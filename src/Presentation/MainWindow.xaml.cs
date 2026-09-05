@@ -57,7 +57,9 @@ public partial class MainWindow : Window
 
     private void ViewCandidates_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel vm || vm.CreateLoadingCandidatePreview() is not { } preview) return;
+        if (DataContext is not MainViewModel vm) return;
+        if (!CommitEditors()) return;
+        if (vm.CreateLoadingCandidatePreview() is not { } preview) return;
 
         var dialog = new Window
         {
@@ -72,7 +74,7 @@ public partial class MainWindow : Window
         var panel = new DockPanel { Margin = new Thickness(20) };
         var summary = new TextBlock
         {
-            Text = $"{preview.CaseCount} loading cases  |  {vm.State.AppliedPoints.Count} applied points  |  {preview.Rows.Count} candidate point loads",
+            Text = $"{preview.CaseCount} candidates for loading cases, applied at {vm.State.AppliedPoints.Count} locations.",
             Foreground = (Brush)FindResource("Accent"),
             FontWeight = FontWeights.SemiBold,
             Margin = new Thickness(0, 0, 0, 12)

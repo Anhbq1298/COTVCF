@@ -1,7 +1,53 @@
 <UserControl x:Class="COT_VCF.Presentation.Controls.Structural2DViewer" x:Name="Root" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:COT_VCF.Presentation.Controls">
- <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}"><DockPanel>
-  <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="8"><DockPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><ComboBox x:Name="Plane" Width="72" SelectedIndex="1" SelectionChanged="PlaneChanged" ToolTip="Projection plane"><ComboBoxItem Content="XY"/><ComboBoxItem Content="XZ"/><ComboBoxItem Content="YZ"/></ComboBox><Button Content="Fit" Click="Fit" Margin="8,0,8,0"/><Button Content="Reset view" Click="Fit"/></StackPanel><StackPanel Orientation="Horizontal"><TextBlock Text="MODEL PREVIEW" FontWeight="SemiBold" Margin="8,0"/><ContentPresenter Content="{Binding ToolbarContent, ElementName=Root}" Margin="16,0,0,0"/></StackPanel></DockPanel></Border>
-  <TextBlock DockPanel.Dock="Bottom" Text="Wheel: zoom  ·  Drag: pan  ·  Double-click: fit  |  Solid: frame  ·  Dashed: cable  ·  Dotted: tendon" Foreground="{StaticResource Muted}" FontSize="11" Margin="16,8" TextWrapping="Wrap"/>
-  <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}"/>
- </DockPanel></Border>
+ <UserControl.Resources>
+  <Style x:Key="ViewerTool" TargetType="ButtonBase">
+   <Setter Property="Width" Value="24"/>
+   <Setter Property="Height" Value="24"/>
+   <Setter Property="Margin" Value="2,0,0,0"/>
+   <Setter Property="Background" Value="Transparent"/>
+   <Setter Property="BorderThickness" Value="0"/>
+   <Setter Property="Cursor" Value="Hand"/>
+   <Setter Property="Template">
+    <Setter.Value>
+     <ControlTemplate TargetType="ButtonBase">
+      <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="2" SnapsToDevicePixels="True">
+       <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+      </Border>
+      <ControlTemplate.Triggers>
+       <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#33FFFFFF"/></Trigger>
+       <Trigger Property="ToggleButton.IsChecked" Value="True"><Setter TargetName="b" Property="Background" Value="#552E90FA"/></Trigger>
+      </ControlTemplate.Triggers>
+     </ControlTemplate>
+    </Setter.Value>
+   </Setter>
+  </Style>
+ </UserControl.Resources>
+ <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource ViewportBg}">
+  <Grid>
+   <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}"/>
+
+   <!-- floating viewer controls (top-right) -->
+   <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" CornerRadius="3" Padding="3" Background="#D91F252B" BorderBrush="#3A424C" BorderThickness="1">
+    <StackPanel Orientation="Horizontal">
+     <ComboBox x:Name="Plane" Width="52" SelectedIndex="1" SelectionChanged="PlaneChanged" ToolTip="Projection plane" VerticalAlignment="Center">
+      <ComboBoxItem Content="XY"/><ComboBoxItem Content="XZ"/><ComboBoxItem Content="YZ"/>
+     </ComboBox>
+     <Button Style="{StaticResource ViewerTool}" Click="Fit" ToolTip="Fit / zoom extents (Home)">
+      <Path Stroke="#D6DDE4" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,6 L2,2 L6,2 M14,2 L18,2 L18,6 M18,14 L18,18 L14,18 M6,18 L2,18 L2,14"/>
+     </Button>
+     <Button Style="{StaticResource ViewerTool}" Click="ResetView" ToolTip="Reset view (XZ)">
+      <Path Stroke="#D6DDE4" StrokeThickness="1.6" Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M13,4 A6,6 0 1 0 15,9.5 M15,9.5 L15,5 M15,9.5 L10.5,9.5"/>
+     </Button>
+     <ToggleButton Style="{StaticResource ViewerTool}" IsChecked="{Binding ShowPointLabels, ElementName=Root, Mode=TwoWay}" ToolTip="Show point labels">
+      <Path Stroke="#D6DDE4" StrokeThickness="1.6" Fill="Transparent" Data="M4,4 L11,4 L16,9 L11,15 L4,15 Z M7,7 L7,7"/>
+     </ToggleButton>
+    </StackPanel>
+   </Border>
+
+   <TextBlock HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8,0,0,6" Foreground="#8B97A5" FontSize="10"
+             Text="Wheel zoom &#183; Drag pan &#183; Dbl-click fit &#183; Solid frame &#183; Dashed cable &#183; Dotted tendon"/>
+
+   <ContentPresenter Content="{Binding ToolbarContent, ElementName=Root}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,8,0,0"/>
+  </Grid>
+ </Border>
 </UserControl>

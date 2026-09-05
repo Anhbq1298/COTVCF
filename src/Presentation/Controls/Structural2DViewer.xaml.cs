@@ -24,6 +24,12 @@ public partial class Structural2DViewer : UserControl
     public AppliedPoint? SelectedAppliedPoint { get => (AppliedPoint?)GetValue(SelectedAppliedPointProperty); set => SetValue(SelectedAppliedPointProperty, value); }
 
     private void Fit(object sender, RoutedEventArgs e) => Canvas.Fit();
+    private void ResetView(object sender, RoutedEventArgs e)
+    {
+        Plane.SelectedIndex = 1; // XZ, the workflow default
+        Canvas.Plane = "XZ";
+        Canvas.Fit();
+    }
     private void PlaneChanged(object sender, SelectionChangedEventArgs e)
     {
         if (Canvas is null) return;
@@ -84,8 +90,8 @@ public sealed class ModelCanvas : FrameworkElement
         appliedPointLocations.Clear();
         if (ActualWidth <= 0 || ActualHeight <= 0) return;
 
-        dc.DrawRectangle(Brush("Surface"), null, new Rect(RenderSize));
-        var grid = new Pen(Brush("Raised"), 1);
+        dc.DrawRectangle(Brush("ViewportBg"), null, new Rect(RenderSize));
+        var grid = new Pen(Brush("ViewportGrid"), 1);
         for (double x = 0; x < ActualWidth; x += 32) dc.DrawLine(grid, new(x, 0), new(x, ActualHeight));
         for (double y = 0; y < ActualHeight; y += 32) dc.DrawLine(grid, new(0, y), new(ActualWidth, y));
 
@@ -105,13 +111,13 @@ public sealed class ModelCanvas : FrameworkElement
             foreach (var member in Model.Members)
             {
                 if (!screenPoints.TryGetValue(member.Start, out var start) || !screenPoints.TryGetValue(member.End, out var end)) continue;
-                var pen = new Pen(Brush(member.Kind == MemberKind.Frame ? "Frame" : "Accent"), 1.5);
+                var pen = new Pen(Brush(member.Kind == MemberKind.Frame ? "ViewportGeom" : "AccentBright"), 1.5);
                 if (member.Kind != MemberKind.Frame) pen.DashStyle = member.Kind == MemberKind.Cable ? DashStyles.Dash : DashStyles.Dot;
                 dc.DrawLine(pen, start, end);
             }
 
             foreach (var point in screenPoints.Values)
-                dc.DrawEllipse(Brush("Surface"), new Pen(Brush("Frame"), 1), point, 2.5, 2.5);
+                dc.DrawEllipse(Brush("ViewportBg"), new Pen(Brush("ViewportEdge"), 1), point, 2.5, 2.5);
 
             foreach (var applied in AppliedPoints ?? [])
             {
@@ -125,19 +131,19 @@ public sealed class ModelCanvas : FrameworkElement
                 foreach (var item in screenPoints.OrderBy(item => item.Key))
                     Label(dc, item.Key, item.Value + new Vector(6, -18));
         }
-        else Text(dc, "No geometry loaded", new(Math.Max(16, ActualWidth / 2 - 70), ActualHeight / 2), "Muted");
+        else Text(dc, "No geometry loaded", new(Math.Max(16, ActualWidth / 2 - 70), ActualHeight / 2), "ViewportEdge");
 
         DrawAxes(dc);
-        Text(dc, Plane + " projection", new(16, 12), "Muted");
+        Text(dc, Plane + " projection", new(16, 12), "ViewportEdge");
     }
 
     private void DrawAppliedPoint(DrawingContext dc, Point point, bool selected)
     {
-        var accent = Brush("Accent");
+        var accent = Brush("AccentBright");
         var selectedBrush = Brush("Error");
-        var halo = new SolidColorBrush(selected ? Color.FromArgb(72, 198, 40, 40) : Color.FromArgb(55, 31, 71, 136));
+        var halo = new SolidColorBrush(selected ? Color.FromArgb(90, 240, 68, 56) : Color.FromArgb(70, 46, 144, 250));
         dc.DrawEllipse(halo, null, point, selected ? 13 : 10, selected ? 13 : 10);
-        dc.DrawEllipse(selected ? selectedBrush : accent, new Pen(Brush("Surface"), 2), point, selected ? 6.5 : 5.5, selected ? 6.5 : 5.5);
+        dc.DrawEllipse(selected ? selectedBrush : accent, new Pen(Brush("ViewportGeom"), 2), point, selected ? 6.5 : 5.5, selected ? 6.5 : 5.5);
     }
 
     private void DrawLoadArrow(DrawingContext dc, Point point)
@@ -158,7 +164,7 @@ public sealed class ModelCanvas : FrameworkElement
         var verticalBrush = AxisBrush(Plane[1]);
         var horizontalAxis = new Pen(horizontalBrush, 1.5);
         var verticalAxis = new Pen(verticalBrush, 1.5);
-        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(150, 255, 255, 255)), null, new Rect(16, ActualHeight - 112, 112, 96));
+        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(150, 18, 22, 27)), null, new Rect(16, ActualHeight - 112, 112, 96));
         dc.DrawLine(horizontalAxis, origin, origin + new Vector(56, 0));
         dc.DrawLine(verticalAxis, origin, origin + new Vector(0, -48));
         dc.DrawLine(horizontalAxis, origin + new Vector(56, 0), origin + new Vector(50, -4));
@@ -169,9 +175,9 @@ public sealed class ModelCanvas : FrameworkElement
 
     private static Brush AxisBrush(char axis) => axis switch
     {
-        'X' => new SolidColorBrush(Color.FromArgb(215, 198, 40, 40)),
-        'Y' => new SolidColorBrush(Color.FromArgb(215, 37, 99, 235)),
-        'Z' => new SolidColorBrush(Color.FromArgb(215, 46, 125, 50)),
+        'X' => new SolidColorBrush(Color.FromArgb(235, 240, 96, 72)),
+        'Y' => new SolidColorBrush(Color.FromArgb(235, 84, 150, 255)),
+        'Z' => new SolidColorBrush(Color.FromArgb(235, 84, 200, 110)),
         _ => Brushes.DimGray
     };
 
@@ -181,8 +187,8 @@ public sealed class ModelCanvas : FrameworkElement
     private void Label(DrawingContext dc, string text, Point point)
     {
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        var label = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 10, Brush("Accent"), dpi);
-        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(185, 255, 255, 255)), null, new Rect(point.X - 2, point.Y - 1, label.Width + 4, label.Height + 2));
+        var label = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 10, Brush("ViewportGeom"), dpi);
+        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(190, 18, 22, 27)), null, new Rect(point.X - 2, point.Y - 1, label.Width + 4, label.Height + 2));
         dc.DrawText(label, point);
     }
 

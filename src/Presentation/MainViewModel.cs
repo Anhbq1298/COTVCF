@@ -53,6 +53,9 @@ public sealed class MainViewModel : Observable
     public string HeightSummary => State.BaselineCaptured ? $"SAP: {State.CommittedHeight:F4} {LengthUnit}   |   Preview: {State.Truss.CurrentHeight:F4} {LengthUnit}" : "Baseline not captured";
     public string IterationSummary => $"MODEL\n{ModelName} - {State.Units}\n\nLOADING CRITERIA\n{State.AppliedPoints.Count} applied points - {State.LoadDefinitions.Count} load definitions\n\nTRUSS HEIGHT\n{State.Truss.MinimumHeight:F4} to {State.Truss.MaximumHeight:F4} {LengthUnit} - step {State.Truss.Increment:F4} {LengthUnit}\n\nCABLE FORCE\n{State.Cables.Count} force sources configured";
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
+    public string StatusLine => State.IsSapConnected
+        ? $"{ModelName}  ·  {State.Units}  ·  {(State.Model?.IsLocked == true ? "Locked" : "Unlocked")}"
+        : $"SAP2000 — {SapStatus}";
     public string AppliedPointsTitle => $"APPLIED POINTS ({State.AppliedPoints.Count})";
     public string LoadStatus => State.AppliedPoints.Count == 0 ? "Not configured" : LoadingCriteriaValid() ? "Configured" : "Review criteria";
     public string TrussStatus => !State.BaselineCaptured ? "Not configured" : new COT_VCF.Geometry.TrussGeometryService().Validate(State.Baseline, State.Truss).Count > 0 ? "Review height" : "Preview ready";
@@ -277,7 +280,7 @@ public sealed class MainViewModel : Observable
             nameof(ModelName), nameof(ModelPath), nameof(ModelVersion), nameof(LockState), nameof(GeometrySummary),
             nameof(ForceUnit), nameof(LengthUnit), nameof(FxHeader), nameof(FyHeader), nameof(FzHeader),
             nameof(TopSummary), nameof(MiddleSummary), nameof(BottomSummary), nameof(HeightSummary),
-            nameof(IterationSummary), nameof(SapStatus), nameof(AppliedPointsTitle), nameof(LoadStatus),
+            nameof(IterationSummary), nameof(SapStatus), nameof(StatusLine), nameof(AppliedPointsTitle), nameof(LoadStatus),
             nameof(TrussStatus), nameof(CableStatus)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
