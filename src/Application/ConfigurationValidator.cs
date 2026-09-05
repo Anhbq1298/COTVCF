@@ -42,6 +42,7 @@ public sealed class ConfigurationValidator
         if (state.AppliedPoints.Count == 0) issues.Add(new("Loading criteria", "Select at least one applied point."));
         if (state.AppliedPoints.GroupBy(point => point.PointName).Any(group => group.Count() > 1)) issues.Add(new("Loading criteria", "Duplicate applied points are not allowed."));
         if (!double.IsFinite(state.TributaryWidthB) || state.TributaryWidthB <= 0) issues.Add(new("Loading criteria", "Out-of-plane tributary width B must be greater than zero."));
+        if (!double.IsFinite(state.NumberOfStories) || state.NumberOfStories < 1 || state.NumberOfStories > int.MaxValue || state.NumberOfStories != Math.Truncate(state.NumberOfStories)) issues.Add(new("Loading criteria", "NStories must be a whole number greater than or equal to one."));
         if (state.LoadDefinitions.Count == 0) issues.Add(new("Loading criteria", "Add at least one load definition."));
         foreach (var row in state.LoadDefinitions)
         {

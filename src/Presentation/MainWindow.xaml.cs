@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -52,6 +53,63 @@ public partial class MainWindow : Window
             LoadDefinitionsGrid.CurrentCell = new DataGridCellInfo(row, LoadDefinitionsGrid.Columns[0]);
             LoadDefinitionsGrid.BeginEdit();
         }, DispatcherPriority.Input);
+    }
+
+    private void ViewCandidates_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || vm.CreateLoadingCandidatePreview() is not { } preview) return;
+
+        var dialog = new Window
+        {
+            Title = "Loading Candidates",
+            Owner = this,
+            Width = 920,
+            Height = 600,
+            MinWidth = 720,
+            MinHeight = 420,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner
+        };
+        var panel = new DockPanel { Margin = new Thickness(20) };
+        var summary = new TextBlock
+        {
+            Text = $"{preview.CaseCount} loading cases  |  {vm.State.AppliedPoints.Count} applied points  |  {preview.Rows.Count} candidate point loads",
+            Foreground = (Brush)FindResource("Accent"),
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 12)
+        };
+        DockPanel.SetDock(summary, Dock.Top);
+        panel.Children.Add(summary);
+
+        var close = new Button
+        {
+            Content = "Close",
+            IsCancel = true,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            MinHeight = 30,
+            Padding = new Thickness(12, 4, 12, 4),
+            Margin = new Thickness(0, 12, 0, 0)
+        };
+        close.Click += (_, _) => dialog.Close();
+        DockPanel.SetDock(close, Dock.Bottom);
+        panel.Children.Add(close);
+
+        var grid = new DataGrid
+        {
+            ItemsSource = preview.Rows,
+            IsReadOnly = true,
+            CanUserDeleteRows = false,
+            SelectionMode = DataGridSelectionMode.Extended,
+            FrozenColumnCount = 2
+        };
+        grid.Columns.Add(new DataGridTextColumn { Header = "Applied Pt", Binding = new Binding(nameof(Domain.LoadingCandidate.AppliedPt)), Width = new DataGridLength(1.2, DataGridLengthUnitType.Star), MinWidth = 110 });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Case", Binding = new Binding(nameof(Domain.LoadingCandidate.Case)), Width = new DataGridLength(1.4, DataGridLengthUnitType.Star), MinWidth = 130 });
+        grid.Columns.Add(new DataGridTextColumn { Header = "qz", Binding = new Binding(nameof(Domain.LoadingCandidate.Qz)) { StringFormat = "F2" }, Width = new DataGridLength(.8, DataGridLengthUnitType.Star), MinWidth = 80, ElementStyle = (Style)FindResource("NumericCell") });
+        grid.Columns.Add(new DataGridTextColumn { Header = "TribArea", Binding = new Binding(nameof(Domain.LoadingCandidate.TribArea)) { StringFormat = "F3" }, Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 95, ElementStyle = (Style)FindResource("NumericCell") });
+        grid.Columns.Add(new DataGridTextColumn { Header = "NStories", Binding = new Binding(nameof(Domain.LoadingCandidate.NStories)), Width = new DataGridLength(.8, DataGridLengthUnitType.Star), MinWidth = 80, ElementStyle = (Style)FindResource("NumericCell") });
+        grid.Columns.Add(new DataGridTextColumn { Header = "FzkN", Binding = new Binding(nameof(Domain.LoadingCandidate.FzKn)) { StringFormat = "F3" }, Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 95, ElementStyle = (Style)FindResource("NumericCell") });
+        panel.Children.Add(grid);
+        dialog.Content = panel;
+        dialog.ShowDialog();
     }
 
     private static bool HasErrors(DependencyObject item)

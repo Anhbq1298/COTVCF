@@ -171,8 +171,57 @@ public sealed class MainViewModel : Observable
     }
 
     private bool LoadingCriteriaValid() => State.TributaryWidthB > 0 && double.IsFinite(State.TributaryWidthB) &&
+        State.NumberOfStories >= 1 && State.NumberOfStories <= int.MaxValue && State.NumberOfStories == Math.Truncate(State.NumberOfStories) &&
         State.AppliedPoints.All(point => State.Geometry.Points.ContainsKey(point.PointName)) &&
         State.LoadDefinitions.Count > 0 && State.LoadDefinitions.All(row => row.CandidateValues.Count > 0);
+
+    public LoadingCandidatePreview? CreateLoadingCandidatePreview()
+    {
+        var issues = new ConfigurationValidator().ValidateLoadingCriteria(State);
+        if (issues.Count > 0)
+        {
+            Message = issues[0].Message;
+            return null;
+        }
+
+        var points = State.AppliedPoints.OrderBy(point => point.X).ThenBy(point => point.PointName, StringComparer.Ordinal).ToArray();
+        var tributaryAreas = new Dictionary<string, double>(StringComparer.Ordinal);
+        for (int i = 0; i < points.Length; i++)
+        {
+            double tributaryLength = points.Length switch
+            {
+                1 => 0,
+                _ when i == 0 => Math.Max(0, points[1].X - points[0].X) / 2,
+                _ when i == points.Length - 1 => Math.Max(0, points[^1].X - points[^2].X) / 2,
+                _ => Math.Max(0, points[i + 1].X - points[i - 1].X) / 2
+            };
+            tributaryAreas[points[i].PointName] = tributaryLength * State.TributaryWidthB;
+        }
+
+        var cases = new List<(string Name, double Qz)>();
+        for (int definitionIndex = 0; definitionIndex < State.LoadDefinitions.Count; definitionIndex++)
+        {
+            var definition = State.LoadDefinitions[definitionIndex];
+            var values = definition.CandidateValues;
+            var baseName = string.IsNullOrWhiteSpace(definition.LoadName) ? $"Load_{definitionIndex + 1}" : definition.LoadName.Trim();
+            for (int candidateIndex = 0; candidateIndex < values.Count; candidateIndex++)
+            {
+                var caseName = values.Count == 1 ? baseName : $"{baseName}_{candidateIndex + 1}";
+                cases.Add((caseName, values[candidateIndex]));
+            }
+        }
+
+        var numberOfStories = (int)State.NumberOfStories;
+        var rows = new List<LoadingCandidate>(points.Length * cases.Count);
+        foreach (var point in points)
+        {
+            var area = tributaryAreas[point.PointName];
+            foreach (var candidate in cases)
+                rows.Add(new(point.PointName, candidate.Name, candidate.Qz, area, numberOfStories, -candidate.Qz * area * numberOfStories));
+        }
+        Message = $"Generated {cases.Count} loading cases and {rows.Count} candidate point loads.";
+        return new(cases.Count, rows);
+    }
 
     private void ChooseGroup(string group)
     {

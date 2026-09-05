@@ -71,6 +71,8 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - Disabled numeric cells must remain grey, unfocusable, excluded from validation, and derived from `ApplyIncrementStep` rather than separate UI state.
 - Candidate values are internal. Single mode returns only qz; range mode returns `Min + n * Step` while the value is at most Max and does not append an off-grid Max.
 - Keep `Out-of-plane tributary width, B [m]` above the load grid as a shared positive numeric input.
+- Render the B label and editor on one horizontal line. `View Candidates` sits at the right of that line and opens a read-only WPF DataGrid with `Applied Pt`, `Case`, `qz`, `TribArea`, `NStories`, and `FzkN`.
+- Candidate preview case count is the sum of `CandidateValues.Count` across load definitions. Rows are the applied-point/case expansion. Tributary area uses X-direction midpoint tributary lengths times B; endpoints receive half the adjacent spacing. `NStories` is a shared whole-number input with minimum 1, and `FzkN = -qz * TribArea * NStories` for downward global-Z loading.
 - Keep the tributary-width field compact (about 220 px) and the secondary `Remove selected` action visually smaller than the primary location picker.
 - `+ Add Load` creates an empty-name, non-increment row with qz `0.00` and focuses its Load Name cell. Each row has a compact delete icon.
 - Validation is inline: qz must be nonnegative; Min must be nonnegative; Max must be at least Min; Step must be positive. No normal cell-validation dialog belongs in Tab 2.

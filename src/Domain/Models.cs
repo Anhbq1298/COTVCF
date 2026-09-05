@@ -34,6 +34,8 @@ public record ModelSnapshot(ModelInfo Info, GeometryModel Geometry, IReadOnlyLis
 public record PointLoad(string PointName, string LoadPattern, double Fx, double Fy, double Fz);
 public record ForceSource(string ObjectName, MemberKind Kind, string Source, double? Force, string? Problem = null);
 public record ValidationIssue(string Section, string Message);
+public sealed record LoadingCandidate(string AppliedPt, string Case, double Qz, double TribArea, int NStories, double FzKn);
+public sealed record LoadingCandidatePreview(int CaseCount, IReadOnlyList<LoadingCandidate> Rows);
 public sealed class AppliedPoint : Observable
 {
     private double x, y, z;
@@ -139,7 +141,7 @@ public sealed class ApplicationState : Observable
     private ModelInfo? model;
     private GeometryModel geometry = GeometryModel.Empty, baseline = GeometryModel.Empty, preview = GeometryModel.Empty;
     private string connection = "Disconnected";
-    private double tributaryWidthB = 1;
+    private double tributaryWidthB = 1, numberOfStories = 1;
     public ModelInfo? Model { get => model; set { Set(ref model, value); Notify(nameof(Units)); } }
     public string Connection { get => connection; set { Set(ref connection, value); Notify(nameof(IsSapConnected)); } }
     public bool IsSapConnected => Connection == "Connected";
@@ -156,6 +158,7 @@ public sealed class ApplicationState : Observable
         new() { LoadName = "LL_Above" }
     ];
     public double TributaryWidthB { get => tributaryWidthB; set => Set(ref tributaryWidthB, value); }
+    public double NumberOfStories { get => numberOfStories; set => Set(ref numberOfStories, value); }
     public ObservableCollection<CableForceConfiguration> Cables { get; } = [];
     public TrussHeightConfiguration Truss { get; } = new();
     public bool BaselineCaptured { get; set; }

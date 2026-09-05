@@ -32,7 +32,7 @@
        <Border Grid.Row="2" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
         <Grid Margin="12"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
          <TextBlock Text="LOAD DEFINITION" FontWeight="SemiBold" Foreground="{StaticResource Accent}" Margin="0,0,0,8"/>
-         <c:EngineeringInput Grid.Row="1" Width="220" HorizontalAlignment="Left" Label="Out-of-plane tributary width, B" Value="{Binding State.TributaryWidthB}" Unit="m" Minimum="0.000000001" Margin="0,0,0,4"/>
+         <DockPanel Grid.Row="1" Margin="0,0,0,8"><Button DockPanel.Dock="Right" Content="View Candidates" Click="ViewCandidates_Click" MinHeight="30" Padding="12,4" Margin="8,0,0,0" VerticalAlignment="Top"/><StackPanel><StackPanel Orientation="Horizontal"><TextBlock Text="Out-of-plane tributary width, B" Width="220" Margin="0,0,12,8"/><c:EngineeringInput Label="" Value="{Binding State.TributaryWidthB}" Unit="m" Minimum="0.000000001" Margin="0"/></StackPanel><StackPanel Orientation="Horizontal"><TextBlock Text="NStories" Width="220" Margin="0,0,12,8"/><c:EngineeringInput Label="" Value="{Binding State.NumberOfStories}" Unit="stories" Minimum="1" Maximum="2147483647" Increment="1" WholeNumbersOnly="True" Margin="0"/></StackPanel></StackPanel></DockPanel>
          <DataGrid x:Name="LoadDefinitionsGrid" Grid.Row="2" ItemsSource="{Binding State.LoadDefinitions}" IsEnabled="{Binding IsIdle}" CanUserDeleteRows="False" SelectionMode="Single" FrozenColumnCount="0">
           <DataGrid.Resources>
            <Style x:Key="LoadValueEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
