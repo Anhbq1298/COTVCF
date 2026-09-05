@@ -38,17 +38,9 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
             else point.Status = "Missing in SAP";
         }
         SortAppliedPoints();
-        // Retain configured ranges and selections; refresh the measured force sources.
-        if (state.Cables.Count > 0)
-        {
-            var selected = state.Cables.Select(c => (c.ObjectName, c.Kind)).ToHashSet();
-            var sources = await sap.ReadForcesAsync(state.Geometry.Members.Where(m => selected.Contains((m.Name, m.Kind))).ToArray(), snapshot.Info);
-            for (int i = 0; i < state.Cables.Count; i++)
-            {
-                var c = state.Cables[i]; var source = sources.FirstOrDefault(s => s.ObjectName == c.ObjectName && s.Kind == c.Kind && s.Source == c.Source);
-                state.Cables[i] = new() { ObjectName = c.ObjectName, Kind = c.Kind, Source = c.Source, CurrentForce = source?.Force, ReadProblem = source?.Problem ?? (source is null ? "Source missing after refresh" : null), MinimumForce = c.MinimumForce, MaximumForce = c.MaximumForce, Increment = c.Increment, TargetForce = c.TargetForce };
-            }
-        }
+        // Tab 4 keeps its candidate definitions; only flag cables that are no longer in the model.
+        var cableNames = state.Geometry.Members.Where(m => m.Kind == MemberKind.Cable).Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var cable in state.Cables) cable.Missing = !cableNames.Contains(cable.CableName);
         if (changed) throw new InvalidOperationException("SAP geometry changed. Selections and ranges were retained. Review them and capture a new baseline before applying geometry.");
     }
     public int AddAppliedPoints(IReadOnlyList<string> pointNames)
@@ -118,15 +110,5 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         var rows = state.PointLoads.ToArray();
         try { await sap.ApplyLoadsAsync(rows.Select(r => r.ToLoad()).ToArray(), state.Model!); foreach (var row in rows) row.Status = "Applied"; }
         catch { foreach (var row in rows) row.Status = "Error — review SAP"; throw; }
-    }
-    public async Task AddCablesAsync(IReadOnlyList<StructuralMember> members)
-    {
-        var sources = await sap.ReadForcesAsync(members, state.Model!);
-        foreach (var s in sources)
-        {
-            if (state.Cables.Any(c => c.ObjectName == s.ObjectName && c.Kind == s.Kind && c.Source == s.Source)) continue;
-            double f = s.Force ?? 0, delta = Math.Max(Math.Abs(f) * .25, 1);
-            state.Cables.Add(new() { ObjectName = s.ObjectName, Kind = s.Kind, Source = s.Source, CurrentForce = s.Force, ReadProblem = s.Problem, MinimumForce = f - delta, MaximumForce = f + delta, Increment = delta / 5, TargetForce = f });
-        }
     }
 }

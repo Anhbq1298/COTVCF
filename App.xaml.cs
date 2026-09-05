@@ -13,7 +13,9 @@ public partial class App : System.Windows.Application
         base.OnStartup(e);
         gateway = new();
         var state = new ApplicationState();
-        var viewModel = new MainViewModel(state, new WorkflowService(gateway, state), new SelectionService());
+        var workflow = new WorkflowService(gateway, state);
+        var config = new Configuration.ConfigService(gateway, state, workflow);
+        var viewModel = new MainViewModel(state, workflow, new SelectionService(), config);
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
     }

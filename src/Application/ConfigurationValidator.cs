@@ -13,12 +13,13 @@ public sealed class ConfigurationValidator
         issues.AddRange(ValidateLoadingCriteria(state));
         issues.AddRange(new TrussGeometryService().Validate(state.Baseline, state.Truss));
         if (!state.BaselineCaptured) issues.Add(new("Truss height", "Capture the baseline geometry."));
-        if (state.Cables.Count == 0) issues.Add(new("Cable force", "Select at least one cable or tendon force source."));
+        if (state.Cables.Count == 0) issues.Add(new("Cable pretension", "Add at least one cable."));
         foreach (var c in state.Cables)
         {
-            if (!state.Geometry.Members.Any(m => m.Name == c.ObjectName && m.Kind == c.Kind)) issues.Add(new("Cable force", $"{c.ObjectName} no longer exists."));
-            if (c.CurrentForce is not double f || !double.IsFinite(f) || !string.IsNullOrEmpty(c.ReadProblem)) issues.Add(new("Cable force", $"{c.ObjectName}: force source could not be read. {c.ReadProblem}"));
-            else if (!TrussGeometryService.ValidRange(c.MinimumForce, c.MaximumForce, c.Increment) || f < c.MinimumForce || f > c.MaximumForce || !TrussGeometryService.OnGrid(c.TargetForce, c.MinimumForce, c.MaximumForce, c.Increment)) issues.Add(new("Cable force", $"{c.ObjectName}: check range, current force and target increment."));
+            if (!state.Geometry.Members.Any(m => m.Name == c.CableName && m.Kind == MemberKind.Cable))
+                issues.Add(new("Cable pretension", $"{c.CableName} is no longer a cable object in the model."));
+            else if (c.CandidateCount <= 0)
+                issues.Add(new("Cable pretension", $"{c.CableName}: {(c.ApplyRange ? "review Min / Max / Step force." : "enter a target force.")}"));
         }
         return issues;
     }

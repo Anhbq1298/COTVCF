@@ -1,8 +1,11 @@
 using COT_VCF.Application;
+using COT_VCF.Configuration;
 using COT_VCF.Domain;
+using Microsoft.Win32;
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Windows.Input;
+using MessageBox = System.Windows.MessageBox;
 
 namespace COT_VCF.Presentation;
 
@@ -11,13 +14,14 @@ public sealed class MainViewModel : Observable
     public ApplicationState State { get; }
     private readonly WorkflowService workflow;
     private readonly ISelectionService selection;
+    private readonly ConfigService config;
     private bool busy;
     private int selectedTab;
     private AppliedPoint? selectedAppliedPoint;
     private string message = "Connect to the running SAP2000 model to begin.";
     private string previewMessage = "Select point groups and capture the baseline.";
 
-    public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); CommandManager.InvalidateRequerySuggested(); } }
+    public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); } }
     public bool IsIdle => !IsBusy;
     public int SelectedTab { get => selectedTab; set => Set(ref selectedTab, value); }
     public string Message { get => message; private set => Set(ref message, value); }
@@ -77,7 +81,12 @@ public sealed class MainViewModel : Observable
     public IReadOnlyList<string> TrussBottomPoints => State.Truss.BottomPoints;
     public bool CanViewTrussCandidates => TrussCandidatesReady(out _);
     public string TrussCandidatesHint { get { TrussCandidatesReady(out var reason); return reason; } }
-    public string IterationSummary => $"MODEL\n{ModelName} - {State.Units}\n\nLOADING CRITERIA\n{State.AppliedPoints.Count} applied points - {State.LoadDefinitions.Count} load definitions\n\nTRUSS HEIGHT\n{State.Truss.MinimumHeight:F4} to {State.Truss.MaximumHeight:F4} {LengthUnit} - step {State.Truss.Increment:F4} {LengthUnit}\n\nCABLE FORCE\n{State.Cables.Count} force sources configured";
+    public string IterationSummary => $"MODEL\n{ModelName} - {State.Units}\n\nLOADING CRITERIA\n{State.AppliedPoints.Count} applied points - {State.LoadDefinitions.Count} load definitions\n\nTRUSS HEIGHT\n{State.Truss.MinimumHeight:F4} to {State.Truss.MaximumHeight:F4} {LengthUnit} - step {State.Truss.Increment:F4} {LengthUnit}\n\nCABLE PRETENSION\n{CableCount} cables ({VariableCableCount} variable) - {PretensionCandidateCount} pretension candidates";
+    public int CableCount => State.Cables.Count;
+    public int VariableCableCount => COT_VCF.Application.PretensionCandidates.VariableCount(State.Cables);
+    public string PretensionCandidateCount => State.Cables.Count == 0 || State.Cables.Any(c => c.CandidateCount <= 0)
+        ? "0"
+        : COT_VCF.Application.PretensionCandidates.TotalCount(State.Cables).ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
     public string StatusLine => State.IsSapConnected
         ? $"{ModelName}  ·  {State.Units}  ·  {(State.Model?.IsLocked == true ? "Locked" : "Unlocked")}"
@@ -85,7 +94,7 @@ public sealed class MainViewModel : Observable
     public string AppliedPointsTitle => $"APPLIED POINTS ({State.AppliedPoints.Count})";
     public string LoadStatus => State.AppliedPoints.Count == 0 ? "Not configured" : LoadingCriteriaValid() ? "Configured" : "Review criteria";
     public string TrussStatus => !State.BaselineCaptured ? "Not configured" : new COT_VCF.Geometry.TrussGeometryService().Validate(State.Baseline, State.Truss).Count > 0 ? "Review height" : "Preview ready";
-    public string CableStatus => State.Cables.Count == 0 ? "Not configured" : new ConfigurationValidator().Validate(State).Any(i => i.Section == "Cable force") ? "Review ranges" : "Configured";
+    public string CableStatus => State.Cables.Count == 0 ? "Not configured" : State.Cables.Any(c => c.Status != "Configured") ? "Review inputs" : "Configured";
     public ObservableCollection<ValidationIssue> Issues { get; } = [];
 
     public Command Connect { get; }
@@ -103,12 +112,17 @@ public sealed class MainViewModel : Observable
     public Command RemoveLoads { get; }
     public Command RemoveCables { get; }
     public Command Validate { get; }
+    public Command SaveConfig { get; }
+    public Command LoadConfig { get; }
 
-    public MainViewModel(ApplicationState state, WorkflowService workflow, ISelectionService selection)
+    public bool CanUseConfig => !IsBusy && State.IsSapConnected && State.Model is not null;
+
+    public MainViewModel(ApplicationState state, WorkflowService workflow, ISelectionService selection, ConfigService config)
     {
         State = state;
         this.workflow = workflow;
         this.selection = selection;
+        this.config = config;
         bool Ready() => !IsBusy && State.IsSapConnected;
         bool GeometryReady() => Ready() && State.Geometry.Points.Count > 0;
 
@@ -131,9 +145,9 @@ public sealed class MainViewModel : Observable
         ResetPreview = new(_ => Local(() => { State.Truss.CurrentHeight = State.CommittedHeight; workflow.UpdatePreview(); }), () => GeometryReady() && State.BaselineCaptured);
         ApplyGeometry = new(_ => Run("Applying geometry to SAP2000...", workflow.ApplyGeometryAsync, "Geometry applied. The original baseline is retained."), () => GeometryReady() && State.BaselineCaptured);
         ApplyLoads = new(_ => Run("Applying point loads to SAP2000...", workflow.ApplyLoadsAsync, "Point loads applied. Existing moments preserved."), () => GeometryReady() && State.PointLoads.Count > 0);
-        AddCables = new(_ => SelectCables(), GeometryReady);
+        AddCables = new(_ => AddCablesFromSelection(), GeometryReady);
         RemoveLoads = new(p => { if (p is IList list) foreach (var row in list.Cast<PointLoadConfiguration>().ToArray()) State.PointLoads.Remove(row); Update(); }, () => !IsBusy);
-        RemoveCables = new(p => { if (p is IList list) foreach (var row in list.Cast<CableForceConfiguration>().ToArray()) State.Cables.Remove(row); Update(); }, () => !IsBusy);
+        RemoveCables = new(p => { if (p is IList list) foreach (var row in list.Cast<CablePretensionConfig>().ToArray()) State.Cables.Remove(row); Update(); }, () => !IsBusy);
         Validate = new(_ =>
         {
             if (CommitEditors?.Invoke() == false) return;
@@ -141,6 +155,8 @@ public sealed class MainViewModel : Observable
             foreach (var issue in new ConfigurationValidator().Validate(State)) Issues.Add(issue);
             Message = Issues.Count == 0 ? "Configuration is valid. Iteration is planned for the next phase." : $"{Issues.Count} configuration issues need review.";
         }, () => !IsBusy);
+        SaveConfig = new(_ => SaveConfiguration(), () => CanUseConfig);
+        LoadConfig = new(_ => LoadConfiguration(), () => CanUseConfig);
 
         State.PropertyChanged += (_, _) => Update();
         State.Truss.PropertyChanged += (_, _) =>
@@ -164,7 +180,7 @@ public sealed class MainViewModel : Observable
             if (e.NewItems is not null) foreach (LoadDefinition row in e.NewItems) Subscribe(row);
             Update();
         };
-        State.Cables.CollectionChanged += (_, e) => { if (e.NewItems is not null) foreach (CableForceConfiguration row in e.NewItems) row.PropertyChanged += (_, _) => Update(); Update(); };
+        State.Cables.CollectionChanged += (_, e) => { if (e.NewItems is not null) foreach (CablePretensionConfig row in e.NewItems) row.PropertyChanged += (_, _) => Update(); Update(); };
     }
 
     private async Task ConnectAndRefreshAsync()
@@ -302,13 +318,155 @@ public sealed class MainViewModel : Observable
         Update();
     }
 
-    private void SelectCables()
+    private void AddCablesFromSelection()
     {
-        var members = State.Geometry.Members.Where(m => m.Kind != MemberKind.Frame).ToDictionary(m => $"{m.Kind}: {m.Name}");
-        var names = selection.Select("Select SAP2000 Cables / Tendons", members.Keys.Order().ToArray(), []);
-        if (names is null) return;
-        Run("Reading cable / tendon force sources...", () => workflow.AddCablesAsync(names.Select(n => members[n]).ToArray()), "Force sources loaded. Review ranges in the current force units.");
+        var available = State.Geometry.Members
+            .Where(m => m.Kind == MemberKind.Cable)
+            .Select(m => m.Name)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        if (available.Length == 0) { Message = "The loaded SAP2000 model has no cable objects."; return; }
+
+        var current = State.Cables.Select(c => c.CableName).ToArray();
+        var picked = selection.Select("Add Cables for PRETENSION", available, current);
+        if (picked is null) return;
+
+        var existing = State.Cables.Select(c => c.CableName).ToHashSet(StringComparer.Ordinal);
+        int added = 0;
+        foreach (var name in picked.Distinct(StringComparer.Ordinal))
+            if (existing.Add(name)) { State.Cables.Add(new CablePretensionConfig { CableName = name }); added++; }
+
+        Message = added == 0 ? "Cable selection unchanged." : $"Added {added} cable{(added == 1 ? "" : "s")}. Remove with − Remove.";
+        Update();
     }
+
+    private const string ConfigFilter = "COT VCF Configuration (*.json)|*.json|JSON Files (*.json)|*.json";
+
+    private async void SaveConfiguration()
+    {
+        if (IsBusy) return;
+        if (CommitEditors?.Invoke() == false) return;
+        if (!config.CanUse) { Warn("Cannot Save Configuration", "Connect to a SAP2000 model before saving a configuration."); return; }
+
+        var blocking = new ConfigurationValidator().Validate(State)
+            .Where(i => i.Section is "Loading criteria" or "Truss height" or "Cable pretension")
+            .GroupBy(i => i.Section)
+            .Select(g => $"{g.Key}:\n" + string.Join("\n", g.Select(i => "  • " + i.Message)))
+            .ToArray();
+        if (blocking.Length > 0)
+        {
+            Warn("Configuration Cannot Be Saved", "Correct the following before saving:\n\n" + string.Join("\n\n", blocking));
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var dto = await config.BuildAsync();
+            var dialog = new SaveFileDialog { Filter = ConfigFilter, FileName = config.SuggestFileName(), AddExtension = true, DefaultExt = ".json" };
+            if (dialog.ShowDialog() != true) return;
+            config.Save(dialog.FileName, dto);
+            Message = $"Configuration saved · {System.IO.Path.GetFileName(dialog.FileName)}";
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+            Warn("Unable to Save Configuration", ex.Message);
+            if (ex is System.Runtime.InteropServices.COMException) State.Connection = "Connection Lost";
+        }
+        finally { IsBusy = false; Update(); }
+    }
+
+    private async void LoadConfiguration()
+    {
+        if (IsBusy) return;
+        if (CommitEditors?.Invoke() == false) return;
+        if (!config.CanUse) { Warn("Cannot Load Configuration", "Connect to a SAP2000 model first."); return; }
+
+        var dialog = new OpenFileDialog { Filter = ConfigFilter, CheckFileExists = true };
+        if (dialog.ShowDialog() != true) return;
+
+        IsBusy = true;
+        try
+        {
+            CotVcfConfigDto dto;
+            try { dto = config.Read(dialog.FileName); }
+            catch (Exception ex)
+            {
+                Warn("Unable to Load Configuration", ex.Message);
+                Message = "Load cancelled — existing configuration unchanged.";
+                return;
+            }
+
+            var check = await config.ValidateAsync(dto);
+            if (!check.SchemaValid)
+            {
+                Warn("Unable to Load Configuration", "The configuration file has invalid content:\n\n" + string.Join("\n", check.SchemaErrors.Select(e => "• " + e)));
+                Message = "Load cancelled — existing configuration unchanged.";
+                return;
+            }
+            if (!check.IsCompatible)
+            {
+                Warn("Configuration Is Not Compatible With Current Model", BuildIncompatibilityReport(dto, check));
+                Message = "Configuration is not compatible with the current model — nothing was applied.";
+                return;
+            }
+
+            config.Apply(dto);
+            SelectedAppliedPoint = null;
+            Update();
+
+            if (check.ModelAppearsRenamed)
+            {
+                Warn("Configuration Loaded",
+                    "The connected SAP model has a different file name from the model used when this configuration was saved, " +
+                    "but all referenced objects and geometry were validated.\n\n" +
+                    $"Saved model:\n{dto.Model.FileName}\n\nCurrent model:\n{CurrentModelFileName()}\n\nThe model appears to have been renamed.",
+                    warning: true);
+                Message = "Configuration loaded (model appears renamed). Loading, Truss Height and Cable Force restored.";
+            }
+            else
+            {
+                Message = "Configuration loaded · Loading ✓  Truss Height ✓  Cable Force ✓";
+            }
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+            Warn("Unable to Load Configuration", ex.Message);
+            if (ex is System.Runtime.InteropServices.COMException) State.Connection = "Connection Lost";
+        }
+        finally { IsBusy = false; Update(); }
+    }
+
+    private string CurrentModelFileName() => State.Model is { } m ? System.IO.Path.GetFileName(m.Path) : "(unknown)";
+
+    private string BuildIncompatibilityReport(CotVcfConfigDto dto, ConfigValidationResult r)
+    {
+        var lines = new List<string>
+        {
+            $"Saved model:\n{dto.Model.FileName}",
+            $"Current model:\n{CurrentModelFileName()}",
+            "Some referenced SAP model content could not be verified.",
+        };
+        void Section(string title, IEnumerable<string> items)
+        {
+            var list = items.ToArray();
+            if (list.Length > 0) lines.Add($"{title}:\n" + string.Join("\n", list.Select(i => "• " + i)));
+        }
+        Section("Missing Points", r.MissingPoints);
+        Section("Point Geometry Mismatch", r.PointCoordinateMismatches.Select(m => $"{m.PointName}\n  Saved:   {m.Saved}\n  Current: {m.Current}"));
+        Section("Missing Cables", r.MissingCables);
+        Section("Cable Geometry Mismatch", r.CableGeometryMismatches.Select(m => $"{m.CableName}: {m.Detail}"));
+        Section("Missing Load Patterns", r.MissingLoadPatterns);
+        Section("Missing Load Cases", r.MissingLoadCases);
+        lines.Add("No configuration has been applied.");
+        return string.Join("\n\n", lines);
+    }
+
+    private void Warn(string title, string body, bool warning = false) =>
+        MessageBox.Show(body, title, System.Windows.MessageBoxButton.OK,
+            warning ? System.Windows.MessageBoxImage.Warning : System.Windows.MessageBoxImage.Information);
 
     private void Local(Action action)
     {
@@ -345,7 +503,8 @@ public sealed class MainViewModel : Observable
             nameof(TrussTopPoints), nameof(TrussMiddlePoints), nameof(TrussBottomPoints),
             nameof(CanViewTrussCandidates), nameof(TrussCandidatesHint),
             nameof(IterationSummary), nameof(SapStatus), nameof(StatusLine), nameof(AppliedPointsTitle), nameof(LoadStatus),
-            nameof(TrussStatus), nameof(CableStatus)
+            nameof(TrussStatus), nameof(CableStatus), nameof(CableCount), nameof(VariableCableCount), nameof(PretensionCandidateCount),
+            nameof(CanUseConfig)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
     }

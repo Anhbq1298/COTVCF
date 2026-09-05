@@ -26,6 +26,19 @@
      <Image Source="{StaticResource AppLogo}" Width="20" Height="20" Margin="0,0,8,0"/>
      <TextBlock Text="COT VCF tools" FontSize="13" FontWeight="Bold"/>
      <TextBlock Text="PARAMETRIC STRUCTURAL WORKFLOW" Margin="12,1,0,0" Foreground="{StaticResource Muted}" FontSize="10"/>
+     <Border Width="1" Background="{StaticResource Border}" Margin="16,3,16,3"/>
+     <Button Command="{Binding SaveConfig}" ToolTip="Save the Tabs 02–04 configuration to a JSON file" Margin="0,0,6,0">
+      <StackPanel Orientation="Horizontal">
+       <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M2,2 L11,2 L14,5 L14,14 L2,14 Z M5,2 L5,6 L11,6 M4.5,14 L4.5,9.5 L11.5,9.5 L11.5,14"/></Viewbox>
+       <TextBlock Text="Save Config"/>
+      </StackPanel>
+     </Button>
+     <Button Command="{Binding LoadConfig}" ToolTip="Load a saved configuration and restore Tabs 02–04" Margin="0">
+      <StackPanel Orientation="Horizontal">
+       <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M1.5,4 L6,4 L8,6 L14.5,6 L14.5,13 L1.5,13 Z"/></Viewbox>
+       <TextBlock Text="Load Config"/>
+      </StackPanel>
+     </Button>
     </StackPanel>
    </DockPanel>
   </Border>
@@ -226,34 +239,65 @@
     </Grid>
    </TabItem>
 
-   <!-- 04 CABLE FORCE -->
+   <!-- 04 CABLE PRETENSION -->
    <TabItem>
     <TabItem.Header>
      <StackPanel Width="124">
-      <TextBlock Text="04  CABLE FORCE" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
+      <TextBlock Text="04  PRETENSION" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
       <TextBlock Text="{Binding CableStatus}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
     <Grid>
-     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-      <Button Content="+ Add" Command="{Binding AddCables}" ToolTip="Add cable / tendon force sources"/>
-      <Button Content="&#8722; Remove" Command="{Binding RemoveCables}" CommandParameter="{Binding SelectedItems, ElementName=Cables}"/>
-      <TextBlock Text="{Binding ForceUnit, StringFormat=Force values in [{0}] · edits stay local until validated}" Foreground="{StaticResource Muted}" FontSize="11" Margin="10,0,0,0"/>
-     </StackPanel>
-     <DataGrid x:Name="Cables" Grid.Row="1" ItemsSource="{Binding State.Cables}" IsEnabled="{Binding IsIdle}">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+     <DockPanel Grid.Row="0" Margin="0,0,0,4">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+       <TextBlock Text="Cables" Foreground="{StaticResource Muted}" FontSize="11"/>
+       <TextBlock Text="{Binding CableCount}" FontWeight="SemiBold" FontSize="11" Margin="4,0,14,0"/>
+       <TextBlock Text="Variable" Foreground="{StaticResource Muted}" FontSize="11"/>
+       <TextBlock Text="{Binding VariableCableCount}" FontWeight="SemiBold" FontSize="11" Margin="4,0,14,0"/>
+       <TextBlock Text="Pretension Candidates" Foreground="{StaticResource Muted}" FontSize="11"/>
+       <TextBlock Text="{Binding PretensionCandidateCount}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Accent}" Margin="6,0,0,0"/>
+      </StackPanel>
+      <StackPanel Orientation="Horizontal">
+       <Button Content="+ Add Cable" Command="{Binding AddCables}" ToolTip="Pick cable objects from the loaded SAP2000 model"/>
+       <Button Content="&#8722; Remove" Command="{Binding RemoveCables}" CommandParameter="{Binding SelectedItems, ElementName=Cables}"/>
+      </StackPanel>
+     </DockPanel>
+     <TextBlock Grid.Row="1" Foreground="{StaticResource Muted}" FontSize="10.5" Margin="0,0,0,6"
+               Text="{Binding ForceUnit, StringFormat=Define Target Force candidates for the PRETENSION load case · forces in [{0}] · editing does not modify SAP2000}"/>
+
+     <DataGrid x:Name="Cables" Grid.Row="2" ItemsSource="{Binding State.Cables}" IsEnabled="{Binding IsIdle}" CanUserDeleteRows="False" FrozenColumnCount="1">
+      <DataGrid.Resources>
+       <Style x:Key="ForceEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+        <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="6,0"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="FontFamily" Value="Consolas"/><Setter Property="TextAlignment" Value="Right"/>
+        <Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Trigger></Style.Triggers>
+       </Style>
+      </DataGrid.Resources>
       <DataGrid.Columns>
-       <DataGridTextColumn Header="Object" Binding="{Binding ObjectName}" IsReadOnly="True" Width="1.1*" MinWidth="96"/>
-       <DataGridTextColumn Header="Force source" Binding="{Binding Source}" IsReadOnly="True" Width="2*" MinWidth="150"/>
-       <DataGridTextColumn Header="Current" Binding="{Binding CurrentForce, StringFormat=F4, TargetNullValue=n/a}" IsReadOnly="True" Width=".9*" MinWidth="82" ElementStyle="{StaticResource NumericCell}"/>
-       <DataGridTextColumn Header="Min" Binding="{Binding MinimumForce, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, StringFormat=F4}" Width=".85*" MinWidth="78" ElementStyle="{StaticResource NumericCell}"/>
-       <DataGridTextColumn Header="Max" Binding="{Binding MaximumForce, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, StringFormat=F4}" Width=".85*" MinWidth="78" ElementStyle="{StaticResource NumericCell}"/>
-       <DataGridTextColumn Header="Step" Binding="{Binding Increment, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, StringFormat=F4}" Width=".7*" MinWidth="66" ElementStyle="{StaticResource NumericCell}"/>
-       <DataGridTextColumn Header="Target" Binding="{Binding TargetForce, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, StringFormat=F4}" Width=".85*" MinWidth="78" ElementStyle="{StaticResource NumericCell}"/>
-       <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="1.4*" MinWidth="130"/>
+       <DataGridTextColumn Header="Cable" Binding="{Binding CableName}" IsReadOnly="True" Width="1.1*" MinWidth="80"/>
+       <DataGridTextColumn Header="Load Case" Binding="{Binding LoadCase}" IsReadOnly="True" Width="1*" MinWidth="86"/>
+       <DataGridTemplateColumn Width="58" MinWidth="58">
+        <DataGridTemplateColumn.Header><TextBlock Text="Range" ToolTip="Apply a Min / Max / Step range instead of a fixed target force"/></DataGridTemplateColumn.Header>
+        <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding ApplyRange, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" VerticalAlignment="Center"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+       </DataGridTemplateColumn>
+       <DataGridTemplateColumn Header="Target Force" Width=".95*" MinWidth="82">
+        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding IsFixed}" Text="{Binding TargetForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+       </DataGridTemplateColumn>
+       <DataGridTemplateColumn Header="Min Force" Width=".85*" MinWidth="74">
+        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding ApplyRange}" Text="{Binding MinForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+       </DataGridTemplateColumn>
+       <DataGridTemplateColumn Header="Max Force" Width=".85*" MinWidth="74">
+        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding ApplyRange}" Text="{Binding MaxForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+       </DataGridTemplateColumn>
+       <DataGridTemplateColumn Header="Step Force" Width=".8*" MinWidth="70">
+        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding ApplyRange}" Text="{Binding StepForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+       </DataGridTemplateColumn>
+       <DataGridTextColumn Header="Candidates" Binding="{Binding CandidateCount}" IsReadOnly="True" Width=".7*" MinWidth="72" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="1.1*" MinWidth="96"/>
       </DataGrid.Columns>
      </DataGrid>
-     <TextBlock Grid.Row="2" Text="Range edits do not modify SAP2000. Use the Iteration tab to validate the configuration." Style="{StaticResource Hint}" Margin="0,6,0,0"/>
+     <TextBlock Grid.Row="3" Text="Total pretension candidates = product of each cable's candidate count (Cartesian). SAP2000 assignments happen later in the Run workflow." Style="{StaticResource Hint}" Margin="0,6,0,0"/>
     </Grid>
    </TabItem>
 

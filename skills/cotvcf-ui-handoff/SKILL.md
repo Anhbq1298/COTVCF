@@ -139,16 +139,70 @@ Tab 3 **defines geometry-variation candidates only**. It never writes SAP2000 �
 - Page content uses `Text` / `Muted` on `Surface`. If content appears invisible, check for inherited
   `Foreground` from tab styling.
 
-## Cable Force Tab
+## Cable Pretension Tab (tab label "04  PRETENSION")
 
-- In-page title/description was removed.
-- Cable force `DataGrid` also uses star sizing plus `MinWidth` to reduce clipped columns.
-- Keep horizontal scrolling enabled.
+Tab 4 **defines candidate PRETENSION target forces** for selected SAP2000 cables. Editing it never
+writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" column.
+
+- Model: `CablePretensionConfig` (Domain) — `CableName`, read-only `LoadCase` = `"PRETENSION"`,
+  `ApplyRange` (Fixed ↔ Range, mirrors `LoadDefinition`), `TargetForce` / `MinForce` / `MaxForce` /
+  `StepForce` (nullable, `NullableDoubleConverter`), `CandidateCount` (allocation-free),
+  `GetCandidateForces()` (materialised on demand, capped at `MaterializeCeiling`), `Status`
+  (`Configured` / `Invalid` / `Missing in SAP`), `IDataErrorInfo` for inline cell validation.
+  `ApplicationState.Cables` is `ObservableCollection<CablePretensionConfig>`.
+- Per-cable candidates: Fixed → `[TargetForce]`; Range → `Min, Min+Step, … ≤ Max` (never appends an
+  off-grid Max; `Min==Max` ⇒ 1). Count = `floor((Max−Min)/Step + 1e-6) + 1`.
+- Total = **Cartesian product** `∏ CandidateCount` — `PretensionCandidates.TotalCount` returns
+  `BigInteger`; `PretensionCandidates.Enumerate` yields `PretensionCombination`s lazily (odometer,
+  one dict per item). Never materialise the product to count it.
+- Summary strip (top-right): `Cables N · Variable N · Pretension Candidates <BigInteger N0>`
+  (`MainViewModel.CableCount` / `VariableCableCount` / `PretensionCandidateCount`), live on every edit.
+- Toolbar `+ Add Cable` → `MainViewModel.AddCablesFromSelection` opens the shared `ISelectionService`
+  dialog listing every cable in `State.Geometry` (search / multi-select / preselects rows already
+  added); picked names that are new become `CablePretensionConfig` rows. No live SAP read — the
+  geometry snapshot already holds the model's cables. `− Remove` deletes selected rows locally only.
+- Apply path (reserved, not wired to any button): `ICablePretensionService.ApplyTargetForceAsync` →
+  `ISapGateway.SetCableTargetForceAsync` → `SapModel.CableObj.SetLoadTargetForce(name, "PRETENSION",
+  ref P, ref RD=0.5, eItemType.Objects)`, creating the `PRETENSION` pattern (`eLoadPatternType.Prestress`)
+  if missing. This is the CSI equivalent of Assign → Cable Loads → Target Force — do not substitute
+  another cable load type.
+- `ConfigurationValidator` cable issues now use section `"Cable pretension"`; the old
+  `CableForceConfiguration` / `WorkflowService.AddCablesAsync` / force-source reading on refresh are gone
+  (`SapGateway.ReadForcesAsync` / `ForceSource` remain, unused). `ICablePretensionService` /
+  `CablePretensionService` exist as the prepared apply seam but are not yet wired into `App.xaml.cs`.
 
 ## Iteration Tab
 
 - In-page title/description was removed.
 - The tab opens directly into the iteration summary/issues layout with the validation controls below.
+
+## Save / Load Config (`src/Configuration/`)
+
+DTO-based persistence for **Tabs 02–04 only** (not Tab 05). Never serialise ViewModels; never mutate SAP.
+
+- Flow: `MainViewModel` `SaveConfig` / `LoadConfig` commands → `ConfigService` (facade, owns `System.Text.Json`
+  IO, no dialogs) → `ConfigurationExtractor` (ApplicationState → `CotVcfConfigDto`, read-only) /
+  `ConfigCompatibilityValidator` (schema + deep model check) / `ConfigurationApplicator` (DTO → ApplicationState).
+- Top-bar buttons `[Save Config] [Load Config]` sit between the title and the status block, gated by
+  `MainViewModel.CanUseConfig` (connected + model).
+- DTO (`ConfigDtos.cs`): `CotVcfConfigDto { ConfigVersion="1.0", Units(m/kN/kPa), Model(snapshot),
+  Tab02Loading, Tab03TrussHeight, Tab04CableForce }`. Fixed internal units. `Tab03` stores **ΔH relative
+  to baseline height** (`Min/Max/StepDeltaH`), not absolute heights — on load the applicator re-runs
+  `WorkflowService.CaptureBaseline()` then reapplies the offsets. Enums serialise as strings
+  (`ReferenceChord`, `CableForceMode`). No candidates / Cartesian products / analysis results / UI state.
+- `ModelSnapshotDto` carries only the points / cables / load patterns the config references, taken from
+  `State.Baseline` (original coordinates). Used for validation only, never re-applied.
+- Save: connection check → block on any `ConfigurationValidator` issue in sections `Loading criteria` /
+  `Truss height` / `Cable pretension` (one consolidated popup) → `SaveFileDialog`
+  (`<model>_COTVCF_Config.json`). Cancel is silent.
+- Load: `OpenFileDialog` → `ConfigService.Read` (malformed JSON → info popup, no state change) →
+  connection check → `ValidateAsync` (schema, then points/coords ±1 mm, cable endpoints I→I/J→J,
+  load patterns, load cases via new `ISapGateway.GetLoadCaseNamesAsync`) → **atomic**: nothing is applied
+  unless `IsCompatible`. Different file name is not a hard block — only content mismatch is
+  (`ModelAppearsRenamed` ⇒ apply + yellow info popup). Incompatible ⇒ one consolidated popup, nothing applied.
+- After a successful load the applicator rebuilds `State.AppliedPoints` / `LoadDefinitions` / `Truss` groups
+  / `Cables`; the existing reactive `Update()` / `UpdatePreview()` path regenerates candidates, refreshes
+  the preview (Top=red / Middle=blue / Bottom=green joints) and tab statuses.
 
 ## Important Files
 
