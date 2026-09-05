@@ -24,7 +24,7 @@
  </UserControl.Resources>
  <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource ViewportBg}">
   <Grid>
-   <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}"/>
+   <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}" TopPoints="{Binding TopPoints, ElementName=Root}" MiddlePoints="{Binding MiddlePoints, ElementName=Root}" BottomPoints="{Binding BottomPoints, ElementName=Root}"/>
 
    <!-- floating viewer controls (top-right) -->
    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" CornerRadius="3" Padding="3" Background="#F2F3F5" BorderBrush="{StaticResource Border}" BorderThickness="1">

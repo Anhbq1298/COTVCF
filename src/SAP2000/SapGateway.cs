@@ -222,5 +222,44 @@ public sealed class SapGateway : ISapGateway
         return true;
     });
     private static bool Close(Position a, Position b) => Math.Abs(a.X - b.X) <= 1e-7 && Math.Abs(a.Y - b.Y) <= 1e-7 && Math.Abs(a.Z - b.Z) <= 1e-7;
+
+    private const int CableObjectType = 3; // CSI SelectObj object-type code for cable objects.
+    private const double PretensionRelDist = 0.5; // Relative distance along the cable for the target-force assignment.
+
+    public Task<CableSelection> GetSelectedCableNamesAsync(ModelInfo expected) => worker.Run(() =>
+    {
+        Verify(expected);
+        int n = 0; int[] types = []; string[] names = [];
+        Check(Model.SelectObj.GetSelected(ref n, ref types, ref names), "SelectObj.GetSelected");
+        int cableCount = 0; string[] cableNames = [];
+        Check(Model.CableObj.GetNameList(ref cableCount, ref cableNames), "CableObj.GetNameList");
+        var cableSet = cableNames.Take(cableCount).ToHashSet(StringComparer.Ordinal);
+        var cables = new List<string>();
+        int nonCable = 0;
+        for (int i = 0; i < n; i++)
+        {
+            if ((types[i] == CableObjectType || cableSet.Contains(names[i])) && cableSet.Contains(names[i])) cables.Add(names[i]);
+            else nonCable++;
+        }
+        return new CableSelection(cables.Distinct(StringComparer.Ordinal).ToArray(), nonCable);
+    });
+
+    public Task SetCableTargetForceAsync(string cableName, string loadPattern, double targetForce, ModelInfo expected) => worker.Run(() =>
+    {
+        Verify(expected, true);
+        if (string.IsNullOrWhiteSpace(cableName)) throw new InvalidOperationException("A cable object name is required.");
+        if (!double.IsFinite(targetForce)) throw new InvalidOperationException("Target force must be a finite number.");
+        int count = 0; string[] patterns = [];
+        Check(Model.LoadPatterns.GetNameList(ref count, ref patterns), "LoadPatterns.GetNameList");
+        if (!patterns.Take(count).Contains(loadPattern))
+            Check(Model.LoadPatterns.Add(loadPattern, eLoadPatternType.Prestress, 0, true), "LoadPatterns.Add", loadPattern);
+        int cableTotal = 0; string[] cableNames = [];
+        Check(Model.CableObj.GetNameList(ref cableTotal, ref cableNames), "CableObj.GetNameList");
+        if (!cableNames.Take(cableTotal).Contains(cableName)) throw new InvalidOperationException($"Cable {cableName} no longer exists in the model.");
+        double p = targetForce, rd = PretensionRelDist;
+        Check(Model.CableObj.SetLoadTargetForce(cableName, loadPattern, ref p, ref rd, eItemType.Objects), "CableObj.SetLoadTargetForce", cableName);
+        return true;
+    });
+
     public void Dispose() { worker.Dispose(); /* SAP2000 remains running; no ApplicationExit. */ }
 }

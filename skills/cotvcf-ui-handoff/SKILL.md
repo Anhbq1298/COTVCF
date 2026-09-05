@@ -107,9 +107,35 @@ earlier tall-header / large-button / blue-block look.
 
 ## Truss Height Tab
 
-- Layout: dominant preview on the left (~1.9:1), `GridSplitter`, then a scrollable right column with
-  `POINT GROUPS` and `HEIGHT RANGE`.
-- `HeightSummary` sits above the preview; `PreviewMessage` below it.
+Tab 3 **defines geometry-variation candidates only**. It never writes SAP2000 — there is no
+"Apply to SAP" here. The primary action is `View Candidates`.
+
+- Layout: dominant preview left (~1.9:1), `GridSplitter`, scrollable right column with
+  `POINT GROUPS` (+ `REF.` column), `HEIGHT RANGE`, `PREVIEW`. `HeightSummary`
+  (`SAP · Preview · ΔH · Ref`) sits above the preview; `PreviewMessage` below it.
+- Group rows carry a colour dot: Top = red `#C62828`, Middle = blue `#2563EB`, Bottom = green
+  `#2E7D32`. The viewer paints matching enlarged joint markers (`Structural2DViewer.TopPoints` /
+  `MiddlePoints` / `BottomPoints`, fed by `MainViewModel.TrussTopPoints` …). Only joints are
+  recoloured — member line styles are untouched. A small legend chip overlays the viewer bottom-left.
+- `REF.` column = mutually-exclusive radio (`TrussHeightConfiguration.Reference`, enum
+  `ReferenceChord`, default `Top`) bound through `EnumMatchConverter` (`{StaticResource EnumMatch}`).
+  Tooltip: "Selected chord elevation remains fixed while generating truss-height candidates."
+- Candidate rule (`TrussGeometryService.ChordDeltas`, ΔH = candidate − baseline height, never
+  hard-coded direction): Top ref → (0, −0.5ΔH, −ΔH); Middle ref → (+0.5ΔH, 0, −0.5ΔH);
+  Bottom ref → (+ΔH, +0.5ΔH, 0). Applied to **baseline** coordinates every time — no drift.
+- `TrussHeightConfiguration.CandidateCount` = `floor((Max−Min)/Step)+1` (capped), recomputed on
+  every Min/Max/Step keystroke; `CandidateHeights`, `LandsOnMaximum` alongside. `CandidateWarning`
+  flags a range whose last step misses the maximum.
+- `Capture Baseline` freezes `state.Baseline` (points + members), `BaselineHeight` H₀ and seeds
+  Min = H₀, Max = 1.5·H₀, Step = H₀/20. Status: `✓ Baseline captured · H₀ …`.
+- Preview height + slider are visualisation only (slider has a per-step `TickBar`; see the `Slider`
+  style in `Theme.xaml`). `TrussGeometryService.Validate` no longer forces preview height on-grid.
+- `View Candidates` (`MainWindow.ViewTrussCandidates_Click` → `MainViewModel.CreateTrussCandidates`)
+  opens a read-only grid `# · Height · ΔH · Reference · Top ΔZ · Mid ΔZ · Bot ΔZ`; selecting a row
+  sets `CurrentHeight` so the main viewer previews it. `CanViewTrussCandidates` /
+  `TrussCandidatesHint` gate + explain the button (groups, baseline, valid range).
+- `ApplyGeometry` / `WorkflowService.ApplyGeometryAsync` / `SapGateway.MovePointsAsync` still exist
+  but are **no longer surfaced** in Tab 3 (kept for a later execution workflow).
 - Page content uses `Text` / `Muted` on `Surface`. If content appears invisible, check for inherited
   `Foreground` from tab styling.
 

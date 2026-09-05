@@ -13,7 +13,7 @@ public sealed class TrussGeometryService
         foreach (var name in names.Where(n => !baseline.Points.ContainsKey(n))) Error($"Point {name} no longer exists. Refresh and review its group.");
         if (!ValidRange(t.MinimumHeight, t.MaximumHeight, t.Increment) || t.MinimumHeight <= 0) Error("Use a positive minimum, maximum greater than minimum, and a positive finite step no larger than the range.");
         if (!double.IsFinite(t.BaselineHeight) || t.BaselineHeight <= 0) Error("Capture a valid baseline height first.");
-        if (!OnGrid(t.CurrentHeight, t.MinimumHeight, t.MaximumHeight, t.Increment)) Error("Preview height must be within range and on an increment.");
+        if (!double.IsFinite(t.CurrentHeight)) Error("Preview height must be a finite number.");
         if (baseline.Points.Values.Any(p => !p.Position.IsFinite)) Error("Baseline contains non-finite coordinates.");
         return issues;
     }
@@ -36,11 +36,21 @@ public sealed class TrussGeometryService
     {
         var issues = Validate(baseline, t);
         if (issues.Count > 0) throw new InvalidOperationException(string.Join("\n", issues.Select(i => i.Message)));
+        var top = t.TopPoints.ToHashSet(StringComparer.Ordinal);
         var middle = t.MiddlePoints.ToHashSet(StringComparer.Ordinal);
         var bottom = t.BottomPoints.ToHashSet(StringComparer.Ordinal);
-        double delta = t.CurrentHeight - t.BaselineHeight;
-        var points = baseline.Points.ToDictionary(p => p.Key, p => p.Value with { Position = p.Value.Position with { Z = p.Value.Position.Z - (bottom.Contains(p.Key) ? delta : middle.Contains(p.Key) ? delta * .5 : 0) } });
+        var (dTop, dMid, dBot) = ChordDeltas(t.Reference, t.CurrentHeight - t.BaselineHeight);
+        var points = baseline.Points.ToDictionary(p => p.Key, p => p.Value with { Position = p.Value.Position with { Z = p.Value.Position.Z + (top.Contains(p.Key) ? dTop : middle.Contains(p.Key) ? dMid : bottom.Contains(p.Key) ? dBot : 0) } });
         if (points.Values.Any(p => !p.Position.IsFinite)) throw new InvalidOperationException("Preview coordinates exceed the supported numeric range.");
         return new(points, baseline.Members);
     }
+
+    /// <summary>Signed Z shift for each chord given the reference chord and ΔH = candidate - baseline height.
+    /// Directions are never hard-coded; a negative ΔH reverses the movement.</summary>
+    public static (double Top, double Mid, double Bot) ChordDeltas(ReferenceChord reference, double deltaHeight) => reference switch
+    {
+        ReferenceChord.Middle => (0.5 * deltaHeight, 0.0, -0.5 * deltaHeight),
+        ReferenceChord.Bottom => (deltaHeight, 0.5 * deltaHeight, 0.0),
+        _ => (0.0, -0.5 * deltaHeight, -deltaHeight),
+    };
 }

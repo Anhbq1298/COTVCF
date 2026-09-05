@@ -50,7 +50,33 @@ public sealed class MainViewModel : Observable
     public string MiddleSummary => $"{State.Truss.MiddlePoints.Count} points selected";
     public string BottomSummary => $"{State.Truss.BottomPoints.Count} points selected";
     public string GroupWarning => State.Truss.TopPoints.Count > 0 && State.Truss.MiddlePoints.Count > 0 && State.Truss.BottomPoints.Count > 0 && (State.Truss.TopPoints.Count != State.Truss.MiddlePoints.Count || State.Truss.TopPoints.Count != State.Truss.BottomPoints.Count) ? "Review: group counts differ. Each selected group moves uniformly; point-to-point correspondence is not inferred." : "";
-    public string HeightSummary => State.BaselineCaptured ? $"SAP: {State.CommittedHeight:F4} {LengthUnit}   |   Preview: {State.Truss.CurrentHeight:F4} {LengthUnit}" : "Baseline not captured";
+    public string HeightSummary => State.BaselineCaptured
+        ? $"SAP {State.CommittedHeight:F4}   ·   Preview {State.Truss.CurrentHeight:F4}   ·   ΔH {State.Truss.CurrentHeight - State.Truss.BaselineHeight:+0.0000;-0.0000;0.0000} {LengthUnit}   ·   Ref {State.Truss.Reference}"
+        : "Baseline not captured — select chord groups, then Capture Baseline.";
+    public string BaselineStatus => State.BaselineCaptured
+        ? $"✓ Baseline captured · H₀ {State.Truss.BaselineHeight:F4} {LengthUnit}"
+        : "Baseline not captured";
+    public string CandidateCountText => State.BaselineCaptured && State.Truss.CandidateCount > 0 ? State.Truss.CandidateCount.ToString() : "—";
+    public string CandidateWarning
+    {
+        get
+        {
+            if (!State.BaselineCaptured) return "";
+            var t = State.Truss;
+            if (!(t.MaximumHeight >= t.MinimumHeight)) return "Maximum height must be at least the minimum height.";
+            if (!(t.Increment > 0)) return "Increment step must be greater than zero.";
+            if (t.CandidateCount <= 0) return "The height range produces no candidates.";
+            return t.LandsOnMaximum ? "" : $"Last step lands at {t.MinimumHeight + (t.CandidateCount - 1) * t.Increment:F4} {LengthUnit}, not the maximum {t.MaximumHeight:F4} {LengthUnit}.";
+        }
+    }
+    public string PreviewDelta => State.BaselineCaptured
+        ? $"ΔH {State.Truss.CurrentHeight - State.Truss.BaselineHeight:+0.0000;-0.0000;0.0000} {LengthUnit}  ·  Ref {State.Truss.Reference}"
+        : "";
+    public IReadOnlyList<string> TrussTopPoints => State.Truss.TopPoints;
+    public IReadOnlyList<string> TrussMiddlePoints => State.Truss.MiddlePoints;
+    public IReadOnlyList<string> TrussBottomPoints => State.Truss.BottomPoints;
+    public bool CanViewTrussCandidates => TrussCandidatesReady(out _);
+    public string TrussCandidatesHint { get { TrussCandidatesReady(out var reason); return reason; } }
     public string IterationSummary => $"MODEL\n{ModelName} - {State.Units}\n\nLOADING CRITERIA\n{State.AppliedPoints.Count} applied points - {State.LoadDefinitions.Count} load definitions\n\nTRUSS HEIGHT\n{State.Truss.MinimumHeight:F4} to {State.Truss.MaximumHeight:F4} {LengthUnit} - step {State.Truss.Increment:F4} {LengthUnit}\n\nCABLE FORCE\n{State.Cables.Count} force sources configured";
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
     public string StatusLine => State.IsSapConnected
@@ -226,6 +252,41 @@ public sealed class MainViewModel : Observable
         return new(cases.Count, rows);
     }
 
+    private bool TrussCandidatesReady(out string reason)
+    {
+        var t = State.Truss;
+        if (t.TopPoints.Count == 0 || t.MiddlePoints.Count == 0 || t.BottomPoints.Count == 0)
+        { reason = "Select Top, Middle and Bottom chord point groups."; return false; }
+        if (!State.BaselineCaptured)
+        { reason = "Capture baseline geometry before generating candidates."; return false; }
+        if (!double.IsFinite(t.MinimumHeight) || t.MinimumHeight <= 0)
+        { reason = "Enter a positive minimum height."; return false; }
+        if (!double.IsFinite(t.MaximumHeight) || t.MaximumHeight < t.MinimumHeight)
+        { reason = "Maximum height must be at least the minimum height."; return false; }
+        if (!double.IsFinite(t.Increment) || t.Increment <= 0)
+        { reason = "Increment step must be greater than zero."; return false; }
+        if (t.CandidateCount <= 0)
+        { reason = "The height range produces no candidates."; return false; }
+        reason = $"{t.CandidateCount} candidate geometr{(t.CandidateCount == 1 ? "y" : "ies")} from the captured baseline · reference {t.Reference} chord fixed.";
+        return true;
+    }
+
+    public IReadOnlyList<TrussCandidate>? CreateTrussCandidates()
+    {
+        if (!TrussCandidatesReady(out var reason)) { Message = reason; return null; }
+        var t = State.Truss;
+        var rows = new List<TrussCandidate>(t.CandidateCount);
+        int index = 1;
+        foreach (var height in t.CandidateHeights)
+        {
+            double deltaH = height - t.BaselineHeight;
+            var (top, mid, bot) = COT_VCF.Geometry.TrussGeometryService.ChordDeltas(t.Reference, deltaH);
+            rows.Add(new(index++, height, deltaH, t.Reference.ToString(), top, mid, bot));
+        }
+        Message = $"{rows.Count} truss-height candidates generated from baseline H₀ {t.BaselineHeight:F4} {LengthUnit}.";
+        return rows;
+    }
+
     private void ChooseGroup(string group)
     {
         var truss = State.Truss;
@@ -280,6 +341,9 @@ public sealed class MainViewModel : Observable
             nameof(ModelName), nameof(ModelPath), nameof(ModelVersion), nameof(LockState), nameof(GeometrySummary),
             nameof(ForceUnit), nameof(LengthUnit), nameof(FxHeader), nameof(FyHeader), nameof(FzHeader),
             nameof(TopSummary), nameof(MiddleSummary), nameof(BottomSummary), nameof(HeightSummary),
+            nameof(BaselineStatus), nameof(CandidateCountText), nameof(CandidateWarning), nameof(PreviewDelta),
+            nameof(TrussTopPoints), nameof(TrussMiddlePoints), nameof(TrussBottomPoints),
+            nameof(CanViewTrussCandidates), nameof(TrussCandidatesHint),
             nameof(IterationSummary), nameof(SapStatus), nameof(StatusLine), nameof(AppliedPointsTitle), nameof(LoadStatus),
             nameof(TrussStatus), nameof(CableStatus)
         }) Notify(name);

@@ -137,31 +137,89 @@
      </StackPanel>
     </TabItem.Header>
     <Grid>
-     <Grid.ColumnDefinitions><ColumnDefinition Width="1.9*"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="1.9*"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*" MinWidth="280"/></Grid.ColumnDefinitions>
      <Grid Grid.Column="0">
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <TextBlock Text="{Binding HeightSummary}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6"/>
-      <c:Structural2DViewer Grid.Row="1" Model="{Binding State.Preview}"/>
+      <TextBlock Text="{Binding HeightSummary}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
+      <Grid Grid.Row="1">
+       <c:Structural2DViewer Model="{Binding State.Preview}" TopPoints="{Binding TrussTopPoints}" MiddlePoints="{Binding TrussMiddlePoints}" BottomPoints="{Binding TrussBottomPoints}"/>
+       <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,26" Background="#F2F3F5" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3">
+        <StackPanel Orientation="Horizontal">
+         <Ellipse Width="8" Height="8" Fill="#C62828" VerticalAlignment="Center"/><TextBlock Text="Top" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,10,0"/>
+         <Ellipse Width="8" Height="8" Fill="#2563EB" VerticalAlignment="Center"/><TextBlock Text="Middle" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,10,0"/>
+         <Ellipse Width="8" Height="8" Fill="#2E7D32" VerticalAlignment="Center"/><TextBlock Text="Bottom" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,0,0"/>
+        </StackPanel>
+       </Border>
+      </Grid>
       <TextBlock Grid.Row="2" Text="{Binding PreviewMessage}" TextWrapping="Wrap" Foreground="{StaticResource Accent}" FontSize="11" Margin="0,6,0,0"/>
      </Grid>
      <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
      <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
       <StackPanel IsEnabled="{Binding IsIdle}" Margin="10,0,0,0">
-       <TextBlock Text="POINT GROUPS" Style="{StaticResource Subheading}"/>
-       <DockPanel Margin="0,0,0,6"><Button DockPanel.Dock="Right" Content="Select" Command="{Binding SelectGroup}" CommandParameter="Top" Margin="6,0,0,0"/><StackPanel><TextBlock Text="Top chord" FontWeight="SemiBold"/><TextBlock Text="{Binding TopSummary}" Foreground="{StaticResource Muted}" FontSize="11"/></StackPanel></DockPanel>
-       <DockPanel Margin="0,0,0,6"><Button DockPanel.Dock="Right" Content="Select" Command="{Binding SelectGroup}" CommandParameter="Middle" Margin="6,0,0,0"/><StackPanel><TextBlock Text="Middle" FontWeight="SemiBold"/><TextBlock Text="{Binding MiddleSummary}" Foreground="{StaticResource Muted}" FontSize="11"/></StackPanel></DockPanel>
-       <DockPanel Margin="0,0,0,10"><Button DockPanel.Dock="Right" Content="Select" Command="{Binding SelectGroup}" CommandParameter="Bottom" Margin="6,0,0,0"/><StackPanel><TextBlock Text="Bottom chord" FontWeight="SemiBold"/><TextBlock Text="{Binding BottomSummary}" Foreground="{StaticResource Muted}" FontSize="11"/></StackPanel></DockPanel>
-       <TextBlock Text="{Binding GroupWarning}" TextWrapping="Wrap" Foreground="{StaticResource Warning}" FontSize="11" Margin="0,0,0,6"/>
-       <Button Content="Capture Baseline" Command="{Binding CaptureBaseline}" HorizontalAlignment="Left" Margin="0,0,0,12"/>
+
+       <Grid Margin="0,0,0,2">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <TextBlock Text="POINT GROUPS" Style="{StaticResource Subheading}" Margin="0"/>
+        <TextBlock Grid.Column="1" Text="REF." Style="{StaticResource Subheading}" Margin="0" HorizontalAlignment="Right"
+                  ToolTip="Selected chord elevation remains fixed while generating truss-height candidates."/>
+       </Grid>
+
+       <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,6">
+         <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="#C62828" VerticalAlignment="Center" Margin="0,0,6,0"/><TextBlock Text="Top chord" FontWeight="SemiBold"/></StackPanel>
+         <TextBlock Text="{Binding TopSummary}" Foreground="{StaticResource Muted}" FontSize="11"/>
+        </StackPanel>
+        <Button Grid.Row="0" Grid.Column="1" Content="Select" Command="{Binding SelectGroup}" CommandParameter="Top" Margin="6,0,6,6" VerticalAlignment="Center"/>
+        <RadioButton Grid.Row="0" Grid.Column="2" GroupName="TrussRef" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,6"
+                    IsChecked="{Binding State.Truss.Reference, Converter={StaticResource EnumMatch}, ConverterParameter=Top}"
+                    ToolTip="Top chord elevation stays fixed while generating candidates."/>
+
+        <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,6">
+         <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="#2563EB" VerticalAlignment="Center" Margin="0,0,6,0"/><TextBlock Text="Middle" FontWeight="SemiBold"/></StackPanel>
+         <TextBlock Text="{Binding MiddleSummary}" Foreground="{StaticResource Muted}" FontSize="11"/>
+        </StackPanel>
+        <Button Grid.Row="1" Grid.Column="1" Content="Select" Command="{Binding SelectGroup}" CommandParameter="Middle" Margin="6,0,6,6" VerticalAlignment="Center"/>
+        <RadioButton Grid.Row="1" Grid.Column="2" GroupName="TrussRef" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,6"
+                    IsChecked="{Binding State.Truss.Reference, Converter={StaticResource EnumMatch}, ConverterParameter=Middle}"
+                    ToolTip="Middle chord elevation stays fixed while generating candidates."/>
+
+        <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,0,6">
+         <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="#2E7D32" VerticalAlignment="Center" Margin="0,0,6,0"/><TextBlock Text="Bottom chord" FontWeight="SemiBold"/></StackPanel>
+         <TextBlock Text="{Binding BottomSummary}" Foreground="{StaticResource Muted}" FontSize="11"/>
+        </StackPanel>
+        <Button Grid.Row="2" Grid.Column="1" Content="Select" Command="{Binding SelectGroup}" CommandParameter="Bottom" Margin="6,0,6,6" VerticalAlignment="Center"/>
+        <RadioButton Grid.Row="2" Grid.Column="2" GroupName="TrussRef" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,6"
+                    IsChecked="{Binding State.Truss.Reference, Converter={StaticResource EnumMatch}, ConverterParameter=Bottom}"
+                    ToolTip="Bottom chord elevation stays fixed while generating candidates."/>
+       </Grid>
+
+       <TextBlock Text="{Binding GroupWarning}" TextWrapping="Wrap" Foreground="{StaticResource Warning}" FontSize="11" Margin="0,2,0,6"/>
+       <Button Content="Capture Baseline" Command="{Binding CaptureBaseline}" HorizontalAlignment="Left" Margin="0,0,0,4"
+              ToolTip="Freeze the selected chord coordinates and truss height H&#8320; as the immutable reference for every candidate."/>
+       <TextBlock Text="{Binding BaselineStatus}" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource Success}" Margin="0,0,0,12"/>
+
        <TextBlock Text="HEIGHT RANGE" Style="{StaticResource Subheading}"/>
        <c:EngineeringInput Label="Minimum height" Value="{Binding State.Truss.MinimumHeight}" Unit="{Binding LengthUnit}"/>
        <c:EngineeringInput Label="Maximum height" Value="{Binding State.Truss.MaximumHeight}" Unit="{Binding LengthUnit}"/>
        <c:EngineeringInput Label="Increment step" Value="{Binding State.Truss.Increment}" Unit="{Binding LengthUnit}"/>
+       <Grid Margin="0,2,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <TextBlock Text="Generated candidates" Foreground="{StaticResource Muted}"/>
+        <TextBlock Grid.Column="1" Text="{Binding CandidateCountText}" FontFamily="Consolas" FontWeight="SemiBold"/>
+       </Grid>
+       <TextBlock Text="{Binding CandidateWarning}" TextWrapping="Wrap" Foreground="{StaticResource Warning}" FontSize="10.5" Margin="0,2,0,10"/>
+
+       <TextBlock Text="PREVIEW" Style="{StaticResource Subheading}"/>
        <c:EngineeringInput Label="Preview height" Value="{Binding State.Truss.CurrentHeight}" Unit="{Binding LengthUnit}"/>
-       <Slider Minimum="{Binding State.Truss.MinimumHeight}" Maximum="{Binding State.Truss.MaximumHeight}" TickFrequency="{Binding State.Truss.Increment}" Value="{Binding State.Truss.CurrentHeight}" IsSnapToTickEnabled="True" TickPlacement="BottomRight" Margin="0,4,0,12" AutomationProperties.Name="Preview truss height"/>
+       <Slider Minimum="{Binding State.Truss.MinimumHeight}" Maximum="{Binding State.Truss.MaximumHeight}" TickFrequency="{Binding State.Truss.Increment}" Value="{Binding State.Truss.CurrentHeight}" Margin="0,4,0,4" AutomationProperties.Name="Preview truss height"/>
+       <TextBlock Text="{Binding PreviewDelta}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
        <StackPanel Orientation="Horizontal">
-        <Button Content="Reset" Command="{Binding ResetPreview}"/>
-        <Button Content="Apply to SAP" Command="{Binding ApplyGeometry}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/>
+        <Button Content="Reset Preview" Command="{Binding ResetPreview}"/>
+        <Button Content="View Candidates" Click="ViewTrussCandidates_Click" Style="{StaticResource Primary}"
+               IsEnabled="{Binding CanViewTrussCandidates}" ToolTip="{Binding TrussCandidatesHint}"/>
        </StackPanel>
       </StackPanel>
      </ScrollViewer>

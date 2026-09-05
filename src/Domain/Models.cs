@@ -36,6 +36,7 @@ public record ForceSource(string ObjectName, MemberKind Kind, string Source, dou
 public record ValidationIssue(string Section, string Message);
 public sealed record LoadingCandidate(string AppliedPt, string Case, double Qz, double TribArea, int NStories, double FzKn);
 public sealed record LoadingCandidatePreview(int CaseCount, IReadOnlyList<LoadingCandidate> Rows);
+public sealed record TrussCandidate(int Index, double Height, double DeltaH, string Reference, double TopDz, double MidDz, double BotDz);
 public sealed class AppliedPoint : Observable
 {
     private double x, y, z;
@@ -110,31 +111,123 @@ public sealed class PointLoadConfiguration : Observable
     public string Status { get => status; set => Set(ref status, value); }
     public PointLoad ToLoad() => new(PointName, LoadPattern, Fx, Fy, Fz);
 }
+public enum ReferenceChord { Top, Middle, Bottom }
 public sealed class TrussHeightConfiguration : Observable
 {
     public IReadOnlyList<string> TopPoints { get; set; } = [];
     public IReadOnlyList<string> MiddlePoints { get; set; } = [];
     public IReadOnlyList<string> BottomPoints { get; set; } = [];
     private double baseline, current, minimum, maximum, increment = 1;
-    public double BaselineHeight { get => baseline; set => Set(ref baseline, value); }
+    private ReferenceChord reference = ReferenceChord.Top;
+    public double BaselineHeight { get => baseline; set { if (Set(ref baseline, value)) NotifyCandidates(); } }
     public double CurrentHeight { get => current; set => Set(ref current, value); }
-    public double MinimumHeight { get => minimum; set => Set(ref minimum, value); }
-    public double MaximumHeight { get => maximum; set => Set(ref maximum, value); }
-    public double Increment { get => increment; set => Set(ref increment, value); }
+    public double MinimumHeight { get => minimum; set { if (Set(ref minimum, value)) NotifyCandidates(); } }
+    public double MaximumHeight { get => maximum; set { if (Set(ref maximum, value)) NotifyCandidates(); } }
+    public double Increment { get => increment; set { if (Set(ref increment, value)) NotifyCandidates(); } }
+    // Which chord stays fixed while candidate heights are generated. Top reproduces the original behaviour.
+    public ReferenceChord Reference { get => reference; set => Set(ref reference, value); }
+    private void NotifyCandidates() { Notify(nameof(CandidateCount)); Notify(nameof(CandidateHeights)); Notify(nameof(LandsOnMaximum)); }
+    // CandidateCount = floor((Max - Min) / Step) + 1, guarded and capped.
+    public int CandidateCount
+    {
+        get
+        {
+            if (!double.IsFinite(minimum) || !double.IsFinite(maximum) || !double.IsFinite(increment) || increment <= 0 || maximum < minimum) return 0;
+            var steps = Math.Floor((maximum - minimum) / increment + 1e-9);
+            if (!double.IsFinite(steps) || steps < 0) return 0;
+            return steps > 1_000_000 ? 1_000_001 : (int)steps + 1;
+        }
+    }
+    public IReadOnlyList<double> CandidateHeights
+    {
+        get
+        {
+            var n = CandidateCount;
+            return n <= 0 ? [] : Enumerable.Range(0, n).Select(i => minimum + i * increment).ToArray();
+        }
+    }
+    // Whether the last candidate lands exactly on MaximumHeight.
+    public bool LandsOnMaximum
+    {
+        get
+        {
+            var n = CandidateCount;
+            return n > 0 && Math.Abs((minimum + (n - 1) * increment) - maximum) <= 1e-6 * Math.Max(1, Math.Abs(maximum));
+        }
+    }
 }
-public sealed class CableForceConfiguration : Observable
+// One selected SAP2000 cable and its candidate PRETENSION target-force definition (Fixed or Range).
+// Editing this never touches SAP2000 — values are candidate definitions only.
+public sealed record PretensionCombination(long CombinationIndex, IReadOnlyDictionary<string, double> CableForces);
+public sealed class CablePretensionConfig : Observable, IDataErrorInfo
 {
-    public string ObjectName { get; init; } = "";
-    public MemberKind Kind { get; init; }
-    public string Source { get; init; } = "";
-    public double? CurrentForce { get; init; }
-    public string? ReadProblem { get; init; }
-    private double minimum, maximum, increment = 1, target;
-    public double MinimumForce { get => minimum; set { Set(ref minimum, value); Notify(nameof(Status)); } }
-    public double MaximumForce { get => maximum; set { Set(ref maximum, value); Notify(nameof(Status)); } }
-    public double Increment { get => increment; set { Set(ref increment, value); Notify(nameof(Status)); } }
-    public double TargetForce { get => target; set { Set(ref target, value); Notify(nameof(Status)); } }
-    public string Status => ReadProblem ?? (CurrentForce is null ? "No force source" : "Configured");
+    public const string PretensionLoadCase = "PRETENSION";
+    public const int MaterializeCeiling = 1_000_000;
+
+    public required string CableName { get; init; }
+    public string LoadCase => PretensionLoadCase;
+
+    private bool applyRange, missing;
+    private double? targetForce = 0, minForce, maxForce, stepForce;
+
+    public bool ApplyRange
+    {
+        get => applyRange;
+        set
+        {
+            if (!Set(ref applyRange, value)) return;
+            Notify(nameof(IsFixed));
+            Notify(nameof(TargetForce)); Notify(nameof(MinForce)); Notify(nameof(MaxForce)); Notify(nameof(StepForce));
+            Notify(nameof(CandidateCount)); Notify(nameof(Status));
+        }
+    }
+    public bool IsFixed => !applyRange;
+    public bool Missing { get => missing; set { if (Set(ref missing, value)) Notify(nameof(Status)); } }
+
+    public double? TargetForce { get => targetForce; set { if (Set(ref targetForce, value)) Recount(); } }
+    public double? MinForce { get => minForce; set { if (Set(ref minForce, value)) { Notify(nameof(MaxForce)); Recount(); } } }
+    public double? MaxForce { get => maxForce; set { if (Set(ref maxForce, value)) Recount(); } }
+    public double? StepForce { get => stepForce; set { if (Set(ref stepForce, value)) Recount(); } }
+    private void Recount() { Notify(nameof(CandidateCount)); Notify(nameof(Status)); }
+
+    // Efficient count — never allocates the value list (spec: do not materialise just to count).
+    public int CandidateCount
+    {
+        get
+        {
+            if (!applyRange)
+                return targetForce is double t && double.IsFinite(t) ? 1 : 0;
+            if (minForce is not double min || maxForce is not double max || stepForce is not double step
+                || !double.IsFinite(min) || !double.IsFinite(max) || !double.IsFinite(step) || step <= 0 || max < min)
+                return 0;
+            var n = Math.Floor((max - min) / step + 1e-6) + 1;
+            return n < 1 ? 0 : n > int.MaxValue ? int.MaxValue : (int)n;
+        }
+    }
+
+    public string Status => Missing ? "Missing in SAP" : CandidateCount > 0 ? "Configured" : "Invalid";
+
+    /// <summary>Candidate target forces for this cable: [TargetForce] in Fixed mode, or Min, Min+Step, … ≤ Max in Range mode.
+    /// Materialised only on demand; never appends an off-grid Max.</summary>
+    public IReadOnlyList<double> GetCandidateForces()
+    {
+        var count = CandidateCount;
+        if (count <= 0) return [];
+        if (count > MaterializeCeiling) throw new InvalidOperationException($"{CableName}: {count:N0} candidate forces exceed the {MaterializeCeiling:N0} limit. Widen the step.");
+        if (!applyRange) return [targetForce!.Value];
+        double min = minForce!.Value, step = stepForce!.Value;
+        return Enumerable.Range(0, count).Select(i => min + i * step).ToArray();
+    }
+
+    string IDataErrorInfo.Error => "";
+    public string this[string columnName] => columnName switch
+    {
+        nameof(TargetForce) when IsFixed && (TargetForce is not double v || !double.IsFinite(v)) => "Enter a target force.",
+        nameof(MinForce) when ApplyRange && (MinForce is not double v || !double.IsFinite(v)) => "Enter a minimum force.",
+        nameof(MaxForce) when ApplyRange && (MaxForce is not double v || !double.IsFinite(v) || MinForce is not double min || v < min) => "Max force must be greater than or equal to Min force.",
+        nameof(StepForce) when ApplyRange && (StepForce is not double v || !double.IsFinite(v) || v <= 0) => "Step force must be greater than zero.",
+        _ => ""
+    };
 }
 public sealed class ApplicationState : Observable
 {
@@ -159,7 +252,7 @@ public sealed class ApplicationState : Observable
     ];
     public double TributaryWidthB { get => tributaryWidthB; set => Set(ref tributaryWidthB, value); }
     public double NumberOfStories { get => numberOfStories; set => Set(ref numberOfStories, value); }
-    public ObservableCollection<CableForceConfiguration> Cables { get; } = [];
+    public ObservableCollection<CablePretensionConfig> Cables { get; } = [];
     public TrussHeightConfiguration Truss { get; } = new();
     public bool BaselineCaptured { get; set; }
     public double CommittedHeight { get; set; }

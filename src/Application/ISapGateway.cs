@@ -8,6 +8,11 @@ public interface ISapGateway : IDisposable
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
     Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected);
+    /// <summary>Names of the cable objects currently selected in SAP2000, plus a count of the other selected objects.</summary>
+    Task<CableSelection> GetSelectedCableNamesAsync(ModelInfo expected);
+    /// <summary>Assign → Cable Loads → Target Force for one cable on the given load pattern (created as a Prestress
+    /// pattern if missing). Reserved for the execution workflow; never called while editing Tab 4.</summary>
+    Task SetCableTargetForceAsync(string cableName, string loadPattern, double targetForce, ModelInfo expected);
 }
 // Deliberately no implementation in this phase.
 public interface IIterationEngine
