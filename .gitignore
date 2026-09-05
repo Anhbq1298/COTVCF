@@ -1,0 +1,6 @@
+bin/
+obj/
+.work/
+tests/bin/
+tests/obj/
+*.user
