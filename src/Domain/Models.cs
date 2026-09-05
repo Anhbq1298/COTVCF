@@ -229,6 +229,16 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         _ => ""
     };
 }
+// Tab 05 study mode: isolate one design variable before running the full interaction.
+public enum IterationStudyMode { FixPretension, FixHeight, Combined }
+public sealed class IterationStudyConfig : Observable
+{
+    private IterationStudyMode mode = IterationStudyMode.FixPretension;
+    private int fixedHeightIndex, fixedPretensionIndex; // 0-based indices into the height / pretension candidate sets
+    public IterationStudyMode Mode { get => mode; set => Set(ref mode, value); }
+    public int FixedHeightIndex { get => fixedHeightIndex; set => Set(ref fixedHeightIndex, Math.Max(0, value)); }
+    public int FixedPretensionIndex { get => fixedPretensionIndex; set => Set(ref fixedPretensionIndex, Math.Max(0, value)); }
+}
 public sealed class ApplicationState : Observable
 {
     private ModelInfo? model;
@@ -254,6 +264,7 @@ public sealed class ApplicationState : Observable
     public double NumberOfStories { get => numberOfStories; set => Set(ref numberOfStories, value); }
     public ObservableCollection<CablePretensionConfig> Cables { get; } = [];
     public TrussHeightConfiguration Truss { get; } = new();
+    public IterationStudyConfig Study { get; } = new();
     public bool BaselineCaptured { get; set; }
     public double CommittedHeight { get; set; }
 }

@@ -3,27 +3,37 @@ using COT_VCF.Domain;
 namespace COT_VCF.Configuration;
 
 /// <summary>
-/// Turns the current <see cref="ApplicationState"/> (Tabs 02–04) into a <see cref="CotVcfConfigDto"/>.
-/// Read-only: it never touches SAP2000. The model snapshot carries only the points / cables / load
-/// patterns actually referenced by the configuration, taken from the immutable baseline geometry.
+/// Turns the current <see cref="ApplicationState"/> into a <see cref="CotVcfConfigDto"/> for the requested
+/// tabs only. Read-only: it never touches SAP2000. The model snapshot carries just the points / cables /
+/// load patterns referenced by the included tabs, taken from the immutable baseline geometry.
 /// </summary>
 public sealed class ConfigurationExtractor
 {
-    public CotVcfConfigDto Extract(ApplicationState state, IReadOnlyCollection<string> modelLoadCases)
+    public CotVcfConfigDto Extract(ApplicationState state, IReadOnlyCollection<string> modelLoadCases, ConfigTabs tabs)
     {
-        var tab02 = ExtractLoading(state);
-        var tab03 = ExtractTruss(state);
-        var tab04 = ExtractCables(state);
+        var t02 = tabs.HasFlag(ConfigTabs.Loading) ? ExtractLoading(state) : null;
+        var t03 = tabs.HasFlag(ConfigTabs.Truss) ? ExtractTruss(state) : null;
+        var t04 = tabs.HasFlag(ConfigTabs.Cable) ? ExtractCables(state) : null;
         return new CotVcfConfigDto
         {
             ConfigVersion = "1.0",
             Units = new UnitsDto(),
-            Model = Snapshot(state, tab02, tab03, tab04, modelLoadCases),
-            Tab02Loading = tab02,
-            Tab03TrussHeight = tab03,
-            Tab04CableForce = tab04,
+            Model = Snapshot(state, t02, t03, t04, modelLoadCases, null),
+            Tab02Loading = t02,
+            Tab03TrussHeight = t03,
+            Tab04CableForce = t04,
         };
     }
+
+    /// <summary>Extract only one tab's section from the current UI state.</summary>
+    public LoadingConfigDto ExtractLoadingSection(ApplicationState state) => ExtractLoading(state);
+    public TrussHeightConfigDto ExtractTrussSection(ApplicationState state) => ExtractTruss(state);
+    public CableForceConfigDto ExtractCableSection(ApplicationState state) => ExtractCables(state);
+
+    /// <summary>Recompute a project's model snapshot from whichever tab sections it currently holds,
+    /// preserving <see cref="ModelSnapshotDto.OriginalFileName"/>.</summary>
+    public ModelSnapshotDto RebuildSnapshot(CotVcfConfigDto project, ApplicationState state, IReadOnlyCollection<string> modelLoadCases) =>
+        Snapshot(state, project.Tab02Loading, project.Tab03TrussHeight, project.Tab04CableForce, modelLoadCases, project.Model);
 
     private static LoadingConfigDto ExtractLoading(ApplicationState s) => new()
     {
@@ -71,19 +81,17 @@ public sealed class ConfigurationExtractor
         }).ToList(),
     };
 
-    private static ModelSnapshotDto Snapshot(ApplicationState s, LoadingConfigDto t02, TrussHeightConfigDto t03, CableForceConfigDto t04, IReadOnlyCollection<string> modelLoadCases)
+    private static ModelSnapshotDto Snapshot(ApplicationState s, LoadingConfigDto? t02, TrussHeightConfigDto? t03, CableForceConfigDto? t04, IReadOnlyCollection<string> modelLoadCases, ModelSnapshotDto? previous)
     {
-        // Baseline geometry = original coordinates captured at connect time (Tab 03 points must use
-        // baseline, and it is the safe original source for every dependency).
+        // Baseline geometry = original coordinates captured at connect time (Tab 03 must use baseline;
+        // it is also the safe original source for every other dependency).
         var geom = s.Baseline.Points.Count > 0 ? s.Baseline : s.Geometry;
 
         var pointNames = new HashSet<string>(StringComparer.Ordinal);
-        pointNames.UnionWith(t02.AppliedPoints);
-        pointNames.UnionWith(t03.TopPoints);
-        pointNames.UnionWith(t03.MiddlePoints);
-        pointNames.UnionWith(t03.BottomPoints);
+        if (t02 is not null) pointNames.UnionWith(t02.AppliedPoints);
+        if (t03 is not null) { pointNames.UnionWith(t03.TopPoints); pointNames.UnionWith(t03.MiddlePoints); pointNames.UnionWith(t03.BottomPoints); }
 
-        var cableNames = new HashSet<string>(t04.Cables.Select(c => c.CableName), StringComparer.Ordinal);
+        var cableNames = new HashSet<string>(t04?.Cables.Select(c => c.CableName) ?? [], StringComparer.Ordinal);
         var members = geom.Members.Where(m => m.Kind == MemberKind.Cable && cableNames.Contains(m.Name)).ToArray();
         foreach (var m in members) { pointNames.Add(m.Start); pointNames.Add(m.End); }
 
@@ -91,13 +99,15 @@ public sealed class ConfigurationExtractor
             ? new CoordinateDto { X = p.Position.X, Y = p.Position.Y, Z = p.Position.Z }
             : new CoordinateDto();
 
-        var patterns = new HashSet<string>(t02.LoadDefinitions.Select(r => r.LoadName), StringComparer.Ordinal);
+        var patterns = new HashSet<string>(t02?.LoadDefinitions.Select(r => r.LoadName) ?? [], StringComparer.Ordinal);
         patterns.IntersectWith(s.LoadPatterns);
-        var cases = new HashSet<string>(t04.Cables.Select(c => c.PretensionLoadCase).Where(n => !string.IsNullOrWhiteSpace(n)), StringComparer.Ordinal);
+        var cases = new HashSet<string>((t04?.Cables.Select(c => c.PretensionLoadCase) ?? []).Where(n => !string.IsNullOrWhiteSpace(n)), StringComparer.Ordinal);
 
+        var currentFile = s.Model is { } info ? System.IO.Path.GetFileName(info.Path) : "";
         return new ModelSnapshotDto
         {
-            FileName = s.Model is { } info ? System.IO.Path.GetFileName(info.Path) : "",
+            OriginalFileName = string.IsNullOrWhiteSpace(previous?.OriginalFileName) ? currentFile : previous!.OriginalFileName,
+            FileName = currentFile,
             Points = pointNames.Where(geom.Points.ContainsKey).OrderBy(n => n, StringComparer.Ordinal)
                 .Select(n => { var c = Coord(n); return new PointSnapshotDto { Name = n, X = c.X, Y = c.Y, Z = c.Z }; }).ToList(),
             Cables = members.OrderBy(m => m.Name, StringComparer.Ordinal).Select(m => new CableSnapshotDto

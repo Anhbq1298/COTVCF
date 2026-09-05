@@ -171,38 +171,64 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
   (`SapGateway.ReadForcesAsync` / `ForceSource` remain, unused). `ICablePretensionService` /
   `CablePretensionService` exist as the prepared apply seam but are not yet wired into `App.xaml.cs`.
 
-## Iteration Tab
+## Iteration Study Tab (05)
 
-- In-page title/description was removed.
-- The tab opens directly into the iteration summary/issues layout with the validation controls below.
+Study **definition + run-count preview only** — nothing executes (`Run study — next phase` stays disabled).
 
-## Save / Load Config (`src/Configuration/`)
+- `IterationStudyConfig` (Domain, `ApplicationState.Study`): `Mode` (`IterationStudyMode` enum
+  `FixPretension` / `FixHeight` / `Combined`), `FixedHeightIndex`, `FixedPretensionIndex` (0-based).
+- Candidate-space counts: **N_L** = Σ `LoadDefinition.CandidateValues.Count` (`MainViewModel.LoadingCandidateCount`),
+  **N_H** = `State.Truss.CandidateCount` (0 until baseline captured), **N_P** = `PretensionCandidates.TotalCount`
+  (`BigInteger`).
+- Total runs (`StudyPlan.TotalRuns`): Fix Pretension → N_L·N_H, Fix Height → N_L·N_P, Combined → N_L·N_H·N_P.
+  `StudyPlan.Enumerate` yields `(loadIndex, heightIndex, pretensionIndex)` lazily — the seam for a future engine.
+- Mode radios bind `State.Study.Mode` via `{StaticResource EnumMatch}` (`EnumMatchConverter` is generic).
+  Fix Pretension shows a 1-based "Combination #" `EngineeringInput` (max = N_P) + a preview of that
+  combination's per-cable forces; Fix Height shows a `ComboBox` of `State.Truss.CandidateHeights`
+  (SelectedIndex ↔ `FixedHeightIndex`); Combined shows neither. `CURRENT STUDY` panel prints the mode,
+  each dimension's count or `FIXED · H#/P#`, and `Total Runs` (accent).
+- Right column keeps the `Issues` grid + `Validate` button. `IterationSummary` property is retained but no
+  longer bound.
 
-DTO-based persistence for **Tabs 02–04 only** (not Tab 05). Never serialise ViewModels; never mutate SAP.
+## Config Project File (`src/Configuration/`)
 
-- Flow: `MainViewModel` `SaveConfig` / `LoadConfig` commands → `ConfigService` (facade, owns `System.Text.Json`
-  IO, no dialogs) → `ConfigurationExtractor` (ApplicationState → `CotVcfConfigDto`, read-only) /
-  `ConfigCompatibilityValidator` (schema + deep model check) / `ConfigurationApplicator` (DTO → ApplicationState).
-- Top-bar buttons `[Save Config] [Load Config]` sit between the title and the status block, gated by
-  `MainViewModel.CanUseConfig` (connected + model).
+The JSON is a **COT VCF project** (document-editor model), not an export/import blob. Tabs 02–04 only
+(not Tab 05). Never serialise ViewModels; never mutate SAP.
+
+- `ConfigProjectSession` (held by `ConfigService`): `FilePath`, in-memory `Project` (`CotVcfConfigDto`),
+  `Tab02/03/04Dirty`. Once a project is open the in-memory `Project` is the source of truth; the file is
+  just persistence. `MainViewModel.ProjectName` shows `Project: <file>` in the top bar.
+- **Load Config = Open Project** (`MainViewModel.OpenProject`): full-or-nothing — every present tab must
+  validate against the connected model (`check.AllPresentOk`), else the current project is untouched.
+  On success: apply present tabs, `SetActiveProject`, `ClearDirty()`. A null tab section = "Not configured",
+  not corrupt. Renamed model (`ModelAppearsRenamed`) → still opens, yellow note.
+- **Per-tab `Save Config`** (`SaveTabConfig` param `Loading`/`Truss`/`Cable` → `SaveTab`): overwrites
+  **only that section** of a clone of the in-memory project — all other tabs come from `Session.Project`,
+  **not their unsaved UI**. Rebuilds the snapshot from all present tabs (`ConfigurationExtractor.RebuildSnapshot`),
+  re-validates the whole project vs the connected SAP model (§29), writes the whole file to `Session.FilePath`
+  (no dialog), clears only that tab's dirty flag. First save with no active project → Save-As, becomes the project.
+- **Top `Save All`** (`SaveAllConfig` → `SaveAll` → `SaveAsync(ConfigTabs.All)`): extracts every tab from
+  the UI, validates all, **atomic** — any failure writes nothing (one popup). Otherwise rewrites the whole
+  project, clears all dirty.
+- `ConfigService.SaveAsync(uiTabs, pickPath)` is the single save engine; `SaveOutcome { Saved | Cancelled | Blocked }`.
+- Tab header status (`MainViewModel.TabState`): `Not configured` → `Review inputs` (invalid) →
+  `Not saved` (configured, absent from project) → `Modified *` (differs from project) → `Saved`.
+  Dirty flags set from the VM's change subscriptions, suppressed during `applyingProject`.
+- `CotVcfConfigDto` tab sections are **nullable** (`PresentTabs`); `ModelSnapshotDto` also carries
+  `OriginalFileName` (preserved across renamed-model saves) alongside `FileName`.
 - DTO (`ConfigDtos.cs`): `CotVcfConfigDto { ConfigVersion="1.0", Units(m/kN/kPa), Model(snapshot),
   Tab02Loading, Tab03TrussHeight, Tab04CableForce }`. Fixed internal units. `Tab03` stores **ΔH relative
   to baseline height** (`Min/Max/StepDeltaH`), not absolute heights — on load the applicator re-runs
   `WorkflowService.CaptureBaseline()` then reapplies the offsets. Enums serialise as strings
   (`ReferenceChord`, `CableForceMode`). No candidates / Cartesian products / analysis results / UI state.
 - `ModelSnapshotDto` carries only the points / cables / load patterns the config references, taken from
-  `State.Baseline` (original coordinates). Used for validation only, never re-applied.
-- Save: connection check → block on any `ConfigurationValidator` issue in sections `Loading criteria` /
-  `Truss height` / `Cable pretension` (one consolidated popup) → `SaveFileDialog`
-  (`<model>_COTVCF_Config.json`). Cancel is silent.
-- Load: `OpenFileDialog` → `ConfigService.Read` (malformed JSON → info popup, no state change) →
-  connection check → `ValidateAsync` (schema, then points/coords ±1 mm, cable endpoints I→I/J→J,
-  load patterns, load cases via new `ISapGateway.GetLoadCaseNamesAsync`) → **atomic**: nothing is applied
-  unless `IsCompatible`. Different file name is not a hard block — only content mismatch is
-  (`ModelAppearsRenamed` ⇒ apply + yellow info popup). Incompatible ⇒ one consolidated popup, nothing applied.
-- After a successful load the applicator rebuilds `State.AppliedPoints` / `LoadDefinitions` / `Truss` groups
-  / `Cables`; the existing reactive `Update()` / `UpdatePreview()` path regenerates candidates, refreshes
-  the preview (Top=red / Middle=blue / Bottom=green joints) and tab statuses.
+  `State.Baseline` (original coordinates). Used for validation only, never re-applied. Compat check:
+  points/coords ±1 mm, cable endpoints I→I/J→J, load patterns, load cases (`ISapGateway.GetLoadCaseNamesAsync`);
+  `TabCheck` per tab; `FileErrors` (bad version / no tabs) abort the whole open.
+- `ConfigurationApplicator.Apply(project, check)` rebuilds `State.AppliedPoints` / `LoadDefinitions` /
+  `Truss` groups / `Cables` for the tabs whose check is `Ok`; the reactive `Update()` / `UpdatePreview()`
+  path regenerates candidates and refreshes the preview (Top=red / Middle=blue / Bottom=green joints).
+  `Tab03` stores ΔH vs baseline → the applicator re-runs `CaptureBaseline()` then reapplies the offsets.
 
 ## Important Files
 

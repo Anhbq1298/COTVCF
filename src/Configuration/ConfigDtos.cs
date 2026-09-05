@@ -7,14 +7,24 @@ namespace COT_VCF.Configuration;
 
 public enum CableForceMode { Fixed, Range }
 
+/// <summary>Which tab sections a save/load touches. A file may carry any subset.</summary>
+[Flags]
+public enum ConfigTabs { None = 0, Loading = 1, Truss = 2, Cable = 4, All = Loading | Truss | Cable }
+
 public sealed class CotVcfConfigDto
 {
     public string ConfigVersion { get; set; } = "1.0";
     public UnitsDto Units { get; set; } = new();
     public ModelSnapshotDto Model { get; set; } = new();
-    public LoadingConfigDto Tab02Loading { get; set; } = new();
-    public TrussHeightConfigDto Tab03TrussHeight { get; set; } = new();
-    public CableForceConfigDto Tab04CableForce { get; set; } = new();
+    // A per-tab save leaves the other sections null; load processes each present section independently.
+    public LoadingConfigDto? Tab02Loading { get; set; }
+    public TrussHeightConfigDto? Tab03TrussHeight { get; set; }
+    public CableForceConfigDto? Tab04CableForce { get; set; }
+
+    public ConfigTabs PresentTabs =>
+        (Tab02Loading is not null ? ConfigTabs.Loading : 0)
+        | (Tab03TrussHeight is not null ? ConfigTabs.Truss : 0)
+        | (Tab04CableForce is not null ? ConfigTabs.Cable : 0);
 }
 
 public sealed class UnitsDto
@@ -36,6 +46,9 @@ public sealed class CoordinateDto
 // compatibility validation on load, never re-applied to SAP.
 public sealed class ModelSnapshotDto
 {
+    /// <summary>Model the project was first created against. Preserved across Save-As / renamed-model saves.</summary>
+    public string OriginalFileName { get; set; } = "";
+    /// <summary>Model the project was last validated / saved against (the effective "current" name).</summary>
     public string FileName { get; set; } = "";
     public List<PointSnapshotDto> Points { get; set; } = new();
     public List<CableSnapshotDto> Cables { get; set; } = new();

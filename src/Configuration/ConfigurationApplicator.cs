@@ -10,11 +10,12 @@ namespace COT_VCF.Configuration;
 /// </summary>
 public sealed class ConfigurationApplicator(ApplicationState state, WorkflowService workflow)
 {
-    public void Apply(CotVcfConfigDto cfg)
+    /// <summary>Apply only the tabs whose checks passed; skip the rest so a partial file still loads.</summary>
+    public void Apply(CotVcfConfigDto cfg, ConfigValidationResult check)
     {
-        ApplyLoading(cfg.Tab02Loading);
-        ApplyTruss(cfg.Tab03TrussHeight);
-        ApplyCables(cfg.Tab04CableForce);
+        if (check.Loading.Ok && cfg.Tab02Loading is { } l) ApplyLoading(l);
+        if (check.Truss.Ok && cfg.Tab03TrussHeight is { } t) ApplyTruss(t);
+        if (check.Cable.Ok && cfg.Tab04CableForce is { } c) ApplyCables(c);
     }
 
     private void ApplyLoading(LoadingConfigDto d)
@@ -23,7 +24,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         state.NumberOfStories = d.NumberOfStories;
 
         state.AppliedPoints.Clear();
-        foreach (var name in d.AppliedPoints)
+        foreach (var name in d.AppliedPoints ?? [])
         {
             if (!state.Geometry.Points.TryGetValue(name, out var p)) continue;
             state.AppliedPoints.Add(new AppliedPoint
@@ -35,7 +36,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         workflow.SortAppliedPoints();
 
         state.LoadDefinitions.Clear();
-        foreach (var row in d.LoadDefinitions)
+        foreach (var row in d.LoadDefinitions ?? [])
             state.LoadDefinitions.Add(new LoadDefinition
             {
                 LoadName = row.LoadName,
@@ -50,9 +51,9 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
     private void ApplyTruss(TrussHeightConfigDto d)
     {
         var t = state.Truss;
-        t.TopPoints = d.TopPoints.ToArray();
-        t.MiddlePoints = d.MiddlePoints.ToArray();
-        t.BottomPoints = d.BottomPoints.ToArray();
+        t.TopPoints = (d.TopPoints ?? []).ToArray();
+        t.MiddlePoints = (d.MiddlePoints ?? []).ToArray();
+        t.BottomPoints = (d.BottomPoints ?? []).ToArray();
         t.Reference = d.ReferenceElevation;
         state.BaselineCaptured = false;
 
@@ -78,7 +79,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
     private void ApplyCables(CableForceConfigDto d)
     {
         state.Cables.Clear();
-        foreach (var row in d.Cables)
+        foreach (var row in d.Cables ?? [])
             state.Cables.Add(new CablePretensionConfig
             {
                 CableName = row.CableName,

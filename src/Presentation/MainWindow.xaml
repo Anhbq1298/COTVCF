@@ -26,14 +26,16 @@
      <Image Source="{StaticResource AppLogo}" Width="20" Height="20" Margin="0,0,8,0"/>
      <TextBlock Text="COT VCF tools" FontSize="13" FontWeight="Bold"/>
      <TextBlock Text="PARAMETRIC STRUCTURAL WORKFLOW" Margin="12,1,0,0" Foreground="{StaticResource Muted}" FontSize="10"/>
-     <Border Width="1" Background="{StaticResource Border}" Margin="16,3,16,3"/>
-     <Button Command="{Binding SaveConfig}" ToolTip="Save the Tabs 02–04 configuration to a JSON file" Margin="0,0,6,0">
+     <Border Width="1" Background="{StaticResource Border}" Margin="16,3,14,3"/>
+     <TextBlock Text="{Binding ProjectName}" VerticalAlignment="Center" FontSize="11" Margin="0,0,12,0"
+               Foreground="{StaticResource Muted}" MaxWidth="260" TextTrimming="CharacterEllipsis"/>
+     <Button Command="{Binding SaveAllConfig}" ToolTip="Save every tab into the active project file (creates it the first time)" Margin="0,0,6,0">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M2,2 L11,2 L14,5 L14,14 L2,14 Z M5,2 L5,6 L11,6 M4.5,14 L4.5,9.5 L11.5,9.5 L11.5,14"/></Viewbox>
-       <TextBlock Text="Save Config"/>
+       <TextBlock Text="Save All"/>
       </StackPanel>
      </Button>
-     <Button Command="{Binding LoadConfig}" ToolTip="Load a saved configuration and restore Tabs 02–04" Margin="0">
+     <Button Command="{Binding LoadConfig}" ToolTip="Open a COT VCF project file and restore Tabs 02–04" Margin="0">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M1.5,4 L6,4 L8,6 L14.5,6 L14.5,13 L1.5,13 Z"/></Viewbox>
        <TextBlock Text="Load Config"/>
@@ -134,7 +136,10 @@
           <DataGridTemplateColumn Width="34" MinWidth="34"><DataGridTemplateColumn.CellTemplate><DataTemplate><Button Command="{Binding DataContext.DeleteLoadDefinition, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="Delete load definition" Width="24" Height="22" MinHeight="22" Padding="5" Margin="0" Background="Transparent" BorderThickness="0"><Viewbox Width="11" Height="11"><Path Stroke="{StaticResource Error}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,2 L14,14 M14,2 L2,14"/></Viewbox></Button></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
          </DataGrid.Columns>
         </DataGrid>
-        <Button Grid.Row="3" Content="+ Add Load" Command="{Binding AddLoadDefinition}" Click="AddLoad_Click" HorizontalAlignment="Left" Margin="0,6,0,0"/>
+        <DockPanel Grid.Row="3" Margin="0,6,0,0">
+         <Button DockPanel.Dock="Right" Content="Save Config" Command="{Binding SaveTabConfig}" CommandParameter="Loading" ToolTip="Save only this tab's loading configuration to a JSON file" Margin="0"/>
+         <Button Content="+ Add Load" Command="{Binding AddLoadDefinition}" Click="AddLoad_Click" HorizontalAlignment="Left"/>
+        </DockPanel>
        </Grid>
       </Border>
      </Grid>
@@ -234,6 +239,8 @@
         <Button Content="View Candidates" Click="ViewTrussCandidates_Click" Style="{StaticResource Primary}"
                IsEnabled="{Binding CanViewTrussCandidates}" ToolTip="{Binding TrussCandidatesHint}"/>
        </StackPanel>
+       <Button Content="Save Config" Command="{Binding SaveTabConfig}" CommandParameter="Truss" HorizontalAlignment="Left" Margin="0,8,0,0"
+              ToolTip="Save only this tab's truss-height configuration to a JSON file"/>
       </StackPanel>
      </ScrollViewer>
     </Grid>
@@ -262,6 +269,7 @@
       <StackPanel Orientation="Horizontal">
        <Button Content="+ Add Cable" Command="{Binding AddCables}" ToolTip="Pick cable objects from the loaded SAP2000 model"/>
        <Button Content="&#8722; Remove" Command="{Binding RemoveCables}" CommandParameter="{Binding SelectedItems, ElementName=Cables}"/>
+       <Button Content="Save Config" Command="{Binding SaveTabConfig}" CommandParameter="Cable" ToolTip="Save only this tab's cable-pretension configuration to a JSON file"/>
       </StackPanel>
      </DockPanel>
      <TextBlock Grid.Row="1" Foreground="{StaticResource Muted}" FontSize="10.5" Margin="0,0,0,6"
@@ -301,31 +309,101 @@
     </Grid>
    </TabItem>
 
-   <!-- 05 ITERATION -->
+   <!-- 05 ITERATION STUDY -->
    <TabItem>
     <TabItem.Header>
      <StackPanel Width="124">
       <TextBlock Text="05  ITERATION" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
-      <TextBlock Text="Next phase" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
+      <TextBlock Text="Study setup" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
     <Grid>
      <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
      <Grid Grid.Row="0">
-      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
-      <ScrollViewer><TextBlock Text="{Binding IterationSummary}" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11" LineHeight="20" Margin="0,0,16,0"/></ScrollViewer>
-      <DataGrid Grid.Column="1" ItemsSource="{Binding Issues}" IsReadOnly="True" CanUserDeleteRows="False">
-       <DataGrid.Columns>
-        <DataGridTextColumn Header="Section" Binding="{Binding Section}" Width="120"/>
-        <DataGridTextColumn Header="Review required" Binding="{Binding Message}" Width="*">
-         <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="ToolTip" Value="{Binding Message}"/></Style></DataGridTextColumn.ElementStyle>
-        </DataGridTextColumn>
-       </DataGrid.Columns>
-      </DataGrid>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="1.1*" MinWidth="320"/><ColumnDefinition Width="8"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
+
+      <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+       <StackPanel IsEnabled="{Binding IsIdle}">
+
+        <TextBlock Text="STUDY MODE" Style="{StaticResource Subheading}"/>
+        <RadioButton GroupName="StudyMode" Margin="0,0,0,8" IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=FixPretension}">
+         <StackPanel><TextBlock Text="Fix Pretension" FontWeight="SemiBold"/><TextBlock Text="Vary Loading × Truss Height  —  N_L × N_H" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel>
+        </RadioButton>
+        <RadioButton GroupName="StudyMode" Margin="0,0,0,8" IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=FixHeight}">
+         <StackPanel><TextBlock Text="Fix Height" FontWeight="SemiBold"/><TextBlock Text="Vary Loading × Cable Pretension  —  N_L × N_P" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel>
+        </RadioButton>
+        <RadioButton GroupName="StudyMode" Margin="0,0,0,10" IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=Combined}">
+         <StackPanel><TextBlock Text="Combined" FontWeight="SemiBold"/><TextBlock Text="Vary Loading × Truss Height × Pretension  —  N_L × N_H × N_P" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel>
+        </RadioButton>
+
+        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10" Margin="0,0,0,10"
+               Visibility="{Binding StudyNeedsFixedPretension, Converter={StaticResource BoolVisibility}}">
+         <StackPanel>
+          <TextBlock Text="FIXED PRETENSION" Style="{StaticResource Subheading}"/>
+          <StackPanel Orientation="Horizontal">
+           <TextBlock Text="Combination #" VerticalAlignment="Top" Margin="0,5,8,0"/>
+           <c:EngineeringInput Width="96" Label="" AutomationProperties.Name="Fixed pretension combination number"
+                              Value="{Binding FixedPretensionOrdinal}" Minimum="1" Maximum="{Binding PretensionMaxOrdinal}" Increment="1" WholeNumbersOnly="True" Unit="" Margin="0"/>
+          </StackPanel>
+          <TextBlock Text="{Binding FixedPretensionValueText}" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+         </StackPanel>
+        </Border>
+
+        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10" Margin="0,0,0,10"
+               Visibility="{Binding StudyNeedsFixedHeight, Converter={StaticResource BoolVisibility}}">
+         <StackPanel>
+          <TextBlock Text="FIXED HEIGHT" Style="{StaticResource Subheading}"/>
+          <StackPanel Orientation="Horizontal">
+           <TextBlock Text="Height candidate" VerticalAlignment="Center" Margin="0,0,8,0"/>
+           <ComboBox Width="140" ItemsSource="{Binding HeightCandidates}" SelectedIndex="{Binding FixedHeightIndex, Mode=TwoWay}" ItemStringFormat="F4"/>
+          </StackPanel>
+          <TextBlock Text="{Binding FixedHeightValueText}" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,4,0,0"/>
+         </StackPanel>
+        </Border>
+
+        <TextBlock Text="CANDIDATE SPACE" Style="{StaticResource Subheading}"/>
+        <Grid Margin="0,0,0,12">
+         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+         <TextBlock Text="Loading" Foreground="{StaticResource Muted}"/><TextBlock Grid.Column="1" Text="{Binding LoadingCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
+         <TextBlock Grid.Row="1" Text="Truss Height" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding HeightCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
+         <TextBlock Grid.Row="2" Text="Pretension" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PretensionCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
+        </Grid>
+
+        <TextBlock Text="CURRENT STUDY" Style="{StaticResource Subheading}"/>
+        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10">
+         <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition Height="8"/><RowDefinition/></Grid.RowDefinitions>
+          <TextBlock Text="Mode" Foreground="{StaticResource Muted}"/><TextBlock Grid.Column="1" Text="{Binding StudyModeLabel}" FontWeight="SemiBold"/>
+          <TextBlock Grid.Row="1" Text="Loading" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StudyLoadingCell}" FontFamily="Consolas"/>
+          <TextBlock Grid.Row="2" Text="Height" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding StudyHeightCell}" FontFamily="Consolas"/>
+          <TextBlock Grid.Row="3" Text="Pretension" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding StudyPretensionCell}" FontFamily="Consolas"/>
+          <TextBlock Grid.Row="5" Text="Total Runs" FontWeight="SemiBold"/><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding StudyTotalRuns}" FontWeight="Bold" FontSize="14" Foreground="{StaticResource Accent}" FontFamily="Consolas"/>
+         </Grid>
+        </Border>
+
+       </StackPanel>
+      </ScrollViewer>
+
+      <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
+
+      <DockPanel Grid.Column="2">
+       <TextBlock DockPanel.Dock="Top" Text="Validation issues" Style="{StaticResource Subheading}"/>
+       <DataGrid ItemsSource="{Binding Issues}" IsReadOnly="True" CanUserDeleteRows="False">
+        <DataGrid.Columns>
+         <DataGridTextColumn Header="Section" Binding="{Binding Section}" Width="130"/>
+         <DataGridTextColumn Header="Review required" Binding="{Binding Message}" Width="*">
+          <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="ToolTip" Value="{Binding Message}"/></Style></DataGridTextColumn.ElementStyle>
+         </DataGridTextColumn>
+        </DataGrid.Columns>
+       </DataGrid>
+      </DockPanel>
      </Grid>
+
      <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,10,0,0">
       <Button Content="Validate" Command="{Binding Validate}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/>
-      <Button Content="Run &#8212; next phase" IsEnabled="False"/>
+      <Button Content="Run study &#8212; next phase" IsEnabled="False" ToolTip="Execution is not implemented in this phase"/>
      </StackPanel>
     </Grid>
    </TabItem>

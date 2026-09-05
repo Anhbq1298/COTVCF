@@ -6,12 +6,19 @@ using COT_VCF.Domain;
 
 namespace COT_VCF.Configuration;
 
+public enum SaveResult { Saved, Cancelled, Blocked }
+public readonly record struct SaveOutcome(SaveResult Result, string Message);
+
 /// <summary>
-/// Facade the UI uses for Save / Load Config. Orchestrates extract → validate → apply and owns JSON IO.
-/// Never shows dialogs and never mutates <see cref="ApplicationState"/> until both validation stages pass.
+/// Owns the active COT VCF <b>project</b> (see <see cref="Session"/>). Load = open a project;
+/// per-tab save overwrites only its section of the in-memory project, then writes the whole file back;
+/// Save All extracts every tab from the UI and rewrites the project atomically. Never shows dialogs —
+/// the caller supplies a Save-As path picker.
 /// </summary>
 public sealed class ConfigService(ISapGateway sap, ApplicationState state, WorkflowService workflow)
 {
+    public ConfigProjectSession Session { get; } = new();
+
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
@@ -19,40 +26,108 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         PropertyNameCaseInsensitive = true,
         AllowTrailingCommas = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         Converters = { new JsonStringEnumConverter() },
     };
 
     public bool CanUse => state.IsSapConnected && state.Model is not null;
 
-    public string SuggestFileName() => state.Model is { } m && !string.IsNullOrWhiteSpace(m.Path)
-        ? Path.GetFileNameWithoutExtension(m.Path) + "_COTVCF_Config.json"
-        : "COTVCF_Config.json";
-
-    /// <summary>Extract the current Tabs 02–04 configuration plus a SAP dependency snapshot. Read-only.</summary>
-    public async Task<CotVcfConfigDto> BuildAsync()
+    public string SuggestFileName(ConfigTabs tabs)
     {
-        if (!CanUse) throw new InvalidOperationException("Connect to a SAP2000 model before saving a configuration.");
-        var cases = await sap.GetLoadCaseNamesAsync(state.Model!);
-        return new ConfigurationExtractor().Extract(state, cases);
+        var stem = state.Model is { } m && !string.IsNullOrWhiteSpace(m.Path) ? Path.GetFileNameWithoutExtension(m.Path) : "COTVCF";
+        var suffix = tabs switch
+        {
+            ConfigTabs.Loading => "Tab02_Loading",
+            ConfigTabs.Truss => "Tab03_TrussHeight",
+            ConfigTabs.Cable => "Tab04_CableForce",
+            _ => "Config",
+        };
+        return $"{stem}_COTVCF_{suffix}.json";
     }
 
-    public void Save(string path, CotVcfConfigDto config) => File.WriteAllText(path, JsonSerializer.Serialize(config, Json));
-
+    // ---------- open ----------
     public CotVcfConfigDto Read(string path)
     {
-        CotVcfConfigDto? config;
-        try { config = JsonSerializer.Deserialize<CotVcfConfigDto>(File.ReadAllText(path), Json); }
+        CotVcfConfigDto? project;
+        try { project = JsonSerializer.Deserialize<CotVcfConfigDto>(File.ReadAllText(path), Json); }
         catch (JsonException) { throw new InvalidDataException("The selected file is not a valid COT VCF configuration file."); }
-        return config ?? throw new InvalidDataException("The selected file is not a valid COT VCF configuration file.");
+        return project ?? throw new InvalidDataException("The selected file is not a valid COT VCF configuration file.");
     }
 
-    public async Task<ConfigValidationResult> ValidateAsync(CotVcfConfigDto config)
+    public async Task<ConfigValidationResult> ValidateAsync(CotVcfConfigDto project)
     {
         var model = state.Model;
         IReadOnlyList<string> cases = model is null ? Array.Empty<string>() : await sap.GetLoadCaseNamesAsync(model);
-        return new ConfigCompatibilityValidator().Validate(config, state, cases);
+        return new ConfigCompatibilityValidator().Validate(project, state, cases);
     }
 
-    /// <summary>Commit a validated config. Call only after <see cref="ValidateAsync"/> returns IsCompatible.</summary>
-    public void Apply(CotVcfConfigDto config) => new ConfigurationApplicator(state, workflow).Apply(config);
+    public void SetActiveProject(string path, CotVcfConfigDto project) => Session.Open(path, project);
+    public void Apply(CotVcfConfigDto project, ConfigValidationResult check) =>
+        new ConfigurationApplicator(state, workflow).Apply(project, check);
+
+    // ---------- save (per-tab or all) ----------
+    /// <param name="uiTabs">Which tab sections come from the current UI. All others are kept from the active project.</param>
+    /// <param name="pickPath">Returns a Save-As path (or null to cancel) when there is no active project.</param>
+    public async Task<SaveOutcome> SaveAsync(ConfigTabs uiTabs, Func<string?>? pickPath)
+    {
+        if (!CanUse) return new(SaveResult.Blocked, "Connect to a SAP2000 model before saving a configuration.");
+        var cases = await sap.GetLoadCaseNamesAsync(state.Model!);
+        var extractor = new ConfigurationExtractor();
+
+        var project = Session.Project is { } active ? Clone(active) : new CotVcfConfigDto { ConfigVersion = "1.0", Units = new() };
+        if (uiTabs.HasFlag(ConfigTabs.Loading)) project.Tab02Loading = extractor.ExtractLoadingSection(state);
+        if (uiTabs.HasFlag(ConfigTabs.Truss)) project.Tab03TrussHeight = extractor.ExtractTrussSection(state);
+        if (uiTabs.HasFlag(ConfigTabs.Cable)) project.Tab04CableForce = extractor.ExtractCableSection(state);
+
+        var effective = ConfiguredIn(project);
+        if (effective == ConfigTabs.None) return new(SaveResult.Cancelled, "Nothing configured to save yet.");
+        project.Model = extractor.RebuildSnapshot(project, state, cases);
+
+        // Whole active project must stay compatible with the connected model (§9 / §29 / §16).
+        var check = new ConfigCompatibilityValidator().Validate(project, state, cases);
+        if (!check.FileValid || !check.AllPresentOk)
+            return new(SaveResult.Blocked, BlockReport(check));
+
+        string path;
+        if (Session.HasActiveProject) path = Session.FilePath!;
+        else
+        {
+            var picked = pickPath?.Invoke();
+            if (string.IsNullOrWhiteSpace(picked)) return new(SaveResult.Cancelled, "");
+            path = picked!;
+        }
+
+        File.WriteAllText(path, JsonSerializer.Serialize(project, Json));
+        // In-memory project == what is on disk; only the tabs written from the UI become clean.
+        Session.SetProject(path, project);
+        Session.ClearDirty(uiTabs);
+        return new(SaveResult.Saved, "");
+    }
+
+    private static ConfigTabs ConfiguredIn(CotVcfConfigDto p)
+    {
+        var t = ConfigTabs.None;
+        if (p.Tab02Loading is { AppliedPoints.Count: > 0 } or { LoadDefinitions.Count: > 0 }) t |= ConfigTabs.Loading;
+        if (p.Tab03TrussHeight is { } h && ((h.TopPoints?.Count ?? 0) > 0 || (h.MiddlePoints?.Count ?? 0) > 0 || (h.BottomPoints?.Count ?? 0) > 0)) t |= ConfigTabs.Truss;
+        if (p.Tab04CableForce is { Cables.Count: > 0 }) t |= ConfigTabs.Cable;
+        // Drop empty sections so the file only carries configured tabs.
+        if (!t.HasFlag(ConfigTabs.Loading)) p.Tab02Loading = null;
+        if (!t.HasFlag(ConfigTabs.Truss)) p.Tab03TrussHeight = null;
+        if (!t.HasFlag(ConfigTabs.Cable)) p.Tab04CableForce = null;
+        return t;
+    }
+
+    private static string BlockReport(ConfigValidationResult r)
+    {
+        var lines = new List<string>();
+        if (r.FileErrors.Count > 0) lines.Add(string.Join("\n", r.FileErrors.Select(e => "• " + e)));
+        void Add(string name, TabCheck tc) { if (tc.Present && !tc.Ok) lines.Add($"{name}:\n" + string.Join("\n", tc.Problems.Select(p => "  • " + p))); }
+        Add("Tab 02 – Loading", r.Loading);
+        Add("Tab 03 – Truss Height", r.Truss);
+        Add("Tab 04 – Cable Force", r.Cable);
+        return "Unable to save the configuration:\n\n" + string.Join("\n\n", lines) + "\n\nNo changes have been written to the project file.";
+    }
+
+    private static CotVcfConfigDto Clone(CotVcfConfigDto d) =>
+        JsonSerializer.Deserialize<CotVcfConfigDto>(JsonSerializer.Serialize(d, Json), Json)!;
 }

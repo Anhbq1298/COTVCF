@@ -4,6 +4,7 @@ using COT_VCF.Domain;
 using Microsoft.Win32;
 using System.Collections;
 using System.Collections.ObjectModel;
+using System.Numerics;
 using System.Windows.Input;
 using MessageBox = System.Windows.MessageBox;
 
@@ -86,15 +87,90 @@ public sealed class MainViewModel : Observable
     public int VariableCableCount => COT_VCF.Application.PretensionCandidates.VariableCount(State.Cables);
     public string PretensionCandidateCount => State.Cables.Count == 0 || State.Cables.Any(c => c.CandidateCount <= 0)
         ? "0"
-        : COT_VCF.Application.PretensionCandidates.TotalCount(State.Cables).ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+        : PretensionRuns.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
+    // ---- Tab 05 iteration study ----
+    private BigInteger PretensionRuns => State.Cables.Count == 0 || State.Cables.Any(c => c.CandidateCount <= 0)
+        ? BigInteger.Zero
+        : PretensionCandidates.TotalCount(State.Cables);
+    public int LoadingCandidateCount => State.LoadDefinitions.Sum(d => d.CandidateValues.Count);
+    public int HeightCandidateCount => State.BaselineCaptured ? State.Truss.CandidateCount : 0;
+    public IReadOnlyList<double> HeightCandidates => State.BaselineCaptured ? State.Truss.CandidateHeights : [];
+
+    public string StudyModeLabel => State.Study.Mode switch
+    {
+        IterationStudyMode.FixPretension => "Fix Pretension",
+        IterationStudyMode.FixHeight => "Fix Height",
+        _ => "Combined",
+    };
+    public bool StudyNeedsFixedHeight => State.Study.Mode == IterationStudyMode.FixHeight;
+    public bool StudyNeedsFixedPretension => State.Study.Mode == IterationStudyMode.FixPretension;
+
+    public int FixedHeightIndex
+    {
+        get { var n = HeightCandidateCount; return n <= 0 ? -1 : Math.Clamp(State.Study.FixedHeightIndex, 0, n - 1); }
+        set { if (value >= 0) State.Study.FixedHeightIndex = value; }
+    }
+    // Pretension combinations are enumerated 1-based in the UI; cap the picker at int range.
+    private int PretensionRunCount
+    {
+        get { var n = PretensionRuns; return n <= 0 ? 0 : n > int.MaxValue ? int.MaxValue : (int)n; }
+    }
+    public double PretensionMaxOrdinal => Math.Max(1, PretensionRunCount);
+    public double FixedPretensionOrdinal
+    {
+        get { var n = PretensionRunCount; return n <= 0 ? 1 : Math.Clamp(State.Study.FixedPretensionIndex + 1, 1, n); }
+        set => State.Study.FixedPretensionIndex = Math.Max(0, (int)Math.Round(value) - 1);
+    }
+
+    public string FixedHeightValueText
+    {
+        get
+        {
+            var hs = HeightCandidates; var i = FixedHeightIndex;
+            return i >= 0 && i < hs.Count ? $"H{i + 1} = {hs[i]:F4} {LengthUnit}" : "no height candidates yet";
+        }
+    }
+    public string FixedPretensionValueText
+    {
+        get
+        {
+            var n = PretensionRunCount;
+            if (n <= 0) return "no pretension candidates yet";
+            int idx = Math.Clamp(State.Study.FixedPretensionIndex, 0, n - 1);
+            var combo = PretensionCandidates.Enumerate(State.Cables.ToArray()).Skip(idx).FirstOrDefault();
+            return combo is null
+                ? $"P{idx + 1}"
+                : $"P{idx + 1}:  " + string.Join(",  ", combo.CableForces.Select(kv => $"{kv.Key}={kv.Value:0.###}"));
+        }
+    }
+
+    public string StudyLoadingCell => LoadingCandidateCount.ToString();
+    public string StudyHeightCell => StudyNeedsFixedHeight ? $"FIXED · H{FixedHeightIndex + 1}" : HeightCandidateCount.ToString();
+    public string StudyPretensionCell => StudyNeedsFixedPretension ? $"FIXED · P{State.Study.FixedPretensionIndex + 1}" : PretensionCandidateCount;
+    public string StudyTotalRuns => StudyPlan.TotalRuns(State.Study.Mode, LoadingCandidateCount, HeightCandidateCount, PretensionRuns)
+        .ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
     public string StatusLine => State.IsSapConnected
         ? $"{ModelName}  ·  {State.Units}  ·  {(State.Model?.IsLocked == true ? "Locked" : "Unlocked")}"
         : $"SAP2000 — {SapStatus}";
     public string AppliedPointsTitle => $"APPLIED POINTS ({State.AppliedPoints.Count})";
-    public string LoadStatus => State.AppliedPoints.Count == 0 ? "Not configured" : LoadingCriteriaValid() ? "Configured" : "Review criteria";
-    public string TrussStatus => !State.BaselineCaptured ? "Not configured" : new COT_VCF.Geometry.TrussGeometryService().Validate(State.Baseline, State.Truss).Count > 0 ? "Review height" : "Preview ready";
-    public string CableStatus => State.Cables.Count == 0 ? "Not configured" : State.Cables.Any(c => c.Status != "Configured") ? "Review inputs" : "Configured";
+    public bool HasProject => config.Session.HasActiveProject;
+    public string ProjectName => config.Session.HasActiveProject ? $"Project: {config.Session.FileName}" : "No project — save to create one";
+
+    // A tab header state reflects the active project: Saved / Modified * / Not saved / Not configured.
+    private string TabState(ConfigTabs tab, bool configured, bool invalid)
+    {
+        if (!configured) return "Not configured";
+        if (invalid) return "Review inputs";
+        if (!config.Session.ProjectHas(tab)) return "Not saved";
+        return config.Session.IsDirty(tab) ? "Modified *" : "Saved";
+    }
+    private bool AnyTrussGroup => State.Truss.TopPoints.Count > 0 || State.Truss.MiddlePoints.Count > 0 || State.Truss.BottomPoints.Count > 0;
+    public string LoadStatus => TabState(ConfigTabs.Loading, State.AppliedPoints.Count > 0, State.AppliedPoints.Count > 0 && !LoadingCriteriaValid());
+    public string TrussStatus => TabState(ConfigTabs.Truss, State.BaselineCaptured || AnyTrussGroup,
+        !State.BaselineCaptured || new COT_VCF.Geometry.TrussGeometryService().Validate(State.Baseline, State.Truss).Count > 0);
+    public string CableStatus => TabState(ConfigTabs.Cable, State.Cables.Count > 0, State.Cables.Any(c => c.Status != "Configured"));
     public ObservableCollection<ValidationIssue> Issues { get; } = [];
 
     public Command Connect { get; }
@@ -112,10 +188,12 @@ public sealed class MainViewModel : Observable
     public Command RemoveLoads { get; }
     public Command RemoveCables { get; }
     public Command Validate { get; }
-    public Command SaveConfig { get; }
+    public Command SaveTabConfig { get; }
+    public Command SaveAllConfig { get; }
     public Command LoadConfig { get; }
 
     public bool CanUseConfig => !IsBusy && State.IsSapConnected && State.Model is not null;
+    private bool applyingProject;
 
     public MainViewModel(ApplicationState state, WorkflowService workflow, ISelectionService selection, ConfigService config)
     {
@@ -155,12 +233,26 @@ public sealed class MainViewModel : Observable
             foreach (var issue in new ConfigurationValidator().Validate(State)) Issues.Add(issue);
             Message = Issues.Count == 0 ? "Configuration is valid. Iteration is planned for the next phase." : $"{Issues.Count} configuration issues need review.";
         }, () => !IsBusy);
-        SaveConfig = new(_ => SaveConfiguration(), () => CanUseConfig);
-        LoadConfig = new(_ => LoadConfiguration(), () => CanUseConfig);
+        SaveTabConfig = new(p => SaveTab(p switch
+        {
+            "Loading" => ConfigTabs.Loading,
+            "Truss" => ConfigTabs.Truss,
+            "Cable" => ConfigTabs.Cable,
+            _ => ConfigTabs.All,
+        }), () => CanUseConfig);
+        SaveAllConfig = new(_ => SaveAll(), () => CanUseConfig);
+        LoadConfig = new(_ => OpenProject(), () => CanUseConfig);
 
-        State.PropertyChanged += (_, _) => Update();
+        void Dirty(ConfigTabs tab) { if (!applyingProject) config.Session.MarkDirty(tab); }
+
+        State.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(ApplicationState.TributaryWidthB) or nameof(ApplicationState.NumberOfStories)) Dirty(ConfigTabs.Loading);
+            Update();
+        };
         State.Truss.PropertyChanged += (_, _) =>
         {
+            Dirty(ConfigTabs.Truss);
             if (State.BaselineCaptured)
             {
                 try { workflow.UpdatePreview(); PreviewMessage = "Preview only - Apply geometry commits these coordinates to SAP2000."; }
@@ -172,15 +264,18 @@ public sealed class MainViewModel : Observable
         State.AppliedPoints.CollectionChanged += (_, e) =>
         {
             if (e.NewItems is not null) foreach (AppliedPoint point in e.NewItems) point.PropertyChanged += (_, _) => Update();
+            Dirty(ConfigTabs.Loading);
             Update();
         };
         foreach (var row in State.LoadDefinitions) Subscribe(row);
         State.LoadDefinitions.CollectionChanged += (_, e) =>
         {
             if (e.NewItems is not null) foreach (LoadDefinition row in e.NewItems) Subscribe(row);
+            Dirty(ConfigTabs.Loading);
             Update();
         };
-        State.Cables.CollectionChanged += (_, e) => { if (e.NewItems is not null) foreach (CablePretensionConfig row in e.NewItems) row.PropertyChanged += (_, _) => Update(); Update(); };
+        State.Cables.CollectionChanged += (_, e) => { if (e.NewItems is not null) foreach (CablePretensionConfig row in e.NewItems) row.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Cable); Update(); }; Dirty(ConfigTabs.Cable); Update(); };
+        State.Study.PropertyChanged += (_, _) => Update();
     }
 
     private async Task ConnectAndRefreshAsync()
@@ -198,7 +293,7 @@ public sealed class MainViewModel : Observable
         }
     }
 
-    private void Subscribe(LoadDefinition row) => row.PropertyChanged += (_, _) => Update();
+    private void Subscribe(LoadDefinition row) => row.PropertyChanged += (_, _) => { if (!applyingProject) config.Session.MarkDirty(ConfigTabs.Loading); Update(); };
 
     private void SelectLoadLocations()
     {
@@ -342,31 +437,43 @@ public sealed class MainViewModel : Observable
 
     private const string ConfigFilter = "COT VCF Configuration (*.json)|*.json|JSON Files (*.json)|*.json";
 
-    private async void SaveConfiguration()
+    private string? PickSavePath(ConfigTabs tabs)
+    {
+        var dialog = new SaveFileDialog { Filter = ConfigFilter, FileName = config.SuggestFileName(tabs), AddExtension = true, DefaultExt = ".json" };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    }
+
+    // Per-tab Save: overwrites only this tab's section of the active project (other tabs come from the
+    // in-memory project, NOT their unsaved UI); creates the project via Save-As the first time.
+    private void SaveTab(ConfigTabs single) => RunSave(single);
+    // Save All: extracts every tab from the UI and rewrites the whole project atomically.
+    private void SaveAll() => RunSave(ConfigTabs.All);
+
+    private async void RunSave(ConfigTabs uiTabs)
     {
         if (IsBusy) return;
         if (CommitEditors?.Invoke() == false) return;
         if (!config.CanUse) { Warn("Cannot Save Configuration", "Connect to a SAP2000 model before saving a configuration."); return; }
 
-        var blocking = new ConfigurationValidator().Validate(State)
-            .Where(i => i.Section is "Loading criteria" or "Truss height" or "Cable pretension")
-            .GroupBy(i => i.Section)
-            .Select(g => $"{g.Key}:\n" + string.Join("\n", g.Select(i => "  • " + i.Message)))
-            .ToArray();
-        if (blocking.Length > 0)
-        {
-            Warn("Configuration Cannot Be Saved", "Correct the following before saving:\n\n" + string.Join("\n\n", blocking));
-            return;
-        }
-
         IsBusy = true;
         try
         {
-            var dto = await config.BuildAsync();
-            var dialog = new SaveFileDialog { Filter = ConfigFilter, FileName = config.SuggestFileName(), AddExtension = true, DefaultExt = ".json" };
-            if (dialog.ShowDialog() != true) return;
-            config.Save(dialog.FileName, dto);
-            Message = $"Configuration saved · {System.IO.Path.GetFileName(dialog.FileName)}";
+            var outcome = await config.SaveAsync(uiTabs, () => PickSavePath(uiTabs));
+            switch (outcome.Result)
+            {
+                case SaveResult.Saved:
+                    Message = uiTabs == ConfigTabs.All
+                        ? $"Project configuration saved · {config.Session.FileName}"
+                        : $"{TabsLabel(uiTabs)} configuration saved · {config.Session.FileName}";
+                    break;
+                case SaveResult.Cancelled:
+                    if (!string.IsNullOrEmpty(outcome.Message)) Message = outcome.Message;
+                    break;
+                case SaveResult.Blocked:
+                    Warn("Unable to Save Configuration", outcome.Message);
+                    Message = "Save blocked — the project file is unchanged.";
+                    break;
+            }
         }
         catch (Exception ex)
         {
@@ -377,7 +484,9 @@ public sealed class MainViewModel : Observable
         finally { IsBusy = false; Update(); }
     }
 
-    private async void LoadConfiguration()
+    // Load Config = open a project. Full-or-nothing: every present tab must validate against the
+    // connected model, or the current project is left untouched.
+    private async void OpenProject()
     {
         if (IsBusy) return;
         if (CommitEditors?.Invoke() == false) return;
@@ -389,46 +498,44 @@ public sealed class MainViewModel : Observable
         IsBusy = true;
         try
         {
-            CotVcfConfigDto dto;
-            try { dto = config.Read(dialog.FileName); }
+            CotVcfConfigDto project;
+            try { project = config.Read(dialog.FileName); }
             catch (Exception ex)
             {
                 Warn("Unable to Load Configuration", ex.Message);
-                Message = "Load cancelled — existing configuration unchanged.";
+                Message = "Load cancelled — the current project is unchanged.";
                 return;
             }
 
-            var check = await config.ValidateAsync(dto);
-            if (!check.SchemaValid)
+            var check = await config.ValidateAsync(project);
+            if (!check.FileValid || !check.AllPresentOk)
             {
-                Warn("Unable to Load Configuration", "The configuration file has invalid content:\n\n" + string.Join("\n", check.SchemaErrors.Select(e => "• " + e)));
-                Message = "Load cancelled — existing configuration unchanged.";
-                return;
-            }
-            if (!check.IsCompatible)
-            {
-                Warn("Configuration Is Not Compatible With Current Model", BuildIncompatibilityReport(dto, check));
-                Message = "Configuration is not compatible with the current model — nothing was applied.";
+                Warn("Configuration Is Not Compatible With Current Model", OpenBlockReport(project, check));
+                Message = "Project is not compatible with the current model — nothing was applied.";
                 return;
             }
 
-            config.Apply(dto);
+            applyingProject = true;
+            try { config.Apply(project, check); }
+            finally { applyingProject = false; }
+            config.SetActiveProject(dialog.FileName, project);
+            config.Session.ClearDirty();
             SelectedAppliedPoint = null;
             Update();
 
+            var present = new List<string>();
+            if (check.Loading.Present) present.Add("Loading");
+            if (check.Truss.Present) present.Add("Truss Height");
+            if (check.Cable.Present) present.Add("Cable Force");
+
             if (check.ModelAppearsRenamed)
             {
-                Warn("Configuration Loaded",
-                    "The connected SAP model has a different file name from the model used when this configuration was saved, " +
-                    "but all referenced objects and geometry were validated.\n\n" +
-                    $"Saved model:\n{dto.Model.FileName}\n\nCurrent model:\n{CurrentModelFileName()}\n\nThe model appears to have been renamed.",
+                Warn("Project Loaded",
+                    $"All referenced objects and geometry were validated, but the connected model has a different file name.\n\n" +
+                    $"Original model:\n{project.Model?.OriginalFileName}\n\nCurrent model:\n{CurrentModelFileName()}\n\nThe model appears to have been renamed.",
                     warning: true);
-                Message = "Configuration loaded (model appears renamed). Loading, Truss Height and Cable Force restored.";
             }
-            else
-            {
-                Message = "Configuration loaded · Loading ✓  Truss Height ✓  Cable Force ✓";
-            }
+            Message = $"Project {config.Session.FileName} opened · restored {string.Join(", ", present)}";
         }
         catch (Exception ex)
         {
@@ -439,30 +546,34 @@ public sealed class MainViewModel : Observable
         finally { IsBusy = false; Update(); }
     }
 
-    private string CurrentModelFileName() => State.Model is { } m ? System.IO.Path.GetFileName(m.Path) : "(unknown)";
-
-    private string BuildIncompatibilityReport(CotVcfConfigDto dto, ConfigValidationResult r)
+    private string OpenBlockReport(CotVcfConfigDto project, ConfigValidationResult r)
     {
         var lines = new List<string>
         {
-            $"Saved model:\n{dto.Model.FileName}",
+            $"Saved model:\n{project.Model?.FileName}",
             $"Current model:\n{CurrentModelFileName()}",
-            "Some referenced SAP model content could not be verified.",
         };
-        void Section(string title, IEnumerable<string> items)
-        {
-            var list = items.ToArray();
-            if (list.Length > 0) lines.Add($"{title}:\n" + string.Join("\n", list.Select(i => "• " + i)));
-        }
-        Section("Missing Points", r.MissingPoints);
-        Section("Point Geometry Mismatch", r.PointCoordinateMismatches.Select(m => $"{m.PointName}\n  Saved:   {m.Saved}\n  Current: {m.Current}"));
-        Section("Missing Cables", r.MissingCables);
-        Section("Cable Geometry Mismatch", r.CableGeometryMismatches.Select(m => $"{m.CableName}: {m.Detail}"));
-        Section("Missing Load Patterns", r.MissingLoadPatterns);
-        Section("Missing Load Cases", r.MissingLoadCases);
+        if (r.FileErrors.Count > 0) lines.Add(string.Join("\n", r.FileErrors.Select(e => "• " + e)));
+        void Add(string name, TabCheck tc) { if (tc.Present && !tc.Ok) lines.Add($"{name}:\n" + string.Join("\n", tc.Problems.Select(p => "  • " + p))); }
+        Add("Tab 02 – Loading", r.Loading);
+        Add("Tab 03 – Truss Height", r.Truss);
+        Add("Tab 04 – Cable Force", r.Cable);
         lines.Add("No configuration has been applied.");
         return string.Join("\n\n", lines);
     }
+
+    private static string TabsLabel(ConfigTabs tabs)
+    {
+        if (tabs == ConfigTabs.All) return "Full configuration";
+        if (tabs == ConfigTabs.None) return "Nothing";
+        var parts = new List<string>();
+        if (tabs.HasFlag(ConfigTabs.Loading)) parts.Add("Loading");
+        if (tabs.HasFlag(ConfigTabs.Truss)) parts.Add("Truss Height");
+        if (tabs.HasFlag(ConfigTabs.Cable)) parts.Add("Cable Force");
+        return string.Join(" + ", parts);
+    }
+
+    private string CurrentModelFileName() => State.Model is { } m ? System.IO.Path.GetFileName(m.Path) : "(unknown)";
 
     private void Warn(string title, string body, bool warning = false) =>
         MessageBox.Show(body, title, System.Windows.MessageBoxButton.OK,
@@ -504,7 +615,12 @@ public sealed class MainViewModel : Observable
             nameof(CanViewTrussCandidates), nameof(TrussCandidatesHint),
             nameof(IterationSummary), nameof(SapStatus), nameof(StatusLine), nameof(AppliedPointsTitle), nameof(LoadStatus),
             nameof(TrussStatus), nameof(CableStatus), nameof(CableCount), nameof(VariableCableCount), nameof(PretensionCandidateCount),
-            nameof(CanUseConfig)
+            nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName),
+            nameof(LoadingCandidateCount), nameof(HeightCandidateCount), nameof(HeightCandidates),
+            nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
+            nameof(FixedHeightIndex), nameof(FixedPretensionOrdinal), nameof(PretensionMaxOrdinal),
+            nameof(FixedHeightValueText), nameof(FixedPretensionValueText),
+            nameof(StudyLoadingCell), nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudyTotalRuns)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
     }
