@@ -58,8 +58,8 @@ public sealed class MainViewModel : Observable
         State = state; this.workflow = workflow; this.selection = selection;
         bool Ready() => !IsBusy && State.IsSapConnected;
         bool GeometryReady() => Ready() && State.Geometry.Points.Count > 0;
-        Connect = new(_ => Run("Connecting to SAP2000...", async () => { State.Connection = "Connecting"; try { await workflow.ConnectAsync(); } catch { State.Connection = "Error"; throw; } }, "Connected. Get geometry to inspect the model."), () => !IsBusy);
-        Refresh = new(_ => Run("Reading SAP2000 geometry...", workflow.RefreshAsync, "Model refreshed. Review retained configuration for missing objects."), Ready);
+        Connect = new(_ => Run("Connecting to SAP2000...", ConnectAndRefreshAsync, "Connected. Geometry loaded."), () => !IsBusy);
+        Refresh = new(_ => Run("Refreshing SAP2000 connection and geometry...", ConnectAndRefreshAsync, "Connection refreshed. Geometry updated."), () => !IsBusy);
         AddPoints = new(_ => SelectPoints(), GeometryReady);
         SelectGroup = new(p => ChooseGroup(p?.ToString() ?? "Top"), GeometryReady);
         CaptureBaseline = new(_ => Local(() => { workflow.CaptureBaseline(); PreviewMessage = "Baseline captured. Slider changes only the preview."; }), GeometryReady);
@@ -74,6 +74,20 @@ public sealed class MainViewModel : Observable
         State.Truss.PropertyChanged += (_, _) => { if (State.BaselineCaptured) { try { workflow.UpdatePreview(); PreviewMessage = "Preview only — Apply geometry commits these coordinates to SAP2000."; } catch (Exception ex) { PreviewMessage = ex.Message; } } Update(); };
         State.PointLoads.CollectionChanged += (_, e) => { if (e.NewItems is not null) foreach (PointLoadConfiguration r in e.NewItems) r.PropertyChanged += (_, _) => Update(); Update(); };
         State.Cables.CollectionChanged += (_, e) => { if (e.NewItems is not null) foreach (CableForceConfiguration r in e.NewItems) r.PropertyChanged += (_, _) => Update(); Update(); };
+    }
+    private async Task ConnectAndRefreshAsync()
+    {
+        State.Connection = "Connecting";
+        try
+        {
+            await workflow.ConnectAsync();
+            await workflow.RefreshAsync();
+        }
+        catch
+        {
+            State.Connection = "Error";
+            throw;
+        }
     }
     private void SelectPoints()
     {

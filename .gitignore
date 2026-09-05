@@ -1,6 +1,7 @@
 bin/
 obj/
 .work/
+.vs/
 tests/bin/
 tests/obj/
 *.user
