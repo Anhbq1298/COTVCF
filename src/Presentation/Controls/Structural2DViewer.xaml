@@ -14,8 +14,8 @@
        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
       </Border>
       <ControlTemplate.Triggers>
-       <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#33FFFFFF"/></Trigger>
-       <Trigger Property="ToggleButton.IsChecked" Value="True"><Setter TargetName="b" Property="Background" Value="#552E90FA"/></Trigger>
+       <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#14000000"/></Trigger>
+       <Trigger Property="ToggleButton.IsChecked" Value="True"><Setter TargetName="b" Property="Background" Value="#332E90FA"/></Trigger>
       </ControlTemplate.Triggers>
      </ControlTemplate>
     </Setter.Value>
@@ -27,24 +27,24 @@
    <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}"/>
 
    <!-- floating viewer controls (top-right) -->
-   <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" CornerRadius="3" Padding="3" Background="#D91F252B" BorderBrush="#3A424C" BorderThickness="1">
+   <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" CornerRadius="3" Padding="3" Background="#F2F3F5" BorderBrush="{StaticResource Border}" BorderThickness="1">
     <StackPanel Orientation="Horizontal">
      <ComboBox x:Name="Plane" Width="52" SelectedIndex="1" SelectionChanged="PlaneChanged" ToolTip="Projection plane" VerticalAlignment="Center">
       <ComboBoxItem Content="XY"/><ComboBoxItem Content="XZ"/><ComboBoxItem Content="YZ"/>
      </ComboBox>
      <Button Style="{StaticResource ViewerTool}" Click="Fit" ToolTip="Fit / zoom extents (Home)">
-      <Path Stroke="#D6DDE4" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,6 L2,2 L6,2 M14,2 L18,2 L18,6 M18,14 L18,18 L14,18 M6,18 L2,18 L2,14"/>
+      <Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,6 L2,2 L6,2 M14,2 L18,2 L18,6 M18,14 L18,18 L14,18 M6,18 L2,18 L2,14"/>
      </Button>
      <Button Style="{StaticResource ViewerTool}" Click="ResetView" ToolTip="Reset view (XZ)">
-      <Path Stroke="#D6DDE4" StrokeThickness="1.6" Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M13,4 A6,6 0 1 0 15,9.5 M15,9.5 L15,5 M15,9.5 L10.5,9.5"/>
+      <Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M13,4 A6,6 0 1 0 15,9.5 M15,9.5 L15,5 M15,9.5 L10.5,9.5"/>
      </Button>
      <ToggleButton Style="{StaticResource ViewerTool}" IsChecked="{Binding ShowPointLabels, ElementName=Root, Mode=TwoWay}" ToolTip="Show point labels">
-      <Path Stroke="#D6DDE4" StrokeThickness="1.6" Fill="Transparent" Data="M4,4 L11,4 L16,9 L11,15 L4,15 Z M7,7 L7,7"/>
+      <Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" Data="M4,4 L11,4 L16,9 L11,15 L4,15 Z M7,7 L7,7"/>
      </ToggleButton>
     </StackPanel>
    </Border>
 
-   <TextBlock HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8,0,0,6" Foreground="#8B97A5" FontSize="10"
+   <TextBlock HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8,0,0,6" Foreground="{StaticResource Muted}" FontSize="10"
              Text="Wheel zoom &#183; Drag pan &#183; Dbl-click fit &#183; Solid frame &#183; Dashed cable &#183; Dotted tendon"/>
 
    <ContentPresenter Content="{Binding ToolbarContent, ElementName=Root}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,8,0,0"/>

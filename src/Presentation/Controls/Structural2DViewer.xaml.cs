@@ -141,9 +141,9 @@ public sealed class ModelCanvas : FrameworkElement
     {
         var accent = Brush("AccentBright");
         var selectedBrush = Brush("Error");
-        var halo = new SolidColorBrush(selected ? Color.FromArgb(90, 240, 68, 56) : Color.FromArgb(70, 46, 144, 250));
+        var halo = new SolidColorBrush(selected ? Color.FromArgb(72, 198, 40, 40) : Color.FromArgb(55, 46, 144, 250));
         dc.DrawEllipse(halo, null, point, selected ? 13 : 10, selected ? 13 : 10);
-        dc.DrawEllipse(selected ? selectedBrush : accent, new Pen(Brush("ViewportGeom"), 2), point, selected ? 6.5 : 5.5, selected ? 6.5 : 5.5);
+        dc.DrawEllipse(selected ? selectedBrush : accent, new Pen(Brush("ViewportBg"), 2), point, selected ? 6.5 : 5.5, selected ? 6.5 : 5.5);
     }
 
     private void DrawLoadArrow(DrawingContext dc, Point point)
@@ -164,7 +164,7 @@ public sealed class ModelCanvas : FrameworkElement
         var verticalBrush = AxisBrush(Plane[1]);
         var horizontalAxis = new Pen(horizontalBrush, 1.5);
         var verticalAxis = new Pen(verticalBrush, 1.5);
-        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(150, 18, 22, 27)), null, new Rect(16, ActualHeight - 112, 112, 96));
+        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(150, 255, 255, 255)), null, new Rect(16, ActualHeight - 112, 112, 96));
         dc.DrawLine(horizontalAxis, origin, origin + new Vector(56, 0));
         dc.DrawLine(verticalAxis, origin, origin + new Vector(0, -48));
         dc.DrawLine(horizontalAxis, origin + new Vector(56, 0), origin + new Vector(50, -4));
@@ -175,9 +175,9 @@ public sealed class ModelCanvas : FrameworkElement
 
     private static Brush AxisBrush(char axis) => axis switch
     {
-        'X' => new SolidColorBrush(Color.FromArgb(235, 240, 96, 72)),
-        'Y' => new SolidColorBrush(Color.FromArgb(235, 84, 150, 255)),
-        'Z' => new SolidColorBrush(Color.FromArgb(235, 84, 200, 110)),
+        'X' => new SolidColorBrush(Color.FromArgb(220, 198, 40, 40)),
+        'Y' => new SolidColorBrush(Color.FromArgb(220, 37, 99, 235)),
+        'Z' => new SolidColorBrush(Color.FromArgb(220, 46, 125, 50)),
         _ => Brushes.DimGray
     };
 
@@ -187,8 +187,8 @@ public sealed class ModelCanvas : FrameworkElement
     private void Label(DrawingContext dc, string text, Point point)
     {
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        var label = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 10, Brush("ViewportGeom"), dpi);
-        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(190, 18, 22, 27)), null, new Rect(point.X - 2, point.Y - 1, label.Width + 4, label.Height + 2));
+        var label = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 10, Brush("Accent"), dpi);
+        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(185, 255, 255, 255)), null, new Rect(point.X - 2, point.Y - 1, label.Width + 4, label.Height + 2));
         dc.DrawText(label, point);
     }
 

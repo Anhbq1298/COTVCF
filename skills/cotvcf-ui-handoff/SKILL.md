@@ -32,8 +32,10 @@ earlier tall-header / large-button / blue-block look.
 - `Theme.xaml` is the single lever for density. Current values: `Button` MinHeight 28, `TextBox`
   MinHeight 26, `ComboBox` 24, `DataGrid` RowHeight 24 / header 26, `TabItem` 152x42, base font 12.
 - Palette is a neutral light chrome (`Background` #E6E8EB, `Surface` #F3F4F6, `Raised` #FFFFFF,
-  `Border` #C7CCD2) plus a charcoal viewport (`ViewportBg` #22272E and the other `Viewport*` tokens).
-  `Accent` #1F4788 stays; `AccentBright` #2E90FA is the selection / focus / cable colour.
+  `Border` #C7CCD2). The model viewport is white (`ViewportBg` #FFFFFF) with dark geometry
+  (`ViewportGeom` #3A4048) and a faint `ViewportGrid`; keep the `Viewport*` seam so the ground
+  can be re-themed from `Theme.xaml` alone. `Accent` #1F4788 stays; `AccentBright` #2E90FA is the
+  selection / focus / cable colour.
 - Keep headers to one small line. Section labels use the `Subheading` style (11 px, muted, uppercase text).
 - Short button labels: `Connect SAP`, `+ Add`, `- Remove`, `Capture Baseline`, `Reset`, `Apply to SAP`,
   `Validate`. Icon-only actions (refresh, row delete, viewer tools) use borderless buttons.
@@ -62,13 +64,13 @@ earlier tall-header / large-button / blue-block look.
 
 ## Viewer Behavior
 
-- `Structural2DViewer` renders on a charcoal viewport (`ViewportBg`) with a subtle `ViewportGrid`.
-  Geometry is light: frames `ViewportGeom`, cables/tendons `AccentBright` (dashed / dotted),
-  joints hollow with a `ViewportEdge` ring.
-- Viewer controls are a small floating panel at the top-right of the canvas: projection combo,
+- `Structural2DViewer` renders on a white viewport (`ViewportBg`) with a faint `ViewportGrid`.
+  Geometry is dark: frames `ViewportGeom`, cables/tendons `AccentBright` (dashed / dotted),
+  joints hollow with a white ring.
+- Viewer controls are a small light floating panel at the top-right of the canvas: projection combo,
   Fit, Reset view (returns to XZ), and a Show-labels toggle bound to `ShowPointLabels`.
   `ToolbarContent` still renders (top-left overlay) for contextual controls.
-- Axis overlay sits on a dark translucent chip: X red, Y blue, Z green (brightened for the dark ground).
+- Axis overlay sits on a white translucent chip: X red, Y blue, Z green.
 - Still supports wheel zoom, drag pan, double-click fit, `Home` to fit.
 
 ## Engineering Inputs

@@ -16,11 +16,11 @@
  <SolidColorBrush x:Key="Frame" Color="#5A6470"/>
  <SolidColorBrush x:Key="Selected" Color="#DCEBFB"/>
  <SolidColorBrush x:Key="SelectedBorder" Color="#AFC7DF"/>
- <!-- Viewport tokens (consumed by ModelCanvas.OnRender) -->
- <SolidColorBrush x:Key="ViewportBg" Color="#22272E"/>
- <SolidColorBrush x:Key="ViewportGrid" Color="#2E353E"/>
- <SolidColorBrush x:Key="ViewportGeom" Color="#C9D1DA"/>
- <SolidColorBrush x:Key="ViewportEdge" Color="#8B97A5"/>
+ <!-- Viewport tokens (consumed by ModelCanvas.OnRender) — white model background -->
+ <SolidColorBrush x:Key="ViewportBg" Color="#FFFFFF"/>
+ <SolidColorBrush x:Key="ViewportGrid" Color="#EEF0F2"/>
+ <SolidColorBrush x:Key="ViewportGeom" Color="#3A4048"/>
+ <SolidColorBrush x:Key="ViewportEdge" Color="#8A929C"/>
 
  <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
  <p:NullableDoubleConverter x:Key="NullableDouble"/>
