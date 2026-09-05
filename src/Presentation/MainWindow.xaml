@@ -9,22 +9,50 @@
      <TextBlock Grid.Row="1" Text="{Binding GeometrySummary}" Foreground="{StaticResource Muted}" Margin="0,8,0,0"/>
     </Grid>
    </TabItem>
-   <TabItem><TabItem.Header><StackPanel Width="150"><TextBlock Text="02  POINT LOADING" Foreground="{StaticResource Surface}" FontWeight="SemiBold"/><TextBlock Text="{Binding LoadStatus}" Foreground="#D8E8F8" Margin="24,8,0,0" FontSize="11"/></StackPanel></TabItem.Header>
-     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="1.15*"/></Grid.ColumnDefinitions>
-      <c:Structural2DViewer Grid.Column="0" Model="{Binding State.Geometry}" ShowPointLabels="True"/>
+   <TabItem><TabItem.Header><StackPanel Width="150"><TextBlock Text="02  LOADING CRITERIA" Foreground="{StaticResource Surface}" FontWeight="SemiBold"/><TextBlock Text="{Binding LoadStatus}" Foreground="#D8E8F8" Margin="24,8,0,0" FontSize="11"/></StackPanel></TabItem.Header>
+     <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="45*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="55*"/></Grid.ColumnDefinitions>
+      <c:Structural2DViewer Grid.Column="0" Model="{Binding State.Geometry}" ShowPointLabels="True" AppliedPoints="{Binding State.AppliedPoints}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, Mode=TwoWay}"/>
       <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
-      <Grid Grid.Column="2"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-       <WrapPanel Grid.Row="0" Margin="0,0,0,16"><Button Content="+ Add point" Command="{Binding AddPoints}"/><Button Content="Remove selected" Command="{Binding RemoveLoads}" CommandParameter="{Binding SelectedItems, ElementName=Loads}"/><Button Content="Apply to SAP2000" Command="{Binding ApplyLoads}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/><TextBlock Text="{Binding ForceUnit, StringFormat=Force unit: {0}}" Margin="8,0,0,0"/></WrapPanel>
-      <DataGrid x:Name="Loads" Grid.Row="1" ItemsSource="{Binding State.PointLoads}" IsEnabled="{Binding IsIdle}">
-       <DataGrid.Columns><DataGridTextColumn Header="Point name" Binding="{Binding PointName}" IsReadOnly="True" Width="1.6*" MinWidth="150"/>
-        <DataGridTemplateColumn Header="Load pattern" Width="1.25*" MinWidth="150"><DataGridTemplateColumn.CellTemplate><DataTemplate><ComboBox ItemsSource="{Binding DataContext.State.LoadPatterns, RelativeSource={RelativeSource AncestorType=Window}}" SelectedItem="{Binding LoadPattern, UpdateSourceTrigger=PropertyChanged}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
-        <DataGridTextColumn x:Name="FxColumn" Header="Fx" Binding="{Binding Fx, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, StringFormat=F4}" ElementStyle="{StaticResource NumericCell}" Width=".8*" MinWidth="90"/>
-        <DataGridTextColumn x:Name="FyColumn" Header="Fy" Binding="{Binding Fy, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, StringFormat=F4}" ElementStyle="{StaticResource NumericCell}" Width=".8*" MinWidth="90"/>
-        <DataGridTextColumn x:Name="FzColumn" Header="Fz" Binding="{Binding Fz, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True, StringFormat=F4}" ElementStyle="{StaticResource NumericCell}" Width=".8*" MinWidth="90"/>
-        <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="1.1*" MinWidth="120"/>
-      </DataGrid.Columns>
-     </DataGrid>
-      <TextBlock Grid.Row="2" Text="Edits remain pending until Apply. Select rows and press Delete to remove; Ctrl+C copies selected rows." Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+      <Grid Grid.Column="2" Margin="16,0,0,0"><Grid.RowDefinitions><RowDefinition Height="42*"/><RowDefinition Height="12"/><RowDefinition Height="58*"/></Grid.RowDefinitions>
+       <Border Grid.Row="0" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+        <Grid Margin="12"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+         <TextBlock Text="{Binding AppliedPointsTitle}" FontWeight="SemiBold" Foreground="{StaticResource Accent}" Margin="0,0,0,8"/>
+         <WrapPanel Grid.Row="1" Margin="0,0,0,8"><Button Content="+ Add Load Locations" Command="{Binding AddPoints}"/><Button Content="Remove selected" Command="{Binding RemoveAppliedPoints}" CommandParameter="{Binding SelectedItems, ElementName=AppliedPointsGrid}" MinHeight="30" Padding="10,4" FontSize="12"/></WrapPanel>
+         <DataGrid x:Name="AppliedPointsGrid" Grid.Row="2" ItemsSource="{Binding State.AppliedPoints}" SelectedItem="{Binding SelectedAppliedPoint, Mode=TwoWay}" IsEnabled="{Binding IsIdle}" SelectionChanged="AppliedPoints_SelectionChanged" CanUserDeleteRows="False">
+          <DataGrid.Columns>
+           <DataGridTextColumn Header="Order" Binding="{Binding Order}" IsReadOnly="True" Width=".55*" MinWidth="50" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="Point Name" Binding="{Binding PointName}" IsReadOnly="True" Width="1.1*" MinWidth="90"/>
+           <DataGridTextColumn Header="X [m]" Binding="{Binding X, StringFormat=F3}" IsReadOnly="True" Width=".8*" MinWidth="68" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="Z [m]" Binding="{Binding Z, StringFormat=F3}" IsReadOnly="True" Width=".8*" MinWidth="68" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="1.05*" MinWidth="82"/>
+          </DataGrid.Columns>
+         </DataGrid>
+        </Grid>
+       </Border>
+       <Border Grid.Row="2" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+        <Grid Margin="12"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+         <TextBlock Text="LOAD DEFINITION" FontWeight="SemiBold" Foreground="{StaticResource Accent}" Margin="0,0,0,8"/>
+         <c:EngineeringInput Grid.Row="1" Width="220" HorizontalAlignment="Left" Label="Out-of-plane tributary width, B" Value="{Binding State.TributaryWidthB}" Unit="m" Minimum="0.000000001" Margin="0,0,0,4"/>
+         <DataGrid x:Name="LoadDefinitionsGrid" Grid.Row="2" ItemsSource="{Binding State.LoadDefinitions}" IsEnabled="{Binding IsIdle}" CanUserDeleteRows="False" SelectionMode="Single" FrozenColumnCount="0">
+          <DataGrid.Resources>
+           <Style x:Key="LoadValueEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="6,0"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="FontFamily" Value="Consolas"/><Setter Property="TextAlignment" Value="Right"/>
+            <Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="{StaticResource Raised}"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Trigger></Style.Triggers>
+           </Style>
+          </DataGrid.Resources>
+          <DataGrid.Columns>
+           <DataGridTextColumn Header="Load Name" Binding="{Binding LoadName, UpdateSourceTrigger=PropertyChanged}" Width="1.2*" MinWidth="90"/>
+           <DataGridTemplateColumn Width="1.05*" MinWidth="82"><DataGridTemplateColumn.Header><TextBlock Text="Apply Increment Step?" TextWrapping="Wrap"/></DataGridTemplateColumn.Header><DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding ApplyIncrementStep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" VerticalAlignment="Center"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+           <DataGridTemplateColumn Header="qz [kPa]" Width=".75*" MinWidth="66"><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource LoadValueEditor}" IsEnabled="{Binding IsSingleValue}" Text="{Binding Qz, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+           <DataGridTemplateColumn Width=".9*" MinWidth="80"><DataGridTemplateColumn.Header><TextBlock Text="Min Range qz [kPa]" TextWrapping="Wrap"/></DataGridTemplateColumn.Header><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource LoadValueEditor}" IsEnabled="{Binding ApplyIncrementStep}" Text="{Binding MinQz, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+           <DataGridTemplateColumn Width=".9*" MinWidth="80"><DataGridTemplateColumn.Header><TextBlock Text="Max Range qz [kPa]" TextWrapping="Wrap"/></DataGridTemplateColumn.Header><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource LoadValueEditor}" IsEnabled="{Binding ApplyIncrementStep}" Text="{Binding MaxQz, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+           <DataGridTemplateColumn Width=".9*" MinWidth="80"><DataGridTemplateColumn.Header><TextBlock Text="Increment Step [kPa]" TextWrapping="Wrap"/></DataGridTemplateColumn.Header><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource LoadValueEditor}" IsEnabled="{Binding ApplyIncrementStep}" Text="{Binding IncrementStep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+           <DataGridTemplateColumn Width="40" MinWidth="40"><DataGridTemplateColumn.CellTemplate><DataTemplate><Button Command="{Binding DataContext.DeleteLoadDefinition, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="Delete load definition" Width="30" Height="28" MinHeight="28" Padding="7" Margin="0"><Viewbox Width="12" Height="12"><Path Stroke="{StaticResource Error}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,2 L14,14 M14,2 L2,14"/></Viewbox></Button></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
+          </DataGrid.Columns>
+         </DataGrid>
+         <Button Grid.Row="3" Content="+ Add Load" Command="{Binding AddLoadDefinition}" Click="AddLoad_Click" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+        </Grid>
+       </Border>
       </Grid>
      </Grid>
    </TabItem>

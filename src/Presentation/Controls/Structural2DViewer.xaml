@@ -2,6 +2,6 @@
  <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}"><DockPanel>
   <Border DockPanel.Dock="Top" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="8"><DockPanel><StackPanel DockPanel.Dock="Right" Orientation="Horizontal"><ComboBox x:Name="Plane" Width="72" SelectedIndex="1" SelectionChanged="PlaneChanged" ToolTip="Projection plane"><ComboBoxItem Content="XY"/><ComboBoxItem Content="XZ"/><ComboBoxItem Content="YZ"/></ComboBox><Button Content="Fit" Click="Fit" Margin="8,0,8,0"/><Button Content="Reset view" Click="Fit"/></StackPanel><StackPanel Orientation="Horizontal"><TextBlock Text="MODEL PREVIEW" FontWeight="SemiBold" Margin="8,0"/><ContentPresenter Content="{Binding ToolbarContent, ElementName=Root}" Margin="16,0,0,0"/></StackPanel></DockPanel></Border>
   <TextBlock DockPanel.Dock="Bottom" Text="Wheel: zoom  ·  Drag: pan  ·  Double-click: fit  |  Solid: frame  ·  Dashed: cable  ·  Dotted: tendon" Foreground="{StaticResource Muted}" FontSize="11" Margin="16,8" TextWrapping="Wrap"/>
-  <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}"/>
+  <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}"/>
  </DockPanel></Border>
 </UserControl>

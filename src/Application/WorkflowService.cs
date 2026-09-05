@@ -9,7 +9,7 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
     public async Task ConnectAsync()
     {
         var info = await sap.ConnectAsync();
-        if (state.Model is { } old && (old.Path != info.Path || old.UnitsCode != info.UnitsCode) && (state.PointLoads.Count > 0 || state.Cables.Count > 0 || state.BaselineCaptured))
+        if (state.Model is { } old && (old.Path != info.Path || old.UnitsCode != info.UnitsCode) && (state.AppliedPoints.Count > 0 || state.PointLoads.Count > 0 || state.Cables.Count > 0 || state.BaselineCaptured))
             throw new InvalidOperationException("The model or units differ from this session. Close and reopen COT VCF tools to begin a new configuration; the current setup has been retained.");
         if (state.Model is { } previous && (previous.Path != info.Path || previous.UnitsCode != info.UnitsCode))
         {
@@ -29,6 +29,15 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         else if (changed) { state.BaselineCaptured = false; state.Preview = state.Geometry; }
         foreach (var row in state.PointLoads)
             row.Status = !state.Geometry.Points.ContainsKey(row.PointName) || !state.LoadPatterns.Contains(row.LoadPattern) ? "Missing in SAP" : "Modified";
+        foreach (var point in state.AppliedPoints)
+        {
+            if (state.Geometry.Points.TryGetValue(point.PointName, out var current))
+            {
+                point.X = current.Position.X; point.Y = current.Position.Y; point.Z = current.Position.Z; point.Status = "Selected";
+            }
+            else point.Status = "Missing in SAP";
+        }
+        SortAppliedPoints();
         // Retain configured ranges and selections; refresh the measured force sources.
         if (state.Cables.Count > 0)
         {
@@ -41,6 +50,43 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
             }
         }
         if (changed) throw new InvalidOperationException("SAP geometry changed. Selections and ranges were retained. Review them and capture a new baseline before applying geometry.");
+    }
+    public int AddAppliedPoints(IReadOnlyList<string> pointNames)
+    {
+        int added = 0;
+        foreach (var name in pointNames.Distinct(StringComparer.Ordinal))
+        {
+            if (!state.Geometry.Points.TryGetValue(name, out var point)) continue;
+            var existing = state.AppliedPoints.FirstOrDefault(item => item.PointName == name);
+            if (existing is not null)
+            {
+                existing.X = point.Position.X;
+                existing.Y = point.Position.Y;
+                existing.Z = point.Position.Z;
+                existing.Status = "Selected";
+                continue;
+            }
+            state.AppliedPoints.Add(new()
+            {
+                PointName = name,
+                X = point.Position.X,
+                Y = point.Position.Y,
+                Z = point.Position.Z
+            });
+            added++;
+        }
+        SortAppliedPoints();
+        return added;
+    }
+    public void SortAppliedPoints()
+    {
+        var sorted = state.AppliedPoints.OrderBy(p => p.X).ThenBy(p => p.PointName, StringComparer.Ordinal).ToArray();
+        for (int target = 0; target < sorted.Length; target++)
+        {
+            var current = state.AppliedPoints.IndexOf(sorted[target]);
+            if (current != target) state.AppliedPoints.Move(current, target);
+            sorted[target].Order = target + 1;
+        }
     }
     public void CaptureBaseline()
     {

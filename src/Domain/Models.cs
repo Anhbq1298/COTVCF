@@ -34,6 +34,68 @@ public record ModelSnapshot(ModelInfo Info, GeometryModel Geometry, IReadOnlyLis
 public record PointLoad(string PointName, string LoadPattern, double Fx, double Fy, double Fz);
 public record ForceSource(string ObjectName, MemberKind Kind, string Source, double? Force, string? Problem = null);
 public record ValidationIssue(string Section, string Message);
+public sealed class AppliedPoint : Observable
+{
+    private double x, y, z;
+    private int order;
+    private bool isSelected;
+    private string status = "Selected";
+    public required string PointName { get; init; }
+    public double X { get => x; set => Set(ref x, value); }
+    public double Y { get => y; set => Set(ref y, value); }
+    public double Z { get => z; set => Set(ref z, value); }
+    public int Order { get => order; set => Set(ref order, value); }
+    public bool IsSelected { get => isSelected; set => Set(ref isSelected, value); }
+    public string Status { get => status; set => Set(ref status, value); }
+}
+public sealed class LoadDefinition : Observable, IDataErrorInfo
+{
+    private string loadName = "";
+    private bool applyIncrementStep;
+    private double? qz = 0, minQz, maxQz, incrementStep;
+    public string LoadName { get => loadName; set => Set(ref loadName, value); }
+    public bool ApplyIncrementStep
+    {
+        get => applyIncrementStep;
+        set
+        {
+            if (!Set(ref applyIncrementStep, value)) return;
+            Notify(nameof(IsSingleValue));
+            Notify(nameof(CandidateValues));
+            Notify(nameof(Qz));
+            Notify(nameof(MinQz));
+            Notify(nameof(MaxQz));
+            Notify(nameof(IncrementStep));
+        }
+    }
+    public bool IsSingleValue => !ApplyIncrementStep;
+    public double? Qz { get => qz; set { if (Set(ref qz, value)) Notify(nameof(CandidateValues)); } }
+    public double? MinQz { get => minQz; set { if (Set(ref minQz, value)) { Notify(nameof(MaxQz)); Notify(nameof(CandidateValues)); } } }
+    public double? MaxQz { get => maxQz; set { if (Set(ref maxQz, value)) Notify(nameof(CandidateValues)); } }
+    public double? IncrementStep { get => incrementStep; set { if (Set(ref incrementStep, value)) Notify(nameof(CandidateValues)); } }
+    public IReadOnlyList<double> CandidateValues
+    {
+        get
+        {
+            if (!ApplyIncrementStep)
+                return Qz is double single && double.IsFinite(single) && single >= 0 ? [single] : [];
+            if (MinQz is not double min || MaxQz is not double max || IncrementStep is not double step ||
+                !double.IsFinite(min) || !double.IsFinite(max) || !double.IsFinite(step) || min < 0 || max < min || step <= 0)
+                return [];
+            var intervals = (int)Math.Floor((max - min) / step + 1e-10);
+            return Enumerable.Range(0, intervals + 1).Select(i => min + i * step).ToArray();
+        }
+    }
+    string IDataErrorInfo.Error => "";
+    public string this[string columnName] => columnName switch
+    {
+        nameof(Qz) when IsSingleValue && (Qz is not double value || !double.IsFinite(value) || value < 0) => "qz must be zero or greater.",
+        nameof(MinQz) when ApplyIncrementStep && (MinQz is not double value || !double.IsFinite(value) || value < 0) => "Minimum qz must be zero or greater.",
+        nameof(MaxQz) when ApplyIncrementStep && (MaxQz is not double value || !double.IsFinite(value) || MinQz is not double min || value < min) => "Maximum qz must be greater than or equal to minimum qz.",
+        nameof(IncrementStep) when ApplyIncrementStep && (IncrementStep is not double value || !double.IsFinite(value) || value <= 0) => "Increment step must be greater than zero.",
+        _ => ""
+    };
+}
 public sealed class PointLoadConfiguration : Observable
 {
     public string PointName { get; init; } = "";
@@ -77,6 +139,7 @@ public sealed class ApplicationState : Observable
     private ModelInfo? model;
     private GeometryModel geometry = GeometryModel.Empty, baseline = GeometryModel.Empty, preview = GeometryModel.Empty;
     private string connection = "Disconnected";
+    private double tributaryWidthB = 1;
     public ModelInfo? Model { get => model; set { Set(ref model, value); Notify(nameof(Units)); } }
     public string Connection { get => connection; set { Set(ref connection, value); Notify(nameof(IsSapConnected)); } }
     public bool IsSapConnected => Connection == "Connected";
@@ -86,6 +149,13 @@ public sealed class ApplicationState : Observable
     public GeometryModel Preview { get => preview; set => Set(ref preview, value); }
     public ObservableCollection<string> LoadPatterns { get; } = [];
     public ObservableCollection<PointLoadConfiguration> PointLoads { get; } = [];
+    public ObservableCollection<AppliedPoint> AppliedPoints { get; } = [];
+    public ObservableCollection<LoadDefinition> LoadDefinitions { get; } =
+    [
+        new() { LoadName = "DL_Above" },
+        new() { LoadName = "LL_Above" }
+    ];
+    public double TributaryWidthB { get => tributaryWidthB; set => Set(ref tributaryWidthB, value); }
     public ObservableCollection<CableForceConfiguration> Cables { get; } = [];
     public TrussHeightConfiguration Truss { get; } = new();
     public bool BaselineCaptured { get; set; }

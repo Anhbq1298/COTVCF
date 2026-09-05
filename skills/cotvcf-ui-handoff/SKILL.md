@@ -29,6 +29,7 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - Tab headers use blue backgrounds, white primary text, light-blue status text, and a small red accent on the selected tab.
 - Avoid setting `Foreground` on the whole `TabItem`; it leaks into page content. Set tab header text colors directly in `MainWindow.xaml`.
 - Keep each tab item fixed-height so all five tabs remain visible.
+- DataGrid selection uses a pale blue background with dark text and a restrained blue-grey cell border; avoid the saturated Windows default selection blue.
 
 ## Top Bar Connection Flow
 
@@ -48,25 +49,33 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
   - Z axis: green
 - The viewer still supports projection plane selection, fit, reset view, mouse wheel zoom, drag pan, and double-click fit.
 
+## Engineering Inputs
+
+- Standalone `EngineeringInput` controls use a consistent 220 px width.
+- Their numeric editor height is 27 px, which is 25% lower than the previous 36 px height. Do not apply the 220 px width to DataGrid cell editors.
+
 ## SAP Model Tab
 
 - The SAP model page should prioritize the model preview.
 - The old in-page title/description and large model-info panel were removed to give the viewer more height.
 - The geometry summary stays below the preview.
 
-## Point Loading Tab
+## Loading Criteria Tab
 
-- Layout is two-column:
-  - Left: 2D model preview with `ShowPointLabels="True"`.
-  - Middle: `GridSplitter`.
-  - Right: point load configuration controls and `DataGrid`.
-- The right toolbar uses `WrapPanel` so buttons wrap when space is narrow.
-- The point-load `DataGrid` columns use star sizing plus `MinWidth` to prevent header clipping:
-  - Point name: wide star column, minimum width.
-  - Load pattern: star column, minimum width.
-  - Fx/Fy/Fz: smaller star columns, minimum width.
-  - Status: star column, minimum width.
-- Keep horizontal scrolling enabled as a fallback for small widths.
+- Tab 2 is `LOADING CRITERIA`; do not restore the former per-point Fx/Fy/Fz assignment grid or an Apply-to-SAP action here.
+- Keep the 45/55 two-column layout: the existing 2D viewer is on the left, and the right side has separate `APPLIED POINTS` and `LOAD DEFINITION` cards.
+- `+ Add Load Locations` opens the existing WPF `SelectionService` dialog using points from the loaded geometry. The dialog supports search, multi-select, select-all, and preselects existing load locations. Selected names are mapped to the cached Global X/Y/Z coordinates, deduplicated, sorted by X then point name, and assigned one-based order values; the user does not need to preselect objects in SAP2000.
+- Applied points are preview-only overlays on the existing viewer. Draw a fixed screen-size downward load arrow, normal applied-point highlight, stronger current-point highlight, and labels without modifying SAP geometry.
+- Grid and viewer current selection are synchronized in both directions. Removing grid rows removes their overlays and arrows, re-sorts, and does not write to SAP2000.
+- `LoadDefinition` is generic and defaults to `DL_Above` and `LL_Above`. Each row independently switches between single-qz mode and Min/Max/Step mode through `ApplyIncrementStep`.
+- Disabled numeric cells must remain grey, unfocusable, excluded from validation, and derived from `ApplyIncrementStep` rather than separate UI state.
+- Candidate values are internal. Single mode returns only qz; range mode returns `Min + n * Step` while the value is at most Max and does not append an off-grid Max.
+- Keep `Out-of-plane tributary width, B [m]` above the load grid as a shared positive numeric input.
+- Keep the tributary-width field compact (about 220 px) and the secondary `Remove selected` action visually smaller than the primary location picker.
+- `+ Add Load` creates an empty-name, non-increment row with qz `0.00` and focuses its Load Name cell. Each row has a compact delete icon.
+- Validation is inline: qz must be nonnegative; Min must be nonnegative; Max must be at least Min; Step must be positive. No normal cell-validation dialog belongs in Tab 2.
+- Load-grid numeric bindings use `NullableDoubleConverter`: clearing an active numeric cell stores `null` and leaves it visually blank instead of restoring `0.00`; validation may still mark the required active cell invalid.
+- Keep star-sized columns with practical `MinWidth` values and horizontal scrolling as a narrow-window fallback.
 
 ## Truss Height Tab
 
@@ -94,4 +103,3 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - `src/Presentation/MainViewModel.cs`: command wiring for connect, refresh, add/remove/apply actions.
 - `src/Presentation/Controls/Structural2DViewer.xaml`: viewer shell and toolbar area.
 - `src/Presentation/Controls/Structural2DViewer.xaml.cs`: canvas drawing, fit/pan/zoom, axis colors, point labels.
-
