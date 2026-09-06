@@ -125,6 +125,22 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         return sap.GetLoadCaseNamesAsync(state.Model);
     }
 
+    /// <summary>Reads each cable's existing SAP Target Force assignment (PRETENSION pattern preferred,
+    /// otherwise the first assignment). Cables with no target force are omitted. Empty when offline.</summary>
+    public async Task<IReadOnlyDictionary<string, CableTargetForce>> ReadCableTargetForcesAsync(IEnumerable<string> cableNames)
+    {
+        var result = new Dictionary<string, CableTargetForce>(StringComparer.Ordinal);
+        if (state.Model is null) return result;
+        foreach (var name in cableNames.Distinct(StringComparer.Ordinal))
+        {
+            var assignments = await sap.GetCableTargetForcesAsync(name, state.Model);
+            var pick = assignments.FirstOrDefault(a => a.LoadPattern.Equals(CablePretensionConfig.PretensionLoadCase, StringComparison.OrdinalIgnoreCase))
+                       ?? assignments.FirstOrDefault();
+            if (pick is not null) result[name] = pick;
+        }
+        return result;
+    }
+
     public async Task ApplyLoadsAsync()
     {
         var issues = new ConfigurationValidator().ValidateLoads(state);

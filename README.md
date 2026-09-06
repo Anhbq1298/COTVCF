@@ -79,12 +79,11 @@ For every selected candidate, one worker performs this complete sequence:
 4. Replace the candidate point-load assignments.
 5. Replace the candidate cable target-force assignments.
 6. Save the configured child model.
-7. Run every SAP2000 analysis case currently marked to run.
-8. Save the analyzed model and its results.
-9. Reopen and verify the persisted geometry, loading, and pretension.
-10. Return the worker to the baseline before accepting another candidate.
+7. Run every SAP2000 analysis case currently marked to run. `RunAnalysis` locks the model and persists the analyzed `.sdb` plus its result files itself — the worker does not save or reopen the child again (doing so makes SAP2000 delete the result files when the next candidate opens the baseline).
+8. Verify the analyzed child in place: it must be locked and still hold the resolved geometry, loading, and pretension.
+9. Return the worker to the baseline before accepting another candidate.
 
-A child becomes **Ready** only after analysis, result saving, and persisted verification succeed. Existing child files or non-empty candidate folders are never overwritten. Candidate failure is isolated where possible; a worker that cannot recover the baseline is removed. Tab 5 does not extract results yet.
+A child becomes **Ready** only after analysis and in-place verification succeed. Existing child files or non-empty candidate folders are never overwritten. Candidate failure is isolated where possible; a worker that cannot recover the baseline is removed. Tab 5 does not extract results yet.
 
 ### SAP2000 instance count
 

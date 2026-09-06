@@ -254,8 +254,15 @@ Study composition plus isolated child-model building and analysis. Tab 05 does n
   remain sequential within each lane.
 - All requested workers must start and open the baseline before any candidate is dispatched. Each job then
   reopens the same baseline, SaveAs creates the child, applies height/loading/pretension using the child
-  `ModelInfo`, saves the configured child, runs every SAP2000 analysis case currently marked to run, saves
-  the analyzed model/results, reopens and verifies the child, and returns to the baseline before another job.
+  `ModelInfo`, `File.Save`s the configured child once, runs every SAP2000 analysis case currently marked to
+  run, then verifies the child **in place** and returns to the baseline before another job.
+- After `Analyze.RunAnalysis` the worker does **not** `File.Save` again and does **not** re-`OpenFile` the
+  child: `RunAnalysis` already persists the analyzed `.sdb` + its result files (`.Y*` / `.OUT` / `.LOG` …),
+  and a redundant save-or-reopen makes SAP2000 delete those result files the next time the worker opens the
+  baseline for the next candidate. `IterationModelBuilder` verifies the just-analyzed model via
+  `GetCurrentModelInfoAsync` (must be locked) + `IterationCandidateVerifier` reads; `SapGateway.RunAnalysisAsync`
+  throws if the model is unlocked after the run (no runnable load cases). `StudyIterationStatus.SavingAnalysis`
+  / `StudyWorkerStage.SavingAnalysis` remain in the enums but are no longer emitted.
 - `StudyExecutionSnapshotFactory` freezes candidate assignments, geometry/groups, paths, selections, and
   worker count at run start. Tabs 01–03, study settings, run checkboxes, and project load/save actions are
   disabled while execution is active.

@@ -85,6 +85,10 @@ public sealed class IterationModelBuilder(
             Report(stage, StudyIterationStatus.Saving, "Saving child model before analysis.", childInfo.Path);
             await gateway.SaveAsync(childInfo);
 
+            // Analyze.RunAnalysis persists the analyzed model and its result files (.Y* / .OUT / .LOG …) next to
+            // the child .sdb by itself. Do NOT File.Save() again or re-OpenFile() the child afterwards: SAP2000
+            // then treats that instance as modified-after-analysis and deletes its result files the next time the
+            // worker switches models (opens the baseline for the next candidate).
             token.ThrowIfCancellationRequested();
             stage = StudyWorkerStage.RunningAnalysis;
             Report(stage, StudyIterationStatus.RunningAnalysis,
@@ -92,25 +96,21 @@ public sealed class IterationModelBuilder(
             await gateway.RunAnalysisAsync(childInfo);
             AppendDiagnostic(job, workerId, $"ANALYZED child={childInfo.Path}");
 
-            token.ThrowIfCancellationRequested();
-            stage = StudyWorkerStage.SavingAnalysis;
-            Report(stage, StudyIterationStatus.SavingAnalysis, "Saving analyzed child model and results.", childInfo.Path);
-            await gateway.SaveAsync(childInfo);
-
-            // Open the saved file again so verification proves persisted disk state, not only in-memory COM state.
+            // Verify the just-analyzed model in place. It must be locked (results computed) and still hold the
+            // resolved height / loading / pretension assignments.
             token.ThrowIfCancellationRequested();
             stage = StudyWorkerStage.Verifying;
-            Report(stage, StudyIterationStatus.Verifying, "Reloading and verifying the saved child model.", childInfo.Path);
-            var reloadedChild = await gateway.OpenModelAsync(job.ModelFullPath);
-            if (!reloadedChild.IsLocked)
+            Report(stage, StudyIterationStatus.Verifying, "Verifying the analyzed child model.", childInfo.Path);
+            var analyzedChild = await gateway.GetCurrentModelInfoAsync();
+            if (!analyzedChild.IsLocked)
                 throw new InvalidOperationException(
-                    $"The saved child model reopened unlocked, so its analysis results were not persisted: {job.ModelFullPath}. " +
+                    $"The analyzed child model is unlocked, so its analysis results were not produced: {job.ModelFullPath}. " +
                     "Confirm the baseline has at least one load case set to run.");
-            var verified = await verifier.VerifyAsync(gateway, snapshot, job, proposed, reloadedChild, token);
+            var verified = await verifier.VerifyAsync(gateway, snapshot, job, proposed, analyzedChild, token);
             AppendDiagnostic(job, workerId,
                 $"VERIFIED geometryPoints={verified.GeometryPointsVerified},pointLoads={verified.PointLoadsVerified}," +
-                $"cableTargets={verified.CableTargetForcesVerified},active={reloadedChild.Path}");
-            return reloadedChild;
+                $"cableTargets={verified.CableTargetForcesVerified},active={analyzedChild.Path}");
+            return analyzedChild;
 
             void Report(StudyWorkerStage nextStage, StudyIterationStatus status, string message, string? path)
             {

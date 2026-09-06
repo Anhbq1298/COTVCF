@@ -59,12 +59,11 @@ internal static class StudyExecutionChecks
             var gateway = factory.Gateways.Single();
             Check(result.Completed == 1 && result.Failed == 0 &&
                   stages.Contains(StudyIterationStatus.RunningAnalysis) &&
-                  stages.Contains(StudyIterationStatus.SavingAnalysis) &&
                   stages.Contains(StudyIterationStatus.Verifying) && File.Exists(job.ModelFullPath),
-                "One worker marks one child Ready only after analysis, result save, and persisted verification");
+                "One worker marks one child Ready only after analysis and in-place verification");
             Check(gateway.AnalysisAttempts.Contains(Path.GetFullPath(job.ModelFullPath)) &&
                   gateway.SavedAfterAnalysis.Contains(Path.GetFullPath(job.ModelFullPath)),
-                "The child model is analyzed and saved again before it becomes Ready");
+                "RunAnalysis persists the analyzed child; the worker never re-saves or reopens it");
             Check(SavedCandidateMatches(gateway, snapshot, job),
                 "Reloaded single child physically contains its resolved height, loading, and pretension values");
             var diagnostic = File.ReadAllText(Path.Combine(job.IterationDirectory, "build.log"));
@@ -595,19 +594,20 @@ internal static class StudyExecutionChecks
             if (!string.IsNullOrWhiteSpace(failAnalysisIterationId) &&
                 path.Contains(failAnalysisIterationId, StringComparison.Ordinal))
                 throw new InvalidOperationException("SAP2000 analysis failed.");
+            // SAP2000's RunAnalysis locks the model and persists it (plus result files) by itself.
+            if (!string.IsNullOrWhiteSpace(corruptIterationId) && Current.Path.Contains(corruptIterationId, StringComparison.Ordinal))
+                currentLoads = new(StringComparer.OrdinalIgnoreCase);
             analysisComplete = true;
             Current = Current with { IsLocked = true };
+            savedStates[Current.Path] = Capture();
+            SavedAfterAnalysis.Add(path);
         });
 
         public async Task SaveAsync(ModelInfo expected) => await Tracked(async () =>
         {
             Verify(expected);
             await Task.Delay(2);
-            var saved = Capture();
-            if (!string.IsNullOrWhiteSpace(corruptIterationId) &&
-                Current.Path.Contains(corruptIterationId, StringComparison.Ordinal))
-                saved = saved with { Loads = new Dictionary<string, PointLoad>(StringComparer.OrdinalIgnoreCase) };
-            savedStates[Current.Path] = saved;
+            savedStates[Current.Path] = Capture();
             if (analysisComplete) SavedAfterAnalysis.Add(Path.GetFullPath(Current.Path));
         });
 

@@ -1171,8 +1171,9 @@ public sealed class MainViewModel : Observable
         Update();
     }
 
-    private void AddCablesFromSelection()
+    private async void AddCablesFromSelection()
     {
+        if (IsBusy) return;
         var available = State.Geometry.Members
             .Where(m => m.Kind == MemberKind.Cable)
             .Select(m => m.Name)
@@ -1185,19 +1186,41 @@ public sealed class MainViewModel : Observable
         if (picked is null) return;
 
         var existing = State.Cables.Select(c => c.CableName).ToHashSet(StringComparer.Ordinal);
-        int added = 0;
-        CablePretensionConfig? firstAdded = null;
+        var added = new List<CablePretensionConfig>();
         foreach (var name in picked.Distinct(StringComparer.Ordinal))
             if (existing.Add(name))
             {
                 var cable = new CablePretensionConfig { CableName = name };
                 State.Cables.Add(cable);
-                firstAdded ??= cable;
-                added++;
+                added.Add(cable);
             }
 
-        if (firstAdded is not null) SelectedCable = firstAdded;
-        Message = added == 0 ? "Cable selection unchanged." : $"Added {added} cable{(added == 1 ? "" : "s")}. Remove with − Remove.";
+        if (added.Count == 0) { Message = "Cable selection unchanged."; Update(); return; }
+        SelectedCable = added[0];
+
+        // Pre-fill each new row from the target force already assigned in the connected SAP2000 model.
+        int prefilled = 0;
+        if (State.Model is not null)
+        {
+            IsBusy = true;
+            try
+            {
+                var existingForces = await workflow.ReadCableTargetForcesAsync(added.Select(c => c.CableName));
+                foreach (var cable in added)
+                    if (existingForces.TryGetValue(cable.CableName, out var tf))
+                    {
+                        cable.LoadPattern = tf.LoadPattern;
+                        cable.TargetForce = tf.TargetForce;
+                        prefilled++;
+                    }
+            }
+            catch (Exception ex) { Warn("Add Cable", $"Could not read existing target forces: {ex.Message}"); }
+            finally { IsBusy = false; }
+        }
+
+        Message = prefilled > 0
+            ? $"Added {added.Count} cable{(added.Count == 1 ? "" : "s")} · {prefilled} pre-filled from SAP2000. Remove with − Remove."
+            : $"Added {added.Count} cable{(added.Count == 1 ? "" : "s")}. Remove with − Remove.";
         Update();
     }
 
