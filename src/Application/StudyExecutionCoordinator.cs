@@ -1,3 +1,4 @@
+using COT_VCF.Application.Results;
 using COT_VCF.Application.Workers;
 using COT_VCF.Domain.Results;
 using System.IO;
@@ -8,6 +9,9 @@ public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactor
 {
     private readonly StudyPathService paths = new();
 
+    /// <summary>Absolute path of the last <c>Deflection_Report.html</c> written by a run, or null.</summary>
+    public string? LastDeflectionReportPath { get; private set; }
+
     public async Task<StudyExecutionResult> BuildAsync(
         StudyExecutionSnapshot snapshot,
         IProgress<StudyExecutionProgress> progress,
@@ -15,12 +19,18 @@ public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactor
         Action<CandidateResultDto>? onCandidateResult = null)
     {
         ValidateSnapshot(snapshot);
-        await using var pool = new SapWorkerPool(hostFactory, onCandidateResult: onCandidateResult);
+        var consolidator = new ConsolidatedResultWriter();
+        await using var pool = new SapWorkerPool(hostFactory, onCandidateResult: dto =>
+        {
+            consolidator.Add(dto);
+            onCandidateResult?.Invoke(dto);
+        });
         Exception? executionError = null;
+        StudyExecutionResult result;
         try
         {
             await pool.StartAsync(snapshot, progress, token);
-            return await pool.ExecuteAsync(progress, token);
+            result = await pool.ExecuteAsync(progress, token);
         }
         catch (Exception ex)
         {
@@ -32,6 +42,25 @@ public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactor
             try { await pool.StopAsync(progress); }
             catch when (executionError is not null) { }
         }
+
+        // Consolidate the deflection results — best-effort; a completed study is never failed by this.
+        if (consolidator.Count > 0)
+        {
+            try
+            {
+                var studyFolder = Path.GetFullPath(paths.GetStudyRoot(snapshot.BaselineModelPath));
+                consolidator.Write(studyFolder, snapshot.DeflectionPoints, snapshot.DeflectionOutputCase,
+                    snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+                LastDeflectionReportPath = new DeflectionReportGenerator().Generate(
+                    studyFolder, consolidator.Snapshot(),
+                    snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+            }
+            catch (Exception ex)
+            {
+                progress.Report(new StudyExecutionProgress { WorkerId = 0, Message = $"Deflection consolidation failed: {ex.Message}" });
+            }
+        }
+        return result;
     }
 
     private void ValidateSnapshot(StudyExecutionSnapshot snapshot)

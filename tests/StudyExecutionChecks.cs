@@ -78,6 +78,22 @@ internal static class StudyExecutionChecks
             Check(diagHtml.Contains("Candidate Diagnostic Report") && diagHtml.Contains("QA/QC") &&
                   diagHtml.Contains("Monitored Deflection") && diagHtml.Contains(">top<"),
                 "Diagnostic HTML states its QA/QC purpose and lists the extracted monitored points");
+
+            var studyFolder = Path.GetDirectoryName(job.IterationDirectory)!;
+            var xlsx = Path.Combine(studyFolder, "Deflection_Results_Source.xlsx");
+            var reportHtml = Path.Combine(studyFolder, "Deflection_Report.html");
+            Check(File.Exists(xlsx) && File.Exists(reportHtml),
+                "Study run writes the consolidated Deflection workbook and the final HTML report to the Study folder");
+            var readBack = COT_VCF.Application.Results.ConsolidatedResultWriter.Read(xlsx);
+            Check(readBack.Count == 1 && readBack[0].IterationKey == job.IterationId &&
+                  readBack[0].Groups.Single().Points.Count == 3 &&
+                  readBack[0].Groups[0].Points.All(pt => pt.UzMm.HasValue),
+                "Consolidated workbook round-trips the candidate and its monitored-point Uz rows");
+            var finalHtml = File.ReadAllText(reportHtml);
+            Check(finalHtml.Contains("id=\"report-data\"") && finalHtml.Contains("Deflection Results Viewer") &&
+                  finalHtml.Contains(job.IterationId) && finalHtml.Contains("Result Library") &&
+                  !finalHtml.Contains("http://") && !finalHtml.Contains("https://") && !finalHtml.Contains("cdn."),
+                "Final HTML embeds the report JSON, has the Result Library, and references nothing external");
             Check(gateway.AnalysisAttempts.Contains(Path.GetFullPath(job.ModelFullPath)) &&
                   gateway.SavedAfterAnalysis.Contains(Path.GetFullPath(job.ModelFullPath)),
                 "RunAnalysis persists the analyzed child; the worker never re-saves or reopens it");

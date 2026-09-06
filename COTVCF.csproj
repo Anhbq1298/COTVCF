@@ -48,4 +48,10 @@
     <None Remove=".work\**" />
     <InternalsVisibleTo Include="COT_VCF.Checks" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Deflection post-processing: consolidated .xlsx source + embedded WebView2 report preview -->
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
+  </ItemGroup>
 </Project>

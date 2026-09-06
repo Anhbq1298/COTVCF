@@ -295,6 +295,53 @@ public sealed class MainViewModel : Observable
             catch { return "Study root unavailable"; }
         }
     }
+    // ---- Tab 06 Post-Processing: Deflection · Uz ----
+    public sealed record PostProcessRow(string IterationKey, string ExtractionStatus, int Points, int Valid, int Warnings, string DiagnosticRelPath)
+    {
+        public string StatusGlyph => ExtractionStatus switch
+        {
+            "ExtractedOk" => "● ok",
+            "ExtractedWithWarning" => "▲ warning",
+            "AnalysisFailed" => "× analysis",
+            _ => "× failed",
+        };
+        public string PointsText => Valid == Points ? $"{Points}" : $"{Valid} / {Points}";
+    }
+
+    public ObservableCollection<PostProcessRow> PostProcessRows { get; } = [];
+    private string? deflectionReportPath;
+    public string? DeflectionReportPath
+    {
+        get => deflectionReportPath;
+        private set
+        {
+            if (!Set(ref deflectionReportPath, value)) return;
+            Notify(nameof(HasDeflectionReport));
+            Notify(nameof(HasNoDeflectionReport));
+            Notify(nameof(DeflectionReportUri));
+            Notify(nameof(DeflectionReportName));
+            Notify(nameof(PostProcessStatus));
+        }
+    }
+    public bool HasDeflectionReport => !string.IsNullOrEmpty(DeflectionReportPath) && File.Exists(DeflectionReportPath);
+    public bool HasNoDeflectionReport => !HasDeflectionReport;
+    public Uri? DeflectionReportUri => HasDeflectionReport ? new Uri(DeflectionReportPath!) : null;
+    public string DeflectionReportName => HasDeflectionReport ? Path.GetFileName(DeflectionReportPath!) : "No report generated yet";
+    public string ResultsWorkbookPath => Directory.Exists(StudyRoot)
+        ? Path.Combine(StudyRoot, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName) : "";
+    public bool HasResultsWorkbook => !string.IsNullOrEmpty(ResultsWorkbookPath) && File.Exists(ResultsWorkbookPath);
+    public string PostProcessStatus
+    {
+        get
+        {
+            var ok = PostProcessRows.Count(r => r.ExtractionStatus == "ExtractedOk");
+            var total = PostProcessRows.Count;
+            if (!HasDeflectionReport && total == 0) return "○ No deflection results yet — run the study on Tab 05.";
+            if (!HasDeflectionReport) return "▲ Results extracted but no report — Regenerate.";
+            return total == 0 ? "● Report available." : $"● Report available · {ok}/{total} candidates extracted cleanly.";
+        }
+    }
+
     public int GeneratedRunCount => StudyIterations.Count;
     public int SelectedRunCount => StudyIterations.Count(i => i.RunIterate);
     public string StudySelectionSummary => $"{SelectedRunCount:N0} / {GeneratedRunCount:N0} selected";
@@ -438,6 +485,10 @@ public sealed class MainViewModel : Observable
     public Command CancelStudy { get; }
     public Command OpenStudyFolder { get; }
     public Command OpenIterationFolder { get; }
+    public Command OpenDeflectionReport { get; }
+    public Command RegenerateDeflectionReport { get; }
+    public Command OpenResultsWorkbook { get; }
+    public Command OpenCandidateDiagnostic { get; }
     public Command ViewIterationError { get; }
     public Command SaveTabConfig { get; }
     public Command SaveAllConfig { get; }
@@ -525,6 +576,14 @@ public sealed class MainViewModel : Observable
         CancelStudy = new(_ => CancelStudyExecution(), () => CanCancelStudy);
         OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => Directory.Exists(StudyRoot));
         OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
+        OpenDeflectionReport = new(_ => TryOpenFile(DeflectionReportPath), () => HasDeflectionReport);
+        OpenResultsWorkbook = new(_ => TryOpenFile(ResultsWorkbookPath), () => HasResultsWorkbook);
+        OpenCandidateDiagnostic = new(p =>
+        {
+            if (p is PostProcessRow row && Directory.Exists(StudyRoot))
+                TryOpenFile(Path.Combine(StudyRoot, row.DiagnosticRelPath.Replace('/', Path.DirectorySeparatorChar)));
+        });
+        RegenerateDeflectionReport = new(_ => RegenerateReport(), () => !IsBusy && HasResultsWorkbook);
         ViewIterationError = new(p =>
         {
             if (p is StudyIteration { ErrorMessage.Length: > 0 } row)
@@ -682,6 +741,7 @@ public sealed class MainViewModel : Observable
                 var modelDirectory = System.IO.Path.GetDirectoryName(baseline.Path);
                 if (!string.IsNullOrWhiteSpace(modelDirectory)) State.Study.OutputDirectory = System.IO.Path.Combine(modelDirectory, "Study");
             }
+            RefreshDeflectionArtifacts();
         }
         catch
         {
@@ -897,6 +957,7 @@ public sealed class MainViewModel : Observable
         studyQueuedCount = snapshot.Jobs.Count(job => job.RunIterate);
         studySkippedCount = snapshot.Jobs.Count - studyQueuedCount;
         StudyWorkers.Clear();
+        PostProcessRows.Clear();
         for (int id = 1; id <= RequestedWorkerCount; id++)
             StudyWorkers.Add(new SapWorkerSnapshot { WorkerId = id, State = SapWorkerState.Offline });
 
@@ -912,7 +973,9 @@ public sealed class MainViewModel : Observable
         var progress = new Progress<StudyExecutionProgress>(ApplyStudyProgress);
         try
         {
-            var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token);
+            var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token, AddPostProcessRow);
+            DeflectionReportPath = studyExecution.LastDeflectionReportPath;
+            RefreshDeflectionArtifacts();
             studyCompletedCount = result.Completed;
             studyFailedCount = result.Failed;
             studyCancelledCount = result.Cancelled;
@@ -1054,6 +1117,55 @@ public sealed class MainViewModel : Observable
     {
         try { OpenFolder(path); }
         catch (Exception ex) { Message = ex.Message; }
+    }
+
+    private void TryOpenFile(string? path)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                throw new FileNotFoundException($"The file does not exist: {path}");
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) { Message = ex.Message; }
+    }
+
+    private async void RegenerateReport()
+    {
+        if (IsBusy || !HasResultsWorkbook) return;
+        IsBusy = true;
+        try
+        {
+            var path = await Task.Run(() => new COT_VCF.Application.Results.DeflectionReportGenerator().RegenerateFromWorkbook(StudyRoot));
+            DeflectionReportPath = path;
+            Message = $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
+        }
+        catch (Exception ex) { Message = ex.Message; Warn("Regenerate Deflection Report", ex.Message); }
+        finally { IsBusy = false; }
+    }
+
+    private void AddPostProcessRow(COT_VCF.Domain.Results.CandidateResultDto dto)
+    {
+        var points = dto.Groups.Sum(g => g.Points.Count);
+        var valid = dto.Groups.Sum(g => g.Points.Count(p => p.Status == COT_VCF.Domain.Results.ResultValueStatus.Valid));
+        var row = new PostProcessRow(dto.IterationKey, dto.ExtractionStatus.ToString(), points, valid, dto.Warnings.Count, dto.DiagnosticReportRelativePath);
+        void add() { PostProcessRows.Add(row); Notify(nameof(PostProcessStatus)); }
+        if (System.Windows.Application.Current?.Dispatcher is { } d && !d.CheckAccess()) d.Invoke(add); else add();
+    }
+
+    /// <summary>Picks up a Deflection report already sitting in the current baseline's Study folder.</summary>
+    public void RefreshDeflectionArtifacts()
+    {
+        try
+        {
+            var report = Directory.Exists(StudyRoot)
+                ? Path.Combine(StudyRoot, COT_VCF.Application.Results.DeflectionReportGenerator.ReportFileName) : null;
+            DeflectionReportPath = report is not null && File.Exists(report) ? report : null;
+        }
+        catch { DeflectionReportPath = null; }
+        Notify(nameof(HasResultsWorkbook));
+        Notify(nameof(ResultsWorkbookPath));
+        Notify(nameof(PostProcessStatus));
     }
 
     private void SelectLoadLocations()
@@ -1420,7 +1532,9 @@ public sealed class MainViewModel : Observable
             nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
-            nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount)
+            nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount),
+            nameof(HasDeflectionReport), nameof(HasNoDeflectionReport), nameof(DeflectionReportUri), nameof(DeflectionReportName),
+            nameof(HasResultsWorkbook), nameof(ResultsWorkbookPath), nameof(PostProcessStatus)
         }) Notify(name);
         NotifySharedViewer();
         NotifyStudyPresentation();
