@@ -2,6 +2,13 @@ using System.Collections.ObjectModel;
 
 namespace COT_VCF.Domain;
 
+public static class OutputUnits
+{
+    public const string Force = "kN";
+    public const string Moment = "kNm";
+    public const string Displacement = "mm";
+}
+
 public static class OutputGroupNaming
 {
     public const string Prefix = "[O]-";
