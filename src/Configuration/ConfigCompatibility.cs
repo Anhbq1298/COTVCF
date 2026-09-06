@@ -141,6 +141,8 @@ public sealed class ConfigCompatibilityValidator
         if (cfg.Tab05IterationStudy is { } t5)
         {
             var tc = r.Study; tc.Present = true;
+            if (cfg.Tab02Loading is null || cfg.Tab03TrussHeight is null || cfg.Tab04CableForce is null)
+                tc.Problems.Add("the study requires the Loading, Truss Height and Cable Force sections in the same project.");
             if (!Enum.IsDefined(t5.StudyMode)) tc.Problems.Add("study mode is invalid.");
             if (t5.StudyMode == IterationStudyMode.FixHeight && !ValidCandidateId(t5.FixedHeightCandidateId, 'H'))
                 tc.Problems.Add("fixed height candidate ID is invalid.");

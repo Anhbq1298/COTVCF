@@ -4,9 +4,9 @@ using COT_VCF.Domain;
 
 namespace COT_VCF.Application;
 
-public sealed record StudyLoadingCandidate(string Id, LoadingCombination Candidate)
+public sealed record StudyLoadingCandidate(string Id, LoadingCombination Combination, IReadOnlyList<LoadingCandidate> PointLoads)
 {
-    public string DisplayName => $"{Id} - {Candidate.Loads.Count} load definition{(Candidate.Loads.Count == 1 ? "" : "s")}";
+    public string DisplayName => $"{Id} - {Combination.Loads.Count} load definition{(Combination.Loads.Count == 1 ? "" : "s")}";
 }
 
 public sealed record StudyHeightCandidate(string Id, TrussCandidate Candidate, string Unit)
@@ -28,7 +28,7 @@ public sealed class StudyIterationPreview : Observable
     public required string LoadingCandidateId { get; init; }
     public required string HeightCandidateId { get; init; }
     public required string PretensionCandidateId { get; init; }
-    public required LoadingCombination LoadingCandidate { get; init; }
+    public required StudyLoadingCandidate LoadingCandidate { get; init; }
     public required TrussCandidate HeightCandidate { get; init; }
     public required PretensionCombination PretensionCandidate { get; init; }
     public required string SapModelName { get; init; }
@@ -68,7 +68,7 @@ public sealed class StudyCompositionService
             return Empty(expected, candidateLimitExceeded || expected > MaxPreviewRows, state.Study);
 
         var loads = LoadingCandidates.Enumerate(state.LoadDefinitions.ToArray())
-            .Select(c => new StudyLoadingCandidate(CandidateId('L', c.Index), c))
+            .Select(c => new StudyLoadingCandidate(CandidateId('L', c.Index), c, BuildPointLoads(state, c)))
             .ToArray();
         var heights = state.Truss.CandidateHeights.Select((height, index) =>
         {
@@ -109,7 +109,7 @@ public sealed class StudyCompositionService
                 LoadingCandidateId = load.Id,
                 HeightCandidateId = height.Id,
                 PretensionCandidateId = pretension.Id,
-                LoadingCandidate = load.Candidate,
+                LoadingCandidate = load,
                 HeightCandidate = height.Candidate,
                 PretensionCandidate = pretension.Candidate,
                 SapModelName = fileName,

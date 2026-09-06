@@ -82,6 +82,8 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         if (uiTabs.HasFlag(ConfigTabs.Study)) project.Tab05IterationStudy = extractor.ExtractStudySection(state);
 
         var effective = ConfiguredIn(project);
+        if (uiTabs == ConfigTabs.Study && !effective.HasFlag(ConfigTabs.Study))
+            return new(SaveResult.Blocked, "Save the Loading, Truss Height and Cable Force sections before saving the iteration study.");
         if (effective == ConfigTabs.None) return new(SaveResult.Cancelled, "Nothing configured to save yet.");
         project.Model = extractor.RebuildSnapshot(project, state, cases);
 
@@ -102,7 +104,7 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         File.WriteAllText(path, JsonSerializer.Serialize(project, Json));
         // In-memory project == what is on disk; only the tabs written from the UI become clean.
         Session.SetProject(path, project);
-        Session.ClearDirty(uiTabs);
+        Session.ClearDirty(uiTabs & effective);
         return new(SaveResult.Saved, "");
     }
 
@@ -112,7 +114,8 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         if (p.Tab02Loading is { AppliedPoints.Count: > 0 } or { LoadDefinitions.Count: > 0 }) t |= ConfigTabs.Loading;
         if (p.Tab03TrussHeight is { } h && ((h.TopPoints?.Count ?? 0) > 0 || (h.MiddlePoints?.Count ?? 0) > 0 || (h.BottomPoints?.Count ?? 0) > 0)) t |= ConfigTabs.Truss;
         if (p.Tab04CableForce is { Cables.Count: > 0 }) t |= ConfigTabs.Cable;
-        if (p.Tab05IterationStudy is not null) t |= ConfigTabs.Study;
+        if (p.Tab05IterationStudy is { OutputDirectory.Length: > 0 } && t.HasFlag(ConfigTabs.Loading) && t.HasFlag(ConfigTabs.Truss) && t.HasFlag(ConfigTabs.Cable))
+            t |= ConfigTabs.Study;
         // Drop empty sections so the file only carries configured tabs.
         if (!t.HasFlag(ConfigTabs.Loading)) p.Tab02Loading = null;
         if (!t.HasFlag(ConfigTabs.Truss)) p.Tab03TrussHeight = null;
