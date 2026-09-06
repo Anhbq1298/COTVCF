@@ -198,7 +198,8 @@ public sealed class SapGateway : ISapGateway
     public Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected) => worker.Run(() =>
     {
         Verify(expected, true);
-        if (loads.GroupBy(l => (l.PointName, l.LoadPattern)).Any(g => g.Count() > 1)) throw new InvalidOperationException("Duplicate point and pattern assignments.");
+        if (loads.GroupBy(l => (l.PointName, l.LoadPattern), new PointPatternComparer()).Any(g => g.Count() > 1))
+            throw new InvalidOperationException("Duplicate point and load-pattern assignments.");
         int count = 0; string[] patterns = [];
         Check(Model.LoadPatterns.GetNameList(ref count, ref patterns), "LoadPatterns.GetNameList");
         var assignments = new List<(PointLoad Load, double[] Original, bool Existed)>();
@@ -206,14 +207,16 @@ public sealed class SapGateway : ISapGateway
         {
             if (!double.IsFinite(load.Fx) || !double.IsFinite(load.Fy) || !double.IsFinite(load.Fz)) throw new InvalidOperationException($"{load.PointName}: force values must be finite.");
             ReadPosition(load.PointName);
-            if (!patterns.Contains(load.LoadPattern)) throw new InvalidOperationException($"Load pattern {load.LoadPattern} no longer exists.");
-            int n = 0; string[] pts = [], pats = [], systems = []; int[] steps = [];
-            double[] f1 = [], f2 = [], f3 = [], m1 = [], m2 = [], m3 = [];
-            Check(Model.PointObj.GetLoadForce(load.PointName, ref n, ref pts, ref pats, ref steps, ref systems, ref f1, ref f2, ref f3, ref m1, ref m2, ref m3), "PointObj.GetLoadForce", load.PointName);
-            var matches = Enumerable.Range(0, n).Where(i => pats[i] == load.LoadPattern).ToArray();
-            if (matches.Length > 1 || matches.Any(i => !systems[i].Equals("Global", StringComparison.OrdinalIgnoreCase) || steps[i] != 0)) throw new InvalidOperationException($"{load.PointName} / {load.LoadPattern}: multiple, local-axis or stepped loads exist. Resolve them in SAP2000 before replacing this assignment.");
-            int index = matches.FirstOrDefault(-1);
-            assignments.Add((load, index < 0 ? new double[6] : [f1[index], f2[index], f3[index], m1[index], m2[index], m3[index]], index >= 0));
+            var actualPattern = patterns.Take(count).FirstOrDefault(pattern => pattern.Equals(load.LoadPattern, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException($"Load pattern {load.LoadPattern} no longer exists.");
+            var normalized = load with { LoadPattern = actualPattern };
+            var matches = ReadPointForceAssignments(normalized.PointName)
+                .Where(item => item.LoadPattern.Equals(actualPattern, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matches.Length > 1 || matches.Any(item => !item.CoordinateSystem.Equals("Global", StringComparison.OrdinalIgnoreCase) || item.Step != 0))
+                throw new InvalidOperationException($"{normalized.PointName} / {actualPattern}: multiple, local-axis or stepped loads exist. Resolve them in SAP2000 before replacing this assignment.");
+            var match = matches.SingleOrDefault();
+            assignments.Add((normalized, match?.Values ?? new double[6], match is not null));
         }
         var journal = RecoveryJournal.Save("point-loads", new { Model = expected, Assignments = assignments.Select(a => new { Proposed = a.Load, Original = a.Original, Existed = a.Existed }).ToArray() });
         var attempted = new List<(PointLoad Load, double[] Original, bool Existed)>();
@@ -223,7 +226,15 @@ public sealed class SapGateway : ISapGateway
             {
                 Verify(expected, true); attempted.Add(item);
                 double[] values = [item.Load.Fx, item.Load.Fy, item.Load.Fz, item.Original[3], item.Original[4], item.Original[5]];
-                Check(Model.PointObj.SetLoadForce(item.Load.PointName, item.Load.LoadPattern, ref values, true, "Global"), "PointObj.SetLoadForce", item.Load.PointName);
+                Check(Model.PointObj.SetLoadForce(item.Load.PointName, item.Load.LoadPattern, ref values, true, "Global", eItemType.Objects),
+                    "PointObj.SetLoadForce", $"{item.Load.PointName} / {item.Load.LoadPattern} / Fz={item.Load.Fz:0.###}");
+                var written = ReadPointForceAssignments(item.Load.PointName)
+                    .Where(candidate => candidate.LoadPattern.Equals(item.Load.LoadPattern, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                if (written.Length != 1 || written[0].Step != 0 ||
+                    !written[0].CoordinateSystem.Equals("Global", StringComparison.OrdinalIgnoreCase) ||
+                    !SameValues(written[0].Values, values))
+                    throw new InvalidOperationException($"SAP2000 did not retain the requested joint load: {item.Load.PointName} / {item.Load.LoadPattern} / Fz={item.Load.Fz:0.###} {expected.ForceUnit}.");
             }
         }
         catch (Exception original)
@@ -231,7 +242,7 @@ public sealed class SapGateway : ISapGateway
             var failures = new List<string>();
             foreach (var item in attempted.AsEnumerable().Reverse())
             {
-                try { Verify(expected, true); var values = item.Original; Check(item.Existed ? Model.PointObj.SetLoadForce(item.Load.PointName, item.Load.LoadPattern, ref values, true, "Global") : Model.PointObj.DeleteLoadForce(item.Load.PointName, item.Load.LoadPattern), "Restore point load", item.Load.PointName); }
+                try { Verify(expected, true); var values = item.Original; Check(item.Existed ? Model.PointObj.SetLoadForce(item.Load.PointName, item.Load.LoadPattern, ref values, true, "Global", eItemType.Objects) : Model.PointObj.DeleteLoadForce(item.Load.PointName, item.Load.LoadPattern, eItemType.Objects), "Restore point load", item.Load.PointName); }
                 catch (Exception ex) { failures.Add(ex.Message); }
             }
             throw new InvalidOperationException(original.Message + (failures.Count == 0 ? " Attempted load changes were restored." : " Some changes could not be restored: " + string.Join("; ", failures)) + $" Recovery data: {journal}", original);
@@ -312,18 +323,108 @@ public sealed class SapGateway : ISapGateway
     {
         Verify(expected, true);
         if (string.IsNullOrWhiteSpace(cableName)) throw new InvalidOperationException("A cable object name is required.");
+        if (string.IsNullOrWhiteSpace(loadPattern)) throw new InvalidOperationException($"{cableName}: a target-force load pattern is required.");
         if (!double.IsFinite(targetForce)) throw new InvalidOperationException("Target force must be a finite number.");
         int count = 0; string[] patterns = [];
         Check(Model.LoadPatterns.GetNameList(ref count, ref patterns), "LoadPatterns.GetNameList");
-        if (!patterns.Take(count).Contains(loadPattern))
-            Check(Model.LoadPatterns.Add(loadPattern, eLoadPatternType.Prestress, 0, true), "LoadPatterns.Add", loadPattern);
+        var actualPattern = patterns.Take(count).FirstOrDefault(pattern => pattern.Equals(loadPattern, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Load pattern {loadPattern} does not exist. Cable target force assignments require a load pattern, not an analysis load case.");
         int cableTotal = 0; string[] cableNames = [];
         Check(Model.CableObj.GetNameList(ref cableTotal, ref cableNames), "CableObj.GetNameList");
-        if (!cableNames.Take(cableTotal).Contains(cableName)) throw new InvalidOperationException($"Cable {cableName} no longer exists in the model.");
-        double p = targetForce, rd = PretensionRelDist;
-        Check(Model.CableObj.SetLoadTargetForce(cableName, loadPattern, ref p, ref rd, eItemType.Objects), "CableObj.SetLoadTargetForce", cableName);
+        var actualCable = cableNames.Take(cableTotal).FirstOrDefault(name => name.Equals(cableName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Cable {cableName} no longer exists in the model.");
+        var original = ReadCableTargetForces(actualCable)
+            .Where(item => item.LoadPattern.Equals(actualPattern, StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        var journal = RecoveryJournal.Save("cable-target-force", new
+        {
+            Model = expected,
+            Cable = actualCable,
+            LoadPattern = actualPattern,
+            ProposedTargetForce = targetForce,
+            RelativeDistance = PretensionRelDist,
+            Original = original
+        });
+        try
+        {
+            if (original.Length > 0)
+                Check(Model.CableObj.DeleteLoadTargetForce(actualCable, actualPattern, eItemType.Objects),
+                    "CableObj.DeleteLoadTargetForce", $"{actualCable} / {actualPattern}");
+            double p = targetForce, rd = PretensionRelDist;
+            Check(Model.CableObj.SetLoadTargetForce(actualCable, actualPattern, ref p, ref rd, eItemType.Objects),
+                "CableObj.SetLoadTargetForce", $"{actualCable} / {actualPattern} / P={targetForce:0.###}");
+            var written = ReadCableTargetForces(actualCable)
+                .Where(item => item.LoadPattern.Equals(actualPattern, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (written.Length != 1 || !Close(written[0].TargetForce, targetForce) || !Close(written[0].RelativeDistance, PretensionRelDist))
+                throw new InvalidOperationException($"SAP2000 did not retain the requested cable target force: {actualCable} / {actualPattern} / P={targetForce:0.###} {expected.ForceUnit} at RD={PretensionRelDist:0.###}.");
+        }
+        catch (Exception originalError)
+        {
+            var failures = new List<string>();
+            try
+            {
+                var current = ReadCableTargetForces(actualCable)
+                    .Any(item => item.LoadPattern.Equals(actualPattern, StringComparison.OrdinalIgnoreCase));
+                if (current)
+                    Check(Model.CableObj.DeleteLoadTargetForce(actualCable, actualPattern, eItemType.Objects),
+                        "Restore cable target force", $"{actualCable} / {actualPattern}");
+                foreach (var prior in original)
+                {
+                    double p = prior.TargetForce, rd = prior.RelativeDistance;
+                    Check(Model.CableObj.SetLoadTargetForce(actualCable, actualPattern, ref p, ref rd, eItemType.Objects),
+                        "Restore cable target force", $"{actualCable} / {actualPattern}");
+                }
+            }
+            catch (Exception ex) { failures.Add(ex.Message); }
+            throw new InvalidOperationException(originalError.Message +
+                (failures.Count == 0 ? " The previous target-force assignment was restored." : " The previous target-force assignment could not be fully restored: " + string.Join("; ", failures)) +
+                $" Recovery data: {journal}", originalError);
+        }
         return true;
     });
+
+    private sealed record PointForceAssignment(string LoadPattern, int Step, string CoordinateSystem, double[] Values);
+    private sealed record CableTargetForceAssignment(string LoadPattern, double TargetForce, double RelativeDistance);
+
+    private IReadOnlyList<PointForceAssignment> ReadPointForceAssignments(string pointName)
+    {
+        int count = 0; string[] points = [], patterns = [], systems = []; int[] steps = [];
+        double[] f1 = [], f2 = [], f3 = [], m1 = [], m2 = [], m3 = [];
+        Check(Model.PointObj.GetLoadForce(pointName, ref count, ref points, ref patterns, ref steps, ref systems,
+            ref f1, ref f2, ref f3, ref m1, ref m2, ref m3, eItemType.Objects), "PointObj.GetLoadForce", pointName);
+        return Enumerable.Range(0, count)
+            .Select(index => new PointForceAssignment(patterns[index], steps[index], systems[index],
+                [f1[index], f2[index], f3[index], m1[index], m2[index], m3[index]]))
+            .ToArray();
+    }
+
+    private IReadOnlyList<CableTargetForceAssignment> ReadCableTargetForces(string cableName)
+    {
+        int count = 0; string[] cables = [], patterns = []; double[] forces = [], distances = [];
+        Check(Model.CableObj.GetLoadTargetForce(cableName, ref count, ref cables, ref patterns, ref forces, ref distances, eItemType.Objects),
+            "CableObj.GetLoadTargetForce", cableName);
+        return Enumerable.Range(0, count)
+            .Select(index => new CableTargetForceAssignment(patterns[index], forces[index], distances[index]))
+            .ToArray();
+    }
+
+    private static bool SameValues(IReadOnlyList<double> left, IReadOnlyList<double> right) =>
+        left.Count == right.Count && Enumerable.Range(0, left.Count).All(index => Close(left[index], right[index]));
+
+    private static bool Close(double left, double right) =>
+        Math.Abs(left - right) <= 1e-8 * Math.Max(1, Math.Max(Math.Abs(left), Math.Abs(right)));
+
+    private sealed class PointPatternComparer : IEqualityComparer<(string PointName, string LoadPattern)>
+    {
+        public bool Equals((string PointName, string LoadPattern) left, (string PointName, string LoadPattern) right) =>
+            left.PointName.Equals(right.PointName, StringComparison.OrdinalIgnoreCase) &&
+            left.LoadPattern.Equals(right.LoadPattern, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string PointName, string LoadPattern) value) =>
+            HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(value.PointName),
+                StringComparer.OrdinalIgnoreCase.GetHashCode(value.LoadPattern));
+    }
 
     public Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected) => worker.Run<IReadOnlyList<string>>(() =>
     {

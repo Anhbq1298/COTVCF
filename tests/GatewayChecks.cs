@@ -16,6 +16,9 @@ internal static class GatewayChecks
             "SAP baseline point loads are captured read-only");
         gateway.ApplyLoadsAsync([new("p1", "LIVE", 1, 2, 3)], expected).GetAwaiter().GetResult();
         Check(fake.Loads["p1"].SequenceEqual(new double[] { 1, 2, 3, 40, 50, 60 }), "SAP load write preserves existing moments");
+        gateway.SetCableTargetForceAsync("Cable-A", "PRETENSION", 1300, expected).GetAwaiter().GetResult();
+        Check(fake.TargetForces[("Cable-A", "PRETENSION")] is [{ Force: 1300, Distance: 0.5 }],
+            "SAP cable target force replaces the same-pattern assignment and verifies the written value");
         var before = fake.Loads.ToDictionary(p => p.Key, p => p.Value.ToArray());
         fake.FailLoadName = "p2";
         Throws(() => gateway.ApplyLoadsAsync([new("p1", "LIVE", 100, 0, 0), new("p2", "LIVE", 200, 0, 0)], expected).GetAwaiter().GetResult());
@@ -63,6 +66,10 @@ internal static class GatewayChecks
         public string CurrentPath = "test.sdb";
         public Dictionary<string, Position> Points { get; } = new() { ["p1"] = new(0, 0, 0), ["p2"] = new(10, 0, 0) };
         public Dictionary<string, double[]> Loads { get; } = new() { ["p1"] = [10, 20, 30, 40, 50, 60], ["p2"] = [11, 21, 31, 41, 51, 61] };
+        public Dictionary<(string Cable, string Pattern), List<(double Force, double Distance)>> TargetForces { get; } = new()
+        {
+            [("Cable-A", "PRETENSION")] = [(900, 0.25), (1000, 0.75)]
+        };
         public cSapModel Model { get; }
         public FakeApi()
         {
@@ -88,8 +95,41 @@ internal static class GatewayChecks
                 if (FailMoveName == p) { FailMoveName = null; return 9; } return 0;
             });
             object? NoMembers(string name, object?[] a) { if (name == "GetNameList") { a[0] = 0; a[1] = Array.Empty<string>(); return 0; } throw new NotSupportedException(name); }
-            var frame = ApiDouble.Create<cFrameObj>(NoMembers); var cable = ApiDouble.Create<cCableObj>(NoMembers); var tendon = ApiDouble.Create<cTendonObj>(NoMembers);
-            var patterns = ApiDouble.Create<cLoadPatterns>((name, a) => { a[0] = 1; a[1] = new[] { "LIVE" }; return 0; });
+            var frame = ApiDouble.Create<cFrameObj>(NoMembers);
+            var cable = ApiDouble.Create<cCableObj>((name, a) =>
+            {
+                switch (name)
+                {
+                    case "GetNameList": a[0] = 1; a[1] = new[] { "Cable-A" }; return 0;
+                    case "GetLoadTargetForce":
+                        var cableName = (string)a[0]!;
+                        var rows = TargetForces
+                            .Where(pair => pair.Key.Cable == cableName)
+                            .SelectMany(pair => pair.Value.Select(value => (pair.Key.Pattern, value.Force, value.Distance)))
+                            .ToArray();
+                        a[1] = rows.Length;
+                        a[2] = Enumerable.Repeat(cableName, rows.Length).ToArray();
+                        a[3] = rows.Select(row => row.Pattern).ToArray();
+                        a[4] = rows.Select(row => row.Force).ToArray();
+                        a[5] = rows.Select(row => row.Distance).ToArray();
+                        return 0;
+                    case "DeleteLoadTargetForce":
+                        TargetForces.Remove(((string)a[0]!, (string)a[1]!));
+                        return 0;
+                    case "SetLoadTargetForce":
+                        var key = ((string)a[0]!, (string)a[1]!);
+                        if (!TargetForces.TryGetValue(key, out var assignments)) TargetForces[key] = assignments = [];
+                        assignments.Add(((double)a[2]!, (double)a[3]!));
+                        return 0;
+                    default: throw new NotSupportedException(name);
+                }
+            });
+            var tendon = ApiDouble.Create<cTendonObj>(NoMembers);
+            var patterns = ApiDouble.Create<cLoadPatterns>((name, a) =>
+            {
+                if (name == "GetNameList") { a[0] = 2; a[1] = new[] { "LIVE", "PRETENSION" }; return 0; }
+                throw new NotSupportedException(name);
+            });
             var view = ApiDouble.Create<cView>((name, a) => 0);
             var file = ApiDouble.Create<cFile>((name, a) =>
             {

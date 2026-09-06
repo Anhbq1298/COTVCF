@@ -21,13 +21,17 @@ internal static class StudyComposerChecks
             "Every iteration previews its own deterministic folder and child model path");
         Check(fixHeight.Iterations[0].Description.Contains("Height 15 \u2192 20 m (\u0394H +5 m, H03)"), "Height description compares against the first-connected baseline");
         var described = fixHeight.Iterations.Single(r => r.IterationKey == "L02_H03_P04").Description;
-        Check(described.Contains("Fz -1 \u2192 -2 kN") && described.Contains("Cable-A 900 \u2192 1300"),
-            "Loading and pretension descriptions use immutable baseline values");
+        Check(described.Contains("Fz -1 \u2192 -2 kN") && described.Contains("Cable-A@PRETENSION target 1300 kN"),
+            "Loading description uses the immutable baseline and pretension names its exact target assignment");
         Check(fixHeight.Iterations[0].LoadingCandidate.PointLoads.Count == 2,
             "Loading candidate retains its complete point-load assignment set");
         Check(fixHeight.Iterations[0].LoadingCandidate.Loads.Count == 2 &&
               fixHeight.Iterations[0].LoadingCandidate.Loads.All(load => load.Fz < 0),
             "Loading candidate resolves complete downward point-load assignments");
+        Check(fixHeight.Iterations[0].LoadingAssignmentDetails.Contains("LIVE: 2 joints [load2, top]") &&
+              fixHeight.Iterations.First(row => row.PretensionCandidateId == "P04").PretensionAssignmentDetails ==
+              "Cable-A @ PRETENSION = 1300 kN",
+            "Study rows expose exact joint-load and cable target-force assignments");
 
         state.Study.Mode = IterationStudyMode.FixPretension;
         state.Study.FixedPretensionCandidateId = "P02";
@@ -68,6 +72,20 @@ internal static class StudyComposerChecks
         Check(loadedState.Study.Mode == IterationStudyMode.Combined && loadedStudy.Iterations.Count == 216 &&
               loadedStudy.Iterations.Count(r => r.RunIterate) == 212,
             "Config load rebuilds rows and restores Run Iterate selections by key");
+
+        var elevenJointState = CreateState();
+        for (int index = 3; index <= 11; index++)
+            elevenJointState.AppliedPoints.Add(new AppliedPoint
+            {
+                PointName = $"load{index}", X = index, Y = 0, Z = 0, Order = index
+            });
+        elevenJointState.LoadPatterns.Add("DEAD");
+        elevenJointState.LoadDefinitions.Add(new LoadDefinition { LoadName = "DEAD", Qz = 5 });
+        var elevenJointCandidate = composer.Compose(elevenJointState).LoadingCandidates.First();
+        Check(elevenJointCandidate.JointCount == 11 && elevenJointCandidate.Loads.Count == 22 &&
+              elevenJointCandidate.Loads.Select(load => load.PointName).Distinct(StringComparer.Ordinal).Count() == 11 &&
+              elevenJointCandidate.Loads.Select(load => load.LoadPattern).Distinct(StringComparer.Ordinal).Count() == 2,
+            "Eleven Tab 2 joints and two load patterns produce all 22 point-load assignments");
     }
 
     internal static ApplicationState CreateState()

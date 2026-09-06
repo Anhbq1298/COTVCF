@@ -9,7 +9,7 @@ namespace COT_VCF.Application;
 /// </summary>
 public interface ICablePretensionService
 {
-    /// <summary>Assigns one candidate as an Assign → Cable Loads → Target Force on the PRETENSION load pattern.</summary>
+    /// <summary>Assigns one candidate as Assign → Cable Loads → Target Force on the configured load pattern.</summary>
     Task ApplyTargetForceAsync(string cableName, double targetForce);
 
     /// <summary>Lazily enumerates the Cartesian product of the current cable configs.</summary>
@@ -21,7 +21,11 @@ public sealed class CablePretensionService(ISapGateway sap, ApplicationState sta
     public Task ApplyTargetForceAsync(string cableName, double targetForce)
     {
         if (state.Model is null) throw new InvalidOperationException("Connect to SAP2000 first.");
-        return sap.SetCableTargetForceAsync(cableName, CablePretensionConfig.PretensionLoadCase, targetForce, state.Model);
+        var cable = state.Cables.SingleOrDefault(candidate => candidate.CableName.Equals(cableName, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException($"Cable {cableName} is not configured in Tab 4.");
+        if (string.IsNullOrWhiteSpace(cable.LoadPattern))
+            throw new InvalidOperationException($"Cable {cableName} has no target-force load pattern.");
+        return sap.SetCableTargetForceAsync(cableName, cable.LoadPattern.Trim(), targetForce, state.Model);
     }
 
     public IEnumerable<PretensionCombination> EnumerateCombinations() => PretensionCandidates.Enumerate(state.Cables.ToArray());

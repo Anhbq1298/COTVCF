@@ -8,9 +8,28 @@ public sealed record StudyHeightCandidate(string Id, TrussCandidate Candidate, s
     public string DisplayName => $"{Id} - {Candidate.Height:0.000} {Unit}";
 }
 
-public sealed record StudyPretensionCandidate(string Id, PretensionCombination Candidate)
+public sealed record StudyPretensionCandidate(
+    string Id,
+    PretensionCombination Candidate,
+    IReadOnlyList<PretensionAssignment> Assignments)
 {
-    public string DisplayName => $"{Id} - {Candidate.CableForces.Count} cable{(Candidate.CableForces.Count == 1 ? "" : "s")}";
+    public string DisplayName
+    {
+        get
+        {
+            if (Assignments.Count == 0) return $"{Id} - no target-force assignments";
+            var minimum = Assignments.Min(assignment => assignment.TargetForce);
+            var maximum = Assignments.Max(assignment => assignment.TargetForce);
+            var force = Close(minimum, maximum) ? $"{minimum:0.###}" : $"{minimum:0.###}..{maximum:0.###}";
+            return $"{Id} - {Assignments.Count} cable target{(Assignments.Count == 1 ? "" : "s")} · {force} kN";
+        }
+    }
+
+    public string AssignmentDetails => string.Join("; ", Assignments.Select(assignment =>
+        $"{assignment.CableName} @ {assignment.LoadPattern} = {assignment.TargetForce:0.###} kN"));
+
+    private static bool Close(double left, double right) =>
+        Math.Abs(left - right) <= 1e-9 * Math.Max(1, Math.Max(Math.Abs(left), Math.Abs(right)));
 }
 
 public sealed record StudyCompositionResult(
@@ -64,8 +83,23 @@ public sealed class StudyCompositionService
                 new TrussCandidate(index + 1, height, delta, state.Truss.Reference.ToString(), top, mid, bot),
                 state.Model?.LengthUnit ?? "m");
         }).ToArray();
+        var pretensionPatterns = state.Cables.ToDictionary(
+            cable => cable.CableName,
+            cable => cable.LoadPattern.Trim(),
+            StringComparer.Ordinal);
         var pretensions = PretensionCandidates.Enumerate(state.Cables.ToArray())
-            .Select(c => new StudyPretensionCandidate(CandidateId('P', c.CombinationIndex), c))
+            .Select(c => new StudyPretensionCandidate(
+                CandidateId('P', c.CombinationIndex),
+                c,
+                c.CableForces
+                    .OrderBy(force => force.Key, StringComparer.Ordinal)
+                    .Select(force => new PretensionAssignment(
+                        force.Key,
+                        pretensionPatterns.TryGetValue(force.Key, out var pattern) && pattern.Length > 0
+                            ? pattern
+                            : throw new InvalidOperationException($"Cable {force.Key} has no target-force load pattern."),
+                        force.Value))
+                    .ToArray()))
             .ToArray();
 
         var fixedHeight = ResolveId(state.Study.FixedHeightCandidateId, heights.Select(c => c.Id));
@@ -105,6 +139,7 @@ public sealed class StudyCompositionService
                 LoadingCandidate = load,
                 HeightCandidate = height.Candidate,
                 PretensionCandidate = pretension.Candidate,
+                PretensionAssignments = pretension.Assignments,
                 ModelName = fileName,
                 IterationDirectory = directory,
                 ModelFullPath = fullPath,
@@ -138,7 +173,7 @@ public sealed class StudyCompositionService
         {
             DescribeLoading(state, load),
             $"Height {state.Truss.BaselineHeight:0.###} \u2192 {height.Candidate.Height:0.###} {height.Unit} (\u0394H {height.Candidate.DeltaH:+0.###;-0.###;0} {height.Unit}, {height.Id})",
-            DescribePretension(state, pretension)
+            DescribePretension(pretension)
         };
         return string.Join(" | ", parts);
     }
@@ -187,16 +222,16 @@ public sealed class StudyCompositionService
         return rows;
     }
 
-    private static string DescribePretension(ApplicationState state, StudyPretensionCandidate pretension)
+    private static string DescribePretension(StudyPretensionCandidate pretension)
     {
-        var forces = pretension.Candidate.CableForces;
-        var changed = forces.Count(force => !state.SessionBaselinePretensionForces.TryGetValue(force.Key, out var baseline) || !Close(baseline, force.Value));
-        var valueText = forces.Count <= 3
-            ? string.Join(", ", forces.Select(force => state.SessionBaselinePretensionForces.TryGetValue(force.Key, out var baseline)
-                ? $"{force.Key} {baseline:0.###} \u2192 {force.Value:0.###}"
-                : $"{force.Key} unassigned \u2192 {force.Value:0.###}"))
-            : $"{changed} of {forces.Count} cables updated, target range {forces.Values.Min():0.###}-{forces.Values.Max():0.###}";
-        return $"Pretension {pretension.Id}: {valueText} kN";
+        var assignments = pretension.Assignments;
+        var valueText = assignments.Count <= 3
+            ? string.Join(", ", assignments.Select(assignment =>
+                $"{assignment.CableName}@{assignment.LoadPattern} target {assignment.TargetForce:0.###} kN"))
+            : $"{assignments.Count} cable targets; " +
+              $"{string.Join(", ", assignments.Select(assignment => assignment.LoadPattern).Distinct(StringComparer.Ordinal))}; " +
+              $"target {Range(assignments.Select(assignment => assignment.TargetForce))} kN";
+        return $"Pretension {pretension.Id}: {valueText}";
     }
 
     private static string Range(IEnumerable<double> values)

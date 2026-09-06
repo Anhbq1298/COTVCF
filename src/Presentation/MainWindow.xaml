@@ -296,7 +296,7 @@
        <TextBlock Text="{Binding PretensionCandidateCount}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Accent}" Margin="6,0,0,0"/>
       </StackPanel>
       <TextBlock Grid.Row="2" Foreground="{StaticResource Muted}" FontSize="10.5" Margin="0,0,0,6" TextWrapping="Wrap"
-               Text="{Binding ForceUnit, StringFormat=Define Target Force candidates for the PRETENSION load case · forces in [{0}] · editing does not modify SAP2000}"/>
+               Text="{Binding ForceUnit, StringFormat=Define Cable Target Force candidates by SAP load pattern · forces in [{0}] · editing does not modify SAP2000}"/>
 
       <DataGrid x:Name="Cables" Grid.Row="3" ItemsSource="{Binding State.Cables}" SelectedItem="{Binding SelectedCable, Mode=TwoWay}"
                 SelectionChanged="Cables_SelectionChanged" SelectionMode="Extended" IsEnabled="{Binding IsIdle}"
@@ -309,13 +309,13 @@
       </DataGrid.Resources>
       <DataGrid.Columns>
        <DataGridTextColumn Header="Cable" Binding="{Binding CableName}" IsReadOnly="True" Width="1.1*" MinWidth="80"/>
-       <DataGridTemplateColumn Header="Load Case" Width="1.3*" MinWidth="120">
+       <DataGridTemplateColumn Header="Load Pattern" Width="1.3*" MinWidth="120">
         <DataGridTemplateColumn.CellTemplate>
          <DataTemplate>
           <ComboBox IsEditable="True" BorderThickness="0" Background="Transparent" Padding="4,0" MinHeight="0" VerticalContentAlignment="Center"
                     ToolTip="SAP2000 load pattern the target force is assigned to"
                     ItemsSource="{Binding DataContext.State.LoadPatterns, RelativeSource={RelativeSource AncestorType=Window}}"
-                    Text="{Binding LoadCase, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                    Text="{Binding LoadPattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
          </DataTemplate>
         </DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
@@ -480,24 +480,34 @@
         <DataGrid x:Name="StudyPreviewGrid" ItemsSource="{Binding StudyIterations}" CanUserDeleteRows="False" FrozenColumnCount="2" IsReadOnly="{Binding IsStudyRunning}"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
          <DataGrid.Columns>
-          <DataGridTextColumn Header="#" Binding="{Binding RunIndex}" IsReadOnly="True" Width="45" ElementStyle="{StaticResource NumericCell}"/>
-          <DataGridTextColumn Header="SAP Model Name" Binding="{Binding SapModelName}" IsReadOnly="True" Width="225" MinWidth="180">
-           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding SapModelName}"/></Style></DataGridTextColumn.ElementStyle>
+          <DataGridTextColumn Header="#" Binding="{Binding RunIndex}" IsReadOnly="True" Width="38" ElementStyle="{StaticResource NumericCell}"/>
+          <DataGridTextColumn Header="SAP Model Name" Binding="{Binding SapModelName}" IsReadOnly="True" Width="180" MinWidth="160">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding ModelFullPath}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
-          <DataGridTextColumn Header="Folder" Binding="{Binding IterationDirectory}" IsReadOnly="True" Width="170" MinWidth="130">
-           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding IterationDirectory}"/></Style></DataGridTextColumn.ElementStyle>
+          <DataGridTextColumn Header="Joint Loads" Binding="{Binding LoadingAssignmentText}" IsReadOnly="True" Width="120" MinWidth="110">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding LoadingAssignmentDetails}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
-          <DataGridTextColumn Header="Description - changes from baseline" Binding="{Binding Description}" IsReadOnly="True" Width="*" MinWidth="280">
-           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding Description}"/></Style></DataGridTextColumn.ElementStyle>
+          <DataGridTextColumn Header="Cable Target Force" Binding="{Binding PretensionAssignmentText}" IsReadOnly="True" Width="145" MinWidth="135">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding PretensionAssignmentDetails}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
-          <DataGridTextColumn Header="Worker" Binding="{Binding WorkerText}" IsReadOnly="True" Width="62" MinWidth="58"/>
-          <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" IsReadOnly="True" Width="120" MinWidth="100">
+          <DataGridTextColumn Header="Height" Binding="{Binding HeightCandidateId}" IsReadOnly="True" Width="74" MinWidth="68">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding Description}"/></Style></DataGridTextColumn.ElementStyle>
+          </DataGridTextColumn>
+          <DataGridTextColumn Header="Worker" Binding="{Binding WorkerText}" IsReadOnly="True" Width="56" MinWidth="52"/>
+          <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" IsReadOnly="True" Width="105" MinWidth="92">
            <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding CurrentStageText}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
-          <DataGridCheckBoxColumn Header="Run" Binding="{Binding RunIterate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="54" MinWidth="50"/>
-          <DataGridTemplateColumn Header="Open" Width="54" MinWidth="50" IsReadOnly="True">
+          <DataGridCheckBoxColumn Header="Run" Binding="{Binding RunIterate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="48" MinWidth="46"/>
+          <DataGridTemplateColumn Header="Open" Width="52" MinWidth="50" IsReadOnly="True">
            <DataGridTemplateColumn.CellTemplate><DataTemplate>
-            <Button Content="Folder" MinHeight="20" Padding="4,0" Margin="0" Command="{Binding DataContext.OpenIterationFolder, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="Open this iteration folder"/>
+            <Grid>
+             <Button Content="Folder" MinHeight="20" Padding="4,0" Margin="0" Command="{Binding DataContext.OpenIterationFolder, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="Open this iteration folder">
+              <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers><DataTrigger Binding="{Binding HasError}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Button.Style>
+             </Button>
+             <Button Content="Error" MinHeight="20" Padding="4,0" Margin="0" Command="{Binding DataContext.ViewIterationError, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="Show the exact SAP2000 operation that failed">
+              <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding HasError}" Value="True"><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></Button.Style>
+             </Button>
+            </Grid>
            </DataTemplate></DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
          </DataGrid.Columns>

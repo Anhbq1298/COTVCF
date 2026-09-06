@@ -75,6 +75,11 @@ internal static class StudyExecutionChecks
                 "Every selected candidate has an isolated child .sdb file");
             Check(factory.Gateways.SelectMany(gateway => gateway.SaveAsSources).All(path => SamePath(path, snapshot.BaselineModelPath)),
                 "Every child SaveAs originates from the immutable baseline");
+            Check(factory.Gateways.Sum(gateway => gateway.AppliedPointLoads.Count) ==
+                  snapshot.Jobs.Where(job => job.RunIterate).Sum(job => job.Loading.Loads.Count) &&
+                  factory.Gateways.Sum(gateway => gateway.AppliedTargetForces.Count) ==
+                  snapshot.Jobs.Where(job => job.RunIterate).Sum(job => job.Pretension.Assignments.Count),
+                "Every worker receives all selected-joint loads and cable target-force assignments");
 
             var ordered = snapshot.Jobs.Where(job => job.RunIterate).OrderBy(job => job.RunIndex).ToArray();
             Check(assignments[ordered[1].IterationId] == assignments[ordered[2].IterationId],
@@ -231,6 +236,8 @@ internal static class StudyExecutionChecks
         private int maxConcurrentCalls;
         public ModelInfo Current { get; private set; } = new("", "26", 6, "kN", "m", false);
         public ConcurrentBag<string> SaveAsSources { get; } = [];
+        public ConcurrentBag<PointLoad> AppliedPointLoads { get; } = [];
+        public ConcurrentBag<PretensionAssignment> AppliedTargetForces { get; } = [];
         public int MaxConcurrentCalls => maxConcurrentCalls;
         public int WorkerId => workerId;
         public bool Crashed { get; private set; }
@@ -273,12 +280,14 @@ internal static class StudyExecutionChecks
         public async Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected) => await Tracked(async () =>
         {
             Verify(expected);
+            foreach (var load in loads) AppliedPointLoads.Add(load);
             await Task.Delay(3);
         });
 
         public async Task SetCableTargetForceAsync(string cableName, string loadPattern, double targetForce, ModelInfo expected) => await Tracked(async () =>
         {
             Verify(expected);
+            AppliedTargetForces.Add(new(cableName, loadPattern, targetForce));
             await Task.Delay(3);
         });
 

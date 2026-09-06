@@ -166,8 +166,19 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     public const int MaterializeCeiling = 1_000_000;
 
     public required string CableName { get; init; }
-    private string loadCase = PretensionLoadCase;
-    public string LoadCase { get => loadCase; set { if (Set(ref loadCase, value)) Notify(nameof(Status)); } }
+    private string loadPattern = PretensionLoadCase;
+    public string LoadPattern
+    {
+        get => loadPattern;
+        set
+        {
+            if (!Set(ref loadPattern, value)) return;
+            Notify(nameof(LoadCase));
+            Notify(nameof(Status));
+        }
+    }
+    // Version-1.0 code/config compatibility alias. Cable target force is assigned to a load pattern.
+    public string LoadCase { get => LoadPattern; set => LoadPattern = value; }
 
     private bool applyRange, missing;
     private double? targetForce = 0, minForce, maxForce, stepForce;
@@ -208,7 +219,7 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     }
 
     public string Status => Missing ? "Missing in SAP"
-        : string.IsNullOrWhiteSpace(loadCase) ? "Invalid"
+        : string.IsNullOrWhiteSpace(loadPattern) ? "Invalid"
         : CandidateCount > 0 ? "Configured" : "Invalid";
 
     /// <summary>Candidate target forces for this cable: [TargetForce] in Fixed mode, or Min, Min+Step, … ≤ Max in Range mode.

@@ -12,8 +12,27 @@ public sealed record LoadingStudyCandidate
     public required LoadingCombination Combination { get; init; }
     public required IReadOnlyList<LoadingCandidate> PointLoads { get; init; }
     public required IReadOnlyList<PointLoad> Loads { get; init; }
-    public string DisplayName => $"{Id} - {Combination.Loads.Count} load definition{(Combination.Loads.Count == 1 ? "" : "s")}";
+    public int JointCount => Loads.Select(load => load.PointName).Distinct(StringComparer.Ordinal).Count();
+    public string DisplayName => $"{Id} - {JointCount} joint{(JointCount == 1 ? "" : "s")} / {Loads.Count} point load{(Loads.Count == 1 ? "" : "s")}";
+    public string AssignmentSummary => $"{Id} · {JointCount} joint{(JointCount == 1 ? "" : "s")} · {Loads.Count} load{(Loads.Count == 1 ? "" : "s")}";
+    public string AssignmentDetails => string.Join("; ", Loads
+        .GroupBy(load => load.LoadPattern, StringComparer.Ordinal)
+        .OrderBy(group => group.Key, StringComparer.Ordinal)
+        .Select(group =>
+        {
+            var rows = group.OrderBy(load => load.PointName, StringComparer.Ordinal).ToArray();
+            var minimum = rows.Min(load => load.Fz);
+            var maximum = rows.Max(load => load.Fz);
+            var force = Close(minimum, maximum) ? $"{minimum:0.###}" : $"{minimum:0.###}..{maximum:0.###}";
+            return $"{group.Key}: {rows.Length} joint{(rows.Length == 1 ? "" : "s")} [{string.Join(", ", rows.Select(load => load.PointName))}], Fz {force} kN";
+        }));
+
+    private static bool Close(double left, double right) =>
+        Math.Abs(left - right) <= 1e-9 * Math.Max(1, Math.Max(Math.Abs(left), Math.Abs(right)));
 }
+
+/// <summary>One complete Assign → Cable Loads → Target Force assignment.</summary>
+public sealed record PretensionAssignment(string CableName, string LoadPattern, double TargetForce);
 
 public enum StudyIterationStatus
 {
@@ -84,6 +103,7 @@ public sealed class StudyIteration : Observable
     public required LoadingStudyCandidate LoadingCandidate { get; init; }
     public required TrussCandidate HeightCandidate { get; init; }
     public required PretensionCombination PretensionCandidate { get; init; }
+    public required IReadOnlyList<PretensionAssignment> PretensionAssignments { get; init; }
     public required string IterationDirectory { get; init; }
     public required string ModelName { get; init; }
     public required string ModelFullPath { get; init; }
@@ -96,6 +116,23 @@ public sealed class StudyIteration : Observable
     public string SapModelName => ModelName;
     public string OutputDirectory => IterationDirectory;
     public string FullOutputPath => ModelFullPath;
+    public string LoadingAssignmentText => LoadingCandidate.AssignmentSummary;
+    public string LoadingAssignmentDetails => LoadingCandidate.AssignmentDetails;
+    public string PretensionAssignmentText
+    {
+        get
+        {
+            if (PretensionAssignments.Count == 0) return $"{PretensionCandidateId} · no targets";
+            var minimum = PretensionAssignments.Min(assignment => assignment.TargetForce);
+            var maximum = PretensionAssignments.Max(assignment => assignment.TargetForce);
+            var force = Math.Abs(minimum - maximum) <= 1e-9 * Math.Max(1, Math.Max(Math.Abs(minimum), Math.Abs(maximum)))
+                ? $"{minimum:0.###}"
+                : $"{minimum:0.###}..{maximum:0.###}";
+            return $"{PretensionCandidateId} · {PretensionAssignments.Count} target{(PretensionAssignments.Count == 1 ? "" : "s")} · {force} kN";
+        }
+    }
+    public string PretensionAssignmentDetails => string.Join("; ", PretensionAssignments.Select(assignment =>
+        $"{assignment.CableName} @ {assignment.LoadPattern} = {assignment.TargetForce:0.###} kN"));
 
     public bool RunIterate { get => runIterate; set => Set(ref runIterate, value); }
     public StudyIterationStatus Status

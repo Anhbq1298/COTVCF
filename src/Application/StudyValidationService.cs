@@ -34,8 +34,8 @@ public sealed class StudyValidationService
                 Error("Pretension Setup", $"Cable {cable.CableName} no longer exists in the model.");
             if (cable.CandidateCount <= 0)
                 Error("Pretension Setup", $"{cable.CableName} has an invalid candidate definition.");
-            if (string.IsNullOrWhiteSpace(cable.LoadCase) || !state.LoadPatterns.Contains(cable.LoadCase, StringComparer.Ordinal))
-                Error("Pretension Setup", $"Load pattern {cable.LoadCase} does not exist in the connected model.");
+            if (string.IsNullOrWhiteSpace(cable.LoadPattern) || !state.LoadPatterns.Contains(cable.LoadPattern, StringComparer.OrdinalIgnoreCase))
+                Error("Pretension Setup", $"Load pattern {cable.LoadPattern} does not exist in the connected model. Cable target force assignments require a load pattern, not an analysis load case.");
         }
 
         if (state.Study.Mode == IterationStudyMode.FixHeight &&

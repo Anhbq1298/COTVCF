@@ -41,11 +41,13 @@ public sealed class IterationModelBuilder(TrussGeometryService? geometryService 
         await gateway.MovePointsAsync(snapshot.BaselineGeometry, proposed, childInfo);
 
         token.ThrowIfCancellationRequested();
-        report(StudyWorkerStage.ApplyingLoading, StudyIterationStatus.ApplyingLoading, "Applying loading candidate.", childInfo.Path);
+        report(StudyWorkerStage.ApplyingLoading, StudyIterationStatus.ApplyingLoading,
+            $"Applying {job.Loading.Id}: {job.Loading.Loads.Count} point loads to {job.Loading.JointCount} selected joints.", childInfo.Path);
         await gateway.ApplyLoadsAsync(job.Loading.Loads, childInfo);
 
         token.ThrowIfCancellationRequested();
-        report(StudyWorkerStage.ApplyingPretension, StudyIterationStatus.ApplyingPretension, "Applying cable pretension candidate.", childInfo.Path);
+        report(StudyWorkerStage.ApplyingPretension, StudyIterationStatus.ApplyingPretension,
+            $"Applying {job.Pretension.Id}: {job.Pretension.Assignments.Count} cable target-force assignments.", childInfo.Path);
         foreach (var assignment in job.Pretension.Assignments)
         {
             token.ThrowIfCancellationRequested();

@@ -144,9 +144,11 @@ Tab 3 **defines geometry-variation candidates only**. It never writes SAP2000 �
 Tab 4 **defines candidate PRETENSION target forces** for selected SAP2000 cables. Editing it never
 writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" column.
 
-- Model: `CablePretensionConfig` (Domain) — `CableName`, **editable `LoadCase`** (default `"PRETENSION"`;
-  the grid column is an editable `ComboBox` bound to `State.LoadPatterns`, so the user picks / types the
-  SAP load pattern the target force is assigned to),
+- Model: `CablePretensionConfig` (Domain) — `CableName`, editable target-force **`LoadPattern`**
+  (`LoadCase` remains only as a version-1.0 code/config compatibility alias; default `"PRETENSION"`;
+  the grid header must say `Load Pattern`).
+  The editable `ComboBox` is bound to `State.LoadPatterns`, so the user picks / types the SAP load pattern
+  consumed by `CableObj.SetLoadTargetForce`; an analysis load-case name is not accepted),
   `ApplyRange` (Fixed ↔ Range, mirrors `LoadDefinition`), `TargetForce` / `MinForce` / `MaxForce` /
   `StepForce` (nullable, `NullableDoubleConverter`), `CandidateCount` (allocation-free),
   `GetCandidateForces()` (materialised on demand, capped at `MaterializeCeiling`), `Status`
@@ -169,9 +171,10 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
 - Apply path (not wired to a Tab 4 button; consumed by the frozen Tab 05 worker pipeline):
   `ICablePretensionService.ApplyTargetForceAsync` →
   `ISapGateway.SetCableTargetForceAsync` → `SapModel.CableObj.SetLoadTargetForce(name, "PRETENSION",
-  ref P, ref RD=0.5, eItemType.Objects)`, creating the `PRETENSION` pattern (`eLoadPatternType.Prestress`)
-  if missing. This is the CSI equivalent of Assign → Cable Loads → Target Force — do not substitute
-  another cable load type.
+  ref P, ref RD=0.5, eItemType.Objects)`. Replace an existing same-pattern target by deleting it first,
+  then read it back with `GetLoadTargetForce`. The pattern must already exist; never silently create one
+  from an analysis load-case name. This is the CSI equivalent of Assign → Cable Loads → Target Force —
+  do not substitute another cable load type.
 - `ConfigurationValidator` cable issues now use section `"Cable pretension"`; the old
   `CableForceConfiguration` / `WorkflowService.AddCablesAsync` / force-source reading on refresh are gone
   (`SapGateway.ReadForcesAsync` / `ForceSource` remain, unused). `ICablePretensionService` /
@@ -202,7 +205,9 @@ Study composition plus isolated child-model building. Tab 05 does not run analys
 - Right column keeps the `Issues` grid + `Validate` button. `IterationSummary` property is retained but no
   longer bound.
 - `StudyCompositionService` creates deterministic `StudyIteration` rows (`Lxx_Hxx_Pxx`) and complete
-  loading/height/pretension candidates. Previewing paths never creates a directory.
+  loading/height/pretension candidates. Each row exposes the selected joint/load-pattern/Fz assignments
+  and cable/load-pattern/target-force assignments in dedicated columns/tooltips; do not hide pretension
+  after a truncated generic description. Previewing paths never creates a directory.
 - Study paths are always derived from the immutable first-connected baseline:
   `<baseline folder>/Study/<iteration id>/<baseline stem>_<iteration id>.sdb`. Existing non-empty iteration
   folders or child models block the run and are never silently overwritten.
@@ -211,7 +216,8 @@ Study composition plus isolated child-model building. Tab 05 does not run analys
   assigns the next job to the next available worker; calls remain sequential within each lane.
 - All requested workers must start and open the baseline before any candidate is dispatched. Each job then
   reopens the same baseline, SaveAs creates the child, applies height/loading/pretension using the child
-  `ModelInfo`, saves and verifies the child, and returns to the baseline before taking another job.
+  `ModelInfo`, reads back point loads and cable target forces after each write, saves and verifies the child,
+  and returns to the baseline before taking another job.
 - `StudyExecutionSnapshotFactory` freezes candidate assignments, geometry/groups, paths, selections, and
   worker count at run start. Tabs 02–04, study settings, run checkboxes, and project load/save actions are
   disabled while execution is active.

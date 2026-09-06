@@ -61,9 +61,7 @@ public sealed class ConfigCompatibilityValidator
         var savedCables = (cfg.Model?.Cables ?? []).ToDictionary(c => c.Name, StringComparer.Ordinal);
         var current = state.Geometry.Points;
         var currentCables = state.Geometry.Members.Where(mm => mm.Kind == MemberKind.Cable).ToDictionary(mm => mm.Name, StringComparer.Ordinal);
-        var patterns = new HashSet<string>(state.LoadPatterns, StringComparer.Ordinal);
-        var caseOrPattern = new HashSet<string>(modelLoadCases, StringComparer.Ordinal);
-        caseOrPattern.UnionWith(state.LoadPatterns); // the app assigns PRETENSION as a load pattern
+        var patterns = new HashSet<string>(state.LoadPatterns, StringComparer.OrdinalIgnoreCase);
 
         void CheckPoint(TabCheck tc, string name)
         {
@@ -118,8 +116,8 @@ public sealed class ConfigCompatibilityValidator
             foreach (var row in t4.Cables ?? [])
             {
                 var tag = Name(row.CableName);
-                if (string.IsNullOrWhiteSpace(row.PretensionLoadCase)) tc.Problems.Add($"{tag}: pretension load case is required.");
-                else if (!caseOrPattern.Contains(row.PretensionLoadCase)) tc.Problems.Add($"{tag}: load case {row.PretensionLoadCase} does not exist in the model.");
+                if (string.IsNullOrWhiteSpace(row.PretensionLoadCase)) tc.Problems.Add($"{tag}: target-force load pattern is required.");
+                else if (!patterns.Contains(row.PretensionLoadCase)) tc.Problems.Add($"{tag}: load pattern {row.PretensionLoadCase} does not exist in the model. Cable target force assignments require a load pattern, not an analysis load case.");
                 if (row.Mode == CableForceMode.Range)
                 {
                     if (row.MinForce is null || row.MaxForce is null || row.StepForce is null) tc.Problems.Add($"{tag}: range needs Min, Max and Step force.");

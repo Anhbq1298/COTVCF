@@ -114,6 +114,7 @@ public sealed class CableForceConfigDto
 public sealed class CableForceRowDto
 {
     public string CableName { get; set; } = "";
+    // JSON name retained for version-1.0 compatibility; SAP CableObj.SetLoadTargetForce expects a load pattern.
     public string PretensionLoadCase { get; set; } = "";
     public CableForceMode Mode { get; set; }
     public double? FixedForce { get; set; }

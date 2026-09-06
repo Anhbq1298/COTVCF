@@ -12,20 +12,11 @@ public sealed class StudyCandidateResolver
         var loadings = composition.LoadingCandidates.ToDictionary(candidate => candidate.Id, StringComparer.Ordinal);
         var heights = composition.HeightCandidates.ToDictionary(candidate => candidate.Id, candidate => candidate.Candidate, StringComparer.Ordinal);
         var pretensions = composition.PretensionCandidates.ToDictionary(candidate => candidate.Id, StringComparer.Ordinal);
-        var loadCases = state.Cables.ToDictionary(cable => cable.CableName, cable => cable.LoadCase.Trim(), StringComparer.Ordinal);
         var resolvedPretensions = pretensions.ToDictionary(
             pair => pair.Key,
             pair => new ResolvedPretensionCandidate(
                 pair.Key,
-                pair.Value.Candidate.CableForces
-                    .OrderBy(force => force.Key, StringComparer.Ordinal)
-                    .Select(force => new PretensionAssignment(
-                        force.Key,
-                        loadCases.TryGetValue(force.Key, out var loadCase) && loadCase.Length > 0
-                            ? loadCase
-                            : throw new InvalidOperationException($"Cable {force.Key} has no PRETENSION load pattern."),
-                        force.Value))
-                    .ToArray()),
+                pair.Value.Assignments.Select(assignment => assignment with { }).ToArray()),
             StringComparer.Ordinal);
 
         var jobs = new List<StudyIterationExecutionDto>(composition.Iterations.Count);

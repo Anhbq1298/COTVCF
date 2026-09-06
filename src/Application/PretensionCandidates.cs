@@ -11,6 +11,7 @@ namespace COT_VCF.Application;
 /// </summary>
 public static class PretensionCandidates
 {
+    // Compatibility name retained; target-force assignments consume a SAP load pattern.
     public const string LoadCase = CablePretensionConfig.PretensionLoadCase;
 
     /// <summary>Total PRETENSION candidates = ∏ CandidateCount. 0 when there are no cables or any cable is invalid.</summary>

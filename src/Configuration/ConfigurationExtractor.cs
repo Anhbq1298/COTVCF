@@ -76,7 +76,7 @@ public sealed class ConfigurationExtractor
         Cables = s.Cables.Select(c => new CableForceRowDto
         {
             CableName = c.CableName,
-            PretensionLoadCase = c.LoadCase,
+            PretensionLoadCase = c.LoadPattern,
             Mode = c.ApplyRange ? CableForceMode.Range : CableForceMode.Fixed,
             FixedForce = c.ApplyRange ? null : c.TargetForce,
             MinForce = c.ApplyRange ? c.MinForce : null,
@@ -120,8 +120,9 @@ public sealed class ConfigurationExtractor
             : new CoordinateDto();
 
         var patterns = new HashSet<string>(t02?.LoadDefinitions.Select(r => r.LoadName) ?? [], StringComparer.Ordinal);
+        patterns.UnionWith((t04?.Cables.Select(c => c.PretensionLoadCase) ?? []).Where(n => !string.IsNullOrWhiteSpace(n)));
         patterns.IntersectWith(s.LoadPatterns);
-        var cases = new HashSet<string>((t04?.Cables.Select(c => c.PretensionLoadCase) ?? []).Where(n => !string.IsNullOrWhiteSpace(n)), StringComparer.Ordinal);
+        var cases = new HashSet<string>(modelLoadCases, StringComparer.Ordinal);
 
         var currentFile = s.Model is { } info ? System.IO.Path.GetFileName(info.Path) : "";
         return new ModelSnapshotDto

@@ -2,8 +2,6 @@ using COT_VCF.Domain;
 
 namespace COT_VCF.Application;
 
-public sealed record PretensionAssignment(string CableName, string LoadPattern, double TargetForce);
-
 public sealed record ResolvedPretensionCandidate(
     string Id,
     IReadOnlyList<PretensionAssignment> Assignments);
