@@ -1,4 +1,5 @@
 using COT_VCF.Domain;
+using COT_VCF.Application;
 
 namespace COT_VCF.Configuration;
 
@@ -89,9 +90,15 @@ public sealed class ConfigurationExtractor
         StudyMode = s.Study.Mode,
         FixedHeightCandidateId = s.Study.FixedHeightCandidateId,
         FixedPretensionCandidateId = s.Study.FixedPretensionCandidateId,
-        OutputDirectory = s.Study.OutputDirectory,
+        OutputDirectory = DerivedStudyRoot(s),
         ExcludedIterationKeys = s.Study.ExcludedIterationKeys.OrderBy(k => k, StringComparer.Ordinal).ToList(),
     };
+
+    private static string DerivedStudyRoot(ApplicationState state)
+    {
+        try { return new StudyPathService().GetStudyRoot(state.SessionBaselineModel?.Path ?? state.Model?.Path ?? ""); }
+        catch { return ""; }
+    }
 
     private static ModelSnapshotDto Snapshot(ApplicationState s, LoadingConfigDto? t02, TrussHeightConfigDto? t03, CableForceConfigDto? t04, IReadOnlyCollection<string> modelLoadCases, ModelSnapshotDto? previous)
     {

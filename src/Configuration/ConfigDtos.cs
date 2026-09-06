@@ -127,6 +127,7 @@ public sealed class IterationStudyConfigDto
     public IterationStudyMode StudyMode { get; set; } = IterationStudyMode.FixPretension;
     public string FixedHeightCandidateId { get; set; } = "H01";
     public string FixedPretensionCandidateId { get; set; } = "P01";
+    // Retained for version-1.0 compatibility. Runtime output is derived from the connected baseline path.
     public string OutputDirectory { get; set; } = "";
     public List<string> ExcludedIterationKeys { get; set; } = new();
 }

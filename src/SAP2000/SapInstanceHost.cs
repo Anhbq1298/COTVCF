@@ -3,6 +3,7 @@ using COT_VCF.Application.Workers;
 using COT_VCF.Domain;
 using COT_VCF.Infrastructure;
 using CSiAPIv1;
+using System.Runtime.InteropServices;
 
 namespace COT_VCF.SAP2000;
 
@@ -13,6 +14,7 @@ public sealed class SapInstanceHost : ISapInstanceHost
     private cOAPI? api;
     private SapGateway? gateway;
     private bool stopped;
+    private bool applicationStarted;
 
     public SapInstanceHost(int instanceId) => InstanceId = instanceId;
     public int InstanceId { get; }
@@ -27,9 +29,17 @@ public sealed class SapInstanceHost : ISapInstanceHost
             await worker.Run(() =>
             {
                 cHelper helper = new Helper();
-                api = helper.CreateObjectProgID("CSI.SAP2000.API.SapObject")
-                    ?? throw new InvalidOperationException($"SAP2000 worker {InstanceId} could not create an API instance.");
+                try
+                {
+                    api = helper.CreateObjectProgID("CSI.SAP2000.API.SapObject")
+                        ?? throw new InvalidOperationException($"SAP2000 worker {InstanceId} could not create an API instance.");
+                }
+                finally
+                {
+                    if (Marshal.IsComObject(helper)) Marshal.FinalReleaseComObject(helper);
+                }
                 Check(api.ApplicationStart(), "ApplicationStart");
+                applicationStarted = true;
                 var model = api.SapModel
                     ?? throw new InvalidOperationException($"SAP2000 worker {InstanceId} did not expose a model API.");
                 gateway = new SapGateway(worker, api, model);
@@ -52,7 +62,7 @@ public sealed class SapInstanceHost : ISapInstanceHost
         var currentApi = api;
         try
         {
-            if (currentApi is not null)
+            if (currentApi is not null && applicationStarted)
                 await worker.Run(() =>
                 {
                     Check(currentApi.ApplicationExit(false), "ApplicationExit");
@@ -61,10 +71,28 @@ public sealed class SapInstanceHost : ISapInstanceHost
         }
         finally
         {
-            gateway?.Dispose();
-            gateway = null;
-            api = null;
-            worker.Dispose();
+            try
+            {
+                if (gateway is not null)
+                {
+                    await gateway.ReleaseComReferencesAsync();
+                }
+                else if (currentApi is not null)
+                {
+                    await worker.Run(() =>
+                    {
+                        if (Marshal.IsComObject(currentApi)) Marshal.FinalReleaseComObject(currentApi);
+                        return true;
+                    });
+                }
+            }
+            finally
+            {
+                gateway?.Dispose();
+                gateway = null;
+                api = null;
+                worker.Dispose();
+            }
         }
     }
 

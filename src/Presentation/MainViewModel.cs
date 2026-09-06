@@ -161,7 +161,7 @@ public sealed class MainViewModel : Observable
     public int StudyFinishedCount => studyCompletedCount + studyFailedCount + studyCancelledCount;
     public double StudyOverallProgress => SelectedRunCount == 0 ? 0 : Math.Min(100, 100.0 * StudyFinishedCount / SelectedRunCount);
     public string StudyProgressText => $"{StudyFinishedCount:N0} / {SelectedRunCount:N0}";
-    public string StudyCountsText => $"Ready {StudyCompletedCount:N0}   Running {StudyRunningCount:N0}   Queued {StudyQueuedCount:N0}   Failed {StudyFailedCount:N0}   Skipped {StudySkippedCount:N0}";
+    public string StudyCountsText => $"Ready {StudyCompletedCount:N0}   Running {StudyRunningCount:N0}   Queued {StudyQueuedCount:N0}   Failed {StudyFailedCount:N0}   Skipped {StudySkippedCount:N0}   Workers {StudyWorkers.Count}   Peak {studyPeakConcurrent}";
     public bool HasStudyWorkers => StudyWorkers.Count > 0;
     public bool CanCancelStudy => IsStudyRunning && studyCancellation is { IsCancellationRequested: false };
     public StudyBuildState StudyBuildState => studyBuildState;
@@ -204,12 +204,6 @@ public sealed class MainViewModel : Observable
             State.Study.FixedPretensionCandidateId = next;
         }
     }
-    public string OutputDirectory
-    {
-        get => State.Study.OutputDirectory;
-        set => State.Study.OutputDirectory = value;
-    }
-
     public string FixedHeightValueText
     {
         get
@@ -316,7 +310,6 @@ public sealed class MainViewModel : Observable
     public Command RemoveLoads { get; }
     public Command RemoveCables { get; }
     public Command Validate { get; }
-    public Command BrowseOutputFolder { get; }
     public Command SelectAllStudyRuns { get; }
     public Command ClearAllStudyRuns { get; }
     public Command BuildSelectedModels { get; }
@@ -388,7 +381,6 @@ public sealed class MainViewModel : Observable
             RegenerateStudyPreview();
             ValidateStudy(showMessage: true);
         }, () => !IsBusy);
-        BrowseOutputFolder = new(_ => BrowseForOutputFolder(), () => !IsBusy);
         SelectAllStudyRuns = new(_ => SetAllStudyRuns(true), () => !IsBusy && StudyIterations.Count > 0);
         ClearAllStudyRuns = new(_ => SetAllStudyRuns(false), () => !IsBusy && StudyIterations.Count > 0);
         BuildSelectedModels = new(_ => RunStudy(), () => CanRunStudy);
@@ -476,7 +468,7 @@ public sealed class MainViewModel : Observable
         {
             await workflow.ConnectAsync();
             await workflow.RefreshAsync();
-            if (string.IsNullOrWhiteSpace(State.Study.OutputDirectory) && State.SessionBaselineModel is { Path.Length: > 0 } baseline)
+            if (State.SessionBaselineModel is { Path.Length: > 0 } baseline)
             {
                 var modelDirectory = System.IO.Path.GetDirectoryName(baseline.Path);
                 if (!string.IsNullOrWhiteSpace(modelDirectory)) State.Study.OutputDirectory = System.IO.Path.Combine(modelDirectory, "Study");
@@ -495,13 +487,6 @@ public sealed class MainViewModel : Observable
         ScheduleStudyRegeneration();
         Update();
     };
-
-    private void BrowseForOutputFolder()
-    {
-        var dialog = new OpenFolderDialog { Title = "Select Study Output Folder", Multiselect = false };
-        if (Directory.Exists(State.Study.OutputDirectory)) dialog.InitialDirectory = State.Study.OutputDirectory;
-        if (dialog.ShowDialog() == true) State.Study.OutputDirectory = dialog.FolderName;
-    }
 
     private void ScheduleStudyRegeneration()
     {
@@ -621,7 +606,7 @@ public sealed class MainViewModel : Observable
         foreach (var name in new[]
         {
             nameof(StudyIterations),
-            nameof(FixedHeightCandidateId), nameof(FixedPretensionCandidateId), nameof(OutputDirectory),
+            nameof(FixedHeightCandidateId), nameof(FixedPretensionCandidateId),
             nameof(FixedHeightValueText), nameof(FixedPretensionValueText), nameof(StudyLoadingCell),
             nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudySpaceFormula), nameof(StudyTotalRuns),
             nameof(BaselineModelName), nameof(BaselineModelPath), nameof(StudyRoot), nameof(GeneratedRunCount), nameof(SelectedRunCount),

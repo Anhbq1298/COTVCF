@@ -166,7 +166,8 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
   dialog listing every cable in `State.Geometry` (search / multi-select / preselects rows already
   added); picked names that are new become `CablePretensionConfig` rows. No live SAP read — the
   geometry snapshot already holds the model's cables. `− Remove` deletes selected rows locally only.
-- Apply path (reserved, not wired to any button): `ICablePretensionService.ApplyTargetForceAsync` →
+- Apply path (not wired to a Tab 4 button; consumed by the frozen Tab 05 worker pipeline):
+  `ICablePretensionService.ApplyTargetForceAsync` →
   `ISapGateway.SetCableTargetForceAsync` → `SapModel.CableObj.SetLoadTargetForce(name, "PRETENSION",
   ref P, ref RD=0.5, eItemType.Objects)`, creating the `PRETENSION` pattern (`eLoadPatternType.Prestress`)
   if missing. This is the CSI equivalent of Assign → Cable Loads → Target Force — do not substitute

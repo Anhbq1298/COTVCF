@@ -114,7 +114,7 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         if (p.Tab02Loading is { AppliedPoints.Count: > 0 } or { LoadDefinitions.Count: > 0 }) t |= ConfigTabs.Loading;
         if (p.Tab03TrussHeight is { } h && ((h.TopPoints?.Count ?? 0) > 0 || (h.MiddlePoints?.Count ?? 0) > 0 || (h.BottomPoints?.Count ?? 0) > 0)) t |= ConfigTabs.Truss;
         if (p.Tab04CableForce is { Cables.Count: > 0 }) t |= ConfigTabs.Cable;
-        if (p.Tab05IterationStudy is { OutputDirectory.Length: > 0 } && t.HasFlag(ConfigTabs.Loading) && t.HasFlag(ConfigTabs.Truss) && t.HasFlag(ConfigTabs.Cable))
+        if (p.Tab05IterationStudy is not null && t.HasFlag(ConfigTabs.Loading) && t.HasFlag(ConfigTabs.Truss) && t.HasFlag(ConfigTabs.Cable))
             t |= ConfigTabs.Study;
         // Drop empty sections so the file only carries configured tabs.
         if (!t.HasFlag(ConfigTabs.Loading)) p.Tab02Loading = null;

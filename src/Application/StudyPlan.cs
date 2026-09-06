@@ -9,7 +9,7 @@ public readonly record struct StudyRun(long Index, int LoadIndex, int HeightInde
 /// <summary>
 /// Tab 05 study space maths. Three modes isolate design variables before the full interaction:
 /// Fix Pretension → N_L·N_H, Fix Height → N_L·N_P, Combined → N_L·N_H·N_P. Counting only — nothing
-/// runs here; the lazy <see cref="Enumerate"/> is the seam for a future iteration engine.
+/// runs here; the lazy <see cref="Enumerate"/> feeds the study composer and frozen execution snapshot.
 /// </summary>
 public static class StudyPlan
 {

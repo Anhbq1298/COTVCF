@@ -2,6 +2,7 @@ using CSiAPIv1;
 using COT_VCF.Domain;
 using COT_VCF.SAP2000;
 using System.Reflection;
+using System.IO;
 
 internal static class GatewayChecks
 {
@@ -33,6 +34,22 @@ internal static class GatewayChecks
         fake.Points["p1"] = new(0, 0, 1); calls = fake.WriteCount;
         Throws(() => gateway.MovePointsAsync(geometry, proposed, expected).GetAwaiter().GetResult());
         Check(fake.WriteCount == calls, "Externally edited coordinates reject stale preview");
+
+        var lifecycleRoot = Path.Combine(Path.GetTempPath(), "COTVCF-gateway-checks-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(lifecycleRoot);
+        try
+        {
+            var baselinePath = Path.Combine(lifecycleRoot, "baseline.sdb");
+            File.WriteAllText(baselinePath, "baseline");
+            var opened = gateway.OpenModelAsync(baselinePath).GetAwaiter().GetResult();
+            fake.Locked = true;
+            var childPath = Path.Combine(lifecycleRoot, "child.sdb");
+            var child = gateway.SaveAsAsync(childPath, opened).GetAwaiter().GetResult();
+            gateway.SaveAsync(child).GetAwaiter().GetResult();
+            Check(child.Path == childPath && !child.IsLocked && fake.UnlockCount == 1 && fake.SaveCalls == 2,
+                "SAP model lifecycle opens baseline, SaveAs activates and unlocks child, then saves child identity");
+        }
+        finally { Directory.Delete(lifecycleRoot, true); }
     }
     private static void Throws(Action action) { try { action(); } catch (InvalidOperationException) { return; } throw new Exception("Expected write rejection."); }
     private static void Check(bool ok, string name) { if (!ok) throw new Exception("FAIL: " + name); Console.WriteLine("PASS: " + name); }
@@ -42,6 +59,8 @@ internal static class GatewayChecks
         public eUnits Units = eUnits.kN_m_C;
         public string? FailLoadName, FailMoveName;
         public int WriteCount;
+        public int UnlockCount, SaveCalls;
+        public string CurrentPath = "test.sdb";
         public Dictionary<string, Position> Points { get; } = new() { ["p1"] = new(0, 0, 0), ["p2"] = new(10, 0, 0) };
         public Dictionary<string, double[]> Loads { get; } = new() { ["p1"] = [10, 20, 30, 40, 50, 60], ["p2"] = [11, 21, 31, 41, 51, 61] };
         public cSapModel Model { get; }
@@ -72,14 +91,24 @@ internal static class GatewayChecks
             var frame = ApiDouble.Create<cFrameObj>(NoMembers); var cable = ApiDouble.Create<cCableObj>(NoMembers); var tendon = ApiDouble.Create<cTendonObj>(NoMembers);
             var patterns = ApiDouble.Create<cLoadPatterns>((name, a) => { a[0] = 1; a[1] = new[] { "LIVE" }; return 0; });
             var view = ApiDouble.Create<cView>((name, a) => 0);
+            var file = ApiDouble.Create<cFile>((name, a) =>
+            {
+                switch (name)
+                {
+                    case "OpenFile": CurrentPath = (string)a[0]!; return 0;
+                    case "Save": SaveCalls++; CurrentPath = (string)a[0]!; return 0;
+                    default: throw new NotSupportedException(name);
+                }
+            });
             Model = ApiDouble.Create<cSapModel>((name, a) =>
             {
                 switch (name)
                 {
                     case "GetVersion": a[0] = "26"; a[1] = 26d; return 0;
-                    case "GetModelFilename": return "test.sdb";
+                    case "GetModelFilename": return CurrentPath;
                     case "GetPresentUnits": return Units;
                     case "GetModelIsLocked": return Locked;
+                    case "SetModelIsLocked": UnlockCount++; Locked = (bool)a[0]!; return 0;
                     case "GetPresentCoordSystem": return "Global";
                     case "GetMergeTol": a[0] = .001; return 0;
                     case "get_PointObj": return point;
@@ -89,6 +118,7 @@ internal static class GatewayChecks
                     case "get_TendonObj": return tendon;
                     case "get_LoadPatterns": return patterns;
                     case "get_View": return view;
+                    case "get_File": return file;
                     default: throw new NotSupportedException(name);
                 }
             });

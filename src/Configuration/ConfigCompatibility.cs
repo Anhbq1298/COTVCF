@@ -157,16 +157,8 @@ public sealed class ConfigCompatibilityValidator
                 tc.Problems.Add("fixed pretension candidate ID is invalid.");
             else if (t5.StudyMode == IterationStudyMode.FixPretension && CandidateOrdinal(t5.FixedPretensionCandidateId) > PretensionCandidateCount(cfg, state))
                 tc.Problems.Add($"fixed pretension candidate {t5.FixedPretensionCandidateId} does not exist.");
-            if (string.IsNullOrWhiteSpace(t5.OutputDirectory)) tc.Problems.Add("output directory is required.");
-            else
-            {
-                try
-                {
-                    if (!Path.IsPathFullyQualified(t5.OutputDirectory)) tc.Problems.Add("output directory must be a fully qualified path.");
-                    else _ = Path.GetFullPath(t5.OutputDirectory);
-                }
-                catch { tc.Problems.Add("output directory is invalid."); }
-            }
+            // OutputDirectory is retained for JSON compatibility only. Runtime study paths are always
+            // derived from the connected immutable baseline model.
         }
 
         return r;

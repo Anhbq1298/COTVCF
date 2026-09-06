@@ -38,6 +38,11 @@ public sealed class SapWorkerPool(
                         Report(progress, id, iterationId, stage, null, state, path, worker.Snapshot.CompletedCount, message),
                     token);
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested)
+            {
+                await StopAsync(progress);
+                throw;
+            }
             catch (Exception ex)
             {
                 await StopAsync(progress);
@@ -152,6 +157,7 @@ public sealed class SapWorkerPool(
         List<Exception> failures = [];
         foreach (var worker in workers)
         {
+            var wasFaulted = worker.Snapshot.State == SapWorkerState.Faulted;
             progress?.Report(CreateProgress(worker.WorkerId, worker.Snapshot.CurrentIterationId,
                 StudyWorkerStage.Waiting, null, SapWorkerState.Stopping, worker.Snapshot.CurrentModelPath,
                 worker.Snapshot.CompletedCount, "Stopping SAP2000 worker."));
@@ -159,8 +165,9 @@ public sealed class SapWorkerPool(
             try { await worker.DisposeAsync(); }
             catch (Exception ex) { stopFailure = ex; failures.Add(ex); }
             progress?.Report(CreateProgress(worker.WorkerId, null, StudyWorkerStage.Waiting, null,
-                stopFailure is null ? SapWorkerState.Offline : SapWorkerState.Faulted, null,
-                worker.Snapshot.CompletedCount, stopFailure is null ? "Stopped." : stopFailure.Message));
+                stopFailure is null && !wasFaulted ? SapWorkerState.Offline : SapWorkerState.Faulted, null,
+                worker.Snapshot.CompletedCount,
+                stopFailure is not null ? stopFailure.Message : wasFaulted ? worker.Snapshot.LastMessage ?? "Worker faulted." : "Stopped."));
         }
         if (failures.Count > 0) throw new AggregateException("One or more SAP2000 workers could not be stopped cleanly.", failures);
     }

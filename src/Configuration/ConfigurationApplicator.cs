@@ -98,7 +98,8 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         state.Study.Mode = d.StudyMode;
         state.Study.FixedHeightCandidateId = d.FixedHeightCandidateId;
         state.Study.FixedPretensionCandidateId = d.FixedPretensionCandidateId;
-        state.Study.OutputDirectory = d.OutputDirectory;
+        try { state.Study.OutputDirectory = new StudyPathService().GetStudyRoot(state.SessionBaselineModel?.Path ?? state.Model?.Path ?? ""); }
+        catch { state.Study.OutputDirectory = ""; }
         state.Study.RestoreExcludedIterationKeys(d.ExcludedIterationKeys);
     }
 }

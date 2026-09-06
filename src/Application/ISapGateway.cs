@@ -22,8 +22,3 @@ public interface ISapGateway : IDisposable
     /// <summary>Every load case name in the model. Read-only; used by config compatibility validation.</summary>
     Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected);
 }
-// Deliberately no implementation in this phase.
-public interface IIterationEngine
-{
-    Task RunAsync(ApplicationState configuration, CancellationToken cancellationToken);
-}

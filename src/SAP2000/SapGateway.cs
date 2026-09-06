@@ -333,6 +333,17 @@ public sealed class SapGateway : ISapGateway
         return names.Take(n).ToArray();
     });
 
+    internal Task ReleaseComReferencesAsync() => worker.Run(() =>
+    {
+        var currentModel = model;
+        var currentApi = api;
+        model = null;
+        api = null;
+        if (currentModel is not null && Marshal.IsComObject(currentModel)) Marshal.FinalReleaseComObject(currentModel);
+        if (currentApi is not null && Marshal.IsComObject(currentApi)) Marshal.FinalReleaseComObject(currentApi);
+        return true;
+    });
+
     public void Dispose()
     {
         model = null;
