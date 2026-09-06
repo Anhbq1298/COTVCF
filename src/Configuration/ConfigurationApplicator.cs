@@ -83,6 +83,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
             state.Cables.Add(new CablePretensionConfig
             {
                 CableName = row.CableName,
+                LoadCase = string.IsNullOrWhiteSpace(row.PretensionLoadCase) ? CablePretensionConfig.PretensionLoadCase : row.PretensionLoadCase,
                 ApplyRange = row.Mode == CableForceMode.Range,
                 TargetForce = row.Mode == CableForceMode.Fixed ? row.FixedForce : 0,
                 MinForce = row.MinForce,

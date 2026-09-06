@@ -165,7 +165,8 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     public const int MaterializeCeiling = 1_000_000;
 
     public required string CableName { get; init; }
-    public string LoadCase => PretensionLoadCase;
+    private string loadCase = PretensionLoadCase;
+    public string LoadCase { get => loadCase; set { if (Set(ref loadCase, value)) Notify(nameof(Status)); } }
 
     private bool applyRange, missing;
     private double? targetForce = 0, minForce, maxForce, stepForce;
@@ -205,7 +206,9 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         }
     }
 
-    public string Status => Missing ? "Missing in SAP" : CandidateCount > 0 ? "Configured" : "Invalid";
+    public string Status => Missing ? "Missing in SAP"
+        : string.IsNullOrWhiteSpace(loadCase) ? "Invalid"
+        : CandidateCount > 0 ? "Configured" : "Invalid";
 
     /// <summary>Candidate target forces for this cable: [TargetForce] in Fixed mode, or Min, Min+Step, … ≤ Max in Range mode.
     /// Materialised only on demand; never appends an off-grid Max.</summary>

@@ -93,7 +93,8 @@ public sealed class MainViewModel : Observable
     private BigInteger PretensionRuns => State.Cables.Count == 0 || State.Cables.Any(c => c.CandidateCount <= 0)
         ? BigInteger.Zero
         : PretensionCandidates.TotalCount(State.Cables);
-    public int LoadingCandidateCount => State.LoadDefinitions.Sum(d => d.CandidateValues.Count);
+    private BigInteger LoadingRuns => LoadingCandidates.TotalCount(State.LoadDefinitions);
+    public int LoadingCandidateCount => (int)BigInteger.Min(LoadingRuns, int.MaxValue);
     public int HeightCandidateCount => State.BaselineCaptured ? State.Truss.CandidateCount : 0;
     public IReadOnlyList<double> HeightCandidates => State.BaselineCaptured ? State.Truss.CandidateHeights : [];
 
@@ -148,6 +149,15 @@ public sealed class MainViewModel : Observable
     public string StudyLoadingCell => LoadingCandidateCount.ToString();
     public string StudyHeightCell => StudyNeedsFixedHeight ? $"FIXED · H{FixedHeightIndex + 1}" : HeightCandidateCount.ToString();
     public string StudyPretensionCell => StudyNeedsFixedPretension ? $"FIXED · P{State.Study.FixedPretensionIndex + 1}" : PretensionCandidateCount;
+    public string StudySpaceFormula
+    {
+        get
+        {
+            var h = StudyNeedsFixedHeight ? "1" : HeightCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var p = StudyNeedsFixedPretension ? "1" : PretensionRuns.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+            return $"{LoadingCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} \\times {h} \\times {p} = {StudyTotalRuns}";
+        }
+    }
     public string StudyTotalRuns => StudyPlan.TotalRuns(State.Study.Mode, LoadingCandidateCount, HeightCandidateCount, PretensionRuns)
         .ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
@@ -338,29 +348,25 @@ public sealed class MainViewModel : Observable
             tributaryAreas[points[i].PointName] = tributaryLength * State.TributaryWidthB;
         }
 
-        var cases = new List<(string Name, double Qz)>();
-        for (int definitionIndex = 0; definitionIndex < State.LoadDefinitions.Count; definitionIndex++)
+        // A loading combination is a Cartesian pick of one qz per load definition.
+        var combinations = LoadingCandidates.Enumerate(State.LoadDefinitions.ToArray()).ToArray();
+        if (combinations.Length == 0)
         {
-            var definition = State.LoadDefinitions[definitionIndex];
-            var values = definition.CandidateValues;
-            var baseName = string.IsNullOrWhiteSpace(definition.LoadName) ? $"Load_{definitionIndex + 1}" : definition.LoadName.Trim();
-            for (int candidateIndex = 0; candidateIndex < values.Count; candidateIndex++)
-            {
-                var caseName = values.Count == 1 ? baseName : $"{baseName}_{candidateIndex + 1}";
-                cases.Add((caseName, values[candidateIndex]));
-            }
+            Message = "No loading combinations — every load definition needs at least one candidate value.";
+            return null;
         }
 
         var numberOfStories = (int)State.NumberOfStories;
-        var rows = new List<LoadingCandidate>(points.Length * cases.Count);
+        var rows = new List<LoadingCandidate>(points.Length * combinations.Length * State.LoadDefinitions.Count);
         foreach (var point in points)
         {
             var area = tributaryAreas[point.PointName];
-            foreach (var candidate in cases)
-                rows.Add(new(point.PointName, candidate.Name, candidate.Qz, area, numberOfStories, -candidate.Qz * area * numberOfStories));
+            foreach (var combo in combinations)
+                foreach (var (name, qz) in combo.Loads)
+                    rows.Add(new(point.PointName, $"C{combo.Index + 1} · {name}", qz, area, numberOfStories, -qz * area * numberOfStories));
         }
-        Message = $"Generated {cases.Count} loading cases and {rows.Count} candidate point loads.";
-        return new(cases.Count, rows);
+        Message = $"Generated {combinations.Length} loading combination{(combinations.Length == 1 ? "" : "s")} and {rows.Count} candidate point loads.";
+        return new(combinations.Length, rows);
     }
 
     private bool TrussCandidatesReady(out string reason)
@@ -620,7 +626,7 @@ public sealed class MainViewModel : Observable
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
             nameof(FixedHeightIndex), nameof(FixedPretensionOrdinal), nameof(PretensionMaxOrdinal),
             nameof(FixedHeightValueText), nameof(FixedPretensionValueText),
-            nameof(StudyLoadingCell), nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudyTotalRuns)
+            nameof(StudyLoadingCell), nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudySpaceFormula), nameof(StudyTotalRuns)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
     }

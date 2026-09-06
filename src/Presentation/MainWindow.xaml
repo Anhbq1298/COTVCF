@@ -284,7 +284,16 @@
       </DataGrid.Resources>
       <DataGrid.Columns>
        <DataGridTextColumn Header="Cable" Binding="{Binding CableName}" IsReadOnly="True" Width="1.1*" MinWidth="80"/>
-       <DataGridTextColumn Header="Load Case" Binding="{Binding LoadCase}" IsReadOnly="True" Width="1*" MinWidth="86"/>
+       <DataGridTemplateColumn Header="Load Case" Width="1.3*" MinWidth="120">
+        <DataGridTemplateColumn.CellTemplate>
+         <DataTemplate>
+          <ComboBox IsEditable="True" BorderThickness="0" Background="Transparent" Padding="4,0" MinHeight="0" VerticalContentAlignment="Center"
+                    ToolTip="SAP2000 load pattern the target force is assigned to"
+                    ItemsSource="{Binding DataContext.State.LoadPatterns, RelativeSource={RelativeSource AncestorType=Window}}"
+                    Text="{Binding LoadCase, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+         </DataTemplate>
+        </DataGridTemplateColumn.CellTemplate>
+       </DataGridTemplateColumn>
        <DataGridTemplateColumn Width="58" MinWidth="58">
         <DataGridTemplateColumn.Header><TextBlock Text="Range" ToolTip="Apply a Min / Max / Step range instead of a fixed target force"/></DataGridTemplateColumn.Header>
         <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding ApplyRange, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" VerticalAlignment="Center"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
@@ -327,13 +336,34 @@
 
         <TextBlock Text="STUDY MODE" Style="{StaticResource Subheading}"/>
         <RadioButton GroupName="StudyMode" Margin="0,0,0,8" IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=FixPretension}">
-         <StackPanel><TextBlock Text="Fix Pretension" FontWeight="SemiBold"/><TextBlock Text="Vary Loading × Truss Height  —  N_L × N_H" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel>
+         <StackPanel>
+          <TextBlock Text="Fix Pretension" FontWeight="SemiBold"/>
+          <StackPanel Orientation="Horizontal">
+           <TextBlock Text="Vary Loading and Truss Height" FontSize="11" Foreground="{StaticResource Muted}"/>
+           <TextBlock Text="  -  " FontSize="11" Foreground="{StaticResource Muted}"/>
+           <c:LatexTextBlock Formula="N_L \times N_H" Style="{StaticResource Formula}" FontSize="11"/>
+          </StackPanel>
+         </StackPanel>
         </RadioButton>
         <RadioButton GroupName="StudyMode" Margin="0,0,0,8" IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=FixHeight}">
-         <StackPanel><TextBlock Text="Fix Height" FontWeight="SemiBold"/><TextBlock Text="Vary Loading × Cable Pretension  —  N_L × N_P" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel>
+         <StackPanel>
+          <TextBlock Text="Fix Height" FontWeight="SemiBold"/>
+          <StackPanel Orientation="Horizontal">
+           <TextBlock Text="Vary Loading and Cable Pretension" FontSize="11" Foreground="{StaticResource Muted}"/>
+           <TextBlock Text="  -  " FontSize="11" Foreground="{StaticResource Muted}"/>
+           <c:LatexTextBlock Formula="N_L \times N_P" Style="{StaticResource Formula}" FontSize="11"/>
+          </StackPanel>
+         </StackPanel>
         </RadioButton>
         <RadioButton GroupName="StudyMode" Margin="0,0,0,10" IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=Combined}">
-         <StackPanel><TextBlock Text="Combined" FontWeight="SemiBold"/><TextBlock Text="Vary Loading × Truss Height × Pretension  —  N_L × N_H × N_P" FontSize="11" Foreground="{StaticResource Muted}"/></StackPanel>
+         <StackPanel>
+          <TextBlock Text="Combined" FontWeight="SemiBold"/>
+          <StackPanel Orientation="Horizontal">
+           <TextBlock Text="Vary Loading, Truss Height and Pretension" FontSize="11" Foreground="{StaticResource Muted}"/>
+           <TextBlock Text="  -  " FontSize="11" Foreground="{StaticResource Muted}"/>
+           <c:LatexTextBlock Formula="N_L \times N_H \times N_P" Style="{StaticResource Formula}" FontSize="11"/>
+          </StackPanel>
+         </StackPanel>
         </RadioButton>
 
         <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10" Margin="0,0,0,10"
@@ -365,21 +395,26 @@
         <Grid Margin="0,0,0,12">
          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
          <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-         <TextBlock Text="Loading" Foreground="{StaticResource Muted}"/><TextBlock Grid.Column="1" Text="{Binding LoadingCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
-         <TextBlock Grid.Row="1" Text="Truss Height" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding HeightCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
-         <TextBlock Grid.Row="2" Text="Pretension" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PretensionCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
+         <StackPanel Orientation="Horizontal"><TextBlock Text="Loading" Foreground="{StaticResource Muted}"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_L" Style="{StaticResource Formula}"/></StackPanel>
+         <TextBlock Grid.Column="1" Text="{Binding LoadingCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
+         <StackPanel Grid.Row="1" Orientation="Horizontal"><TextBlock Text="Truss Height" Foreground="{StaticResource Muted}"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_H" Style="{StaticResource Formula}"/></StackPanel>
+         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding HeightCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
+         <StackPanel Grid.Row="2" Orientation="Horizontal"><TextBlock Text="Pretension" Foreground="{StaticResource Muted}"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_P" Style="{StaticResource Formula}"/></StackPanel>
+         <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PretensionCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
         </Grid>
 
         <TextBlock Text="CURRENT STUDY" Style="{StaticResource Subheading}"/>
         <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10">
          <Grid>
           <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-          <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition Height="8"/><RowDefinition/></Grid.RowDefinitions>
+          <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition Height="8"/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
           <TextBlock Text="Mode" Foreground="{StaticResource Muted}"/><TextBlock Grid.Column="1" Text="{Binding StudyModeLabel}" FontWeight="SemiBold"/>
           <TextBlock Grid.Row="1" Text="Loading" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StudyLoadingCell}" FontFamily="Consolas"/>
           <TextBlock Grid.Row="2" Text="Height" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding StudyHeightCell}" FontFamily="Consolas"/>
           <TextBlock Grid.Row="3" Text="Pretension" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding StudyPretensionCell}" FontFamily="Consolas"/>
-          <TextBlock Grid.Row="5" Text="Total Runs" FontWeight="SemiBold"/><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding StudyTotalRuns}" FontWeight="Bold" FontSize="14" Foreground="{StaticResource Accent}" FontFamily="Consolas"/>
+          <TextBlock Grid.Row="5" Text="Study Space" Foreground="{StaticResource Muted}"/>
+          <c:LatexTextBlock Grid.Row="5" Grid.Column="1" Formula="{Binding StudySpaceFormula}" Style="{StaticResource Formula}" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+          <TextBlock Grid.Row="6" Text="Total Runs" FontWeight="SemiBold"/><TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding StudyTotalRuns}" FontWeight="Bold" FontSize="14" Foreground="{StaticResource Accent}" FontFamily="Consolas"/>
          </Grid>
         </Border>
 

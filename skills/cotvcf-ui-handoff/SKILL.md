@@ -98,7 +98,7 @@ earlier tall-header / large-button / blue-block look.
 - Candidate values are internal. Single mode returns only qz; range mode returns `Min + n * Step` while the value is at most Max and does not append an off-grid Max.
 - Keep `Out-of-plane tributary width, B [m]` above the load grid as a shared positive numeric input.
 - `Trib. width B` and `NStories` share one compact horizontal line above the load grid (small text label + narrow `EngineeringInput`, ~118 / ~96 px). `View Candidates` sits at the right of that line, commits pending editors, then opens a read-only WPF DataGrid with `Applied Pt`, `Case`, `qz`, `TribArea`, `NStories`, and `FzkN`. Its summary line reads `N candidates for loading cases, applied at M locations.`
-- Candidate preview case count is the sum of `CandidateValues.Count` across load definitions. Rows are the applied-point/case expansion. Tributary area uses X-direction midpoint tributary lengths times B; endpoints receive half the adjacent spacing. `NStories` is a shared whole-number input with minimum 1, and `FzkN = -qz * TribArea * NStories` for downward global-Z loading.
+- A loading combination is a **Cartesian pick of one qz per load definition** — the candidate count is `∏ CandidateValues.Count` over the load definitions (`LoadingCandidates.TotalCount` / `.Enumerate`, mirrors `PretensionCandidates`). View Candidates rows are the applied-point × combination × load-definition expansion (`Case` = `C{n} · {LoadName}`). Tributary area uses X-direction midpoint tributary lengths times B; endpoints receive half the adjacent spacing. `NStories` is a shared whole-number input with minimum 1, and `FzkN = -qz * TribArea * NStories` for downward global-Z loading.
 - Keep the `- Remove` action visually secondary to the primary `+ Add` location picker.
 - `+ Add Load` creates an empty-name, non-increment row with qz `0.00` and focuses its Load Name cell. Each row has a compact delete icon.
 - Validation is inline: qz must be nonnegative; Min must be nonnegative; Max must be at least Min; Step must be positive. No normal cell-validation dialog belongs in Tab 2.
@@ -144,7 +144,9 @@ Tab 3 **defines geometry-variation candidates only**. It never writes SAP2000 �
 Tab 4 **defines candidate PRETENSION target forces** for selected SAP2000 cables. Editing it never
 writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" column.
 
-- Model: `CablePretensionConfig` (Domain) — `CableName`, read-only `LoadCase` = `"PRETENSION"`,
+- Model: `CablePretensionConfig` (Domain) — `CableName`, **editable `LoadCase`** (default `"PRETENSION"`;
+  the grid column is an editable `ComboBox` bound to `State.LoadPatterns`, so the user picks / types the
+  SAP load pattern the target force is assigned to),
   `ApplyRange` (Fixed ↔ Range, mirrors `LoadDefinition`), `TargetForce` / `MinForce` / `MaxForce` /
   `StepForce` (nullable, `NullableDoubleConverter`), `CandidateCount` (allocation-free),
   `GetCandidateForces()` (materialised on demand, capped at `MaterializeCeiling`), `Status`
@@ -177,7 +179,7 @@ Study **definition + run-count preview only** — nothing executes (`Run study �
 
 - `IterationStudyConfig` (Domain, `ApplicationState.Study`): `Mode` (`IterationStudyMode` enum
   `FixPretension` / `FixHeight` / `Combined`), `FixedHeightIndex`, `FixedPretensionIndex` (0-based).
-- Candidate-space counts: **N_L** = Σ `LoadDefinition.CandidateValues.Count` (`MainViewModel.LoadingCandidateCount`),
+- Candidate-space counts: **N_L** = `LoadingCandidates.TotalCount` (∏ `CandidateValues.Count`, Cartesian),
   **N_H** = `State.Truss.CandidateCount` (0 until baseline captured), **N_P** = `PretensionCandidates.TotalCount`
   (`BigInteger`).
 - Total runs (`StudyPlan.TotalRuns`): Fix Pretension → N_L·N_H, Fix Height → N_L·N_P, Combined → N_L·N_H·N_P.
