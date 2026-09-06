@@ -182,7 +182,7 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
 
 ## Iteration Study Tab (05)
 
-Study composition plus isolated child-model building. Tab 05 does not run analysis or extract results.
+Study composition plus isolated child-model building and analysis. Tab 05 does not extract results.
 
 - `IterationStudyConfig` (Domain, `ApplicationState.Study`): `Mode` (`IterationStudyMode` enum
   `FixPretension` / `FixHeight` / `Combined`), `FixedHeightIndex`, `FixedPretensionIndex` (0-based).
@@ -217,16 +217,17 @@ Study composition plus isolated child-model building. Tab 05 does not run analys
   remain sequential within each lane.
 - All requested workers must start and open the baseline before any candidate is dispatched. Each job then
   reopens the same baseline, SaveAs creates the child, applies height/loading/pretension using the child
-  `ModelInfo`, reads back point loads and cable target forces after each write, saves and verifies the child,
-  and returns to the baseline before taking another job.
+  `ModelInfo`, saves the configured child, runs every SAP2000 analysis case currently marked to run, saves
+  the analyzed model/results, reopens and verifies the child, and returns to the baseline before another job.
 - `StudyExecutionSnapshotFactory` freezes candidate assignments, geometry/groups, paths, selections, and
   worker count at run start. Tabs 02–04, study settings, run checkboxes, and project load/save actions are
   disabled while execution is active.
-- The Tab 05 monitor shows each worker ID, gate state, candidate, discrete 1/8 stage, completed count, and
+- The Tab 05 monitor shows each worker ID, gate state, candidate, discrete 1/10 stage, completed count, and
   overall Ready/Running/Queued/Failed/Skipped totals. Cancellation is observed only between SAP API calls;
   active workers attempt to return to baseline and queued jobs become Cancelled.
-- A candidate-level failure may continue on a recovered worker. Failure to restore the baseline faults that
-  worker and removes it from scheduling; healthy workers continue. No analysis API is called in this phase.
+- A candidate-level failure, including a nonzero `Analyze.RunAnalysis` result, may continue on a recovered
+  worker. Failure to restore the baseline faults that worker and removes it from scheduling; healthy workers
+  continue. Result extraction is not part of this phase.
 
 ## Config Project File (`src/Configuration/`)
 

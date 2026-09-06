@@ -154,6 +154,7 @@ internal static class StudyComposerChecks
         public Task<ModelInfo> OpenModelAsync(string modelPath) => throw new NotSupportedException();
         public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => throw new NotSupportedException();
         public Task SaveAsync(ModelInfo expected) => Task.CompletedTask;
+        public Task RunAnalysisAsync(ModelInfo expected) => Task.CompletedTask;
         public Task<ModelInfo> GetCurrentModelInfoAsync() => throw new NotSupportedException();
         public Task<ModelSnapshot> ReadAsync() => throw new NotSupportedException();
         public Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<PointLoad>>([]);

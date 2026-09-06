@@ -62,8 +62,9 @@ internal static class Program
                 vm.RequestedWorkerCount = 3;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "Total SAP2000 Instances") &&
-                       vm.RunStudyToolTip.Contains("starts 2 additional processes", StringComparison.Ordinal),
-                    "Tab 5 counts the connected baseline as instance 1 and describes only two additional processes");
+                       vm.RunStudyToolTip.Contains("starts 2 additional processes", StringComparison.Ordinal) &&
+                       vm.RunStudyLabel.StartsWith("Build & Analyze", StringComparison.Ordinal),
+                    "Tab 5 counts the baseline as instance 1 and clearly labels build plus analysis");
                 var pretensionPicker = FindVisuals<ComboBox>(window)
                     .Single(combo => combo.Items.Cast<object>().OfType<StudyPretensionCandidate>().Any());
                 pretensionPicker.SelectedValue = "P02";
@@ -260,6 +261,7 @@ internal static class Program
         public Task<ModelInfo> OpenModelAsync(string modelPath) => Task.FromResult(Snapshot.Info with { Path = modelPath });
         public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => Task.FromResult(expected with { Path = targetPath, IsLocked = false });
         public Task SaveAsync(ModelInfo expected) => Task.CompletedTask;
+        public Task RunAnalysisAsync(ModelInfo expected) => Task.CompletedTask;
         public Task<ModelInfo> GetCurrentModelInfoAsync() => Task.FromResult(Snapshot.Info);
         public Task<ModelSnapshot> ReadAsync() => Task.FromResult(Snapshot);
         public Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<PointLoad>>([]);

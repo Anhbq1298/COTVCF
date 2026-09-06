@@ -46,6 +46,8 @@ public enum StudyIterationStatus
     ApplyingLoading,
     ApplyingPretension,
     Saving,
+    RunningAnalysis,
+    SavingAnalysis,
     Verifying,
     Ready,
     Failed,
@@ -62,6 +64,8 @@ public enum StudyWorkerStage
     ApplyingLoading,
     ApplyingPretension,
     Saving,
+    RunningAnalysis,
+    SavingAnalysis,
     Verifying,
     ReturningToBaseline,
     Completed
@@ -163,6 +167,8 @@ public sealed class StudyIteration : Observable
         StudyIterationStatus.ApplyingGeometry => "Applying Geometry",
         StudyIterationStatus.ApplyingLoading => "Applying Loading",
         StudyIterationStatus.ApplyingPretension => "Applying Pretension",
+        StudyIterationStatus.RunningAnalysis => "Running Analysis",
+        StudyIterationStatus.SavingAnalysis => "Saving Analysis",
         StudyIterationStatus.Verifying => "Verifying",
         _ => Status.ToString()
     };
@@ -224,6 +230,9 @@ public sealed class SapWorkerSnapshot : Observable
         StudyWorkerStage.ApplyingGeometry => "Applying Geometry",
         StudyWorkerStage.ApplyingLoading => "Applying Loading",
         StudyWorkerStage.ApplyingPretension => "Applying Pretension",
+        StudyWorkerStage.Saving => "Saving Inputs",
+        StudyWorkerStage.RunningAnalysis => "Running Analysis",
+        StudyWorkerStage.SavingAnalysis => "Saving Analysis",
         StudyWorkerStage.Verifying => "Verifying Saved Child",
         StudyWorkerStage.ReturningToBaseline => "Returning to Baseline",
         _ => CurrentStage.ToString()!
@@ -237,8 +246,10 @@ public sealed class SapWorkerSnapshot : Observable
         StudyWorkerStage.ApplyingLoading => 5,
         StudyWorkerStage.ApplyingPretension => 6,
         StudyWorkerStage.Saving => 7,
-        StudyWorkerStage.Verifying or StudyWorkerStage.Completed => 8,
+        StudyWorkerStage.RunningAnalysis => 8,
+        StudyWorkerStage.SavingAnalysis => 9,
+        StudyWorkerStage.Verifying or StudyWorkerStage.Completed => 10,
         _ => 0
     };
-    public string StageProgressText => StageNumber == 0 ? "" : $"Stage {StageNumber} / 8";
+    public string StageProgressText => StageNumber == 0 ? "" : $"Stage {StageNumber} / 10";
 }

@@ -82,7 +82,19 @@ public sealed class IterationModelBuilder(
 
             token.ThrowIfCancellationRequested();
             stage = StudyWorkerStage.Saving;
-            Report(stage, StudyIterationStatus.Saving, "Saving child model after all candidate changes.", childInfo.Path);
+            Report(stage, StudyIterationStatus.Saving, "Saving child model before analysis.", childInfo.Path);
+            await gateway.SaveAsync(childInfo);
+
+            token.ThrowIfCancellationRequested();
+            stage = StudyWorkerStage.RunningAnalysis;
+            Report(stage, StudyIterationStatus.RunningAnalysis,
+                "Running the child model's active SAP2000 analysis cases.", childInfo.Path);
+            await gateway.RunAnalysisAsync(childInfo);
+            AppendDiagnostic(job, workerId, $"ANALYZED child={childInfo.Path}");
+
+            token.ThrowIfCancellationRequested();
+            stage = StudyWorkerStage.SavingAnalysis;
+            Report(stage, StudyIterationStatus.SavingAnalysis, "Saving analyzed child model and results.", childInfo.Path);
             await gateway.SaveAsync(childInfo);
 
             // Open the saved file again so verification proves persisted disk state, not only in-memory COM state.

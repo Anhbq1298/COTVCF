@@ -60,8 +60,13 @@ internal static class GatewayChecks
             var childPath = Path.Combine(lifecycleRoot, "child.sdb");
             var child = gateway.SaveAsAsync(childPath, opened).GetAwaiter().GetResult();
             gateway.SaveAsync(child).GetAwaiter().GetResult();
-            Check(child.Path == childPath && !child.IsLocked && fake.UnlockCount == 1 && fake.SaveCalls == 2,
-                "SAP model lifecycle opens baseline, SaveAs activates and unlocks child, then saves child identity");
+            fake.FailAnalysis = true;
+            Throws(() => gateway.RunAnalysisAsync(child).GetAwaiter().GetResult());
+            gateway.RunAnalysisAsync(child).GetAwaiter().GetResult();
+            gateway.SaveAsync(child).GetAwaiter().GetResult();
+            Check(child.Path == childPath && !child.IsLocked && fake.UnlockCount == 1 &&
+                  fake.AnalysisRuns == 2 && fake.Locked && fake.SaveCalls == 3,
+                "SAP analysis checks failure codes, then saves the successfully analyzed locked model");
         }
         finally { Directory.Delete(lifecycleRoot, true); }
     }
@@ -70,10 +75,11 @@ internal static class GatewayChecks
     private sealed class FakeApi
     {
         public bool Locked;
+        public bool FailAnalysis;
         public eUnits Units = eUnits.kN_m_C;
         public string? FailLoadName, FailMoveName;
         public int WriteCount;
-        public int UnlockCount, SaveCalls;
+        public int UnlockCount, SaveCalls, AnalysisRuns;
         public int SetCoordSystemCalls;
         public string PresentCoordSystem = "Global";
         public string CurrentPath = "test.sdb";
@@ -145,6 +151,14 @@ internal static class GatewayChecks
                 throw new NotSupportedException(name);
             });
             var view = ApiDouble.Create<cView>((name, a) => 0);
+            var analyze = ApiDouble.Create<cAnalyze>((name, a) =>
+            {
+                if (name != "RunAnalysis") throw new NotSupportedException(name);
+                AnalysisRuns++;
+                if (FailAnalysis) { FailAnalysis = false; return 9; }
+                Locked = true;
+                return 0;
+            });
             var file = ApiDouble.Create<cFile>((name, a) =>
             {
                 switch (name)
@@ -173,6 +187,7 @@ internal static class GatewayChecks
                     case "get_TendonObj": return tendon;
                     case "get_LoadPatterns": return patterns;
                     case "get_View": return view;
+                    case "get_Analyze": return analyze;
                     case "get_File": return file;
                     default: throw new NotSupportedException(name);
                 }

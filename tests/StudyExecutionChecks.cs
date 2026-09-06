@@ -15,6 +15,7 @@ internal static class StudyExecutionChecks
         FixedModesAndCombinedPhysicallyApplyResolvedCandidates();
         ConnectedBaselineCountsAsWorkerOne();
         TwoWorkersAreParallelAndIndividuallySequential();
+        AnalysisFailureNeverBecomesReady();
         VerificationFailureNeverBecomesReady();
         PretensionFailureReturnsToBaselineAndContinues();
         StartupFailureBlocksAllDispatch();
@@ -57,12 +58,37 @@ internal static class StudyExecutionChecks
             var job = snapshot.Jobs.Single(candidate => candidate.RunIterate);
             var gateway = factory.Gateways.Single();
             Check(result.Completed == 1 && result.Failed == 0 &&
+                  stages.Contains(StudyIterationStatus.RunningAnalysis) &&
+                  stages.Contains(StudyIterationStatus.SavingAnalysis) &&
                   stages.Contains(StudyIterationStatus.Verifying) && File.Exists(job.ModelFullPath),
-                "One worker marks one child Ready only after persisted verification");
+                "One worker marks one child Ready only after analysis, result save, and persisted verification");
+            Check(gateway.AnalysisAttempts.Contains(Path.GetFullPath(job.ModelFullPath)) &&
+                  gateway.SavedAfterAnalysis.Contains(Path.GetFullPath(job.ModelFullPath)),
+                "The child model is analyzed and saved again before it becomes Ready");
             Check(SavedCandidateMatches(gateway, snapshot, job),
                 "Reloaded single child physically contains its resolved height, loading, and pretension values");
-            Check(File.ReadAllText(Path.Combine(job.IterationDirectory, "build.log")).Contains("VERIFIED", StringComparison.Ordinal),
-                "Per-candidate diagnostics record the verified L/H/P transaction");
+            var diagnostic = File.ReadAllText(Path.Combine(job.IterationDirectory, "build.log"));
+            Check(diagnostic.Contains("ANALYZED", StringComparison.Ordinal) &&
+                  diagnostic.Contains("VERIFIED", StringComparison.Ordinal),
+                "Per-candidate diagnostics record analysis and the verified L/H/P transaction");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void AnalysisFailureNeverBecomesReady()
+    {
+        var (root, _, snapshot) = CreateSnapshot(2, 1);
+        try
+        {
+            var failedId = snapshot.Jobs.First(job => job.RunIterate).IterationId;
+            var factory = new FakeHostFactory(failAnalysisIterationId: failedId);
+            var result = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+            var gateway = factory.Gateways.Single();
+            Check(result.Failed == 1 && result.Completed == 1 && gateway.AnalysisAttempts.Count == 2,
+                "An analysis failure leaves that candidate Failed while the recovered worker analyzes the next candidate");
+            Check(gateway.SavedAfterAnalysis.Count == 1,
+                "A failed analysis is never saved or reported as a Ready analyzed child");
         }
         finally { DeleteRoot(root); }
     }
@@ -239,6 +265,9 @@ internal static class StudyExecutionChecks
                   factory.Gateways.Sum(gateway => gateway.AppliedTargetForces.Count) ==
                   snapshot.Jobs.Where(job => job.RunIterate).Sum(job => job.Pretension.Assignments.Count),
                 "Every worker receives all selected-joint loads and cable target-force assignments");
+            Check(factory.Gateways.Sum(gateway => gateway.AnalysisAttempts.Count) == result.Completed &&
+                  factory.Gateways.Sum(gateway => gateway.SavedAfterAnalysis.Count) == result.Completed,
+                "Every completed child is analyzed and saved by its assigned worker");
 
             var ordered = snapshot.Jobs.Where(job => job.RunIterate).OrderBy(job => job.RunIndex).ToArray();
             Check(assignments[ordered[1].IterationId] == assignments[ordered[2].IterationId],
@@ -414,14 +443,16 @@ internal static class StudyExecutionChecks
     private sealed class FakeHostFactory(
         int failStartId = 0,
         int failRuntimeId = 0,
-        string? corruptIterationId = null) : ISapInstanceHostFactory
+        string? corruptIterationId = null,
+        string? failAnalysisIterationId = null) : ISapInstanceHostFactory
     {
         public ConcurrentBag<FakeGateway> Gateways { get; } = [];
         public int CreateCount;
         public ISapInstanceHost Create(int instanceId)
         {
             Interlocked.Increment(ref CreateCount);
-            var gateway = new FakeGateway(instanceId, failRuntimeId == instanceId, corruptIterationId);
+            var gateway = new FakeGateway(instanceId, failRuntimeId == instanceId,
+                corruptIterationId, failAnalysisIterationId);
             Gateways.Add(gateway);
             return new FakeHost(instanceId, gateway, failStartId == instanceId);
         }
@@ -441,7 +472,11 @@ internal static class StudyExecutionChecks
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class FakeGateway(int workerId, bool failRuntime = false, string? corruptIterationId = null) : ISapGateway
+    private sealed class FakeGateway(
+        int workerId,
+        bool failRuntime = false,
+        string? corruptIterationId = null,
+        string? failAnalysisIterationId = null) : ISapGateway
     {
         private int activeCalls;
         private int maxConcurrentCalls;
@@ -449,10 +484,13 @@ internal static class StudyExecutionChecks
         private Dictionary<string, PointLoad> currentLoads = new(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, CableTargetForce> currentTargets = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, SavedState> savedStates = new(StringComparer.OrdinalIgnoreCase);
+        private bool analysisComplete;
         public ModelInfo Current { get; private set; } = new("", "26", 6, "kN", "m", false);
         public ConcurrentBag<string> SaveAsSources { get; } = [];
         public ConcurrentBag<PointLoad> AppliedPointLoads { get; } = [];
         public ConcurrentBag<PretensionAssignment> AppliedTargetForces { get; } = [];
+        public ConcurrentBag<string> AnalysisAttempts { get; } = [];
+        public ConcurrentBag<string> SavedAfterAnalysis { get; } = [];
         public int MaxConcurrentCalls => maxConcurrentCalls;
         public int WorkerId => workerId;
         public int DisposeCount { get; private set; }
@@ -490,6 +528,7 @@ internal static class StudyExecutionChecks
                 currentGeometry = CloneGeometry(StudyComposerChecks.CreateState().SessionBaseline);
                 currentLoads = new(StringComparer.OrdinalIgnoreCase);
                 currentTargets = new(StringComparer.OrdinalIgnoreCase);
+                analysisComplete = false;
             }
             Current = Current with { Path = fullPath };
             return Current;
@@ -502,6 +541,7 @@ internal static class StudyExecutionChecks
             await Task.Delay(2);
             File.Copy(Current.Path, targetPath, false);
             Current = expected with { Path = Path.GetFullPath(targetPath), IsLocked = false };
+            analysisComplete = false;
             savedStates[Current.Path] = Capture();
             return Current;
         });
@@ -516,6 +556,7 @@ internal static class StudyExecutionChecks
             }
             await Task.Delay(Current.Path.Contains("_P01.sdb", StringComparison.Ordinal) ? 100 : 5);
             currentGeometry = CloneGeometry(proposed);
+            analysisComplete = false;
         });
 
         public async Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected) => await Tracked(async () =>
@@ -526,6 +567,7 @@ internal static class StudyExecutionChecks
                 AppliedPointLoads.Add(load);
                 currentLoads[Key(load.PointName, load.LoadPattern)] = load with { };
             }
+            analysisComplete = false;
             await Task.Delay(3);
         });
 
@@ -536,7 +578,20 @@ internal static class StudyExecutionChecks
                 throw new InvalidOperationException($"Cable {cableName} no longer exists in the model.");
             AppliedTargetForces.Add(new(cableName, loadPattern, targetForce));
             currentTargets[Key(cableName, loadPattern)] = new(cableName, loadPattern, targetForce, 0.5);
+            analysisComplete = false;
             await Task.Delay(3);
+        });
+
+        public async Task RunAnalysisAsync(ModelInfo expected) => await Tracked(async () =>
+        {
+            Verify(expected);
+            var path = Path.GetFullPath(Current.Path);
+            AnalysisAttempts.Add(path);
+            await Task.Delay(3);
+            if (!string.IsNullOrWhiteSpace(failAnalysisIterationId) &&
+                path.Contains(failAnalysisIterationId, StringComparison.Ordinal))
+                throw new InvalidOperationException("SAP2000 analysis failed.");
+            analysisComplete = true;
         });
 
         public async Task SaveAsync(ModelInfo expected) => await Tracked(async () =>
@@ -548,6 +603,7 @@ internal static class StudyExecutionChecks
                 Current.Path.Contains(corruptIterationId, StringComparison.Ordinal))
                 saved = saved with { Loads = new Dictionary<string, PointLoad>(StringComparer.OrdinalIgnoreCase) };
             savedStates[Current.Path] = saved;
+            if (analysisComplete) SavedAfterAnalysis.Add(Path.GetFullPath(Current.Path));
         });
 
         public Task<ModelInfo> GetCurrentModelInfoAsync() => Task.FromResult(Current);
@@ -570,13 +626,15 @@ internal static class StudyExecutionChecks
         private SavedState Capture() => new(
             CloneGeometry(currentGeometry),
             currentLoads.ToDictionary(pair => pair.Key, pair => pair.Value with { }, StringComparer.OrdinalIgnoreCase),
-            currentTargets.ToDictionary(pair => pair.Key, pair => pair.Value with { }, StringComparer.OrdinalIgnoreCase));
+            currentTargets.ToDictionary(pair => pair.Key, pair => pair.Value with { }, StringComparer.OrdinalIgnoreCase),
+            analysisComplete);
 
         private void Restore(SavedState state)
         {
             currentGeometry = CloneGeometry(state.Geometry);
             currentLoads = state.Loads.ToDictionary(pair => pair.Key, pair => pair.Value with { }, StringComparer.OrdinalIgnoreCase);
             currentTargets = state.Targets.ToDictionary(pair => pair.Key, pair => pair.Value with { }, StringComparer.OrdinalIgnoreCase);
+            analysisComplete = state.AnalysisComplete;
         }
 
         private static GeometryModel CloneGeometry(GeometryModel source) => new(
@@ -588,7 +646,8 @@ internal static class StudyExecutionChecks
         private sealed record SavedState(
             GeometryModel Geometry,
             IReadOnlyDictionary<string, PointLoad> Loads,
-            IReadOnlyDictionary<string, CableTargetForce> Targets);
+            IReadOnlyDictionary<string, CableTargetForce> Targets,
+            bool AnalysisComplete);
 
         private async Task Tracked(Func<Task> action) =>
             await Tracked(async () => { await action(); return true; });

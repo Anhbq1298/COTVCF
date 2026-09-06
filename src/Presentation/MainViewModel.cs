@@ -269,11 +269,11 @@ public sealed class MainViewModel : Observable
         StudyValidationState.Invalid => "Study validation failed.",
         _ => "Not validated yet."
     };
-    public string RunStudyLabel => $"Build {SelectedRunCount:N0} Models - {RequestedWorkerCount} Instance{(RequestedWorkerCount == 1 ? "" : "s")}";
+    public string RunStudyLabel => $"Build & Analyze {SelectedRunCount:N0} - {RequestedWorkerCount} Instance{(RequestedWorkerCount == 1 ? "" : "s")}";
     public bool CanRunStudy => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0;
     public string RunStudyToolTip => RequestedWorkerCount == 1
-        ? "Uses the connected SAP2000 instance as worker 1; no additional SAP2000 process is started."
-        : $"Uses the connected SAP2000 instance as worker 1 and starts {RequestedWorkerCount - 1} additional processes. Up to {RequestedWorkerCount} models build concurrently.";
+        ? "Uses the connected SAP2000 instance as worker 1 to build, analyze, save, and verify each child; no additional process is started."
+        : $"Uses the connected SAP2000 instance as worker 1 and starts {RequestedWorkerCount - 1} additional processes. Up to {RequestedWorkerCount} child models build and analyze concurrently.";
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
     public string StatusLine => State.IsSapConnected
         ? $"{ModelName}  ·  {State.Units}  ·  {(State.Model?.IsLocked == true ? "Locked" : "Unlocked")}"
@@ -630,7 +630,7 @@ public sealed class MainViewModel : Observable
                 : StudyValidationState.Valid;
         if (showMessage)
             Message = studyValidationState is StudyValidationState.Valid or StudyValidationState.ValidWithWarnings
-                ? $"Study is valid - {SelectedRunCount:N0} iterations are ready to build."
+                ? $"Study is valid - {SelectedRunCount:N0} iterations are ready to build and analyze."
                 : $"{Issues.Count} study validation issue{(Issues.Count == 1 ? "" : "s")} need review.";
         NotifyStudyPresentation();
         return studyValidationState is StudyValidationState.Valid or StudyValidationState.ValidWithWarnings;
@@ -649,7 +649,7 @@ public sealed class MainViewModel : Observable
         {
             studyBuildState = StudyBuildState.Failed;
             Message = ex.Message;
-            Warn("Unable to Build Study Models", ex.Message);
+            Warn("Unable to Build and Analyze Study Models", ex.Message);
             NotifyStudyExecution();
             return;
         }
@@ -695,17 +695,17 @@ public sealed class MainViewModel : Observable
                     : result.Failed > 0 ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
             Message = studyBuildState switch
             {
-                StudyBuildState.Completed => $"Build complete - {result.Completed:N0} child models are ready.",
-                StudyBuildState.CompletedWithErrors => $"Build completed with errors - {result.Completed:N0} ready, {result.Failed:N0} failed.",
-                StudyBuildState.Cancelled => $"Build cancelled - {result.Completed:N0} ready, {result.Cancelled:N0} cancelled.",
-                _ => $"Build failed - all SAP2000 workers faulted; {result.Completed:N0} models are ready and {result.Failed:N0} failed."
+                StudyBuildState.Completed => $"Build and analysis complete - {result.Completed:N0} verified child models are ready.",
+                StudyBuildState.CompletedWithErrors => $"Build and analysis completed with errors - {result.Completed:N0} ready, {result.Failed:N0} failed.",
+                StudyBuildState.Cancelled => $"Build and analysis cancelled - {result.Completed:N0} ready, {result.Cancelled:N0} cancelled.",
+                _ => $"Build and analysis failed - all SAP2000 workers faulted; {result.Completed:N0} models are ready and {result.Failed:N0} failed."
             };
         }
         catch (OperationCanceledException)
         {
             studyBuildState = StudyBuildState.Cancelled;
             MarkUnfinishedIterations(StudyIterationStatus.Cancelled, "Cancelled before worker assignment.");
-            Message = "Study build cancelled at a safe SAP2000 stage boundary.";
+            Message = "Study build and analysis cancelled at a safe SAP2000 stage boundary.";
         }
         catch (Exception ex)
         {

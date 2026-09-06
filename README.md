@@ -1,10 +1,10 @@
 # COT VCF tools
 
-WPF / .NET 8 desktop application for defining structural-study candidates from an existing SAP2000 model and building one isolated child `.sdb` model per selected combination.
+WPF / .NET 8 desktop application for defining structural-study candidates from an existing SAP2000 model, then building and analyzing one isolated child `.sdb` model per selected combination.
 
 The workflow is sequential:
 
-`SAP baseline -> loading candidates -> truss-height candidates -> cable-pretension candidates -> validated child models`
+`SAP baseline -> loading candidates -> truss-height candidates -> cable-pretension candidates -> analyzed and verified child models`
 
 Tabs 2–4 only configure and preview candidates. SAP2000 assignments are changed only while Tab 5 builds child models; the original baseline model is never used as an output.
 
@@ -79,11 +79,13 @@ For every selected candidate, one worker performs this complete sequence:
 3. Apply the candidate height geometry.
 4. Replace the candidate point-load assignments.
 5. Replace the candidate cable target-force assignments.
-6. Read back the applied geometry, loading, and pretension.
-7. Save, reopen, and verify the child model.
-8. Return the worker to the baseline before accepting another candidate.
+6. Save the configured child model.
+7. Run every SAP2000 analysis case currently marked to run.
+8. Save the analyzed model and its results.
+9. Reopen and verify the persisted geometry, loading, and pretension.
+10. Return the worker to the baseline before accepting another candidate.
 
-A child becomes **Ready** only after persisted verification succeeds. Existing child files or non-empty candidate folders are never overwritten. Candidate failure is isolated where possible; a worker that cannot recover the baseline is removed. Tab 5 builds models only—it does not run analysis or extract results.
+A child becomes **Ready** only after analysis, result saving, and persisted verification succeed. Existing child files or non-empty candidate folders are never overwritten. Candidate failure is isolated where possible; a worker that cannot recover the baseline is removed. Tab 5 does not extract results yet.
 
 ### SAP2000 instance count
 

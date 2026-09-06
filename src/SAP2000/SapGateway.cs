@@ -80,8 +80,16 @@ public sealed class SapGateway : ISapGateway
     });
     public Task SaveAsync(ModelInfo expected) => worker.Run(() =>
     {
-        Verify(expected, true);
+        // Saving analysis results is valid while SAP2000 has the model locked.
+        Verify(expected);
         Check(Model.File.Save(expected.Path), "File.Save", expected.Path);
+        Verify(expected);
+        return true;
+    });
+    public Task RunAnalysisAsync(ModelInfo expected) => worker.Run(() =>
+    {
+        Verify(expected, true);
+        Check(Model.Analyze.RunAnalysis(), "Analyze.RunAnalysis", expected.Path);
         Verify(expected);
         return true;
     });

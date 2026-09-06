@@ -10,6 +10,8 @@ public interface ISapGateway : IDisposable
     Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected);
     /// <summary>Saves the verified active model without changing its identity.</summary>
     Task SaveAsync(ModelInfo expected);
+    /// <summary>Runs every analysis case currently marked to run in the verified active child model.</summary>
+    Task RunAnalysisAsync(ModelInfo expected);
     Task<ModelInfo> GetCurrentModelInfoAsync();
     Task<ModelSnapshot> ReadAsync();
     Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected);
