@@ -74,13 +74,13 @@ internal static class Program
                        Equals(pretensionPicker.SelectedValue, "P02") &&
                        pretensionPicker.SelectedItem is StudyPretensionCandidate { Id: "P02" } &&
                        vm.StudyIterations.All(row => row.PretensionCandidateId == "P02"),
-                    "Tab 5 switches directly from P01 to P02 without clearing the ComboBox");
+                    "Tab 6 switches directly from P01 to P02 without clearing the ComboBox");
                 uiState.Study.FixedPretensionCandidateId = "";
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
                 Assert(vm.FixedPretensionCandidateId == "P01" && vm.StudyIterations.Count == 36 &&
                        vm.StudyIterations.All(row => row.PretensionCandidateId == "P01"),
-                    "Tab 5 restores P01 when the fixed-pretension selection is transiently cleared");
+                    "Tab 6 restores P01 when the fixed-pretension selection is transiently cleared");
                 uiState.Study.Mode = IterationStudyMode.FixHeight;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var heightPicker = FindVisuals<ComboBox>(window)
@@ -92,7 +92,7 @@ internal static class Program
                        Equals(heightPicker.SelectedValue, "H02") &&
                        heightPicker.SelectedItem is StudyHeightCandidate { Id: "H02" } &&
                        vm.StudyIterations.All(row => row.HeightCandidateId == "H02"),
-                    "Tab 5 switches directly from H01 to H02 without clearing the ComboBox");
+                    "Tab 6 switches directly from H01 to H02 without clearing the ComboBox");
                 var grids = FindVisuals<DataGrid>(window).ToArray();
                 Assert(grids.Any(grid => grid.Name == "StudyPreviewGrid" && grid.Items.Count == 36 && grid.Columns.Count == 9),
                     "Study Preview DataGrid renders joint-load, cable-target, worker, status, run, and open columns");
@@ -123,7 +123,7 @@ internal static class Program
                 using (var stream = File.Create(".work/study-tab.png")) encoder.Save(stream);
                 window.Close(); bindingListener.Flush();
                 if (bindingLog.ToString().Length > 0) throw new Exception("WPF binding errors: " + bindingLog);
-                Console.WriteLine("PASS: Tab 5 rendered with no WPF binding errors.");
+                Console.WriteLine("PASS: Tab 6 rendered with no WPF binding errors.");
                 return 0;
             }
             if (args.Contains("--ui-read"))
@@ -147,7 +147,7 @@ internal static class Program
                 var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection(), uiConfig);
                 var window = new COT_VCF.Presentation.MainWindow { DataContext = vm };
                 window.Show();
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < 6; i++)
                 {
                     vm.SelectedTab = i;
                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -228,6 +228,7 @@ internal static class Program
             Assert(state.Preview.Points["bot"].Position.Z == -1, "Apply followed by preview has no drift");
             try { workflow.RefreshAsync().GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
             Assert(!state.BaselineCaptured && state.Truss.TopPoints.Contains("top") && state.PointLoads.Count == 2, "External geometry changes invalidate baseline but preserve setup");
+            OutputSettingsChecks.Run();
             StudyComposerChecks.Run();
             StudyExecutionChecks.Run();
             GatewayChecks.Run();
