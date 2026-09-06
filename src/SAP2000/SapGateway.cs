@@ -478,6 +478,154 @@ public sealed class SapGateway : ISapGateway
         return names.Take(n).ToArray();
     });
 
+    public Task<IReadOnlyList<SapGroupSnapshot>> ReadOutputGroupsAsync(IReadOnlyList<string> groupNames, ModelInfo expected) =>
+        worker.Run<IReadOnlyList<SapGroupSnapshot>>(() =>
+        {
+            Verify(expected);
+            var requested = groupNames.Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var snapshots = ReadOutputGroups(requested);
+            Verify(expected);
+            return snapshots;
+        });
+
+    public Task ReplaceOutputGroupsAsync(IReadOnlyList<OutputSapGroupDefinition> groups, ModelInfo expected) => worker.Run(() =>
+    {
+        Verify(expected, true);
+        var requested = groups?.ToArray() ?? [];
+        if (requested.Length == 0) throw new InvalidOperationException("At least one output group is required.");
+        if (requested.Any(group => string.IsNullOrWhiteSpace(group.Name) ||
+            !group.Name.StartsWith(OutputGroupNaming.Prefix, StringComparison.Ordinal)))
+            throw new InvalidOperationException($"Every managed output group must use the {OutputGroupNaming.Prefix} prefix.");
+        if (requested.GroupBy(group => group.Name, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+            throw new InvalidOperationException("Duplicate output group names are not allowed.");
+
+        int n = 0; string[] names = [];
+        Check(Model.PointObj.GetNameList(ref n, ref names), "PointObj.GetNameList");
+        var points = names.Take(n).ToHashSet(StringComparer.Ordinal);
+        n = 0; names = [];
+        Check(Model.FrameObj.GetNameList(ref n, ref names), "FrameObj.GetNameList");
+        var frames = names.Take(n).ToHashSet(StringComparer.Ordinal);
+        n = 0; names = [];
+        Check(Model.CableObj.GetNameList(ref n, ref names), "CableObj.GetNameList");
+        var cables = names.Take(n).ToHashSet(StringComparer.Ordinal);
+
+        foreach (var group in requested)
+        {
+            var missing = group.ObjectNames.Distinct(StringComparer.Ordinal).Where(name => group.ObjectKind switch
+            {
+                OutputGroupObjectKind.Point => !points.Contains(name),
+                OutputGroupObjectKind.Frame => !frames.Contains(name),
+                OutputGroupObjectKind.Cable => !cables.Contains(name),
+                _ => true
+            }).ToArray();
+            if (missing.Length > 0)
+                throw new InvalidOperationException($"{group.Name}: missing {group.ObjectKind} object(s): {string.Join(", ", missing)}.");
+        }
+
+        var prior = ReadOutputGroups(requested.Select(group => group.Name).ToArray());
+        try
+        {
+            foreach (var group in requested)
+            {
+                Verify(expected, true);
+                DeleteGroupIfExists(group.Name);
+                Check(Model.GroupDef.SetGroup(group.Name), "GroupDef.SetGroup", group.Name);
+                foreach (var name in group.ObjectNames.Distinct(StringComparer.Ordinal))
+                {
+                    var rc = group.ObjectKind switch
+                    {
+                        OutputGroupObjectKind.Point => Model.PointObj.SetGroupAssign(name, group.Name, false, eItemType.Objects),
+                        OutputGroupObjectKind.Frame => Model.FrameObj.SetGroupAssign(name, group.Name, false, eItemType.Objects),
+                        OutputGroupObjectKind.Cable => Model.CableObj.SetGroupAssign(name, group.Name, false, eItemType.Objects),
+                        _ => -1
+                    };
+                    Check(rc, $"{group.ObjectKind}.SetGroupAssign", $"{name} -> {group.Name}");
+                }
+            }
+
+            var written = ReadOutputGroups(requested.Select(group => group.Name).ToArray());
+            foreach (var group in requested)
+            {
+                var snapshot = written.First(item => item.Name.Equals(group.Name, StringComparison.OrdinalIgnoreCase));
+                var expectedNames = group.ObjectNames.Distinct(StringComparer.Ordinal).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+                var actualNames = snapshot.Names(group.ObjectKind).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+                if (!snapshot.Exists || !expectedNames.SequenceEqual(actualNames, StringComparer.Ordinal))
+                    throw new InvalidOperationException($"{group.Name}: SAP2000 group membership did not match the requested output definition.");
+                var total = snapshot.PointNames.Count + snapshot.FrameNames.Count + snapshot.CableNames.Count;
+                if (total != actualNames.Length)
+                    throw new InvalidOperationException($"{group.Name}: SAP2000 retained an unexpected object type in the output group.");
+            }
+        }
+        catch (Exception original)
+        {
+            var restoreFailures = new List<string>();
+            foreach (var snapshot in prior)
+            {
+                try
+                {
+                    Verify(expected, true);
+                    DeleteGroupIfExists(snapshot.Name);
+                    if (!snapshot.Exists) continue;
+                    Check(Model.GroupDef.SetGroup(snapshot.Name), "Restore GroupDef.SetGroup", snapshot.Name);
+                    foreach (var name in snapshot.PointNames)
+                        Check(Model.PointObj.SetGroupAssign(name, snapshot.Name, false, eItemType.Objects), "Restore PointObj.SetGroupAssign", name);
+                    foreach (var name in snapshot.FrameNames)
+                        Check(Model.FrameObj.SetGroupAssign(name, snapshot.Name, false, eItemType.Objects), "Restore FrameObj.SetGroupAssign", name);
+                    foreach (var name in snapshot.CableNames)
+                        Check(Model.CableObj.SetGroupAssign(name, snapshot.Name, false, eItemType.Objects), "Restore CableObj.SetGroupAssign", name);
+                }
+                catch (Exception ex) { restoreFailures.Add($"{snapshot.Name}: {ex.Message}"); }
+            }
+            throw new InvalidOperationException(original.Message +
+                (restoreFailures.Count == 0 ? " Previous output-group state was restored." :
+                 " Some output groups could not be restored: " + string.Join("; ", restoreFailures)), original);
+        }
+        return true;
+    });
+
+    private IReadOnlyList<SapGroupSnapshot> ReadOutputGroups(IReadOnlyList<string> groupNames)
+    {
+        int count = 0; string[] existingNames = [];
+        Check(Model.GroupDef.GetNameList(ref count, ref existingNames), "GroupDef.GetNameList");
+        var existing = existingNames.Take(count).ToDictionary(name => name, name => name, StringComparer.OrdinalIgnoreCase);
+        var result = new List<SapGroupSnapshot>(groupNames.Count);
+        foreach (var requestedName in groupNames)
+        {
+            if (!existing.TryGetValue(requestedName, out var actualName))
+            {
+                result.Add(new(requestedName, false, [], [], []));
+                continue;
+            }
+            int n = 0; int[] types = []; string[] names = [];
+            Check(Model.GroupDef.GetAssignments(actualName, ref n, ref types, ref names), "GroupDef.GetAssignments", actualName);
+            var points = new List<string>();
+            var frames = new List<string>();
+            var cables = new List<string>();
+            for (int i = 0; i < n; i++)
+            {
+                switch (types[i])
+                {
+                    case 1: points.Add(names[i]); break;
+                    case 2: frames.Add(names[i]); break;
+                    case 3: cables.Add(names[i]); break;
+                    default:
+                        throw new InvalidOperationException($"{actualName}: unsupported SAP object type {types[i]} is assigned to this COTVCF output group.");
+                }
+            }
+            result.Add(new(actualName, true, points, frames, cables));
+        }
+        return result;
+    }
+
+    private void DeleteGroupIfExists(string groupName)
+    {
+        int count = 0; string[] names = [];
+        Check(Model.GroupDef.GetNameList(ref count, ref names), "GroupDef.GetNameList");
+        var actual = names.Take(count).FirstOrDefault(name => name.Equals(groupName, StringComparison.OrdinalIgnoreCase));
+        if (actual is not null) Check(Model.GroupDef.Delete(actual), "GroupDef.Delete", actual);
+    }
+
     internal Task ReleaseComReferencesAsync() => worker.Run(() =>
     {
         var currentModel = model;

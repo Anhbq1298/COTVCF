@@ -31,7 +31,13 @@ public sealed class StudyExecutionSnapshotFactory(StudyCandidateResolver? resolv
             state.Truss.BottomPoints.ToArray(),
             state.Study.Mode,
             resolver.Resolve(state, composition),
-            requestedWorkerCount);
+            requestedWorkerCount)
+        {
+            OutputGroups = state.OutputSettings.ToSapGroups()
+                .Select(group => new OutputSapGroupDefinition(group.Name, group.ObjectKind, group.ObjectNames.ToArray()))
+                .ToArray(),
+            CableResultLoadCase = state.OutputSettings.CableResultLoadCase,
+        };
     }
 
     private static GeometryModel CloneGeometry(GeometryModel geometry) => new(

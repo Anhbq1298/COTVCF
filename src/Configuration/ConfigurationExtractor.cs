@@ -15,16 +15,18 @@ public sealed class ConfigurationExtractor
         var t02 = tabs.HasFlag(ConfigTabs.Loading) ? ExtractLoading(state) : null;
         var t03 = tabs.HasFlag(ConfigTabs.Truss) ? ExtractTruss(state) : null;
         var t04 = tabs.HasFlag(ConfigTabs.Cable) ? ExtractCables(state) : null;
-        var t05 = tabs.HasFlag(ConfigTabs.Study) ? ExtractStudy(state) : null;
+        var t05 = tabs.HasFlag(ConfigTabs.Output) ? ExtractOutput(state) : null;
+        var t06 = tabs.HasFlag(ConfigTabs.Study) ? ExtractStudy(state) : null;
         return new CotVcfConfigDto
         {
             ConfigVersion = "1.0",
             Units = new UnitsDto(),
-            Model = Snapshot(state, t02, t03, t04, modelLoadCases, null),
+            Model = Snapshot(state, t02, t03, t04, t05, modelLoadCases, null),
             Tab02Loading = t02,
             Tab03TrussHeight = t03,
             Tab04CableForce = t04,
-            Tab05IterationStudy = t05,
+            Tab05OutputSettings = t05,
+            Tab05IterationStudy = t06,
         };
     }
 
@@ -32,12 +34,13 @@ public sealed class ConfigurationExtractor
     public LoadingConfigDto ExtractLoadingSection(ApplicationState state) => ExtractLoading(state);
     public TrussHeightConfigDto ExtractTrussSection(ApplicationState state) => ExtractTruss(state);
     public CableForceConfigDto ExtractCableSection(ApplicationState state) => ExtractCables(state);
+    public OutputSettingsConfigDto ExtractOutputSection(ApplicationState state) => ExtractOutput(state);
     public IterationStudyConfigDto ExtractStudySection(ApplicationState state) => ExtractStudy(state);
 
     /// <summary>Recompute a project's model snapshot from whichever tab sections it currently holds,
     /// preserving <see cref="ModelSnapshotDto.OriginalFileName"/>.</summary>
     public ModelSnapshotDto RebuildSnapshot(CotVcfConfigDto project, ApplicationState state, IReadOnlyCollection<string> modelLoadCases) =>
-        Snapshot(state, project.Tab02Loading, project.Tab03TrussHeight, project.Tab04CableForce, modelLoadCases, project.Model);
+        Snapshot(state, project.Tab02Loading, project.Tab03TrussHeight, project.Tab04CableForce, project.Tab05OutputSettings, modelLoadCases, project.Model);
 
     private static LoadingConfigDto ExtractLoading(ApplicationState s) => new()
     {
@@ -85,6 +88,23 @@ public sealed class ConfigurationExtractor
         }).ToList(),
     };
 
+    private static OutputSettingsConfigDto ExtractOutput(ApplicationState s) => new()
+    {
+        OutputGroupPrefix = OutputGroupNaming.Prefix,
+        DeflectionPointNames = s.OutputSettings.DeflectionPoints.ToList(),
+        MemberForceGroups = s.OutputSettings.MemberForceGroups.Select(group => new MemberForceGroupConfigDto
+        {
+            Id = group.Id,
+            Name = group.Name,
+            SapGroupName = group.SapGroupName,
+            FrameNames = group.Members.ToList(),
+        }).ToList(),
+        FoundationLeftPointNames = s.OutputSettings.FoundationLeftPoints.ToList(),
+        FoundationRightPointNames = s.OutputSettings.FoundationRightPoints.ToList(),
+        CableNames = s.OutputSettings.CableNames.ToList(),
+        CableResultLoadCase = s.OutputSettings.CableResultLoadCase,
+    };
+
     private static IterationStudyConfigDto ExtractStudy(ApplicationState s) => new()
     {
         StudyMode = s.Study.Mode,
@@ -100,7 +120,7 @@ public sealed class ConfigurationExtractor
         catch { return ""; }
     }
 
-    private static ModelSnapshotDto Snapshot(ApplicationState s, LoadingConfigDto? t02, TrussHeightConfigDto? t03, CableForceConfigDto? t04, IReadOnlyCollection<string> modelLoadCases, ModelSnapshotDto? previous)
+    private static ModelSnapshotDto Snapshot(ApplicationState s, LoadingConfigDto? t02, TrussHeightConfigDto? t03, CableForceConfigDto? t04, OutputSettingsConfigDto? t05, IReadOnlyCollection<string> modelLoadCases, ModelSnapshotDto? previous)
     {
         // Baseline geometry = original coordinates captured at connect time (Tab 03 must use baseline;
         // it is also the safe original source for every other dependency).
@@ -112,8 +132,19 @@ public sealed class ConfigurationExtractor
         if (t03 is not null) { pointNames.UnionWith(t03.TopPoints); pointNames.UnionWith(t03.MiddlePoints); pointNames.UnionWith(t03.BottomPoints); }
 
         var cableNames = new HashSet<string>(t04?.Cables.Select(c => c.CableName) ?? [], StringComparer.Ordinal);
-        var members = geom.Members.Where(m => m.Kind == MemberKind.Cable && cableNames.Contains(m.Name)).ToArray();
-        foreach (var m in members) { pointNames.Add(m.Start); pointNames.Add(m.End); }
+        cableNames.UnionWith(t05?.CableNames ?? []);
+        var cableMembers = geom.Members.Where(m => m.Kind == MemberKind.Cable && cableNames.Contains(m.Name)).ToArray();
+        foreach (var m in cableMembers) { pointNames.Add(m.Start); pointNames.Add(m.End); }
+
+        if (t05 is not null)
+        {
+            pointNames.UnionWith(t05.DeflectionPointNames ?? []);
+            pointNames.UnionWith(t05.FoundationLeftPointNames ?? []);
+            pointNames.UnionWith(t05.FoundationRightPointNames ?? []);
+        }
+        var frameNames = new HashSet<string>(t05?.MemberForceGroups.SelectMany(group => group.FrameNames) ?? [], StringComparer.Ordinal);
+        var frameMembers = geom.Members.Where(m => m.Kind == MemberKind.Frame && frameNames.Contains(m.Name)).ToArray();
+        foreach (var m in frameMembers) { pointNames.Add(m.Start); pointNames.Add(m.End); }
 
         CoordinateDto Coord(string name) => geom.Points.TryGetValue(name, out var p)
             ? new CoordinateDto { X = p.Position.X, Y = p.Position.Y, Z = p.Position.Z }
@@ -131,7 +162,12 @@ public sealed class ConfigurationExtractor
             FileName = currentFile,
             Points = pointNames.Where(geom.Points.ContainsKey).OrderBy(n => n, StringComparer.Ordinal)
                 .Select(n => { var c = Coord(n); return new PointSnapshotDto { Name = n, X = c.X, Y = c.Y, Z = c.Z }; }).ToList(),
-            Cables = members.OrderBy(m => m.Name, StringComparer.Ordinal).Select(m => new CableSnapshotDto
+            Cables = cableMembers.OrderBy(m => m.Name, StringComparer.Ordinal).Select(m => new CableSnapshotDto
+            {
+                Name = m.Name, PointI = m.Start, PointJ = m.End,
+                PointICoordinate = Coord(m.Start), PointJCoordinate = Coord(m.End),
+            }).ToList(),
+            Frames = frameMembers.OrderBy(m => m.Name, StringComparer.Ordinal).Select(m => new FrameSnapshotDto
             {
                 Name = m.Name, PointI = m.Start, PointJ = m.End,
                 PointICoordinate = Coord(m.Start), PointJCoordinate = Coord(m.End),

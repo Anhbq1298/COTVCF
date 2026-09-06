@@ -18,7 +18,10 @@ public partial class App : System.Windows.Application
         var config = new Configuration.ConfigService(gateway, state, workflow);
         var studyExecution = new StudyExecutionCoordinator(
             new ConnectedSapInstanceHostFactory(gateway, new SapInstanceHostFactory()));
-        var viewModel = new MainViewModel(state, workflow, new SelectionService(), config, studyExecution);
+        var outputDialogs = new OutputSettingsDialogService();
+        var outputPreparation = new OutputGroupPreparationService(gateway);
+        var viewModel = new MainViewModel(state, workflow, new SelectionService(), config, studyExecution,
+            outputDialogs: outputDialogs, outputGroupPreparation: outputPreparation);
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
     }

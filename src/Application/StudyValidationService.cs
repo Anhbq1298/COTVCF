@@ -27,6 +27,9 @@ public sealed class StudyValidationService
 
         foreach (var issue in new TrussGeometryService().Validate(state.Baseline, state.Truss)) issues.Add(issue);
 
+        foreach (var issue in new OutputSettingsValidator().Validate(state))
+            issues.Add(issue);
+
         if (state.Cables.Count == 0) Error("Pretension Setup", "No cable pretension candidates are available from Tab 4.");
         foreach (var cable in state.Cables)
         {

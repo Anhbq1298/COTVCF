@@ -13,7 +13,8 @@ public sealed class ConfigProjectSession
     public bool Tab02Dirty { get; private set; }
     public bool Tab03Dirty { get; private set; }
     public bool Tab04Dirty { get; private set; }
-    public bool Tab05Dirty { get; private set; }
+    public bool Tab05OutputDirty { get; private set; }
+    public bool Tab06StudyDirty { get; private set; }
 
     public bool HasActiveProject => Project is not null && !string.IsNullOrWhiteSpace(FilePath);
     public string? FileName => FilePath is null ? null : System.IO.Path.GetFileName(FilePath);
@@ -39,7 +40,8 @@ public sealed class ConfigProjectSession
         if (tab.HasFlag(ConfigTabs.Loading)) Tab02Dirty = true;
         if (tab.HasFlag(ConfigTabs.Truss)) Tab03Dirty = true;
         if (tab.HasFlag(ConfigTabs.Cable)) Tab04Dirty = true;
-        if (tab.HasFlag(ConfigTabs.Study)) Tab05Dirty = true;
+        if (tab.HasFlag(ConfigTabs.Output)) Tab05OutputDirty = true;
+        if (tab.HasFlag(ConfigTabs.Study)) Tab06StudyDirty = true;
     }
 
     public void ClearDirty(ConfigTabs tabs = ConfigTabs.All)
@@ -47,7 +49,8 @@ public sealed class ConfigProjectSession
         if (tabs.HasFlag(ConfigTabs.Loading)) Tab02Dirty = false;
         if (tabs.HasFlag(ConfigTabs.Truss)) Tab03Dirty = false;
         if (tabs.HasFlag(ConfigTabs.Cable)) Tab04Dirty = false;
-        if (tabs.HasFlag(ConfigTabs.Study)) Tab05Dirty = false;
+        if (tabs.HasFlag(ConfigTabs.Output)) Tab05OutputDirty = false;
+        if (tabs.HasFlag(ConfigTabs.Study)) Tab06StudyDirty = false;
     }
 
     public bool IsDirty(ConfigTabs tab) => tab switch
@@ -55,8 +58,9 @@ public sealed class ConfigProjectSession
         ConfigTabs.Loading => Tab02Dirty,
         ConfigTabs.Truss => Tab03Dirty,
         ConfigTabs.Cable => Tab04Dirty,
-        ConfigTabs.Study => Tab05Dirty,
-        _ => Tab02Dirty || Tab03Dirty || Tab04Dirty || Tab05Dirty,
+        ConfigTabs.Output => Tab05OutputDirty,
+        ConfigTabs.Study => Tab06StudyDirty,
+        _ => Tab02Dirty || Tab03Dirty || Tab04Dirty || Tab05OutputDirty || Tab06StudyDirty,
     };
 
     public bool ProjectHas(ConfigTabs tab) => Project is { } p && tab switch
@@ -64,6 +68,7 @@ public sealed class ConfigProjectSession
         ConfigTabs.Loading => p.Tab02Loading is not null,
         ConfigTabs.Truss => p.Tab03TrussHeight is not null,
         ConfigTabs.Cable => p.Tab04CableForce is not null,
+        ConfigTabs.Output => p.Tab05OutputSettings is not null,
         ConfigTabs.Study => p.Tab05IterationStudy is not null,
         _ => p.PresentTabs != ConfigTabs.None,
     };

@@ -184,9 +184,10 @@ public partial class MainWindow : Window
         "1. Connect to a running SAP2000 model and load geometry.\n" +
         "2. Select Point Objects in SAP2000, add them as applied points, and define loading criteria.\n" +
         "3. Select level chord groups, capture a baseline and preview height changes.\n" +
-        "4. Select cable / tendon force sources and define ranges.\n" +
-        "5. In Tab 05, select study rows and 1-3 total SAP2000 instances, validate, then build and analyze isolated child .sdb models. The connected baseline is instance 1.\n" +
-        "6. Each worker is sequential; workers run in parallel and reopen the immutable baseline before every candidate.\n\n" +
+        "4. Select SAP cable objects and define PRETENSION target-force candidates.\n" +
+        "5. In Tab 05, define deflection points, member-force groups, foundation reactions, and monitored cables/result case. No SAP group write occurs while editing.\n" +
+        "6. In Tab 06, select study rows and 1-3 total SAP2000 instances. Run first prepares [O]- groups on the parent baseline and saves it, then workers create children from that prepared parent.\n" +
+        "7. Each worker is sequential; workers run in parallel and reopen the immutable baseline before every candidate.\n\n" +
         "Viewer: mouse wheel zooms, drag pans, double-click or Home fits.\n" +
         "Each child runs the load cases enabled in SAP2000 and is saved again before verification; results are not extracted yet.\n" +
         "Existing candidate outputs are never overwritten.",
