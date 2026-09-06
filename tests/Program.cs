@@ -18,6 +18,53 @@ internal static class Program
     {
         try
         {
+            if (args.Contains("--study-ui"))
+            {
+                var app = new System.Windows.Application();
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/COT VCF tools;component/src/Presentation/Theme.xaml", UriKind.Relative) });
+                var bindingLog = new StringWriter();
+                var bindingListener = new TextWriterTraceListener(bindingLog);
+                PresentationTraceSources.DataBindingSource.Listeners.Add(bindingListener);
+                PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
+
+                var uiState = StudyComposerChecks.CreateState();
+                var uiSap = new FakeSap { Snapshot = new(uiState.Model!, uiState.Geometry, uiState.LoadPatterns.ToArray()) };
+                var uiWorkflow = new WorkflowService(uiSap, uiState);
+                var uiConfig = new COT_VCF.Configuration.ConfigService(uiSap, uiState, uiWorkflow);
+                var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection(), uiConfig) { SelectedTab = 1 };
+                var window = new COT_VCF.Presentation.MainWindow { DataContext = vm, Width = 1400, Height = 810 };
+                window.Show();
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                var loadPatternPickers = FindVisuals<ComboBox>(window)
+                    .Where(combo => combo.Items.Cast<object>().OfType<string>().Contains("LIVE"))
+                    .ToArray();
+                Assert(loadPatternPickers.Length == uiState.LoadDefinitions.Count && loadPatternPickers.All(combo => !combo.IsEditable),
+                    "Tab 2 renders one read-only SAP load-pattern dropdown per definition");
+                var loadingBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                loadingBitmap.Render(window);
+                var loadingEncoder = new PngBitmapEncoder(); loadingEncoder.Frames.Add(BitmapFrame.Create(loadingBitmap));
+                Directory.CreateDirectory(".work");
+                using (var stream = File.Create(".work/loading-tab.png")) loadingEncoder.Save(stream);
+
+                vm.SelectedTab = 4;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(vm.StudyIterations.Count == 36, "Tab 5 UI binds the expected Fix Pretension rows");
+                var grids = FindVisuals<DataGrid>(window).ToArray();
+                Assert(grids.Any(grid => grid.Name == "StudyPreviewGrid" && grid.Items.Count == 36 && grid.Columns.Count == 5),
+                    "Study Preview DataGrid renders five required columns");
+
+                var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                bitmap.Render(window);
+                var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                Directory.CreateDirectory(".work");
+                using (var stream = File.Create(".work/study-tab.png")) encoder.Save(stream);
+                window.Close(); bindingListener.Flush();
+                if (bindingLog.ToString().Length > 0) throw new Exception("WPF binding errors: " + bindingLog);
+                Console.WriteLine("PASS: Tab 5 rendered with no WPF binding errors.");
+                return 0;
+            }
             if (args.Contains("--ui-read"))
             {
                 using var sap = new SapGateway();
@@ -134,6 +181,12 @@ internal static class Program
             if (FindVisual<T>(VisualTreeHelper.GetChild(root, i)) is { } found) return found;
         return null;
     }
+    private static IEnumerable<T> FindVisuals<T>(DependencyObject root) where T : DependencyObject
+    {
+        if (root is T match) yield return match;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            foreach (var found in FindVisuals<T>(VisualTreeHelper.GetChild(root, i))) yield return found;
+    }
     private sealed class NoSelection : ISelectionService
     {
         public IReadOnlyList<string>? Select(string title, IReadOnlyList<string> available, IReadOnlyList<string> selected) => null;
@@ -144,6 +197,7 @@ internal static class Program
         public int Writes { get; private set; }
         public Task<ModelInfo> ConnectAsync() => Task.FromResult(Snapshot.Info);
         public Task<ModelSnapshot> ReadAsync() => Task.FromResult(Snapshot);
+        public Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<PointLoad>>([]);
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> m, ModelInfo e) => Task.FromResult<IReadOnlyList<ForceSource>>([]);
         public Task ApplyLoadsAsync(IReadOnlyList<PointLoad> l, ModelInfo e) { Writes++; return Task.CompletedTask; }
         public Task MovePointsAsync(GeometryModel a, GeometryModel b, ModelInfo e) { Writes++; return Task.CompletedTask; }

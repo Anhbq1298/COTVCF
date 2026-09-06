@@ -47,11 +47,18 @@ public sealed class ConfigurationValidator
         if (state.LoadDefinitions.Count == 0) issues.Add(new("Loading criteria", "Add at least one load definition."));
         foreach (var row in state.LoadDefinitions)
         {
+            if (string.IsNullOrWhiteSpace(row.LoadName) || !state.LoadPatterns.Contains(row.LoadName, StringComparer.Ordinal))
+                issues.Add(new("Loading criteria", $"Select an existing SAP load pattern for {Name(row.LoadName)}."));
             if (!row.ApplyIncrementStep && (row.Qz is not double qz || !double.IsFinite(qz) || qz < 0))
                 issues.Add(new("Loading criteria", $"{row.LoadName}: qz must be zero or greater."));
             if (row.ApplyIncrementStep && (row.MinQz is not double min || !double.IsFinite(min) || min < 0 || row.MaxQz is not double max || !double.IsFinite(max) || max < min || row.IncrementStep is not double step || !double.IsFinite(step) || step <= 0))
                 issues.Add(new("Loading criteria", $"{row.LoadName}: review minimum, maximum and increment step."));
         }
+        if (state.LoadDefinitions.Where(row => !string.IsNullOrWhiteSpace(row.LoadName))
+            .GroupBy(row => row.LoadName, StringComparer.Ordinal).Any(group => group.Count() > 1))
+            issues.Add(new("Loading criteria", "Each SAP load pattern can appear only once."));
         return issues;
     }
+
+    private static string Name(string? value) => string.IsNullOrWhiteSpace(value) ? "this row" : value;
 }

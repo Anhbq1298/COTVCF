@@ -81,6 +81,8 @@ public sealed class ConfigCompatibilityValidator
             foreach (var row in t2.LoadDefinitions ?? [])
             {
                 var tag = Name(row.LoadName);
+                if (string.IsNullOrWhiteSpace(row.LoadName) || !patterns.Contains(row.LoadName))
+                    tc.Problems.Add($"{tag}: load pattern does not exist in the connected model.");
                 if (row.IncrementEnabled)
                 {
                     if (row.MinQz is null || row.MaxQz is null || row.StepQz is null) tc.Problems.Add($"{tag}: range needs Min, Max and Step qz.");
@@ -89,6 +91,9 @@ public sealed class ConfigCompatibilityValidator
                 }
                 else if (row.FixedQz is null || !double.IsFinite(row.FixedQz.Value)) tc.Problems.Add($"{tag}: a fixed qz value is required.");
             }
+            if ((t2.LoadDefinitions ?? []).Where(row => !string.IsNullOrWhiteSpace(row.LoadName))
+                .GroupBy(row => row.LoadName, StringComparer.Ordinal).Any(group => group.Count() > 1))
+                tc.Problems.Add("each load pattern can appear only once.");
             foreach (var name in (t2.AppliedPoints ?? []).Distinct(StringComparer.Ordinal)) CheckPoint(tc, name);
             foreach (var pat in savedPoints.Count == 0 ? [] : (cfg.Model?.LoadPatterns ?? []))
                 if (!patterns.Contains(pat)) tc.Problems.Add($"missing load pattern {pat}");

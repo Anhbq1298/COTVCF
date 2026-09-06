@@ -127,7 +127,15 @@
           </Style>
          </DataGrid.Resources>
          <DataGrid.Columns>
-          <DataGridTextColumn Header="Load Name" Binding="{Binding LoadName, UpdateSourceTrigger=PropertyChanged}" Width="1.4*" MinWidth="84"/>
+          <DataGridTemplateColumn Header="Load Pattern" Width="1.4*" MinWidth="110">
+           <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+             <ComboBox ItemsSource="{Binding DataContext.State.LoadPatterns, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                       SelectedItem="{Binding LoadName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                       IsEditable="False" BorderThickness="0" Padding="5,0" Background="Transparent"/>
+            </DataTemplate>
+           </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
           <DataGridTemplateColumn Width="46" MinWidth="46"><DataGridTemplateColumn.Header><TextBlock Text="Incr?" ToolTip="Apply increment step"/></DataGridTemplateColumn.Header><DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding ApplyIncrementStep, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" HorizontalAlignment="Center" VerticalAlignment="Center"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
           <DataGridTemplateColumn Header="qz [kPa]" Width=".8*" MinWidth="62"><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource LoadValueEditor}" IsEnabled="{Binding IsSingleValue}" Text="{Binding Qz, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
           <DataGridTemplateColumn Header="Min qz" Width=".8*" MinWidth="62"><DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource LoadValueEditor}" IsEnabled="{Binding ApplyIncrementStep}" Text="{Binding MinQz, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
@@ -384,7 +392,7 @@
 
         <TextBlock Text="CANDIDATE SUMMARY" Style="{StaticResource Subheading}"/>
         <Grid Margin="0,0,0,10">
-         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="76"/><ColumnDefinition Width="112"/></Grid.ColumnDefinitions>
+         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="70"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
          <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
          <TextBlock Grid.Column="1" Text="Available" Foreground="{StaticResource Muted}" FontSize="10"/>
          <TextBlock Grid.Column="2" Text="Current Study" Foreground="{StaticResource Muted}" FontSize="10"/>
@@ -474,11 +482,12 @@
       </Grid>
      </Grid>
 
-     <DockPanel Grid.Row="1" Margin="0,10,0,0">
-      <Button DockPanel.Dock="Right" Content="{Binding RunStudyLabel}" IsEnabled="{Binding CanRunStudy}" ToolTip="{Binding RunStudyToolTip}" Margin="6,0,0,0"/>
-      <Button DockPanel.Dock="Right" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 5 into the active project"/>
+     <Grid Grid.Row="1" Margin="0,10,0,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <Button Content="Validate Study" Command="{Binding Validate}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/>
-     </DockPanel>
+      <Button Grid.Column="2" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 5 into the active project"/>
+      <Button Grid.Column="3" Content="{Binding RunStudyLabel}" IsEnabled="{Binding CanRunStudy}" ToolTip="{Binding RunStudyToolTip}" Margin="0"/>
+     </Grid>
     </Grid>
    </TabItem>
 

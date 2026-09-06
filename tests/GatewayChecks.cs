@@ -10,6 +10,9 @@ internal static class GatewayChecks
         var fake = new FakeApi();
         using var gateway = new SapGateway(fake.Model);
         var expected = new ModelInfo("test.sdb", "26", 6, "kN", "m", false);
+        var baselineLoads = gateway.ReadPointLoadsAsync(expected).GetAwaiter().GetResult();
+        Check(baselineLoads.Count == 2 && baselineLoads.Single(load => load.PointName == "p1").Fz == 30,
+            "SAP baseline point loads are captured read-only");
         gateway.ApplyLoadsAsync([new("p1", "LIVE", 1, 2, 3)], expected).GetAwaiter().GetResult();
         Check(fake.Loads["p1"].SequenceEqual(new double[] { 1, 2, 3, 40, 50, 60 }), "SAP load write preserves existing moments");
         var before = fake.Loads.ToDictionary(p => p.Key, p => p.Value.ToArray());

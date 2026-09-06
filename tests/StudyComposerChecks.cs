@@ -16,6 +16,11 @@ internal static class StudyComposerChecks
         Check(fixHeight.Iterations.All(r => r.HeightCandidateId == "H03"), "Fix Height retains H03 for every row");
         Check(fixHeight.Iterations.Single(r => r.IterationKey == "L02_H03_P04").SapModelName == "COT_VCF_L02_H03_P04.sdb", "Stable IDs generate the expected SAP filename");
         Check(fixHeight.Iterations[0].Description.Contains("Height 15 \u2192 20 m (\u0394H +5 m, H03)"), "Height description compares against the first-connected baseline");
+        var described = fixHeight.Iterations.Single(r => r.IterationKey == "L02_H03_P04").Description;
+        Check(described.Contains("Fz -1 \u2192 -2 kN") && described.Contains("Cable-A 900 \u2192 1300"),
+            "Loading and pretension descriptions use immutable baseline values");
+        Check(fixHeight.Iterations[0].LoadingCandidate.PointLoads.Count == 2,
+            "Loading candidate retains its complete point-load assignment set");
 
         state.Study.Mode = IterationStudyMode.FixPretension;
         state.Study.FixedPretensionCandidateId = "P02";
@@ -50,13 +55,14 @@ internal static class StudyComposerChecks
             "Config load rebuilds rows and restores Run Iterate selections by key");
     }
 
-    private static ApplicationState CreateState()
+    internal static ApplicationState CreateState()
     {
         var geometry = new GeometryModel(new Dictionary<string, StructuralPoint>
         {
             ["top"] = new("top", new(0, 0, 15)),
             ["mid"] = new("mid", new(0, 0, 7.5)),
             ["bot"] = new("bot", new(0, 0, 0)),
+            ["load2"] = new("load2", new(2, 0, 0)),
         }, [new("Cable-A", "top", "bot", MemberKind.Cable)]);
         var model = new ModelInfo(@"C:\Models\COT_VCF.sdb", "26", 6, "kN", "m", false);
         var state = new ApplicationState
@@ -74,6 +80,13 @@ internal static class StudyComposerChecks
         state.LoadPatterns.Add("LIVE");
         state.LoadPatterns.Add(CablePretensionConfig.PretensionLoadCase);
         state.AppliedPoints.Add(new AppliedPoint { PointName = "top", X = 0, Y = 0, Z = 15, Order = 1 });
+        state.AppliedPoints.Add(new AppliedPoint { PointName = "load2", X = 2, Y = 0, Z = 0, Order = 2 });
+        state.SessionBaselinePointLoads =
+        [
+            new PointLoad("top", "LIVE", 0, 0, -1),
+            new PointLoad("load2", "LIVE", 0, 0, -1),
+        ];
+        state.SessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal) { ["Cable-A"] = 900 };
         state.LoadDefinitions.Clear();
         state.LoadDefinitions.Add(new LoadDefinition
         {
@@ -106,6 +119,7 @@ internal static class StudyComposerChecks
     {
         public Task<ModelInfo> ConnectAsync() => throw new NotSupportedException();
         public Task<ModelSnapshot> ReadAsync() => throw new NotSupportedException();
+        public Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<PointLoad>>([]);
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) =>
             Task.FromResult<IReadOnlyList<ForceSource>>([]);
         public Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected) => Task.CompletedTask;

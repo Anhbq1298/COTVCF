@@ -268,6 +268,8 @@ public sealed class ApplicationState : Observable
     private GeometryModel geometry = GeometryModel.Empty, baseline = GeometryModel.Empty, preview = GeometryModel.Empty;
     private ModelInfo? sessionBaselineModel;
     private GeometryModel sessionBaseline = GeometryModel.Empty;
+    private IReadOnlyList<PointLoad> sessionBaselinePointLoads = [];
+    private IReadOnlyDictionary<string, double> sessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
     private string connection = "Disconnected";
     private double tributaryWidthB = 1, numberOfStories = 1;
     public ModelInfo? Model { get => model; set { Set(ref model, value); Notify(nameof(Units)); } }
@@ -279,6 +281,8 @@ public sealed class ApplicationState : Observable
     public GeometryModel Preview { get => preview; set => Set(ref preview, value); }
     public ModelInfo? SessionBaselineModel { get => sessionBaselineModel; internal set { if (Set(ref sessionBaselineModel, value)) Notify(nameof(SessionBaselineCaptured)); } }
     public GeometryModel SessionBaseline { get => sessionBaseline; internal set { if (Set(ref sessionBaseline, value)) Notify(nameof(SessionBaselineCaptured)); } }
+    public IReadOnlyList<PointLoad> SessionBaselinePointLoads { get => sessionBaselinePointLoads; internal set => Set(ref sessionBaselinePointLoads, value); }
+    public IReadOnlyDictionary<string, double> SessionBaselinePretensionForces { get => sessionBaselinePretensionForces; internal set => Set(ref sessionBaselinePretensionForces, value); }
     public bool SessionBaselineCaptured => SessionBaselineModel is not null && SessionBaseline.Points.Count > 0;
     public ObservableCollection<string> LoadPatterns { get; } = [];
     public ObservableCollection<PointLoadConfiguration> PointLoads { get; } = [];

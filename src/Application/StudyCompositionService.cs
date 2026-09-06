@@ -162,26 +162,76 @@ public sealed class StudyCompositionService
         {
             DescribeLoading(state, load),
             $"Height {state.Truss.BaselineHeight:0.###} \u2192 {height.Candidate.Height:0.###} {height.Unit} (\u0394H {height.Candidate.DeltaH:+0.###;-0.###;0} {height.Unit}, {height.Id})",
-            DescribePretension(pretension)
+            DescribePretension(state, pretension)
         };
         return string.Join(" | ", parts);
     }
 
     private static string DescribeLoading(ApplicationState state, StudyLoadingCandidate load)
     {
-        var values = load.Candidate.Loads;
-        var valueText = values.Count <= 3
+        var values = load.Combination.Loads;
+        var qzText = values.Count <= 3
             ? string.Join(", ", values.Select(v => $"{v.Name}={v.Qz:0.###}"))
             : $"{values.Count} definitions, qz {values.Min(v => v.Qz):0.###}-{values.Max(v => v.Qz):0.###}";
-        return $"Loading baseline \u2192 {load.Id}: {state.AppliedPoints.Count} point{(state.AppliedPoints.Count == 1 ? "" : "s")}, {valueText} kPa";
+        var baseline = state.SessionBaselinePointLoads
+            .GroupBy(row => (row.PointName, row.LoadPattern))
+            .ToDictionary(group => group.Key, group => group.Sum(row => row.Fz));
+        var comparisons = load.PointLoads.Select(row =>
+        {
+            var baselineFz = baseline.GetValueOrDefault((row.AppliedPt, row.Case));
+            return (Baseline: baselineFz, Candidate: row.FzKn);
+        }).ToArray();
+        var changed = comparisons.Count(pair => !Close(pair.Baseline, pair.Candidate));
+        var forceText = comparisons.Length == 0 ? "no point-load assignments"
+            : comparisons.Length == 1 ? $"Fz {comparisons[0].Baseline:0.###} \u2192 {comparisons[0].Candidate:0.###} kN"
+            : $"{changed} of {comparisons.Length} assignments updated, Fz {Range(comparisons.Select(pair => pair.Baseline))} \u2192 {Range(comparisons.Select(pair => pair.Candidate))} kN";
+        return $"Loading {load.Id}: {forceText}; qz {qzText} kPa";
     }
 
-    private static string DescribePretension(StudyPretensionCandidate pretension)
+    private static IReadOnlyList<LoadingCandidate> BuildPointLoads(ApplicationState state, LoadingCombination combination)
+    {
+        var points = state.AppliedPoints.OrderBy(point => point.X).ThenBy(point => point.PointName, StringComparer.Ordinal).ToArray();
+        var rows = new List<LoadingCandidate>(points.Length * combination.Loads.Count);
+        var stories = double.IsFinite(state.NumberOfStories) && state.NumberOfStories >= 1 && state.NumberOfStories <= int.MaxValue
+            ? (int)Math.Truncate(state.NumberOfStories)
+            : 0;
+        for (int i = 0; i < points.Length; i++)
+        {
+            var tributaryLength = points.Length switch
+            {
+                1 => 0,
+                _ when i == 0 => Math.Max(0, points[1].X - points[0].X) / 2,
+                _ when i == points.Length - 1 => Math.Max(0, points[^1].X - points[^2].X) / 2,
+                _ => Math.Max(0, points[i + 1].X - points[i - 1].X) / 2
+            };
+            var area = tributaryLength * state.TributaryWidthB;
+            foreach (var (name, qz) in combination.Loads)
+                rows.Add(new LoadingCandidate(points[i].PointName, name, qz, area, stories, -qz * area * stories));
+        }
+        return rows;
+    }
+
+    private static string DescribePretension(ApplicationState state, StudyPretensionCandidate pretension)
     {
         var forces = pretension.Candidate.CableForces;
+        var changed = forces.Count(force => !state.SessionBaselinePretensionForces.TryGetValue(force.Key, out var baseline) || !Close(baseline, force.Value));
         var valueText = forces.Count <= 3
-            ? string.Join(", ", forces.Select(v => $"{v.Key}={v.Value:0.###}"))
-            : $"{forces.Count} cables, target range {forces.Values.Min():0.###}-{forces.Values.Max():0.###}";
-        return $"Pretension baseline \u2192 {pretension.Id}: {valueText} kN";
+            ? string.Join(", ", forces.Select(force => state.SessionBaselinePretensionForces.TryGetValue(force.Key, out var baseline)
+                ? $"{force.Key} {baseline:0.###} \u2192 {force.Value:0.###}"
+                : $"{force.Key} unassigned \u2192 {force.Value:0.###}"))
+            : $"{changed} of {forces.Count} cables updated, target range {forces.Values.Min():0.###}-{forces.Values.Max():0.###}";
+        return $"Pretension {pretension.Id}: {valueText} kN";
     }
+
+    private static string Range(IEnumerable<double> values)
+    {
+        var materialized = values.ToArray();
+        if (materialized.Length == 0) return "0";
+        var min = materialized.Min();
+        var max = materialized.Max();
+        return Close(min, max) ? min.ToString("0.###") : $"{min:0.###}..{max:0.###}";
+    }
+
+    private static bool Close(double left, double right) =>
+        Math.Abs(left - right) <= 1e-9 * Math.Max(1, Math.Max(Math.Abs(left), Math.Abs(right)));
 }

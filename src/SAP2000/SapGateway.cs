@@ -80,6 +80,25 @@ public sealed class SapGateway : ISapGateway
         if (!p.IsFinite) throw new InvalidOperationException($"Point {name} has non-finite coordinates.");
         return p;
     }
+    public Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected) => worker.Run<IReadOnlyList<PointLoad>>(() =>
+    {
+        Verify(expected);
+        int pointCount = 0; string[] pointNames = [];
+        Check(Model.PointObj.GetNameList(ref pointCount, ref pointNames), "PointObj.GetNameList");
+        var loads = new List<PointLoad>();
+        foreach (var pointName in pointNames.Take(pointCount))
+        {
+            int count = 0; string[] points = [], patterns = [], systems = []; int[] steps = [];
+            double[] f1 = [], f2 = [], f3 = [], m1 = [], m2 = [], m3 = [];
+            Check(Model.PointObj.GetLoadForce(pointName, ref count, ref points, ref patterns, ref steps, ref systems,
+                ref f1, ref f2, ref f3, ref m1, ref m2, ref m3), "PointObj.GetLoadForce", pointName);
+            for (int i = 0; i < count; i++)
+                if (steps[i] == 0 && systems[i].Equals("Global", StringComparison.OrdinalIgnoreCase))
+                    loads.Add(new PointLoad(points[i], patterns[i], f1[i], f2[i], f3[i]));
+        }
+        Verify(expected);
+        return loads;
+    });
     public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => worker.Run<IReadOnlyList<ForceSource>>(() =>
     {
         Verify(expected);

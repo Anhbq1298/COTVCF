@@ -15,6 +15,8 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         {
             state.Geometry = GeometryModel.Empty; state.Baseline = GeometryModel.Empty; state.Preview = GeometryModel.Empty; state.LoadPatterns.Clear();
             state.SessionBaselineModel = null; state.SessionBaseline = GeometryModel.Empty;
+            state.SessionBaselinePointLoads = [];
+            state.SessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
         }
         state.Model = info; state.Connection = "Connected";
     }
@@ -25,8 +27,15 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         state.Model = snapshot.Info;
         if (!state.SessionBaselineCaptured)
         {
+            var pointLoads = await sap.ReadPointLoadsAsync(snapshot.Info);
+            var forceSources = await sap.ReadForcesAsync(snapshot.Geometry.Members.Where(m => m.Kind != MemberKind.Frame).ToArray(), snapshot.Info);
             state.SessionBaselineModel = snapshot.Info;
             state.SessionBaseline = snapshot.Geometry;
+            state.SessionBaselinePointLoads = pointLoads;
+            state.SessionBaselinePretensionForces = forceSources
+                .Where(source => source.Force is not null)
+                .GroupBy(source => source.ObjectName, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First().Force!.Value, StringComparer.Ordinal);
         }
         bool changed = state.BaselineCaptured && (snapshot.Geometry.Points.Count != state.Geometry.Points.Count || snapshot.Geometry.Points.Any(p => !state.Geometry.Points.TryGetValue(p.Key, out var prior) || prior.Position != p.Value.Position) || !snapshot.Geometry.Members.SequenceEqual(state.Geometry.Members));
         state.Geometry = snapshot.Geometry;

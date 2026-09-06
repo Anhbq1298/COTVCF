@@ -155,8 +155,8 @@ public sealed class MainViewModel : Observable
     }
 
     public string StudyLoadingCell => $"{LoadingCandidateCount:N0} used";
-    public string StudyHeightCell => StudyNeedsFixedHeight ? $"1 used - fixed {FixedHeightCandidateId}" : $"{HeightCandidateCount:N0} used";
-    public string StudyPretensionCell => StudyNeedsFixedPretension ? $"1 used - fixed {FixedPretensionCandidateId}" : $"{PretensionRuns:N0} used";
+    public string StudyHeightCell => StudyNeedsFixedHeight ? $"1 ({FixedHeightCandidateId} fixed)" : $"{HeightCandidateCount:N0} used";
+    public string StudyPretensionCell => StudyNeedsFixedPretension ? $"1 ({FixedPretensionCandidateId} fixed)" : $"{PretensionRuns:N0} used";
     public string StudySpaceFormula
     {
         get
@@ -482,7 +482,8 @@ public sealed class MainViewModel : Observable
     private bool LoadingCriteriaValid() => State.TributaryWidthB > 0 && double.IsFinite(State.TributaryWidthB) &&
         State.NumberOfStories >= 1 && State.NumberOfStories <= int.MaxValue && State.NumberOfStories == Math.Truncate(State.NumberOfStories) &&
         State.AppliedPoints.All(point => State.Geometry.Points.ContainsKey(point.PointName)) &&
-        State.LoadDefinitions.Count > 0 && State.LoadDefinitions.All(row => row.CandidateValues.Count > 0);
+        State.LoadDefinitions.Count > 0 && State.LoadDefinitions.All(row => row.CandidateValues.Count > 0 && State.LoadPatterns.Contains(row.LoadName, StringComparer.Ordinal)) &&
+        !State.LoadDefinitions.GroupBy(row => row.LoadName, StringComparer.Ordinal).Any(group => group.Count() > 1);
 
     public LoadingCandidatePreview? CreateLoadingCandidatePreview()
     {
