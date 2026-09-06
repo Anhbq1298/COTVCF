@@ -52,15 +52,32 @@ internal static class StudyExecutionChecks
         {
             var factory = new FakeHostFactory();
             var stages = new ConcurrentBag<StudyIterationStatus?>();
+            var candidateResults = new ConcurrentBag<COT_VCF.Domain.Results.CandidateResultDto>();
             var result = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
                 new InlineProgress<StudyExecutionProgress>(progress => stages.Add(progress.IterationStatus)),
-                CancellationToken.None).GetAwaiter().GetResult();
+                CancellationToken.None, candidateResults.Add).GetAwaiter().GetResult();
             var job = snapshot.Jobs.Single(candidate => candidate.RunIterate);
             var gateway = factory.Gateways.Single();
             Check(result.Completed == 1 && result.Failed == 0 &&
                   stages.Contains(StudyIterationStatus.RunningAnalysis) &&
-                  stages.Contains(StudyIterationStatus.Verifying) && File.Exists(job.ModelFullPath),
-                "One worker marks one child Ready only after analysis and in-place verification");
+                  stages.Contains(StudyIterationStatus.Verifying) &&
+                  stages.Contains(StudyIterationStatus.ExtractingResults) && File.Exists(job.ModelFullPath),
+                "One worker marks one child Ready only after analysis, verification and result extraction");
+
+            var cr = candidateResults.Single();
+            Check(cr.IterationKey == job.IterationId &&
+                  cr.ExtractionStatus == COT_VCF.Domain.Results.CandidateExtractionStatus.ExtractedOk &&
+                  cr.Groups.Single().Points.Count == 3 &&
+                  cr.Groups[0].Points.All(pt => pt.Status == COT_VCF.Domain.Results.ResultValueStatus.Valid) &&
+                  cr.Groups[0].Points.Select(pt => pt.Sequence).SequenceEqual([1, 2, 3]),
+                "Deflection extraction produces one sorted group of Valid monitored-point Uz per candidate");
+
+            var diagHtmlPath = Path.Combine(job.IterationDirectory, $"Deflection_Diagnostic_{job.IterationId}.html");
+            Check(File.Exists(diagHtmlPath), "A candidate diagnostic HTML is written into the candidate folder");
+            var diagHtml = File.ReadAllText(diagHtmlPath);
+            Check(diagHtml.Contains("Candidate Diagnostic Report") && diagHtml.Contains("QA/QC") &&
+                  diagHtml.Contains("Monitored Deflection") && diagHtml.Contains(">top<"),
+                "Diagnostic HTML states its QA/QC purpose and lists the extracted monitored points");
             Check(gateway.AnalysisAttempts.Contains(Path.GetFullPath(job.ModelFullPath)) &&
                   gateway.SavedAfterAnalysis.Contains(Path.GetFullPath(job.ModelFullPath)),
                 "RunAnalysis persists the analyzed child; the worker never re-saves or reopens it");
@@ -357,6 +374,7 @@ internal static class StudyExecutionChecks
         state.Study.Mode = IterationStudyMode.FixHeight;
         state.Study.FixedHeightCandidateId = "H03";
         state.Study.OutputDirectory = Path.Combine(root, "Study");
+        ConfigureDeflectionOutput(state);
         var composition = new StudyCompositionService().Compose(state);
         foreach (var row in composition.Iterations.Skip(selectedCount)) row.RunIterate = false;
         return (root, state, new StudyExecutionSnapshotFactory().Create(state, composition, workers));
@@ -381,9 +399,16 @@ internal static class StudyExecutionChecks
         if (fixedHeight is not null) state.Study.FixedHeightCandidateId = fixedHeight;
         if (fixedPretension is not null) state.Study.FixedPretensionCandidateId = fixedPretension;
         state.Study.OutputDirectory = Path.Combine(root, "Study");
+        ConfigureDeflectionOutput(state);
         var composition = new StudyCompositionService().Compose(state);
         foreach (var row in composition.Iterations) row.RunIterate = select(row);
         return (root, state, new StudyExecutionSnapshotFactory().Create(state, composition, workers));
+    }
+
+    private static void ConfigureDeflectionOutput(ApplicationState state)
+    {
+        foreach (var name in new[] { "bot", "mid", "top" }) state.OutputSettings.DeflectionPoints.Add(name);
+        state.OutputSettings.DeflectionOutputCaseName = "SERVICE";
     }
 
     private static bool SavedCandidateMatches(
@@ -513,7 +538,24 @@ internal static class StudyExecutionChecks
             return currentTargets.Values.Where(force => force.CableName.Equals(cableName, StringComparison.OrdinalIgnoreCase)).ToArray();
         });
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => Task.FromResult<IReadOnlyList<ForceSource>>([]);
-        public Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<string>>([]);
+        public Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<string>>(["DEAD", "SERVICE", "PRETENSION"]);
+        public async Task<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>> GetJointDisplacementsAsync(
+            IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) => await Tracked<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>>(async () =>
+        {
+            Verify(expected); await Task.Delay(1);
+            var rows = new List<COT_VCF.Domain.Results.JointDisplacement>();
+            foreach (var name in pointNames)
+            {
+                if (!currentGeometry.Points.TryGetValue(name, out var p))
+                { rows.Add(new(name, 0, 0, 0, null, COT_VCF.Domain.Results.ResultValueStatus.PointNotFound)); continue; }
+                if (!analysisComplete)
+                { rows.Add(new(name, p.Position.X, p.Position.Y, p.Position.Z, null, COT_VCF.Domain.Results.ResultValueStatus.AnalysisNotRun)); continue; }
+                // deterministic synthetic deflection: parabolic-ish along X, in mm
+                var uz = -Math.Round(1.5 * (10 - Math.Abs(5 - p.Position.X)), 3);
+                rows.Add(new(name, p.Position.X, p.Position.Y, p.Position.Z, uz, COT_VCF.Domain.Results.ResultValueStatus.Valid));
+            }
+            return rows;
+        });
         public Task<IReadOnlyList<SapGroupSnapshot>> ReadOutputGroupsAsync(IReadOnlyList<string> groupNames, ModelInfo expected) =>
             Task.FromResult<IReadOnlyList<SapGroupSnapshot>>(groupNames.Select(name => new SapGroupSnapshot(name, false, [], [], [])).ToArray());
         public Task ReplaceOutputGroupsAsync(IReadOnlyList<OutputSapGroupDefinition> groups, ModelInfo expected) => Task.CompletedTask;

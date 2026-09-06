@@ -1,4 +1,5 @@
 using COT_VCF.Domain;
+using COT_VCF.Domain.Results;
 using System.IO;
 
 namespace COT_VCF.Application.Workers;
@@ -7,7 +8,8 @@ public sealed record SapWorkerJobResult(
     StudyIterationStatus Status,
     bool WorkerFaulted,
     string Message,
-    string? ModelPath);
+    string? ModelPath,
+    CandidateResultDto? Result = null);
 
 /// <summary>One sequential execution lane. Its host owns a unique SAP2000 process and STA COM graph.</summary>
 public sealed class SapWorkerInstance : IAsyncDisposable
@@ -71,13 +73,13 @@ public sealed class SapWorkerInstance : IAsyncDisposable
                 "Candidate accepted.", job.IterationId, job.ModelFullPath, report);
             try
             {
-                var child = await builder.BuildAsync(host.Gateway, snapshot, job, WorkerId,
+                var built = await builder.BuildAsync(host.Gateway, snapshot, job, WorkerId,
                     (stage, status, message, path) => SetState(SapWorkerState.Busy, stage, status, message, job.IterationId, path, report), token);
                 await ReturnToBaselineAsync(job, report);
                 Snapshot.CompletedCount++;
                 SetState(SapWorkerState.Ready, StudyWorkerStage.Waiting, null,
                     "Ready for next candidate.", null, snapshot.BaselineModelPath, report);
-                return new(StudyIterationStatus.Ready, false, "Child model is ready.", child.Path);
+                return new(StudyIterationStatus.Ready, false, "Child model is ready.", built.Child.Path, built.Result);
             }
             catch (OperationCanceledException)
             {

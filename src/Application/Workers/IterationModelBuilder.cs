@@ -1,17 +1,27 @@
+using COT_VCF.Application.Results;
 using COT_VCF.Domain;
+using COT_VCF.Domain.Results;
 using COT_VCF.Geometry;
 using System.IO;
 
 namespace COT_VCF.Application.Workers;
 
+/// <summary>The analyzed child plus its extracted deflection result (for consolidation) — the diagnostic
+/// HTML is already written into the candidate folder by the time this is returned.</summary>
+public sealed record CandidateBuildResult(ModelInfo Child, CandidateResultDto Result);
+
 public sealed class IterationModelBuilder(
     TrussGeometryService? geometryService = null,
-    IterationCandidateVerifier? verifier = null)
+    IterationCandidateVerifier? verifier = null,
+    SapResultExtractor? resultExtractor = null,
+    CandidateDiagnosticReportGenerator? diagnosticGenerator = null)
 {
     private readonly TrussGeometryService geometryService = geometryService ?? new();
     private readonly IterationCandidateVerifier verifier = verifier ?? new();
+    private readonly SapResultExtractor resultExtractor = resultExtractor ?? new();
+    private readonly CandidateDiagnosticReportGenerator diagnosticGenerator = diagnosticGenerator ?? new();
 
-    public async Task<ModelInfo> BuildAsync(
+    public async Task<CandidateBuildResult> BuildAsync(
         ISapGateway gateway,
         StudyExecutionSnapshot snapshot,
         StudyIterationExecutionDto job,
@@ -93,7 +103,9 @@ public sealed class IterationModelBuilder(
             stage = StudyWorkerStage.RunningAnalysis;
             Report(stage, StudyIterationStatus.RunningAnalysis,
                 "Running the child model's active SAP2000 analysis cases.", childInfo.Path);
+            var analysisStarted = DateTimeOffset.Now;
             await gateway.RunAnalysisAsync(childInfo);
+            var analysisCompleted = DateTimeOffset.Now;
             AppendDiagnostic(job, workerId, $"ANALYZED child={childInfo.Path}");
 
             // Verify the just-analyzed model in place. It must be locked (results computed) and still hold the
@@ -110,7 +122,23 @@ public sealed class IterationModelBuilder(
             AppendDiagnostic(job, workerId,
                 $"VERIFIED geometryPoints={verified.GeometryPointsVerified},pointLoads={verified.PointLoadsVerified}," +
                 $"cableTargets={verified.CableTargetForcesVerified},active={analyzedChild.Path}");
-            return analyzedChild;
+
+            token.ThrowIfCancellationRequested();
+            stage = StudyWorkerStage.ExtractingResults;
+            Report(stage, StudyIterationStatus.ExtractingResults, "Extracting monitored-point deflection.", analyzedChild.Path);
+            var result = await resultExtractor.ExtractAsync(
+                gateway, snapshot, job, analyzedChild, analysisStarted, analysisCompleted, token);
+            AppendDiagnostic(job, workerId,
+                $"EXTRACTED status={result.ExtractionStatus} groups={result.Groups.Count} " +
+                $"points={result.Groups.Sum(g => g.Points.Count)} warnings={result.Warnings.Count}");
+
+            token.ThrowIfCancellationRequested();
+            stage = StudyWorkerStage.GeneratingDiagnostic;
+            Report(stage, StudyIterationStatus.GeneratingDiagnostic, "Writing candidate diagnostic report.", analyzedChild.Path);
+            var diagnosticPath = diagnosticGenerator.Write(result, job.IterationDirectory);
+            AppendDiagnostic(job, workerId, $"DIAGNOSTIC {diagnosticPath}");
+
+            return new CandidateBuildResult(analyzedChild, result);
 
             void Report(StudyWorkerStage nextStage, StudyIterationStatus status, string message, string? path)
             {
@@ -129,7 +157,16 @@ public sealed class IterationModelBuilder(
             var detail = $"Iteration {job.IterationId} failed on Worker {workerId} during {stage}. " +
                 $"Candidates L={job.LoadingCandidateId}, H={job.HeightCandidateId}, P={job.PretensionCandidateId}. {ex.Message}";
             if (Directory.Exists(job.IterationDirectory))
+            {
                 AppendDiagnostic(job, workerId, $"FAILED stage={stage}: {ex}");
+                try
+                {
+                    diagnosticGenerator.Write(
+                        resultExtractor.FailureResult(snapshot, job, $"Failed during {stage}: {ex.Message}", DateTimeOffset.Now),
+                        job.IterationDirectory);
+                }
+                catch { /* the failure diagnostic is best-effort */ }
+            }
             throw new InvalidOperationException(detail, ex);
         }
     }

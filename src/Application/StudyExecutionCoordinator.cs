@@ -1,4 +1,5 @@
 using COT_VCF.Application.Workers;
+using COT_VCF.Domain.Results;
 using System.IO;
 
 namespace COT_VCF.Application;
@@ -10,10 +11,11 @@ public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactor
     public async Task<StudyExecutionResult> BuildAsync(
         StudyExecutionSnapshot snapshot,
         IProgress<StudyExecutionProgress> progress,
-        CancellationToken token)
+        CancellationToken token,
+        Action<CandidateResultDto>? onCandidateResult = null)
     {
         ValidateSnapshot(snapshot);
-        await using var pool = new SapWorkerPool(hostFactory);
+        await using var pool = new SapWorkerPool(hostFactory, onCandidateResult: onCandidateResult);
         Exception? executionError = null;
         try
         {

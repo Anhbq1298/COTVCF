@@ -1,13 +1,15 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using COT_VCF.Domain;
+using COT_VCF.Domain.Results;
 
 namespace COT_VCF.Application.Workers;
 
 /// <summary>A central next-available-worker queue feeding 1..3 sequential SAP lanes.</summary>
 public sealed class SapWorkerPool(
     ISapInstanceHostFactory hostFactory,
-    IterationModelBuilder? builder = null) : ISapWorkerPool
+    IterationModelBuilder? builder = null,
+    Action<CandidateResultDto>? onCandidateResult = null) : ISapWorkerPool
 {
     private readonly IterationModelBuilder builder = builder ?? new();
     private readonly List<SapWorkerInstance> workers = [];
@@ -138,6 +140,11 @@ public sealed class SapWorkerPool(
                     case StudyIterationStatus.Ready: Interlocked.Increment(ref completed); break;
                     case StudyIterationStatus.Cancelled: Interlocked.Increment(ref cancelled); break;
                     default: Interlocked.Increment(ref failed); break;
+                }
+                if (result.Result is { } candidateResult)
+                {
+                    try { onCandidateResult?.Invoke(candidateResult); }
+                    catch { /* consolidation is downstream; a sink error must not fault the worker lane */ }
                 }
                 Report(progress, worker.WorkerId, job.IterationId,
                     result.Status == StudyIterationStatus.Ready ? StudyWorkerStage.Completed : StudyWorkerStage.Waiting,

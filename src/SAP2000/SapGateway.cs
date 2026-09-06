@@ -1,5 +1,6 @@
 using COT_VCF.Application;
 using COT_VCF.Domain;
+using COT_VCF.Domain.Results;
 using COT_VCF.Infrastructure;
 using CSiAPIv1;
 using System.IO;
@@ -178,6 +179,73 @@ public sealed class SapGateway : ISapGateway
         var position = ReadPosition(pointName);
         Verify(expected);
         return position;
+    });
+
+    public Task<IReadOnlyList<JointDisplacement>> GetJointDisplacementsAsync(
+        IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) =>
+        worker.Run<IReadOnlyList<JointDisplacement>>(() =>
+    {
+        Verify(expected);
+        var results = new List<JointDisplacement>(pointNames.Count);
+
+        if (!ReadInfo().IsLocked)
+        {
+            foreach (var name in pointNames)
+                results.Add(new(name, 0, 0, 0, null, ResultValueStatus.AnalysisNotRun, "The model holds no analysis results."));
+            return results;
+        }
+
+        // SAP joint displacements are in the present database length unit. The study session runs in kN/m/C,
+        // so U3 is metres → millimetres. Assert it rather than assume.
+        if (!Model.GetPresentUnits().ToString().StartsWith("kN_m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Deflection extraction expects kN, m units; the model is in {ReadInfo().Units}.");
+
+        Check(Model.Results.Setup.DeselectAllCasesAndCombosForOutput(), "Results.Setup.DeselectAllCasesAndCombosForOutput");
+        var select = isCombo
+            ? Model.Results.Setup.SetComboSelectedForOutput(outputCase)
+            : Model.Results.Setup.SetCaseSelectedForOutput(outputCase);
+        if (select != 0)
+        {
+            foreach (var name in pointNames)
+                results.Add(new(name, 0, 0, 0, null, ResultValueStatus.CaseNotFound,
+                    $"Output {(isCombo ? "combo" : "case")} '{outputCase}' is not in the model."));
+            return results;
+        }
+
+        foreach (var name in pointNames)
+        {
+            double x = 0, y = 0, z = 0;
+            var coordRc = Model.PointObj.GetCoordCartesian(name, ref x, ref y, ref z, "Global");
+            if (coordRc != 0)
+            {
+                results.Add(new(name, 0, 0, 0, null, ResultValueStatus.PointNotFound, $"Point '{name}' is not in the model."));
+                continue;
+            }
+
+            int n = 0;
+            string[] obj = [], elm = [], loadCase = [], stepType = [];
+            double[] stepNum = [], u1 = [], u2 = [], u3 = [], r1 = [], r2 = [], r3 = [];
+            var rc = Model.Results.JointDispl(name, eItemTypeElm.ObjectElm, ref n, ref obj, ref elm,
+                ref loadCase, ref stepType, ref stepNum, ref u1, ref u2, ref u3, ref r1, ref r2, ref r3);
+            if (rc != 0)
+                results.Add(new(name, x, y, z, null, ResultValueStatus.ApiError, $"Results.JointDispl returned {rc} for '{name}'."));
+            else if (n <= 0)
+                results.Add(new(name, x, y, z, null, ResultValueStatus.NoResult, $"No displacement row for '{name}' under '{outputCase}'."));
+            else
+            {
+                // one case selected → take the governing (max |U3|) row so an enveloping combo is handled too
+                var idx = 0;
+                for (int i = 1; i < n; i++) if (Math.Abs(u3[i]) > Math.Abs(u3[idx])) idx = i;
+                var uz = u3[idx] * 1000.0;
+                results.Add(double.IsFinite(uz)
+                    ? new(name, x, y, z, uz, ResultValueStatus.Valid)
+                    : new(name, x, y, z, null, ResultValueStatus.ApiError, $"Non-finite Uz for '{name}'."));
+            }
+        }
+
+        Verify(expected);
+        return results;
     });
     public Task<IReadOnlyList<PointLoad>> GetPointLoadsAsync(string pointName, ModelInfo expected) => worker.Run<IReadOnlyList<PointLoad>>(() =>
     {

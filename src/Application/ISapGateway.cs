@@ -1,4 +1,5 @@
 using COT_VCF.Domain;
+using COT_VCF.Domain.Results;
 namespace COT_VCF.Application;
 
 public interface ISapGateway : IDisposable
@@ -33,4 +34,11 @@ public interface ISapGateway : IDisposable
     Task<IReadOnlyList<SapGroupSnapshot>> ReadOutputGroupsAsync(IReadOnlyList<string> groupNames, ModelInfo expected);
     /// <summary>Replaces the requested COTVCF-managed [O]- groups in the active baseline model. Does not save the model.</summary>
     Task ReplaceOutputGroupsAsync(IReadOnlyList<OutputSapGroupDefinition> groups, ModelInfo expected);
+
+    /// <summary>Reads global joint displacements (U3 → Uz, mm) for the given points from the analyzed active model
+    /// under exactly one output case or combo. Selects only that case for output first. One row per requested
+    /// point, in the same order; each row carries an explicit <see cref="ResultValueStatus"/> — a missing result
+    /// is never reported as 0.</summary>
+    Task<IReadOnlyList<JointDisplacement>> GetJointDisplacementsAsync(
+        IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected);
 }

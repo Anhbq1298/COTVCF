@@ -49,6 +49,8 @@ public enum StudyIterationStatus
     RunningAnalysis,
     SavingAnalysis,
     Verifying,
+    ExtractingResults,
+    GeneratingDiagnostic,
     Ready,
     Failed,
     Cancelled
@@ -67,6 +69,8 @@ public enum StudyWorkerStage
     RunningAnalysis,
     SavingAnalysis,
     Verifying,
+    ExtractingResults,
+    GeneratingDiagnostic,
     ReturningToBaseline,
     Completed
 }
@@ -170,9 +174,11 @@ public sealed class StudyIteration : Observable
         StudyIterationStatus.RunningAnalysis => "Running Analysis",
         StudyIterationStatus.SavingAnalysis => "Saving Analysis",
         StudyIterationStatus.Verifying => "Verifying",
+        StudyIterationStatus.ExtractingResults => "Extracting Results",
+        StudyIterationStatus.GeneratingDiagnostic => "Diagnostic Report",
         _ => Status.ToString()
     };
-    public bool IsRunning => Status is >= StudyIterationStatus.PreparingFolder and <= StudyIterationStatus.Verifying;
+    public bool IsRunning => Status is >= StudyIterationStatus.PreparingFolder and <= StudyIterationStatus.GeneratingDiagnostic;
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
 }
 
@@ -233,7 +239,9 @@ public sealed class SapWorkerSnapshot : Observable
         StudyWorkerStage.Saving => "Saving Inputs",
         StudyWorkerStage.RunningAnalysis => "Running Analysis",
         StudyWorkerStage.SavingAnalysis => "Saving Analysis",
-        StudyWorkerStage.Verifying => "Verifying Saved Child",
+        StudyWorkerStage.Verifying => "Verifying Child",
+        StudyWorkerStage.ExtractingResults => "Extracting Results",
+        StudyWorkerStage.GeneratingDiagnostic => "Diagnostic Report",
         StudyWorkerStage.ReturningToBaseline => "Returning to Baseline",
         _ => CurrentStage.ToString()!
     };
@@ -247,8 +255,8 @@ public sealed class SapWorkerSnapshot : Observable
         StudyWorkerStage.ApplyingPretension => 6,
         StudyWorkerStage.Saving => 7,
         StudyWorkerStage.RunningAnalysis => 8,
-        StudyWorkerStage.SavingAnalysis => 9,
-        StudyWorkerStage.Verifying or StudyWorkerStage.Completed => 10,
+        StudyWorkerStage.Verifying => 9,
+        StudyWorkerStage.ExtractingResults or StudyWorkerStage.GeneratingDiagnostic or StudyWorkerStage.Completed => 10,
         _ => 0
     };
     public string StageProgressText => StageNumber == 0 ? "" : $"Stage {StageNumber} / 10";

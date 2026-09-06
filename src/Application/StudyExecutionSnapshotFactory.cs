@@ -37,6 +37,8 @@ public sealed class StudyExecutionSnapshotFactory(StudyCandidateResolver? resolv
                 .Select(group => new OutputSapGroupDefinition(group.Name, group.ObjectKind, group.ObjectNames.ToArray()))
                 .ToArray(),
             CableResultLoadCase = state.OutputSettings.CableResultLoadCase,
+            DeflectionPoints = state.OutputSettings.DeflectionPoints.ToArray(),
+            DeflectionOutputCase = state.OutputSettings.DeflectionOutputCaseName,
         };
     }
 
