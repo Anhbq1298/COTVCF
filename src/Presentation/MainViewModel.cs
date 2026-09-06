@@ -20,6 +20,8 @@ public sealed class MainViewModel : Observable
     private readonly ConfigService config;
     private readonly StudyExecutionCoordinator? studyExecution;
     private readonly StudyExecutionSnapshotFactory studySnapshotFactory;
+    private readonly IOutputSettingsDialogService? outputDialogs;
+    private readonly OutputGroupPreparationService? outputGroupPreparation;
     private bool busy;
     private int selectedTab;
     private AppliedPoint? selectedAppliedPoint;
@@ -295,6 +297,24 @@ public sealed class MainViewModel : Observable
     public string TrussStatus => TabState(ConfigTabs.Truss, State.BaselineCaptured || AnyTrussGroup,
         !State.BaselineCaptured || new COT_VCF.Geometry.TrussGeometryService().Validate(State.Baseline, State.Truss).Count > 0);
     public string CableStatus => TabState(ConfigTabs.Cable, State.Cables.Count > 0, State.Cables.Any(c => c.Status != "Configured"));
+    public string OutputStatus => TabState(ConfigTabs.Output, State.OutputSettings.IsConfigured,
+        new OutputSettingsValidator().Validate(State).Any(issue => issue.Severity == ValidationSeverity.Error));
+    public string DeflectionOutputSummary => State.OutputSettings.DeflectionPoints.Count == 0
+        ? "Not configured"
+        : $"{State.OutputSettings.DeflectionPoints.Count} point{(State.OutputSettings.DeflectionPoints.Count == 1 ? "" : "s")} · U3 [mm]";
+    public string MemberForceOutputSummary
+    {
+        get
+        {
+            var groups = State.OutputSettings.MemberForceGroups.Count;
+            var members = State.OutputSettings.MemberForceGroups.Sum(group => group.Members.Count);
+            return groups == 0 ? "Not configured" : $"{groups} group{(groups == 1 ? "" : "s")} · {members} frame{(members == 1 ? "" : "s")}";
+        }
+    }
+    public string FoundationOutputSummary => $"Left {State.OutputSettings.FoundationLeftPoints.Count}/2 · Right {State.OutputSettings.FoundationRightPoints.Count}/2";
+    public string CableOutputSummary => State.OutputSettings.CableNames.Count == 0
+        ? "Not configured"
+        : $"{State.OutputSettings.CableNames.Count} cable{(State.OutputSettings.CableNames.Count == 1 ? "" : "s")} · {State.OutputSettings.CableResultLoadCase}";
     public ObservableCollection<ValidationIssue> Issues { get; } = [];
 
     public Command Connect { get; }
@@ -311,6 +331,11 @@ public sealed class MainViewModel : Observable
     public Command AddCables { get; }
     public Command RemoveLoads { get; }
     public Command RemoveCables { get; }
+    public Command ConfigureDeflectionOutput { get; }
+    public Command ConfigureMemberForceOutput { get; }
+    public Command ConfigureFoundationOutput { get; }
+    public Command ConfigureCableOutput { get; }
+    public Command ValidateOutputSettings { get; }
     public Command Validate { get; }
     public Command SelectAllStudyRuns { get; }
     public Command ClearAllStudyRuns { get; }
@@ -332,7 +357,9 @@ public sealed class MainViewModel : Observable
         ISelectionService selection,
         ConfigService config,
         StudyExecutionCoordinator? studyExecution = null,
-        StudyExecutionSnapshotFactory? studySnapshotFactory = null)
+        StudyExecutionSnapshotFactory? studySnapshotFactory = null,
+        IOutputSettingsDialogService? outputDialogs = null,
+        OutputGroupPreparationService? outputGroupPreparation = null)
     {
         State = state;
         this.workflow = workflow;
@@ -340,6 +367,8 @@ public sealed class MainViewModel : Observable
         this.config = config;
         this.studyExecution = studyExecution;
         this.studySnapshotFactory = studySnapshotFactory ?? new();
+        this.outputDialogs = outputDialogs;
+        this.outputGroupPreparation = outputGroupPreparation;
         StudyWorkers.CollectionChanged += (_, _) =>
         {
             Notify(nameof(HasStudyWorkers));
@@ -377,6 +406,18 @@ public sealed class MainViewModel : Observable
             if (SelectedCable is not null && removed.Contains(SelectedCable)) SelectedCable = null;
             Update();
         }, () => !IsBusy);
+        ConfigureDeflectionOutput = new(_ => EditDeflectionOutput(), GeometryReady);
+        ConfigureMemberForceOutput = new(_ => EditMemberForceOutput(), GeometryReady);
+        ConfigureFoundationOutput = new(_ => EditFoundationOutput(), GeometryReady);
+        ConfigureCableOutput = new(_ => EditCableOutput(), GeometryReady);
+        ValidateOutputSettings = new(_ =>
+        {
+            var issues = new OutputSettingsValidator().Validate(State);
+            Message = issues.Count == 0 ? "Output Settings are configured and ready for parent preparation at Run." :
+                string.Join("  ·  ", issues.Take(3).Select(issue => issue.Message));
+            if (issues.Count > 0) Warn("Output Settings", string.Join("\n", issues.Select(issue => "• " + issue.Message)));
+            Update();
+        }, GeometryReady);
         Validate = new(_ =>
         {
             if (CommitEditors?.Invoke() == false) return;
@@ -399,6 +440,7 @@ public sealed class MainViewModel : Observable
             "Loading" => ConfigTabs.Loading,
             "Truss" => ConfigTabs.Truss,
             "Cable" => ConfigTabs.Cable,
+            "Output" => ConfigTabs.Output,
             "Study" => ConfigTabs.Study,
             _ => ConfigTabs.All,
         }), () => CanUseConfig);
@@ -452,6 +494,21 @@ public sealed class MainViewModel : Observable
             ScheduleStudyRegeneration();
             Update();
         };
+        State.OutputSettings.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
+        State.OutputSettings.DeflectionPoints.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
+        State.OutputSettings.FoundationLeftPoints.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
+        State.OutputSettings.FoundationRightPoints.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
+        State.OutputSettings.CableNames.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
+        State.OutputSettings.MemberForceGroups.CollectionChanged += (_, e) =>
+        {
+            if (e.NewItems is not null)
+                foreach (MemberForceOutputGroup group in e.NewItems)
+                {
+                    group.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
+                    group.Members.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
+                }
+            Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update();
+        };
         State.Study.PropertyChanged += (_, e) =>
         {
             if (normalizingStudyCandidateIds) return;
@@ -461,6 +518,55 @@ public sealed class MainViewModel : Observable
             Update();
         };
         RegenerateStudyPreview();
+    }
+
+    private GeometryModel OutputBaselineGeometry() =>
+        State.SessionBaseline.Points.Count > 0 ? State.SessionBaseline : State.Geometry;
+
+    private void EditDeflectionOutput()
+    {
+        if (outputDialogs is null) { Message = "Output Settings editor is unavailable."; return; }
+        if (!outputDialogs.EditDeflection(State.OutputSettings, OutputBaselineGeometry(), selection)) return;
+        config.Session.MarkDirty(ConfigTabs.Output);
+        InvalidateStudyValidation();
+        Message = $"{State.OutputSettings.DeflectionPoints.Count} deflection monitoring points configured. Groups will be applied to the parent when Tab 06 runs.";
+        Update();
+    }
+
+    private void EditMemberForceOutput()
+    {
+        if (outputDialogs is null) { Message = "Output Settings editor is unavailable."; return; }
+        if (!outputDialogs.EditMemberForces(State.OutputSettings, OutputBaselineGeometry(), selection)) return;
+        config.Session.MarkDirty(ConfigTabs.Output);
+        InvalidateStudyValidation();
+        Message = $"{State.OutputSettings.MemberForceGroups.Count} member-force output groups configured. Groups will be applied to the parent when Tab 06 runs.";
+        Update();
+    }
+
+    private void EditFoundationOutput()
+    {
+        if (outputDialogs is null) { Message = "Output Settings editor is unavailable."; return; }
+        if (!outputDialogs.EditFoundations(State.OutputSettings, OutputBaselineGeometry(), selection)) return;
+        config.Session.MarkDirty(ConfigTabs.Output);
+        InvalidateStudyValidation();
+        Message = "Foundation reaction points configured. Groups will be applied to the parent when Tab 06 runs.";
+        Update();
+    }
+
+    private async void EditCableOutput()
+    {
+        if (IsBusy || outputDialogs is null) return;
+        IsBusy = true;
+        try
+        {
+            var loadCases = await workflow.GetLoadCaseNamesAsync();
+            if (!outputDialogs.EditCables(State.OutputSettings, OutputBaselineGeometry(), loadCases, selection)) return;
+            config.Session.MarkDirty(ConfigTabs.Output);
+            InvalidateStudyValidation();
+            Message = $"{State.OutputSettings.CableNames.Count} cable monitoring objects configured for result case {State.OutputSettings.CableResultLoadCase}.";
+        }
+        catch (Exception ex) { Message = ex.Message; Warn("Cable Output Settings", ex.Message); }
+        finally { IsBusy = false; Update(); }
     }
 
     private async Task ConnectAndRefreshAsync()
@@ -642,6 +748,31 @@ public sealed class MainViewModel : Observable
         if (CommitEditors?.Invoke() == false) return;
         RegenerateStudyPreview();
         if (!ValidateStudy(showMessage: true)) return;
+
+        if (outputGroupPreparation is null)
+        {
+            Message = "Output-group parent preparation service is unavailable.";
+            Warn("Unable to Build and Analyze Study Models", Message);
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            Message = "Preparing Tab 05 output groups on the parent baseline model...";
+            await outputGroupPreparation.PrepareParentAsync(State);
+            Message = "Parent output groups verified and saved. Freezing study execution snapshot...";
+        }
+        catch (Exception ex)
+        {
+            studyBuildState = StudyBuildState.Failed;
+            Message = ex.Message;
+            Warn("Output Group Preparation Failed", ex.Message + "\n\nNo child models were created.");
+            if (ex is System.Runtime.InteropServices.COMException) State.Connection = "Connection Lost";
+            NotifyStudyExecution();
+            return;
+        }
+        finally { IsBusy = false; }
 
         StudyExecutionSnapshot snapshot;
         try { snapshot = studySnapshotFactory.Create(State, studyComposition, RequestedWorkerCount); }
@@ -1063,6 +1194,7 @@ public sealed class MainViewModel : Observable
             if (check.Loading.Present) present.Add("Loading");
             if (check.Truss.Present) present.Add("Truss Height");
             if (check.Cable.Present) present.Add("Cable Force");
+            if (check.Output.Present) present.Add("Output Settings");
             if (check.Study.Present) present.Add("Iteration Study");
 
             if (check.ModelAppearsRenamed)
@@ -1095,6 +1227,7 @@ public sealed class MainViewModel : Observable
         Add("Tab 02 – Loading", r.Loading);
         Add("Tab 03 – Truss Height", r.Truss);
         Add("Tab 04 – Cable Force", r.Cable);
+        Add("Tab 05 – Output Settings", r.Output);
         Add("Tab 06 - Iteration Study", r.Study);
         lines.Add("No configuration has been applied.");
         return string.Join("\n\n", lines);
@@ -1108,6 +1241,7 @@ public sealed class MainViewModel : Observable
         if (tabs.HasFlag(ConfigTabs.Loading)) parts.Add("Loading");
         if (tabs.HasFlag(ConfigTabs.Truss)) parts.Add("Truss Height");
         if (tabs.HasFlag(ConfigTabs.Cable)) parts.Add("Cable Force");
+        if (tabs.HasFlag(ConfigTabs.Output)) parts.Add("Output Settings");
         if (tabs.HasFlag(ConfigTabs.Study)) parts.Add("Iteration Study");
         return string.Join(" + ", parts);
     }
@@ -1153,8 +1287,9 @@ public sealed class MainViewModel : Observable
             nameof(TrussTopPoints), nameof(TrussMiddlePoints), nameof(TrussBottomPoints),
             nameof(CanViewTrussCandidates), nameof(TrussCandidatesHint),
             nameof(IterationSummary), nameof(SapStatus), nameof(StatusLine), nameof(AppliedPointsTitle), nameof(LoadStatus),
-            nameof(TrussStatus), nameof(CableStatus), nameof(CableCount), nameof(VariableCableCount), nameof(PretensionCandidateCount),
-            nameof(CablePreviewSummary),
+            nameof(TrussStatus), nameof(CableStatus), nameof(OutputStatus), nameof(CableCount), nameof(VariableCableCount), nameof(PretensionCandidateCount),
+            nameof(CablePreviewSummary), nameof(DeflectionOutputSummary), nameof(MemberForceOutputSummary),
+            nameof(FoundationOutputSummary), nameof(CableOutputSummary),
             nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),

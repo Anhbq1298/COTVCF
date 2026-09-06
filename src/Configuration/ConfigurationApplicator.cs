@@ -16,7 +16,8 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         if (check.Loading.Ok && cfg.Tab02Loading is { } l) ApplyLoading(l);
         if (check.Truss.Ok && cfg.Tab03TrussHeight is { } t) ApplyTruss(t);
         if (check.Cable.Ok && cfg.Tab04CableForce is { } c) ApplyCables(c);
-        if (check.Study.Ok && cfg.Tab06IterationStudy is { } s) ApplyStudy(s);
+        if (check.Output.Ok && cfg.Tab05OutputSettings is { } o) ApplyOutput(o);
+        if (check.Study.Ok && cfg.Tab05IterationStudy is { } s) ApplyStudy(s);
     }
 
     private void ApplyLoading(LoadingConfigDto d)
@@ -91,6 +92,35 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
                 MaxForce = row.MaxForce,
                 StepForce = row.StepForce,
             });
+    }
+
+    private void ApplyOutput(OutputSettingsConfigDto d)
+    {
+        var output = state.OutputSettings;
+        output.DeflectionPoints.Clear();
+        foreach (var name in d.DeflectionPointNames ?? []) output.DeflectionPoints.Add(name);
+
+        output.MemberForceGroups.Clear();
+        foreach (var row in d.MemberForceGroups ?? [])
+        {
+            var group = new MemberForceOutputGroup
+            {
+                Id = string.IsNullOrWhiteSpace(row.Id) ? Guid.NewGuid().ToString("N") : row.Id,
+                Name = string.IsNullOrWhiteSpace(row.Name)
+                    ? (row.SapGroupName ?? "").Replace(OutputGroupNaming.Prefix, "", StringComparison.OrdinalIgnoreCase)
+                    : row.Name
+            };
+            foreach (var frame in row.FrameNames ?? []) group.Members.Add(frame);
+            output.MemberForceGroups.Add(group);
+        }
+
+        output.FoundationLeftPoints.Clear();
+        foreach (var name in d.FoundationLeftPointNames ?? []) output.FoundationLeftPoints.Add(name);
+        output.FoundationRightPoints.Clear();
+        foreach (var name in d.FoundationRightPointNames ?? []) output.FoundationRightPoints.Add(name);
+        output.CableNames.Clear();
+        foreach (var name in d.CableNames ?? []) output.CableNames.Add(name);
+        output.CableResultLoadCase = d.CableResultLoadCase;
     }
 
     private void ApplyStudy(IterationStudyConfigDto d)

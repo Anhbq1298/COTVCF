@@ -29,4 +29,8 @@ public interface ISapGateway : IDisposable
     Task SetCableTargetForceAsync(string cableName, string loadPattern, double targetForce, ModelInfo expected);
     /// <summary>Every load case name in the model. Read-only; used by config compatibility validation.</summary>
     Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected);
+    /// <summary>Reads only the requested SAP groups and their point/frame/cable assignments.</summary>
+    Task<IReadOnlyList<SapGroupSnapshot>> ReadOutputGroupsAsync(IReadOnlyList<string> groupNames, ModelInfo expected);
+    /// <summary>Replaces the requested COTVCF-managed [O]- groups in the active baseline model. Does not save the model.</summary>
+    Task ReplaceOutputGroupsAsync(IReadOnlyList<OutputSapGroupDefinition> groups, ModelInfo expected);
 }

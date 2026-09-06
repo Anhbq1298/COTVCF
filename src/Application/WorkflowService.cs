@@ -119,6 +119,12 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         await sap.MovePointsAsync(state.Geometry, state.Preview, state.Model!);
         state.Geometry = state.Preview; state.CommittedHeight = state.Truss.CurrentHeight;
     }
+    public Task<IReadOnlyList<string>> GetLoadCaseNamesAsync()
+    {
+        if (state.Model is null) throw new InvalidOperationException("Connect to SAP2000 first.");
+        return sap.GetLoadCaseNamesAsync(state.Model);
+    }
+
     public async Task ApplyLoadsAsync()
     {
         var issues = new ConfigurationValidator().ValidateLoads(state);

@@ -180,6 +180,20 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
   (`SapGateway.ReadForcesAsync` / `ForceSource` remain, unused). `ICablePretensionService` /
   `CablePretensionService` exist as the prepared apply seam but are not yet wired into `App.xaml.cs`.
 
+## Output Settings Tab (05)
+
+Tab 05 defines study-wide output monitoring only; editing the tab does not write to SAP2000.
+
+- Fixed output units: displacement mm, force kN, moment kNm.
+- Output groups use the reserved `[O]-` namespace: `[O]-DeflectionMonitorPts`, dynamic member-force groups `[O]-{user suffix}`, `[O]-FoundationLeft`, `[O]-FoundationRight`, and `[O]-CableMonitor`.
+- Deflection monitoring selects baseline Point Objects and fixes the future output to Global U3.
+- Member-force groups are user-defined application groups over baseline Frame Objects; one frame belongs to at most one member-force output group. Future components are P/V2/V3 and T/M2/M3.
+- Foundations require exactly two baseline points on the Left and exactly two on the Right, with no overlap.
+- Cable output selects baseline Cable Objects plus a SAP analysis load case. This is distinct from Tab 04's target-force load pattern.
+- Configuration is persisted as `Tab05OutputSettings`; opening a project restores definitions only and never mutates SAP.
+- When Tab 06 Run starts, `OutputGroupPreparationService` is the preflight gate: verify the active model is the immutable session parent and unlocked, replace/read-back all requested `[O]-` groups, save the parent .sdb, then freeze the execution snapshot. No worker or child may start before this succeeds.
+- Children inherit the saved parent groups. Actual SAP result extraction remains a future phase.
+
 ## Iteration Study Tab (06)
 
 Study composition plus isolated child-model building and analysis. Tab 06 does not extract results.
@@ -231,7 +245,7 @@ Study composition plus isolated child-model building and analysis. Tab 06 does n
 
 ## Config Project File (`src/Configuration/`)
 
-The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 02–06,
+The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 02–05,
 including the Tab 06 mode/fixed candidate/selection exclusions. Never serialise ViewModels; project save/load
 never mutates SAP.
 

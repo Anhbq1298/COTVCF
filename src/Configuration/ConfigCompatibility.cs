@@ -30,13 +30,15 @@ public sealed class ConfigValidationResult
     public TabCheck Loading { get; } = new();
     public TabCheck Truss { get; } = new();
     public TabCheck Cable { get; } = new();
+    public TabCheck Output { get; } = new();
     public TabCheck Study { get; } = new();
 
     public bool FileValid => FileErrors.Count == 0;
-    public bool AnyPresent => Loading.Present || Truss.Present || Cable.Present || Study.Present;
-    public bool AnyOk => Loading.Ok || Truss.Ok || Cable.Ok || Study.Ok;
+    public bool AnyPresent => Loading.Present || Truss.Present || Cable.Present || Output.Present || Study.Present;
+    public bool AnyOk => Loading.Ok || Truss.Ok || Cable.Ok || Output.Ok || Study.Ok;
     public bool AllPresentOk => AnyPresent
-        && (!Loading.Present || Loading.Ok) && (!Truss.Present || Truss.Ok) && (!Cable.Present || Cable.Ok) && (!Study.Present || Study.Ok);
+        && (!Loading.Present || Loading.Ok) && (!Truss.Present || Truss.Ok) && (!Cable.Present || Cable.Ok)
+        && (!Output.Present || Output.Ok) && (!Study.Present || Study.Ok);
     public bool ModelAppearsRenamed => FileValid && AnyOk && !FileNameMatches;
 }
 
@@ -59,8 +61,10 @@ public sealed class ConfigCompatibilityValidator
 
         var savedPoints = (cfg.Model?.Points ?? []).ToDictionary(p => p.Name, StringComparer.Ordinal);
         var savedCables = (cfg.Model?.Cables ?? []).ToDictionary(c => c.Name, StringComparer.Ordinal);
+        var savedFrames = (cfg.Model?.Frames ?? []).ToDictionary(c => c.Name, StringComparer.Ordinal);
         var current = state.Geometry.Points;
         var currentCables = state.Geometry.Members.Where(mm => mm.Kind == MemberKind.Cable).ToDictionary(mm => mm.Name, StringComparer.Ordinal);
+        var currentFrames = state.Geometry.Members.Where(mm => mm.Kind == MemberKind.Frame).ToDictionary(mm => mm.Name, StringComparer.Ordinal);
         var patterns = new HashSet<string>(state.LoadPatterns, StringComparer.OrdinalIgnoreCase);
 
         void CheckPoint(TabCheck tc, string name)
@@ -140,8 +144,79 @@ public sealed class ConfigCompatibilityValidator
             }
         }
 
-        // ---- Tab 06 Iteration Study ----
-        if (cfg.Tab06IterationStudy is { } t6)
+        // ---- Tab 05 Output Settings ----
+        if (cfg.Tab05OutputSettings is { } t5)
+        {
+            var tc = r.Output; tc.Present = true;
+            if (!string.Equals(t5.OutputGroupPrefix, OutputGroupNaming.Prefix, StringComparison.Ordinal))
+                tc.Problems.Add($"output group prefix must be {OutputGroupNaming.Prefix}.");
+
+            foreach (var name in (t5.DeflectionPointNames ?? []).Distinct(StringComparer.Ordinal)) CheckPoint(tc, name);
+            foreach (var name in (t5.FoundationLeftPointNames ?? []).Distinct(StringComparer.Ordinal)) CheckPoint(tc, name);
+            foreach (var name in (t5.FoundationRightPointNames ?? []).Distinct(StringComparer.Ordinal)) CheckPoint(tc, name);
+
+            if ((t5.FoundationLeftPointNames?.Count ?? 0) != 2) tc.Problems.Add("Foundation Left requires exactly 2 points.");
+            if ((t5.FoundationRightPointNames?.Count ?? 0) != 2) tc.Problems.Add("Foundation Right requires exactly 2 points.");
+            if ((t5.FoundationLeftPointNames ?? []).Intersect(t5.FoundationRightPointNames ?? [], StringComparer.Ordinal).Any())
+                tc.Problems.Add("foundation Left and Right groups cannot share a point.");
+
+            var sapGroupNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var assignedFrames = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var group in t5.MemberForceGroups ?? [])
+            {
+                var expectedSapName = OutputGroupNaming.MemberGroupName(group.Name);
+                if (string.IsNullOrWhiteSpace(group.Name)) tc.Problems.Add("member-force group name is required.");
+                if (!string.IsNullOrWhiteSpace(group.SapGroupName) &&
+                    !string.Equals(group.SapGroupName, expectedSapName, StringComparison.Ordinal))
+                    tc.Problems.Add($"{Name(group.Name)}: saved SAP group name does not match {expectedSapName}.");
+                if (OutputGroupNaming.ReservedNames.Contains(expectedSapName))
+                    tc.Problems.Add($"{expectedSapName} is reserved for a fixed output group.");
+                if (!sapGroupNames.Add(expectedSapName)) tc.Problems.Add($"duplicate member-force group {expectedSapName}.");
+                if ((group.FrameNames?.Count ?? 0) == 0) tc.Problems.Add($"{expectedSapName} contains no frames.");
+
+                foreach (var frameName in (group.FrameNames ?? []).Distinct(StringComparer.Ordinal))
+                {
+                    if (!currentFrames.TryGetValue(frameName, out var currentFrame))
+                    {
+                        tc.Problems.Add($"missing frame {frameName}");
+                        continue;
+                    }
+                    if (assignedFrames.TryGetValue(frameName, out var prior) && !string.Equals(prior, expectedSapName, StringComparison.OrdinalIgnoreCase))
+                        tc.Problems.Add($"frame {frameName} is assigned to both {prior} and {expectedSapName}.");
+                    else assignedFrames[frameName] = expectedSapName;
+
+                    if (savedFrames.TryGetValue(frameName, out var savedFrame))
+                    {
+                        if (currentFrame.Start != savedFrame.PointI || currentFrame.End != savedFrame.PointJ)
+                            tc.Problems.Add($"{frameName}: endpoints changed (saved {savedFrame.PointI}–{savedFrame.PointJ}, now {currentFrame.Start}–{currentFrame.End})");
+                        else
+                        {
+                            if (current.TryGetValue(currentFrame.Start, out var pi) && !CloseCoord(pi.Position, savedFrame.PointICoordinate)) tc.Problems.Add($"{frameName}: I-end {currentFrame.Start} moved");
+                            if (current.TryGetValue(currentFrame.End, out var pj) && !CloseCoord(pj.Position, savedFrame.PointJCoordinate)) tc.Problems.Add($"{frameName}: J-end {currentFrame.End} moved");
+                        }
+                    }
+                }
+            }
+
+            foreach (var cableName in (t5.CableNames ?? []).Distinct(StringComparer.Ordinal))
+            {
+                if (!currentCables.TryGetValue(cableName, out var currentCable))
+                {
+                    tc.Problems.Add($"missing cable {cableName}");
+                    continue;
+                }
+                if (savedCables.TryGetValue(cableName, out var savedCable) &&
+                    (currentCable.Start != savedCable.PointI || currentCable.End != savedCable.PointJ))
+                    tc.Problems.Add($"{cableName}: endpoints changed (saved {savedCable.PointI}–{savedCable.PointJ}, now {currentCable.Start}–{currentCable.End})");
+            }
+            if (string.IsNullOrWhiteSpace(t5.CableResultLoadCase))
+                tc.Problems.Add("cable result load case is required.");
+            else if (!modelLoadCases.Contains(t5.CableResultLoadCase, StringComparer.OrdinalIgnoreCase))
+                tc.Problems.Add($"cable result load case {t5.CableResultLoadCase} does not exist in the connected model.");
+        }
+
+        // ---- Legacy Tab 05 JSON / UI Tab 06 Iteration Study ----
+        if (cfg.Tab05IterationStudy is { } t6)
         {
             var tc = r.Study; tc.Present = true;
             if (cfg.Tab02Loading is null || cfg.Tab03TrussHeight is null || cfg.Tab04CableForce is null)

@@ -308,6 +308,7 @@ public sealed class ApplicationState : Observable
     public double NumberOfStories { get => numberOfStories; set => Set(ref numberOfStories, value); }
     public ObservableCollection<CablePretensionConfig> Cables { get; } = [];
     public TrussHeightConfiguration Truss { get; } = new();
+    public OutputSettingsConfiguration OutputSettings { get; } = new();
     public IterationStudyConfig Study { get; } = new();
     public bool BaselineCaptured { get; set; }
     public double CommittedHeight { get; set; }

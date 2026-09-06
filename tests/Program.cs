@@ -147,7 +147,7 @@ internal static class Program
                 var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection(), uiConfig);
                 var window = new COT_VCF.Presentation.MainWindow { DataContext = vm };
                 window.Show();
-                for (int i = 0; i < 5; i++)
+                for (int i = 0; i < 6; i++)
                 {
                     vm.SelectedTab = i;
                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -228,6 +228,7 @@ internal static class Program
             Assert(state.Preview.Points["bot"].Position.Z == -1, "Apply followed by preview has no drift");
             try { workflow.RefreshAsync().GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
             Assert(!state.BaselineCaptured && state.Truss.TopPoints.Contains("top") && state.PointLoads.Count == 2, "External geometry changes invalidate baseline but preserve setup");
+            OutputSettingsChecks.Run();
             StudyComposerChecks.Run();
             StudyExecutionChecks.Run();
             GatewayChecks.Run();
@@ -273,6 +274,9 @@ internal static class Program
         public Task MovePointsAsync(GeometryModel a, GeometryModel b, ModelInfo e) { Writes++; return Task.CompletedTask; }
         public Task SetCableTargetForceAsync(string cableName, string loadPattern, double targetForce, ModelInfo expected) { Writes++; return Task.CompletedTask; }
         public Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<string>>([]);
+        public Task<IReadOnlyList<SapGroupSnapshot>> ReadOutputGroupsAsync(IReadOnlyList<string> groupNames, ModelInfo expected) =>
+            Task.FromResult<IReadOnlyList<SapGroupSnapshot>>(groupNames.Select(name => new SapGroupSnapshot(name, false, [], [], [])).ToArray());
+        public Task ReplaceOutputGroupsAsync(IReadOnlyList<OutputSapGroupDefinition> groups, ModelInfo expected) => Task.CompletedTask;
         public void Dispose() { }
     }
 }
