@@ -14,6 +14,7 @@ public sealed class ConfigurationExtractor
         var t02 = tabs.HasFlag(ConfigTabs.Loading) ? ExtractLoading(state) : null;
         var t03 = tabs.HasFlag(ConfigTabs.Truss) ? ExtractTruss(state) : null;
         var t04 = tabs.HasFlag(ConfigTabs.Cable) ? ExtractCables(state) : null;
+        var t05 = tabs.HasFlag(ConfigTabs.Study) ? ExtractStudy(state) : null;
         return new CotVcfConfigDto
         {
             ConfigVersion = "1.0",
@@ -22,6 +23,7 @@ public sealed class ConfigurationExtractor
             Tab02Loading = t02,
             Tab03TrussHeight = t03,
             Tab04CableForce = t04,
+            Tab05IterationStudy = t05,
         };
     }
 
@@ -29,6 +31,7 @@ public sealed class ConfigurationExtractor
     public LoadingConfigDto ExtractLoadingSection(ApplicationState state) => ExtractLoading(state);
     public TrussHeightConfigDto ExtractTrussSection(ApplicationState state) => ExtractTruss(state);
     public CableForceConfigDto ExtractCableSection(ApplicationState state) => ExtractCables(state);
+    public IterationStudyConfigDto ExtractStudySection(ApplicationState state) => ExtractStudy(state);
 
     /// <summary>Recompute a project's model snapshot from whichever tab sections it currently holds,
     /// preserving <see cref="ModelSnapshotDto.OriginalFileName"/>.</summary>
@@ -81,11 +84,21 @@ public sealed class ConfigurationExtractor
         }).ToList(),
     };
 
+    private static IterationStudyConfigDto ExtractStudy(ApplicationState s) => new()
+    {
+        StudyMode = s.Study.Mode,
+        FixedHeightCandidateId = s.Study.FixedHeightCandidateId,
+        FixedPretensionCandidateId = s.Study.FixedPretensionCandidateId,
+        OutputDirectory = s.Study.OutputDirectory,
+        ExcludedIterationKeys = s.Study.ExcludedIterationKeys.OrderBy(k => k, StringComparer.Ordinal).ToList(),
+    };
+
     private static ModelSnapshotDto Snapshot(ApplicationState s, LoadingConfigDto? t02, TrussHeightConfigDto? t03, CableForceConfigDto? t04, IReadOnlyCollection<string> modelLoadCases, ModelSnapshotDto? previous)
     {
         // Baseline geometry = original coordinates captured at connect time (Tab 03 must use baseline;
         // it is also the safe original source for every other dependency).
-        var geom = s.Baseline.Points.Count > 0 ? s.Baseline : s.Geometry;
+        var geom = s.SessionBaseline.Points.Count > 0 ? s.SessionBaseline
+            : s.Baseline.Points.Count > 0 ? s.Baseline : s.Geometry;
 
         var pointNames = new HashSet<string>(StringComparer.Ordinal);
         if (t02 is not null) pointNames.UnionWith(t02.AppliedPoints);

@@ -14,6 +14,7 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         if (state.Model is { } previous && (previous.Path != info.Path || previous.UnitsCode != info.UnitsCode))
         {
             state.Geometry = GeometryModel.Empty; state.Baseline = GeometryModel.Empty; state.Preview = GeometryModel.Empty; state.LoadPatterns.Clear();
+            state.SessionBaselineModel = null; state.SessionBaseline = GeometryModel.Empty;
         }
         state.Model = info; state.Connection = "Connected";
     }
@@ -22,10 +23,15 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         var snapshot = await sap.ReadAsync();
         if (state.Model is { } old && (old.Path != snapshot.Info.Path || old.UnitsCode != snapshot.Info.UnitsCode)) throw new InvalidOperationException("The model or its units changed. Restore the original model and units, or restart COT VCF tools for a new session.");
         state.Model = snapshot.Info;
+        if (!state.SessionBaselineCaptured)
+        {
+            state.SessionBaselineModel = snapshot.Info;
+            state.SessionBaseline = snapshot.Geometry;
+        }
         bool changed = state.BaselineCaptured && (snapshot.Geometry.Points.Count != state.Geometry.Points.Count || snapshot.Geometry.Points.Any(p => !state.Geometry.Points.TryGetValue(p.Key, out var prior) || prior.Position != p.Value.Position) || !snapshot.Geometry.Members.SequenceEqual(state.Geometry.Members));
         state.Geometry = snapshot.Geometry;
         state.LoadPatterns.Clear(); foreach (var pattern in snapshot.LoadPatterns) state.LoadPatterns.Add(pattern);
-        if (!state.BaselineCaptured) { state.Baseline = state.Geometry; state.Preview = state.Geometry; }
+        if (!state.BaselineCaptured) { state.Baseline = state.SessionBaselineCaptured ? state.SessionBaseline : state.Geometry; state.Preview = state.Geometry; }
         else if (changed) { state.BaselineCaptured = false; state.Preview = state.Geometry; }
         foreach (var row in state.PointLoads)
             row.Status = !state.Geometry.Points.ContainsKey(row.PointName) || !state.LoadPatterns.Contains(row.LoadPattern) ? "Missing in SAP" : "Modified";
@@ -84,11 +90,12 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
     {
         state.BaselineCaptured = false;
         var t = state.Truss;
+        var original = state.SessionBaseline.Points.Count > 0 ? state.SessionBaseline : state.Geometry;
         var names = t.TopPoints.Concat(t.MiddlePoints).Concat(t.BottomPoints).ToArray();
         if (t.MiddlePoints.Count == 0 || names.Length != names.Distinct().Count()) throw new InvalidOperationException("Select three non-overlapping point groups first.");
-        if (names.Any(n => !state.Geometry.Points.ContainsKey(n))) throw new InvalidOperationException("Selected points are missing; refresh and review groups.");
-        var height = truss.MeasureHeight(state.Geometry, t);
-        state.Baseline = state.Geometry;
+        if (names.Any(n => !original.Points.ContainsKey(n))) throw new InvalidOperationException("Selected points are missing from the first-connected baseline; review the groups.");
+        var height = truss.MeasureHeight(original, t);
+        state.Baseline = original;
         t.BaselineHeight = height; t.MinimumHeight = height; t.MaximumHeight = height * 1.5; t.Increment = height / 20; t.CurrentHeight = height;
         state.CommittedHeight = height; state.BaselineCaptured = true; state.Preview = state.Geometry;
     }

@@ -1,4 +1,7 @@
 using COT_VCF.Domain;
+using COT_VCF.Application;
+using System.IO;
+using System.Numerics;
 
 namespace COT_VCF.Configuration;
 
@@ -27,12 +30,13 @@ public sealed class ConfigValidationResult
     public TabCheck Loading { get; } = new();
     public TabCheck Truss { get; } = new();
     public TabCheck Cable { get; } = new();
+    public TabCheck Study { get; } = new();
 
     public bool FileValid => FileErrors.Count == 0;
-    public bool AnyPresent => Loading.Present || Truss.Present || Cable.Present;
-    public bool AnyOk => Loading.Ok || Truss.Ok || Cable.Ok;
+    public bool AnyPresent => Loading.Present || Truss.Present || Cable.Present || Study.Present;
+    public bool AnyOk => Loading.Ok || Truss.Ok || Cable.Ok || Study.Ok;
     public bool AllPresentOk => AnyPresent
-        && (!Loading.Present || Loading.Ok) && (!Truss.Present || Truss.Ok) && (!Cable.Present || Cable.Ok);
+        && (!Loading.Present || Loading.Ok) && (!Truss.Present || Truss.Ok) && (!Cable.Present || Cable.Ok) && (!Study.Present || Study.Ok);
     public bool ModelAppearsRenamed => FileValid && AnyOk && !FileNameMatches;
 }
 
@@ -133,12 +137,65 @@ public sealed class ConfigCompatibilityValidator
             }
         }
 
+        // ---- Tab 05 Iteration Study ----
+        if (cfg.Tab05IterationStudy is { } t5)
+        {
+            var tc = r.Study; tc.Present = true;
+            if (!Enum.IsDefined(t5.StudyMode)) tc.Problems.Add("study mode is invalid.");
+            if (t5.StudyMode == IterationStudyMode.FixHeight && !ValidCandidateId(t5.FixedHeightCandidateId, 'H'))
+                tc.Problems.Add("fixed height candidate ID is invalid.");
+            else if (t5.StudyMode == IterationStudyMode.FixHeight && CandidateOrdinal(t5.FixedHeightCandidateId) > HeightCandidateCount(cfg, state))
+                tc.Problems.Add($"fixed height candidate {t5.FixedHeightCandidateId} does not exist.");
+            if (t5.StudyMode == IterationStudyMode.FixPretension && !ValidCandidateId(t5.FixedPretensionCandidateId, 'P'))
+                tc.Problems.Add("fixed pretension candidate ID is invalid.");
+            else if (t5.StudyMode == IterationStudyMode.FixPretension && CandidateOrdinal(t5.FixedPretensionCandidateId) > PretensionCandidateCount(cfg, state))
+                tc.Problems.Add($"fixed pretension candidate {t5.FixedPretensionCandidateId} does not exist.");
+            if (string.IsNullOrWhiteSpace(t5.OutputDirectory)) tc.Problems.Add("output directory is required.");
+            else
+            {
+                try
+                {
+                    if (!Path.IsPathFullyQualified(t5.OutputDirectory)) tc.Problems.Add("output directory must be a fully qualified path.");
+                    else _ = Path.GetFullPath(t5.OutputDirectory);
+                }
+                catch { tc.Problems.Add("output directory is invalid."); }
+            }
+        }
+
         return r;
     }
 
     private static IEnumerable<string> Concat(params List<string>?[] groups) =>
         groups.SelectMany(g => g ?? Enumerable.Empty<string>()).Distinct(StringComparer.Ordinal);
     private static string Name(string s) => string.IsNullOrWhiteSpace(s) ? "(unnamed)" : s;
+    private static bool ValidCandidateId(string? id, char prefix) =>
+        id is { Length: >= 2 } && id[0] == prefix && long.TryParse(id[1..], out var n) && n > 0;
+    private static long CandidateOrdinal(string id) => long.TryParse(id[1..], out var n) ? n : 0;
+    private static long HeightCandidateCount(CotVcfConfigDto cfg, ApplicationState state)
+    {
+        if (cfg.Tab03TrussHeight is not { } h) return state.Truss.CandidateCount;
+        if (!double.IsFinite(h.MinDeltaH) || !double.IsFinite(h.MaxDeltaH) || !double.IsFinite(h.StepDeltaH) || h.StepDeltaH <= 0 || h.MaxDeltaH < h.MinDeltaH) return 0;
+        var count = Math.Floor((h.MaxDeltaH - h.MinDeltaH) / h.StepDeltaH + 1e-9) + 1;
+        return count > long.MaxValue ? long.MaxValue : (long)count;
+    }
+    private static BigInteger PretensionCandidateCount(CotVcfConfigDto cfg, ApplicationState state)
+    {
+        if (cfg.Tab04CableForce is not { } cableConfig) return PretensionCandidates.TotalCount(state.Cables);
+        BigInteger total = BigInteger.One;
+        if (cableConfig.Cables.Count == 0) return BigInteger.Zero;
+        foreach (var cable in cableConfig.Cables)
+        {
+            if (cable.Mode == CableForceMode.Fixed)
+            {
+                if (cable.FixedForce is not double value || !double.IsFinite(value)) return BigInteger.Zero;
+                continue;
+            }
+            if (cable.MinForce is not double min || cable.MaxForce is not double max || cable.StepForce is not double step ||
+                !double.IsFinite(min) || !double.IsFinite(max) || !double.IsFinite(step) || step <= 0 || max < min) return BigInteger.Zero;
+            total *= (long)Math.Floor((max - min) / step + 1e-6) + 1;
+        }
+        return total;
+    }
     private static bool Close(double a, double b) => Math.Abs(a - b) <= CoordinateToleranceM;
     private static bool CloseXyz(Position p, double x, double y, double z) => Close(p.X, x) && Close(p.Y, y) && Close(p.Z, z);
     private static bool CloseCoord(Position p, CoordinateDto c) => Close(p.X, c.X) && Close(p.Y, c.Y) && Close(p.Z, c.Z);

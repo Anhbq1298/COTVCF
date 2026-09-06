@@ -33,7 +33,8 @@ public record ModelInfo(string Path, string Version, int UnitsCode, string Force
 public record ModelSnapshot(ModelInfo Info, GeometryModel Geometry, IReadOnlyList<string> LoadPatterns);
 public record PointLoad(string PointName, string LoadPattern, double Fx, double Fy, double Fz);
 public record ForceSource(string ObjectName, MemberKind Kind, string Source, double? Force, string? Problem = null);
-public record ValidationIssue(string Section, string Message);
+public enum ValidationSeverity { Error, Warning, Info }
+public record ValidationIssue(string Section, string Message, ValidationSeverity Severity = ValidationSeverity.Error);
 public sealed record LoadingCandidate(string AppliedPt, string Case, double Qz, double TribArea, int NStories, double FzKn);
 public sealed record LoadingCandidatePreview(int CaseCount, IReadOnlyList<LoadingCandidate> Rows);
 public sealed record TrussCandidate(int Index, double Height, double DeltaH, string Reference, double TopDz, double MidDz, double BotDz);
@@ -237,15 +238,36 @@ public enum IterationStudyMode { FixPretension, FixHeight, Combined }
 public sealed class IterationStudyConfig : Observable
 {
     private IterationStudyMode mode = IterationStudyMode.FixPretension;
-    private int fixedHeightIndex, fixedPretensionIndex; // 0-based indices into the height / pretension candidate sets
+    private string fixedHeightCandidateId = "H01", fixedPretensionCandidateId = "P01", outputDirectory = "";
+    private readonly HashSet<string> excludedIterationKeys = new(StringComparer.Ordinal);
     public IterationStudyMode Mode { get => mode; set => Set(ref mode, value); }
-    public int FixedHeightIndex { get => fixedHeightIndex; set => Set(ref fixedHeightIndex, Math.Max(0, value)); }
-    public int FixedPretensionIndex { get => fixedPretensionIndex; set => Set(ref fixedPretensionIndex, Math.Max(0, value)); }
+    public string FixedHeightCandidateId { get => fixedHeightCandidateId; set => Set(ref fixedHeightCandidateId, value ?? ""); }
+    public string FixedPretensionCandidateId { get => fixedPretensionCandidateId; set => Set(ref fixedPretensionCandidateId, value ?? ""); }
+    public string OutputDirectory { get => outputDirectory; set => Set(ref outputDirectory, value?.Trim() ?? ""); }
+    public IReadOnlyCollection<string> ExcludedIterationKeys => excludedIterationKeys;
+
+    public bool IsRunSelected(string iterationKey) => !excludedIterationKeys.Contains(iterationKey);
+
+    public void SetRunSelected(string iterationKey, bool selected)
+    {
+        if (selected) excludedIterationKeys.Remove(iterationKey);
+        else excludedIterationKeys.Add(iterationKey);
+    }
+
+    public void RestoreExcludedIterationKeys(IEnumerable<string>? keys)
+    {
+        excludedIterationKeys.Clear();
+        foreach (var key in keys ?? [])
+            if (!string.IsNullOrWhiteSpace(key)) excludedIterationKeys.Add(key);
+        Notify(nameof(ExcludedIterationKeys));
+    }
 }
 public sealed class ApplicationState : Observable
 {
     private ModelInfo? model;
     private GeometryModel geometry = GeometryModel.Empty, baseline = GeometryModel.Empty, preview = GeometryModel.Empty;
+    private ModelInfo? sessionBaselineModel;
+    private GeometryModel sessionBaseline = GeometryModel.Empty;
     private string connection = "Disconnected";
     private double tributaryWidthB = 1, numberOfStories = 1;
     public ModelInfo? Model { get => model; set { Set(ref model, value); Notify(nameof(Units)); } }
@@ -255,6 +277,9 @@ public sealed class ApplicationState : Observable
     public GeometryModel Geometry { get => geometry; set => Set(ref geometry, value); }
     public GeometryModel Baseline { get => baseline; set => Set(ref baseline, value); }
     public GeometryModel Preview { get => preview; set => Set(ref preview, value); }
+    public ModelInfo? SessionBaselineModel { get => sessionBaselineModel; internal set { if (Set(ref sessionBaselineModel, value)) Notify(nameof(SessionBaselineCaptured)); } }
+    public GeometryModel SessionBaseline { get => sessionBaseline; internal set { if (Set(ref sessionBaseline, value)) Notify(nameof(SessionBaselineCaptured)); } }
+    public bool SessionBaselineCaptured => SessionBaselineModel is not null && SessionBaseline.Points.Count > 0;
     public ObservableCollection<string> LoadPatterns { get; } = [];
     public ObservableCollection<PointLoadConfiguration> PointLoads { get; } = [];
     public ObservableCollection<AppliedPoint> AppliedPoints { get; } = [];

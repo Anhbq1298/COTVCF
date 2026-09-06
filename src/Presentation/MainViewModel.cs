@@ -4,6 +4,7 @@ using COT_VCF.Domain;
 using Microsoft.Win32;
 using System.Collections;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Numerics;
 using System.Windows.Input;
 using MessageBox = System.Windows.MessageBox;
@@ -21,6 +22,11 @@ public sealed class MainViewModel : Observable
     private AppliedPoint? selectedAppliedPoint;
     private string message = "Connect to the running SAP2000 model to begin.";
     private string previewMessage = "Select point groups and capture the baseline.";
+    private readonly StudyCompositionService studyComposer = new();
+    private StudyCompositionResult studyComposition = new([], [], [], [], BigInteger.Zero, false, "", "");
+    private StudyValidationState studyValidationState = StudyValidationState.NotValidated;
+    private bool suppressStudySelectionEvents;
+    private bool studyRefreshPending;
 
     public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); } }
     public bool IsIdle => !IsBusy;
@@ -89,14 +95,16 @@ public sealed class MainViewModel : Observable
         ? "0"
         : PretensionRuns.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
 
-    // ---- Tab 05 iteration study ----
+    // ---- Tab 05 study composer ----
     private BigInteger PretensionRuns => State.Cables.Count == 0 || State.Cables.Any(c => c.CandidateCount <= 0)
         ? BigInteger.Zero
         : PretensionCandidates.TotalCount(State.Cables);
     private BigInteger LoadingRuns => LoadingCandidates.TotalCount(State.LoadDefinitions);
     public int LoadingCandidateCount => (int)BigInteger.Min(LoadingRuns, int.MaxValue);
     public int HeightCandidateCount => State.BaselineCaptured ? State.Truss.CandidateCount : 0;
-    public IReadOnlyList<double> HeightCandidates => State.BaselineCaptured ? State.Truss.CandidateHeights : [];
+    public IReadOnlyList<StudyHeightCandidate> HeightStudyCandidates => studyComposition.HeightCandidates;
+    public IReadOnlyList<StudyPretensionCandidate> PretensionStudyCandidates => studyComposition.PretensionCandidates;
+    public IReadOnlyList<StudyIterationPreview> StudyIterations => studyComposition.Iterations;
 
     public string StudyModeLabel => State.Study.Mode switch
     {
@@ -107,48 +115,48 @@ public sealed class MainViewModel : Observable
     public bool StudyNeedsFixedHeight => State.Study.Mode == IterationStudyMode.FixHeight;
     public bool StudyNeedsFixedPretension => State.Study.Mode == IterationStudyMode.FixPretension;
 
-    public int FixedHeightIndex
+    public string FixedHeightCandidateId
     {
-        get { var n = HeightCandidateCount; return n <= 0 ? -1 : Math.Clamp(State.Study.FixedHeightIndex, 0, n - 1); }
-        set { if (value >= 0) State.Study.FixedHeightIndex = value; }
+        get => State.Study.FixedHeightCandidateId;
+        set => State.Study.FixedHeightCandidateId = value ?? "";
     }
-    // Pretension combinations are enumerated 1-based in the UI; cap the picker at int range.
-    private int PretensionRunCount
+    public string FixedPretensionCandidateId
     {
-        get { var n = PretensionRuns; return n <= 0 ? 0 : n > int.MaxValue ? int.MaxValue : (int)n; }
+        get => State.Study.FixedPretensionCandidateId;
+        set => State.Study.FixedPretensionCandidateId = value ?? "";
     }
-    public double PretensionMaxOrdinal => Math.Max(1, PretensionRunCount);
-    public double FixedPretensionOrdinal
+    public string OutputDirectory
     {
-        get { var n = PretensionRunCount; return n <= 0 ? 1 : Math.Clamp(State.Study.FixedPretensionIndex + 1, 1, n); }
-        set => State.Study.FixedPretensionIndex = Math.Max(0, (int)Math.Round(value) - 1);
+        get => State.Study.OutputDirectory;
+        set => State.Study.OutputDirectory = value;
     }
 
     public string FixedHeightValueText
     {
         get
         {
-            var hs = HeightCandidates; var i = FixedHeightIndex;
-            return i >= 0 && i < hs.Count ? $"H{i + 1} = {hs[i]:F4} {LengthUnit}" : "no height candidates yet";
+            var candidate = HeightStudyCandidates.FirstOrDefault(c => c.Id == FixedHeightCandidateId);
+            return candidate is null
+                ? "No height candidates are available from Tab 3."
+                : $"{candidate.Id}: baseline {State.Truss.BaselineHeight:F3} \u2192 {candidate.Candidate.Height:F3} {LengthUnit} (\u0394H {candidate.Candidate.DeltaH:+0.###;-0.###;0} {LengthUnit})";
         }
     }
     public string FixedPretensionValueText
     {
         get
         {
-            var n = PretensionRunCount;
-            if (n <= 0) return "no pretension candidates yet";
-            int idx = Math.Clamp(State.Study.FixedPretensionIndex, 0, n - 1);
-            var combo = PretensionCandidates.Enumerate(State.Cables.ToArray()).Skip(idx).FirstOrDefault();
-            return combo is null
-                ? $"P{idx + 1}"
-                : $"P{idx + 1}:  " + string.Join(",  ", combo.CableForces.Select(kv => $"{kv.Key}={kv.Value:0.###}"));
+            var candidate = PretensionStudyCandidates.FirstOrDefault(c => c.Id == FixedPretensionCandidateId);
+            if (candidate is null) return "No pretension candidates are available from Tab 4.";
+            var forces = candidate.Candidate.CableForces;
+            return forces.Count <= 3
+                ? $"{candidate.Id}: " + string.Join(",  ", forces.Select(kv => $"{kv.Key}={kv.Value:0.###} kN"))
+                : $"{candidate.Id}: {forces.Count} cables, target range {forces.Values.Min():0.###}-{forces.Values.Max():0.###} kN";
         }
     }
 
-    public string StudyLoadingCell => LoadingCandidateCount.ToString();
-    public string StudyHeightCell => StudyNeedsFixedHeight ? $"FIXED · H{FixedHeightIndex + 1}" : HeightCandidateCount.ToString();
-    public string StudyPretensionCell => StudyNeedsFixedPretension ? $"FIXED · P{State.Study.FixedPretensionIndex + 1}" : PretensionCandidateCount;
+    public string StudyLoadingCell => $"{LoadingCandidateCount:N0} used";
+    public string StudyHeightCell => StudyNeedsFixedHeight ? $"1 used - fixed {FixedHeightCandidateId}" : $"{HeightCandidateCount:N0} used";
+    public string StudyPretensionCell => StudyNeedsFixedPretension ? $"1 used - fixed {FixedPretensionCandidateId}" : $"{PretensionRuns:N0} used";
     public string StudySpaceFormula
     {
         get
@@ -160,6 +168,29 @@ public sealed class MainViewModel : Observable
     }
     public string StudyTotalRuns => StudyPlan.TotalRuns(State.Study.Mode, LoadingCandidateCount, HeightCandidateCount, PretensionRuns)
         .ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+    public string BaselineModelName => State.SessionBaselineModel?.Name ?? "Baseline unavailable";
+    public string BaselineModelPath => State.SessionBaselineModel?.Path ?? "";
+    public int GeneratedRunCount => StudyIterations.Count;
+    public int SelectedRunCount => StudyIterations.Count(i => i.RunIterate);
+    public string StudySelectionSummary => $"{SelectedRunCount:N0} / {GeneratedRunCount:N0} selected";
+    public bool HasStudyIterations => StudyIterations.Count > 0;
+    public bool ShowStudyEmptyState => !HasStudyIterations;
+    public string StudyPreviewEmptyText => studyComposition.PreviewLimitExceeded
+        ? $"Study space is too large to preview. Reduce it below {StudyCompositionService.MaxPreviewRows:N0} iterations."
+        : "No study iterations generated.";
+    public StudyValidationState StudyValidationState => studyValidationState;
+    public bool HasValidationIssues => Issues.Count > 0;
+    public bool ShowValidationStatus => Issues.Count == 0;
+    public string ValidationStatusText => studyValidationState switch
+    {
+        StudyValidationState.Valid => "No validation issues.",
+        StudyValidationState.ValidWithWarnings => "Study is valid with warnings.",
+        StudyValidationState.Invalid => "Study validation failed.",
+        _ => "Not validated yet."
+    };
+    public string RunStudyLabel => $"Run Study - {SelectedRunCount:N0} Iterations";
+    public bool CanRunStudy => false;
+    public string RunStudyToolTip => "SAP iteration execution is reserved for the next phase.";
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
     public string StatusLine => State.IsSapConnected
         ? $"{ModelName}  ·  {State.Units}  ·  {(State.Model?.IsLocked == true ? "Locked" : "Unlocked")}"
@@ -198,6 +229,9 @@ public sealed class MainViewModel : Observable
     public Command RemoveLoads { get; }
     public Command RemoveCables { get; }
     public Command Validate { get; }
+    public Command BrowseOutputFolder { get; }
+    public Command SelectAllStudyRuns { get; }
+    public Command ClearAllStudyRuns { get; }
     public Command SaveTabConfig { get; }
     public Command SaveAllConfig { get; }
     public Command LoadConfig { get; }
@@ -239,15 +273,28 @@ public sealed class MainViewModel : Observable
         Validate = new(_ =>
         {
             if (CommitEditors?.Invoke() == false) return;
+            RegenerateStudyPreview();
             Issues.Clear();
-            foreach (var issue in new ConfigurationValidator().Validate(State)) Issues.Add(issue);
-            Message = Issues.Count == 0 ? "Configuration is valid. Iteration is planned for the next phase." : $"{Issues.Count} configuration issues need review.";
+            foreach (var issue in new StudyValidationService().Validate(State, studyComposition)) Issues.Add(issue);
+            studyValidationState = Issues.Any(i => i.Severity == ValidationSeverity.Error)
+                ? StudyValidationState.Invalid
+                : Issues.Any(i => i.Severity == ValidationSeverity.Warning)
+                    ? StudyValidationState.ValidWithWarnings
+                    : StudyValidationState.Valid;
+            Message = studyValidationState == StudyValidationState.Valid
+                ? $"Study is valid - {SelectedRunCount:N0} iterations selected. Execution remains a next-phase task."
+                : $"{Issues.Count} study validation issue{(Issues.Count == 1 ? "" : "s")} need review.";
+            NotifyStudyPresentation();
         }, () => !IsBusy);
+        BrowseOutputFolder = new(_ => BrowseForOutputFolder(), () => !IsBusy);
+        SelectAllStudyRuns = new(_ => SetAllStudyRuns(true), () => !IsBusy && StudyIterations.Count > 0);
+        ClearAllStudyRuns = new(_ => SetAllStudyRuns(false), () => !IsBusy && StudyIterations.Count > 0);
         SaveTabConfig = new(p => SaveTab(p switch
         {
             "Loading" => ConfigTabs.Loading,
             "Truss" => ConfigTabs.Truss,
             "Cable" => ConfigTabs.Cable,
+            "Study" => ConfigTabs.Study,
             _ => ConfigTabs.All,
         }), () => CanUseConfig);
         SaveAllConfig = new(_ => SaveAll(), () => CanUseConfig);
@@ -258,9 +305,12 @@ public sealed class MainViewModel : Observable
         State.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(ApplicationState.TributaryWidthB) or nameof(ApplicationState.NumberOfStories)) Dirty(ConfigTabs.Loading);
+            if (e.PropertyName is nameof(ApplicationState.Model) or nameof(ApplicationState.Connection) or
+                nameof(ApplicationState.SessionBaselineModel) or nameof(ApplicationState.SessionBaseline) or
+                nameof(ApplicationState.TributaryWidthB) or nameof(ApplicationState.NumberOfStories)) ScheduleStudyRegeneration();
             Update();
         };
-        State.Truss.PropertyChanged += (_, _) =>
+        State.Truss.PropertyChanged += (_, e) =>
         {
             Dirty(ConfigTabs.Truss);
             if (State.BaselineCaptured)
@@ -268,6 +318,7 @@ public sealed class MainViewModel : Observable
                 try { workflow.UpdatePreview(); PreviewMessage = "Preview only - Apply geometry commits these coordinates to SAP2000."; }
                 catch (Exception ex) { PreviewMessage = ex.Message; }
             }
+            if (e.PropertyName != nameof(TrussHeightConfiguration.CurrentHeight)) ScheduleStudyRegeneration();
             Update();
         };
         State.PointLoads.CollectionChanged += (_, e) => { if (e.NewItems is not null) foreach (PointLoadConfiguration row in e.NewItems) row.PropertyChanged += (_, _) => Update(); Update(); };
@@ -275,6 +326,7 @@ public sealed class MainViewModel : Observable
         {
             if (e.NewItems is not null) foreach (AppliedPoint point in e.NewItems) point.PropertyChanged += (_, _) => Update();
             Dirty(ConfigTabs.Loading);
+            ScheduleStudyRegeneration();
             Update();
         };
         foreach (var row in State.LoadDefinitions) Subscribe(row);
@@ -282,10 +334,26 @@ public sealed class MainViewModel : Observable
         {
             if (e.NewItems is not null) foreach (LoadDefinition row in e.NewItems) Subscribe(row);
             Dirty(ConfigTabs.Loading);
+            ScheduleStudyRegeneration();
             Update();
         };
-        State.Cables.CollectionChanged += (_, e) => { if (e.NewItems is not null) foreach (CablePretensionConfig row in e.NewItems) row.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Cable); Update(); }; Dirty(ConfigTabs.Cable); Update(); };
-        State.Study.PropertyChanged += (_, _) => Update();
+        State.Cables.CollectionChanged += (_, e) =>
+        {
+            if (e.NewItems is not null)
+                foreach (CablePretensionConfig row in e.NewItems)
+                    row.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update(); };
+            Dirty(ConfigTabs.Cable);
+            ScheduleStudyRegeneration();
+            Update();
+        };
+        State.Study.PropertyChanged += (_, e) =>
+        {
+            Dirty(ConfigTabs.Study);
+            if (e.PropertyName != nameof(IterationStudyConfig.ExcludedIterationKeys)) ScheduleStudyRegeneration();
+            else InvalidateStudyValidation();
+            Update();
+        };
+        RegenerateStudyPreview();
     }
 
     private async Task ConnectAndRefreshAsync()
@@ -295,6 +363,11 @@ public sealed class MainViewModel : Observable
         {
             await workflow.ConnectAsync();
             await workflow.RefreshAsync();
+            if (string.IsNullOrWhiteSpace(State.Study.OutputDirectory) && State.SessionBaselineModel is { Path.Length: > 0 } baseline)
+            {
+                var modelDirectory = System.IO.Path.GetDirectoryName(baseline.Path);
+                if (!string.IsNullOrWhiteSpace(modelDirectory)) State.Study.OutputDirectory = System.IO.Path.Combine(modelDirectory, "Study", "Models");
+            }
         }
         catch
         {
@@ -303,7 +376,93 @@ public sealed class MainViewModel : Observable
         }
     }
 
-    private void Subscribe(LoadDefinition row) => row.PropertyChanged += (_, _) => { if (!applyingProject) config.Session.MarkDirty(ConfigTabs.Loading); Update(); };
+    private void Subscribe(LoadDefinition row) => row.PropertyChanged += (_, _) =>
+    {
+        if (!applyingProject) config.Session.MarkDirty(ConfigTabs.Loading);
+        ScheduleStudyRegeneration();
+        Update();
+    };
+
+    private void BrowseForOutputFolder()
+    {
+        var dialog = new OpenFolderDialog { Title = "Select Study Output Folder", Multiselect = false };
+        if (Directory.Exists(State.Study.OutputDirectory)) dialog.InitialDirectory = State.Study.OutputDirectory;
+        if (dialog.ShowDialog() == true) State.Study.OutputDirectory = dialog.FolderName;
+    }
+
+    private void ScheduleStudyRegeneration()
+    {
+        if (studyRefreshPending) return;
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            RegenerateStudyPreview();
+            return;
+        }
+        studyRefreshPending = true;
+        dispatcher.BeginInvoke(() =>
+        {
+            studyRefreshPending = false;
+            RegenerateStudyPreview();
+        }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void RegenerateStudyPreview()
+    {
+        studyRefreshPending = false;
+        studyComposition = studyComposer.Compose(State);
+        foreach (var row in StudyIterations) row.PropertyChanged += StudyIterationPropertyChanged;
+        InvalidateStudyValidation();
+        NotifyStudyPresentation();
+    }
+
+    private void StudyIterationPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(StudyIterationPreview.RunIterate) || sender is not StudyIterationPreview row || suppressStudySelectionEvents) return;
+        State.Study.SetRunSelected(row.IterationKey, row.RunIterate);
+        config.Session.MarkDirty(ConfigTabs.Study);
+        InvalidateStudyValidation();
+        NotifyStudyPresentation();
+    }
+
+    private void SetAllStudyRuns(bool selected)
+    {
+        suppressStudySelectionEvents = true;
+        try
+        {
+            foreach (var row in StudyIterations)
+            {
+                row.RunIterate = selected;
+                State.Study.SetRunSelected(row.IterationKey, selected);
+            }
+        }
+        finally { suppressStudySelectionEvents = false; }
+        config.Session.MarkDirty(ConfigTabs.Study);
+        InvalidateStudyValidation();
+        NotifyStudyPresentation();
+    }
+
+    private void InvalidateStudyValidation()
+    {
+        studyValidationState = StudyValidationState.NotValidated;
+        Issues.Clear();
+    }
+
+    private void NotifyStudyPresentation()
+    {
+        foreach (var name in new[]
+        {
+            nameof(HeightStudyCandidates), nameof(PretensionStudyCandidates), nameof(StudyIterations),
+            nameof(FixedHeightCandidateId), nameof(FixedPretensionCandidateId), nameof(OutputDirectory),
+            nameof(FixedHeightValueText), nameof(FixedPretensionValueText), nameof(StudyLoadingCell),
+            nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudySpaceFormula), nameof(StudyTotalRuns),
+            nameof(BaselineModelName), nameof(BaselineModelPath), nameof(GeneratedRunCount), nameof(SelectedRunCount),
+            nameof(StudySelectionSummary), nameof(HasStudyIterations), nameof(ShowStudyEmptyState), nameof(StudyPreviewEmptyText),
+            nameof(StudyValidationState), nameof(HasValidationIssues), nameof(ShowValidationStatus), nameof(ValidationStatusText),
+            nameof(RunStudyLabel), nameof(CanRunStudy), nameof(RunStudyToolTip)
+        }) Notify(name);
+        CommandManager.InvalidateRequerySuggested();
+    }
 
     private void SelectLoadLocations()
     {
@@ -524,6 +683,7 @@ public sealed class MainViewModel : Observable
             applyingProject = true;
             try { config.Apply(project, check); }
             finally { applyingProject = false; }
+            RegenerateStudyPreview();
             config.SetActiveProject(dialog.FileName, project);
             config.Session.ClearDirty();
             SelectedAppliedPoint = null;
@@ -533,6 +693,7 @@ public sealed class MainViewModel : Observable
             if (check.Loading.Present) present.Add("Loading");
             if (check.Truss.Present) present.Add("Truss Height");
             if (check.Cable.Present) present.Add("Cable Force");
+            if (check.Study.Present) present.Add("Iteration Study");
 
             if (check.ModelAppearsRenamed)
             {
@@ -564,6 +725,7 @@ public sealed class MainViewModel : Observable
         Add("Tab 02 – Loading", r.Loading);
         Add("Tab 03 – Truss Height", r.Truss);
         Add("Tab 04 – Cable Force", r.Cable);
+        Add("Tab 05 - Iteration Study", r.Study);
         lines.Add("No configuration has been applied.");
         return string.Join("\n\n", lines);
     }
@@ -576,6 +738,7 @@ public sealed class MainViewModel : Observable
         if (tabs.HasFlag(ConfigTabs.Loading)) parts.Add("Loading");
         if (tabs.HasFlag(ConfigTabs.Truss)) parts.Add("Truss Height");
         if (tabs.HasFlag(ConfigTabs.Cable)) parts.Add("Cable Force");
+        if (tabs.HasFlag(ConfigTabs.Study)) parts.Add("Iteration Study");
         return string.Join(" + ", parts);
     }
 
@@ -622,12 +785,9 @@ public sealed class MainViewModel : Observable
             nameof(IterationSummary), nameof(SapStatus), nameof(StatusLine), nameof(AppliedPointsTitle), nameof(LoadStatus),
             nameof(TrussStatus), nameof(CableStatus), nameof(CableCount), nameof(VariableCableCount), nameof(PretensionCandidateCount),
             nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName),
-            nameof(LoadingCandidateCount), nameof(HeightCandidateCount), nameof(HeightCandidates),
-            nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
-            nameof(FixedHeightIndex), nameof(FixedPretensionOrdinal), nameof(PretensionMaxOrdinal),
-            nameof(FixedHeightValueText), nameof(FixedPretensionValueText),
-            nameof(StudyLoadingCell), nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudySpaceFormula), nameof(StudyTotalRuns)
+            nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
+            nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension)
         }) Notify(name);
-        CommandManager.InvalidateRequerySuggested();
+        NotifyStudyPresentation();
     }
 }

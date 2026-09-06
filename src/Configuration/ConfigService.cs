@@ -40,6 +40,7 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
             ConfigTabs.Loading => "Tab02_Loading",
             ConfigTabs.Truss => "Tab03_TrussHeight",
             ConfigTabs.Cable => "Tab04_CableForce",
+            ConfigTabs.Study => "Tab05_Study",
             _ => "Config",
         };
         return $"{stem}_COTVCF_{suffix}.json";
@@ -78,6 +79,7 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         if (uiTabs.HasFlag(ConfigTabs.Loading)) project.Tab02Loading = extractor.ExtractLoadingSection(state);
         if (uiTabs.HasFlag(ConfigTabs.Truss)) project.Tab03TrussHeight = extractor.ExtractTrussSection(state);
         if (uiTabs.HasFlag(ConfigTabs.Cable)) project.Tab04CableForce = extractor.ExtractCableSection(state);
+        if (uiTabs.HasFlag(ConfigTabs.Study)) project.Tab05IterationStudy = extractor.ExtractStudySection(state);
 
         var effective = ConfiguredIn(project);
         if (effective == ConfigTabs.None) return new(SaveResult.Cancelled, "Nothing configured to save yet.");
@@ -110,10 +112,12 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         if (p.Tab02Loading is { AppliedPoints.Count: > 0 } or { LoadDefinitions.Count: > 0 }) t |= ConfigTabs.Loading;
         if (p.Tab03TrussHeight is { } h && ((h.TopPoints?.Count ?? 0) > 0 || (h.MiddlePoints?.Count ?? 0) > 0 || (h.BottomPoints?.Count ?? 0) > 0)) t |= ConfigTabs.Truss;
         if (p.Tab04CableForce is { Cables.Count: > 0 }) t |= ConfigTabs.Cable;
+        if (p.Tab05IterationStudy is not null) t |= ConfigTabs.Study;
         // Drop empty sections so the file only carries configured tabs.
         if (!t.HasFlag(ConfigTabs.Loading)) p.Tab02Loading = null;
         if (!t.HasFlag(ConfigTabs.Truss)) p.Tab03TrussHeight = null;
         if (!t.HasFlag(ConfigTabs.Cable)) p.Tab04CableForce = null;
+        if (!t.HasFlag(ConfigTabs.Study)) p.Tab05IterationStudy = null;
         return t;
     }
 
@@ -125,6 +129,7 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         Add("Tab 02 – Loading", r.Loading);
         Add("Tab 03 – Truss Height", r.Truss);
         Add("Tab 04 – Cable Force", r.Cable);
+        Add("Tab 05 - Iteration Study", r.Study);
         return "Unable to save the configuration:\n\n" + string.Join("\n\n", lines) + "\n\nNo changes have been written to the project file.";
     }
 

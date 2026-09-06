@@ -4,7 +4,7 @@ using COT_VCF.Domain;
 namespace COT_VCF.Configuration;
 
 /// <summary>
-/// Writes a validated <see cref="CotVcfConfigDto"/> back into <see cref="ApplicationState"/> (Tabs 02–04),
+/// Writes a validated <see cref="CotVcfConfigDto"/> back into <see cref="ApplicationState"/> (Tabs 02-05),
 /// then lets the existing reactive machinery regenerate candidates and refresh the preview. Callers must
 /// only invoke this after schema + model validation have both passed. Nothing here writes to SAP2000.
 /// </summary>
@@ -16,6 +16,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         if (check.Loading.Ok && cfg.Tab02Loading is { } l) ApplyLoading(l);
         if (check.Truss.Ok && cfg.Tab03TrussHeight is { } t) ApplyTruss(t);
         if (check.Cable.Ok && cfg.Tab04CableForce is { } c) ApplyCables(c);
+        if (check.Study.Ok && cfg.Tab05IterationStudy is { } s) ApplyStudy(s);
     }
 
     private void ApplyLoading(LoadingConfigDto d)
@@ -90,5 +91,14 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
                 MaxForce = row.MaxForce,
                 StepForce = row.StepForce,
             });
+    }
+
+    private void ApplyStudy(IterationStudyConfigDto d)
+    {
+        state.Study.Mode = d.StudyMode;
+        state.Study.FixedHeightCandidateId = d.FixedHeightCandidateId;
+        state.Study.FixedPretensionCandidateId = d.FixedPretensionCandidateId;
+        state.Study.OutputDirectory = d.OutputDirectory;
+        state.Study.RestoreExcludedIterationKeys(d.ExcludedIterationKeys);
     }
 }

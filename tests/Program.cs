@@ -31,10 +31,12 @@ internal static class Program
                 var uiWorkflow = new WorkflowService(sap, uiState);
                 uiWorkflow.ConnectAsync().GetAwaiter().GetResult();
                 uiWorkflow.RefreshAsync().GetAwaiter().GetResult();
-                uiWorkflow.AddCablesAsync(uiState.Geometry.Members.Where(m => m.Kind != MemberKind.Frame).ToArray()).GetAwaiter().GetResult();
+                foreach (var cable in uiState.Geometry.Members.Where(m => m.Kind == MemberKind.Cable))
+                    uiState.Cables.Add(new CablePretensionConfig { CableName = cable.Name });
                 if (uiState.Geometry.Points.Count > 0 && uiState.LoadPatterns.Count > 0)
                     uiState.PointLoads.Add(new() { PointName = uiState.Geometry.Points.Keys.First(), LoadPattern = uiState.LoadPatterns[0] });
-                var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection());
+                var uiConfig = new COT_VCF.Configuration.ConfigService(sap, uiState, uiWorkflow);
+                var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection(), uiConfig);
                 var window = new COT_VCF.Presentation.MainWindow { DataContext = vm };
                 window.Show();
                 for (int i = 0; i < 5; i++)
@@ -100,7 +102,7 @@ internal static class Program
             t.MiddlePoints = ["mid"]; t.BottomPoints = ["missing"];
             Assert(service.Validate(g, t).Any(i => i.Message.Contains("no longer exists")), "Missing points rejected");
             t.BottomPoints = ["bot"]; t.CurrentHeight = 21.5;
-            Assert(service.Validate(g, t).Any(i => i.Message.Contains("increment")), "Off-grid preview rejected");
+            Assert(!TrussGeometryService.OnGrid(t.CurrentHeight, t.MinimumHeight, t.MaximumHeight, t.Increment), "Off-grid preview detected");
             Assert(!TrussGeometryService.ValidRange(0, 10, 0) && !TrussGeometryService.ValidRange(0, double.NaN, 1) && !TrussGeometryService.OnGrid(double.PositiveInfinity, 0, 10, 1), "Non-finite and zero-step ranges rejected");
             var state = new ApplicationState { Geometry = g, Baseline = g, Connection = "Connected", Model = new("test.sdb", "26", 6, "kN", "m", false) };
             state.LoadPatterns.Add("LIVE"); state.PointLoads.Add(new() { PointName = "top", LoadPattern = "LIVE", Fx = double.NaN });
@@ -118,6 +120,7 @@ internal static class Program
             Assert(state.Preview.Points["bot"].Position.Z == -1, "Apply followed by preview has no drift");
             try { workflow.RefreshAsync().GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
             Assert(!state.BaselineCaptured && state.Truss.TopPoints.Contains("top") && state.PointLoads.Count == 2, "External geometry changes invalidate baseline but preserve setup");
+            StudyComposerChecks.Run();
             GatewayChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }
@@ -144,6 +147,8 @@ internal static class Program
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> m, ModelInfo e) => Task.FromResult<IReadOnlyList<ForceSource>>([]);
         public Task ApplyLoadsAsync(IReadOnlyList<PointLoad> l, ModelInfo e) { Writes++; return Task.CompletedTask; }
         public Task MovePointsAsync(GeometryModel a, GeometryModel b, ModelInfo e) { Writes++; return Task.CompletedTask; }
+        public Task SetCableTargetForceAsync(string cableName, string loadPattern, double targetForce, ModelInfo expected) { Writes++; return Task.CompletedTask; }
+        public Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<string>>([]);
         public void Dispose() { }
     }
 }

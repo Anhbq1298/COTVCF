@@ -9,7 +9,7 @@ public enum CableForceMode { Fixed, Range }
 
 /// <summary>Which tab sections a save/load touches. A file may carry any subset.</summary>
 [Flags]
-public enum ConfigTabs { None = 0, Loading = 1, Truss = 2, Cable = 4, All = Loading | Truss | Cable }
+public enum ConfigTabs { None = 0, Loading = 1, Truss = 2, Cable = 4, Study = 8, All = Loading | Truss | Cable | Study }
 
 public sealed class CotVcfConfigDto
 {
@@ -20,11 +20,13 @@ public sealed class CotVcfConfigDto
     public LoadingConfigDto? Tab02Loading { get; set; }
     public TrussHeightConfigDto? Tab03TrussHeight { get; set; }
     public CableForceConfigDto? Tab04CableForce { get; set; }
+    public IterationStudyConfigDto? Tab05IterationStudy { get; set; }
 
     public ConfigTabs PresentTabs =>
         (Tab02Loading is not null ? ConfigTabs.Loading : 0)
         | (Tab03TrussHeight is not null ? ConfigTabs.Truss : 0)
-        | (Tab04CableForce is not null ? ConfigTabs.Cable : 0);
+        | (Tab04CableForce is not null ? ConfigTabs.Cable : 0)
+        | (Tab05IterationStudy is not null ? ConfigTabs.Study : 0);
 }
 
 public sealed class UnitsDto
@@ -118,4 +120,13 @@ public sealed class CableForceRowDto
     public double? MinForce { get; set; }
     public double? MaxForce { get; set; }
     public double? StepForce { get; set; }
+}
+
+public sealed class IterationStudyConfigDto
+{
+    public IterationStudyMode StudyMode { get; set; } = IterationStudyMode.FixPretension;
+    public string FixedHeightCandidateId { get; set; } = "H01";
+    public string FixedPretensionCandidateId { get; set; } = "P01";
+    public string OutputDirectory { get; set; } = "";
+    public List<string> ExcludedIterationKeys { get; set; } = new();
 }

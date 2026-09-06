@@ -35,7 +35,7 @@
        <TextBlock Text="Save All"/>
       </StackPanel>
      </Button>
-     <Button Command="{Binding LoadConfig}" ToolTip="Open a COT VCF project file and restore Tabs 02–04" Margin="0">
+     <Button Command="{Binding LoadConfig}" ToolTip="Open a COT VCF project file and restore Tabs 02-05" Margin="0">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M1.5,4 L6,4 L8,6 L14.5,6 L14.5,13 L1.5,13 Z"/></Viewbox>
        <TextBlock Text="Load Config"/>
@@ -323,123 +323,162 @@
     <TabItem.Header>
      <StackPanel Width="124">
       <TextBlock Text="05  ITERATION" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
-      <TextBlock Text="Study setup" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
+      <TextBlock Text="Study composer" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
     <Grid>
      <Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
      <Grid Grid.Row="0">
-      <Grid.ColumnDefinitions><ColumnDefinition Width="1.1*" MinWidth="320"/><ColumnDefinition Width="8"/><ColumnDefinition Width="1.4*"/></Grid.ColumnDefinitions>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="330" MinWidth="300"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*" MinWidth="520"/></Grid.ColumnDefinitions>
 
-      <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+      <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
        <StackPanel IsEnabled="{Binding IsIdle}">
-
         <TextBlock Text="STUDY MODE" Style="{StaticResource Subheading}"/>
-        <RadioButton GroupName="StudyMode" Margin="0,0,0,8" IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=FixPretension}">
-         <StackPanel>
+        <RadioButton GroupName="StudyMode" Margin="0,0,0,7" HorizontalContentAlignment="Stretch"
+                     IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=FixPretension}">
+         <Grid Width="282">
+          <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
           <TextBlock Text="Fix Pretension" FontWeight="SemiBold"/>
-          <StackPanel Orientation="Horizontal">
-           <TextBlock Text="Vary Loading and Truss Height" FontSize="11" Foreground="{StaticResource Muted}"/>
-           <TextBlock Text="  -  " FontSize="11" Foreground="{StaticResource Muted}"/>
-           <c:LatexTextBlock Formula="N_L \times N_H" Style="{StaticResource Formula}" FontSize="11"/>
-          </StackPanel>
-         </StackPanel>
+          <TextBlock Grid.Row="1" Text="Vary Loading and Truss Height" FontSize="11" Foreground="{StaticResource Muted}"/>
+          <c:LatexTextBlock Grid.Row="1" Formula="N_L \times N_H" Style="{StaticResource Formula}" FontSize="11" HorizontalAlignment="Right"/>
+         </Grid>
         </RadioButton>
-        <RadioButton GroupName="StudyMode" Margin="0,0,0,8" IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=FixHeight}">
-         <StackPanel>
+        <RadioButton GroupName="StudyMode" Margin="0,0,0,7" HorizontalContentAlignment="Stretch"
+                     IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=FixHeight}">
+         <Grid Width="282">
+          <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
           <TextBlock Text="Fix Height" FontWeight="SemiBold"/>
-          <StackPanel Orientation="Horizontal">
-           <TextBlock Text="Vary Loading and Cable Pretension" FontSize="11" Foreground="{StaticResource Muted}"/>
-           <TextBlock Text="  -  " FontSize="11" Foreground="{StaticResource Muted}"/>
-           <c:LatexTextBlock Formula="N_L \times N_P" Style="{StaticResource Formula}" FontSize="11"/>
-          </StackPanel>
-         </StackPanel>
+          <TextBlock Grid.Row="1" Text="Vary Loading and Cable Pretension" FontSize="11" Foreground="{StaticResource Muted}"/>
+          <c:LatexTextBlock Grid.Row="1" Formula="N_L \times N_P" Style="{StaticResource Formula}" FontSize="11" HorizontalAlignment="Right"/>
+         </Grid>
         </RadioButton>
-        <RadioButton GroupName="StudyMode" Margin="0,0,0,10" IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=Combined}">
-         <StackPanel>
+        <RadioButton GroupName="StudyMode" Margin="0,0,0,12" HorizontalContentAlignment="Stretch"
+                     IsChecked="{Binding State.Study.Mode, Converter={StaticResource EnumMatch}, ConverterParameter=Combined}">
+         <Grid Width="282">
+          <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
           <TextBlock Text="Combined" FontWeight="SemiBold"/>
-          <StackPanel Orientation="Horizontal">
-           <TextBlock Text="Vary Loading, Truss Height and Pretension" FontSize="11" Foreground="{StaticResource Muted}"/>
-           <TextBlock Text="  -  " FontSize="11" Foreground="{StaticResource Muted}"/>
-           <c:LatexTextBlock Formula="N_L \times N_H \times N_P" Style="{StaticResource Formula}" FontSize="11"/>
-          </StackPanel>
-         </StackPanel>
+          <TextBlock Grid.Row="1" Text="Vary all candidate dimensions" FontSize="11" Foreground="{StaticResource Muted}"/>
+          <c:LatexTextBlock Grid.Row="1" Formula="N_L \times N_H \times N_P" Style="{StaticResource Formula}" FontSize="11" HorizontalAlignment="Right"/>
+         </Grid>
         </RadioButton>
 
-        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10" Margin="0,0,0,10"
-               Visibility="{Binding StudyNeedsFixedPretension, Converter={StaticResource BoolVisibility}}">
+        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10" Margin="0,0,0,12"
+                Visibility="{Binding StudyNeedsFixedPretension, Converter={StaticResource BoolVisibility}}">
          <StackPanel>
-          <TextBlock Text="FIXED PRETENSION" Style="{StaticResource Subheading}"/>
-          <StackPanel Orientation="Horizontal">
-           <TextBlock Text="Combination #" VerticalAlignment="Top" Margin="0,5,8,0"/>
-           <c:EngineeringInput Width="96" Label="" AutomationProperties.Name="Fixed pretension combination number"
-                              Value="{Binding FixedPretensionOrdinal}" Minimum="1" Maximum="{Binding PretensionMaxOrdinal}" Increment="1" WholeNumbersOnly="True" Unit="" Margin="0"/>
-          </StackPanel>
-          <TextBlock Text="{Binding FixedPretensionValueText}" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+          <TextBlock Text="FIXED CABLE PRETENSION" Style="{StaticResource Subheading}"/>
+          <ComboBox ItemsSource="{Binding PretensionStudyCandidates}" DisplayMemberPath="DisplayName" SelectedValuePath="Id"
+                    SelectedValue="{Binding FixedPretensionCandidateId, Mode=TwoWay}"/>
+          <TextBlock Text="{Binding FixedPretensionValueText}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,5,0,0"/>
          </StackPanel>
         </Border>
 
-        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10" Margin="0,0,0,10"
-               Visibility="{Binding StudyNeedsFixedHeight, Converter={StaticResource BoolVisibility}}">
+        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10" Margin="0,0,0,12"
+                Visibility="{Binding StudyNeedsFixedHeight, Converter={StaticResource BoolVisibility}}">
          <StackPanel>
-          <TextBlock Text="FIXED HEIGHT" Style="{StaticResource Subheading}"/>
-          <StackPanel Orientation="Horizontal">
-           <TextBlock Text="Height candidate" VerticalAlignment="Center" Margin="0,0,8,0"/>
-           <ComboBox Width="140" ItemsSource="{Binding HeightCandidates}" SelectedIndex="{Binding FixedHeightIndex, Mode=TwoWay}" ItemStringFormat="F4"/>
-          </StackPanel>
-          <TextBlock Text="{Binding FixedHeightValueText}" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,4,0,0"/>
+          <TextBlock Text="FIXED TRUSS HEIGHT" Style="{StaticResource Subheading}"/>
+          <ComboBox ItemsSource="{Binding HeightStudyCandidates}" DisplayMemberPath="DisplayName" SelectedValuePath="Id"
+                    SelectedValue="{Binding FixedHeightCandidateId, Mode=TwoWay}"/>
+          <TextBlock Text="{Binding FixedHeightValueText}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,5,0,0"/>
          </StackPanel>
         </Border>
 
-        <TextBlock Text="CANDIDATE SPACE" Style="{StaticResource Subheading}"/>
-        <Grid Margin="0,0,0,12">
-         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-         <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-         <StackPanel Orientation="Horizontal"><TextBlock Text="Loading" Foreground="{StaticResource Muted}"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_L" Style="{StaticResource Formula}"/></StackPanel>
-         <TextBlock Grid.Column="1" Text="{Binding LoadingCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
-         <StackPanel Grid.Row="1" Orientation="Horizontal"><TextBlock Text="Truss Height" Foreground="{StaticResource Muted}"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_H" Style="{StaticResource Formula}"/></StackPanel>
-         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding HeightCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
-         <StackPanel Grid.Row="2" Orientation="Horizontal"><TextBlock Text="Pretension" Foreground="{StaticResource Muted}"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_P" Style="{StaticResource Formula}"/></StackPanel>
-         <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PretensionCandidateCount}" FontFamily="Consolas" FontWeight="SemiBold"/>
+        <TextBlock Text="CANDIDATE SUMMARY" Style="{StaticResource Subheading}"/>
+        <Grid Margin="0,0,0,10">
+         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="76"/><ColumnDefinition Width="112"/></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+         <TextBlock Grid.Column="1" Text="Available" Foreground="{StaticResource Muted}" FontSize="10"/>
+         <TextBlock Grid.Column="2" Text="Current Study" Foreground="{StaticResource Muted}" FontSize="10"/>
+         <StackPanel Grid.Row="1" Orientation="Horizontal"><TextBlock Text="Loading"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_L" Style="{StaticResource Formula}"/></StackPanel>
+         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding LoadingCandidateCount}" FontFamily="Consolas"/>
+         <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding StudyLoadingCell}" FontFamily="Consolas"/>
+         <StackPanel Grid.Row="2" Orientation="Horizontal"><TextBlock Text="Height"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_H" Style="{StaticResource Formula}"/></StackPanel>
+         <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding HeightCandidateCount}" FontFamily="Consolas"/>
+         <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding StudyHeightCell}" FontFamily="Consolas" TextTrimming="CharacterEllipsis" ToolTip="{Binding StudyHeightCell}"/>
+         <StackPanel Grid.Row="3" Orientation="Horizontal"><TextBlock Text="Pretension"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_P" Style="{StaticResource Formula}"/></StackPanel>
+         <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PretensionCandidateCount}" FontFamily="Consolas"/>
+         <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding StudyPretensionCell}" FontFamily="Consolas" TextTrimming="CharacterEllipsis" ToolTip="{Binding StudyPretensionCell}"/>
         </Grid>
 
-        <TextBlock Text="CURRENT STUDY" Style="{StaticResource Subheading}"/>
-        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10">
-         <Grid>
-          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-          <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition Height="8"/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-          <TextBlock Text="Mode" Foreground="{StaticResource Muted}"/><TextBlock Grid.Column="1" Text="{Binding StudyModeLabel}" FontWeight="SemiBold"/>
-          <TextBlock Grid.Row="1" Text="Loading" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding StudyLoadingCell}" FontFamily="Consolas"/>
-          <TextBlock Grid.Row="2" Text="Height" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding StudyHeightCell}" FontFamily="Consolas"/>
-          <TextBlock Grid.Row="3" Text="Pretension" Foreground="{StaticResource Muted}"/><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding StudyPretensionCell}" FontFamily="Consolas"/>
-          <TextBlock Grid.Row="5" Text="Study Space" Foreground="{StaticResource Muted}"/>
-          <c:LatexTextBlock Grid.Row="5" Grid.Column="1" Formula="{Binding StudySpaceFormula}" Style="{StaticResource Formula}" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
-          <TextBlock Grid.Row="6" Text="Total Runs" FontWeight="SemiBold"/><TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding StudyTotalRuns}" FontWeight="Bold" FontSize="14" Foreground="{StaticResource Accent}" FontFamily="Consolas"/>
-         </Grid>
+        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Raised}" Padding="10">
+         <StackPanel>
+          <TextBlock Text="STUDY SPACE" Style="{StaticResource Subheading}"/>
+          <c:LatexTextBlock Formula="{Binding StudySpaceFormula}" Style="{StaticResource Formula}" Foreground="{StaticResource Accent}" FontSize="13" FontWeight="SemiBold"/>
+          <TextBlock Text="{Binding StudyModeLabel}" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
+         </StackPanel>
         </Border>
-
        </StackPanel>
       </ScrollViewer>
 
       <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
 
-      <DockPanel Grid.Column="2">
-       <TextBlock DockPanel.Dock="Top" Text="Validation issues" Style="{StaticResource Subheading}"/>
-       <DataGrid ItemsSource="{Binding Issues}" IsReadOnly="True" CanUserDeleteRows="False">
-        <DataGrid.Columns>
-         <DataGridTextColumn Header="Section" Binding="{Binding Section}" Width="130"/>
-         <DataGridTextColumn Header="Review required" Binding="{Binding Message}" Width="*">
-          <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="ToolTip" Value="{Binding Message}"/></Style></DataGridTextColumn.ElementStyle>
-         </DataGridTextColumn>
-        </DataGrid.Columns>
-       </DataGrid>
-      </DockPanel>
+      <Grid Grid.Column="2" Margin="10,0,0,0">
+       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+       <DockPanel Grid.Row="0" Margin="0,0,0,7">
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+         <TextBlock Text="{Binding StudySelectionSummary}" Foreground="{StaticResource Accent}" FontFamily="Consolas" FontWeight="SemiBold" Margin="0,0,10,0"/>
+         <Button Content="Select All" Command="{Binding SelectAllStudyRuns}" MinHeight="24" Padding="8,2"/>
+         <Button Content="Clear All" Command="{Binding ClearAllStudyRuns}" MinHeight="24" Padding="8,2" Margin="0"/>
+        </StackPanel>
+        <StackPanel>
+         <TextBlock Text="STUDY PREVIEW" Style="{StaticResource Subheading}" Margin="0"/>
+         <TextBlock Text="{Binding BaselineModelName}" FontWeight="SemiBold" ToolTip="{Binding BaselineModelPath}"/>
+        </StackPanel>
+       </DockPanel>
+
+       <Grid Grid.Row="1" Margin="0,0,0,7">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <TextBlock Text="Output Folder" VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <TextBox Grid.Column="1" Text="{Binding OutputDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=300}" ToolTip="{Binding OutputDirectory}"/>
+        <Button Grid.Column="2" Content="Browse..." Command="{Binding BrowseOutputFolder}" Margin="6,0,0,0"/>
+       </Grid>
+
+       <Grid Grid.Row="2">
+        <DataGrid x:Name="StudyPreviewGrid" ItemsSource="{Binding StudyIterations}" CanUserDeleteRows="False" FrozenColumnCount="2"
+                  EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+         <DataGrid.Columns>
+          <DataGridTextColumn Header="#" Binding="{Binding RunIndex}" IsReadOnly="True" Width="45" ElementStyle="{StaticResource NumericCell}"/>
+          <DataGridTextColumn Header="SAP Model Name" Binding="{Binding SapModelName}" IsReadOnly="True" Width="225" MinWidth="180">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding SapModelName}"/></Style></DataGridTextColumn.ElementStyle>
+          </DataGridTextColumn>
+          <DataGridTextColumn Header="Path" Binding="{Binding FullOutputPath}" IsReadOnly="True" Width="210" MinWidth="150">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding FullOutputPath}"/></Style></DataGridTextColumn.ElementStyle>
+          </DataGridTextColumn>
+          <DataGridTextColumn Header="Description - changes from baseline" Binding="{Binding Description}" IsReadOnly="True" Width="*" MinWidth="280">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding Description}"/></Style></DataGridTextColumn.ElementStyle>
+          </DataGridTextColumn>
+          <DataGridCheckBoxColumn Header="Run Iterate" Binding="{Binding RunIterate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="94" MinWidth="88"/>
+         </DataGrid.Columns>
+        </DataGrid>
+        <TextBlock Text="{Binding StudyPreviewEmptyText}" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   Visibility="{Binding ShowStudyEmptyState, Converter={StaticResource BoolVisibility}}"/>
+       </Grid>
+
+       <Border Grid.Row="3" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Margin="0,8,0,0" MaxHeight="138">
+        <Grid>
+         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+         <TextBlock Text="VALIDATION ISSUES" Style="{StaticResource Subheading}" Margin="8,5,8,4"/>
+         <TextBlock Grid.Row="1" Text="{Binding ValidationStatusText}" Foreground="{StaticResource Muted}" Margin="8,2,8,8"
+                    Visibility="{Binding ShowValidationStatus, Converter={StaticResource BoolVisibility}}"/>
+         <DataGrid Grid.Row="1" ItemsSource="{Binding Issues}" IsReadOnly="True" CanUserDeleteRows="False" HeadersVisibility="Column"
+                   Visibility="{Binding HasValidationIssues, Converter={StaticResource BoolVisibility}}" MaxHeight="106">
+          <DataGrid.Columns>
+           <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="76"/>
+           <DataGridTextColumn Header="Section" Binding="{Binding Section}" Width="130"/>
+           <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*">
+            <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding Message}"/></Style></DataGridTextColumn.ElementStyle>
+           </DataGridTextColumn>
+          </DataGrid.Columns>
+         </DataGrid>
+        </Grid>
+       </Border>
+      </Grid>
      </Grid>
 
-     <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,10,0,0">
-      <Button Content="Validate" Command="{Binding Validate}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/>
-      <Button Content="Run study &#8212; next phase" IsEnabled="False" ToolTip="Execution is not implemented in this phase"/>
-     </StackPanel>
+     <DockPanel Grid.Row="1" Margin="0,10,0,0">
+      <Button DockPanel.Dock="Right" Content="{Binding RunStudyLabel}" IsEnabled="{Binding CanRunStudy}" ToolTip="{Binding RunStudyToolTip}" Margin="6,0,0,0"/>
+      <Button DockPanel.Dock="Right" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 5 into the active project"/>
+      <Button Content="Validate Study" Command="{Binding Validate}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/>
+     </DockPanel>
     </Grid>
    </TabItem>
 
