@@ -8,7 +8,7 @@ namespace COT_VCF.Presentation;
 
 public interface IOutputSettingsDialogService
 {
-    bool EditDeflection(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection);
+    bool EditDeflection(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
     bool EditMemberForces(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection);
     bool EditFoundations(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection);
     bool EditCables(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
@@ -16,12 +16,32 @@ public interface IOutputSettingsDialogService
 
 public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
 {
-    public bool EditDeflection(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection)
+    public bool EditDeflection(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection)
     {
         var available = baseline.Points.Keys.OrderBy(x => x, StringComparer.Ordinal).ToArray();
         var picked = selection.Select("Deflection Monitoring Points — U3 [mm]", available, settings.DeflectionPoints.ToArray());
         if (picked is null) return false;
+
+        var owner = System.Windows.Application.Current?.MainWindow;
+        var dialog = BasicDialog("Deflection Output Case", 480, 250);
+        if (owner is not null) dialog.Owner = owner;
+        var panel = new StackPanel { Margin = new Thickness(18) };
+        panel.Children.Add(Label("Output component", "The monitored deflection component is fixed."));
+        panel.Children.Add(new TextBlock { Text = "U3 — Global Z   ·   unit mm", Foreground = System.Windows.Media.Brushes.DimGray, Margin = new Thickness(0, 0, 0, 10) });
+        panel.Children.Add(Label("Deflection output case", "SAP analysis load case the U3 deflection is read under. Empty until you pick one — never defaulted."));
+        var combo = new ComboBox
+        {
+            ItemsSource = loadCases.OrderBy(x => x, StringComparer.Ordinal).ToArray(),
+            IsEditable = false,
+            SelectedItem = loadCases.FirstOrDefault(c => c.Equals(settings.DeflectionOutputCaseName, StringComparison.OrdinalIgnoreCase)),
+        };
+        panel.Children.Add(combo);
+        panel.Children.Add(Footer(dialog, "Save"));
+        dialog.Content = panel;
+        if (dialog.ShowDialog() != true) return false;
+
         Replace(settings.DeflectionPoints, picked);
+        settings.DeflectionOutputCaseName = combo.SelectedItem as string ?? "";
         return true;
     }
 

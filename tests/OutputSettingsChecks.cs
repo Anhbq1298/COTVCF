@@ -39,12 +39,22 @@ internal static class OutputSettingsChecks
         state.OutputSettings.FoundationRightPoints.Add("P4");
         state.OutputSettings.CableNames.Add("C1");
         state.OutputSettings.CableResultLoadCase = "CASE1";
+        state.OutputSettings.DeflectionOutputCaseName = "CASE1";
         var top = new MemberForceOutputGroup { Name = "TopChords" };
         top.Members.Add("F1");
         state.OutputSettings.MemberForceGroups.Add(top);
 
         var valid = new OutputSettingsValidator().Validate(state, ["CASE1"]);
         Check(valid.Count == 0, "Complete output settings validate");
+
+        state.OutputSettings.DeflectionOutputCaseName = "";
+        var noCase = new OutputSettingsValidator().Validate(state, ["CASE1"]);
+        Check(noCase.Any(i => i.Message.Contains("deflection output case") && i.Severity == ValidationSeverity.Warning),
+            "Monitored points without a deflection output case are incomplete, not invalid");
+        state.OutputSettings.DeflectionOutputCaseName = "MISSING";
+        Check(new OutputSettingsValidator().Validate(state, ["CASE1"]).Any(i => i.Message.Contains("MISSING") && i.Severity == ValidationSeverity.Error),
+            "A deflection output case that no longer exists is an error");
+        state.OutputSettings.DeflectionOutputCaseName = "CASE1";
 
         var duplicate = new MemberForceOutputGroup { Name = "Other" };
         duplicate.Members.Add("F1");
@@ -55,7 +65,8 @@ internal static class OutputSettingsChecks
 
         var dto = new ConfigurationExtractor().ExtractOutputSection(state);
         Check(dto.MemberForceGroups.Single().SapGroupName == "[O]-TopChords" &&
-              dto.FoundationLeftPointNames.Count == 2 && dto.CableResultLoadCase == "CASE1",
+              dto.FoundationLeftPointNames.Count == 2 && dto.CableResultLoadCase == "CASE1" &&
+              dto.DeflectionOutputCaseName == "CASE1",
             "Output settings extract to project DTO");
 
         var target = new ApplicationState { Geometry = geometry, SessionBaseline = geometry, Model = model, SessionBaselineModel = model, Connection = "Connected" };
@@ -64,7 +75,8 @@ internal static class OutputSettingsChecks
         check.Output.Present = true;
         new ConfigurationApplicator(target, new WorkflowService(new FakeSap(model), target)).Apply(project, check);
         Check(target.OutputSettings.MemberForceGroups.Single().SapGroupName == "[O]-TopChords" &&
-              target.OutputSettings.CableResultLoadCase == "CASE1",
+              target.OutputSettings.CableResultLoadCase == "CASE1" &&
+              target.OutputSettings.DeflectionOutputCaseName == "CASE1",
             "Output settings restore without writing SAP");
 
         var fake = new FakeSap(model);

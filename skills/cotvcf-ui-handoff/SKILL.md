@@ -68,7 +68,10 @@ earlier tall-header / large-button / blue-block look.
   Geometry is dark: frames `ViewportGeom`, cables/tendons `AccentBright` (dashed / dotted),
   joints hollow with a white ring.
 - Viewer controls are a small light floating panel at the top-right of the canvas: projection combo,
-  Fit, Reset view (returns to XZ), and a Show-labels toggle bound to `ShowPointLabels`.
+  Fit, Reset view (returns to XZ), and three label toggles `P` / `F` / `C` bound to `ShowPointLabels` /
+  `ShowFrameLabels` / `ShowCableLabels`. Frame and cable/tendon labels are drawn along the member,
+  rotated to the element's screen-space direction and kept upright (`ModelCanvas.MemberLabel`); configured
+  cables keep their own horizontal `CableLabel` from the overlay and are skipped by the `C` pass.
   `ToolbarContent` still renders (top-left overlay) for contextual controls.
 - Axis overlay sits on a white translucent chip: X red, Y blue, Z green.
 - Still supports wheel zoom, drag pan, double-click fit, `Home` to fit.
@@ -80,29 +83,30 @@ earlier tall-header / large-button / blue-block look.
   (e.g. the B / NStories row) and `Label=""` to hide the label; give those an `AutomationProperties.Name`.
 - Do not apply the 220 px width to DataGrid cell editors.
 
-## Shared Model Preview (hoisted viewer)
+## Workflow tabs & shared model preview
 
+- There is **no** standalone "SAP Model" tab. The five workflow tabs (left rail) are **01 Loading, 02 Truss
+  Height, 03 Pretension, 04 Output Settings, 05 Iteration** (`SelectedIndex` 0-4). Connecting is the top-bar
+  `Connect SAP` button only. The `NN` in each header, all doc/help "Tab NN" prose, and the config validation
+  labels use this 01-05 numbering; the DTO property names (`Tab02Loading` … `Tab05IterationStudy`) and JSON keys
+  are **unchanged** legacy v1 identifiers — do not renumber them.
 - There is **one** `Structural2DViewer` (`x:Name="SharedViewer"`), hoisted out of the `TabControl` into a
   three-column grid in `MainWindow.xaml`: `ParamsColumn` (the `TabControl`, params only) | `ViewerSplitterColumn` |
   `ViewerColumn` (the `SharedViewerPane` `DockPanel`). Switching tabs never rebuilds the viewer.
-- `MainWindow.xaml.cs` `ApplyViewerLayout()` (called from `Loaded` and `WorkflowTabs_SelectionChanged`) sets the
-  column widths per `SelectedIndex`: tabs 2-4 (index 1-3) get the resizable ~40/60 params/preview split; tab 1
-  (index 0) is preview-dominant (300 px params strip, no splitter); tabs 5-6 (index 4-5) hide the viewer + splitter
-  and the `TabControl` takes the full width. The user's dragged split is remembered in `paramsColumnWidth` /
-  `viewerColumnWidth`.
+- `MainWindow.xaml.cs` `ApplyViewerLayout()` (called from `Loaded` and `WorkflowTabs_SelectionChanged`): tabs
+  01-04 (index 0-3) get the resizable ~40/60 params/preview split; tab 05 Iteration (index 4) hides the viewer +
+  splitter and the `TabControl` takes the full width. The user's dragged split is remembered in
+  `paramsColumnWidth` / `viewerColumnWidth`.
 - The viewer's `Model` and every overlay come from `MainViewModel` `SharedViewer*` computed properties gated on
   `selectedTab` (`SharedViewerModel`, `SharedViewerAppliedPoints`, `SharedViewerTopPoints/Middle/Bottom`,
   `SharedViewerCables`, `SharedViewerCaption`, `SharedViewerHint`, `ShowTrussLegend`). `NotifySharedViewer()` is
   called from the `SelectedTab` setter and from `Update()`, so both a tab switch and any state refresh re-raise them.
-- Caption (Consolas, top of the pane) = `GeometrySummary` on tab 1, `HeightSummary` on tab 3, `CablePreviewSummary`
-  on tab 4, empty on tab 2. Hint (muted, bottom) is a short per-tab sentence. The Top/Middle/Bottom legend chip
-  only shows on tab 3 (`ShowTrussLegend`).
-- Do **not** re-add a per-tab `Structural2DViewer` to tabs 1-4; the params panels are viewer-free.
-
-## SAP Model Tab
-
-- Left params column is a compact read-only model card (`CONNECTED MODEL` name/path/version/units/lock +
-  `GEOMETRY` summary). The shared preview is the dominant pane on this tab.
+- Overlays per tab: Loading → applied-point arrows + selection sync; Truss → Top/Middle/Bottom recoloured joints
+  + legend chip; Pretension → `State.Cables` highlight/labels + selection sync; Output → `State.Cables`
+  highlight/labels plus point labels (so the user can read names to pick deflection points, foundation reactions,
+  member-force groups and monitored cables). Caption (Consolas, top) = `HeightSummary` on Truss,
+  `CablePreviewSummary` on Pretension, `GeometrySummary` on Output, empty on Loading.
+- Do **not** re-add a per-tab `Structural2DViewer`; the params panels are viewer-free.
 
 ## Loading Criteria Tab
 
@@ -253,7 +257,7 @@ Study composition plus isolated child-model building and analysis. Tab 05 does n
   `ModelInfo`, saves the configured child, runs every SAP2000 analysis case currently marked to run, saves
   the analyzed model/results, reopens and verifies the child, and returns to the baseline before another job.
 - `StudyExecutionSnapshotFactory` freezes candidate assignments, geometry/groups, paths, selections, and
-  worker count at run start. Tabs 02–04, study settings, run checkboxes, and project load/save actions are
+  worker count at run start. Tabs 01–03, study settings, run checkboxes, and project load/save actions are
   disabled while execution is active.
 - The Tab 05 monitor shows each worker ID, gate state, candidate, discrete 1/10 stage, completed count, and
   overall Ready/Running/Queued/Failed/Skipped totals. Cancellation is observed only between SAP API calls;
@@ -264,7 +268,7 @@ Study composition plus isolated child-model building and analysis. Tab 05 does n
 
 ## Config Project File (`src/Configuration/`)
 
-The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 02–05,
+The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 01–05,
 including the Tab 05 mode/fixed candidate/selection exclusions. Never serialise ViewModels; project save/load
 never mutates SAP.
 

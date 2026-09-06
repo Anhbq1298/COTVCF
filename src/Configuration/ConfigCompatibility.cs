@@ -213,6 +213,11 @@ public sealed class ConfigCompatibilityValidator
                 tc.Problems.Add("cable result load case is required.");
             else if (!modelLoadCases.Contains(t5.CableResultLoadCase, StringComparer.OrdinalIgnoreCase))
                 tc.Problems.Add($"cable result load case {t5.CableResultLoadCase} does not exist in the connected model.");
+
+            if (string.IsNullOrWhiteSpace(t5.DeflectionOutputCaseName))
+                tc.Problems.Add("deflection output case is required.");
+            else if (!modelLoadCases.Contains(t5.DeflectionOutputCaseName, StringComparer.OrdinalIgnoreCase))
+                tc.Problems.Add($"deflection output case {t5.DeflectionOutputCaseName} does not exist in the connected model.");
         }
 
         // ---- Legacy Tab 05 JSON key / UI Tab 05 Iteration Study ----

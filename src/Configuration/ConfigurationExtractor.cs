@@ -103,6 +103,7 @@ public sealed class ConfigurationExtractor
         FoundationRightPointNames = s.OutputSettings.FoundationRightPoints.ToList(),
         CableNames = s.OutputSettings.CableNames.ToList(),
         CableResultLoadCase = s.OutputSettings.CableResultLoadCase,
+        DeflectionOutputCaseName = s.OutputSettings.DeflectionOutputCaseName,
     };
 
     private static IterationStudyConfigDto ExtractStudy(ApplicationState s) => new()

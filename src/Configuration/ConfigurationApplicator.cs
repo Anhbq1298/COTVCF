@@ -4,7 +4,7 @@ using COT_VCF.Domain;
 namespace COT_VCF.Configuration;
 
 /// <summary>
-/// Writes a validated <see cref="CotVcfConfigDto"/> back into <see cref="ApplicationState"/> (Tabs 02-06),
+/// Writes a validated <see cref="CotVcfConfigDto"/> back into <see cref="ApplicationState"/> (Tabs 01-05),
 /// then lets the existing reactive machinery regenerate candidates and refresh the preview. Callers must
 /// only invoke this after schema + model validation have both passed. Nothing here writes to SAP2000.
 /// </summary>
@@ -74,7 +74,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         catch
         {
             // Groups restored but a level-chord baseline could not be measured; leave the user to
-            // Capture Baseline manually. Tabs 02 and 04 are unaffected.
+            // Capture Baseline manually. Tabs 01 and 03 are unaffected.
         }
     }
 
@@ -121,6 +121,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         output.CableNames.Clear();
         foreach (var name in d.CableNames ?? []) output.CableNames.Add(name);
         output.CableResultLoadCase = d.CableResultLoadCase;
+        output.DeflectionOutputCaseName = d.DeflectionOutputCaseName ?? "";
     }
 
     private void ApplyStudy(IterationStudyConfigDto d)

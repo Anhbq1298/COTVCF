@@ -21,6 +21,11 @@ public sealed class OutputSettingsValidator
             if (!geometry.Points.ContainsKey(name)) issues.Add(new("Output Settings", $"Deflection point {name} is missing from the baseline model."));
         if (output.DeflectionPoints.Count != output.DeflectionPoints.Distinct(StringComparer.Ordinal).Count())
             issues.Add(new("Output Settings", "Deflection monitoring points contain duplicates."));
+        if (string.IsNullOrWhiteSpace(output.DeflectionOutputCaseName))
+            issues.Add(new("Output Settings", "Select a deflection output case (U3 · Global Z).",
+                output.DeflectionPoints.Count > 0 ? ValidationSeverity.Warning : ValidationSeverity.Error));
+        else if (loadCases is not null && !loadCases.Contains(output.DeflectionOutputCaseName, StringComparer.OrdinalIgnoreCase))
+            issues.Add(new("Output Settings", $"Deflection output case {output.DeflectionOutputCaseName} does not exist in the baseline model."));
 
         if (output.MemberForceGroups.Count == 0)
             issues.Add(new("Output Settings", "Add at least one member-force output group."));

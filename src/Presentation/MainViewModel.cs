@@ -357,6 +357,59 @@ public sealed class MainViewModel : Observable
     public string CableOutputSummary => State.OutputSettings.CableNames.Count == 0
         ? "Not configured"
         : $"{State.OutputSettings.CableNames.Count} cable{(State.OutputSettings.CableNames.Count == 1 ? "" : "s")} · {State.OutputSettings.CableResultLoadCase}";
+
+    // ---- Tab 04 Output Settings: compact left-panel summaries + status ----
+    private const string StatusReady = "● Ready", StatusIncomplete = "▲ Incomplete",
+        StatusInvalid = "× Invalid", StatusNotConfigured = "○ Not configured";
+    private OutputSettingsConfiguration Out => State.OutputSettings;
+    public string MonitoredPointCaseSummary => string.IsNullOrWhiteSpace(Out.DeflectionOutputCaseName)
+        ? "U3 · No output case"
+        : $"U3 · {Out.DeflectionOutputCaseName}";
+    public string MonitoredPointSummary =>
+        $"{Out.DeflectionPoints.Count} point{(Out.DeflectionPoints.Count == 1 ? "" : "s")}";
+    public string MonitoredPointStatus => Out.DeflectionPoints.Count == 0 ? StatusNotConfigured
+        : string.IsNullOrWhiteSpace(Out.DeflectionOutputCaseName) ? StatusIncomplete
+        : StatusReady;
+    public string MemberForceSummary
+    {
+        get
+        {
+            var groups = Out.MemberForceGroups.Count;
+            if (groups == 0) return "0 groups";
+            var members = Out.MemberForceGroups.Sum(g => g.Members.Count);
+            var empty = Out.MemberForceGroups.Count(g => g.Members.Count == 0 || string.IsNullOrWhiteSpace(g.Name));
+            return $"{groups} group{(groups == 1 ? "" : "s")} · {members} member{(members == 1 ? "" : "s")}" +
+                   (empty > 0 ? $" · {empty} empty" : "");
+        }
+    }
+    public string MemberForceStatus => Out.MemberForceGroups.Count == 0 ? StatusNotConfigured
+        : Out.MemberForceGroups.Any(g => g.Members.Count == 0 || string.IsNullOrWhiteSpace(g.Name)) ? StatusIncomplete
+        : StatusReady;
+    public string FoundationSummary => $"Left {Out.FoundationLeftPoints.Count} / 2 · Right {Out.FoundationRightPoints.Count} / 2";
+    public string FoundationStatus => Out.FoundationLeftPoints.Count == 0 && Out.FoundationRightPoints.Count == 0 ? StatusNotConfigured
+        : Out.FoundationLeftPoints.Count == 2 && Out.FoundationRightPoints.Count == 2 ? StatusReady
+        : StatusIncomplete;
+    public string CableForceSummary => Out.CableNames.Count == 0
+        ? "0 cables"
+        : string.IsNullOrWhiteSpace(Out.CableResultLoadCase)
+            ? $"No output case · {Out.CableNames.Count} cable{(Out.CableNames.Count == 1 ? "" : "s")}"
+            : $"{Out.CableResultLoadCase} · {Out.CableNames.Count} cable{(Out.CableNames.Count == 1 ? "" : "s")}";
+    public string CableForceStatus => Out.CableNames.Count == 0 ? StatusNotConfigured
+        : string.IsNullOrWhiteSpace(Out.CableResultLoadCase) ? StatusIncomplete
+        : StatusReady;
+    private int ReadyOutputCount =>
+        (MonitoredPointStatus == StatusReady ? 1 : 0) + (MemberForceStatus == StatusReady ? 1 : 0) +
+        (FoundationStatus == StatusReady ? 1 : 0) + (CableForceStatus == StatusReady ? 1 : 0);
+    public string OutputUnitsSummary => $"Force {OutputUnits.Force} · Moment {OutputUnits.Moment} · Deflection {OutputUnits.Displacement}";
+    public string ConfiguredOutputCount
+    {
+        get
+        {
+            var n = ReadyOutputCount;
+            var glyph = n == 4 ? "●" : n == 0 ? "○" : "▲";
+            return $"{glyph} {n} / 4 configured";
+        }
+    }
     public ObservableCollection<ValidationIssue> Issues { get; } = [];
 
     public Command Connect { get; }
@@ -565,14 +618,20 @@ public sealed class MainViewModel : Observable
     private GeometryModel OutputBaselineGeometry() =>
         State.SessionBaseline.Points.Count > 0 ? State.SessionBaseline : State.Geometry;
 
-    private void EditDeflectionOutput()
+    private async void EditDeflectionOutput()
     {
-        if (outputDialogs is null) { Message = "Output Settings editor is unavailable."; return; }
-        if (!outputDialogs.EditDeflection(State.OutputSettings, OutputBaselineGeometry(), selection)) return;
-        config.Session.MarkDirty(ConfigTabs.Output);
-        InvalidateStudyValidation();
-        Message = $"{State.OutputSettings.DeflectionPoints.Count} deflection monitoring points configured. Groups will be applied to the parent when Tab 05 runs.";
-        Update();
+        if (IsBusy || outputDialogs is null) { if (outputDialogs is null) Message = "Output Settings editor is unavailable."; return; }
+        IsBusy = true;
+        try
+        {
+            var loadCases = await workflow.GetLoadCaseNamesAsync();
+            if (!outputDialogs.EditDeflection(State.OutputSettings, OutputBaselineGeometry(), loadCases, selection)) return;
+            config.Session.MarkDirty(ConfigTabs.Output);
+            InvalidateStudyValidation();
+            Message = $"{State.OutputSettings.DeflectionPoints.Count} deflection monitoring points · U3 case {State.OutputSettings.DeflectionOutputCaseName}. Groups will be applied to the parent when Tab 05 runs.";
+        }
+        catch (Exception ex) { Message = ex.Message; Warn("Deflection Output Settings", ex.Message); }
+        finally { IsBusy = false; Update(); }
     }
 
     private void EditMemberForceOutput()
@@ -1332,6 +1391,9 @@ public sealed class MainViewModel : Observable
             nameof(TrussStatus), nameof(CableStatus), nameof(OutputStatus), nameof(CableCount), nameof(VariableCableCount), nameof(PretensionCandidateCount),
             nameof(CablePreviewSummary), nameof(DeflectionOutputSummary), nameof(MemberForceOutputSummary),
             nameof(FoundationOutputSummary), nameof(CableOutputSummary),
+            nameof(MonitoredPointSummary), nameof(MonitoredPointCaseSummary), nameof(MonitoredPointStatus), nameof(MemberForceSummary), nameof(MemberForceStatus),
+            nameof(FoundationSummary), nameof(FoundationStatus), nameof(CableForceSummary), nameof(CableForceStatus),
+            nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
             nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),

@@ -74,16 +74,20 @@ public sealed class MemberForceOutputGroup : Observable
 public sealed class OutputSettingsConfiguration : Observable
 {
     private string cableResultLoadCase = "";
+    private string deflectionOutputCaseName = "";
     public ObservableCollection<string> DeflectionPoints { get; } = [];
     public ObservableCollection<MemberForceOutputGroup> MemberForceGroups { get; } = [];
     public ObservableCollection<string> FoundationLeftPoints { get; } = [];
     public ObservableCollection<string> FoundationRightPoints { get; } = [];
     public ObservableCollection<string> CableNames { get; } = [];
     public string CableResultLoadCase { get => cableResultLoadCase; set => Set(ref cableResultLoadCase, (value ?? "").Trim()); }
+    /// <summary>SAP analysis load case the fixed U3/Global-Z deflection output is read under. Separate from
+    /// <see cref="CableResultLoadCase"/>. Empty until the user picks one — never defaulted to the first case.</summary>
+    public string DeflectionOutputCaseName { get => deflectionOutputCaseName; set => Set(ref deflectionOutputCaseName, (value ?? "").Trim()); }
 
     public bool IsConfigured => DeflectionPoints.Count > 0 || MemberForceGroups.Count > 0 ||
         FoundationLeftPoints.Count > 0 || FoundationRightPoints.Count > 0 || CableNames.Count > 0 ||
-        !string.IsNullOrWhiteSpace(CableResultLoadCase);
+        !string.IsNullOrWhiteSpace(CableResultLoadCase) || !string.IsNullOrWhiteSpace(DeflectionOutputCaseName);
 
     public IReadOnlyList<OutputSapGroupDefinition> ToSapGroups()
     {

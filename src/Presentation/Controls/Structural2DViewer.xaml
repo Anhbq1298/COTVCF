@@ -24,7 +24,7 @@
  </UserControl.Resources>
  <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource ViewportBg}">
   <Grid>
-   <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}" Cables="{Binding Cables, ElementName=Root}" SelectedCable="{Binding SelectedCable, ElementName=Root, Mode=TwoWay}" TopPoints="{Binding TopPoints, ElementName=Root}" MiddlePoints="{Binding MiddlePoints, ElementName=Root}" BottomPoints="{Binding BottomPoints, ElementName=Root}"/>
+   <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" ShowFrameLabels="{Binding ShowFrameLabels, ElementName=Root}" ShowCableLabels="{Binding ShowCableLabels, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}" Cables="{Binding Cables, ElementName=Root}" SelectedCable="{Binding SelectedCable, ElementName=Root, Mode=TwoWay}" TopPoints="{Binding TopPoints, ElementName=Root}" MiddlePoints="{Binding MiddlePoints, ElementName=Root}" BottomPoints="{Binding BottomPoints, ElementName=Root}"/>
 
    <!-- floating viewer controls (top-right) -->
    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" CornerRadius="3" Padding="3" Background="#F2F3F5" BorderBrush="{StaticResource Border}" BorderThickness="1">
@@ -38,8 +38,15 @@
      <Button Style="{StaticResource ViewerTool}" Click="ResetView" ToolTip="Reset view (XZ)">
       <Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M13,4 A6,6 0 1 0 15,9.5 M15,9.5 L15,5 M15,9.5 L10.5,9.5"/>
      </Button>
+     <Border Width="1" Background="{StaticResource Border}" Margin="4,3,2,3"/>
      <ToggleButton Style="{StaticResource ViewerTool}" IsChecked="{Binding ShowPointLabels, ElementName=Root, Mode=TwoWay}" ToolTip="Show point labels">
-      <Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" Data="M4,4 L11,4 L16,9 L11,15 L4,15 Z M7,7 L7,7"/>
+      <TextBlock Text="P" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+     </ToggleButton>
+     <ToggleButton Style="{StaticResource ViewerTool}" IsChecked="{Binding ShowFrameLabels, ElementName=Root, Mode=TwoWay}" ToolTip="Show frame labels (aligned to the member axis)">
+      <TextBlock Text="F" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+     </ToggleButton>
+     <ToggleButton Style="{StaticResource ViewerTool}" IsChecked="{Binding ShowCableLabels, ElementName=Root, Mode=TwoWay}" ToolTip="Show cable / tendon labels (aligned to the member axis)">
+      <TextBlock Text="C" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
      </ToggleButton>
     </StackPanel>
    </Border>

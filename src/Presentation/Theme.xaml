@@ -187,8 +187,9 @@
   <Setter Property="RowBackground" Value="{StaticResource Raised}"/>
   <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
   <Setter Property="BorderThickness" Value="1"/>
-  <Setter Property="GridLinesVisibility" Value="Horizontal"/>
+  <Setter Property="GridLinesVisibility" Value="All"/>
   <Setter Property="HorizontalGridLinesBrush" Value="{StaticResource Border}"/>
+  <Setter Property="VerticalGridLinesBrush" Value="{StaticResource Border}"/>
   <Setter Property="HeadersVisibility" Value="Column"/>
   <Setter Property="FrozenColumnCount" Value="1"/>
   <Setter Property="ClipboardCopyMode" Value="IncludeHeader"/>

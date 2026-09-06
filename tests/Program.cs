@@ -39,7 +39,7 @@ internal static class Program
                 var uiSap = new FakeSap { Snapshot = new(uiState.Model!, uiState.Geometry, uiState.LoadPatterns.ToArray()) };
                 var uiWorkflow = new WorkflowService(uiSap, uiState);
                 var uiConfig = new COT_VCF.Configuration.ConfigService(uiSap, uiState, uiWorkflow);
-                var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection(), uiConfig) { SelectedTab = 1 };
+                var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection(), uiConfig) { SelectedTab = 0 };
                 var window = new COT_VCF.Presentation.MainWindow { DataContext = vm, Width = 1400, Height = 810 };
                 window.Show();
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -55,7 +55,7 @@ internal static class Program
                 Directory.CreateDirectory(".work");
                 using (var stream = File.Create(".work/loading-tab.png")) loadingEncoder.Save(stream);
 
-                vm.SelectedTab = 5;
+                vm.SelectedTab = 4;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
                 Assert(vm.StudyIterations.Count == 36, "Tab 5 UI binds the expected Fix Pretension rows");
@@ -147,7 +147,7 @@ internal static class Program
                 var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection(), uiConfig);
                 var window = new COT_VCF.Presentation.MainWindow { DataContext = vm };
                 window.Show();
-                for (int i = 0; i < 6; i++)
+                for (int i = 0; i < 5; i++)
                 {
                     vm.SelectedTab = i;
                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
