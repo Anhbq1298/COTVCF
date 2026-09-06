@@ -234,6 +234,10 @@ internal static class StudyExecutionChecks
     {
         private int activeCalls;
         private int maxConcurrentCalls;
+        private GeometryModel currentGeometry = CloneGeometry(StudyComposerChecks.CreateState().SessionBaseline);
+        private Dictionary<string, PointLoad> currentLoads = new(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, CableTargetForce> currentTargets = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, SavedState> savedStates = new(StringComparer.OrdinalIgnoreCase);
         public ModelInfo Current { get; private set; } = new("", "26", 6, "kN", "m", false);
         public ConcurrentBag<string> SaveAsSources { get; } = [];
         public ConcurrentBag<PointLoad> AppliedPointLoads { get; } = [];
@@ -245,6 +249,20 @@ internal static class StudyExecutionChecks
         public Task<ModelInfo> ConnectAsync() => throw new NotSupportedException();
         public Task<ModelSnapshot> ReadAsync() => throw new NotSupportedException();
         public Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<PointLoad>>([]);
+        public async Task<Position> GetPointPositionAsync(string pointName, ModelInfo expected) => await Tracked(async () =>
+        {
+            Verify(expected); await Task.Delay(1); return currentGeometry.Points[pointName].Position;
+        });
+        public async Task<IReadOnlyList<PointLoad>> GetPointLoadsAsync(string pointName, ModelInfo expected) => await Tracked<IReadOnlyList<PointLoad>>(async () =>
+        {
+            Verify(expected); await Task.Delay(1);
+            return currentLoads.Values.Where(load => load.PointName.Equals(pointName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        });
+        public async Task<IReadOnlyList<CableTargetForce>> GetCableTargetForcesAsync(string cableName, ModelInfo expected) => await Tracked<IReadOnlyList<CableTargetForce>>(async () =>
+        {
+            Verify(expected); await Task.Delay(1);
+            return currentTargets.Values.Where(force => force.CableName.Equals(cableName, StringComparison.OrdinalIgnoreCase)).ToArray();
+        });
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => Task.FromResult<IReadOnlyList<ForceSource>>([]);
         public Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<string>>([]);
 
@@ -252,7 +270,16 @@ internal static class StudyExecutionChecks
         {
             if (Crashed) throw new InvalidOperationException("SAP2000 process crashed.");
             await Task.Delay(2);
-            Current = Current with { Path = Path.GetFullPath(modelPath) };
+            var fullPath = Path.GetFullPath(modelPath);
+            if (savedStates.TryGetValue(fullPath, out var saved))
+                Restore(saved);
+            else
+            {
+                currentGeometry = CloneGeometry(StudyComposerChecks.CreateState().SessionBaseline);
+                currentLoads = new(StringComparer.OrdinalIgnoreCase);
+                currentTargets = new(StringComparer.OrdinalIgnoreCase);
+            }
+            Current = Current with { Path = fullPath };
             return Current;
         });
 
@@ -263,6 +290,7 @@ internal static class StudyExecutionChecks
             await Task.Delay(2);
             File.Copy(Current.Path, targetPath, false);
             Current = expected with { Path = Path.GetFullPath(targetPath), IsLocked = false };
+            savedStates[Current.Path] = Capture();
             return Current;
         });
 
@@ -275,12 +303,17 @@ internal static class StudyExecutionChecks
                 throw new InvalidOperationException("SAP2000 process crashed.");
             }
             await Task.Delay(Current.Path.Contains("_P01.sdb", StringComparison.Ordinal) ? 100 : 5);
+            currentGeometry = CloneGeometry(proposed);
         });
 
         public async Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected) => await Tracked(async () =>
         {
             Verify(expected);
-            foreach (var load in loads) AppliedPointLoads.Add(load);
+            foreach (var load in loads)
+            {
+                AppliedPointLoads.Add(load);
+                currentLoads[Key(load.PointName, load.LoadPattern)] = load with { };
+            }
             await Task.Delay(3);
         });
 
@@ -288,6 +321,7 @@ internal static class StudyExecutionChecks
         {
             Verify(expected);
             AppliedTargetForces.Add(new(cableName, loadPattern, targetForce));
+            currentTargets[Key(cableName, loadPattern)] = new(cableName, loadPattern, targetForce, 0.5);
             await Task.Delay(3);
         });
 
@@ -295,6 +329,7 @@ internal static class StudyExecutionChecks
         {
             Verify(expected);
             await Task.Delay(2);
+            savedStates[Current.Path] = Capture();
         });
 
         public Task<ModelInfo> GetCurrentModelInfoAsync() => Task.FromResult(Current);
@@ -304,6 +339,29 @@ internal static class StudyExecutionChecks
             if (!SamePath(Current.Path, expected.Path))
                 throw new InvalidOperationException($"Worker {workerId} active model identity changed.");
         }
+
+        private SavedState Capture() => new(
+            CloneGeometry(currentGeometry),
+            currentLoads.ToDictionary(pair => pair.Key, pair => pair.Value with { }, StringComparer.OrdinalIgnoreCase),
+            currentTargets.ToDictionary(pair => pair.Key, pair => pair.Value with { }, StringComparer.OrdinalIgnoreCase));
+
+        private void Restore(SavedState state)
+        {
+            currentGeometry = CloneGeometry(state.Geometry);
+            currentLoads = state.Loads.ToDictionary(pair => pair.Key, pair => pair.Value with { }, StringComparer.OrdinalIgnoreCase);
+            currentTargets = state.Targets.ToDictionary(pair => pair.Key, pair => pair.Value with { }, StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static GeometryModel CloneGeometry(GeometryModel source) => new(
+            source.Points.ToDictionary(pair => pair.Key, pair => pair.Value with { }, StringComparer.Ordinal),
+            source.Members.Select(member => member with { }).ToArray());
+
+        private static string Key(string objectName, string loadPattern) => objectName + "\0" + loadPattern;
+
+        private sealed record SavedState(
+            GeometryModel Geometry,
+            IReadOnlyDictionary<string, PointLoad> Loads,
+            IReadOnlyDictionary<string, CableTargetForce> Targets);
 
         private async Task Tracked(Func<Task> action) =>
             await Tracked(async () => { await action(); return true; });

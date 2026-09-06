@@ -71,7 +71,7 @@ public sealed class SapWorkerInstance : IAsyncDisposable
                 "Candidate accepted.", job.IterationId, job.ModelFullPath, report);
             try
             {
-                var child = await builder.BuildAsync(host.Gateway, snapshot, job,
+                var child = await builder.BuildAsync(host.Gateway, snapshot, job, WorkerId,
                     (stage, status, message, path) => SetState(SapWorkerState.Busy, stage, status, message, job.IterationId, path, report), token);
                 await ReturnToBaselineAsync(job, report);
                 Snapshot.CompletedCount++;

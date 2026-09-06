@@ -9,8 +9,14 @@ public sealed class StudyCandidateResolver
         ApplicationState state,
         StudyCompositionResult composition)
     {
-        var loadings = composition.LoadingCandidates.ToDictionary(candidate => candidate.Id, StringComparer.Ordinal);
-        var heights = composition.HeightCandidates.ToDictionary(candidate => candidate.Id, candidate => candidate.Candidate, StringComparer.Ordinal);
+        var loadings = composition.LoadingCandidates.ToDictionary(
+            candidate => candidate.Id,
+            FreezeLoading,
+            StringComparer.Ordinal);
+        var heights = composition.HeightCandidates.ToDictionary(
+            candidate => candidate.Id,
+            candidate => candidate.Candidate with { },
+            StringComparer.Ordinal);
         var pretensions = composition.PretensionCandidates.ToDictionary(candidate => candidate.Id, StringComparer.Ordinal);
         var resolvedPretensions = pretensions.ToDictionary(
             pair => pair.Key,
@@ -46,4 +52,14 @@ public sealed class StudyCandidateResolver
         }
         return jobs;
     }
+
+    private static LoadingStudyCandidate FreezeLoading(LoadingStudyCandidate candidate) => new()
+    {
+        Id = candidate.Id,
+        Combination = new LoadingCombination(
+            candidate.Combination.Index,
+            candidate.Combination.Loads.Select(load => (load.Name, load.Qz)).ToArray()),
+        PointLoads = candidate.PointLoads.Select(load => load with { }).ToArray(),
+        Loads = candidate.Loads.Select(load => load with { }).ToArray()
+    };
 }

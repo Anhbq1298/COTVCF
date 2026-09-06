@@ -158,6 +158,37 @@ public sealed class SapGateway : ISapGateway
         Verify(expected);
         return loads;
     });
+    public Task<Position> GetPointPositionAsync(string pointName, ModelInfo expected) => worker.Run(() =>
+    {
+        Verify(expected);
+        var position = ReadPosition(pointName);
+        Verify(expected);
+        return position;
+    });
+    public Task<IReadOnlyList<PointLoad>> GetPointLoadsAsync(string pointName, ModelInfo expected) => worker.Run<IReadOnlyList<PointLoad>>(() =>
+    {
+        Verify(expected);
+        ReadPosition(pointName); // Gives a focused, contextual CSI error when the point no longer exists.
+        var loads = ReadPointForceAssignments(pointName)
+            .Where(item => item.Step == 0 && item.CoordinateSystem.Equals("Global", StringComparison.OrdinalIgnoreCase))
+            .Select(item => new PointLoad(pointName, item.LoadPattern, item.Values[0], item.Values[1], item.Values[2]))
+            .ToArray();
+        Verify(expected);
+        return loads;
+    });
+    public Task<IReadOnlyList<CableTargetForce>> GetCableTargetForcesAsync(string cableName, ModelInfo expected) => worker.Run<IReadOnlyList<CableTargetForce>>(() =>
+    {
+        Verify(expected);
+        int count = 0; string[] cableNames = [];
+        Check(Model.CableObj.GetNameList(ref count, ref cableNames), "CableObj.GetNameList");
+        var actualCable = cableNames.Take(count).FirstOrDefault(name => name.Equals(cableName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException($"Cable {cableName} no longer exists in the model.");
+        var assignments = ReadCableTargetForces(actualCable)
+            .Select(item => new CableTargetForce(actualCable, item.LoadPattern, item.TargetForce, item.RelativeDistance))
+            .ToArray();
+        Verify(expected);
+        return assignments;
+    });
     public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => worker.Run<IReadOnlyList<ForceSource>>(() =>
     {
         Verify(expected);

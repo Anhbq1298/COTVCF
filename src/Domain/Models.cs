@@ -32,6 +32,7 @@ public record ModelInfo(string Path, string Version, int UnitsCode, string Force
 }
 public record ModelSnapshot(ModelInfo Info, GeometryModel Geometry, IReadOnlyList<string> LoadPatterns);
 public record PointLoad(string PointName, string LoadPattern, double Fx, double Fy, double Fz);
+public record CableTargetForce(string CableName, string LoadPattern, double TargetForce, double RelativeDistance);
 public record ForceSource(string ObjectName, MemberKind Kind, string Source, double? Force, string? Problem = null);
 public enum ValidationSeverity { Error, Warning, Info }
 public record ValidationIssue(string Section, string Message, ValidationSeverity Severity = ValidationSeverity.Error);

@@ -13,6 +13,12 @@ public interface ISapGateway : IDisposable
     Task<ModelInfo> GetCurrentModelInfoAsync();
     Task<ModelSnapshot> ReadAsync();
     Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected);
+    /// <summary>Reads one point's current global coordinates from the verified active model.</summary>
+    Task<Position> GetPointPositionAsync(string pointName, ModelInfo expected);
+    /// <summary>Reads the ordinary, global-axis force assignments for one point from the verified active model.</summary>
+    Task<IReadOnlyList<PointLoad>> GetPointLoadsAsync(string pointName, ModelInfo expected);
+    /// <summary>Reads all target-force assignments for one cable from the verified active model.</summary>
+    Task<IReadOnlyList<CableTargetForce>> GetCableTargetForcesAsync(string cableName, ModelInfo expected);
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
     Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected);

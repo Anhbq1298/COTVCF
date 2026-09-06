@@ -46,6 +46,7 @@ public enum StudyIterationStatus
     ApplyingLoading,
     ApplyingPretension,
     Saving,
+    Verifying,
     Ready,
     Failed,
     Cancelled
@@ -61,6 +62,7 @@ public enum StudyWorkerStage
     ApplyingLoading,
     ApplyingPretension,
     Saving,
+    Verifying,
     ReturningToBaseline,
     Completed
 }
@@ -161,9 +163,10 @@ public sealed class StudyIteration : Observable
         StudyIterationStatus.ApplyingGeometry => "Applying Geometry",
         StudyIterationStatus.ApplyingLoading => "Applying Loading",
         StudyIterationStatus.ApplyingPretension => "Applying Pretension",
+        StudyIterationStatus.Verifying => "Verifying",
         _ => Status.ToString()
     };
-    public bool IsRunning => Status is >= StudyIterationStatus.PreparingFolder and <= StudyIterationStatus.Saving;
+    public bool IsRunning => Status is >= StudyIterationStatus.PreparingFolder and <= StudyIterationStatus.Verifying;
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
 }
 
@@ -221,6 +224,7 @@ public sealed class SapWorkerSnapshot : Observable
         StudyWorkerStage.ApplyingGeometry => "Applying Geometry",
         StudyWorkerStage.ApplyingLoading => "Applying Loading",
         StudyWorkerStage.ApplyingPretension => "Applying Pretension",
+        StudyWorkerStage.Verifying => "Verifying Saved Child",
         StudyWorkerStage.ReturningToBaseline => "Returning to Baseline",
         _ => CurrentStage.ToString()!
     };
@@ -232,8 +236,9 @@ public sealed class SapWorkerSnapshot : Observable
         StudyWorkerStage.ApplyingGeometry => 4,
         StudyWorkerStage.ApplyingLoading => 5,
         StudyWorkerStage.ApplyingPretension => 6,
-        StudyWorkerStage.Saving or StudyWorkerStage.Completed => 7,
+        StudyWorkerStage.Saving => 7,
+        StudyWorkerStage.Verifying or StudyWorkerStage.Completed => 8,
         _ => 0
     };
-    public string StageProgressText => StageNumber == 0 ? "" : $"Stage {StageNumber} / 7";
+    public string StageProgressText => StageNumber == 0 ? "" : $"Stage {StageNumber} / 8";
 }
