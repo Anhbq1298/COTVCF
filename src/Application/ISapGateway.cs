@@ -4,6 +4,13 @@ namespace COT_VCF.Application;
 public interface ISapGateway : IDisposable
 {
     Task<ModelInfo> ConnectAsync();
+    /// <summary>Opens a saved model in this gateway's SAP2000 instance and returns its active identity.</summary>
+    Task<ModelInfo> OpenModelAsync(string modelPath);
+    /// <summary>Saves the verified active model to a new path and returns the new child-model identity.</summary>
+    Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected);
+    /// <summary>Saves the verified active model without changing its identity.</summary>
+    Task SaveAsync(ModelInfo expected);
+    Task<ModelInfo> GetCurrentModelInfoAsync();
     Task<ModelSnapshot> ReadAsync();
     Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected);
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);

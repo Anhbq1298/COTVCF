@@ -15,12 +15,19 @@ internal static class StudyComposerChecks
         Check(fixHeight.Iterations.Count == 36, "Fix Height generates 6 x 1 x 6 rows");
         Check(fixHeight.Iterations.All(r => r.HeightCandidateId == "H03"), "Fix Height retains H03 for every row");
         Check(fixHeight.Iterations.Single(r => r.IterationKey == "L02_H03_P04").SapModelName == "COT_VCF_L02_H03_P04.sdb", "Stable IDs generate the expected SAP filename");
+        var pathRow = fixHeight.Iterations.Single(r => r.IterationKey == "L02_H03_P04");
+        Check(pathRow.IterationDirectory == @"C:\Models\Study\L02_H03_P04" &&
+              pathRow.ModelFullPath == @"C:\Models\Study\L02_H03_P04\COT_VCF_L02_H03_P04.sdb",
+            "Every iteration previews its own deterministic folder and child model path");
         Check(fixHeight.Iterations[0].Description.Contains("Height 15 \u2192 20 m (\u0394H +5 m, H03)"), "Height description compares against the first-connected baseline");
         var described = fixHeight.Iterations.Single(r => r.IterationKey == "L02_H03_P04").Description;
         Check(described.Contains("Fz -1 \u2192 -2 kN") && described.Contains("Cable-A 900 \u2192 1300"),
             "Loading and pretension descriptions use immutable baseline values");
         Check(fixHeight.Iterations[0].LoadingCandidate.PointLoads.Count == 2,
             "Loading candidate retains its complete point-load assignment set");
+        Check(fixHeight.Iterations[0].LoadingCandidate.Loads.Count == 2 &&
+              fixHeight.Iterations[0].LoadingCandidate.Loads.All(load => load.Fz < 0),
+            "Loading candidate resolves complete downward point-load assignments");
 
         state.Study.Mode = IterationStudyMode.FixPretension;
         state.Study.FixedPretensionCandidateId = "P02";
@@ -126,6 +133,10 @@ internal static class StudyComposerChecks
     private sealed class NoOpSap : ISapGateway
     {
         public Task<ModelInfo> ConnectAsync() => throw new NotSupportedException();
+        public Task<ModelInfo> OpenModelAsync(string modelPath) => throw new NotSupportedException();
+        public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => throw new NotSupportedException();
+        public Task SaveAsync(ModelInfo expected) => Task.CompletedTask;
+        public Task<ModelInfo> GetCurrentModelInfoAsync() => throw new NotSupportedException();
         public Task<ModelSnapshot> ReadAsync() => throw new NotSupportedException();
         public Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<PointLoad>>([]);
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) =>

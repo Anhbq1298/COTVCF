@@ -86,7 +86,7 @@
      <Grid.ColumnDefinitions><ColumnDefinition Width="62*"/><ColumnDefinition Width="6"/><ColumnDefinition Width="38*"/></Grid.ColumnDefinitions>
      <c:Structural2DViewer Grid.Column="0" Model="{Binding State.Geometry}" ShowPointLabels="True" AppliedPoints="{Binding State.AppliedPoints}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, Mode=TwoWay}"/>
      <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
-     <Grid Grid.Column="2" Margin="10,0,0,0">
+     <Grid Grid.Column="2" Margin="10,0,0,0" IsEnabled="{Binding IsIdle}">
       <Grid.RowDefinitions><RowDefinition Height="44*"/><RowDefinition Height="8"/><RowDefinition Height="56*"/></Grid.RowDefinitions>
 
       <Border Grid.Row="0" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
@@ -277,7 +277,7 @@
 
      <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
 
-     <Grid Grid.Column="2" Margin="10,0,0,0">
+     <Grid Grid.Column="2" Margin="10,0,0,0" IsEnabled="{Binding IsIdle}">
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <DockPanel Grid.Row="0" Margin="0,0,0,4">
        <Button DockPanel.Dock="Right" Content="Save Config" Command="{Binding SaveTabConfig}" CommandParameter="Cable"
@@ -349,7 +349,7 @@
     <TabItem.Header>
      <StackPanel Width="124">
       <TextBlock Text="05  ITERATION" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
-      <TextBlock Text="Study composer" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
+      <TextBlock Text="{Binding StudyBuildStateText}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
     <Grid>
@@ -429,7 +429,26 @@
          <StackPanel>
           <TextBlock Text="STUDY SPACE" Style="{StaticResource Subheading}"/>
           <c:LatexTextBlock Formula="{Binding StudySpaceFormula}" Style="{StaticResource Formula}" Foreground="{StaticResource Accent}" FontSize="13" FontWeight="SemiBold"/>
-          <TextBlock Text="{Binding StudyModeLabel}" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
+         <TextBlock Text="{Binding StudyModeLabel}" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
+         </StackPanel>
+        </Border>
+
+        <TextBlock Text="EXECUTION" Style="{StaticResource Subheading}" Margin="0,12,0,4"/>
+        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="10">
+         <StackPanel>
+          <Grid>
+           <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="86"/></Grid.ColumnDefinitions>
+           <StackPanel>
+            <TextBlock Text="Concurrent Study Workers" FontWeight="SemiBold"/>
+            <TextBlock Text="Background SAP2000 instances; max 3" Style="{StaticResource Hint}"/>
+           </StackPanel>
+           <ComboBox Grid.Column="1" ItemsSource="{Binding WorkerCountOptions}" SelectedItem="{Binding RequestedWorkerCount, Mode=TwoWay}"
+                     AutomationProperties.Name="Concurrent study workers" ToolTip="Each worker is one isolated sequential SAP2000 execution lane."/>
+          </Grid>
+          <TextBlock Text="Sequential per worker / parallel across workers" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" Margin="0,7,0,0"/>
+          <TextBlock Text="Additional SAP2000 licenses may be required." FontSize="10.5" Foreground="{StaticResource Muted}"/>
+          <TextBlock Text="STUDY ROOT" Style="{StaticResource Subheading}" Margin="0,8,0,2"/>
+          <TextBlock Text="{Binding StudyRoot}" FontFamily="Consolas" FontSize="10.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding StudyRoot}"/>
          </StackPanel>
         </Border>
        </StackPanel>
@@ -437,8 +456,8 @@
 
       <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
 
-      <Grid Grid.Column="2" Margin="10,0,0,0">
-       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+       <Grid Grid.Column="2" Margin="10,0,0,0">
+       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="3*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
        <DockPanel Grid.Row="0" Margin="0,0,0,7">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
          <TextBlock Text="{Binding StudySelectionSummary}" Foreground="{StaticResource Accent}" FontFamily="Consolas" FontWeight="SemiBold" Margin="0,0,10,0"/>
@@ -452,34 +471,70 @@
        </DockPanel>
 
        <Grid Grid.Row="1" Margin="0,0,0,7">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <TextBlock Text="Output Folder" VerticalAlignment="Center" Margin="0,0,8,0"/>
-        <TextBox Grid.Column="1" Text="{Binding OutputDirectory, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=300}" ToolTip="{Binding OutputDirectory}"/>
-        <Button Grid.Column="2" Content="Browse..." Command="{Binding BrowseOutputFolder}" Margin="6,0,0,0"/>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <TextBlock Text="Study Root" VerticalAlignment="Center" Margin="0,0,8,0"/>
+        <TextBox Grid.Column="1" Text="{Binding StudyRoot, Mode=OneWay}" IsReadOnly="True" ToolTip="Derived automatically from the immutable baseline model path"/>
        </Grid>
 
        <Grid Grid.Row="2">
-        <DataGrid x:Name="StudyPreviewGrid" ItemsSource="{Binding StudyIterations}" CanUserDeleteRows="False" FrozenColumnCount="2"
+        <DataGrid x:Name="StudyPreviewGrid" ItemsSource="{Binding StudyIterations}" CanUserDeleteRows="False" FrozenColumnCount="2" IsReadOnly="{Binding IsStudyRunning}"
                   EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
          <DataGrid.Columns>
           <DataGridTextColumn Header="#" Binding="{Binding RunIndex}" IsReadOnly="True" Width="45" ElementStyle="{StaticResource NumericCell}"/>
           <DataGridTextColumn Header="SAP Model Name" Binding="{Binding SapModelName}" IsReadOnly="True" Width="225" MinWidth="180">
            <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding SapModelName}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
-          <DataGridTextColumn Header="Path" Binding="{Binding FullOutputPath}" IsReadOnly="True" Width="210" MinWidth="150">
-           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding FullOutputPath}"/></Style></DataGridTextColumn.ElementStyle>
+          <DataGridTextColumn Header="Folder" Binding="{Binding IterationDirectory}" IsReadOnly="True" Width="170" MinWidth="130">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding IterationDirectory}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
           <DataGridTextColumn Header="Description - changes from baseline" Binding="{Binding Description}" IsReadOnly="True" Width="*" MinWidth="280">
            <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding Description}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
-          <DataGridCheckBoxColumn Header="Run Iterate" Binding="{Binding RunIterate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="94" MinWidth="88"/>
+          <DataGridTextColumn Header="Worker" Binding="{Binding WorkerText}" IsReadOnly="True" Width="62" MinWidth="58"/>
+          <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" IsReadOnly="True" Width="120" MinWidth="100">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding CurrentStageText}"/></Style></DataGridTextColumn.ElementStyle>
+          </DataGridTextColumn>
+          <DataGridCheckBoxColumn Header="Run" Binding="{Binding RunIterate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="54" MinWidth="50"/>
+          <DataGridTemplateColumn Header="Open" Width="54" MinWidth="50" IsReadOnly="True">
+           <DataGridTemplateColumn.CellTemplate><DataTemplate>
+            <Button Content="Folder" MinHeight="20" Padding="4,0" Margin="0" Command="{Binding DataContext.OpenIterationFolder, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" ToolTip="Open this iteration folder"/>
+           </DataTemplate></DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
          </DataGrid.Columns>
         </DataGrid>
         <TextBlock Text="{Binding StudyPreviewEmptyText}" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center"
                    Visibility="{Binding ShowStudyEmptyState, Converter={StaticResource BoolVisibility}}"/>
        </Grid>
 
-       <Border Grid.Row="3" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Margin="0,8,0,0" MaxHeight="138">
+       <Border Grid.Row="3" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Margin="0,8,0,0"
+               Visibility="{Binding HasStudyWorkers, Converter={StaticResource BoolVisibility}}">
+        <Grid Margin="8">
+         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+         <Grid>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+          <TextBlock Text="WORKER MONITOR" Style="{StaticResource Subheading}" Margin="0"/>
+          <ProgressBar Grid.Column="1" Height="8" Minimum="0" Maximum="100" Value="{Binding StudyOverallProgress, Mode=OneWay}" Margin="10,3"/>
+          <TextBlock Grid.Column="2" Text="{Binding StudyProgressText}" FontFamily="Consolas" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+         </Grid>
+         <ItemsControl Grid.Row="1" ItemsSource="{Binding StudyWorkers}" Margin="0,6,0,5">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate><DataTemplate>
+           <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Raised}" Padding="7" Margin="0,0,6,0" MinHeight="86">
+            <Grid>
+             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+             <DockPanel><TextBlock DockPanel.Dock="Right" Text="{Binding StateText}" FontFamily="Consolas" FontSize="10" FontWeight="SemiBold"/><TextBlock Text="{Binding InstanceName}" FontWeight="SemiBold"/></DockPanel>
+             <TextBlock Grid.Row="1" Text="{Binding GateText}" FontFamily="Consolas" FontSize="10" Foreground="{StaticResource Muted}"/>
+             <DockPanel Grid.Row="2" Margin="0,4,0,0"><TextBlock DockPanel.Dock="Right" Text="{Binding StageProgressText}" FontFamily="Consolas" FontSize="10" Foreground="{StaticResource Muted}"/><TextBlock Text="{Binding CurrentIterationId, TargetNullValue=Waiting}" FontFamily="Consolas" TextTrimming="CharacterEllipsis"/></DockPanel>
+             <DockPanel Grid.Row="3"><TextBlock DockPanel.Dock="Right" Text="{Binding CompletedCount, StringFormat=Ready: {0}}" FontFamily="Consolas" FontSize="10"/><TextBlock Text="{Binding StageText}" FontSize="10.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding LastMessage}"/></DockPanel>
+            </Grid>
+           </Border>
+          </DataTemplate></ItemsControl.ItemTemplate>
+         </ItemsControl>
+         <DockPanel Grid.Row="2"><TextBlock DockPanel.Dock="Right" Text="{Binding StudyBuildStateText}" FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/><TextBlock Text="{Binding StudyCountsText}" FontFamily="Consolas" FontSize="10.5"/></DockPanel>
+        </Grid>
+       </Border>
+
+       <Border Grid.Row="4" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Margin="0,8,0,0" MaxHeight="116">
         <Grid>
          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
          <TextBlock Text="VALIDATION ISSUES" Style="{StaticResource Subheading}" Margin="8,5,8,4"/>
@@ -501,10 +556,12 @@
      </Grid>
 
      <Grid Grid.Row="1" Margin="0,10,0,0">
-      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <Button Content="Validate Study" Command="{Binding Validate}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/>
-      <Button Grid.Column="2" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 5 into the active project"/>
-      <Button Grid.Column="3" Content="{Binding RunStudyLabel}" IsEnabled="{Binding CanRunStudy}" ToolTip="{Binding RunStudyToolTip}" Margin="0"/>
+      <Button Grid.Column="2" Content="Open Study Folder" Command="{Binding OpenStudyFolder}"/>
+      <Button Grid.Column="3" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 5 into the active project"/>
+      <Button Grid.Column="4" Content="Cancel Remaining" Command="{Binding CancelStudy}"/>
+      <Button Grid.Column="5" Content="{Binding RunStudyLabel}" Command="{Binding BuildSelectedModels}" Style="{StaticResource Primary}" ToolTip="{Binding RunStudyToolTip}" Margin="0"/>
      </Grid>
     </Grid>
    </TabItem>

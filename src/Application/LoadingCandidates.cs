@@ -3,9 +3,6 @@ using COT_VCF.Domain;
 
 namespace COT_VCF.Application;
 
-/// <summary>One loading scenario: a chosen qz for every load definition at once.</summary>
-public sealed record LoadingCombination(long Index, IReadOnlyList<(string Name, double Qz)> Loads);
-
 /// <summary>
 /// Tab 02 loading candidate space. A loading scenario needs a value for <b>every</b> load definition,
 /// so the candidate count is the <b>Cartesian product</b> of each definition's candidate values —

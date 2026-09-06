@@ -1,13 +1,7 @@
 using System.Numerics;
-using System.IO;
 using COT_VCF.Domain;
 
 namespace COT_VCF.Application;
-
-public sealed record StudyLoadingCandidate(string Id, LoadingCombination Combination, IReadOnlyList<LoadingCandidate> PointLoads)
-{
-    public string DisplayName => $"{Id} - {Combination.Loads.Count} load definition{(Combination.Loads.Count == 1 ? "" : "s")}";
-}
 
 public sealed record StudyHeightCandidate(string Id, TrussCandidate Candidate, string Unit)
 {
@@ -19,32 +13,11 @@ public sealed record StudyPretensionCandidate(string Id, PretensionCombination C
     public string DisplayName => $"{Id} - {Candidate.CableForces.Count} cable{(Candidate.CableForces.Count == 1 ? "" : "s")}";
 }
 
-public sealed class StudyIterationPreview : Observable
-{
-    private bool runIterate;
-
-    public required int RunIndex { get; init; }
-    public required string IterationKey { get; init; }
-    public required string LoadingCandidateId { get; init; }
-    public required string HeightCandidateId { get; init; }
-    public required string PretensionCandidateId { get; init; }
-    public required StudyLoadingCandidate LoadingCandidate { get; init; }
-    public required TrussCandidate HeightCandidate { get; init; }
-    public required PretensionCombination PretensionCandidate { get; init; }
-    public required string SapModelName { get; init; }
-    public required string OutputDirectory { get; init; }
-    public required string FullOutputPath { get; init; }
-    public required string Description { get; init; }
-    public bool RunIterate { get => runIterate; set => Set(ref runIterate, value); }
-    public bool IsValid { get; init; } = true;
-    public string ValidationMessage { get; init; } = "";
-}
-
 public sealed record StudyCompositionResult(
-    IReadOnlyList<StudyLoadingCandidate> LoadingCandidates,
+    IReadOnlyList<LoadingStudyCandidate> LoadingCandidates,
     IReadOnlyList<StudyHeightCandidate> HeightCandidates,
     IReadOnlyList<StudyPretensionCandidate> PretensionCandidates,
-    IReadOnlyList<StudyIterationPreview> Iterations,
+    IReadOnlyList<StudyIteration> Iterations,
     BigInteger ExpectedRunCount,
     bool PreviewLimitExceeded,
     string EffectiveFixedHeightId,
@@ -53,6 +26,9 @@ public sealed record StudyCompositionResult(
 public sealed class StudyCompositionService
 {
     public const int MaxPreviewRows = 50_000;
+    private readonly StudyPathService paths;
+
+    public StudyCompositionService(StudyPathService? paths = null) => this.paths = paths ?? new();
 
     public StudyCompositionResult Compose(ApplicationState state)
     {
@@ -68,7 +44,17 @@ public sealed class StudyCompositionService
             return Empty(expected, candidateLimitExceeded || expected > MaxPreviewRows, state.Study);
 
         var loads = LoadingCandidates.Enumerate(state.LoadDefinitions.ToArray())
-            .Select(c => new StudyLoadingCandidate(CandidateId('L', c.Index), c, BuildPointLoads(state, c)))
+            .Select(c =>
+            {
+                var rows = BuildPointLoads(state, c);
+                return new LoadingStudyCandidate
+                {
+                    Id = CandidateId('L', c.Index),
+                    Combination = c,
+                    PointLoads = rows,
+                    Loads = rows.Select(row => new PointLoad(row.AppliedPt, row.Case, 0, 0, row.FzKn)).ToArray()
+                };
+            })
             .ToArray();
         var heights = state.Truss.CandidateHeights.Select((height, index) =>
         {
@@ -92,7 +78,7 @@ public sealed class StudyCompositionService
         if ((state.Study.Mode == IterationStudyMode.FixHeight && fixedHeightIndex < 0) ||
             (state.Study.Mode == IterationStudyMode.FixPretension && fixedPretensionIndex < 0))
             return new(loads, heights, pretensions, [], expected, false, fixedHeight, fixedPretension);
-        var rows = new List<StudyIterationPreview>((int)expected);
+        var rows = new List<StudyIteration>((int)expected);
         foreach (var run in StudyPlan.Enumerate(state.Study.Mode, loads.Length, heights.Length, pretensions.LongLength,
                      fixedHeightIndex, fixedPretensionIndex))
         {
@@ -100,21 +86,28 @@ public sealed class StudyCompositionService
             var height = heights[run.HeightIndex];
             var pretension = pretensions[run.PretensionIndex];
             var key = $"{load.Id}_{height.Id}_{pretension.Id}";
-            var fileName = BuildModelName(state.SessionBaselineModel ?? state.Model, key);
-            var fullPath = CombinePath(state.Study.OutputDirectory, fileName);
-            rows.Add(new StudyIterationPreview
+            string directory = "", fullPath = "", fileName = $"COT_VCF_{key}.sdb";
+            try
+            {
+                var baselinePath = (state.SessionBaselineModel ?? state.Model)?.Path ?? "";
+                directory = paths.GetIterationDirectory(baselinePath, key);
+                fullPath = paths.GetIterationModelPath(baselinePath, key);
+                fileName = System.IO.Path.GetFileName(fullPath);
+            }
+            catch { }
+            rows.Add(new StudyIteration
             {
                 RunIndex = checked((int)run.Index + 1),
-                IterationKey = key,
+                IterationId = key,
                 LoadingCandidateId = load.Id,
                 HeightCandidateId = height.Id,
                 PretensionCandidateId = pretension.Id,
                 LoadingCandidate = load,
                 HeightCandidate = height.Candidate,
                 PretensionCandidate = pretension.Candidate,
-                SapModelName = fileName,
-                OutputDirectory = state.Study.OutputDirectory,
-                FullOutputPath = fullPath,
+                ModelName = fileName,
+                IterationDirectory = directory,
+                ModelFullPath = fullPath,
                 Description = Describe(state, load, height, pretension),
                 RunIterate = state.Study.IsRunSelected(key),
                 IsValid = fullPath.Length > 0,
@@ -138,24 +131,7 @@ public sealed class StudyCompositionService
         return ids.Contains(selected, StringComparer.Ordinal) ? selected : ids.FirstOrDefault() ?? "";
     }
 
-    private static string BuildModelName(ModelInfo? baseline, string key)
-    {
-        var stem = baseline is null || string.IsNullOrWhiteSpace(baseline.Path)
-            ? "COT_VCF"
-            : Path.GetFileNameWithoutExtension(baseline.Path);
-        var invalid = Path.GetInvalidFileNameChars().ToHashSet();
-        var clean = new string(stem.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim();
-        return $"{(clean.Length == 0 ? "COT_VCF" : clean)}_{key}.sdb";
-    }
-
-    private static string CombinePath(string directory, string fileName)
-    {
-        if (string.IsNullOrWhiteSpace(directory)) return "";
-        try { return Path.GetFullPath(Path.Combine(directory, fileName)); }
-        catch { return ""; }
-    }
-
-    private static string Describe(ApplicationState state, StudyLoadingCandidate load,
+    private static string Describe(ApplicationState state, LoadingStudyCandidate load,
         StudyHeightCandidate height, StudyPretensionCandidate pretension)
     {
         var parts = new[]
@@ -167,7 +143,7 @@ public sealed class StudyCompositionService
         return string.Join(" | ", parts);
     }
 
-    private static string DescribeLoading(ApplicationState state, StudyLoadingCandidate load)
+    private static string DescribeLoading(ApplicationState state, LoadingStudyCandidate load)
     {
         var values = load.Combination.Loads;
         var qzText = values.Count <= 3

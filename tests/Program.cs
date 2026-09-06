@@ -80,8 +80,24 @@ internal static class Program
                        vm.StudyIterations.All(row => row.HeightCandidateId == "H02"),
                     "Tab 5 switches directly from H01 to H02 without clearing the ComboBox");
                 var grids = FindVisuals<DataGrid>(window).ToArray();
-                Assert(grids.Any(grid => grid.Name == "StudyPreviewGrid" && grid.Items.Count == 36 && grid.Columns.Count == 5),
-                    "Study Preview DataGrid renders five required columns");
+                Assert(grids.Any(grid => grid.Name == "StudyPreviewGrid" && grid.Items.Count == 36 && grid.Columns.Count == 8),
+                    "Study Preview DataGrid renders model, folder, worker, status, run, and open columns");
+
+                vm.StudyWorkers.Add(new SapWorkerSnapshot
+                {
+                    WorkerId = 1,
+                    State = SapWorkerState.Busy,
+                    CurrentIterationId = "L01_H02_P01",
+                    CurrentStage = StudyWorkerStage.ApplyingLoading,
+                    CurrentModelPath = @"C:\Models\Study\L01_H02_P01\COT_VCF_L01_H02_P01.sdb",
+                    CompletedCount = 3,
+                    LastMessage = "Applying loading candidate."
+                });
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "Gate: OCCUPIED") &&
+                       FindVisuals<TextBlock>(window).Any(text => text.Text == "Applying Loading"),
+                    "Worker monitor renders worker gate and current stage text");
 
                 var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                 bitmap.Render(window);
@@ -196,6 +212,7 @@ internal static class Program
             try { workflow.RefreshAsync().GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
             Assert(!state.BaselineCaptured && state.Truss.TopPoints.Contains("top") && state.PointLoads.Count == 2, "External geometry changes invalidate baseline but preserve setup");
             StudyComposerChecks.Run();
+            StudyExecutionChecks.Run();
             GatewayChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }
@@ -224,6 +241,10 @@ internal static class Program
         public required ModelSnapshot Snapshot { get; init; }
         public int Writes { get; private set; }
         public Task<ModelInfo> ConnectAsync() => Task.FromResult(Snapshot.Info);
+        public Task<ModelInfo> OpenModelAsync(string modelPath) => Task.FromResult(Snapshot.Info with { Path = modelPath });
+        public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => Task.FromResult(expected with { Path = targetPath, IsLocked = false });
+        public Task SaveAsync(ModelInfo expected) => Task.CompletedTask;
+        public Task<ModelInfo> GetCurrentModelInfoAsync() => Task.FromResult(Snapshot.Info);
         public Task<ModelSnapshot> ReadAsync() => Task.FromResult(Snapshot);
         public Task<IReadOnlyList<PointLoad>> ReadPointLoadsAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<PointLoad>>([]);
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> m, ModelInfo e) => Task.FromResult<IReadOnlyList<ForceSource>>([]);

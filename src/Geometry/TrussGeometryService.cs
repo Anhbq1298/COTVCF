@@ -45,6 +45,45 @@ public sealed class TrussGeometryService
         return new(points, baseline.Members);
     }
 
+    /// <summary>Builds one frozen study geometry directly from the immutable baseline.</summary>
+    public GeometryModel BuildCandidateGeometry(
+        GeometryModel baseline,
+        IReadOnlyList<string> topPoints,
+        IReadOnlyList<string> middlePoints,
+        IReadOnlyList<string> bottomPoints,
+        TrussCandidate candidate)
+    {
+        var all = topPoints.Concat(middlePoints).Concat(bottomPoints).ToArray();
+        if (topPoints.Count == 0 || middlePoints.Count == 0 || bottomPoints.Count == 0)
+            throw new InvalidOperationException("The frozen study is missing one or more truss chord groups.");
+        if (all.Distinct(StringComparer.Ordinal).Count() != all.Length)
+            throw new InvalidOperationException("A frozen truss point belongs to more than one chord group.");
+        if (all.Any(name => !baseline.Points.ContainsKey(name)))
+            throw new InvalidOperationException("A frozen truss point is missing from the immutable baseline geometry.");
+        if (!double.IsFinite(candidate.TopDz) || !double.IsFinite(candidate.MidDz) || !double.IsFinite(candidate.BotDz))
+            throw new InvalidOperationException("The truss candidate contains a non-finite chord displacement.");
+
+        var top = topPoints.ToHashSet(StringComparer.Ordinal);
+        var middle = middlePoints.ToHashSet(StringComparer.Ordinal);
+        var bottom = bottomPoints.ToHashSet(StringComparer.Ordinal);
+        var points = baseline.Points.ToDictionary(
+            pair => pair.Key,
+            pair => pair.Value with
+            {
+                Position = pair.Value.Position with
+                {
+                    Z = pair.Value.Position.Z +
+                        (top.Contains(pair.Key) ? candidate.TopDz :
+                         middle.Contains(pair.Key) ? candidate.MidDz :
+                         bottom.Contains(pair.Key) ? candidate.BotDz : 0)
+                }
+            },
+            StringComparer.Ordinal);
+        if (points.Values.Any(point => !point.Position.IsFinite))
+            throw new InvalidOperationException("Candidate geometry exceeds the supported numeric range.");
+        return new GeometryModel(points, baseline.Members.ToArray());
+    }
+
     /// <summary>Signed Z shift for each chord given the reference chord and ΔH = candidate - baseline height.
     /// Directions are never hard-coded; a negative ΔH reverses the movement.</summary>
     public static (double Top, double Mid, double Bot) ChordDeltas(ReferenceChord reference, double deltaHeight) => reference switch

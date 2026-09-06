@@ -17,7 +17,7 @@ public sealed class StudyValidationService
         if (!state.SessionBaselineCaptured) Error("Baseline Model", "The first-connected baseline snapshot is not available.");
         if (!state.BaselineCaptured) Error("Truss Height", "Capture the baseline height from the original model.");
 
-        ValidateOutputDirectory(state.Study.OutputDirectory, Error);
+        ValidateBaselineAndOutput(state, composition, Error);
 
         foreach (var issue in new ConfigurationValidator().ValidateLoadingCriteria(state))
             issues.Add(issue with { Section = "Loading Setup" });
@@ -62,22 +62,37 @@ public sealed class StudyValidationService
         return issues.Distinct().ToArray();
     }
 
-    private static void ValidateOutputDirectory(string directory, Action<string, string> error)
+    private static void ValidateBaselineAndOutput(
+        ApplicationState state,
+        StudyCompositionResult composition,
+        Action<string, string> error)
     {
-        if (string.IsNullOrWhiteSpace(directory))
+        if (state.SessionBaselineModel is not { Path.Length: > 0 } baseline)
         {
-            error("Output Folder", "Choose an output folder for generated SAP models.");
+            error("Baseline Model", "Save and reconnect the baseline SAP2000 model before building a study.");
             return;
         }
-
         try
         {
-            if (!Path.IsPathFullyQualified(directory)) error("Output Folder", "Use a fully qualified output folder path.");
-            _ = Path.GetFullPath(directory);
+            var baselinePath = Path.GetFullPath(baseline.Path);
+            if (!Path.IsPathFullyQualified(baselinePath) || !File.Exists(baselinePath))
+                error("Baseline Model", "The immutable baseline .sdb file does not exist at its connected path.");
+            if (!string.Equals(baseline.ForceUnit, "kN", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(baseline.LengthUnit, "m", StringComparison.OrdinalIgnoreCase))
+                error("Baseline Model", $"Study candidates use kN and m. Set SAP2000 present units to kN / m before reconnecting (current: {baseline.Units}).");
+            _ = new StudyPathService().GetStudyRoot(baselinePath);
+
+            foreach (var row in composition.Iterations.Where(row => row.RunIterate))
+            {
+                if (File.Exists(row.ModelFullPath))
+                    error("Existing Output", $"{row.IterationId} already has a child model. Existing outputs are never overwritten.");
+                else if (Directory.Exists(row.IterationDirectory) && Directory.EnumerateFileSystemEntries(row.IterationDirectory).Any())
+                    error("Existing Output", $"{row.IterationId} already has a non-empty iteration folder. Existing outputs are never overwritten.");
+            }
         }
         catch (Exception)
         {
-            error("Output Folder", "The output folder path is not valid.");
+            error("Output Folder", "The study folder derived from the baseline model path is not valid or accessible.");
         }
     }
 }

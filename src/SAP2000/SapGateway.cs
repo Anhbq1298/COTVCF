@@ -2,17 +2,35 @@ using COT_VCF.Application;
 using COT_VCF.Domain;
 using COT_VCF.Infrastructure;
 using CSiAPIv1;
+using System.IO;
 using System.Runtime.InteropServices;
 
 namespace COT_VCF.SAP2000;
 
 public sealed class SapGateway : ISapGateway
 {
-    private readonly StaWorker worker = new();
+    private readonly StaWorker worker;
+    private readonly bool ownsWorker;
     private cOAPI? api;
     private cSapModel? model;
-    public SapGateway() { }
-    internal SapGateway(cSapModel model) => this.model = model;
+    public SapGateway()
+    {
+        worker = new();
+        ownsWorker = true;
+    }
+    internal SapGateway(cSapModel model)
+    {
+        worker = new();
+        ownsWorker = true;
+        this.model = model;
+    }
+    internal SapGateway(StaWorker worker, cOAPI api, cSapModel model)
+    {
+        this.worker = worker;
+        ownsWorker = false;
+        this.api = api;
+        this.model = model;
+    }
     private cSapModel Model => model ?? throw new InvalidOperationException("Connect to a running SAP2000 model first.");
     private static void Check(int result, string operation, string name = "")
     {
@@ -27,6 +45,47 @@ public sealed class SapGateway : ISapGateway
         model = api.SapModel;
         return ReadInfo();
     });
+    public Task<ModelInfo> OpenModelAsync(string modelPath) => worker.Run(() =>
+    {
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new InvalidOperationException("A baseline model path is required.");
+        var fullPath = Path.GetFullPath(modelPath);
+        if (!File.Exists(fullPath)) throw new FileNotFoundException("The baseline SAP2000 model no longer exists.", fullPath);
+        Check(Model.File.OpenFile(fullPath), "File.OpenFile", fullPath);
+        var info = ReadInfo();
+        if (!SamePath(info.Path, fullPath))
+            throw new InvalidOperationException($"SAP2000 opened a different model than requested. Expected {fullPath}; active {info.Path}.");
+        return info;
+    });
+    public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => worker.Run(() =>
+    {
+        Verify(expected);
+        if (string.IsNullOrWhiteSpace(targetPath)) throw new InvalidOperationException("A child model path is required.");
+        var fullPath = Path.GetFullPath(targetPath);
+        if (File.Exists(fullPath)) throw new InvalidOperationException($"Existing output will not be overwritten: {fullPath}");
+        var parent = Path.GetDirectoryName(fullPath);
+        if (string.IsNullOrWhiteSpace(parent) || !Directory.Exists(parent))
+            throw new DirectoryNotFoundException($"The candidate directory does not exist: {parent}");
+        Check(Model.File.Save(fullPath), "File.Save (SaveAs)", fullPath);
+        var child = ReadInfo();
+        if (!SamePath(child.Path, fullPath))
+            throw new InvalidOperationException($"SAP2000 did not activate the requested child model. Expected {fullPath}; active {child.Path}.");
+        if (child.UnitsCode != expected.UnitsCode)
+            throw new InvalidOperationException($"SAP units changed while creating the child model ({expected.Units} to {child.Units}).");
+        if (child.IsLocked)
+        {
+            Check(Model.SetModelIsLocked(false), "SetModelIsLocked", fullPath);
+            child = ReadInfo();
+        }
+        return child;
+    });
+    public Task SaveAsync(ModelInfo expected) => worker.Run(() =>
+    {
+        Verify(expected, true);
+        Check(Model.File.Save(expected.Path), "File.Save", expected.Path);
+        Verify(expected);
+        return true;
+    });
+    public Task<ModelInfo> GetCurrentModelInfoAsync() => worker.Run(ReadInfo);
     private ModelInfo ReadInfo()
     {
         string version = ""; double number = 0;
@@ -40,7 +99,7 @@ public sealed class SapGateway : ISapGateway
     private void Verify(ModelInfo expected, bool write = false)
     {
         var actual = ReadInfo();
-        if (!string.Equals(actual.Path, expected.Path, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("The active SAP model has changed. Reconnect and review your configuration.");
+        if (!SamePath(actual.Path, expected.Path)) throw new InvalidOperationException("The active SAP model has changed. Reconnect and review your configuration.");
         if (actual.UnitsCode != expected.UnitsCode) throw new InvalidOperationException($"SAP units changed from {expected.Units} to {actual.Units}. Restore the previous units before continuing, or start a new configuration.");
         if (write && string.IsNullOrWhiteSpace(actual.Path)) throw new InvalidOperationException("Save the SAP2000 model before applying changes so its identity can be checked.");
         if (write && actual.IsLocked) throw new InvalidOperationException("The SAP2000 model is locked. Unlock it in SAP2000 (which clears analysis results), then retry Apply.");
@@ -241,6 +300,11 @@ public sealed class SapGateway : ISapGateway
         return true;
     });
     private static bool Close(Position a, Position b) => Math.Abs(a.X - b.X) <= 1e-7 && Math.Abs(a.Y - b.Y) <= 1e-7 && Math.Abs(a.Z - b.Z) <= 1e-7;
+    private static bool SamePath(string left, string right)
+    {
+        try { return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase); }
+        catch { return string.Equals(left, right, StringComparison.OrdinalIgnoreCase); }
+    }
 
     private const double PretensionRelDist = 0.5; // Relative distance along the cable for the target-force assignment.
 
@@ -269,5 +333,10 @@ public sealed class SapGateway : ISapGateway
         return names.Take(n).ToArray();
     });
 
-    public void Dispose() { worker.Dispose(); /* SAP2000 remains running; no ApplicationExit. */ }
+    public void Dispose()
+    {
+        model = null;
+        api = null;
+        if (ownsWorker) worker.Dispose(); // Controller SAP2000 remains running; no ApplicationExit.
+    }
 }

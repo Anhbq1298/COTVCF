@@ -4,6 +4,7 @@ using COT_VCF.Domain;
 using Microsoft.Win32;
 using System.Collections;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Windows.Input;
@@ -17,6 +18,8 @@ public sealed class MainViewModel : Observable
     private readonly WorkflowService workflow;
     private readonly ISelectionService selection;
     private readonly ConfigService config;
+    private readonly StudyExecutionCoordinator? studyExecution;
+    private readonly StudyExecutionSnapshotFactory studySnapshotFactory;
     private bool busy;
     private int selectedTab;
     private AppliedPoint? selectedAppliedPoint;
@@ -29,9 +32,25 @@ public sealed class MainViewModel : Observable
     private bool suppressStudySelectionEvents;
     private bool normalizingStudyCandidateIds;
     private bool studyRefreshPending;
+    private bool isStudyRunning;
+    private int requestedWorkerCount = 1;
+    private int studyCompletedCount, studyFailedCount, studyRunningCount, studyQueuedCount, studySkippedCount, studyCancelledCount;
+    private int studyPeakConcurrent;
+    private StudyBuildState studyBuildState = StudyBuildState.ReadyToBuild;
+    private CancellationTokenSource? studyCancellation;
 
     public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); } }
     public bool IsIdle => !IsBusy;
+    public bool IsStudyRunning
+    {
+        get => isStudyRunning;
+        private set
+        {
+            if (!Set(ref isStudyRunning, value)) return;
+            Notify(nameof(CanCancelStudy));
+            Notify(nameof(CanRunStudy));
+        }
+    }
     public int SelectedTab { get => selectedTab; set => Set(ref selectedTab, value); }
     public string Message { get => message; private set => Set(ref message, value); }
     public Func<bool>? CommitEditors { get; set; }
@@ -118,7 +137,43 @@ public sealed class MainViewModel : Observable
     public int HeightCandidateCount => State.BaselineCaptured ? State.Truss.CandidateCount : 0;
     public IReadOnlyList<StudyHeightCandidate> HeightStudyCandidates => studyComposition.HeightCandidates;
     public IReadOnlyList<StudyPretensionCandidate> PretensionStudyCandidates => studyComposition.PretensionCandidates;
-    public IReadOnlyList<StudyIterationPreview> StudyIterations => studyComposition.Iterations;
+    public IReadOnlyList<StudyIteration> StudyIterations => studyComposition.Iterations;
+    public IReadOnlyList<int> WorkerCountOptions { get; } = [1, 2, 3];
+    public int RequestedWorkerCount
+    {
+        get => requestedWorkerCount;
+        set
+        {
+            var next = Math.Clamp(value, 1, MaxWorkerCount);
+            if (!Set(ref requestedWorkerCount, next)) return;
+            Notify(nameof(RunStudyLabel));
+            Notify(nameof(RunStudyToolTip));
+        }
+    }
+    public int MaxWorkerCount => 3;
+    public ObservableCollection<SapWorkerSnapshot> StudyWorkers { get; } = [];
+    public int StudyCompletedCount => studyCompletedCount;
+    public int StudyFailedCount => studyFailedCount;
+    public int StudyRunningCount => studyRunningCount;
+    public int StudyQueuedCount => studyQueuedCount;
+    public int StudySkippedCount => studySkippedCount;
+    public int StudyCancelledCount => studyCancelledCount;
+    public int StudyFinishedCount => studyCompletedCount + studyFailedCount + studyCancelledCount;
+    public double StudyOverallProgress => SelectedRunCount == 0 ? 0 : Math.Min(100, 100.0 * StudyFinishedCount / SelectedRunCount);
+    public string StudyProgressText => $"{StudyFinishedCount:N0} / {SelectedRunCount:N0}";
+    public string StudyCountsText => $"Ready {StudyCompletedCount:N0}   Running {StudyRunningCount:N0}   Queued {StudyQueuedCount:N0}   Failed {StudyFailedCount:N0}   Skipped {StudySkippedCount:N0}";
+    public bool HasStudyWorkers => StudyWorkers.Count > 0;
+    public bool CanCancelStudy => IsStudyRunning && studyCancellation is { IsCancellationRequested: false };
+    public StudyBuildState StudyBuildState => studyBuildState;
+    public string StudyBuildStateText => studyBuildState switch
+    {
+        StudyBuildState.ReadyToBuild => "READY TO BUILD",
+        StudyBuildState.Completed => "BUILD COMPLETE",
+        StudyBuildState.CompletedWithErrors => "BUILD COMPLETED WITH ERRORS",
+        StudyBuildState.Cancelled => "BUILD CANCELLED",
+        StudyBuildState.Failed => "BUILD FAILED",
+        _ => $"BUILDING - {RequestedWorkerCount} INSTANCE{(RequestedWorkerCount == 1 ? "" : "S")}"
+    };
 
     public string StudyModeLabel => State.Study.Mode switch
     {
@@ -194,6 +249,14 @@ public sealed class MainViewModel : Observable
         .ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
     public string BaselineModelName => State.SessionBaselineModel?.Name ?? "Baseline unavailable";
     public string BaselineModelPath => State.SessionBaselineModel?.Path ?? "";
+    public string StudyRoot
+    {
+        get
+        {
+            try { return new StudyPathService().GetStudyRoot(BaselineModelPath); }
+            catch { return "Study root unavailable"; }
+        }
+    }
     public int GeneratedRunCount => StudyIterations.Count;
     public int SelectedRunCount => StudyIterations.Count(i => i.RunIterate);
     public string StudySelectionSummary => $"{SelectedRunCount:N0} / {GeneratedRunCount:N0} selected";
@@ -212,9 +275,9 @@ public sealed class MainViewModel : Observable
         StudyValidationState.Invalid => "Study validation failed.",
         _ => "Not validated yet."
     };
-    public string RunStudyLabel => $"Run Study - {SelectedRunCount:N0} Iterations";
-    public bool CanRunStudy => false;
-    public string RunStudyToolTip => "SAP iteration execution is reserved for the next phase.";
+    public string RunStudyLabel => $"Build {SelectedRunCount:N0} Models - {RequestedWorkerCount} Instance{(RequestedWorkerCount == 1 ? "" : "s")}";
+    public bool CanRunStudy => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0;
+    public string RunStudyToolTip => $"Each background SAP2000 worker processes one model at a time. Up to {RequestedWorkerCount} models build concurrently; additional SAP2000 licenses may be required.";
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
     public string StatusLine => State.IsSapConnected
         ? $"{ModelName}  ·  {State.Units}  ·  {(State.Model?.IsLocked == true ? "Locked" : "Unlocked")}"
@@ -256,6 +319,11 @@ public sealed class MainViewModel : Observable
     public Command BrowseOutputFolder { get; }
     public Command SelectAllStudyRuns { get; }
     public Command ClearAllStudyRuns { get; }
+    public Command BuildSelectedModels { get; }
+    public Command CancelStudy { get; }
+    public Command OpenStudyFolder { get; }
+    public Command OpenIterationFolder { get; }
+    public Command ViewIterationError { get; }
     public Command SaveTabConfig { get; }
     public Command SaveAllConfig { get; }
     public Command LoadConfig { get; }
@@ -263,12 +331,25 @@ public sealed class MainViewModel : Observable
     public bool CanUseConfig => !IsBusy && State.IsSapConnected && State.Model is not null;
     private bool applyingProject;
 
-    public MainViewModel(ApplicationState state, WorkflowService workflow, ISelectionService selection, ConfigService config)
+    public MainViewModel(
+        ApplicationState state,
+        WorkflowService workflow,
+        ISelectionService selection,
+        ConfigService config,
+        StudyExecutionCoordinator? studyExecution = null,
+        StudyExecutionSnapshotFactory? studySnapshotFactory = null)
     {
         State = state;
         this.workflow = workflow;
         this.selection = selection;
         this.config = config;
+        this.studyExecution = studyExecution;
+        this.studySnapshotFactory = studySnapshotFactory ?? new();
+        StudyWorkers.CollectionChanged += (_, _) =>
+        {
+            Notify(nameof(HasStudyWorkers));
+            NotifyStudyExecution();
+        };
         bool Ready() => !IsBusy && State.IsSapConnected;
         bool GeometryReady() => Ready() && State.Geometry.Points.Count > 0;
 
@@ -305,21 +386,21 @@ public sealed class MainViewModel : Observable
         {
             if (CommitEditors?.Invoke() == false) return;
             RegenerateStudyPreview();
-            Issues.Clear();
-            foreach (var issue in new StudyValidationService().Validate(State, studyComposition)) Issues.Add(issue);
-            studyValidationState = Issues.Any(i => i.Severity == ValidationSeverity.Error)
-                ? StudyValidationState.Invalid
-                : Issues.Any(i => i.Severity == ValidationSeverity.Warning)
-                    ? StudyValidationState.ValidWithWarnings
-                    : StudyValidationState.Valid;
-            Message = studyValidationState == StudyValidationState.Valid
-                ? $"Study is valid - {SelectedRunCount:N0} iterations selected. Execution remains a next-phase task."
-                : $"{Issues.Count} study validation issue{(Issues.Count == 1 ? "" : "s")} need review.";
-            NotifyStudyPresentation();
+            ValidateStudy(showMessage: true);
         }, () => !IsBusy);
         BrowseOutputFolder = new(_ => BrowseForOutputFolder(), () => !IsBusy);
         SelectAllStudyRuns = new(_ => SetAllStudyRuns(true), () => !IsBusy && StudyIterations.Count > 0);
         ClearAllStudyRuns = new(_ => SetAllStudyRuns(false), () => !IsBusy && StudyIterations.Count > 0);
+        BuildSelectedModels = new(_ => RunStudy(), () => CanRunStudy);
+        CancelStudy = new(_ => CancelStudyExecution(), () => CanCancelStudy);
+        OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => !IsStudyRunning && Directory.Exists(StudyRoot));
+        OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); },
+            () => !IsStudyRunning);
+        ViewIterationError = new(p =>
+        {
+            if (p is StudyIteration { ErrorMessage.Length: > 0 } row)
+                Warn($"{row.IterationId} - Build Error", row.ErrorMessage);
+        });
         SaveTabConfig = new(p => SaveTab(p switch
         {
             "Loading" => ConfigTabs.Loading,
@@ -399,7 +480,7 @@ public sealed class MainViewModel : Observable
             if (string.IsNullOrWhiteSpace(State.Study.OutputDirectory) && State.SessionBaselineModel is { Path.Length: > 0 } baseline)
             {
                 var modelDirectory = System.IO.Path.GetDirectoryName(baseline.Path);
-                if (!string.IsNullOrWhiteSpace(modelDirectory)) State.Study.OutputDirectory = System.IO.Path.Combine(modelDirectory, "Study", "Models");
+                if (!string.IsNullOrWhiteSpace(modelDirectory)) State.Study.OutputDirectory = System.IO.Path.Combine(modelDirectory, "Study");
             }
         }
         catch
@@ -425,6 +506,7 @@ public sealed class MainViewModel : Observable
 
     private void ScheduleStudyRegeneration()
     {
+        if (IsStudyRunning) return;
         if (studyRefreshPending) return;
         var dispatcher = System.Windows.Application.Current?.Dispatcher;
         if (dispatcher is null)
@@ -442,6 +524,7 @@ public sealed class MainViewModel : Observable
 
     private void RegenerateStudyPreview()
     {
+        if (IsStudyRunning) return;
         studyRefreshPending = false;
         var nextComposition = studyComposer.Compose(State);
         var heightCandidatesChanged = !EquivalentHeightCandidates(
@@ -502,7 +585,7 @@ public sealed class MainViewModel : Observable
 
     private void StudyIterationPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(StudyIterationPreview.RunIterate) || sender is not StudyIterationPreview row || suppressStudySelectionEvents) return;
+        if (e.PropertyName != nameof(StudyIteration.RunIterate) || sender is not StudyIteration row || suppressStudySelectionEvents) return;
         State.Study.SetRunSelected(row.IterationKey, row.RunIterate);
         config.Session.MarkDirty(ConfigTabs.Study);
         InvalidateStudyValidation();
@@ -542,12 +625,212 @@ public sealed class MainViewModel : Observable
             nameof(FixedHeightCandidateId), nameof(FixedPretensionCandidateId), nameof(OutputDirectory),
             nameof(FixedHeightValueText), nameof(FixedPretensionValueText), nameof(StudyLoadingCell),
             nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudySpaceFormula), nameof(StudyTotalRuns),
-            nameof(BaselineModelName), nameof(BaselineModelPath), nameof(GeneratedRunCount), nameof(SelectedRunCount),
+            nameof(BaselineModelName), nameof(BaselineModelPath), nameof(StudyRoot), nameof(GeneratedRunCount), nameof(SelectedRunCount),
             nameof(StudySelectionSummary), nameof(HasStudyIterations), nameof(ShowStudyEmptyState), nameof(StudyPreviewEmptyText),
             nameof(StudyValidationState), nameof(HasValidationIssues), nameof(ShowValidationStatus), nameof(ValidationStatusText),
             nameof(RunStudyLabel), nameof(CanRunStudy), nameof(RunStudyToolTip)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
+    }
+
+    private bool ValidateStudy(bool showMessage)
+    {
+        Issues.Clear();
+        foreach (var issue in new StudyValidationService().Validate(State, studyComposition)) Issues.Add(issue);
+        studyValidationState = Issues.Any(issue => issue.Severity == ValidationSeverity.Error)
+            ? StudyValidationState.Invalid
+            : Issues.Any(issue => issue.Severity == ValidationSeverity.Warning)
+                ? StudyValidationState.ValidWithWarnings
+                : StudyValidationState.Valid;
+        if (showMessage)
+            Message = studyValidationState is StudyValidationState.Valid or StudyValidationState.ValidWithWarnings
+                ? $"Study is valid - {SelectedRunCount:N0} iterations are ready to build."
+                : $"{Issues.Count} study validation issue{(Issues.Count == 1 ? "" : "s")} need review.";
+        NotifyStudyPresentation();
+        return studyValidationState is StudyValidationState.Valid or StudyValidationState.ValidWithWarnings;
+    }
+
+    private async void RunStudy()
+    {
+        if (IsBusy || studyExecution is null) return;
+        if (CommitEditors?.Invoke() == false) return;
+        RegenerateStudyPreview();
+        if (!ValidateStudy(showMessage: true)) return;
+
+        StudyExecutionSnapshot snapshot;
+        try { snapshot = studySnapshotFactory.Create(State, studyComposition, RequestedWorkerCount); }
+        catch (Exception ex)
+        {
+            studyBuildState = StudyBuildState.Failed;
+            Message = ex.Message;
+            Warn("Unable to Build Study Models", ex.Message);
+            NotifyStudyExecution();
+            return;
+        }
+
+        foreach (var row in StudyIterations)
+        {
+            row.AssignedWorkerId = null;
+            row.CurrentStageText = null;
+            row.ErrorMessage = null;
+            row.Status = row.RunIterate ? StudyIterationStatus.Queued : StudyIterationStatus.Skipped;
+        }
+        studyCompletedCount = studyFailedCount = studyRunningCount = studyCancelledCount = studyPeakConcurrent = 0;
+        studyQueuedCount = snapshot.Jobs.Count(job => job.RunIterate);
+        studySkippedCount = snapshot.Jobs.Count - studyQueuedCount;
+        StudyWorkers.Clear();
+        for (int id = 1; id <= RequestedWorkerCount; id++)
+            StudyWorkers.Add(new SapWorkerSnapshot { WorkerId = id, State = SapWorkerState.Offline });
+
+        studyCancellation = new CancellationTokenSource();
+        studyBuildState = StudyBuildState.Running;
+        IsStudyRunning = true;
+        IsBusy = true;
+        Message = $"Starting {RequestedWorkerCount} isolated SAP2000 study worker{(RequestedWorkerCount == 1 ? "" : "s")}...";
+        NotifyStudyExecution();
+
+        var progress = new Progress<StudyExecutionProgress>(ApplyStudyProgress);
+        try
+        {
+            var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token);
+            studyCompletedCount = result.Completed;
+            studyFailedCount = result.Failed;
+            studyCancelledCount = result.Cancelled;
+            studyRunningCount = 0;
+            studyQueuedCount = 0;
+            studySkippedCount = result.Skipped;
+            studyPeakConcurrent = result.PeakConcurrent;
+            studyBuildState = result.Cancelled > 0 && studyCancellation.IsCancellationRequested
+                ? StudyBuildState.Cancelled
+                : result.Failed > 0 ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
+            Message = studyBuildState switch
+            {
+                StudyBuildState.Completed => $"Build complete - {result.Completed:N0} child models are ready.",
+                StudyBuildState.CompletedWithErrors => $"Build completed with errors - {result.Completed:N0} ready, {result.Failed:N0} failed.",
+                _ => $"Build cancelled - {result.Completed:N0} ready, {result.Cancelled:N0} cancelled."
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            studyBuildState = StudyBuildState.Cancelled;
+            MarkUnfinishedIterations(StudyIterationStatus.Cancelled, "Cancelled before worker assignment.");
+            Message = "Study build cancelled at a safe SAP2000 stage boundary.";
+        }
+        catch (Exception ex)
+        {
+            studyBuildState = StudyBuildState.Failed;
+            MarkUnfinishedIterations(StudyIterationStatus.Failed, ex.Message, leaveUnassignedPlanned: true);
+            Message = ex.Message;
+            Warn("Study Build Failed", ex.Message);
+            if (ex is System.Runtime.InteropServices.COMException) State.Connection = "Connection Lost";
+        }
+        finally
+        {
+            studyCancellation.Dispose();
+            studyCancellation = null;
+            IsStudyRunning = false;
+            IsBusy = false;
+            NotifyStudyExecution();
+            Update();
+        }
+    }
+
+    private void CancelStudyExecution()
+    {
+        if (studyCancellation is null || studyCancellation.IsCancellationRequested) return;
+        studyCancellation.Cancel();
+        Message = $"Cancellation requested. {StudyRunningCount:N0} running candidate{(StudyRunningCount == 1 ? "" : "s")} will stop at the next safe API boundary.";
+        NotifyStudyExecution();
+    }
+
+    private void ApplyStudyProgress(StudyExecutionProgress progress)
+    {
+        if (progress.Total > 0)
+        {
+            studyCompletedCount = progress.Completed;
+            studyFailedCount = progress.Failed;
+            studyCancelledCount = progress.Cancelled;
+            studyRunningCount = progress.Running;
+            studyQueuedCount = progress.Queued;
+            studySkippedCount = progress.Skipped;
+            studyPeakConcurrent = Math.Max(studyPeakConcurrent, progress.Running);
+        }
+
+        if (progress.WorkerId > 0)
+        {
+            var worker = StudyWorkers.FirstOrDefault(item => item.WorkerId == progress.WorkerId);
+            if (worker is null)
+            {
+                worker = new SapWorkerSnapshot { WorkerId = progress.WorkerId };
+                StudyWorkers.Add(worker);
+            }
+            worker.State = progress.WorkerState;
+            worker.CurrentStage = progress.Stage;
+            worker.CurrentIterationId = progress.WorkerState is SapWorkerState.Ready or SapWorkerState.Offline
+                ? null : progress.IterationId;
+            worker.CurrentModelPath = progress.CurrentModelPath;
+            worker.CompletedCount = progress.WorkerCompletedCount;
+            worker.LastMessage = progress.Message;
+        }
+
+        if (progress.IterationId is { Length: > 0 } iterationId &&
+            StudyIterations.FirstOrDefault(row => row.IterationId == iterationId) is { } row)
+        {
+            if (progress.WorkerId > 0) row.AssignedWorkerId = progress.WorkerId;
+            if (progress.IterationStatus is { } status) row.Status = status;
+            row.CurrentStageText = progress.Message;
+            if (progress.IterationStatus is StudyIterationStatus.Failed or StudyIterationStatus.Cancelled)
+                row.ErrorMessage = progress.Message;
+        }
+        if (IsStudyRunning && progress.Message.Length > 0)
+            Message = progress.IterationId is { Length: > 0 }
+                ? $"{progress.IterationId} - {progress.Message}"
+                : progress.Message;
+        NotifyStudyExecution();
+    }
+
+    private void MarkUnfinishedIterations(
+        StudyIterationStatus terminalStatus,
+        string message,
+        bool leaveUnassignedPlanned = false)
+    {
+        foreach (var row in StudyIterations.Where(row => row.RunIterate && row.Status is not
+                     (StudyIterationStatus.Ready or StudyIterationStatus.Failed or StudyIterationStatus.Cancelled)))
+        {
+            if (leaveUnassignedPlanned && row.AssignedWorkerId is null)
+            {
+                row.Status = StudyIterationStatus.Planned;
+                continue;
+            }
+            row.Status = terminalStatus;
+            row.ErrorMessage = message;
+        }
+    }
+
+    private void NotifyStudyExecution()
+    {
+        foreach (var name in new[]
+        {
+            nameof(IsStudyRunning), nameof(CanCancelStudy), nameof(CanRunStudy), nameof(StudyWorkers),
+            nameof(HasStudyWorkers), nameof(StudyCompletedCount), nameof(StudyFailedCount),
+            nameof(StudyRunningCount), nameof(StudyQueuedCount), nameof(StudySkippedCount),
+            nameof(StudyCancelledCount), nameof(StudyFinishedCount), nameof(StudyOverallProgress),
+            nameof(StudyProgressText), nameof(StudyCountsText), nameof(StudyBuildState),
+            nameof(StudyBuildStateText), nameof(RunStudyLabel), nameof(RunStudyToolTip)
+        }) Notify(name);
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private static void OpenFolder(string path)
+    {
+        if (!Directory.Exists(path)) throw new DirectoryNotFoundException($"The study folder does not exist: {path}");
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+    }
+
+    private void TryOpenFolder(string path)
+    {
+        try { OpenFolder(path); }
+        catch (Exception ex) { Message = ex.Message; }
     }
 
     private void SelectLoadLocations()
@@ -883,7 +1166,8 @@ public sealed class MainViewModel : Observable
             nameof(CablePreviewSummary),
             nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
-            nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension)
+            nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
+            nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount)
         }) Notify(name);
         NotifyStudyPresentation();
     }

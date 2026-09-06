@@ -15,7 +15,8 @@ public partial class App : System.Windows.Application
         var state = new ApplicationState();
         var workflow = new WorkflowService(gateway, state);
         var config = new Configuration.ConfigService(gateway, state, workflow);
-        var viewModel = new MainViewModel(state, workflow, new SelectionService(), config);
+        var studyExecution = new StudyExecutionCoordinator(new SapInstanceHostFactory());
+        var viewModel = new MainViewModel(state, workflow, new SelectionService(), config, studyExecution);
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
     }
