@@ -211,9 +211,10 @@ Study composition plus isolated child-model building. Tab 05 does not run analys
 - Study paths are always derived from the immutable first-connected baseline:
   `<baseline folder>/Study/<iteration id>/<baseline stem>_<iteration id>.sdb`. Existing non-empty iteration
   folders or child models block the run and are never silently overwritten.
-- The user selects 1–3 **background** SAP2000 workers. The connected controller instance remains separate.
-  Every worker owns its own process, `cOAPI`, `cSapModel`, STA thread, and one-job gate. A central channel
-  assigns the next job to the next available worker; calls remain sequential within each lane.
+- The user selects 1–3 **total** SAP2000 instances. The already-connected baseline instance is worker 1;
+  only workers 2 and 3 create additional background SAP2000 processes. The connected host is borrowed and
+  never closed by the study pool. A central channel assigns the next job to the next available worker; calls
+  remain sequential within each lane.
 - All requested workers must start and open the baseline before any candidate is dispatched. Each job then
   reopens the same baseline, SaveAs creates the child, applies height/loading/pretension using the child
   `ModelInfo`, reads back point loads and cable target forces after each write, saves and verifies the child,
@@ -221,7 +222,7 @@ Study composition plus isolated child-model building. Tab 05 does not run analys
 - `StudyExecutionSnapshotFactory` freezes candidate assignments, geometry/groups, paths, selections, and
   worker count at run start. Tabs 02–04, study settings, run checkboxes, and project load/save actions are
   disabled while execution is active.
-- The Tab 05 monitor shows each worker ID, gate state, candidate, discrete 1/7 stage, completed count, and
+- The Tab 05 monitor shows each worker ID, gate state, candidate, discrete 1/8 stage, completed count, and
   overall Ready/Running/Queued/Failed/Skipped totals. Cancellation is observed only between SAP API calls;
   active workers attempt to return to baseline and queued jobs become Cancelled.
 - A candidate-level failure may continue on a recovered worker. Failure to restore the baseline faults that

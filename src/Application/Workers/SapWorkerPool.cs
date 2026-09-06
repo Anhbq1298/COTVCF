@@ -4,7 +4,7 @@ using COT_VCF.Domain;
 
 namespace COT_VCF.Application.Workers;
 
-/// <summary>A central next-available-worker queue feeding 1..3 isolated sequential SAP lanes.</summary>
+/// <summary>A central next-available-worker queue feeding 1..3 sequential SAP lanes.</summary>
 public sealed class SapWorkerPool(
     ISapInstanceHostFactory hostFactory,
     IterationModelBuilder? builder = null) : ISapWorkerPool
@@ -24,7 +24,7 @@ public sealed class SapWorkerPool(
     {
         if (this.snapshot is not null) throw new InvalidOperationException("The SAP study worker pool has already started.");
         if (snapshot.RequestedWorkerCount is < 1 or > 3)
-            throw new InvalidOperationException("Concurrent study workers must be between 1 and 3.");
+            throw new InvalidOperationException("Total SAP2000 instances must be between 1 and 3.");
         this.snapshot = snapshot;
 
         for (int id = 1; id <= snapshot.RequestedWorkerCount; id++)
@@ -48,7 +48,7 @@ public sealed class SapWorkerPool(
                 await StopAsync(progress);
                 throw new InvalidOperationException(
                     $"Requested workers: {snapshot.RequestedWorkerCount}. Started successfully: {id - 1}. " +
-                    $"Instance {id} failed: {ex.Message} Study execution has not started. Reduce Concurrent Study Workers and retry.", ex);
+                    $"Instance {id} failed: {ex.Message} Study execution has not started. Reduce Total SAP2000 Instances and retry.", ex);
             }
         }
     }

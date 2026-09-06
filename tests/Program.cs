@@ -59,6 +59,11 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
                 Assert(vm.StudyIterations.Count == 36, "Tab 5 UI binds the expected Fix Pretension rows");
+                vm.RequestedWorkerCount = 3;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "Total SAP2000 Instances") &&
+                       vm.RunStudyToolTip.Contains("starts 2 additional processes", StringComparison.Ordinal),
+                    "Tab 5 counts the connected baseline as instance 1 and describes only two additional processes");
                 var pretensionPicker = FindVisuals<ComboBox>(window)
                     .Single(combo => combo.Items.Cast<object>().OfType<StudyPretensionCandidate>().Any());
                 pretensionPicker.SelectedValue = "P02";

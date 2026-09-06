@@ -439,14 +439,14 @@
           <Grid>
            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="86"/></Grid.ColumnDefinitions>
            <StackPanel>
-            <TextBlock Text="Concurrent Study Workers" FontWeight="SemiBold"/>
-            <TextBlock Text="Background SAP2000 instances; max 3" Style="{StaticResource Hint}"/>
+            <TextBlock Text="Total SAP2000 Instances" FontWeight="SemiBold"/>
+            <TextBlock Text="Includes connected baseline instance; max 3" Style="{StaticResource Hint}"/>
            </StackPanel>
            <ComboBox Grid.Column="1" ItemsSource="{Binding WorkerCountOptions}" SelectedItem="{Binding RequestedWorkerCount, Mode=TwoWay}"
-                     AutomationProperties.Name="Concurrent study workers" ToolTip="Each worker is one isolated sequential SAP2000 execution lane."/>
+                     AutomationProperties.Name="Total SAP2000 instances" ToolTip="The connected instance is worker 1; only the remaining instances are started in the background."/>
           </Grid>
           <TextBlock Text="Sequential per worker / parallel across workers" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" Margin="0,7,0,0"/>
-          <TextBlock Text="Additional SAP2000 licenses may be required." FontSize="10.5" Foreground="{StaticResource Muted}"/>
+          <TextBlock Text="Only workers 2 and 3 start additional SAP2000 processes." FontSize="10.5" Foreground="{StaticResource Muted}"/>
           <TextBlock Text="STUDY ROOT" Style="{StaticResource Subheading}" Margin="0,8,0,2"/>
           <TextBlock Text="{Binding StudyRoot}" FontFamily="Consolas" FontSize="10.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding StudyRoot}"/>
          </StackPanel>

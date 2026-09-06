@@ -271,7 +271,9 @@ public sealed class MainViewModel : Observable
     };
     public string RunStudyLabel => $"Build {SelectedRunCount:N0} Models - {RequestedWorkerCount} Instance{(RequestedWorkerCount == 1 ? "" : "s")}";
     public bool CanRunStudy => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0;
-    public string RunStudyToolTip => $"Each background SAP2000 worker processes one model at a time. Up to {RequestedWorkerCount} models build concurrently; additional SAP2000 licenses may be required.";
+    public string RunStudyToolTip => RequestedWorkerCount == 1
+        ? "Uses the connected SAP2000 instance as worker 1; no additional SAP2000 process is started."
+        : $"Uses the connected SAP2000 instance as worker 1 and starts {RequestedWorkerCount - 1} additional processes. Up to {RequestedWorkerCount} models build concurrently.";
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
     public string StatusLine => State.IsSapConnected
         ? $"{ModelName}  ·  {State.Units}  ·  {(State.Model?.IsLocked == true ? "Locked" : "Unlocked")}"
@@ -670,7 +672,9 @@ public sealed class MainViewModel : Observable
         studyBuildState = StudyBuildState.Running;
         IsStudyRunning = true;
         IsBusy = true;
-        Message = $"Starting {RequestedWorkerCount} isolated SAP2000 study worker{(RequestedWorkerCount == 1 ? "" : "s")}...";
+        Message = RequestedWorkerCount == 1
+            ? "Using the connected SAP2000 instance as study worker 1; no additional process will be started."
+            : $"Using the connected SAP2000 instance as worker 1 and starting {RequestedWorkerCount - 1} additional SAP2000 process{(RequestedWorkerCount == 2 ? "" : "es")}...";
         NotifyStudyExecution();
 
         var progress = new Progress<StudyExecutionProgress>(ApplyStudyProgress);

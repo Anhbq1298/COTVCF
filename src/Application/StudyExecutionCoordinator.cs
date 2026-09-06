@@ -35,7 +35,7 @@ public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactor
     private void ValidateSnapshot(StudyExecutionSnapshot snapshot)
     {
         if (snapshot.RequestedWorkerCount is < 1 or > 3)
-            throw new InvalidOperationException("Concurrent study workers must be between 1 and 3.");
+            throw new InvalidOperationException("Total SAP2000 instances must be between 1 and 3.");
         if (!File.Exists(snapshot.BaselineModelPath))
             throw new FileNotFoundException("The immutable baseline SAP2000 model no longer exists.", snapshot.BaselineModelPath);
         if (snapshot.Jobs.Count(job => job.RunIterate) == 0)

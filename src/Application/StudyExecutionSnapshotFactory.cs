@@ -13,7 +13,7 @@ public sealed class StudyExecutionSnapshotFactory(StudyCandidateResolver? resolv
         int requestedWorkerCount)
     {
         if (requestedWorkerCount is < 1 or > 3)
-            throw new InvalidOperationException("Concurrent study workers must be between 1 and 3.");
+            throw new InvalidOperationException("Total SAP2000 instances must be between 1 and 3.");
         var baseline = state.SessionBaselineModel
             ?? throw new InvalidOperationException("The immutable session baseline is unavailable. Reconnect to SAP2000.");
         if (string.IsNullOrWhiteSpace(baseline.Path))

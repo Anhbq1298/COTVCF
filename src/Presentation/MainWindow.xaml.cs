@@ -185,7 +185,7 @@ public partial class MainWindow : Window
         "2. Select Point Objects in SAP2000, add them as applied points, and define loading criteria.\n" +
         "3. Select level chord groups, capture a baseline and preview height changes.\n" +
         "4. Select cable / tendon force sources and define ranges.\n" +
-        "5. In Tab 05, select study rows and 1-3 background workers, validate, then build isolated child .sdb models.\n" +
+        "5. In Tab 05, select study rows and 1-3 total SAP2000 instances, validate, then build isolated child .sdb models. The connected baseline is instance 1.\n" +
         "6. Each worker is sequential; workers run in parallel and reopen the immutable baseline before every candidate.\n\n" +
         "Viewer: mouse wheel zooms, drag pans, double-click or Home fits.\n" +
         "Study building creates models only; it does not run analysis or extract results.\n" +

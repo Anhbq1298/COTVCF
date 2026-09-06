@@ -13,6 +13,7 @@ internal static class StudyExecutionChecks
         OneWorkerPersistsAndVerifiesOneCandidate();
         OneWorkerDoesNotAccumulateOrLeakCandidateState();
         FixedModesAndCombinedPhysicallyApplyResolvedCandidates();
+        ConnectedBaselineCountsAsWorkerOne();
         TwoWorkersAreParallelAndIndividuallySequential();
         VerificationFailureNeverBecomesReady();
         PretensionFailureReturnsToBaselineAndContinues();
@@ -20,6 +21,27 @@ internal static class StudyExecutionChecks
         ExistingOutputBlocksBeforeWorkerStartup();
         FaultedWorkerIsRemovedWhileHealthyWorkerContinues();
         CancellationStopsAtStageBoundaries();
+    }
+
+    private static void ConnectedBaselineCountsAsWorkerOne()
+    {
+        var (root, _, snapshot) = CreateSnapshot(3, 3);
+        try
+        {
+            var connected = new FakeGateway(1);
+            var additionalFactory = new FakeHostFactory();
+            var factory = new ConnectedSapInstanceHostFactory(connected, additionalFactory);
+            var result = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+
+            Check(result.Completed == 3 && result.WorkerCount == 3 && additionalFactory.CreateCount == 2,
+                "Three selected instances use the connected baseline plus exactly two additional SAP2000 hosts");
+            Check(additionalFactory.Gateways.All(gateway => gateway.WorkerId is 2 or 3),
+                "Only worker IDs 2 and 3 create additional SAP2000 hosts");
+            Check(connected.DisposeCount == 0,
+                "Stopping the study pool does not dispose or close the borrowed connected SAP2000 instance");
+        }
+        finally { DeleteRoot(root); }
     }
 
     private static void OneWorkerPersistsAndVerifiesOneCandidate()
@@ -433,6 +455,7 @@ internal static class StudyExecutionChecks
         public ConcurrentBag<PretensionAssignment> AppliedTargetForces { get; } = [];
         public int MaxConcurrentCalls => maxConcurrentCalls;
         public int WorkerId => workerId;
+        public int DisposeCount { get; private set; }
         public bool Crashed { get; private set; }
 
         public Task<ModelInfo> ConnectAsync() => throw new NotSupportedException();
@@ -581,6 +604,6 @@ internal static class StudyExecutionChecks
             finally { Interlocked.Decrement(ref activeCalls); }
         }
 
-        public void Dispose() { }
+        public void Dispose() => DisposeCount++;
     }
 }
