@@ -90,7 +90,8 @@ public sealed class SapWorkerPool(
             }
         }
 
-        return new(total, completed, failed, cancelled, skipped, workers.Count, peakConcurrent);
+        return new(total, completed, failed, cancelled, skipped, workers.Count, peakConcurrent,
+            workers.Count > 0 && workers.All(worker => worker.Snapshot.State == SapWorkerState.Faulted));
     }
 
     private async Task ConsumeAsync(

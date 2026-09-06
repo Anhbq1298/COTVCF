@@ -13,6 +13,7 @@ internal static class StudyExecutionChecks
         TwoWorkersAreParallelAndIndividuallySequential();
         StartupFailureBlocksAllDispatch();
         ExistingOutputBlocksBeforeWorkerStartup();
+        FaultedWorkerIsRemovedWhileHealthyWorkerContinues();
         CancellationStopsAtStageBoundaries();
     }
 
@@ -135,6 +136,22 @@ internal static class StudyExecutionChecks
         finally { DeleteRoot(root); }
     }
 
+    private static void FaultedWorkerIsRemovedWhileHealthyWorkerContinues()
+    {
+        var (root, _, snapshot) = CreateSnapshot(5, 2);
+        try
+        {
+            var factory = new FakeHostFactory(failRuntimeId: 1);
+            var result = new StudyExecutionCoordinator(factory)
+                .BuildAsync(snapshot, new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None)
+                .GetAwaiter().GetResult();
+            Check(result.Failed == 1 && result.Completed == 4 &&
+                  factory.Gateways.Single(gateway => gateway.WorkerId == 1).Crashed,
+                "A faulted SAP worker is removed while the healthy worker completes the remaining queue");
+        }
+        finally { DeleteRoot(root); }
+    }
+
     private static (string Root, ApplicationState State, StudyExecutionSnapshot Snapshot) CreateSnapshot(int selectedCount, int workers)
     {
         var root = NewRoot();
@@ -181,14 +198,14 @@ internal static class StudyExecutionChecks
         public void Report(T value) => report(value);
     }
 
-    private sealed class FakeHostFactory(int failStartId = 0) : ISapInstanceHostFactory
+    private sealed class FakeHostFactory(int failStartId = 0, int failRuntimeId = 0) : ISapInstanceHostFactory
     {
         public ConcurrentBag<FakeGateway> Gateways { get; } = [];
         public int CreateCount;
         public ISapInstanceHost Create(int instanceId)
         {
             Interlocked.Increment(ref CreateCount);
-            var gateway = new FakeGateway(instanceId);
+            var gateway = new FakeGateway(instanceId, failRuntimeId == instanceId);
             Gateways.Add(gateway);
             return new FakeHost(instanceId, gateway, failStartId == instanceId);
         }
@@ -208,13 +225,15 @@ internal static class StudyExecutionChecks
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class FakeGateway(int workerId) : ISapGateway
+    private sealed class FakeGateway(int workerId, bool failRuntime = false) : ISapGateway
     {
         private int activeCalls;
         private int maxConcurrentCalls;
         public ModelInfo Current { get; private set; } = new("", "26", 6, "kN", "m", false);
         public ConcurrentBag<string> SaveAsSources { get; } = [];
         public int MaxConcurrentCalls => maxConcurrentCalls;
+        public int WorkerId => workerId;
+        public bool Crashed { get; private set; }
 
         public Task<ModelInfo> ConnectAsync() => throw new NotSupportedException();
         public Task<ModelSnapshot> ReadAsync() => throw new NotSupportedException();
@@ -224,6 +243,7 @@ internal static class StudyExecutionChecks
 
         public async Task<ModelInfo> OpenModelAsync(string modelPath) => await Tracked(async () =>
         {
+            if (Crashed) throw new InvalidOperationException("SAP2000 process crashed.");
             await Task.Delay(2);
             Current = Current with { Path = Path.GetFullPath(modelPath) };
             return Current;
@@ -242,6 +262,11 @@ internal static class StudyExecutionChecks
         public async Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected) => await Tracked(async () =>
         {
             Verify(expected);
+            if (failRuntime && !Crashed)
+            {
+                Crashed = true;
+                throw new InvalidOperationException("SAP2000 process crashed.");
+            }
             await Task.Delay(Current.Path.Contains("_P01.sdb", StringComparison.Ordinal) ? 100 : 5);
         });
 

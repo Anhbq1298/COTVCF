@@ -98,6 +98,9 @@ internal static class Program
                 Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "Gate: OCCUPIED") &&
                        FindVisuals<TextBlock>(window).Any(text => text.Text == "Applying Loading"),
                     "Worker monitor renders worker gate and current stage text");
+                Assert(window.StudyValidationPanel.ActualHeight > 0 &&
+                       window.StudyValidationPanel.TransformToAncestor(window).Transform(new Point()).Y < window.ActualHeight,
+                    "Study validation panel remains visible with the worker monitor expanded");
 
                 var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                 bitmap.Render(window);

@@ -393,9 +393,8 @@ public sealed class MainViewModel : Observable
         ClearAllStudyRuns = new(_ => SetAllStudyRuns(false), () => !IsBusy && StudyIterations.Count > 0);
         BuildSelectedModels = new(_ => RunStudy(), () => CanRunStudy);
         CancelStudy = new(_ => CancelStudyExecution(), () => CanCancelStudy);
-        OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => !IsStudyRunning && Directory.Exists(StudyRoot));
-        OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); },
-            () => !IsStudyRunning);
+        OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => Directory.Exists(StudyRoot));
+        OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
         ViewIterationError = new(p =>
         {
             if (p is StudyIteration { ErrorMessage.Length: > 0 } row)
@@ -700,14 +699,17 @@ public sealed class MainViewModel : Observable
             studyQueuedCount = 0;
             studySkippedCount = result.Skipped;
             studyPeakConcurrent = result.PeakConcurrent;
-            studyBuildState = result.Cancelled > 0 && studyCancellation.IsCancellationRequested
-                ? StudyBuildState.Cancelled
-                : result.Failed > 0 ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
+            studyBuildState = result.AllWorkersFaulted
+                ? StudyBuildState.Failed
+                : result.Cancelled > 0 && studyCancellation.IsCancellationRequested
+                    ? StudyBuildState.Cancelled
+                    : result.Failed > 0 ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
             Message = studyBuildState switch
             {
                 StudyBuildState.Completed => $"Build complete - {result.Completed:N0} child models are ready.",
                 StudyBuildState.CompletedWithErrors => $"Build completed with errors - {result.Completed:N0} ready, {result.Failed:N0} failed.",
-                _ => $"Build cancelled - {result.Completed:N0} ready, {result.Cancelled:N0} cancelled."
+                StudyBuildState.Cancelled => $"Build cancelled - {result.Completed:N0} ready, {result.Cancelled:N0} cancelled.",
+                _ => $"Build failed - all SAP2000 workers faulted; {result.Completed:N0} models are ready and {result.Failed:N0} failed."
             };
         }
         catch (OperationCanceledException)

@@ -60,4 +60,5 @@ public sealed record StudyExecutionResult(
     int Cancelled,
     int Skipped,
     int WorkerCount,
-    int PeakConcurrent);
+    int PeakConcurrent,
+    bool AllWorkersFaulted = false);

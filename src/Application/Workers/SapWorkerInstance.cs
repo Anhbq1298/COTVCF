@@ -44,6 +44,8 @@ public sealed class SapWorkerInstance : IAsyncDisposable
             var info = await host.StartAsync(snapshot.BaselineModelPath, token);
             if (info.UnitsCode != snapshot.BaselineModel.UnitsCode)
                 throw new InvalidOperationException($"Worker {WorkerId} units differ from the controller baseline.");
+            if (!string.Equals(info.Version, snapshot.BaselineModel.Version, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Worker {WorkerId} SAP2000 version {info.Version} differs from the controller baseline version {snapshot.BaselineModel.Version}.");
             started = true;
             SetState(SapWorkerState.Ready, StudyWorkerStage.Waiting, "Ready.", null, info.Path, report);
         }

@@ -178,7 +178,7 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
 
 ## Iteration Study Tab (05)
 
-Study **definition + run-count preview only** — nothing executes (`Run study — next phase` stays disabled).
+Study composition plus isolated child-model building. Tab 05 does not run analysis or extract results.
 
 - `IterationStudyConfig` (Domain, `ApplicationState.Study`): `Mode` (`IterationStudyMode` enum
   `FixPretension` / `FixHeight` / `Combined`), `FixedHeightIndex`, `FixedPretensionIndex` (0-based).
@@ -200,11 +200,31 @@ Study **definition + run-count preview only** — nothing executes (`Run study �
   the new ID, making the first selection look blank and forcing a second click.
 - Right column keeps the `Issues` grid + `Validate` button. `IterationSummary` property is retained but no
   longer bound.
+- `StudyCompositionService` creates deterministic `StudyIteration` rows (`Lxx_Hxx_Pxx`) and complete
+  loading/height/pretension candidates. Previewing paths never creates a directory.
+- Study paths are always derived from the immutable first-connected baseline:
+  `<baseline folder>/Study/<iteration id>/<baseline stem>_<iteration id>.sdb`. Existing non-empty iteration
+  folders or child models block the run and are never silently overwritten.
+- The user selects 1–3 **background** SAP2000 workers. The connected controller instance remains separate.
+  Every worker owns its own process, `cOAPI`, `cSapModel`, STA thread, and one-job gate. A central channel
+  assigns the next job to the next available worker; calls remain sequential within each lane.
+- All requested workers must start and open the baseline before any candidate is dispatched. Each job then
+  reopens the same baseline, SaveAs creates the child, applies height/loading/pretension using the child
+  `ModelInfo`, saves and verifies the child, and returns to the baseline before taking another job.
+- `StudyExecutionSnapshotFactory` freezes candidate assignments, geometry/groups, paths, selections, and
+  worker count at run start. Tabs 02–04, study settings, run checkboxes, and project load/save actions are
+  disabled while execution is active.
+- The Tab 05 monitor shows each worker ID, gate state, candidate, discrete 1/7 stage, completed count, and
+  overall Ready/Running/Queued/Failed/Skipped totals. Cancellation is observed only between SAP API calls;
+  active workers attempt to return to baseline and queued jobs become Cancelled.
+- A candidate-level failure may continue on a recovered worker. Failure to restore the baseline faults that
+  worker and removes it from scheduling; healthy workers continue. No analysis API is called in this phase.
 
 ## Config Project File (`src/Configuration/`)
 
-The JSON is a **COT VCF project** (document-editor model), not an export/import blob. Tabs 02–04 only
-(not Tab 05). Never serialise ViewModels; never mutate SAP.
+The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 02–05,
+including the Tab 05 mode/fixed candidate/selection exclusions. Never serialise ViewModels; project save/load
+never mutates SAP.
 
 - `ConfigProjectSession` (held by `ConfigService`): `FilePath`, in-memory `Project` (`CotVcfConfigDto`),
   `Tab02/03/04Dirty`. Once a project is open the in-memory `Project` is the source of truth; the file is
