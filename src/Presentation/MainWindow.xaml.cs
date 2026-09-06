@@ -42,6 +42,13 @@ public partial class MainWindow : Window
         if (vm.SelectedAppliedPoint is not null) AppliedPointsGrid.ScrollIntoView(vm.SelectedAppliedPoint);
     }
 
+    private void Cables_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        vm.SelectedCable = Cables.SelectedItem as Domain.CablePretensionConfig;
+        if (vm.SelectedCable is not null) Cables.ScrollIntoView(vm.SelectedCable);
+    }
+
     private void AddLoad_Click(object sender, RoutedEventArgs e)
     {
         Dispatcher.BeginInvoke(() =>

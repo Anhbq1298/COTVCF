@@ -135,7 +135,7 @@ public sealed class StudyCompositionService
     private static string ResolveId(string selected, IEnumerable<string> available)
     {
         var ids = available.ToArray();
-        return ids.Contains(selected, StringComparer.Ordinal) ? selected : "";
+        return ids.Contains(selected, StringComparer.Ordinal) ? selected : ids.FirstOrDefault() ?? "";
     }
 
     private static string BuildModelName(ModelInfo? baseline, string key)

@@ -159,6 +159,9 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
   one dict per item). Never materialise the product to count it.
 - Summary strip (top-right): `Cables N · Variable N · Pretension Candidates <BigInteger N0>`
   (`MainViewModel.CableCount` / `VariableCableCount` / `PretensionCandidateCount`), live on every edit.
+- Tab 4 uses the same resizable preview-left / inputs-right pattern as Tabs 2 and 3. The preview binds
+  `State.Geometry` plus `State.Cables`, highlights configured cable members, always labels them by
+  `CableName`, and synchronizes `MainViewModel.SelectedCable` between cable hits and the current grid row.
 - Toolbar `+ Add Cable` → `MainViewModel.AddCablesFromSelection` opens the shared `ISelectionService`
   dialog listing every cable in `State.Geometry` (search / multi-select / preselects rows already
   added); picked names that are new become `CablePretensionConfig` rows. No live SAP read — the
@@ -189,6 +192,12 @@ Study **definition + run-count preview only** — nothing executes (`Run study �
   combination's per-cable forces; Fix Height shows a `ComboBox` of `State.Truss.CandidateHeights`
   (SelectedIndex ↔ `FixedHeightIndex`); Combined shows neither. `CURRENT STUDY` panel prints the mode,
   each dimension's count or `FIXED · H#/P#`, and `Total Runs` (accent).
+- Candidate dropdown refreshes preserve a valid fixed ID. If a saved or transient selection is unavailable
+  while candidates exist, the composer falls back to the first candidate (`H01` / `P01`) and the ViewModel
+  synchronizes that effective ID back to the study state before presenting the generated rows.
+- Keep the candidate `ItemsSource` reference stable when its semantic contents have not changed. Broadcasting
+  a false candidate-list change during an H/P selection clears the WPF `ComboBox` while the model still holds
+  the new ID, making the first selection look blank and forcing a second click.
 - Right column keeps the `Issues` grid + `Validate` button. `IterationSummary` property is retained but no
   longer bound.
 

@@ -263,27 +263,44 @@
      </StackPanel>
     </TabItem.Header>
     <Grid>
-     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="54*"/><ColumnDefinition Width="6"/><ColumnDefinition Width="46*" MinWidth="520"/></Grid.ColumnDefinitions>
 
-     <DockPanel Grid.Row="0" Margin="0,0,0,4">
-      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+     <Grid Grid.Column="0">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <TextBlock Text="{Binding CablePreviewSummary}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
+      <c:Structural2DViewer Grid.Row="1" Model="{Binding State.Geometry}" Cables="{Binding State.Cables}"
+                            SelectedCable="{Binding SelectedCable, Mode=TwoWay}"
+                            AutomationProperties.Name="Cable pretension model preview"/>
+      <TextBlock Grid.Row="2" Text="Configured cables are highlighted and labelled by SAP2000 cable name. Select a row or click a cable in the view."
+                 Style="{StaticResource Hint}" Margin="2,6,0,0"/>
+     </Grid>
+
+     <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
+
+     <Grid Grid.Column="2" Margin="10,0,0,0">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <DockPanel Grid.Row="0" Margin="0,0,0,4">
+       <Button DockPanel.Dock="Right" Content="Save Config" Command="{Binding SaveTabConfig}" CommandParameter="Cable"
+               ToolTip="Save only this tab's cable-pretension configuration to a JSON file" Margin="0"/>
+       <StackPanel Orientation="Horizontal">
+        <Button Content="+ Add Cable" Command="{Binding AddCables}" ToolTip="Pick cable objects from the loaded SAP2000 model"/>
+        <Button Content="&#8722; Remove" Command="{Binding RemoveCables}" CommandParameter="{Binding SelectedItems, ElementName=Cables}"/>
+       </StackPanel>
+      </DockPanel>
+      <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,3">
        <TextBlock Text="Cables" Foreground="{StaticResource Muted}" FontSize="11"/>
        <TextBlock Text="{Binding CableCount}" FontWeight="SemiBold" FontSize="11" Margin="4,0,14,0"/>
        <TextBlock Text="Variable" Foreground="{StaticResource Muted}" FontSize="11"/>
        <TextBlock Text="{Binding VariableCableCount}" FontWeight="SemiBold" FontSize="11" Margin="4,0,14,0"/>
-       <TextBlock Text="Pretension Candidates" Foreground="{StaticResource Muted}" FontSize="11"/>
+       <TextBlock Text="Candidates" Foreground="{StaticResource Muted}" FontSize="11"/>
        <TextBlock Text="{Binding PretensionCandidateCount}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Accent}" Margin="6,0,0,0"/>
       </StackPanel>
-      <StackPanel Orientation="Horizontal">
-       <Button Content="+ Add Cable" Command="{Binding AddCables}" ToolTip="Pick cable objects from the loaded SAP2000 model"/>
-       <Button Content="&#8722; Remove" Command="{Binding RemoveCables}" CommandParameter="{Binding SelectedItems, ElementName=Cables}"/>
-       <Button Content="Save Config" Command="{Binding SaveTabConfig}" CommandParameter="Cable" ToolTip="Save only this tab's cable-pretension configuration to a JSON file"/>
-      </StackPanel>
-     </DockPanel>
-     <TextBlock Grid.Row="1" Foreground="{StaticResource Muted}" FontSize="10.5" Margin="0,0,0,6"
+      <TextBlock Grid.Row="2" Foreground="{StaticResource Muted}" FontSize="10.5" Margin="0,0,0,6" TextWrapping="Wrap"
                Text="{Binding ForceUnit, StringFormat=Define Target Force candidates for the PRETENSION load case · forces in [{0}] · editing does not modify SAP2000}"/>
 
-     <DataGrid x:Name="Cables" Grid.Row="2" ItemsSource="{Binding State.Cables}" IsEnabled="{Binding IsIdle}" CanUserDeleteRows="False" FrozenColumnCount="1">
+      <DataGrid x:Name="Cables" Grid.Row="3" ItemsSource="{Binding State.Cables}" SelectedItem="{Binding SelectedCable, Mode=TwoWay}"
+                SelectionChanged="Cables_SelectionChanged" SelectionMode="Extended" IsEnabled="{Binding IsIdle}"
+                CanUserDeleteRows="False" FrozenColumnCount="1" ScrollViewer.HorizontalScrollBarVisibility="Auto">
       <DataGrid.Resources>
        <Style x:Key="ForceEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
         <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="6,0"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="FontFamily" Value="Consolas"/><Setter Property="TextAlignment" Value="Right"/>
@@ -321,8 +338,9 @@
        <DataGridTextColumn Header="Candidates" Binding="{Binding CandidateCount}" IsReadOnly="True" Width=".7*" MinWidth="72" ElementStyle="{StaticResource NumericCell}"/>
        <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="1.1*" MinWidth="96"/>
       </DataGrid.Columns>
-     </DataGrid>
-     <TextBlock Grid.Row="3" Text="Total pretension candidates = product of each cable's candidate count (Cartesian). SAP2000 assignments happen later in the Run workflow." Style="{StaticResource Hint}" Margin="0,6,0,0"/>
+      </DataGrid>
+      <TextBlock Grid.Row="4" Text="Total candidates = product of each cable's candidate count (Cartesian). Assignment happens later in Run." Style="{StaticResource Hint}" Margin="0,6,0,0"/>
+     </Grid>
     </Grid>
    </TabItem>
 

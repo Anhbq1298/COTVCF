@@ -20,12 +20,14 @@ public sealed class MainViewModel : Observable
     private bool busy;
     private int selectedTab;
     private AppliedPoint? selectedAppliedPoint;
+    private CablePretensionConfig? selectedCable;
     private string message = "Connect to the running SAP2000 model to begin.";
     private string previewMessage = "Select point groups and capture the baseline.";
     private readonly StudyCompositionService studyComposer = new();
     private StudyCompositionResult studyComposition = new([], [], [], [], BigInteger.Zero, false, "", "");
     private StudyValidationState studyValidationState = StudyValidationState.NotValidated;
     private bool suppressStudySelectionEvents;
+    private bool normalizingStudyCandidateIds;
     private bool studyRefreshPending;
 
     public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); } }
@@ -44,6 +46,15 @@ public sealed class MainViewModel : Observable
             selectedAppliedPoint = value;
             if (selectedAppliedPoint is not null) selectedAppliedPoint.IsSelected = true;
             Notify();
+        }
+    }
+    public CablePretensionConfig? SelectedCable
+    {
+        get => selectedCable;
+        set
+        {
+            if (!Set(ref selectedCable, value)) return;
+            Notify(nameof(CablePreviewSummary));
         }
     }
 
@@ -91,6 +102,9 @@ public sealed class MainViewModel : Observable
     public string IterationSummary => $"MODEL\n{ModelName} - {State.Units}\n\nLOADING CRITERIA\n{State.AppliedPoints.Count} applied points - {State.LoadDefinitions.Count} load definitions\n\nTRUSS HEIGHT\n{State.Truss.MinimumHeight:F4} to {State.Truss.MaximumHeight:F4} {LengthUnit} - step {State.Truss.Increment:F4} {LengthUnit}\n\nCABLE PRETENSION\n{CableCount} cables ({VariableCableCount} variable) - {PretensionCandidateCount} pretension candidates";
     public int CableCount => State.Cables.Count;
     public int VariableCableCount => COT_VCF.Application.PretensionCandidates.VariableCount(State.Cables);
+    public string CablePreviewSummary => SelectedCable is null
+        ? $"{CableCount} cable{(CableCount == 1 ? "" : "s")} configured — select a row or cable in the view"
+        : $"Selected  ·  {SelectedCable.CableName}  ·  {SelectedCable.Status}";
     public string PretensionCandidateCount => State.Cables.Count == 0 || State.Cables.Any(c => c.CandidateCount <= 0)
         ? "0"
         : PretensionRuns.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
@@ -118,12 +132,22 @@ public sealed class MainViewModel : Observable
     public string FixedHeightCandidateId
     {
         get => State.Study.FixedHeightCandidateId;
-        set => State.Study.FixedHeightCandidateId = value ?? "";
+        set
+        {
+            var next = value ?? "";
+            if (string.IsNullOrWhiteSpace(next) && HeightStudyCandidates.Any(candidate => candidate.Id == State.Study.FixedHeightCandidateId)) return;
+            State.Study.FixedHeightCandidateId = next;
+        }
     }
     public string FixedPretensionCandidateId
     {
         get => State.Study.FixedPretensionCandidateId;
-        set => State.Study.FixedPretensionCandidateId = value ?? "";
+        set
+        {
+            var next = value ?? "";
+            if (string.IsNullOrWhiteSpace(next) && PretensionStudyCandidates.Any(candidate => candidate.Id == State.Study.FixedPretensionCandidateId)) return;
+            State.Study.FixedPretensionCandidateId = next;
+        }
     }
     public string OutputDirectory
     {
@@ -269,7 +293,14 @@ public sealed class MainViewModel : Observable
         ApplyLoads = new(_ => Run("Applying point loads to SAP2000...", workflow.ApplyLoadsAsync, "Point loads applied. Existing moments preserved."), () => GeometryReady() && State.PointLoads.Count > 0);
         AddCables = new(_ => AddCablesFromSelection(), GeometryReady);
         RemoveLoads = new(p => { if (p is IList list) foreach (var row in list.Cast<PointLoadConfiguration>().ToArray()) State.PointLoads.Remove(row); Update(); }, () => !IsBusy);
-        RemoveCables = new(p => { if (p is IList list) foreach (var row in list.Cast<CablePretensionConfig>().ToArray()) State.Cables.Remove(row); Update(); }, () => !IsBusy);
+        RemoveCables = new(p =>
+        {
+            if (p is not IList list) return;
+            var removed = list.Cast<CablePretensionConfig>().ToArray();
+            foreach (var row in removed) State.Cables.Remove(row);
+            if (SelectedCable is not null && removed.Contains(SelectedCable)) SelectedCable = null;
+            Update();
+        }, () => !IsBusy);
         Validate = new(_ =>
         {
             if (CommitEditors?.Invoke() == false) return;
@@ -342,12 +373,14 @@ public sealed class MainViewModel : Observable
             if (e.NewItems is not null)
                 foreach (CablePretensionConfig row in e.NewItems)
                     row.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update(); };
+            if (SelectedCable is not null && !State.Cables.Contains(SelectedCable)) SelectedCable = null;
             Dirty(ConfigTabs.Cable);
             ScheduleStudyRegeneration();
             Update();
         };
         State.Study.PropertyChanged += (_, e) =>
         {
+            if (normalizingStudyCandidateIds) return;
             Dirty(ConfigTabs.Study);
             if (e.PropertyName != nameof(IterationStudyConfig.ExcludedIterationKeys)) ScheduleStudyRegeneration();
             else InvalidateStudyValidation();
@@ -410,10 +443,61 @@ public sealed class MainViewModel : Observable
     private void RegenerateStudyPreview()
     {
         studyRefreshPending = false;
-        studyComposition = studyComposer.Compose(State);
+        var nextComposition = studyComposer.Compose(State);
+        var heightCandidatesChanged = !EquivalentHeightCandidates(
+            studyComposition.HeightCandidates, nextComposition.HeightCandidates);
+        var pretensionCandidatesChanged = !EquivalentPretensionCandidates(
+            studyComposition.PretensionCandidates, nextComposition.PretensionCandidates);
+        if (!heightCandidatesChanged)
+            nextComposition = nextComposition with { HeightCandidates = studyComposition.HeightCandidates };
+        if (!pretensionCandidatesChanged)
+            nextComposition = nextComposition with { PretensionCandidates = studyComposition.PretensionCandidates };
+        studyComposition = nextComposition;
+        bool normalized = false;
+        normalizingStudyCandidateIds = true;
+        try
+        {
+            if (studyComposition.EffectiveFixedHeightId.Length > 0 &&
+                State.Study.FixedHeightCandidateId != studyComposition.EffectiveFixedHeightId)
+            {
+                State.Study.FixedHeightCandidateId = studyComposition.EffectiveFixedHeightId;
+                normalized = true;
+            }
+            if (studyComposition.EffectiveFixedPretensionId.Length > 0 &&
+                State.Study.FixedPretensionCandidateId != studyComposition.EffectiveFixedPretensionId)
+            {
+                State.Study.FixedPretensionCandidateId = studyComposition.EffectiveFixedPretensionId;
+                normalized = true;
+            }
+        }
+        finally { normalizingStudyCandidateIds = false; }
+        if (normalized && !applyingProject) config.Session.MarkDirty(ConfigTabs.Study);
         foreach (var row in StudyIterations) row.PropertyChanged += StudyIterationPropertyChanged;
         InvalidateStudyValidation();
-        NotifyStudyPresentation();
+        NotifyStudyPresentation(heightCandidatesChanged, pretensionCandidatesChanged);
+    }
+
+    private static bool EquivalentHeightCandidates(
+        IReadOnlyList<StudyHeightCandidate> current,
+        IReadOnlyList<StudyHeightCandidate> next) => current.SequenceEqual(next);
+
+    private static bool EquivalentPretensionCandidates(
+        IReadOnlyList<StudyPretensionCandidate> current,
+        IReadOnlyList<StudyPretensionCandidate> next)
+    {
+        if (current.Count != next.Count) return false;
+        for (int i = 0; i < current.Count; i++)
+        {
+            var left = current[i];
+            var right = next[i];
+            if (left.Id != right.Id || left.Candidate.CombinationIndex != right.Candidate.CombinationIndex ||
+                left.Candidate.CableForces.Count != right.Candidate.CableForces.Count)
+                return false;
+            foreach (var force in left.Candidate.CableForces)
+                if (!right.Candidate.CableForces.TryGetValue(force.Key, out var value) || value != force.Value)
+                    return false;
+        }
+        return true;
     }
 
     private void StudyIterationPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -448,11 +532,13 @@ public sealed class MainViewModel : Observable
         Issues.Clear();
     }
 
-    private void NotifyStudyPresentation()
+    private void NotifyStudyPresentation(bool heightCandidatesChanged = false, bool pretensionCandidatesChanged = false)
     {
+        if (heightCandidatesChanged) Notify(nameof(HeightStudyCandidates));
+        if (pretensionCandidatesChanged) Notify(nameof(PretensionStudyCandidates));
         foreach (var name in new[]
         {
-            nameof(HeightStudyCandidates), nameof(PretensionStudyCandidates), nameof(StudyIterations),
+            nameof(StudyIterations),
             nameof(FixedHeightCandidateId), nameof(FixedPretensionCandidateId), nameof(OutputDirectory),
             nameof(FixedHeightValueText), nameof(FixedPretensionValueText), nameof(StudyLoadingCell),
             nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudySpaceFormula), nameof(StudyTotalRuns),
@@ -594,9 +680,17 @@ public sealed class MainViewModel : Observable
 
         var existing = State.Cables.Select(c => c.CableName).ToHashSet(StringComparer.Ordinal);
         int added = 0;
+        CablePretensionConfig? firstAdded = null;
         foreach (var name in picked.Distinct(StringComparer.Ordinal))
-            if (existing.Add(name)) { State.Cables.Add(new CablePretensionConfig { CableName = name }); added++; }
+            if (existing.Add(name))
+            {
+                var cable = new CablePretensionConfig { CableName = name };
+                State.Cables.Add(cable);
+                firstAdded ??= cable;
+                added++;
+            }
 
+        if (firstAdded is not null) SelectedCable = firstAdded;
         Message = added == 0 ? "Cable selection unchanged." : $"Added {added} cable{(added == 1 ? "" : "s")}. Remove with − Remove.";
         Update();
     }
@@ -688,6 +782,7 @@ public sealed class MainViewModel : Observable
             config.SetActiveProject(dialog.FileName, project);
             config.Session.ClearDirty();
             SelectedAppliedPoint = null;
+            SelectedCable = null;
             Update();
 
             var present = new List<string>();
@@ -785,6 +880,7 @@ public sealed class MainViewModel : Observable
             nameof(CanViewTrussCandidates), nameof(TrussCandidatesHint),
             nameof(IterationSummary), nameof(SapStatus), nameof(StatusLine), nameof(AppliedPointsTitle), nameof(LoadStatus),
             nameof(TrussStatus), nameof(CableStatus), nameof(CableCount), nameof(VariableCableCount), nameof(PretensionCandidateCount),
+            nameof(CablePreviewSummary),
             nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension)

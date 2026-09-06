@@ -16,6 +16,8 @@ public partial class Structural2DViewer : UserControl
     public static readonly DependencyProperty ShowPointLabelsProperty = DependencyProperty.Register(nameof(ShowPointLabels), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(false));
     public static readonly DependencyProperty AppliedPointsProperty = DependencyProperty.Register(nameof(AppliedPoints), typeof(IEnumerable<AppliedPoint>), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty SelectedAppliedPointProperty = DependencyProperty.Register(nameof(SelectedAppliedPoint), typeof(AppliedPoint), typeof(Structural2DViewer), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+    public static readonly DependencyProperty CablesProperty = DependencyProperty.Register(nameof(Cables), typeof(IEnumerable<CablePretensionConfig>), typeof(Structural2DViewer), new PropertyMetadata(null));
+    public static readonly DependencyProperty SelectedCableProperty = DependencyProperty.Register(nameof(SelectedCable), typeof(CablePretensionConfig), typeof(Structural2DViewer), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
     public static readonly DependencyProperty TopPointsProperty = DependencyProperty.Register(nameof(TopPoints), typeof(IEnumerable<string>), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty MiddlePointsProperty = DependencyProperty.Register(nameof(MiddlePoints), typeof(IEnumerable<string>), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty BottomPointsProperty = DependencyProperty.Register(nameof(BottomPoints), typeof(IEnumerable<string>), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -25,6 +27,8 @@ public partial class Structural2DViewer : UserControl
     public bool ShowPointLabels { get => (bool)GetValue(ShowPointLabelsProperty); set => SetValue(ShowPointLabelsProperty, value); }
     public IEnumerable<AppliedPoint>? AppliedPoints { get => (IEnumerable<AppliedPoint>?)GetValue(AppliedPointsProperty); set => SetValue(AppliedPointsProperty, value); }
     public AppliedPoint? SelectedAppliedPoint { get => (AppliedPoint?)GetValue(SelectedAppliedPointProperty); set => SetValue(SelectedAppliedPointProperty, value); }
+    public IEnumerable<CablePretensionConfig>? Cables { get => (IEnumerable<CablePretensionConfig>?)GetValue(CablesProperty); set => SetValue(CablesProperty, value); }
+    public CablePretensionConfig? SelectedCable { get => (CablePretensionConfig?)GetValue(SelectedCableProperty); set => SetValue(SelectedCableProperty, value); }
     public IEnumerable<string>? TopPoints { get => (IEnumerable<string>?)GetValue(TopPointsProperty); set => SetValue(TopPointsProperty, value); }
     public IEnumerable<string>? MiddlePoints { get => (IEnumerable<string>?)GetValue(MiddlePointsProperty); set => SetValue(MiddlePointsProperty, value); }
     public IEnumerable<string>? BottomPoints { get => (IEnumerable<string>?)GetValue(BottomPointsProperty); set => SetValue(BottomPointsProperty, value); }
@@ -50,6 +54,8 @@ public sealed class ModelCanvas : FrameworkElement
     public static readonly DependencyProperty ShowPointLabelsProperty = DependencyProperty.Register(nameof(ShowPointLabels), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty AppliedPointsProperty = DependencyProperty.Register(nameof(AppliedPoints), typeof(IEnumerable<AppliedPoint>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, AppliedPointsChanged));
     public static readonly DependencyProperty SelectedAppliedPointProperty = DependencyProperty.Register(nameof(SelectedAppliedPoint), typeof(AppliedPoint), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+    public static readonly DependencyProperty CablesProperty = DependencyProperty.Register(nameof(Cables), typeof(IEnumerable<CablePretensionConfig>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, CablesChanged));
+    public static readonly DependencyProperty SelectedCableProperty = DependencyProperty.Register(nameof(SelectedCable), typeof(CablePretensionConfig), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
     public static readonly DependencyProperty TopPointsProperty = DependencyProperty.Register(nameof(TopPoints), typeof(IEnumerable<string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty MiddlePointsProperty = DependencyProperty.Register(nameof(MiddlePoints), typeof(IEnumerable<string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty BottomPointsProperty = DependencyProperty.Register(nameof(BottomPoints), typeof(IEnumerable<string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -58,12 +64,15 @@ public sealed class ModelCanvas : FrameworkElement
     public bool ShowPointLabels { get => (bool)GetValue(ShowPointLabelsProperty); set => SetValue(ShowPointLabelsProperty, value); }
     public IEnumerable<AppliedPoint>? AppliedPoints { get => (IEnumerable<AppliedPoint>?)GetValue(AppliedPointsProperty); set => SetValue(AppliedPointsProperty, value); }
     public AppliedPoint? SelectedAppliedPoint { get => (AppliedPoint?)GetValue(SelectedAppliedPointProperty); set => SetValue(SelectedAppliedPointProperty, value); }
+    public IEnumerable<CablePretensionConfig>? Cables { get => (IEnumerable<CablePretensionConfig>?)GetValue(CablesProperty); set => SetValue(CablesProperty, value); }
+    public CablePretensionConfig? SelectedCable { get => (CablePretensionConfig?)GetValue(SelectedCableProperty); set => SetValue(SelectedCableProperty, value); }
     public IEnumerable<string>? TopPoints { get => (IEnumerable<string>?)GetValue(TopPointsProperty); set => SetValue(TopPointsProperty, value); }
     public IEnumerable<string>? MiddlePoints { get => (IEnumerable<string>?)GetValue(MiddlePointsProperty); set => SetValue(MiddlePointsProperty, value); }
     public IEnumerable<string>? BottomPoints { get => (IEnumerable<string>?)GetValue(BottomPointsProperty); set => SetValue(BottomPointsProperty, value); }
     public string Plane { get; set; } = "XZ";
 
     private readonly Dictionary<AppliedPoint, Point> appliedPointLocations = [];
+    private readonly Dictionary<CablePretensionConfig, (Point Start, Point End)> cableLocations = [];
     private double zoom = 1;
     private Vector pan;
     private Point? last;
@@ -86,6 +95,16 @@ public sealed class ModelCanvas : FrameworkElement
 
     private void AppliedPointsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => InvalidateVisual();
 
+    private static void CablesChanged(DependencyObject item, DependencyPropertyChangedEventArgs e)
+    {
+        var canvas = (ModelCanvas)item;
+        if (e.OldValue is INotifyCollectionChanged oldCollection) oldCollection.CollectionChanged -= canvas.CablesCollectionChanged;
+        if (e.NewValue is INotifyCollectionChanged newCollection) newCollection.CollectionChanged += canvas.CablesCollectionChanged;
+        canvas.InvalidateVisual();
+    }
+
+    private void CablesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => InvalidateVisual();
+
     public void Fit()
     {
         zoom = 1;
@@ -100,6 +119,7 @@ public sealed class ModelCanvas : FrameworkElement
     {
         base.OnRender(dc);
         appliedPointLocations.Clear();
+        cableLocations.Clear();
         if (ActualWidth <= 0 || ActualHeight <= 0) return;
 
         dc.DrawRectangle(Brush("ViewportBg"), null, new Rect(RenderSize));
@@ -126,6 +146,19 @@ public sealed class ModelCanvas : FrameworkElement
                 var pen = new Pen(Brush(member.Kind == MemberKind.Frame ? "ViewportGeom" : "AccentBright"), 1.5);
                 if (member.Kind != MemberKind.Frame) pen.DashStyle = member.Kind == MemberKind.Cable ? DashStyles.Dash : DashStyles.Dot;
                 dc.DrawLine(pen, start, end);
+            }
+
+            var cableMembers = Model.Members
+                .Where(member => member.Kind == MemberKind.Cable)
+                .ToDictionary(member => member.Name, StringComparer.Ordinal);
+            foreach (var cable in Cables ?? [])
+            {
+                if (!cableMembers.TryGetValue(cable.CableName, out var member) ||
+                    !screenPoints.TryGetValue(member.Start, out var start) ||
+                    !screenPoints.TryGetValue(member.End, out var end)) continue;
+                var selected = ReferenceEquals(cable, SelectedCable);
+                cableLocations[cable] = (start, end);
+                DrawCable(dc, cable.CableName, start, end, selected);
             }
 
             foreach (var point in screenPoints.Values)
@@ -181,6 +214,35 @@ public sealed class ModelCanvas : FrameworkElement
         dc.DrawLine(pen, start, end);
         dc.DrawLine(pen, end, end + new Vector(-5, -8));
         dc.DrawLine(pen, end, end + new Vector(5, -8));
+    }
+
+    private void DrawCable(DrawingContext dc, string name, Point start, Point end, bool selected)
+    {
+        if (selected)
+            dc.DrawLine(new Pen(Brush("SelectedBorder"), 7), start, end);
+
+        var pen = new Pen(Brush(selected ? "Accent" : "AccentBright"), selected ? 3.5 : 2.5)
+        {
+            DashStyle = DashStyles.Dash
+        };
+        dc.DrawLine(pen, start, end);
+
+        var direction = end - start;
+        var length = direction.Length;
+        var normal = length > 0.001 ? new Vector(-direction.Y / length, direction.X / length) : new Vector(0, -1);
+        CableLabel(dc, name, start + direction * 0.5 + normal * 10, selected);
+    }
+
+    private void CableLabel(DrawingContext dc, string text, Point point, bool selected)
+    {
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var brush = Brush(selected ? "Accent" : "Text");
+        var label = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface("Consolas"), 10, brush, dpi);
+        var bounds = new Rect(point.X - 3, point.Y - 2, label.Width + 6, label.Height + 4);
+        dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(225, 255, 255, 255)),
+            new Pen(Brush(selected ? "AccentBright" : "Border"), 1), bounds, 2, 2);
+        dc.DrawText(label, point);
     }
 
     private void DrawAxes(DrawingContext dc)
@@ -241,6 +303,18 @@ public sealed class ModelCanvas : FrameworkElement
             e.Handled = true;
             return;
         }
+        var cableHit = cableLocations
+            .Where(item => DistanceToSegment(position, item.Value.Start, item.Value.End) <= 8)
+            .OrderBy(item => DistanceToSegment(position, item.Value.Start, item.Value.End))
+            .Select(item => item.Key)
+            .FirstOrDefault();
+        if (cableHit is not null)
+        {
+            SelectedCable = cableHit;
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
         last = position;
         CaptureMouse();
     }
@@ -258,6 +332,16 @@ public sealed class ModelCanvas : FrameworkElement
     {
         last = null;
         if (IsMouseCaptured) ReleaseMouseCapture();
+    }
+
+    private static double DistanceToSegment(Point point, Point start, Point end)
+    {
+        var segment = end - start;
+        var lengthSquared = segment.X * segment.X + segment.Y * segment.Y;
+        if (lengthSquared <= double.Epsilon) return (point - start).Length;
+        var fromStart = point - start;
+        var t = Math.Clamp((fromStart.X * segment.X + fromStart.Y * segment.Y) / lengthSquared, 0, 1);
+        return (point - (start + segment * t)).Length;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

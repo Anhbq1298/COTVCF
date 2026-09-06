@@ -51,6 +51,34 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
                 Assert(vm.StudyIterations.Count == 36, "Tab 5 UI binds the expected Fix Pretension rows");
+                var pretensionPicker = FindVisuals<ComboBox>(window)
+                    .Single(combo => combo.Items.Cast<object>().OfType<StudyPretensionCandidate>().Any());
+                pretensionPicker.SelectedValue = "P02";
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(vm.FixedPretensionCandidateId == "P02" &&
+                       Equals(pretensionPicker.SelectedValue, "P02") &&
+                       pretensionPicker.SelectedItem is StudyPretensionCandidate { Id: "P02" } &&
+                       vm.StudyIterations.All(row => row.PretensionCandidateId == "P02"),
+                    "Tab 5 switches directly from P01 to P02 without clearing the ComboBox");
+                uiState.Study.FixedPretensionCandidateId = "";
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(vm.FixedPretensionCandidateId == "P01" && vm.StudyIterations.Count == 36 &&
+                       vm.StudyIterations.All(row => row.PretensionCandidateId == "P01"),
+                    "Tab 5 restores P01 when the fixed-pretension selection is transiently cleared");
+                uiState.Study.Mode = IterationStudyMode.FixHeight;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                var heightPicker = FindVisuals<ComboBox>(window)
+                    .Single(combo => combo.Items.Cast<object>().OfType<StudyHeightCandidate>().Any());
+                heightPicker.SelectedValue = "H02";
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(vm.FixedHeightCandidateId == "H02" &&
+                       Equals(heightPicker.SelectedValue, "H02") &&
+                       heightPicker.SelectedItem is StudyHeightCandidate { Id: "H02" } &&
+                       vm.StudyIterations.All(row => row.HeightCandidateId == "H02"),
+                    "Tab 5 switches directly from H01 to H02 without clearing the ComboBox");
                 var grids = FindVisuals<DataGrid>(window).ToArray();
                 Assert(grids.Any(grid => grid.Name == "StudyPreviewGrid" && grid.Items.Count == 36 && grid.Columns.Count == 5),
                     "Study Preview DataGrid renders five required columns");

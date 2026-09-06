@@ -28,6 +28,14 @@ internal static class StudyComposerChecks
         Check(fixPretension.Iterations.Count == 36, "Fix Pretension generates 6 x 6 x 1 rows");
         Check(fixPretension.Iterations.All(r => r.PretensionCandidateId == "P02"), "Fix Pretension retains P02 for every row");
 
+        state.Study.FixedPretensionCandidateId = "";
+        var defaultedPretension = composer.Compose(state);
+        Check(defaultedPretension.EffectiveFixedPretensionId == "P01" &&
+              defaultedPretension.Iterations.Count == 36 &&
+              defaultedPretension.Iterations.All(r => r.PretensionCandidateId == "P01"),
+            "Fix Pretension defaults an unavailable selection to P01");
+        state.Study.FixedPretensionCandidateId = "P02";
+
         state.Study.Mode = IterationStudyMode.Combined;
         var combined = composer.Compose(state);
         Check(combined.Iterations.Count == 216, "Combined generates 6 x 6 x 6 rows");
