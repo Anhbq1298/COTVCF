@@ -22,7 +22,7 @@ public sealed class CotVcfConfigDto
     public TrussHeightConfigDto? Tab03TrussHeight { get; set; }
     public CableForceConfigDto? Tab04CableForce { get; set; }
     public OutputSettingsConfigDto? Tab05OutputSettings { get; set; }
-    // Legacy v1 JSON property name retained even though the study is now displayed as Tab 06.
+    // Legacy v1 JSON property name retained even though the study is now displayed as Tab 05.
     public IterationStudyConfigDto? Tab05IterationStudy { get; set; }
 
     public ConfigTabs PresentTabs =>

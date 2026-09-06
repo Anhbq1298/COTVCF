@@ -156,7 +156,7 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         var dialog = BasicDialog(existing is null ? "Add Member Force Group" : "Edit Member Force Group", 600, 300);
         if (owner is not null) dialog.Owner = owner;
         var panel = new StackPanel { Margin = new Thickness(18) };
-        panel.Children.Add(Label("Group suffix", "The SAP group will be created as [O]-{suffix} when Tab 06 starts."));
+        panel.Children.Add(Label("Group suffix", "The SAP group will be created as [O]-{suffix} when Tab 05 starts."));
         var name = new TextBox { Text = existing?.Name ?? "" };
         panel.Children.Add(name);
 

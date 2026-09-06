@@ -4,7 +4,7 @@ using COT_VCF.Domain;
 namespace COT_VCF.Application;
 
 /// <summary>
-/// Pure combinatorics over the Tab 4 cable pretension configs. The total number of PRETENSION
+/// Pure combinatorics over the Tab 3 cable pretension configs. The total number of PRETENSION
 /// candidates is the <b>Cartesian product</b> of every cable's candidate count — never the sum.
 /// Counting is exact and allocation-free (BigInteger); the combinations themselves are produced
 /// lazily and only when a caller (such as the frozen study snapshot factory) asks for them.

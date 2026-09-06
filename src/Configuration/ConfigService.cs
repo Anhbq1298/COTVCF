@@ -37,11 +37,11 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         var stem = state.Model is { } m && !string.IsNullOrWhiteSpace(m.Path) ? Path.GetFileNameWithoutExtension(m.Path) : "COTVCF";
         var suffix = tabs switch
         {
-            ConfigTabs.Loading => "Tab02_Loading",
-            ConfigTabs.Truss => "Tab03_TrussHeight",
-            ConfigTabs.Cable => "Tab04_CableForce",
-            ConfigTabs.Output => "Tab05_OutputSettings",
-            ConfigTabs.Study => "Tab06_Study",
+            ConfigTabs.Loading => "Tab01_Loading",
+            ConfigTabs.Truss => "Tab02_TrussHeight",
+            ConfigTabs.Cable => "Tab03_CableForce",
+            ConfigTabs.Output => "Tab04_OutputSettings",
+            ConfigTabs.Study => "Tab05_Study",
             _ => "Config",
         };
         return $"{stem}_COTVCF_{suffix}.json";
@@ -137,11 +137,11 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         var lines = new List<string>();
         if (r.FileErrors.Count > 0) lines.Add(string.Join("\n", r.FileErrors.Select(e => "• " + e)));
         void Add(string name, TabCheck tc) { if (tc.Present && !tc.Ok) lines.Add($"{name}:\n" + string.Join("\n", tc.Problems.Select(p => "  • " + p))); }
-        Add("Tab 02 – Loading", r.Loading);
-        Add("Tab 03 – Truss Height", r.Truss);
-        Add("Tab 04 – Cable Force", r.Cable);
-        Add("Tab 05 – Output Settings", r.Output);
-        Add("Tab 06 - Iteration Study", r.Study);
+        Add("Tab 01 – Loading", r.Loading);
+        Add("Tab 02 – Truss Height", r.Truss);
+        Add("Tab 03 – Cable Force", r.Cable);
+        Add("Tab 04 – Output Settings", r.Output);
+        Add("Tab 05 - Iteration Study", r.Study);
         return "Unable to save the configuration:\n\n" + string.Join("\n\n", lines) + "\n\nNo changes have been written to the project file.";
     }
 

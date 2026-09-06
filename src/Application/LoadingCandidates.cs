@@ -4,7 +4,7 @@ using COT_VCF.Domain;
 namespace COT_VCF.Application;
 
 /// <summary>
-/// Tab 02 loading candidate space. A loading scenario needs a value for <b>every</b> load definition,
+/// Tab 01 loading candidate space. A loading scenario needs a value for <b>every</b> load definition,
 /// so the candidate count is the <b>Cartesian product</b> of each definition's candidate values —
 /// N_L = ∏ CandidateValues.Count — not the sum. Same shape as <see cref="PretensionCandidates"/>.
 /// </summary>

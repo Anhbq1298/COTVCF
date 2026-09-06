@@ -76,7 +76,7 @@ public sealed class ConfigCompatibilityValidator
                     new() { X = cur.Position.X, Y = cur.Position.Y, Z = cur.Position.Z }).ToString());
         }
 
-        // ---- Tab 02 Loading ----
+        // ---- Tab 01 Loading ----
         if (cfg.Tab02Loading is { } t2)
         {
             var tc = r.Loading; tc.Present = true;
@@ -101,7 +101,7 @@ public sealed class ConfigCompatibilityValidator
                 if (!patterns.Contains(pat)) tc.Problems.Add($"missing load pattern {pat}");
         }
 
-        // ---- Tab 03 Truss Height ----
+        // ---- Tab 02 Truss Height ----
         if (cfg.Tab03TrussHeight is { } t3)
         {
             var tc = r.Truss; tc.Present = true;
@@ -113,7 +113,7 @@ public sealed class ConfigCompatibilityValidator
             foreach (var name in Concat(t3.TopPoints, t3.MiddlePoints, t3.BottomPoints)) CheckPoint(tc, name);
         }
 
-        // ---- Tab 04 Cable Force ----
+        // ---- Tab 03 Cable Force ----
         if (cfg.Tab04CableForce is { } t4)
         {
             var tc = r.Cable; tc.Present = true;
@@ -144,7 +144,7 @@ public sealed class ConfigCompatibilityValidator
             }
         }
 
-        // ---- Tab 05 Output Settings ----
+        // ---- Tab 04 Output Settings ----
         if (cfg.Tab05OutputSettings is { } t5)
         {
             var tc = r.Output; tc.Present = true;
@@ -215,7 +215,7 @@ public sealed class ConfigCompatibilityValidator
                 tc.Problems.Add($"cable result load case {t5.CableResultLoadCase} does not exist in the connected model.");
         }
 
-        // ---- Legacy Tab 05 JSON / UI Tab 06 Iteration Study ----
+        // ---- Legacy Tab 05 JSON key / UI Tab 05 Iteration Study ----
         if (cfg.Tab05IterationStudy is { } t6)
         {
             var tc = r.Study; tc.Present = true;

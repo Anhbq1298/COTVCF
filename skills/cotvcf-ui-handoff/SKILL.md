@@ -106,7 +106,7 @@ earlier tall-header / large-button / blue-block look.
 
 ## Loading Criteria Tab
 
-- Tab 2 is `LOADING CRITERIA`; do not restore the former per-point Fx/Fy/Fz assignment grid or an Apply-to-SAP action here.
+- Tab 1 is `LOADING CRITERIA`; do not restore the former per-point Fx/Fy/Fz assignment grid or an Apply-to-SAP action here.
 - Tab content is params only (left ~40%); the model lives in the shared preview on the right (see **Shared Model Preview**). The params column stacks separate `APPLIED POINTS` and `LOAD DEFINITION` cards.
 - `+ Add Load Locations` opens the existing WPF `SelectionService` dialog using points from the loaded geometry. The dialog supports search, multi-select, select-all, and preselects existing load locations. Selected names are mapped to the cached Global X/Y/Z coordinates, deduplicated, sorted by X then point name, and assigned one-based order values; the user does not need to preselect objects in SAP2000.
 - Applied points are preview-only overlays on the existing viewer. Draw a fixed screen-size downward load arrow, normal applied-point highlight, stronger current-point highlight, and labels without modifying SAP geometry.
@@ -119,13 +119,13 @@ earlier tall-header / large-button / blue-block look.
 - A loading combination is a **Cartesian pick of one qz per load definition** — the candidate count is `∏ CandidateValues.Count` over the load definitions (`LoadingCandidates.TotalCount` / `.Enumerate`, mirrors `PretensionCandidates`). View Candidates rows are the applied-point × combination × load-definition expansion (`Case` = `C{n} · {LoadName}`). Tributary area uses X-direction midpoint tributary lengths times B; endpoints receive half the adjacent spacing. `NStories` is a shared whole-number input with minimum 1, and `FzkN = -qz * TribArea * NStories` for downward global-Z loading.
 - Keep the `- Remove` action visually secondary to the primary `+ Add` location picker.
 - `+ Add Load` creates an empty-name, non-increment row with qz `0.00` and focuses its Load Name cell. Each row has a compact delete icon.
-- Validation is inline: qz must be nonnegative; Min must be nonnegative; Max must be at least Min; Step must be positive. No normal cell-validation dialog belongs in Tab 2.
+- Validation is inline: qz must be nonnegative; Min must be nonnegative; Max must be at least Min; Step must be positive. No normal cell-validation dialog belongs in Tab 1.
 - Load-grid numeric bindings use `NullableDoubleConverter`: clearing an active numeric cell stores `null` and leaves it visually blank instead of restoring `0.00`; validation may still mark the required active cell invalid.
 - Keep star-sized columns with practical `MinWidth` values and horizontal scrolling as a narrow-window fallback.
 
 ## Truss Height Tab
 
-Tab 3 **defines geometry-variation candidates only**. It never writes SAP2000 — there is no
+Tab 2 **defines geometry-variation candidates only**. It never writes SAP2000 — there is no
 "Apply to SAP" here. The primary action is `View Candidates`.
 
 - Layout: params only — a scrollable column (`POINT GROUPS` + `REF.`, `HEIGHT RANGE`, `PREVIEW`) with
@@ -153,13 +153,13 @@ Tab 3 **defines geometry-variation candidates only**. It never writes SAP2000 �
   sets `CurrentHeight` so the main viewer previews it. `CanViewTrussCandidates` /
   `TrussCandidatesHint` gate + explain the button (groups, baseline, valid range).
 - `ApplyGeometry` / `WorkflowService.ApplyGeometryAsync` / `SapGateway.MovePointsAsync` still exist
-  but are **no longer surfaced** in Tab 3 (kept for a later execution workflow).
+  but are **no longer surfaced** in Tab 2 (kept for a later execution workflow).
 - Page content uses `Text` / `Muted` on `Surface`. If content appears invisible, check for inherited
   `Foreground` from tab styling.
 
 ## Cable Pretension Tab (tab label "04  PRETENSION")
 
-Tab 4 **defines candidate PRETENSION target forces** for selected SAP2000 cables. Editing it never
+Tab 3 **defines candidate PRETENSION target forces** for selected SAP2000 cables. Editing it never
 writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" column.
 
 - Model: `CablePretensionConfig` (Domain) — `CableName`, editable target-force **`LoadPattern`**
@@ -179,7 +179,7 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
   one dict per item). Never materialise the product to count it.
 - Summary strip (top-right): `Cables N · Variable N · Pretension Candidates <BigInteger N0>`
   (`MainViewModel.CableCount` / `VariableCableCount` / `PretensionCandidateCount`), live on every edit.
-- Tab 4 content is params only (left ~40%); the model is the shared preview on the right (see **Shared
+- Tab 3 content is params only (left ~40%); the model is the shared preview on the right (see **Shared
   Model Preview**). On the pretension tab the shared viewer receives `SharedViewerCables` (= `State.Cables`),
   highlights configured cable members, always labels them by `CableName`, and synchronizes
   `MainViewModel.SelectedCable` between cable hits and the current grid row. `CablePreviewSummary` is the caption.
@@ -187,7 +187,7 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
   dialog listing every cable in `State.Geometry` (search / multi-select / preselects rows already
   added); picked names that are new become `CablePretensionConfig` rows. No live SAP read — the
   geometry snapshot already holds the model's cables. `− Remove` deletes selected rows locally only.
-- Apply path (not wired to a Tab 4 button; consumed by the frozen Tab 06 worker pipeline):
+- Apply path (not wired to a Tab 3 button; consumed by the frozen Tab 05 worker pipeline):
   `ICablePretensionService.ApplyTargetForceAsync` →
   `ISapGateway.SetCableTargetForceAsync` → `SapModel.CableObj.SetLoadTargetForce(name, "PRETENSION",
   ref P, ref RD=0.5, eItemType.Objects)`. Replace an existing same-pattern target by deleting it first,
@@ -201,21 +201,21 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
 
 ## Output Settings Tab (05)
 
-Tab 05 defines study-wide output monitoring only; editing the tab does not write to SAP2000.
+Tab 04 defines study-wide output monitoring only; editing the tab does not write to SAP2000.
 
 - Fixed output units: displacement mm, force kN, moment kNm.
 - Output groups use the reserved `[O]-` namespace: `[O]-DeflectionMonitorPts`, dynamic member-force groups `[O]-{user suffix}`, `[O]-FoundationLeft`, `[O]-FoundationRight`, and `[O]-CableMonitor`.
 - Deflection monitoring selects baseline Point Objects and fixes the future output to Global U3.
 - Member-force groups are user-defined application groups over baseline Frame Objects; one frame belongs to at most one member-force output group. Future components are P/V2/V3 and T/M2/M3.
 - Foundations require exactly two baseline points on the Left and exactly two on the Right, with no overlap.
-- Cable output selects baseline Cable Objects plus a SAP analysis load case. This is distinct from Tab 04's target-force load pattern.
+- Cable output selects baseline Cable Objects plus a SAP analysis load case. This is distinct from Tab 03's target-force load pattern.
 - Configuration is persisted as `Tab05OutputSettings`; opening a project restores definitions only and never mutates SAP.
-- When Tab 06 Run starts, `OutputGroupPreparationService` is the preflight gate: verify the active model is the immutable session parent and unlocked, replace/read-back all requested `[O]-` groups, save the parent .sdb, then freeze the execution snapshot. No worker or child may start before this succeeds.
+- When Tab 05 Run starts, `OutputGroupPreparationService` is the preflight gate: verify the active model is the immutable session parent and unlocked, replace/read-back all requested `[O]-` groups, save the parent .sdb, then freeze the execution snapshot. No worker or child may start before this succeeds.
 - Children inherit the saved parent groups. Actual SAP result extraction remains a future phase.
 
 ## Iteration Study Tab (06)
 
-Study composition plus isolated child-model building and analysis. Tab 06 does not extract results.
+Study composition plus isolated child-model building and analysis. Tab 05 does not extract results.
 
 - `IterationStudyConfig` (Domain, `ApplicationState.Study`): `Mode` (`IterationStudyMode` enum
   `FixPretension` / `FixHeight` / `Combined`), `FixedHeightIndex`, `FixedPretensionIndex` (0-based).
@@ -255,7 +255,7 @@ Study composition plus isolated child-model building and analysis. Tab 06 does n
 - `StudyExecutionSnapshotFactory` freezes candidate assignments, geometry/groups, paths, selections, and
   worker count at run start. Tabs 02–04, study settings, run checkboxes, and project load/save actions are
   disabled while execution is active.
-- The Tab 06 monitor shows each worker ID, gate state, candidate, discrete 1/10 stage, completed count, and
+- The Tab 05 monitor shows each worker ID, gate state, candidate, discrete 1/10 stage, completed count, and
   overall Ready/Running/Queued/Failed/Skipped totals. Cancellation is observed only between SAP API calls;
   active workers attempt to return to baseline and queued jobs become Cancelled.
 - A candidate-level failure, including a nonzero `Analyze.RunAnalysis` result, may continue on a recovered
@@ -265,7 +265,7 @@ Study composition plus isolated child-model building and analysis. Tab 06 does n
 ## Config Project File (`src/Configuration/`)
 
 The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 02–05,
-including the Tab 06 mode/fixed candidate/selection exclusions. Never serialise ViewModels; project save/load
+including the Tab 05 mode/fixed candidate/selection exclusions. Never serialise ViewModels; project save/load
 never mutates SAP.
 
 - `ConfigProjectSession` (held by `ConfigService`): `FilePath`, in-memory `Project` (`CotVcfConfigDto`),

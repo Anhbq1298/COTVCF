@@ -233,7 +233,7 @@ internal static class StudyExecutionChecks
             state.Cables[0].MinForce = 999;
             Check(job.Loading.Loads.All(load => load.Fz == -1) && job.Height.Height == 20 &&
                   job.Pretension.Assignments.Single().TargetForce == 1000,
-                "Queued L/H/P values remain unchanged after mutable Tab 2-4 state is edited");
+                "Queued L/H/P values remain unchanged after mutable Tab 1-4 state is edited");
         }
         finally { DeleteRoot(root); }
     }

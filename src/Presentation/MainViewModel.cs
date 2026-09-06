@@ -172,7 +172,7 @@ public sealed class MainViewModel : Observable
         ? "0"
         : PretensionRuns.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
 
-    // ---- Tab 06 study composer ----
+    // ---- Tab 05 study composer ----
     private BigInteger PretensionRuns => State.Cables.Count == 0 || State.Cables.Any(c => c.CandidateCount <= 0)
         ? BigInteger.Zero
         : PretensionCandidates.TotalCount(State.Cables);
@@ -254,7 +254,7 @@ public sealed class MainViewModel : Observable
         {
             var candidate = HeightStudyCandidates.FirstOrDefault(c => c.Id == FixedHeightCandidateId);
             return candidate is null
-                ? "No height candidates are available from Tab 3."
+                ? "No height candidates are available from Tab 2."
                 : $"{candidate.Id}: baseline {State.Truss.BaselineHeight:F3} \u2192 {candidate.Candidate.Height:F3} {LengthUnit} (\u0394H {candidate.Candidate.DeltaH:+0.###;-0.###;0} {LengthUnit})";
         }
     }
@@ -263,7 +263,7 @@ public sealed class MainViewModel : Observable
         get
         {
             var candidate = PretensionStudyCandidates.FirstOrDefault(c => c.Id == FixedPretensionCandidateId);
-            if (candidate is null) return "No pretension candidates are available from Tab 4.";
+            if (candidate is null) return "No pretension candidates are available from Tab 3.";
             var forces = candidate.Candidate.CableForces;
             return forces.Count <= 3
                 ? $"{candidate.Id}: " + string.Join(",  ", forces.Select(kv => $"{kv.Key}={kv.Value:0.###} kN"))
@@ -571,7 +571,7 @@ public sealed class MainViewModel : Observable
         if (!outputDialogs.EditDeflection(State.OutputSettings, OutputBaselineGeometry(), selection)) return;
         config.Session.MarkDirty(ConfigTabs.Output);
         InvalidateStudyValidation();
-        Message = $"{State.OutputSettings.DeflectionPoints.Count} deflection monitoring points configured. Groups will be applied to the parent when Tab 06 runs.";
+        Message = $"{State.OutputSettings.DeflectionPoints.Count} deflection monitoring points configured. Groups will be applied to the parent when Tab 05 runs.";
         Update();
     }
 
@@ -581,7 +581,7 @@ public sealed class MainViewModel : Observable
         if (!outputDialogs.EditMemberForces(State.OutputSettings, OutputBaselineGeometry(), selection)) return;
         config.Session.MarkDirty(ConfigTabs.Output);
         InvalidateStudyValidation();
-        Message = $"{State.OutputSettings.MemberForceGroups.Count} member-force output groups configured. Groups will be applied to the parent when Tab 06 runs.";
+        Message = $"{State.OutputSettings.MemberForceGroups.Count} member-force output groups configured. Groups will be applied to the parent when Tab 05 runs.";
         Update();
     }
 
@@ -591,7 +591,7 @@ public sealed class MainViewModel : Observable
         if (!outputDialogs.EditFoundations(State.OutputSettings, OutputBaselineGeometry(), selection)) return;
         config.Session.MarkDirty(ConfigTabs.Output);
         InvalidateStudyValidation();
-        Message = "Foundation reaction points configured. Groups will be applied to the parent when Tab 06 runs.";
+        Message = "Foundation reaction points configured. Groups will be applied to the parent when Tab 05 runs.";
         Update();
     }
 
@@ -801,7 +801,7 @@ public sealed class MainViewModel : Observable
         IsBusy = true;
         try
         {
-            Message = "Preparing Tab 05 output groups on the parent baseline model...";
+            Message = "Preparing Tab 04 output groups on the parent baseline model...";
             await outputGroupPreparation.PrepareParentAsync(State);
             Message = "Parent output groups verified and saved. Freezing study execution snapshot...";
         }
@@ -1266,11 +1266,11 @@ public sealed class MainViewModel : Observable
         };
         if (r.FileErrors.Count > 0) lines.Add(string.Join("\n", r.FileErrors.Select(e => "• " + e)));
         void Add(string name, TabCheck tc) { if (tc.Present && !tc.Ok) lines.Add($"{name}:\n" + string.Join("\n", tc.Problems.Select(p => "  • " + p))); }
-        Add("Tab 02 – Loading", r.Loading);
-        Add("Tab 03 – Truss Height", r.Truss);
-        Add("Tab 04 – Cable Force", r.Cable);
-        Add("Tab 05 – Output Settings", r.Output);
-        Add("Tab 06 - Iteration Study", r.Study);
+        Add("Tab 01 – Loading", r.Loading);
+        Add("Tab 02 – Truss Height", r.Truss);
+        Add("Tab 03 – Cable Force", r.Cable);
+        Add("Tab 04 – Output Settings", r.Output);
+        Add("Tab 05 - Iteration Study", r.Study);
         lines.Add("No configuration has been applied.");
         return string.Join("\n\n", lines);
     }

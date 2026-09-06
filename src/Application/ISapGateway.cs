@@ -25,7 +25,7 @@ public interface ISapGateway : IDisposable
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
     Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected);
     /// <summary>Assigns a Cable Loads / Target Force value on an existing load pattern.
-    /// Reserved for execution and never called while editing Tab 4.</summary>
+    /// Reserved for execution and never called while editing Tab 3.</summary>
     Task SetCableTargetForceAsync(string cableName, string loadPattern, double targetForce, ModelInfo expected);
     /// <summary>Every load case name in the model. Read-only; used by config compatibility validation.</summary>
     Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected);

@@ -3,9 +3,9 @@ using COT_VCF.Domain;
 namespace COT_VCF.Application;
 
 /// <summary>
-/// Application seam that turns Tab 4 cable configs into concrete
+/// Application seam that turns Tab 3 cable configs into concrete
 /// PRETENSION assignments. All CSI API calls stay behind <see cref="ISapGateway"/>; nothing here runs
-/// while the user is only editing Tab 4.
+/// while the user is only editing Tab 3.
 /// </summary>
 public interface ICablePretensionService
 {
@@ -22,7 +22,7 @@ public sealed class CablePretensionService(ISapGateway sap, ApplicationState sta
     {
         if (state.Model is null) throw new InvalidOperationException("Connect to SAP2000 first.");
         var cable = state.Cables.SingleOrDefault(candidate => candidate.CableName.Equals(cableName, StringComparison.Ordinal))
-            ?? throw new InvalidOperationException($"Cable {cableName} is not configured in Tab 4.");
+            ?? throw new InvalidOperationException($"Cable {cableName} is not configured in Tab 3.");
         if (string.IsNullOrWhiteSpace(cable.LoadPattern))
             throw new InvalidOperationException($"Cable {cableName} has no target-force load pattern.");
         return sap.SetCableTargetForceAsync(cableName, cable.LoadPattern.Trim(), targetForce, state.Model);

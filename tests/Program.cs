@@ -48,7 +48,7 @@ internal static class Program
                     .Where(combo => combo.Items.Cast<object>().OfType<string>().Contains("LIVE"))
                     .ToArray();
                 Assert(loadPatternPickers.Length == uiState.LoadDefinitions.Count && loadPatternPickers.All(combo => !combo.IsEditable),
-                    "Tab 2 renders one read-only SAP load-pattern dropdown per definition");
+                    "Tab 1 renders one read-only SAP load-pattern dropdown per definition");
                 var loadingBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                 loadingBitmap.Render(window);
                 var loadingEncoder = new PngBitmapEncoder(); loadingEncoder.Frames.Add(BitmapFrame.Create(loadingBitmap));
@@ -58,13 +58,13 @@ internal static class Program
                 vm.SelectedTab = 5;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
-                Assert(vm.StudyIterations.Count == 36, "Tab 6 UI binds the expected Fix Pretension rows");
+                Assert(vm.StudyIterations.Count == 36, "Tab 5 UI binds the expected Fix Pretension rows");
                 vm.RequestedWorkerCount = 3;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "Total SAP2000 Instances") &&
                        vm.RunStudyToolTip.Contains("starts 2 additional processes", StringComparison.Ordinal) &&
                        vm.RunStudyLabel.StartsWith("Build & Analyze", StringComparison.Ordinal),
-                    "Tab 6 counts the baseline as instance 1 and clearly labels build plus analysis");
+                    "Tab 5 counts the baseline as instance 1 and clearly labels build plus analysis");
                 var pretensionPicker = FindVisuals<ComboBox>(window)
                     .Single(combo => combo.Items.Cast<object>().OfType<StudyPretensionCandidate>().Any());
                 pretensionPicker.SelectedValue = "P02";
@@ -74,13 +74,13 @@ internal static class Program
                        Equals(pretensionPicker.SelectedValue, "P02") &&
                        pretensionPicker.SelectedItem is StudyPretensionCandidate { Id: "P02" } &&
                        vm.StudyIterations.All(row => row.PretensionCandidateId == "P02"),
-                    "Tab 6 switches directly from P01 to P02 without clearing the ComboBox");
+                    "Tab 5 switches directly from P01 to P02 without clearing the ComboBox");
                 uiState.Study.FixedPretensionCandidateId = "";
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
                 Assert(vm.FixedPretensionCandidateId == "P01" && vm.StudyIterations.Count == 36 &&
                        vm.StudyIterations.All(row => row.PretensionCandidateId == "P01"),
-                    "Tab 6 restores P01 when the fixed-pretension selection is transiently cleared");
+                    "Tab 5 restores P01 when the fixed-pretension selection is transiently cleared");
                 uiState.Study.Mode = IterationStudyMode.FixHeight;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var heightPicker = FindVisuals<ComboBox>(window)
@@ -92,7 +92,7 @@ internal static class Program
                        Equals(heightPicker.SelectedValue, "H02") &&
                        heightPicker.SelectedItem is StudyHeightCandidate { Id: "H02" } &&
                        vm.StudyIterations.All(row => row.HeightCandidateId == "H02"),
-                    "Tab 6 switches directly from H01 to H02 without clearing the ComboBox");
+                    "Tab 5 switches directly from H01 to H02 without clearing the ComboBox");
                 var grids = FindVisuals<DataGrid>(window).ToArray();
                 Assert(grids.Any(grid => grid.Name == "StudyPreviewGrid" && grid.Items.Count == 36 && grid.Columns.Count == 9),
                     "Study Preview DataGrid renders joint-load, cable-target, worker, status, run, and open columns");
@@ -123,7 +123,7 @@ internal static class Program
                 using (var stream = File.Create(".work/study-tab.png")) encoder.Save(stream);
                 window.Close(); bindingListener.Flush();
                 if (bindingLog.ToString().Length > 0) throw new Exception("WPF binding errors: " + bindingLog);
-                Console.WriteLine("PASS: Tab 6 rendered with no WPF binding errors.");
+                Console.WriteLine("PASS: Tab 5 rendered with no WPF binding errors.");
                 return 0;
             }
             if (args.Contains("--ui-read"))

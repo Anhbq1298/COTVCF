@@ -53,7 +53,7 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
             else point.Status = "Missing in SAP";
         }
         SortAppliedPoints();
-        // Tab 4 keeps its candidate definitions; only flag cables that are no longer in the model.
+        // Tab 3 keeps its candidate definitions; only flag cables that are no longer in the model.
         var cableNames = state.Geometry.Members.Where(m => m.Kind == MemberKind.Cable).Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
         foreach (var cable in state.Cables) cable.Missing = !cableNames.Contains(cable.CableName);
         if (changed) throw new InvalidOperationException("SAP geometry changed. Selections and ranges were retained. Review them and capture a new baseline before applying geometry.");

@@ -104,7 +104,7 @@ public sealed class OutputGroupPreparationService(ISapGateway sap)
 
         var desired = state.OutputSettings.ToSapGroups();
         if (desired.Count == 0)
-            throw new InvalidOperationException("No output groups are configured in Tab 05.");
+            throw new InvalidOperationException("No output groups are configured in Tab 04.");
 
         cancellationToken.ThrowIfCancellationRequested();
         await sap.ReplaceOutputGroupsAsync(desired, active);

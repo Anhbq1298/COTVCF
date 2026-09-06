@@ -61,7 +61,7 @@ internal static class StudyComposerChecks
 
         var saved = new ConfigurationExtractor().ExtractStudySection(state);
         Check(saved.StudyMode == IterationStudyMode.Combined && saved.ExcludedIterationKeys.Count == 4,
-            "Tab 6 mode and exclusions are included in config extraction");
+            "Tab 5 mode and exclusions are included in config extraction");
 
         var loadedState = CreateState();
         var loadCheck = new ConfigValidationResult();
@@ -85,7 +85,7 @@ internal static class StudyComposerChecks
         Check(elevenJointCandidate.JointCount == 11 && elevenJointCandidate.Loads.Count == 22 &&
               elevenJointCandidate.Loads.Select(load => load.PointName).Distinct(StringComparer.Ordinal).Count() == 11 &&
               elevenJointCandidate.Loads.Select(load => load.LoadPattern).Distinct(StringComparer.Ordinal).Count() == 2,
-            "Eleven Tab 2 joints and two load patterns produce all 22 point-load assignments");
+            "Eleven Tab 1 joints and two load patterns produce all 22 point-load assignments");
     }
 
     internal static ApplicationState CreateState()

@@ -30,7 +30,7 @@ public sealed class StudyValidationService
         foreach (var issue in new OutputSettingsValidator().Validate(state))
             issues.Add(issue);
 
-        if (state.Cables.Count == 0) Error("Pretension Setup", "No cable pretension candidates are available from Tab 4.");
+        if (state.Cables.Count == 0) Error("Pretension Setup", "No cable pretension candidates are available from Tab 3.");
         foreach (var cable in state.Cables)
         {
             if (cable.Missing || !state.Geometry.Members.Any(m => m.Name == cable.CableName && m.Kind == MemberKind.Cable))
@@ -43,10 +43,10 @@ public sealed class StudyValidationService
 
         if (state.Study.Mode == IterationStudyMode.FixHeight &&
             !composition.HeightCandidates.Any(c => c.Id == state.Study.FixedHeightCandidateId))
-            Error("Fixed Parameter", "Select one valid height candidate from Tab 3.");
+            Error("Fixed Parameter", "Select one valid height candidate from Tab 2.");
         if (state.Study.Mode == IterationStudyMode.FixPretension &&
             !composition.PretensionCandidates.Any(c => c.Id == state.Study.FixedPretensionCandidateId))
-            Error("Fixed Parameter", "Select one valid pretension candidate from Tab 4.");
+            Error("Fixed Parameter", "Select one valid pretension candidate from Tab 3.");
 
         if (composition.PreviewLimitExceeded)
             Error("Study Preview", $"The study exceeds the {StudyCompositionService.MaxPreviewRows:N0}-row preview limit. Reduce the candidate space.");

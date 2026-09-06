@@ -122,7 +122,7 @@ public sealed class ConfigurationExtractor
 
     private static ModelSnapshotDto Snapshot(ApplicationState s, LoadingConfigDto? t02, TrussHeightConfigDto? t03, CableForceConfigDto? t04, OutputSettingsConfigDto? t05, IReadOnlyCollection<string> modelLoadCases, ModelSnapshotDto? previous)
     {
-        // Baseline geometry = original coordinates captured at connect time (Tab 03 must use baseline;
+        // Baseline geometry = original coordinates captured at connect time (Tab 02 must use baseline;
         // it is also the safe original source for every other dependency).
         var geom = s.SessionBaseline.Points.Count > 0 ? s.SessionBaseline
             : s.Baseline.Points.Count > 0 ? s.Baseline : s.Geometry;

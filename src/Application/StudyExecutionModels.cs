@@ -32,7 +32,7 @@ public sealed record StudyExecutionSnapshot(
     IReadOnlyList<StudyIterationExecutionDto> Jobs,
     int RequestedWorkerCount)
 {
-    // Frozen after Tab 05 groups have been prepared on and saved into the parent.
+    // Frozen after Tab 04 groups have been prepared on and saved into the parent.
     // Reserved for the future result-extraction phase; current workers do not read results.
     public IReadOnlyList<OutputSapGroupDefinition> OutputGroups { get; init; } = [];
     public string CableResultLoadCase { get; init; } = "";
