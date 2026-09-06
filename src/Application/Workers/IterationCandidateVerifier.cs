@@ -22,12 +22,15 @@ public sealed class IterationCandidateVerifier
         token.ThrowIfCancellationRequested();
         VerifyChildIdentity(snapshot, job, child);
 
-        var modifiedPoints = expectedGeometry.Points.Values
-            .Where(point => snapshot.BaselineGeometry.Points.TryGetValue(point.Name, out var baseline) &&
-                            !Close(point.Position, baseline.Position))
+        var heightPointNames = snapshot.TopPoints
+            .Concat(snapshot.MiddlePoints)
+            .Concat(snapshot.BottomPoints)
+            .ToHashSet(StringComparer.Ordinal);
+        var heightPoints = expectedGeometry.Points.Values
+            .Where(point => heightPointNames.Contains(point.Name))
             .OrderBy(point => point.Name, StringComparer.Ordinal)
             .ToArray();
-        foreach (var point in modifiedPoints)
+        foreach (var point in heightPoints)
         {
             token.ThrowIfCancellationRequested();
             var actual = await gateway.GetPointPositionAsync(point.Name, child);
@@ -77,7 +80,7 @@ public sealed class IterationCandidateVerifier
         token.ThrowIfCancellationRequested();
         var active = await gateway.GetCurrentModelInfoAsync();
         VerifyChildIdentity(snapshot, job, active);
-        return new(modifiedPoints.Length, job.Loading.Loads.Count, job.Pretension.Assignments.Count);
+        return new(heightPoints.Length, job.Loading.Loads.Count, job.Pretension.Assignments.Count);
     }
 
     private static void VerifyChildIdentity(

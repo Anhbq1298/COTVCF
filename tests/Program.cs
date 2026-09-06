@@ -18,6 +18,14 @@ internal static class Program
     {
         try
         {
+            var liveMatrixIndex = Array.IndexOf(args, "--study-live-matrix");
+            var liveStudyIndex = liveMatrixIndex >= 0 ? liveMatrixIndex : Array.IndexOf(args, "--study-live");
+            if (liveStudyIndex >= 0)
+            {
+                if (liveStudyIndex + 1 >= args.Length) throw new ArgumentException("--study-live requires a baseline .sdb path.");
+                LiveStudyCheck.RunAsync(args[liveStudyIndex + 1], liveMatrixIndex >= 0).GetAwaiter().GetResult();
+                return 0;
+            }
             if (args.Contains("--study-ui"))
             {
                 var app = new System.Windows.Application();

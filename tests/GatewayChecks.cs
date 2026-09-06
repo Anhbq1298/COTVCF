@@ -19,6 +19,12 @@ internal static class GatewayChecks
         gateway.SetCableTargetForceAsync("Cable-A", "PRETENSION", 1300, expected).GetAwaiter().GetResult();
         Check(fake.TargetForces[("Cable-A", "PRETENSION")] is [{ Force: 1300, Distance: 0.5 }],
             "SAP cable target force replaces the same-pattern assignment and verifies the written value");
+        var pointPosition = gateway.GetPointPositionAsync("p1", expected).GetAwaiter().GetResult();
+        var pointLoads = gateway.GetPointLoadsAsync("p1", expected).GetAwaiter().GetResult();
+        var cableTargets = gateway.GetCableTargetForcesAsync("Cable-A", expected).GetAwaiter().GetResult();
+        Check(pointPosition == fake.Points["p1"] && pointLoads is [{ Fx: 1, Fy: 2, Fz: 3 }] &&
+              cableTargets is [{ CableName: "Cable-A", LoadPattern: "PRETENSION", TargetForce: 1300, RelativeDistance: 0.5 }],
+            "Focused gateway read-back returns global point position, point loads, and cable target force");
         var before = fake.Loads.ToDictionary(p => p.Key, p => p.Value.ToArray());
         fake.FailLoadName = "p2";
         Throws(() => gateway.ApplyLoadsAsync([new("p1", "LIVE", 100, 0, 0), new("p2", "LIVE", 200, 0, 0)], expected).GetAwaiter().GetResult());
@@ -29,8 +35,13 @@ internal static class GatewayChecks
         fake.Locked = false; fake.Units = eUnits.N_mm_C;
         Throws(() => gateway.ApplyLoadsAsync([new("p1", "LIVE", 1, 0, 0)], expected).GetAwaiter().GetResult());
         Check(fake.WriteCount == calls, "Changed SAP units reject writes"); fake.Units = eUnits.kN_m_C;
-        var geometry = new GeometryModel(fake.Points.ToDictionary(p => p.Key, p => new StructuralPoint(p.Key, p.Value)), []);
-        var proposed = new GeometryModel(geometry.Points.ToDictionary(p => p.Key, p => p.Value with { Position = p.Value.Position with { Z = 5 } }), []);
+        var geometry = new GeometryModel(fake.Points.ToDictionary(p => p.Key, p => new StructuralPoint(p.Key, p.Value)),
+            [new StructuralMember("Cable-A", "p1", "p2", MemberKind.Cable)]);
+        fake.PresentCoordSystem = "Local-CSys";
+        gateway.MovePointsAsync(geometry, geometry, expected).GetAwaiter().GetResult();
+        Check(fake.PresentCoordSystem == "Global" && fake.SetCoordSystemCalls == 1,
+            "Geometry write explicitly establishes the SAP Global coordinate system");
+        var proposed = new GeometryModel(geometry.Points.ToDictionary(p => p.Key, p => p.Value with { Position = p.Value.Position with { Z = 5 } }), geometry.Members);
         fake.FailMoveName = "p2";
         Throws(() => gateway.MovePointsAsync(geometry, proposed, expected).GetAwaiter().GetResult());
         Check(fake.Points.All(p => p.Value == geometry.Points[p.Key].Position), "Failed coordinate batch restores all attempted points");
@@ -63,6 +74,8 @@ internal static class GatewayChecks
         public string? FailLoadName, FailMoveName;
         public int WriteCount;
         public int UnlockCount, SaveCalls;
+        public int SetCoordSystemCalls;
+        public string PresentCoordSystem = "Global";
         public string CurrentPath = "test.sdb";
         public Dictionary<string, Position> Points { get; } = new() { ["p1"] = new(0, 0, 0), ["p2"] = new(10, 0, 0) };
         public Dictionary<string, double[]> Loads { get; } = new() { ["p1"] = [10, 20, 30, 40, 50, 60], ["p2"] = [11, 21, 31, 41, 51, 61] };
@@ -101,6 +114,7 @@ internal static class GatewayChecks
                 switch (name)
                 {
                     case "GetNameList": a[0] = 1; a[1] = new[] { "Cable-A" }; return 0;
+                    case "GetPoints": a[1] = "p1"; a[2] = "p2"; return 0;
                     case "GetLoadTargetForce":
                         var cableName = (string)a[0]!;
                         var rows = TargetForces
@@ -149,7 +163,8 @@ internal static class GatewayChecks
                     case "GetPresentUnits": return Units;
                     case "GetModelIsLocked": return Locked;
                     case "SetModelIsLocked": UnlockCount++; Locked = (bool)a[0]!; return 0;
-                    case "GetPresentCoordSystem": return "Global";
+                    case "GetPresentCoordSystem": return PresentCoordSystem;
+                    case "SetPresentCoordSystem": SetCoordSystemCalls++; PresentCoordSystem = (string)a[0]!; return 0;
                     case "GetMergeTol": a[0] = .001; return 0;
                     case "get_PointObj": return point;
                     case "get_EditPoint": return edit;

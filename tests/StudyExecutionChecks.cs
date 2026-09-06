@@ -10,11 +10,142 @@ internal static class StudyExecutionChecks
     {
         PathServiceIsPureAndDeterministic();
         SnapshotResolvesCompleteCandidates();
+        OneWorkerPersistsAndVerifiesOneCandidate();
+        OneWorkerDoesNotAccumulateOrLeakCandidateState();
+        FixedModesAndCombinedPhysicallyApplyResolvedCandidates();
         TwoWorkersAreParallelAndIndividuallySequential();
+        VerificationFailureNeverBecomesReady();
+        PretensionFailureReturnsToBaselineAndContinues();
         StartupFailureBlocksAllDispatch();
         ExistingOutputBlocksBeforeWorkerStartup();
         FaultedWorkerIsRemovedWhileHealthyWorkerContinues();
         CancellationStopsAtStageBoundaries();
+    }
+
+    private static void OneWorkerPersistsAndVerifiesOneCandidate()
+    {
+        var (root, _, snapshot) = CreateSnapshot(1, 1);
+        try
+        {
+            var factory = new FakeHostFactory();
+            var stages = new ConcurrentBag<StudyIterationStatus?>();
+            var result = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(progress => stages.Add(progress.IterationStatus)),
+                CancellationToken.None).GetAwaiter().GetResult();
+            var job = snapshot.Jobs.Single(candidate => candidate.RunIterate);
+            var gateway = factory.Gateways.Single();
+            Check(result.Completed == 1 && result.Failed == 0 &&
+                  stages.Contains(StudyIterationStatus.Verifying) && File.Exists(job.ModelFullPath),
+                "One worker marks one child Ready only after persisted verification");
+            Check(SavedCandidateMatches(gateway, snapshot, job),
+                "Reloaded single child physically contains its resolved height, loading, and pretension values");
+            Check(File.ReadAllText(Path.Combine(job.IterationDirectory, "build.log")).Contains("VERIFIED", StringComparison.Ordinal),
+                "Per-candidate diagnostics record the verified L/H/P transaction");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void OneWorkerDoesNotAccumulateOrLeakCandidateState()
+    {
+        var (root, _, snapshot) = CreateSnapshot(
+            IterationStudyMode.Combined,
+            1,
+            row => row.IterationId is "L01_H01_P01" or "L01_H02_P02" or "L02_H01_P01");
+        try
+        {
+            var factory = new FakeHostFactory();
+            var result = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+            var gateway = factory.Gateways.Single();
+            var jobs = snapshot.Jobs.Where(job => job.RunIterate).ToArray();
+            Check(result.Completed == 3 && jobs.All(job => SavedCandidateMatches(gateway, snapshot, job)),
+                "One worker reloads the baseline and persists exact values for multiple different L/H/P candidates");
+            var firstHeight = gateway.SavedPosition(jobs[0].ModelFullPath, "bot").Z;
+            var secondHeight = gateway.SavedPosition(jobs[1].ModelFullPath, "bot").Z;
+            Check(Close(firstHeight, -jobs[0].Height.DeltaH) && Close(secondHeight, -jobs[1].Height.DeltaH),
+                "Successive height candidates are baseline-relative and never cumulative");
+            Check(!Close(gateway.SavedLoad(jobs[0].ModelFullPath, "top", "LIVE").Fz,
+                         gateway.SavedLoad(jobs[2].ModelFullPath, "top", "LIVE").Fz) &&
+                  !Close(gateway.SavedTarget(jobs[0].ModelFullPath, "Cable-A", "PRETENSION").TargetForce,
+                         gateway.SavedTarget(jobs[1].ModelFullPath, "Cable-A", "PRETENSION").TargetForce),
+                "Loading and pretension assignments do not leak between children on the same worker");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void FixedModesAndCombinedPhysicallyApplyResolvedCandidates()
+    {
+        VerifyMode(IterationStudyMode.FixHeight, "H03", null,
+            row => row.IterationId is "L01_H03_P01" or "L01_H03_P02" or "L02_H03_P01" or "L02_H03_P02",
+            "Fix Height physically applies H03 to all four L/P children");
+        VerifyMode(IterationStudyMode.FixPretension, null, "P03",
+            row => row.IterationId is "L01_H01_P03" or "L01_H02_P03" or "L02_H01_P03" or "L02_H02_P03",
+            "Fix Pretension physically applies P03 to all four L/H children");
+        VerifyMode(IterationStudyMode.Combined, null, null,
+            row => row.IterationId is "L02_H02_P02",
+            "Combined mode uses the same verified L/H/P builder");
+    }
+
+    private static void VerifyMode(
+        IterationStudyMode mode,
+        string? fixedHeight,
+        string? fixedPretension,
+        Func<StudyIteration, bool> select,
+        string assertion)
+    {
+        var (root, _, snapshot) = CreateSnapshot(mode, 1, select, fixedHeight, fixedPretension);
+        try
+        {
+            var factory = new FakeHostFactory();
+            var result = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+            var jobs = snapshot.Jobs.Where(job => job.RunIterate).ToArray();
+            Check(jobs.Length > 0 && result.Completed == jobs.Length &&
+                  jobs.All(job => SavedCandidateMatches(factory.Gateways.Single(), snapshot, job)), assertion);
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void VerificationFailureNeverBecomesReady()
+    {
+        var (root, _, snapshot) = CreateSnapshot(2, 1);
+        try
+        {
+            var corruptId = snapshot.Jobs.First(job => job.RunIterate).IterationId;
+            var factory = new FakeHostFactory(corruptIterationId: corruptId);
+            var result = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+            Check(result.Failed == 1 && result.Completed == 1,
+                "A child whose saved loading is corrupted fails verification and never becomes Ready");
+            Check(SamePath(factory.Gateways.Single().Current.Path, snapshot.BaselineModelPath),
+                "Worker restores the baseline after verification failure and continues with the next candidate");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void PretensionFailureReturnsToBaselineAndContinues()
+    {
+        var (root, _, original) = CreateSnapshot(2, 1);
+        try
+        {
+            var jobs = original.Jobs.Where(job => job.RunIterate).ToArray();
+            var badPretension = jobs[0].Pretension with
+            {
+                Assignments = [new PretensionAssignment("Invalid-Cable", "PRETENSION", 1234)]
+            };
+            var replaced = original.Jobs.Select(job => job.IterationId == jobs[0].IterationId
+                ? job with { Pretension = badPretension }
+                : job).ToArray();
+            var snapshot = original with { Jobs = replaced };
+            var factory = new FakeHostFactory();
+            var result = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+            Check(result.Failed == 1 && result.Completed == 1,
+                "Invalid cable target force leaves the candidate Failed and the worker processes the next job");
+            Check(SamePath(factory.Gateways.Single().Current.Path, snapshot.BaselineModelPath),
+                "Pretension failure returns the worker to the immutable baseline");
+        }
+        finally { DeleteRoot(root); }
     }
 
     private static void PathServiceIsPureAndDeterministic()
@@ -49,6 +180,12 @@ internal static class StudyExecutionChecks
             Check(snapshot.BaselineGeometry.Points["top"].Position.Z == 15 &&
                   !ReferenceEquals(snapshot.BaselineGeometry.Points, state.Baseline.Points),
                 "Execution snapshot owns an immutable baseline geometry copy");
+            state.LoadDefinitions[0].MinQz = 999;
+            state.Truss.MinimumHeight = 999;
+            state.Cables[0].MinForce = 999;
+            Check(job.Loading.Loads.All(load => load.Fz == -1) && job.Height.Height == 20 &&
+                  job.Pretension.Assignments.Single().TargetForce == 1000,
+                "Queued L/H/P values remain unchanged after mutable Tab 2-4 state is edited");
         }
         finally { DeleteRoot(root); }
     }
@@ -175,6 +312,55 @@ internal static class StudyExecutionChecks
         return (root, state, new StudyExecutionSnapshotFactory().Create(state, composition, workers));
     }
 
+    private static (string Root, ApplicationState State, StudyExecutionSnapshot Snapshot) CreateSnapshot(
+        IterationStudyMode mode,
+        int workers,
+        Func<StudyIteration, bool> select,
+        string? fixedHeight = null,
+        string? fixedPretension = null)
+    {
+        var root = NewRoot();
+        Directory.CreateDirectory(root);
+        var baselinePath = Path.Combine(root, "COT_VCF.sdb");
+        File.WriteAllText(baselinePath, "baseline");
+        var state = StudyComposerChecks.CreateState();
+        var baseline = state.SessionBaselineModel! with { Path = baselinePath };
+        state.Model = baseline;
+        state.SessionBaselineModel = baseline;
+        state.Study.Mode = mode;
+        if (fixedHeight is not null) state.Study.FixedHeightCandidateId = fixedHeight;
+        if (fixedPretension is not null) state.Study.FixedPretensionCandidateId = fixedPretension;
+        state.Study.OutputDirectory = Path.Combine(root, "Study");
+        var composition = new StudyCompositionService().Compose(state);
+        foreach (var row in composition.Iterations) row.RunIterate = select(row);
+        return (root, state, new StudyExecutionSnapshotFactory().Create(state, composition, workers));
+    }
+
+    private static bool SavedCandidateMatches(
+        FakeGateway gateway,
+        StudyExecutionSnapshot snapshot,
+        StudyIterationExecutionDto job)
+    {
+        var expectedGeometry = new COT_VCF.Geometry.TrussGeometryService().BuildCandidateGeometry(
+            snapshot.BaselineGeometry, snapshot.TopPoints, snapshot.MiddlePoints, snapshot.BottomPoints, job.Height);
+        var geometryMatches = expectedGeometry.Points.Values.All(point =>
+            Close(gateway.SavedPosition(job.ModelFullPath, point.Name), point.Position));
+        var loadsMatch = job.Loading.Loads.All(expected =>
+        {
+            var actual = gateway.SavedLoad(job.ModelFullPath, expected.PointName, expected.LoadPattern);
+            return Close(actual.Fx, expected.Fx) && Close(actual.Fy, expected.Fy) && Close(actual.Fz, expected.Fz);
+        });
+        var pretensionMatches = job.Pretension.Assignments.All(expected =>
+            Close(gateway.SavedTarget(job.ModelFullPath, expected.CableName, expected.LoadPattern).TargetForce,
+                expected.TargetForce));
+        return geometryMatches && loadsMatch && pretensionMatches;
+    }
+
+    private static bool Close(Position left, Position right) =>
+        Close(left.X, right.X) && Close(left.Y, right.Y) && Close(left.Z, right.Z);
+    private static bool Close(double left, double right) =>
+        Math.Abs(left - right) <= 1e-8 * Math.Max(1, Math.Max(Math.Abs(left), Math.Abs(right)));
+
     private static string NewRoot() => Path.Combine(Path.GetTempPath(), "COTVCF-study-checks-" + Guid.NewGuid().ToString("N"));
     private static void DeleteRoot(string root)
     {
@@ -203,14 +389,17 @@ internal static class StudyExecutionChecks
         public void Report(T value) => report(value);
     }
 
-    private sealed class FakeHostFactory(int failStartId = 0, int failRuntimeId = 0) : ISapInstanceHostFactory
+    private sealed class FakeHostFactory(
+        int failStartId = 0,
+        int failRuntimeId = 0,
+        string? corruptIterationId = null) : ISapInstanceHostFactory
     {
         public ConcurrentBag<FakeGateway> Gateways { get; } = [];
         public int CreateCount;
         public ISapInstanceHost Create(int instanceId)
         {
             Interlocked.Increment(ref CreateCount);
-            var gateway = new FakeGateway(instanceId, failRuntimeId == instanceId);
+            var gateway = new FakeGateway(instanceId, failRuntimeId == instanceId, corruptIterationId);
             Gateways.Add(gateway);
             return new FakeHost(instanceId, gateway, failStartId == instanceId);
         }
@@ -230,7 +419,7 @@ internal static class StudyExecutionChecks
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class FakeGateway(int workerId, bool failRuntime = false) : ISapGateway
+    private sealed class FakeGateway(int workerId, bool failRuntime = false, string? corruptIterationId = null) : ISapGateway
     {
         private int activeCalls;
         private int maxConcurrentCalls;
@@ -320,6 +509,8 @@ internal static class StudyExecutionChecks
         public async Task SetCableTargetForceAsync(string cableName, string loadPattern, double targetForce, ModelInfo expected) => await Tracked(async () =>
         {
             Verify(expected);
+            if (!cableName.Equals("Cable-A", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Cable {cableName} no longer exists in the model.");
             AppliedTargetForces.Add(new(cableName, loadPattern, targetForce));
             currentTargets[Key(cableName, loadPattern)] = new(cableName, loadPattern, targetForce, 0.5);
             await Task.Delay(3);
@@ -329,10 +520,23 @@ internal static class StudyExecutionChecks
         {
             Verify(expected);
             await Task.Delay(2);
-            savedStates[Current.Path] = Capture();
+            var saved = Capture();
+            if (!string.IsNullOrWhiteSpace(corruptIterationId) &&
+                Current.Path.Contains(corruptIterationId, StringComparison.Ordinal))
+                saved = saved with { Loads = new Dictionary<string, PointLoad>(StringComparer.OrdinalIgnoreCase) };
+            savedStates[Current.Path] = saved;
         });
 
         public Task<ModelInfo> GetCurrentModelInfoAsync() => Task.FromResult(Current);
+
+        public Position SavedPosition(string modelPath, string pointName) =>
+            savedStates[Path.GetFullPath(modelPath)].Geometry.Points[pointName].Position;
+
+        public PointLoad SavedLoad(string modelPath, string pointName, string loadPattern) =>
+            savedStates[Path.GetFullPath(modelPath)].Loads[Key(pointName, loadPattern)];
+
+        public CableTargetForce SavedTarget(string modelPath, string cableName, string loadPattern) =>
+            savedStates[Path.GetFullPath(modelPath)].Targets[Key(cableName, loadPattern)];
 
         private void Verify(ModelInfo expected)
         {

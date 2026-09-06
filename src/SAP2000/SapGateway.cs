@@ -283,7 +283,12 @@ public sealed class SapGateway : ISapGateway
     public Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected) => worker.Run(() =>
     {
         Verify(expected, true);
-        if (Model.GetPresentCoordSystem() != "Global") throw new InvalidOperationException("Set SAP2000's present coordinate system to Global before applying geometry.");
+        if (!Model.GetPresentCoordSystem().Equals("Global", StringComparison.OrdinalIgnoreCase))
+        {
+            Check(Model.SetPresentCoordSystem("Global"), "SetPresentCoordSystem", "Global");
+            if (!Model.GetPresentCoordSystem().Equals("Global", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("SAP2000 did not retain Global as the present coordinate system required for geometry updates.");
+        }
         if (!expectedGeometry.Points.Keys.Order().SequenceEqual(proposed.Points.Keys.Order())) throw new InvalidOperationException("Geometry updates must preserve all point identities.");
         int pointCount = 0; string[] pointNames = [];
         Check(Model.PointObj.GetNameList(ref pointCount, ref pointNames), "PointObj.GetNameList");
@@ -322,7 +327,7 @@ public sealed class SapGateway : ISapGateway
             foreach (var p in updates)
             {
                 Verify(expected, true);
-                if (Model.GetPresentCoordSystem() != "Global") throw new InvalidOperationException("SAP coordinate system changed during the update.");
+                if (!Model.GetPresentCoordSystem().Equals("Global", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("SAP coordinate system changed during the update.");
                 attempted.Add(expectedGeometry.Points[p.Name]);
                 Check(Model.EditPoint.ChangeCoordinates_1(p.Name, p.Position.X, p.Position.Y, p.Position.Z, true), "EditPoint.ChangeCoordinates_1", p.Name);
                 if (!Close(ReadPosition(p.Name), p.Position)) throw new InvalidOperationException($"Point {p.Name} did not reach the requested coordinates.");
@@ -333,7 +338,7 @@ public sealed class SapGateway : ISapGateway
             var failures = new List<string>();
             foreach (var p in attempted.AsEnumerable().Reverse())
             {
-                try { Verify(expected, true); if (Model.GetPresentCoordSystem() != "Global") throw new InvalidOperationException("Restore requires SAP's Global coordinate system."); Check(Model.EditPoint.ChangeCoordinates_1(p.Name, p.Position.X, p.Position.Y, p.Position.Z, true), "Restore coordinates", p.Name); }
+                try { Verify(expected, true); if (!Model.GetPresentCoordSystem().Equals("Global", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Restore requires SAP's Global coordinate system."); Check(Model.EditPoint.ChangeCoordinates_1(p.Name, p.Position.X, p.Position.Y, p.Position.Z, true), "Restore coordinates", p.Name); }
                 catch (Exception ex) { failures.Add(ex.Message); }
             }
             throw new InvalidOperationException(original.Message + (failures.Count == 0 ? " Attempted coordinate changes were restored." : " Some coordinates could not be restored: " + string.Join("; ", failures)) + $" Recovery data: {journal}", original);
