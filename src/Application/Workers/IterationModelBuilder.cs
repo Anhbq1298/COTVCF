@@ -102,6 +102,10 @@ public sealed class IterationModelBuilder(
             stage = StudyWorkerStage.Verifying;
             Report(stage, StudyIterationStatus.Verifying, "Reloading and verifying the saved child model.", childInfo.Path);
             var reloadedChild = await gateway.OpenModelAsync(job.ModelFullPath);
+            if (!reloadedChild.IsLocked)
+                throw new InvalidOperationException(
+                    $"The saved child model reopened unlocked, so its analysis results were not persisted: {job.ModelFullPath}. " +
+                    "Confirm the baseline has at least one load case set to run.");
             var verified = await verifier.VerifyAsync(gateway, snapshot, job, proposed, reloadedChild, token);
             AppendDiagnostic(job, workerId,
                 $"VERIFIED geometryPoints={verified.GeometryPointsVerified},pointLoads={verified.PointLoadsVerified}," +

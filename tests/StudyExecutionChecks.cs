@@ -533,7 +533,8 @@ internal static class StudyExecutionChecks
                 currentTargets = new(StringComparer.OrdinalIgnoreCase);
                 analysisComplete = false;
             }
-            Current = Current with { Path = fullPath };
+            // A reopened model comes back locked only if it was saved after a completed analysis.
+            Current = Current with { Path = fullPath, IsLocked = analysisComplete };
             return Current;
         });
 
@@ -595,6 +596,7 @@ internal static class StudyExecutionChecks
                 path.Contains(failAnalysisIterationId, StringComparison.Ordinal))
                 throw new InvalidOperationException("SAP2000 analysis failed.");
             analysisComplete = true;
+            Current = Current with { IsLocked = true };
         });
 
         public async Task SaveAsync(ModelInfo expected) => await Tracked(async () =>

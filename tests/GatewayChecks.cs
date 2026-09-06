@@ -67,6 +67,10 @@ internal static class GatewayChecks
             Check(child.Path == childPath && !child.IsLocked && fake.UnlockCount == 1 &&
                   fake.AnalysisRuns == 2 && fake.Locked && fake.SaveCalls == 3,
                 "SAP analysis checks failure codes, then saves the successfully analyzed locked model");
+            fake.Locked = false; fake.NoRunCases = true;
+            Throws(() => gateway.RunAnalysisAsync(child).GetAwaiter().GetResult());
+            Check(fake.AnalysisRuns == 3 && !fake.Locked,
+                "RunAnalysis that executes no load cases leaves the model unlocked and is rejected");
         }
         finally { Directory.Delete(lifecycleRoot, true); }
     }
@@ -76,6 +80,7 @@ internal static class GatewayChecks
     {
         public bool Locked;
         public bool FailAnalysis;
+        public bool NoRunCases;
         public eUnits Units = eUnits.kN_m_C;
         public string? FailLoadName, FailMoveName;
         public int WriteCount;
@@ -156,7 +161,7 @@ internal static class GatewayChecks
                 if (name != "RunAnalysis") throw new NotSupportedException(name);
                 AnalysisRuns++;
                 if (FailAnalysis) { FailAnalysis = false; return 9; }
-                Locked = true;
+                if (!NoRunCases) Locked = true;
                 return 0;
             });
             var file = ApiDouble.Create<cFile>((name, a) =>

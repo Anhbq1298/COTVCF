@@ -93,6 +93,9 @@ public sealed class IterationCandidateVerifier
         if (actual.UnitsCode != snapshot.BaselineModel.UnitsCode)
             throw new InvalidOperationException(
                 $"Child verification found different units than the baseline ({actual.Units} vs {snapshot.BaselineModel.Units}).");
+        if (!actual.IsLocked)
+            throw new InvalidOperationException(
+                $"The child model is unlocked, so its analysis results were not persisted: {job.ModelFullPath}.");
         if (!File.Exists(job.ModelFullPath))
             throw new InvalidOperationException($"The saved child model was not found: {job.ModelFullPath}");
         if (new FileInfo(job.ModelFullPath).Length <= 0)

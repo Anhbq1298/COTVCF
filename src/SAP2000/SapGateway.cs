@@ -91,6 +91,12 @@ public sealed class SapGateway : ISapGateway
         Verify(expected, true);
         Check(Model.Analyze.RunAnalysis(), "Analyze.RunAnalysis", expected.Path);
         Verify(expected);
+        // A real analysis run locks the model. If it comes back unlocked, RunAnalysis executed no
+        // load cases (none are set to run) and produced no results — fail instead of saving an empty child.
+        if (!ReadInfo().IsLocked)
+            throw new InvalidOperationException(
+                $"Analyze.RunAnalysis executed no load cases for {expected.Path} and produced no results. " +
+                "Set at least one load case to run in the baseline model (Analyze > Set Load Cases to Run), then retry.");
         return true;
     });
     public Task<ModelInfo> GetCurrentModelInfoAsync() => worker.Run(ReadInfo);
