@@ -35,7 +35,7 @@
        <TextBlock Text="Save All"/>
       </StackPanel>
      </Button>
-     <Button Command="{Binding LoadConfig}" ToolTip="Open a COT VCF project file and restore Tabs 02-05" Margin="0">
+     <Button Command="{Binding LoadConfig}" ToolTip="Open a COT VCF project file and restore Tabs 02-06" Margin="0">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M1.5,4 L6,4 L8,6 L14.5,6 L14.5,13 L1.5,13 Z"/></Viewbox>
        <TextBlock Text="Load Config"/>
@@ -344,11 +344,11 @@
     </Grid>
    </TabItem>
 
-   <!-- 05 ITERATION STUDY -->
+   <!-- 06 ITERATION STUDY -->
    <TabItem>
     <TabItem.Header>
      <StackPanel Width="124">
-      <TextBlock Text="05  ITERATION" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
+      <TextBlock Text="06  ITERATION" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
       <TextBlock Text="{Binding StudyBuildStateText}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
@@ -569,7 +569,7 @@
       <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <Button Content="Validate Study" Command="{Binding Validate}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/>
       <Button Grid.Column="2" Content="Open Study Folder" Command="{Binding OpenStudyFolder}"/>
-      <Button Grid.Column="3" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 5 into the active project"/>
+      <Button Grid.Column="3" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 6 into the active project"/>
       <Button Grid.Column="4" Content="Cancel Remaining" Command="{Binding CancelStudy}"/>
       <Button Grid.Column="5" Content="{Binding RunStudyLabel}" Command="{Binding BuildSelectedModels}" Style="{StaticResource Primary}" ToolTip="{Binding RunStudyToolTip}" Margin="0"/>
      </Grid>

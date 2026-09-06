@@ -92,7 +92,7 @@ public enum StudyBuildState
     Failed
 }
 
-/// <summary>A deterministic Tab 05 plan row which acquires execution state only after a worker accepts it.</summary>
+/// <summary>A deterministic Tab 06 plan row which acquires execution state only after a worker accepts it.</summary>
 public sealed class StudyIteration : Observable
 {
     private bool runIterate;

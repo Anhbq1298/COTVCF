@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using COT_VCF.Domain;
 
 namespace COT_VCF.Configuration;
@@ -20,13 +21,24 @@ public sealed class CotVcfConfigDto
     public LoadingConfigDto? Tab02Loading { get; set; }
     public TrussHeightConfigDto? Tab03TrussHeight { get; set; }
     public CableForceConfigDto? Tab04CableForce { get; set; }
-    public IterationStudyConfigDto? Tab05IterationStudy { get; set; }
+    public IterationStudyConfigDto? Tab06IterationStudy { get; set; }
+
+    /// <summary>
+    /// Legacy JSON key from before the Iteration Study tab was renumbered 5 → 6. Deserialize-only:
+    /// older project files still load; saves only ever write <see cref="Tab06IterationStudy"/>.
+    /// </summary>
+    [JsonPropertyName("tab05IterationStudy")]
+    public IterationStudyConfigDto? Tab05IterationStudyLegacy
+    {
+        get => null;
+        set => Tab06IterationStudy ??= value;
+    }
 
     public ConfigTabs PresentTabs =>
         (Tab02Loading is not null ? ConfigTabs.Loading : 0)
         | (Tab03TrussHeight is not null ? ConfigTabs.Truss : 0)
         | (Tab04CableForce is not null ? ConfigTabs.Cable : 0)
-        | (Tab05IterationStudy is not null ? ConfigTabs.Study : 0);
+        | (Tab06IterationStudy is not null ? ConfigTabs.Study : 0);
 }
 
 public sealed class UnitsDto

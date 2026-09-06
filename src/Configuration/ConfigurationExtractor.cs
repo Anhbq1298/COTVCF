@@ -15,7 +15,7 @@ public sealed class ConfigurationExtractor
         var t02 = tabs.HasFlag(ConfigTabs.Loading) ? ExtractLoading(state) : null;
         var t03 = tabs.HasFlag(ConfigTabs.Truss) ? ExtractTruss(state) : null;
         var t04 = tabs.HasFlag(ConfigTabs.Cable) ? ExtractCables(state) : null;
-        var t05 = tabs.HasFlag(ConfigTabs.Study) ? ExtractStudy(state) : null;
+        var t06 = tabs.HasFlag(ConfigTabs.Study) ? ExtractStudy(state) : null;
         return new CotVcfConfigDto
         {
             ConfigVersion = "1.0",
@@ -24,7 +24,7 @@ public sealed class ConfigurationExtractor
             Tab02Loading = t02,
             Tab03TrussHeight = t03,
             Tab04CableForce = t04,
-            Tab05IterationStudy = t05,
+            Tab06IterationStudy = t06,
         };
     }
 

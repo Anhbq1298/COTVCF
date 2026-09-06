@@ -61,12 +61,12 @@ internal static class StudyComposerChecks
 
         var saved = new ConfigurationExtractor().ExtractStudySection(state);
         Check(saved.StudyMode == IterationStudyMode.Combined && saved.ExcludedIterationKeys.Count == 4,
-            "Tab 5 mode and exclusions are included in config extraction");
+            "Tab 6 mode and exclusions are included in config extraction");
 
         var loadedState = CreateState();
         var loadCheck = new ConfigValidationResult();
         loadCheck.Study.Present = true;
-        var project = new CotVcfConfigDto { Tab05IterationStudy = saved };
+        var project = new CotVcfConfigDto { Tab06IterationStudy = saved };
         new ConfigurationApplicator(loadedState, new WorkflowService(new NoOpSap(), loadedState)).Apply(project, loadCheck);
         var loadedStudy = composer.Compose(loadedState);
         Check(loadedState.Study.Mode == IterationStudyMode.Combined && loadedStudy.Iterations.Count == 216 &&

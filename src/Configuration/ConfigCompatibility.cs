@@ -140,21 +140,21 @@ public sealed class ConfigCompatibilityValidator
             }
         }
 
-        // ---- Tab 05 Iteration Study ----
-        if (cfg.Tab05IterationStudy is { } t5)
+        // ---- Tab 06 Iteration Study ----
+        if (cfg.Tab06IterationStudy is { } t6)
         {
             var tc = r.Study; tc.Present = true;
             if (cfg.Tab02Loading is null || cfg.Tab03TrussHeight is null || cfg.Tab04CableForce is null)
                 tc.Problems.Add("the study requires the Loading, Truss Height and Cable Force sections in the same project.");
-            if (!Enum.IsDefined(t5.StudyMode)) tc.Problems.Add("study mode is invalid.");
-            if (t5.StudyMode == IterationStudyMode.FixHeight && !ValidCandidateId(t5.FixedHeightCandidateId, 'H'))
+            if (!Enum.IsDefined(t6.StudyMode)) tc.Problems.Add("study mode is invalid.");
+            if (t6.StudyMode == IterationStudyMode.FixHeight && !ValidCandidateId(t6.FixedHeightCandidateId, 'H'))
                 tc.Problems.Add("fixed height candidate ID is invalid.");
-            else if (t5.StudyMode == IterationStudyMode.FixHeight && CandidateOrdinal(t5.FixedHeightCandidateId) > HeightCandidateCount(cfg, state))
-                tc.Problems.Add($"fixed height candidate {t5.FixedHeightCandidateId} does not exist.");
-            if (t5.StudyMode == IterationStudyMode.FixPretension && !ValidCandidateId(t5.FixedPretensionCandidateId, 'P'))
+            else if (t6.StudyMode == IterationStudyMode.FixHeight && CandidateOrdinal(t6.FixedHeightCandidateId) > HeightCandidateCount(cfg, state))
+                tc.Problems.Add($"fixed height candidate {t6.FixedHeightCandidateId} does not exist.");
+            if (t6.StudyMode == IterationStudyMode.FixPretension && !ValidCandidateId(t6.FixedPretensionCandidateId, 'P'))
                 tc.Problems.Add("fixed pretension candidate ID is invalid.");
-            else if (t5.StudyMode == IterationStudyMode.FixPretension && CandidateOrdinal(t5.FixedPretensionCandidateId) > PretensionCandidateCount(cfg, state))
-                tc.Problems.Add($"fixed pretension candidate {t5.FixedPretensionCandidateId} does not exist.");
+            else if (t6.StudyMode == IterationStudyMode.FixPretension && CandidateOrdinal(t6.FixedPretensionCandidateId) > PretensionCandidateCount(cfg, state))
+                tc.Problems.Add($"fixed pretension candidate {t6.FixedPretensionCandidateId} does not exist.");
             // OutputDirectory is retained for JSON compatibility only. Runtime study paths are always
             // derived from the connected immutable baseline model.
         }

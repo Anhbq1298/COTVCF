@@ -7,7 +7,7 @@ namespace COT_VCF.Application;
 public readonly record struct StudyRun(long Index, int LoadIndex, int HeightIndex, long PretensionIndex);
 
 /// <summary>
-/// Tab 05 study space maths. Three modes isolate design variables before the full interaction:
+/// Tab 06 study space maths. Three modes isolate design variables before the full interaction:
 /// Fix Pretension → N_L·N_H, Fix Height → N_L·N_P, Combined → N_L·N_H·N_P. Counting only — nothing
 /// runs here; the lazy <see cref="Enumerate"/> feeds the study composer and frozen execution snapshot.
 /// </summary>

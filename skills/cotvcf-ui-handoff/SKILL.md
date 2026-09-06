@@ -168,7 +168,7 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
   dialog listing every cable in `State.Geometry` (search / multi-select / preselects rows already
   added); picked names that are new become `CablePretensionConfig` rows. No live SAP read — the
   geometry snapshot already holds the model's cables. `− Remove` deletes selected rows locally only.
-- Apply path (not wired to a Tab 4 button; consumed by the frozen Tab 05 worker pipeline):
+- Apply path (not wired to a Tab 4 button; consumed by the frozen Tab 06 worker pipeline):
   `ICablePretensionService.ApplyTargetForceAsync` →
   `ISapGateway.SetCableTargetForceAsync` → `SapModel.CableObj.SetLoadTargetForce(name, "PRETENSION",
   ref P, ref RD=0.5, eItemType.Objects)`. Replace an existing same-pattern target by deleting it first,
@@ -180,9 +180,9 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
   (`SapGateway.ReadForcesAsync` / `ForceSource` remain, unused). `ICablePretensionService` /
   `CablePretensionService` exist as the prepared apply seam but are not yet wired into `App.xaml.cs`.
 
-## Iteration Study Tab (05)
+## Iteration Study Tab (06)
 
-Study composition plus isolated child-model building and analysis. Tab 05 does not extract results.
+Study composition plus isolated child-model building and analysis. Tab 06 does not extract results.
 
 - `IterationStudyConfig` (Domain, `ApplicationState.Study`): `Mode` (`IterationStudyMode` enum
   `FixPretension` / `FixHeight` / `Combined`), `FixedHeightIndex`, `FixedPretensionIndex` (0-based).
@@ -222,7 +222,7 @@ Study composition plus isolated child-model building and analysis. Tab 05 does n
 - `StudyExecutionSnapshotFactory` freezes candidate assignments, geometry/groups, paths, selections, and
   worker count at run start. Tabs 02–04, study settings, run checkboxes, and project load/save actions are
   disabled while execution is active.
-- The Tab 05 monitor shows each worker ID, gate state, candidate, discrete 1/10 stage, completed count, and
+- The Tab 06 monitor shows each worker ID, gate state, candidate, discrete 1/10 stage, completed count, and
   overall Ready/Running/Queued/Failed/Skipped totals. Cancellation is observed only between SAP API calls;
   active workers attempt to return to baseline and queued jobs become Cancelled.
 - A candidate-level failure, including a nonzero `Analyze.RunAnalysis` result, may continue on a recovered
@@ -231,8 +231,8 @@ Study composition plus isolated child-model building and analysis. Tab 05 does n
 
 ## Config Project File (`src/Configuration/`)
 
-The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 02–05,
-including the Tab 05 mode/fixed candidate/selection exclusions. Never serialise ViewModels; project save/load
+The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 02–06,
+including the Tab 06 mode/fixed candidate/selection exclusions. Never serialise ViewModels; project save/load
 never mutates SAP.
 
 - `ConfigProjectSession` (held by `ConfigService`): `FilePath`, in-memory `Project` (`CotVcfConfigDto`),

@@ -128,7 +128,7 @@ public sealed class MainViewModel : Observable
         ? "0"
         : PretensionRuns.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
 
-    // ---- Tab 05 study composer ----
+    // ---- Tab 06 study composer ----
     private BigInteger PretensionRuns => State.Cables.Count == 0 || State.Cables.Any(c => c.CandidateCount <= 0)
         ? BigInteger.Zero
         : PretensionCandidates.TotalCount(State.Cables);
@@ -1095,7 +1095,7 @@ public sealed class MainViewModel : Observable
         Add("Tab 02 – Loading", r.Loading);
         Add("Tab 03 – Truss Height", r.Truss);
         Add("Tab 04 – Cable Force", r.Cable);
-        Add("Tab 05 - Iteration Study", r.Study);
+        Add("Tab 06 - Iteration Study", r.Study);
         lines.Add("No configuration has been applied.");
         return string.Join("\n\n", lines);
     }

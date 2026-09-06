@@ -245,7 +245,7 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         _ => ""
     };
 }
-// Tab 05 study mode: isolate one design variable before running the full interaction.
+// Tab 06 study mode: isolate one design variable before running the full interaction.
 public enum IterationStudyMode { FixPretension, FixHeight, Combined }
 public sealed class IterationStudyConfig : Observable
 {
