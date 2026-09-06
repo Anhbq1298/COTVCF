@@ -1,58 +1,135 @@
 # COT VCF tools
 
-WPF / .NET 8 application for the COT_VCF workflow: connect to SAP2000, inspect geometry, configure point loads, preview truss height, configure cable forces, and validate inputs.
+WPF / .NET 8 desktop application for defining structural-study candidates from an existing SAP2000 model and building one isolated child `.sdb` model per selected combination.
 
-## Run
+The workflow is sequential:
 
-Requires Windows x64, .NET 8 Desktop Runtime, and SAP2000 26. The build references the installed `CSiAPIv1.dll`; no CSI binaries are committed.
+`SAP baseline -> loading candidates -> truss-height candidates -> cable-pretension candidates -> validated child models`
+
+Tabs 2–4 only configure and preview candidates. SAP2000 assignments are changed only while Tab 5 builds child models; the original baseline model is never used as an output.
+
+## Tab 1 — SAP Model
+
+1. Open and save the intended model in SAP2000, then click **Connect SAP**.
+2. The application attaches to that existing SAP2000 instance and reads model identity, units, lock state, geometry, load patterns, and relevant objects.
+3. The first connected model and its original geometry become the immutable session baseline used by every candidate.
+4. **Refresh** rereads the connected model. A changed model, units, or external geometry can invalidate pending writes rather than being accepted silently.
+
+The model viewer supports XY/XZ/YZ projection, fit/reset, zoom, pan, labels, and synchronized selection where applicable.
+
+## Tab 2 — Loading Criteria
+
+1. **Add Load Locations** selects joints from the cached SAP geometry. Locations are deduplicated and ordered by global X.
+2. Define one or more loading rows as either a fixed `qz` or a `Min / Max / Step` range.
+3. Set the out-of-plane tributary width `B` and whole-number `NStories`.
+4. **View Candidates** previews every loading combination and the resulting joint forces.
+
+For each load definition, candidate values are generated on-grid from Min through Max. A loading candidate is the Cartesian selection of one `qz` value from every definition. Tributary area is based on X-direction midpoint spacing and width `B`, with half-spacing at the end joints:
+
+`Fz = -qz × TributaryArea × NStories`
+
+During Tab 5 execution, each joint/load-pattern force assignment is **replaced, not added**. Existing moments on that assignment are preserved. Ambiguous multiple assignments or incompatible coordinate systems are rejected instead of guessed.
+
+## Tab 3 — Truss Height
+
+1. Select non-overlapping Top, Middle, and Bottom joint groups.
+2. Choose the reference chord that must remain fixed.
+3. **Capture Baseline** records the original height `H0` and original joint coordinates.
+4. Define the candidate `Min / Max / Step` range and preview values with the slider or **View Candidates**.
+
+Every height candidate is calculated from the immutable baseline, never from the previous candidate, so changes cannot accumulate or drift. For `ΔH = candidate height - H0`:
+
+- Top reference: Top `0`, Middle `-0.5ΔH`, Bottom `-ΔH`.
+- Middle reference: Top `+0.5ΔH`, Middle `0`, Bottom `-0.5ΔH`.
+- Bottom reference: Top `+ΔH`, Middle `+0.5ΔH`, Bottom `0`.
+
+Tab 3 previews geometry only; it does not write to SAP2000.
+
+## Tab 4 — Pretension
+
+1. **Add Cable** selects cable objects from the cached geometry.
+2. For each cable, select or enter an existing SAP load pattern.
+3. Define a fixed target force or a `Min / Max / Step` range.
+4. The pretension space is the Cartesian product of the per-cable target-force candidates.
+
+These are SAP cable **Target Force** assignments, not analysis results. During Tab 5 execution, an existing target force for the same cable/load pattern is deleted and replaced, then read back for verification. Tab 4 itself does not write to SAP2000.
+
+## Tab 5 — Iteration Study
+
+Tab 5 composes deterministic `Lxx_Hxx_Pxx` rows from the three candidate dimensions:
+
+- `NL`: Cartesian loading combinations from Tab 2.
+- `NH`: truss-height candidates from Tab 3.
+- `NP`: Cartesian cable-pretension combinations from Tab 4.
+
+Study modes control the final study space:
+
+- **Fix Pretension:** `NL × NH × 1`.
+- **Fix Height:** `NL × 1 × NP`.
+- **Combined:** `NL × NH × NP`.
+
+Each preview row shows its complete joint/load-pattern/Fz assignments and cable/load-pattern/target-force assignments. The selected row set and all resolved candidate data are frozen when the build starts.
+
+### Child-model transaction
+
+For every selected candidate, one worker performs this complete sequence:
+
+1. Reopen the immutable baseline.
+2. Create `<baseline folder>/Study/<iteration id>/<baseline>_<iteration id>.sdb` using **Save As**.
+3. Apply the candidate height geometry.
+4. Replace the candidate point-load assignments.
+5. Replace the candidate cable target-force assignments.
+6. Read back the applied geometry, loading, and pretension.
+7. Save, reopen, and verify the child model.
+8. Return the worker to the baseline before accepting another candidate.
+
+A child becomes **Ready** only after persisted verification succeeds. Existing child files or non-empty candidate folders are never overwritten. Candidate failure is isolated where possible; a worker that cannot recover the baseline is removed. Tab 5 builds models only—it does not run analysis or extract results.
+
+### SAP2000 instance count
+
+The Tab 5 selector is the **total SAP2000 instance count**, not an additional-worker count:
+
+- Select `1`: use the already-connected baseline instance; start `0` additional processes.
+- Select `2`: use the connected instance plus `1` additional process.
+- Select `3`: use the connected instance plus `2` additional processes—exactly `3` study instances total.
+
+The connected instance is worker 1 and processes candidates. The study pool borrows it and does not close it. Calls are sequential inside each worker and parallel across workers; the next available worker receives the next queued candidate.
+
+## Project configuration
+
+The COT VCF project JSON stores the configuration for Tabs 2–5 and their study selections; loading a project never writes to SAP2000. **Save Config** updates the current tab section, while **Save All** validates and saves all sections atomically. Saved configuration is checked against the connected model before it is applied.
+
+## Build and run
+
+Requirements: Windows x64, .NET 8 Desktop Runtime, and SAP2000 26. `CSiAPIv1.dll` is referenced from the local SAP2000 installation and is not committed.
 
 ```powershell
-dotnet build ConsoleApp1.csproj
-dotnet run --project ConsoleApp1.csproj
+dotnet build COTVCF.sln
+dotnet run --project COTVCF.csproj
 ```
 
-For a different SAP installation location:
+For a different SAP2000 installation:
 
 ```powershell
-dotnet build ConsoleApp1.csproj '-p:SapInstallDir=C:\Your SAP2000 folder'
+dotnet build COTVCF.sln '-p:SapInstallDir=C:\Your SAP2000 folder'
 ```
 
-Executable: `bin\Debug\net8.0-windows\win-x64\COT VCF tools.exe`.
+Default executable:
 
-## Workflow
-
-1. Open the intended model in SAP2000. Click **Connect to SAP2000**, then **Get geometry / Refresh**. The application only attaches to an existing instance.
-2. In **Point loading**, add points and choose existing load patterns. Enter global Fx/Fy/Fz in the displayed force unit. **Apply** replaces one unstepped global force assignment for each point/pattern, preserving its moments. Multiple or non-global existing assignments are rejected for review in SAP2000.
-3. In **Truss height**, select non-overlapping top, middle and bottom groups. **Capture baseline** measures the height between level top and bottom chords. Set minimum, maximum and increment, then use the slider or preview-height field. Top points remain fixed; middle and bottom points move down by half and all of the height change. **Reset preview** returns to the last committed height. **Apply geometry** commits the preview while retaining the original baseline in memory.
-4. In **Cable force**, add cable/tendon objects. Cable values identify the shape-tension component returned by CSI. Tendon values identify the prestress assignment; stress-based assignments explicitly use stress × section area. These are configuration forces, not solved analysis results. Edit ranges and targets without writing to SAP2000.
-5. In **Iteration**, review the summary and **Validate inputs**. **Run iteration** is intentionally disabled; no optimization or analysis loop is implemented.
-
-The viewer supports XY/XZ/YZ projections, wheel zoom, drag pan, fit/reset, and a fixed coordinate indicator. XZ is the initial plane for this workflow. Select rows with Ctrl/Shift; Delete removes configuration rows and Ctrl+C copies them. Arrow keys adjust engineering numeric inputs; Home fits a focused viewer.
-
-## State and Apply behavior
-
-- UI → ViewModel → application workflow → SAP gateway. All CSI calls live under `src/SAP2000`; calls run on a dedicated STA dispatcher.
-- Current SAP geometry, captured baseline, and proposed geometry are separate. Opening tabs does not query SAP.
-- SAP present units are preserved. Changed units or model identity block writes. Start a fresh application session to configure a different model/unit system.
-- Refresh preserves selections and ranges. Missing objects are flagged; external geometry changes invalidate the captured baseline. Point-load rows return to pending status because external load edits may have occurred.
-- Models must be saved and unlocked before Apply. The application never unlocks, saves, closes, or launches SAP2000.
-- Geometry Apply checks object names, connectivity, baseline coordinates, the Global coordinate system and point merge tolerance before modifying points.
-- Recovery JSON files are written to the executable's `Recovery` directory before writes. Failed batches attempt to restore all attempted assignments/coordinates. If recovery fails, the error lists the affected operations and recovery file. Recovery files support manual review; an automated restore command is not implemented.
+`bin\Debug\net8.0-windows\win-x64\COT VCF tools.exe`
 
 ## Checks
 
 ```powershell
 dotnet run --project tests\COT_VCF.Checks.csproj
-dotnet run --project tests\COT_VCF.Checks.csproj -- --sap-read
-dotnet run --project tests\COT_VCF.Checks.csproj -- --ui-read
+dotnet run --project tests\COT_VCF.Checks.csproj -- --study-ui
 ```
 
-The first command checks baseline math, validation, preview/commit separation, refresh behavior, and SAP write behavior using API test doubles. The last two require a running SAP2000 instance; both only read SAP data. UI checks briefly open all five screens and save renders under `.work`.
+The first command runs offline workflow and guarded SAP-write tests using test doubles. The second opens the Tab 5 UI smoke test and checks WPF bindings. Live SAP checks are intentionally separate because they require a running SAP2000 instance.
 
-Verified locally against SAP2000 26.3.0: 41 points, 56 frames, 16 cables and 3 load patterns in kN/m. All 16 cable force sources were readable. Live SAP writes have not been exercised on the user's model; rollback and write guards are tested with API doubles. Tendon extraction is implemented against CSI documentation but this live model contains cables only.
+## Implementation boundaries
 
-## Scope and references
-
-This is an initial configuration application, organized into Presentation, Application, Domain, SAP2000, Geometry and Infrastructure namespaces in a single project. Full session save/load, general undo/redo, automated baseline restoration, optimization, solved-result extraction and object selection in the viewer remain future work. Truss geometry currently requires level top/bottom chords; non-level chord mappings are rejected rather than inferred.
-
-Implementation follows `.claude/skills/structural-engineering-ui/SKILL.md`, `design-system/structural-engineering/MASTER.md`, and the project SAP skill guidance on boundaries, units and return codes. Actual signatures and parameter meanings were verified against the installed `CSiAPIv1.dll` and `CSI_OAPI_Documentation.chm`: several illustrative skill signatures differ from the installed API. In SAP2000 26, `GetPresentUnits_2` returns `-100`; the gateway uses the supported `GetPresentUnits` enum instead.
+- UI → ViewModel → application services → SAP gateway.
+- All CSI calls live under `src/SAP2000` and execute through dedicated STA lanes.
+- SAP units, model identity, object existence, baseline coordinates, and return codes are verified around writes.
+- Recovery JSON is written before guarded write batches; failed batches attempt rollback.
