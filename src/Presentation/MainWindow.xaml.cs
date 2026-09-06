@@ -9,6 +9,10 @@ namespace COT_VCF.Presentation;
 
 public partial class MainWindow : Window
 {
+    // Remembers the user's dragged split so it survives visits to the full-width tabs.
+    private GridLength paramsColumnWidth = new(2, GridUnitType.Star);
+    private GridLength viewerColumnWidth = new(3, GridUnitType.Star);
+
     public MainWindow()
     {
         InitializeComponent();
@@ -16,6 +20,42 @@ public partial class MainWindow : Window
         {
             if (DataContext is MainViewModel vm) vm.CommitEditors = CommitEditors;
         };
+        Loaded += (_, _) => ApplyViewerLayout();
+    }
+
+    // The model preview is one shared viewer hoisted out of the TabControl. Tabs 01-04 (Loading, Truss,
+    // Pretension, Output) keep a resizable ~40/60 params/preview split; tab 05 (Iteration) takes the full width.
+    private void WorkflowTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ReferenceEquals(e.OriginalSource, WorkflowTabs)) ApplyViewerLayout();
+    }
+
+    private void ApplyViewerLayout()
+    {
+        if (ParamsColumn is null) return;
+        bool showViewer = WorkflowTabs.SelectedIndex is >= 0 and <= 3;
+
+        if (ViewerSplitter.Visibility == Visibility.Visible && ParamsColumn.Width.IsStar && ViewerColumn.Width.IsStar)
+        {
+            paramsColumnWidth = ParamsColumn.Width;
+            viewerColumnWidth = ViewerColumn.Width;
+        }
+
+        SharedViewerPane.Visibility = showViewer ? Visibility.Visible : Visibility.Collapsed;
+        ViewerSplitter.Visibility = showViewer ? Visibility.Visible : Visibility.Collapsed;
+
+        if (showViewer)
+        {
+            ParamsColumn.Width = paramsColumnWidth;
+            ViewerSplitterColumn.Width = GridLength.Auto;
+            ViewerColumn.Width = viewerColumnWidth;
+        }
+        else
+        {
+            ParamsColumn.Width = new GridLength(1, GridUnitType.Star);
+            ViewerSplitterColumn.Width = new GridLength(0);
+            ViewerColumn.Width = new GridLength(0);
+        }
     }
 
     private void ValidateEditors(object sender, MouseButtonEventArgs e)
@@ -181,12 +221,12 @@ public partial class MainWindow : Window
     }
 
     private void ShowHelp(object sender, RoutedEventArgs e) => MessageBox.Show(this,
-        "1. Connect to a running SAP2000 model and load geometry.\n" +
-        "2. Select Point Objects in SAP2000, add them as applied points, and define loading criteria.\n" +
-        "3. Select level chord groups, capture a baseline and preview height changes.\n" +
-        "4. Select SAP cable objects and define PRETENSION target-force candidates.\n" +
-        "5. In Tab 05, define deflection points, member-force groups, foundation reactions, and monitored cables/result case. No SAP group write occurs while editing.\n" +
-        "6. In Tab 06, select study rows and 1-3 total SAP2000 instances. Run first prepares [O]- groups on the parent baseline and saves it, then workers create children from that prepared parent.\n" +
+        "1. Connect to a running SAP2000 model from the top bar and load geometry.\n" +
+        "2. Tab 01: select Point Objects in SAP2000, add them as applied points, and define loading criteria.\n" +
+        "3. Tab 02: select level chord groups, capture a baseline and preview height changes.\n" +
+        "4. Tab 03: select SAP cable objects and define PRETENSION target-force candidates.\n" +
+        "5. Tab 04: define deflection points, member-force groups, foundation reactions, and monitored cables/result case. No SAP group write occurs while editing.\n" +
+        "6. Tab 05: select study rows and 1-3 total SAP2000 instances. Run first prepares [O]- groups on the parent baseline and saves it, then workers create children from that prepared parent.\n" +
         "7. Each worker is sequential; workers run in parallel and reopen the immutable baseline before every candidate.\n\n" +
         "Viewer: mouse wheel zooms, drag pans, double-click or Home fits.\n" +
         "Each child runs the load cases enabled in SAP2000 and is saved again before verification; results are not extracted yet.\n" +

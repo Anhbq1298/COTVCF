@@ -80,16 +80,34 @@ earlier tall-header / large-button / blue-block look.
   (e.g. the B / NStories row) and `Label=""` to hide the label; give those an `AutomationProperties.Name`.
 - Do not apply the 220 px width to DataGrid cell editors.
 
+## Shared Model Preview (hoisted viewer)
+
+- There is **one** `Structural2DViewer` (`x:Name="SharedViewer"`), hoisted out of the `TabControl` into a
+  three-column grid in `MainWindow.xaml`: `ParamsColumn` (the `TabControl`, params only) | `ViewerSplitterColumn` |
+  `ViewerColumn` (the `SharedViewerPane` `DockPanel`). Switching tabs never rebuilds the viewer.
+- `MainWindow.xaml.cs` `ApplyViewerLayout()` (called from `Loaded` and `WorkflowTabs_SelectionChanged`) sets the
+  column widths per `SelectedIndex`: tabs 2-4 (index 1-3) get the resizable ~40/60 params/preview split; tab 1
+  (index 0) is preview-dominant (300 px params strip, no splitter); tabs 5-6 (index 4-5) hide the viewer + splitter
+  and the `TabControl` takes the full width. The user's dragged split is remembered in `paramsColumnWidth` /
+  `viewerColumnWidth`.
+- The viewer's `Model` and every overlay come from `MainViewModel` `SharedViewer*` computed properties gated on
+  `selectedTab` (`SharedViewerModel`, `SharedViewerAppliedPoints`, `SharedViewerTopPoints/Middle/Bottom`,
+  `SharedViewerCables`, `SharedViewerCaption`, `SharedViewerHint`, `ShowTrussLegend`). `NotifySharedViewer()` is
+  called from the `SelectedTab` setter and from `Update()`, so both a tab switch and any state refresh re-raise them.
+- Caption (Consolas, top of the pane) = `GeometrySummary` on tab 1, `HeightSummary` on tab 3, `CablePreviewSummary`
+  on tab 4, empty on tab 2. Hint (muted, bottom) is a short per-tab sentence. The Top/Middle/Bottom legend chip
+  only shows on tab 3 (`ShowTrussLegend`).
+- Do **not** re-add a per-tab `Structural2DViewer` to tabs 1-4; the params panels are viewer-free.
+
 ## SAP Model Tab
 
-- The SAP model page should prioritize the model preview.
-- The old in-page title/description and large model-info panel were removed to give the viewer more height.
-- The geometry summary stays below the preview.
+- Left params column is a compact read-only model card (`CONNECTED MODEL` name/path/version/units/lock +
+  `GEOMETRY` summary). The shared preview is the dominant pane on this tab.
 
 ## Loading Criteria Tab
 
 - Tab 2 is `LOADING CRITERIA`; do not restore the former per-point Fx/Fy/Fz assignment grid or an Apply-to-SAP action here.
-- Keep the viewer-left / inputs-right split, but the viewer is the dominant pane (~62/38, `GridSplitter` between). The right side stacks separate `APPLIED POINTS` and `LOAD DEFINITION` cards.
+- Tab content is params only (left ~40%); the model lives in the shared preview on the right (see **Shared Model Preview**). The params column stacks separate `APPLIED POINTS` and `LOAD DEFINITION` cards.
 - `+ Add Load Locations` opens the existing WPF `SelectionService` dialog using points from the loaded geometry. The dialog supports search, multi-select, select-all, and preselects existing load locations. Selected names are mapped to the cached Global X/Y/Z coordinates, deduplicated, sorted by X then point name, and assigned one-based order values; the user does not need to preselect objects in SAP2000.
 - Applied points are preview-only overlays on the existing viewer. Draw a fixed screen-size downward load arrow, normal applied-point highlight, stronger current-point highlight, and labels without modifying SAP geometry.
 - Grid and viewer current selection are synchronized in both directions. Removing grid rows removes their overlays and arrows, re-sorts, and does not write to SAP2000.
@@ -110,13 +128,13 @@ earlier tall-header / large-button / blue-block look.
 Tab 3 **defines geometry-variation candidates only**. It never writes SAP2000 — there is no
 "Apply to SAP" here. The primary action is `View Candidates`.
 
-- Layout: dominant preview left (~1.9:1), `GridSplitter`, scrollable right column with
-  `POINT GROUPS` (+ `REF.` column), `HEIGHT RANGE`, `PREVIEW`. `HeightSummary`
-  (`SAP · Preview · ΔH · Ref`) sits above the preview; `PreviewMessage` below it.
+- Layout: params only — a scrollable column (`POINT GROUPS` + `REF.`, `HEIGHT RANGE`, `PREVIEW`) with
+  `PreviewMessage` at its top. `HeightSummary` (`SAP · Preview · ΔH · Ref`) is now the shared-preview caption;
+  the model itself is the shared preview on the right.
 - Group rows carry a colour dot: Top = red `#C62828`, Middle = blue `#2563EB`, Bottom = green
-  `#2E7D32`. The viewer paints matching enlarged joint markers (`Structural2DViewer.TopPoints` /
-  `MiddlePoints` / `BottomPoints`, fed by `MainViewModel.TrussTopPoints` …). Only joints are
-  recoloured — member line styles are untouched. A small legend chip overlays the viewer bottom-left.
+  `#2E7D32`. The shared viewer paints matching enlarged joint markers (`SharedViewerTopPoints` /
+  `Middle` / `Bottom`, gated on the truss tab). Only joints are recoloured — member line styles are
+  untouched. The legend chip overlays the shared viewer bottom-left, shown only on the truss tab.
 - `REF.` column = mutually-exclusive radio (`TrussHeightConfiguration.Reference`, enum
   `ReferenceChord`, default `Top`) bound through `EnumMatchConverter` (`{StaticResource EnumMatch}`).
   Tooltip: "Selected chord elevation remains fixed while generating truss-height candidates."
@@ -161,9 +179,10 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
   one dict per item). Never materialise the product to count it.
 - Summary strip (top-right): `Cables N · Variable N · Pretension Candidates <BigInteger N0>`
   (`MainViewModel.CableCount` / `VariableCableCount` / `PretensionCandidateCount`), live on every edit.
-- Tab 4 uses the same resizable preview-left / inputs-right pattern as Tabs 2 and 3. The preview binds
-  `State.Geometry` plus `State.Cables`, highlights configured cable members, always labels them by
-  `CableName`, and synchronizes `MainViewModel.SelectedCable` between cable hits and the current grid row.
+- Tab 4 content is params only (left ~40%); the model is the shared preview on the right (see **Shared
+  Model Preview**). On the pretension tab the shared viewer receives `SharedViewerCables` (= `State.Cables`),
+  highlights configured cable members, always labels them by `CableName`, and synchronizes
+  `MainViewModel.SelectedCable` between cable hits and the current grid row. `CablePreviewSummary` is the caption.
 - Toolbar `+ Add Cable` → `MainViewModel.AddCablesFromSelection` opens the shared `ISelectionService`
   dialog listing every cable in `State.Geometry` (search / multi-select / preselects rows already
   added); picked names that are new become `CablePretensionConfig` rows. No live SAP read — the

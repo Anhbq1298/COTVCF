@@ -55,7 +55,7 @@ internal static class Program
                 Directory.CreateDirectory(".work");
                 using (var stream = File.Create(".work/loading-tab.png")) loadingEncoder.Save(stream);
 
-                vm.SelectedTab = 4;
+                vm.SelectedTab = 5;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
                 Assert(vm.StudyIterations.Count == 36, "Tab 6 UI binds the expected Fix Pretension rows");

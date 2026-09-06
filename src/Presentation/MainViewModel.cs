@@ -53,7 +53,11 @@ public sealed class MainViewModel : Observable
             Notify(nameof(CanRunStudy));
         }
     }
-    public int SelectedTab { get => selectedTab; set => Set(ref selectedTab, value); }
+    public int SelectedTab
+    {
+        get => selectedTab;
+        set { if (Set(ref selectedTab, value)) NotifySharedViewer(); }
+    }
     public string Message { get => message; private set => Set(ref message, value); }
     public Func<bool>? CommitEditors { get; set; }
     public string PreviewMessage { get => previewMessage; private set => Set(ref previewMessage, value); }
@@ -76,6 +80,7 @@ public sealed class MainViewModel : Observable
         {
             if (!Set(ref selectedCable, value)) return;
             Notify(nameof(CablePreviewSummary));
+            Notify(nameof(SharedViewerCaption));
         }
     }
 
@@ -118,6 +123,43 @@ public sealed class MainViewModel : Observable
     public IReadOnlyList<string> TrussTopPoints => State.Truss.TopPoints;
     public IReadOnlyList<string> TrussMiddlePoints => State.Truss.MiddlePoints;
     public IReadOnlyList<string> TrussBottomPoints => State.Truss.BottomPoints;
+
+    // ---- Hoisted model preview: one Structural2DViewer shared by tabs 01-04 (index 0-3) ----
+    // Workflow tabs after the SAP Model tab was removed: 0 Loading, 1 Truss, 2 Pretension, 3 Output, 4 Iteration.
+    private const int TabLoading = 0, TabTruss = 1, TabPretension = 2, TabOutput = 3;
+    public bool ShowSharedViewer => selectedTab is >= TabLoading and <= TabOutput;
+    public bool ShowTrussLegend => selectedTab == TabTruss;
+    public GeometryModel SharedViewerModel =>
+        (selectedTab == TabTruss ? State.Preview : State.Geometry) ?? GeometryModel.Empty;
+    public IEnumerable<AppliedPoint>? SharedViewerAppliedPoints =>
+        selectedTab == TabLoading ? State.AppliedPoints : null;
+    public IEnumerable<string>? SharedViewerTopPoints => selectedTab == TabTruss ? State.Truss.TopPoints : null;
+    public IEnumerable<string>? SharedViewerMiddlePoints => selectedTab == TabTruss ? State.Truss.MiddlePoints : null;
+    public IEnumerable<string>? SharedViewerBottomPoints => selectedTab == TabTruss ? State.Truss.BottomPoints : null;
+    public IEnumerable<CablePretensionConfig>? SharedViewerCables =>
+        selectedTab is TabPretension or TabOutput ? State.Cables : null;
+    public string SharedViewerCaption => selectedTab switch
+    {
+        TabTruss => HeightSummary,
+        TabPretension => CablePreviewSummary,
+        TabOutput => GeometrySummary,
+        _ => "",
+    };
+    public string SharedViewerHint => selectedTab switch
+    {
+        TabLoading => "Applied load locations are preview overlays; grid and viewer selection stay in sync.",
+        TabTruss => "Preview height only — Top red · Middle blue · Bottom green.",
+        TabPretension => "Configured cables are highlighted and labelled by SAP2000 cable name.",
+        TabOutput => "Point and member labels for picking deflection points, foundation reactions, member-force groups and monitored cables.",
+        _ => "",
+    };
+    private void NotifySharedViewer()
+    {
+        Notify(nameof(ShowSharedViewer)); Notify(nameof(ShowTrussLegend));
+        Notify(nameof(SharedViewerModel)); Notify(nameof(SharedViewerAppliedPoints));
+        Notify(nameof(SharedViewerTopPoints)); Notify(nameof(SharedViewerMiddlePoints)); Notify(nameof(SharedViewerBottomPoints));
+        Notify(nameof(SharedViewerCables)); Notify(nameof(SharedViewerCaption)); Notify(nameof(SharedViewerHint));
+    }
     public bool CanViewTrussCandidates => TrussCandidatesReady(out _);
     public string TrussCandidatesHint { get { TrussCandidatesReady(out var reason); return reason; } }
     public string IterationSummary => $"MODEL\n{ModelName} - {State.Units}\n\nLOADING CRITERIA\n{State.AppliedPoints.Count} applied points - {State.LoadDefinitions.Count} load definitions\n\nTRUSS HEIGHT\n{State.Truss.MinimumHeight:F4} to {State.Truss.MaximumHeight:F4} {LengthUnit} - step {State.Truss.Increment:F4} {LengthUnit}\n\nCABLE PRETENSION\n{CableCount} cables ({VariableCableCount} variable) - {PretensionCandidateCount} pretension candidates";
@@ -1295,6 +1337,7 @@ public sealed class MainViewModel : Observable
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
             nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount)
         }) Notify(name);
+        NotifySharedViewer();
         NotifyStudyPresentation();
     }
 }

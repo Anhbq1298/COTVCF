@@ -56,8 +56,15 @@
    </StackPanel>
   </Border>
 
-  <!-- ====================== LEFT WORKFLOW TABS ====================== -->
-  <TabControl x:Name="WorkflowTabs" SelectedIndex="{Binding SelectedTab}" TabStripPlacement="Left" Background="{StaticResource Background}" BorderThickness="0" Padding="10" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+  <!-- ============ WORKFLOW TABS (params) + SHARED MODEL PREVIEW ============ -->
+  <Grid>
+   <Grid.ColumnDefinitions>
+    <ColumnDefinition x:Name="ParamsColumn" Width="2*" MinWidth="150"/>
+    <ColumnDefinition x:Name="ViewerSplitterColumn" Width="Auto"/>
+    <ColumnDefinition x:Name="ViewerColumn" Width="3*"/>
+   </Grid.ColumnDefinitions>
+
+  <TabControl x:Name="WorkflowTabs" Grid.Column="0" SelectedIndex="{Binding SelectedTab}" SelectionChanged="WorkflowTabs_SelectionChanged" TabStripPlacement="Left" Background="{StaticResource Background}" BorderThickness="0" Padding="10" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
 
    <!-- 01 SAP MODEL -->
    <TabItem>
@@ -67,11 +74,25 @@
       <TextBlock Text="{Binding SapStatus}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
-    <Grid>
-     <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-     <c:Structural2DViewer Grid.Row="0" Model="{Binding State.Geometry}" ShowPointLabels="True"/>
-     <TextBlock Grid.Row="1" Text="{Binding GeometrySummary}" Foreground="{StaticResource Muted}" FontSize="11" Margin="2,6,0,0"/>
-    </Grid>
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+     <StackPanel Margin="2,2,0,0">
+      <TextBlock Text="CONNECTED MODEL" Style="{StaticResource Subheading}"/>
+      <TextBlock Text="{Binding ModelName}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding ModelPath}"/>
+      <TextBlock Text="{Binding ModelPath}" Foreground="{StaticResource Muted}" FontSize="10.5" TextWrapping="Wrap" Margin="0,2,0,8"/>
+      <Grid>
+       <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+       <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+       <TextBlock Text="SAP2000" Foreground="{StaticResource Muted}" Margin="0,0,10,2"/>
+       <TextBlock Grid.Column="1" Text="{Binding ModelVersion}" FontFamily="Consolas"/>
+       <TextBlock Grid.Row="1" Text="Units" Foreground="{StaticResource Muted}" Margin="0,0,10,2"/>
+       <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding State.Units}" FontFamily="Consolas"/>
+       <TextBlock Grid.Row="2" Text="State" Foreground="{StaticResource Muted}" Margin="0,0,10,0"/>
+       <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding LockState}" FontFamily="Consolas" TextWrapping="Wrap"/>
+      </Grid>
+      <TextBlock Text="GEOMETRY" Style="{StaticResource Subheading}" Margin="0,12,0,0"/>
+      <TextBlock Text="{Binding GeometrySummary}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
+     </StackPanel>
+    </ScrollViewer>
    </TabItem>
 
    <!-- 02 LOADING CRITERIA -->
@@ -82,11 +103,7 @@
       <TextBlock Text="{Binding LoadStatus}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
-    <Grid>
-     <Grid.ColumnDefinitions><ColumnDefinition Width="62*"/><ColumnDefinition Width="6"/><ColumnDefinition Width="38*"/></Grid.ColumnDefinitions>
-     <c:Structural2DViewer Grid.Column="0" Model="{Binding State.Geometry}" ShowPointLabels="True" AppliedPoints="{Binding State.AppliedPoints}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, Mode=TwoWay}"/>
-     <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
-     <Grid Grid.Column="2" Margin="10,0,0,0" IsEnabled="{Binding IsIdle}">
+    <Grid IsEnabled="{Binding IsIdle}">
       <Grid.RowDefinitions><RowDefinition Height="44*"/><RowDefinition Height="8"/><RowDefinition Height="56*"/></Grid.RowDefinitions>
 
       <Border Grid.Row="0" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
@@ -151,7 +168,6 @@
        </Grid>
       </Border>
      </Grid>
-    </Grid>
    </TabItem>
 
    <!-- 03 TRUSS HEIGHT -->
@@ -162,26 +178,9 @@
       <TextBlock Text="{Binding TrussStatus}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
-    <Grid>
-     <Grid.ColumnDefinitions><ColumnDefinition Width="1.9*"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*" MinWidth="280"/></Grid.ColumnDefinitions>
-     <Grid Grid.Column="0">
-      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <TextBlock Text="{Binding HeightSummary}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
-      <Grid Grid.Row="1">
-       <c:Structural2DViewer Model="{Binding State.Preview}" TopPoints="{Binding TrussTopPoints}" MiddlePoints="{Binding TrussMiddlePoints}" BottomPoints="{Binding TrussBottomPoints}"/>
-       <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,26" Background="#F2F3F5" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3">
-        <StackPanel Orientation="Horizontal">
-         <Ellipse Width="8" Height="8" Fill="#C62828" VerticalAlignment="Center"/><TextBlock Text="Top" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,10,0"/>
-         <Ellipse Width="8" Height="8" Fill="#2563EB" VerticalAlignment="Center"/><TextBlock Text="Middle" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,10,0"/>
-         <Ellipse Width="8" Height="8" Fill="#2E7D32" VerticalAlignment="Center"/><TextBlock Text="Bottom" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,0,0"/>
-        </StackPanel>
-       </Border>
-      </Grid>
-      <TextBlock Grid.Row="2" Text="{Binding PreviewMessage}" TextWrapping="Wrap" Foreground="{StaticResource Accent}" FontSize="11" Margin="0,6,0,0"/>
-     </Grid>
-     <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
-     <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
-      <StackPanel IsEnabled="{Binding IsIdle}" Margin="10,0,0,0">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <StackPanel IsEnabled="{Binding IsIdle}" Margin="2,2,0,0">
+       <TextBlock Text="{Binding PreviewMessage}" TextWrapping="Wrap" Foreground="{StaticResource Accent}" FontSize="11" Margin="0,0,0,8"/>
 
        <Grid Margin="0,0,0,2">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -250,8 +249,7 @@
        <Button Content="Save Config" Command="{Binding SaveTabConfig}" CommandParameter="Truss" HorizontalAlignment="Left" Margin="0,8,0,0"
               ToolTip="Save only this tab's truss-height configuration to a JSON file"/>
       </StackPanel>
-     </ScrollViewer>
-    </Grid>
+    </ScrollViewer>
    </TabItem>
 
    <!-- 04 CABLE PRETENSION -->
@@ -262,22 +260,7 @@
       <TextBlock Text="{Binding CableStatus}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
-    <Grid>
-     <Grid.ColumnDefinitions><ColumnDefinition Width="54*"/><ColumnDefinition Width="6"/><ColumnDefinition Width="46*" MinWidth="520"/></Grid.ColumnDefinitions>
-
-     <Grid Grid.Column="0">
-      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <TextBlock Text="{Binding CablePreviewSummary}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
-      <c:Structural2DViewer Grid.Row="1" Model="{Binding State.Geometry}" Cables="{Binding State.Cables}"
-                            SelectedCable="{Binding SelectedCable, Mode=TwoWay}"
-                            AutomationProperties.Name="Cable pretension model preview"/>
-      <TextBlock Grid.Row="2" Text="Configured cables are highlighted and labelled by SAP2000 cable name. Select a row or click a cable in the view."
-                 Style="{StaticResource Hint}" Margin="2,6,0,0"/>
-     </Grid>
-
-     <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
-
-     <Grid Grid.Column="2" Margin="10,0,0,0" IsEnabled="{Binding IsIdle}">
+    <Grid IsEnabled="{Binding IsIdle}">
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <DockPanel Grid.Row="0" Margin="0,0,0,4">
        <Button DockPanel.Dock="Right" Content="Save Config" Command="{Binding SaveTabConfig}" CommandParameter="Cable"
@@ -340,7 +323,6 @@
       </DataGrid.Columns>
       </DataGrid>
       <TextBlock Grid.Row="4" Text="Total candidates = product of each cable's candidate count (Cartesian). Assignment happens later in Run." Style="{StaticResource Hint}" Margin="0,6,0,0"/>
-     </Grid>
     </Grid>
    </TabItem>
 
@@ -670,5 +652,33 @@
    </TabItem>
 
   </TabControl>
+
+  <GridSplitter x:Name="ViewerSplitter" Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="{StaticResource Border}"/>
+
+  <DockPanel x:Name="SharedViewerPane" Grid.Column="2" Margin="10,10,10,10" LastChildFill="True">
+   <TextBlock DockPanel.Dock="Top" Text="{Binding SharedViewerCaption}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
+   <TextBlock DockPanel.Dock="Bottom" Text="{Binding SharedViewerHint}" Style="{StaticResource Hint}" Margin="2,6,0,0"/>
+   <Grid>
+    <c:Structural2DViewer x:Name="SharedViewer" ShowPointLabels="True"
+                          Model="{Binding SharedViewerModel}"
+                          AppliedPoints="{Binding SharedViewerAppliedPoints}"
+                          SelectedAppliedPoint="{Binding SelectedAppliedPoint, Mode=TwoWay}"
+                          TopPoints="{Binding SharedViewerTopPoints}"
+                          MiddlePoints="{Binding SharedViewerMiddlePoints}"
+                          BottomPoints="{Binding SharedViewerBottomPoints}"
+                          Cables="{Binding SharedViewerCables}"
+                          SelectedCable="{Binding SelectedCable, Mode=TwoWay}"
+                          AutomationProperties.Name="Shared structural model preview"/>
+    <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,8" Background="#F2F3F5" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3"
+            Visibility="{Binding ShowTrussLegend, Converter={StaticResource BoolVisibility}}">
+     <StackPanel Orientation="Horizontal">
+      <Ellipse Width="8" Height="8" Fill="#C62828" VerticalAlignment="Center"/><TextBlock Text="Top" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,10,0"/>
+      <Ellipse Width="8" Height="8" Fill="#2563EB" VerticalAlignment="Center"/><TextBlock Text="Middle" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,10,0"/>
+      <Ellipse Width="8" Height="8" Fill="#2E7D32" VerticalAlignment="Center"/><TextBlock Text="Bottom" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,0,0"/>
+     </StackPanel>
+    </Border>
+   </Grid>
+  </DockPanel>
+ </Grid>
  </DockPanel>
 </Window>

@@ -66,7 +66,7 @@ internal static class StudyComposerChecks
         var loadedState = CreateState();
         var loadCheck = new ConfigValidationResult();
         loadCheck.Study.Present = true;
-        var project = new CotVcfConfigDto { Tab06IterationStudy = saved };
+        var project = new CotVcfConfigDto { Tab05IterationStudy = saved };
         new ConfigurationApplicator(loadedState, new WorkflowService(new NoOpSap(), loadedState)).Apply(project, loadCheck);
         var loadedStudy = composer.Compose(loadedState);
         Check(loadedState.Study.Mode == IterationStudyMode.Combined && loadedStudy.Iterations.Count == 216 &&
