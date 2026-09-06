@@ -344,11 +344,104 @@
     </Grid>
    </TabItem>
 
-   <!-- 05 ITERATION STUDY -->
+   <!-- 05 OUTPUT SETTINGS -->
    <TabItem>
     <TabItem.Header>
      <StackPanel Width="124">
-      <TextBlock Text="05  ITERATION" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
+      <TextBlock Text="05  OUTPUT SETTINGS" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
+      <TextBlock Text="{Binding OutputStatus}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
+     </StackPanel>
+    </TabItem.Header>
+    <Grid IsEnabled="{Binding IsIdle}">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+     <DockPanel Grid.Row="0" Margin="0,0,0,10">
+      <TextBlock DockPanel.Dock="Right" Text="[O]- groups are prepared on the parent only when Tab 06 runs"
+                 Foreground="{StaticResource Muted}" FontFamily="Consolas" FontSize="10.5" VerticalAlignment="Center"/>
+      <StackPanel>
+       <TextBlock Text="OUTPUT SETTINGS" Style="{StaticResource Subheading}" Margin="0"/>
+       <TextBlock Text="{Binding BaselineModelName}" FontWeight="SemiBold" ToolTip="{Binding BaselineModelPath}"/>
+      </StackPanel>
+     </DockPanel>
+
+     <UniformGrid Grid.Row="1" Rows="2" Columns="2">
+      <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="14" Margin="0,0,6,6">
+       <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+         <TextBlock Text="01  MONITORED POINTS" Style="{StaticResource Subheading}" Margin="0"/>
+         <TextBlock Text="Vertical deflection · Global U3 [mm]" FontWeight="SemiBold" Margin="0,4,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1" VerticalAlignment="Center">
+         <TextBlock Text="[O]-DeflectionMonitorPts" FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+         <TextBlock Text="{Binding DeflectionOutputSummary}" Foreground="{StaticResource Muted}" Margin="0,4,0,0"/>
+        </StackPanel>
+        <Button Grid.Row="2" Content="Configure" Command="{Binding ConfigureDeflectionOutput}" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+       </Grid>
+      </Border>
+
+      <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="14" Margin="6,0,0,6">
+       <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+         <TextBlock Text="02  MEMBER FORCES" Style="{StaticResource Subheading}" Margin="0"/>
+         <TextBlock Text="P / V2 / V3 [kN] · T / M2 / M3 [kNm]" FontWeight="SemiBold" Margin="0,4,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1" VerticalAlignment="Center">
+         <TextBlock Text="Dynamic [O]-{GroupName} groups" FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+         <TextBlock Text="{Binding MemberForceOutputSummary}" Foreground="{StaticResource Muted}" Margin="0,4,0,0"/>
+        </StackPanel>
+        <Button Grid.Row="2" Content="Configure" Command="{Binding ConfigureMemberForceOutput}" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+       </Grid>
+      </Border>
+
+      <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="14" Margin="0,6,6,0">
+       <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+         <TextBlock Text="03  FOUNDATION REACTIONS" Style="{StaticResource Subheading}" Margin="0"/>
+         <TextBlock Text="F1 / F2 / F3 [kN] · M1 / M2 / M3 [kNm]" FontWeight="SemiBold" Margin="0,4,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1" VerticalAlignment="Center">
+         <TextBlock Text="[O]-FoundationLeft · [O]-FoundationRight" FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+         <TextBlock Text="{Binding FoundationOutputSummary}" Foreground="{StaticResource Muted}" Margin="0,4,0,0"/>
+        </StackPanel>
+        <Button Grid.Row="2" Content="Configure" Command="{Binding ConfigureFoundationOutput}" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+       </Grid>
+      </Border>
+
+      <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="14" Margin="6,6,0,0">
+       <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <StackPanel>
+         <TextBlock Text="04  CABLE FORCES" Style="{StaticResource Subheading}" Margin="0"/>
+         <TextBlock Text="Cable tension [kN] · result load case" FontWeight="SemiBold" Margin="0,4,0,0"/>
+        </StackPanel>
+        <StackPanel Grid.Row="1" VerticalAlignment="Center">
+         <TextBlock Text="[O]-CableMonitor" FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+         <TextBlock Text="{Binding CableOutputSummary}" Foreground="{StaticResource Muted}" Margin="0,4,0,0"/>
+        </StackPanel>
+        <Button Grid.Row="2" Content="Configure" Command="{Binding ConfigureCableOutput}" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,8,0,0"/>
+       </Grid>
+      </Border>
+     </UniformGrid>
+
+     <Grid Grid.Row="2" Margin="0,10,0,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Button Content="Validate Output Settings" Command="{Binding ValidateOutputSettings}" Style="{StaticResource Primary}"/>
+      <TextBlock Grid.Column="1" Text="Definition only · SAP groups are assigned to the baseline as the first Run gate"
+                 Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0"/>
+      <Button Grid.Column="2" Content="Save Config" Command="{Binding SaveTabConfig}" CommandParameter="Output"
+              ToolTip="Save Tab 05 Output Settings into the active project" Margin="0"/>
+     </Grid>
+    </Grid>
+   </TabItem>
+
+   <!-- 06 ITERATION STUDY -->
+   <TabItem>
+    <TabItem.Header>
+     <StackPanel Width="124">
+      <TextBlock Text="06  ITERATION" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
       <TextBlock Text="{Binding StudyBuildStateText}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
@@ -569,7 +662,7 @@
       <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <Button Content="Validate Study" Command="{Binding Validate}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/>
       <Button Grid.Column="2" Content="Open Study Folder" Command="{Binding OpenStudyFolder}"/>
-      <Button Grid.Column="3" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 5 into the active project"/>
+      <Button Grid.Column="3" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 06 into the active project"/>
       <Button Grid.Column="4" Content="Cancel Remaining" Command="{Binding CancelStudy}"/>
       <Button Grid.Column="5" Content="{Binding RunStudyLabel}" Command="{Binding BuildSelectedModels}" Style="{StaticResource Primary}" ToolTip="{Binding RunStudyToolTip}" Margin="0"/>
      </Grid>
