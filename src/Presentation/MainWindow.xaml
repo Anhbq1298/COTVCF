@@ -1,4 +1,4 @@
-<Window x:Class="COT_VCF.Presentation.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls" xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf" Title="COT VCF tools" Icon="{StaticResource AppLogo}" Width="1440" Height="810" MinWidth="1100" MinHeight="660" WindowStartupLocation="CenterScreen">
+<Window x:Class="COT_VCF.Presentation.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls" Title="COT VCF tools" Icon="{StaticResource AppLogo}" Width="1440" Height="810" MinWidth="1100" MinHeight="660" WindowStartupLocation="CenterScreen">
  <DockPanel>
 
   <!-- ============================ TOP BAR ============================ -->
@@ -616,60 +616,92 @@
       <TextBlock Text="Deflection · Uz" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
-    <Grid>
-     <Grid.ColumnDefinitions><ColumnDefinition Width="360" MinWidth="300"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*" MinWidth="420"/></Grid.ColumnDefinitions>
+    <Grid Margin="2,2,0,0" MaxWidth="860" HorizontalAlignment="Left">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <Grid.Resources>
+      <Style x:Key="PpModule" TargetType="Expander"><Setter Property="Margin" Value="0,0,0,6"/><Setter Property="BorderBrush" Value="{StaticResource Border}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Padding" Value="10,4,10,10"/></Style>
+      <Style x:Key="PpDesc" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="Margin" Value="0,2,0,0"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+      <Style x:Key="PpTodo" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="#9AA0A6"/><Setter Property="Margin" Value="0,3,0,0"/></Style>
+     </Grid.Resources>
 
-     <Grid Grid.Column="0" Margin="2,2,0,0">
-      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <StackPanel Grid.Row="0" Margin="0,0,0,4">
+      <TextBlock Text="POST-PROCESSING · RESULT LIBRARY" Style="{StaticResource Subheading}" Margin="0"/>
+      <TextBlock FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding BaselineModelPath}">
+       <Run Text="Study: " Foreground="{StaticResource Muted}"/><Run Text="{Binding BaselineModelName, Mode=OneWay}" FontWeight="SemiBold"/>
+      </TextBlock>
+     </StackPanel>
 
-      <StackPanel Grid.Row="0" Margin="0,0,0,8">
-       <TextBlock Text="POST-PROCESSING" Style="{StaticResource Subheading}" Margin="0"/>
-       <TextBlock Text="Deflection · U₃ Global Z [mm] · study-wide" FontSize="10.5" Foreground="{StaticResource Muted}"/>
-       <TextBlock FontSize="11" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding BaselineModelPath}">
-        <Run Text="Study: " Foreground="{StaticResource Muted}"/><Run Text="{Binding BaselineModelName, Mode=OneWay}" FontWeight="SemiBold"/>
-       </TextBlock>
-       <TextBlock Text="{Binding PostProcessStatus}" FontSize="11" FontWeight="SemiBold" Margin="0,4,0,0" TextWrapping="Wrap"/>
+     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
+      <StackPanel>
+
+       <Expander Style="{StaticResource PpModule}" IsExpanded="True">
+        <Expander.Header><TextBlock Text="01  DEFLECTION · Uz" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <StackPanel>
+         <TextBlock Text="Vertical deflection profile per monitored-point group · Global Z [mm]" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="{Binding PostProcessStatus}" FontSize="11" FontWeight="SemiBold" Margin="0,4,0,0" TextWrapping="Wrap"/>
+         <DataGrid ItemsSource="{Binding PostProcessRows}" IsReadOnly="True" CanUserDeleteRows="False" HeadersVisibility="Column"
+                   FrozenColumnCount="1" MaxHeight="340" Margin="0,6,0,0" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+          <DataGrid.Columns>
+           <DataGridTextColumn Header="Candidate" Binding="{Binding IterationKey}" Width="1.4*" MinWidth="110"/>
+           <DataGridTextColumn Header="Status" Binding="{Binding StatusGlyph}" Width="1*" MinWidth="78"/>
+           <DataGridTextColumn Header="Uz pts" Binding="{Binding PointsText}" Width=".7*" MinWidth="56" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="Warn" Binding="{Binding Warnings}" Width=".55*" MinWidth="46" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTemplateColumn Header="Diag" Width="60" MinWidth="54">
+            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+             <Button Content="Open" MinHeight="20" Padding="6,0" Margin="0"
+                     Command="{Binding DataContext.OpenCandidateDiagnostic, RelativeSource={RelativeSource AncestorType=Window}}"
+                     CommandParameter="{Binding}" ToolTip="Open this candidate's diagnostic HTML in the browser"/>
+            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+           </DataGridTemplateColumn>
+          </DataGrid.Columns>
+         </DataGrid>
+        </StackPanel>
+       </Expander>
+
+       <Expander Style="{StaticResource PpModule}">
+        <Expander.Header><TextBlock Text="02  TOP CHORDS" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <StackPanel>
+         <TextBlock Text="Member forces — P / V2 / V3 [kN] · T / M2 / M3 [kNm]" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="○ Not implemented yet" Style="{StaticResource PpTodo}"/>
+        </StackPanel>
+       </Expander>
+
+       <Expander Style="{StaticResource PpModule}">
+        <Expander.Header><TextBlock Text="03  BOTTOM CHORDS" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <StackPanel>
+         <TextBlock Text="Member forces — P / V2 / V3 [kN] · T / M2 / M3 [kNm]" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="○ Not implemented yet" Style="{StaticResource PpTodo}"/>
+        </StackPanel>
+       </Expander>
+
+       <Expander Style="{StaticResource PpModule}">
+        <Expander.Header><TextBlock Text="04  VIERENDEEL MEMBERS" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <StackPanel>
+         <TextBlock Text="Member forces — P / V2 / V3 [kN] · T / M2 / M3 [kNm]" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="○ Not implemented yet" Style="{StaticResource PpTodo}"/>
+        </StackPanel>
+       </Expander>
+
+       <Expander Style="{StaticResource PpModule}">
+        <Expander.Header><TextBlock Text="05  CABLE FORCES" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <StackPanel>
+         <TextBlock Text="Cable tension [kN] under the result load case" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="○ Not implemented yet" Style="{StaticResource PpTodo}"/>
+        </StackPanel>
+       </Expander>
+
       </StackPanel>
+     </ScrollViewer>
 
-      <DataGrid Grid.Row="1" ItemsSource="{Binding PostProcessRows}" IsReadOnly="True" CanUserDeleteRows="False" HeadersVisibility="Column"
-                FrozenColumnCount="1" ScrollViewer.HorizontalScrollBarVisibility="Auto">
-       <DataGrid.Columns>
-        <DataGridTextColumn Header="Candidate" Binding="{Binding IterationKey}" Width="1.4*" MinWidth="110"/>
-        <DataGridTextColumn Header="Status" Binding="{Binding StatusGlyph}" Width="1*" MinWidth="78"/>
-        <DataGridTextColumn Header="Uz pts" Binding="{Binding PointsText}" Width=".7*" MinWidth="56" ElementStyle="{StaticResource NumericCell}"/>
-        <DataGridTextColumn Header="Warn" Binding="{Binding Warnings}" Width=".6*" MinWidth="48" ElementStyle="{StaticResource NumericCell}"/>
-        <DataGridTemplateColumn Header="Diag" Width="60" MinWidth="56">
-         <DataGridTemplateColumn.CellTemplate><DataTemplate>
-          <Button Content="Open" MinHeight="20" Padding="6,0" Margin="0"
-                  Command="{Binding DataContext.OpenCandidateDiagnostic, RelativeSource={RelativeSource AncestorType=Window}}"
-                  CommandParameter="{Binding}" ToolTip="Open this candidate's diagnostic HTML"/>
-         </DataTemplate></DataGridTemplateColumn.CellTemplate>
-        </DataGridTemplateColumn>
-       </DataGrid.Columns>
-      </DataGrid>
-
-      <StackPanel Grid.Row="2" Margin="0,8,0,0">
-       <TextBlock Text="{Binding DeflectionReportName}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionReportPath}"/>
-       <WrapPanel Margin="0,4,0,0">
-        <Button Content="Open Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}"/>
-        <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Rebuild the HTML report from Deflection_Results_Source.xlsx — no SAP"/>
-        <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
-        <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
-       </WrapPanel>
-      </StackPanel>
-     </Grid>
-
-     <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{StaticResource Border}"/>
-
-     <Grid Grid.Column="2" Margin="10,2,0,0">
-      <wv2:WebView2 x:Name="ReportView" Visibility="{Binding HasDeflectionReport, Converter={StaticResource BoolVisibility}}"/>
-      <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}"
-              Visibility="{Binding HasNoDeflectionReport, Converter={StaticResource BoolVisibility}}">
-       <TextBlock Text="No deflection report yet.&#10;Run the study on Tab 05 to generate it, or Regenerate from an existing Deflection_Results_Source.xlsx."
-                  Foreground="{StaticResource Muted}" TextAlignment="Center" TextWrapping="Wrap" MaxWidth="360"
-                  HorizontalAlignment="Center" VerticalAlignment="Center"/>
-      </Border>
-     </Grid>
+     <StackPanel Grid.Row="2" Margin="0,8,0,0">
+      <TextBlock Text="{Binding DeflectionReportName}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionReportPath}"/>
+      <WrapPanel Margin="0,4,0,0">
+       <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser"/>
+       <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Rebuild Deflection_Report.html from Deflection_Results_Source.xlsx — no SAP"/>
+       <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
+       <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
+      </WrapPanel>
+     </StackPanel>
     </Grid>
    </TabItem>
 

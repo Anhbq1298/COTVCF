@@ -16,37 +16,11 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        DataContextChanged += (_, e) =>
+        DataContextChanged += (_, _) =>
         {
-            if (e.OldValue is MainViewModel old) old.PropertyChanged -= OnViewModelPropertyChanged;
-            if (DataContext is MainViewModel vm)
-            {
-                vm.CommitEditors = CommitEditors;
-                vm.PropertyChanged += OnViewModelPropertyChanged;
-                SyncReportView(vm);
-            }
+            if (DataContext is MainViewModel vm) vm.CommitEditors = CommitEditors;
         };
         Loaded += (_, _) => ApplyViewerLayout();
-    }
-
-    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (sender is MainViewModel vm && e.PropertyName is nameof(MainViewModel.DeflectionReportUri) or nameof(MainViewModel.HasDeflectionReport))
-            SyncReportView(vm);
-    }
-
-    // WebView2 does not re-navigate when Source is set to an equal Uri, so a regenerated report needs an explicit Reload.
-    private void SyncReportView(MainViewModel vm)
-    {
-        if (ReportView is null) return;
-        try
-        {
-            var uri = vm.DeflectionReportUri;
-            if (uri is null) return;
-            if (Equals(ReportView.Source, uri)) ReportView.Reload();
-            else ReportView.Source = uri;
-        }
-        catch { /* WebView2 runtime may be unavailable; the placeholder stays visible */ }
     }
 
     // The model preview is one shared viewer hoisted out of the TabControl. Tabs 01-04 (Loading, Truss,

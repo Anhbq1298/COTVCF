@@ -28,6 +28,8 @@ public sealed record DeflectionCandidateSeriesDto(
     string PretensionLabel,
     string ExtractionStatus,
     string DiagnosticReportRelativePath,
+    string ColorKey,   // key into ColorLegend — the parameter dimension that varies (load level, else height, else pretension)
+    string DashKey,    // key into DashLegend — the second varying dimension, or "" when there is none
     IReadOnlyList<DeflectionPointDto> Points);
 
 public sealed record DeflectionGroupReportDto(
@@ -41,8 +43,10 @@ public sealed record LegendEntryDto(string Key, string Label, string Value);
 public sealed record DeflectionReportDto(
     StudyMetadataDto Study,
     IReadOnlyList<DeflectionGroupReportDto> Groups,
-    IReadOnlyList<LegendEntryDto> LoadLevelColors,   // Value = hex colour
-    IReadOnlyList<LegendEntryDto> TrussHeightDashes, // Value = "solid|dash|dot|dashdot|longdash|longdashdot"
+    string ColorDimension,                       // e.g. "Load level" / "Truss height"
+    string DashDimension,                        // e.g. "Truss height" / "" when only one dimension varies
+    IReadOnlyList<LegendEntryDto> ColorLegend,   // Value = hex colour
+    IReadOnlyList<LegendEntryDto> DashLegend,    // Value = "solid|dash|dot|dashdot|longdash|longdashdot"
     IReadOnlyList<ResultReportWarningDto> Warnings);
 
 public sealed record ResultReportWarningDto(string IterationKey, string Category, string Severity, string Message);

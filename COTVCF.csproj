@@ -50,8 +50,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Deflection post-processing: consolidated .xlsx source + embedded WebView2 report preview -->
+    <!-- Deflection post-processing: consolidated .xlsx source data. The HTML report opens in the default browser. -->
     <PackageReference Include="ClosedXML" Version="0.104.2" />
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
   </ItemGroup>
 </Project>

@@ -336,9 +336,9 @@ public sealed class MainViewModel : Observable
         {
             var ok = PostProcessRows.Count(r => r.ExtractionStatus == "ExtractedOk");
             var total = PostProcessRows.Count;
-            if (!HasDeflectionReport && total == 0) return "○ No deflection results yet — run the study on Tab 05.";
-            if (!HasDeflectionReport) return "▲ Results extracted but no report — Regenerate.";
-            return total == 0 ? "● Report available." : $"● Report available · {ok}/{total} candidates extracted cleanly.";
+            if (!HasDeflectionReport && !HasResultsWorkbook) return "○ No deflection results — run the study on Tab 05.";
+            if (!HasDeflectionReport) return "▲ Results present but no report — press Regenerate.";
+            return total == 0 ? "● Report ready (from a previous run)." : $"● Report ready · {ok}/{total} candidates clean.";
         }
     }
 
@@ -583,7 +583,7 @@ public sealed class MainViewModel : Observable
             if (p is PostProcessRow row && Directory.Exists(StudyRoot))
                 TryOpenFile(Path.Combine(StudyRoot, row.DiagnosticRelPath.Replace('/', Path.DirectorySeparatorChar)));
         });
-        RegenerateDeflectionReport = new(_ => RegenerateReport(), () => !IsBusy && HasResultsWorkbook);
+        RegenerateDeflectionReport = new(_ => RegenerateReport(), () => !IsBusy);
         ViewIterationError = new(p =>
         {
             if (p is StudyIteration { ErrorMessage.Length: > 0 } row)
@@ -1132,7 +1132,16 @@ public sealed class MainViewModel : Observable
 
     private async void RegenerateReport()
     {
-        if (IsBusy || !HasResultsWorkbook) return;
+        if (IsBusy) return;
+        if (!HasResultsWorkbook)
+        {
+            // Nothing to regenerate from: clear the stale report + status and white out the preview.
+            PostProcessRows.Clear();
+            DeflectionReportPath = null;
+            Message = $"No {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName} found in {StudyRoot}. Run the study on Tab 05 to produce deflection results.";
+            RefreshDeflectionArtifacts();
+            return;
+        }
         IsBusy = true;
         try
         {
@@ -1166,6 +1175,7 @@ public sealed class MainViewModel : Observable
         Notify(nameof(HasResultsWorkbook));
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(PostProcessStatus));
+        CommandManager.InvalidateRequerySuggested();
     }
 
     private void SelectLoadLocations()
