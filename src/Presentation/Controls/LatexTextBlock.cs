@@ -27,7 +27,9 @@ public sealed class LatexTextBlock : TextBlock
 
     public LatexTextBlock()
     {
-        FontFamily = new FontFamily("Cambria Math, Segoe UI");
+        // Match the project chrome font (Window sets "Segoe UI"); this control only does
+        // sub/superscript layout, so there is no need for a distinct math typeface.
+        FontFamily = new FontFamily("Segoe UI");
         VerticalAlignment = VerticalAlignment.Center;
         DependencyPropertyDescriptor.FromProperty(FontSizeProperty, typeof(TextBlock))
             .AddValueChanged(this, (_, _) =>

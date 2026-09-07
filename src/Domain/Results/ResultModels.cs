@@ -71,10 +71,14 @@ public sealed record CandidateParametersDto(
     double DeltaHM,             // signed, from baseline
     double? PretensionKN,       // single target force if every assignment is equal; else null
     string PretensionLabel,     // "P01 · 5000 kN" | "mixed" | "none"
-    IReadOnlyList<PretensionCableDto>? PretensionCables = null); // per-cable target forces for this candidate
+    IReadOnlyList<PretensionCableDto>? PretensionCables = null, // per-cable target forces for this candidate
+    IReadOnlyList<LoadComponentDto>? LoadingComponents = null); // per-pattern qz for this loading candidate
 
 /// <summary>One cable's resolved Cable Loads / Target Force for a study candidate.</summary>
 public sealed record PretensionCableDto(string CableName, double TargetForceKN);
+
+/// <summary>One load pattern's resolved qz [kPa] for a study loading candidate.</summary>
+public sealed record LoadComponentDto(string PatternName, double LevelKPa);
 
 public sealed record ResultWarningDto(
     string IterationKey,        // "" for study-level warnings

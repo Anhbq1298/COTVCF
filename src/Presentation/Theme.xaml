@@ -64,7 +64,7 @@
  <Style x:Key="Subheading" TargetType="TextBlock"><Setter Property="FontSize" Value="11"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="Margin" Value="0,2,0,6"/></Style>
  <Style x:Key="Hint" TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="FontSize" Value="10.5"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="Margin" Value="0,0,0,8"/></Style>
  <Style x:Key="Formula" TargetType="c:LatexTextBlock">
-  <Setter Property="FontFamily" Value="Cambria Math, Segoe UI"/>
+  <Setter Property="FontFamily" Value="Segoe UI"/>
   <Setter Property="FontSize" Value="12"/>
   <Setter Property="Foreground" Value="{StaticResource Muted}"/>
   <Setter Property="TextWrapping" Value="Wrap"/>

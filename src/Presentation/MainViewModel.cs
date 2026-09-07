@@ -187,16 +187,33 @@ public sealed class MainViewModel : Observable
     public IReadOnlyList<StudyIteration> StudyIterations => studyComposition.Iterations;
 
     // ---- Tab 05: candidate definitions (master grid shows IDs only; these back the collapsible lists) ----
-    public sealed record LoadingDefRow(string Id, string Loads);
+    public sealed record LoadingDefRow(string Id, IReadOnlyList<string> Values);
     public sealed record HeightDefRow(string Id, string Delta, string Height);
     public sealed record PretensionDefRow(string Cable, string Force);
     public sealed record PretensionDefGroup(string Id, string Summary, IReadOnlyList<PretensionDefRow> Cables);
 
-    public IReadOnlyList<LoadingDefRow> LoadingDefinitionRows => LoadingStudyCandidates
-        .Select(c => new LoadingDefRow(c.Id, c.Combination.Loads.Count == 0
-            ? "—"
-            : string.Join("      ", c.Combination.Loads.Select(l => $"{l.Name} {l.Qz:0.###} kPa"))))
+    /// <summary>Distinct load-pattern names across every loading candidate — the column headers for the list.</summary>
+    public IReadOnlyList<string> LoadingDefinitionColumns => LoadingStudyCandidates
+        .SelectMany(c => c.Combination.Loads.Select(l => l.Name))
+        .Distinct(StringComparer.Ordinal)
         .ToArray();
+
+    public IReadOnlyList<LoadingDefRow> LoadingDefinitionRows
+    {
+        get
+        {
+            var cols = LoadingDefinitionColumns;
+            return LoadingStudyCandidates.Select(c =>
+            {
+                var byName = c.Combination.Loads
+                    .GroupBy(l => l.Name, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().Qz, StringComparer.Ordinal);
+                return new LoadingDefRow(c.Id, cols
+                    .Select(n => byName.TryGetValue(n, out var q) ? $"{q:0.###} kPa" : "—")
+                    .ToArray());
+            }).ToArray();
+        }
+    }
 
     public IReadOnlyList<HeightDefRow> HeightDefinitionRows => HeightStudyCandidates
         .Select(c => new HeightDefRow(c.Id,
@@ -225,13 +242,40 @@ public sealed class MainViewModel : Observable
         ? "Select a study row to trace its L / H / P"
         : $"{selectedStudyIteration.LoadingCandidateId} · {selectedStudyIteration.HeightCandidateId} · {selectedStudyIteration.PretensionCandidateId}    {selectedStudyIteration.SapModelName}";
 
-    // ---- Tab 05: execution worker slots (always 3; the ones past the requested count are shown "not in use") ----
-    public sealed record WorkerSlotVm(int Number, bool InUse, string Role);
-    public IReadOnlyList<WorkerSlotVm> WorkerSlots => Enumerable.Range(1, MaxWorkerCount)
-        .Select(n => new WorkerSlotVm(n, n <= RequestedWorkerCount,
-            n > RequestedWorkerCount ? "Not in use"
-                : n == 1 ? "Connected baseline instance" : "Background instance"))
-        .ToArray();
+    // ---- Tab 05: worker monitor slots — always MaxWorkerCount cards; the ones past the requested
+    //      instance count are shown hatched / "not in use", regardless of whether a study is running ----
+    public sealed class WorkerMonitorSlot : Observable
+    {
+        private bool inUse;
+        private SapWorkerSnapshot? snapshot;
+        public required int Number { get; init; }
+        public string InstanceName => $"Instance {Number}";
+        public bool InUse
+        {
+            get => inUse;
+            set { if (Set(ref inUse, value)) { Notify(nameof(ShowLive)); Notify(nameof(ShowStatus)); Notify(nameof(StatusLabel)); } }
+        }
+        public SapWorkerSnapshot? Snapshot
+        {
+            get => snapshot;
+            set { if (Set(ref snapshot, value)) { Notify(nameof(ShowLive)); Notify(nameof(ShowStatus)); Notify(nameof(StatusLabel)); } }
+        }
+        public bool ShowLive => inUse && snapshot is not null;
+        public bool ShowStatus => !ShowLive;
+        public string StatusLabel => !inUse ? "Not in use" : snapshot is null ? "Idle — start a study run" : "";
+    }
+
+    public ObservableCollection<WorkerMonitorSlot> WorkerMonitorSlots { get; } =
+        new(Enumerable.Range(1, 3).Select(n => new WorkerMonitorSlot { Number = n }));
+
+    private void SyncWorkerMonitorSlots()
+    {
+        foreach (var slot in WorkerMonitorSlots)
+        {
+            slot.InUse = slot.Number <= RequestedWorkerCount;
+            slot.Snapshot = StudyWorkers.FirstOrDefault(w => w.WorkerId == slot.Number);
+        }
+    }
     public IReadOnlyList<int> WorkerCountOptions { get; } = [1, 2, 3];
     public int RequestedWorkerCount
     {
@@ -242,7 +286,7 @@ public sealed class MainViewModel : Observable
             if (!Set(ref requestedWorkerCount, next)) return;
             Notify(nameof(RunStudyLabel));
             Notify(nameof(RunStudyToolTip));
-            Notify(nameof(WorkerSlots));
+            SyncWorkerMonitorSlots();
         }
     }
     public int MaxWorkerCount => 3;
@@ -337,6 +381,8 @@ public sealed class MainViewModel : Observable
             return $"{LoadingCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} \\times {h} \\times {p} = {StudyTotalRuns}";
         }
     }
+    /// <summary>Symbolic + numeric total, e.g. "N_L \times N_H \times N_P = 4 \times 5 \times 2 = 40".</summary>
+    public string StudySpaceHeadlineFormula => $"N_L \\times N_H \\times N_P = {StudySpaceFormula}";
     public string StudyTotalRuns => StudyPlan.TotalRuns(State.Study.Mode, LoadingCandidateCount, HeightCandidateCount, PretensionRuns)
         .ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
     public string BaselineModelName => State.SessionBaselineModel?.Name ?? "Baseline unavailable";
@@ -582,8 +628,10 @@ public sealed class MainViewModel : Observable
         StudyWorkers.CollectionChanged += (_, _) =>
         {
             Notify(nameof(HasStudyWorkers));
+            SyncWorkerMonitorSlots();
             NotifyStudyExecution();
         };
+        SyncWorkerMonitorSlots();
         bool Ready() => !IsBusy && State.IsSapConnected;
         bool GeometryReady() => Ready() && State.Geometry.Points.Count > 0;
 
@@ -943,9 +991,9 @@ public sealed class MainViewModel : Observable
         foreach (var name in new[]
         {
             nameof(StudyIterations), nameof(LoadingStudyCandidates),
-            nameof(LoadingDefinitionRows), nameof(HeightDefinitionRows), nameof(PretensionDefinitionGroups),
+            nameof(LoadingDefinitionColumns), nameof(LoadingDefinitionRows), nameof(HeightDefinitionRows), nameof(PretensionDefinitionGroups),
             nameof(LoadingCandidatesTotalText), nameof(HeightCandidatesTotalText), nameof(PretensionCandidatesTotalText),
-            nameof(SelectedCandidateBreadcrumb), nameof(WorkerSlots),
+            nameof(SelectedCandidateBreadcrumb), nameof(StudySpaceHeadlineFormula),
             nameof(FixedHeightCandidateId), nameof(FixedPretensionCandidateId),
             nameof(FixedHeightValueText), nameof(FixedPretensionValueText), nameof(StudyLoadingCell),
             nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudySpaceFormula), nameof(StudyTotalRuns),

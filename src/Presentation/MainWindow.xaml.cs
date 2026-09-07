@@ -16,6 +16,14 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Default launch size: 90% of the available work area, centred.
+        var work = SystemParameters.WorkArea;
+        Width = System.Math.Max(MinWidth, work.Width * 0.9);
+        Height = System.Math.Max(MinHeight, work.Height * 0.9);
+        Left = work.Left + (work.Width - Width) / 2;
+        Top = work.Top + (work.Height - Height) / 2;
+
         DataContextChanged += (_, _) =>
         {
             if (DataContext is MainViewModel vm) vm.CommitEditors = CommitEditors;
