@@ -277,15 +277,26 @@ button{cursor:pointer}button:hover{background:var(--su)}
 #tip{position:fixed;pointer-events:none;background:#fffffff2;border:1px solid var(--acc);border-radius:3px;padding:6px 8px;font:11px/1.4 Consolas,monospace;z-index:20;max-width:280px}
 #candKey{border-top:1px solid var(--bd);font-size:11.5px}
 #candKey>summary{cursor:pointer;padding:6px 14px;background:var(--su);font-weight:600;color:var(--acc)}
-#candKeyBody{display:flex;gap:26px;flex-wrap:wrap;padding:10px 14px 14px}
-#candKeyBody .grp{min-width:230px}
-#candKeyBody .pgrp{min-width:340px}
-#candKeyBody h5{margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+#candKeyBody{display:flex;gap:36px;flex-wrap:wrap;padding:12px 14px 16px;align-items:flex-start}
+#candKeyBody .grp{min-width:200px}
+#candKeyBody .pgrp{min-width:280px}
+#candKeyBody h5{margin:0 0 6px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+#candKeyBody h5 .cnt{color:var(--acc);font-weight:700;font-size:11px;margin-left:3px}
 #candKeyBody .kr{display:flex;align-items:flex-start;gap:8px;padding:2px 0}
-#candKeyBody .kid{font:600 11px Consolas,monospace;color:var(--tx);min-width:36px;flex:none}
+#candKeyBody .kid{font:600 11px Consolas,monospace;color:var(--tx);flex:none}
 #candKeyBody .kval{line-height:1.5}
-#candKeyBody .ksw{width:20px;height:0;border-top-width:3px;border-top-style:solid;flex:none}
+#candKeyBody .ksw{display:inline-block;width:22px;height:0;border-top-width:3px;border-top-style:solid;flex:none;vertical-align:middle}
 #candKeyBody .kmk{flex:none}
+#candKeyBody table.kt{border-collapse:collapse;font-size:11px}
+#candKeyBody table.kt th{font-weight:400;color:var(--mu);text-align:right;padding:0 8px 3px;font-size:10px;white-space:nowrap}
+#candKeyBody table.kt td{padding:2px 8px;text-align:right;white-space:nowrap}
+#candKeyBody table.kt td.kid{text-align:left;padding-left:2px}
+#candKeyBody table.kt td.csw{padding-right:0;width:26px}
+#candKeyBody .pblk{margin-bottom:9px}
+#candKeyBody .pgh{display:flex;align-items:center;gap:8px}
+#candKeyBody .pgh .pgn{color:var(--mu);font-size:10.5px}
+#candKeyBody .ptbl{margin:1px 0 0 26px}
+#candKeyBody .ptbl td:first-child{text-align:left;font-family:Consolas,monospace;color:var(--tx)}
 #matrixWrap{border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
 .mhdr{display:flex;justify-content:space-between;align-items:center;padding:5px 14px;background:var(--su)}
 #matrix{overflow:auto;max-height:42vh}
@@ -360,32 +371,61 @@ a{color:var(--acc)}
   const pShape = s => MSHAPES[Math.max(0, P_IDS.indexOf(s.pretensionId)) % MSHAPES.length];
 
   // one-off glossary of every candidate id -> its meaning (colour for L, dash for H, marker shape for P)
+  // Candidate definitions block — mirrors the Tab 05 "Candidate Definitions" panel:
+  // Loading = one column per load pattern; Truss height = ΔH + height columns; Pretension = per-cable list.
   function buildCandKey(){
     const body = document.getElementById('candKeyBody');
     const bySeries = id => allSeries.find(s => s.loadId===id || s.heightId===id || s.pretensionId===id);
     const dashOf = k => { const v = (D.views[0].dashLegend.find(e=>e.key===k)||{}).value; return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
-    const L = `<div class="grp"><h5>Load candidate — colour</h5>` + CAND.L.map((o)=>{
+    const colOf = s => (D.views[0].colorLegend.find(e=>e.key===s.colorKeys[0])||{}).value || '#9aa0a6';
+    const kfmt = n => (+n).toLocaleString('en-US',{maximumFractionDigits:0});
+    const h5 = (t,n) => `<h5>${t} <span class="cnt">${n}</span></h5>`;
+
+    // ---- Loading candidates: a column per load pattern ----
+    const LCOLS = [...new Set(allSeries.flatMap(s => (s.loadingComponents||[]).map(c=>c.pattern)))];
+    let L;
+    if(LCOLS.length){
+      const head = `<tr><th></th><th></th>${LCOLS.map(p=>`<th>${esc(p)}</th>`).join('')}</tr>`;
+      const rows = CAND.L.map(o=>{
+        const s = bySeries(o.id);
+        const map = {}; (s.loadingComponents||[]).forEach(c=>map[c.pattern]=c.levelKPa);
+        const cells = LCOLS.map(p=> p in map ? `<td>${(+map[p]).toFixed(2)} kPa</td>` : `<td>—</td>`).join('');
+        return `<tr><td class="csw"><span class="ksw" style="border-top-color:${colOf(s)}"></span></td><td class="kid">${o.id}</td>${cells}</tr>`;
+      }).join('');
+      L = `<div class="grp">${h5('Loading candidates', CAND.L.length)}<table class="kt">${head}${rows}</table></div>`;
+    } else {
+      L = `<div class="grp">${h5('Loading candidates', CAND.L.length)}` + CAND.L.map(o=>{
+        const s = bySeries(o.id);
+        return `<div class="kr"><span class="ksw" style="border-top-color:${colOf(s)}"></span><span class="kid">${o.id}</span><span class="kval">${esc(s.loadingLabel)}</span></div>`;
+      }).join('') + `</div>`;
+    }
+
+    // ---- Truss-height candidates: ΔH baseline + truss height ----
+    const Hhead = `<tr><th></th><th></th><th>ΔH baseline</th><th>Truss height</th></tr>`;
+    const Hrows = CAND.H.map(o=>{
       const s = bySeries(o.id);
-      const col = (D.views[0].colorLegend.find(e=>e.key===s.colorKeys[0])||{}).value || '#9aa0a6';
-      const lc = s.loadingComponents || [];
-      const val = lc.length
-        ? lc.map(c=>`${esc(c.pattern)} = ${(+c.levelKPa).toFixed(2)} kPa`).join(' · ')
-        : esc(o.label.replace(o.id+' · ',''));
-      return `<div class="kr"><span class="ksw" style="border-top-color:${col}"></span><span class="kid">${o.id}</span><span class="kval">${val}</span></div>`; }).join('') + `</div>`;
-    const H = `<div class="grp"><h5>Truss height — line</h5>` + CAND.H.map(o=>{
-      const s = bySeries(o.id);
-      return `<div class="kr"><span class="ksw" style="border-top-style:${dashOf(s.dashKeys[0])};border-top-color:#444"></span><span class="kid">${o.id}</span>${esc(o.label.replace(o.id+' · ',''))}${s.deltaHM!=null?` (ΔH ${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)} m)`:''}</div>`; }).join('') + `</div>`;
-    const P = P_ON ? `<div class="grp pgrp"><h5>Pretension candidate — marker</h5>` + CAND.P.map(o=>{
-      const shape = MSHAPES[P_IDS.indexOf(o.id) % MSHAPES.length];
-      const s = bySeries(o.id);
-      const cabs = s.pretensionCables || [];
-      let val;
-      if(cabs.length){
-        const rows=[]; for(let i=0;i<cabs.length;i+=3) rows.push(cabs.slice(i,i+3)
-          .map(c=>`${esc(c.cable)} = ${(+c.forceKN).toFixed(0)} kN`).join(' · '));
-        val = rows.join('<br>');
-      } else val = esc(s.pretensionKN!=null ? `${(+s.pretensionKN).toFixed(0)} kN` : (s.pretensionLabel||'—'));
-      return `<div class="kr"><svg class="kmk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(shape,11,9,5.6,'#555',1)}</svg><span class="kid">${o.id}</span><span class="kval">${val}</span></div>`; }).join('') + `</div>` : '';
+      const dh = s.deltaHM!=null ? `${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)} m` : '—';
+      return `<tr><td class="csw"><span class="ksw" style="border-top-style:${dashOf(s.dashKeys[0])};border-top-color:#444"></span></td><td class="kid">${o.id}</td><td>${dh}</td><td>${(+s.trussHeightM).toFixed(2)} m</td></tr>`;
+    }).join('');
+    const H = `<div class="grp">${h5('Truss-height candidates', CAND.H.length)}<table class="kt">${Hhead}${Hrows}</table></div>`;
+
+    // ---- Pretension candidates: per-P block, one row per cable ----
+    let P = '';
+    if(P_ON){
+      P = `<div class="grp pgrp">${h5('Pretension candidates', CAND.P.length)}` + CAND.P.map(o=>{
+        const shape = MSHAPES[P_IDS.indexOf(o.id) % MSHAPES.length];
+        const s = bySeries(o.id);
+        const cabs = s.pretensionCables || [];
+        const note = cabs.length
+          ? `${cabs.length} cable target${cabs.length===1?'':'s'}`
+          : esc(s.pretensionKN!=null ? `${kfmt(s.pretensionKN)} kN` : (s.pretensionLabel||'—'));
+        const hdr = `<div class="pgh"><svg class="kmk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(shape,11,9,5.6,'#555',1)}</svg><span class="kid">${o.id}</span><span class="pgn">${note}</span></div>`;
+        const list = cabs.length
+          ? `<table class="kt ptbl">${cabs.map(c=>`<tr><td>${esc(c.cable)}</td><td>${kfmt(c.forceKN)} kN</td></tr>`).join('')}</table>`
+          : '';
+        return `<div class="pblk">${hdr}${list}</div>`;
+      }).join('') + `</div>`;
+    }
     body.innerHTML = L + H + P;
   }
 
