@@ -259,7 +259,7 @@ button{cursor:pointer}button:hover{background:var(--su)}
 .legend h4{margin:8px 0 4px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
 .legend .hint2{font-weight:400;text-transform:none;letter-spacing:0;color:#9aa0a6;font-size:9.5px}
 .legend .row{display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer}
-.legend .row.key:hover,.legend .row.dkey:hover,.legend .row.fkey:hover{background:#f0f3f7;border-radius:2px}
+.legend .row.key:hover,.legend .row.dkey:hover,.legend .row.pkey:hover{background:#f0f3f7;border-radius:2px}
 .legend .fdot{width:8px;height:8px;border-radius:50%;background:#9aa0a6;flex:none;margin:0 8px 0 8px}
 .legend .row.off{opacity:.35}
 .legend .row.hi{background:#e8f0fe;border-radius:2px}
@@ -334,6 +334,11 @@ a{color:var(--acc)}
     H: uniqOpts(s=>s.heightId, s=>`${s.heightId} · ${(+s.trussHeightM).toFixed(2)} m`),
     P: uniqOpts(s=>s.pretensionId, s=>`${s.pretensionId} · ${s.pretensionKN!=null?(+s.pretensionKN).toFixed(0)+' kN':s.pretensionLabel}`),
   };
+  // Pretension candidate is ALWAYS shown as a point marker (shape per P id) on every chart, whenever the
+  // study sweeps more than one pretension candidate — independent of which relationship a chart plots.
+  const P_IDS = CAND.P.map(o=>o.id);
+  const P_ON = P_IDS.length > 1;
+  const pShape = s => MSHAPES[Math.max(0, P_IDS.indexOf(s.pretensionId)) % MSHAPES.length];
 
   // one multi-select dropdown over `opts`; `set` is the backing Set (empty = all); onChange runs after edits.
   function buildMS(tag, opts, set, onChange){
@@ -390,7 +395,7 @@ a{color:var(--acc)}
     const grp = () => D.groups[curGi()];
     const view = () => D.views[vi];
     const colorKey = s => s.colorKeys[vi], dashKey = s => s.dashKeys[vi];
-    const keyForDim = (dim,s) => dim==='c' ? colorKey(s) : dashKey(s);
+    const keyForDim = (dim,s) => dim==='c' ? colorKey(s) : dim==='p' ? s.pretensionId : dashKey(s);
     const passes = s => (selL.size===0||selL.has(s.loadId)) && (selH.size===0||selH.has(s.heightId)) && (selP.size===0||selP.has(s.pretensionId));
     // in scope after this panel's L/H/P filter, then the per-candidate show/hide
     const scoped = () => grp().series.filter(passes);
@@ -488,20 +493,18 @@ a{color:var(--acc)}
       P.push(`<text x="${(m.l+W-m.r)/2}" y="${H-6}" font-size="11" fill="#333" text-anchor="middle">${g.profileAxis} coordinate [m]</text>`);
       P.push(`<text transform="translate(14,${(m.t+H-m.b)/2}) rotate(-90)" font-size="11" fill="#333" text-anchor="middle">Uz [mm]  (− = downward)</text>`);
 
-      const mk = V.dashMarkers;
+      const lineSolid = V.dashMarkers;   // this view's line dim IS pretension -> solid line, marker carries P
       visible().slice().sort((a,b)=>(emph(a)?1:0)-(emph(b)?1:0)).forEach(s=>{
         const vp = s.points.filter(p=>p.uzMm!=null);
         const pts = vp.map(p=>`${sx(p.coord).toFixed(1)},${sy(p.uzMm).toFixed(1)}`).join(' ');
         if(!pts) return;
         const c = legendColor(V.colorLegend, colorKey(s));
         const on = emph(s), op = (!em || on) ? 1 : 0.15, wd = on ? 3.4 : 1.8;
-        const shape = mk ? MSHAPES[Math.max(0, V.dashLegend.findIndex(e=>e.key===dashKey(s))) % MSHAPES.length] : 'circle';
-        // when markers carry the pretension candidate, draw the line solid (marker shape is the P identifier)
-        P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${mk?'':dashArr(V.dashLegend, dashKey(s))}" opacity="${op}" data-k="${s.iterationKey}"/>`);
+        P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${lineSolid?'':dashArr(V.dashLegend, dashKey(s))}" opacity="${op}" data-k="${s.iterationKey}"/>`);
         vp.forEach(p=>{
           const X=+sx(p.coord).toFixed(1), Y=+sy(p.uzMm).toFixed(1);
           const kd = ` data-k="${s.iterationKey}" data-pt="${p.pointName}" data-x="${p.coord}" data-uz="${p.uzMm}"`;
-          if(mk){ P.push(`<circle cx="${X}" cy="${Y}" r="6" fill="transparent"${kd}/>` + markerSvg(shape, X, Y, on?4.4:3.3, c, op)); }
+          if(P_ON){ P.push(`<circle cx="${X}" cy="${Y}" r="6" fill="transparent"${kd}/>` + markerSvg(pShape(s), X, Y, on?4.6:3.4, c, op)); }
           else { P.push(`<circle cx="${X}" cy="${Y}" r="${on?3.4:2.4}" fill="${c}" opacity="${op}"${kd}/>`); }
         });
       });
@@ -520,27 +523,32 @@ a{color:var(--acc)}
       const cp = present(colorKey);
       V.colorLegend.filter(e=>cp.has(e.key)).forEach(e=>{
         h.push(`<div class="row key${selMark('c',e.key)}" data-k="${e.key}"><span class="sw" style="border-top-color:${e.value}"></span>${e.label}</div>`); });
-      if(showDash){
-        const mk = V.dashMarkers;
-        h.push(`<h4>${V.dashDimension} — ${mk?'marker':'line'} <span class="hint2">click = highlight</span></h4>`);
+      // LINE section — only when the line dimension is NOT pretension (pretension is shown as a marker below)
+      if(showDash && !V.dashMarkers){
+        h.push(`<h4>${V.dashDimension} — line <span class="hint2">click = highlight</span></h4>`);
         const dp = present(dashKey);
         V.dashLegend.filter(e=>dp.has(e.key)).forEach(e=>{
-          const di = V.dashLegend.findIndex(x=>x.key===e.key);
-          const swatch = mk
-            ? `<svg class="mk" width="18" height="16" viewBox="0 0 18 16">${markerSvg(MSHAPES[di%MSHAPES.length],9,8,4.6,'#555',1)}</svg>`
-            : `<span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>`;
-          h.push(`<div class="row dkey${selMark('d',e.key)}" data-k="${e.key}">${swatch}${e.label}</div>`); });
+          h.push(`<div class="row dkey${selMark('d',e.key)}" data-k="${e.key}"><span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${e.label}</div>`); });
+      }
+      // PRETENSION MARKER section — always present when the study sweeps more than one pretension candidate
+      if(P_ON){
+        const pPresent = new Set(inScope.map(s=>s.pretensionId));
+        h.push(`<h4>Pretension candidate — marker <span class="hint2">click = highlight</span></h4>`);
+        CAND.P.filter(o=>pPresent.has(o.id)).forEach((o,i)=>{
+          const shape = MSHAPES[P_IDS.indexOf(o.id) % MSHAPES.length];
+          h.push(`<div class="row pkey${selMark('p',o.id)}" data-k="${o.id}"><svg class="mk" width="18" height="16" viewBox="0 0 18 16">${markerSvg(shape,9,8,4.6,'#555',1)}</svg>${o.label}</div>`); });
       }
       h.push(`<h4>Candidates <span class="hint2">${inScope.length}/${grp().series.length} in scope · click = show/hide</span></h4>`);
       inScope.forEach(s=>{ const off=curHidden().has(s.iterationKey)?' off':'', on=s.iterationKey===hi?' hi':'';
         const col = legendColor(V.colorLegend, colorKey(s));
-        const swatch = V.dashMarkers
-          ? `<svg class="mk" width="18" height="16" viewBox="0 0 18 16">${markerSvg(MSHAPES[Math.max(0,V.dashLegend.findIndex(e=>e.key===dashKey(s)))%MSHAPES.length],9,8,4.2,col,1)}</svg>`
+        const swatch = P_ON
+          ? `<svg class="mk" width="18" height="16" viewBox="0 0 18 16">${markerSvg(pShape(s),9,8,4.2,col,1)}</svg>`
           : `<span class="sw" style="border-top-color:${col};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>`;
         h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}">${swatch}${s.iterationKey} · ${s.loadingLabel} · H ${(+s.trussHeightM).toFixed(2)}m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}</div>`); });
       legendEl.innerHTML = h.join('');
       legendEl.querySelectorAll('.row.key').forEach(r=>r.onclick=()=>toggleHiSel('c', r.dataset.k));
       legendEl.querySelectorAll('.row.dkey').forEach(r=>r.onclick=()=>toggleHiSel('d', r.dataset.k));
+      legendEl.querySelectorAll('.row.pkey').forEach(r=>r.onclick=()=>toggleHiSel('p', r.dataset.k));
       legendEl.querySelectorAll('.row.cand').forEach(r=>r.onclick=()=>toggleCand(r.dataset.k));
     }
 
