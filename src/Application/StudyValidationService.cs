@@ -42,19 +42,23 @@ public sealed class StudyValidationService
                 Error("Pretension Setup", $"Load pattern {cable.LoadPattern} does not exist in the connected model. Cable target force assignments require a load pattern, not an analysis load case.");
             if (cable.SyncMode != CableSyncMode.Independent)
             {
-                var word = cable.SyncMode == CableSyncMode.SameStep ? "Same Step" : "Same Values";
-                var reference = state.Cables.FirstOrDefault(o => !ReferenceEquals(o, cable) &&
-                    o.CableName.Equals(cable.ReferenceCableName, StringComparison.OrdinalIgnoreCase));
+                var word = cable.SyncMode.Label();
                 if (string.IsNullOrEmpty(cable.ReferenceCableName))
                     Error("Pretension Setup", $"{cable.CableName}: '{word}' needs a reference cable.");
-                else if (reference is null)
+                else if (CableSyncGraph.DirectReference(cable, state.Cables) is null)
                     Error("Pretension Setup", $"{cable.CableName}: '{word}' reference cable '{cable.ReferenceCableName}' does not exist.");
-                else if (reference.SyncMode != CableSyncMode.Independent)
-                    Error("Pretension Setup", $"{cable.CableName}: '{word}' must reference an Independent cable, but {reference.CableName} is itself synced.");
+                else if (CableSyncGraph.RootOf(cable, state.Cables) is null)
+                    Error("Pretension Setup", $"{cable.CableName}: '{word}' reference chain never reaches an Independent cable (broken or circular).");
                 else if (cable.SyncMode == CableSyncMode.SameStep
                          && (!cable.ApplyRange || cable.MinForce is not double lo || cable.MaxForce is not double hi
                              || !double.IsFinite(lo) || !double.IsFinite(hi) || hi < lo))
-                    Error("Pretension Setup", $"{cable.CableName}: 'Same Step' needs its own Min and Max force (the spacing is derived from {reference.CableName}).");
+                    Error("Pretension Setup", $"{cable.CableName}: 'Same Step' needs its own Min and Max force (spacing is derived from the reference).");
+                else if (cable.CanEditFactor
+                         && (cable.SyncFactor is not double f || !double.IsFinite(f)
+                             || (cable.SyncMode == CableSyncMode.SameRatio && f <= 0)))
+                    Error("Pretension Setup", cable.SyncMode == CableSyncMode.SameRatio
+                        ? $"{cable.CableName}: Same Ratio needs a ratio greater than zero."
+                        : $"{cable.CableName}: Same Offset needs an offset value.");
             }
             else if (PretensionCandidates.FollowersOf(cable, state.Cables) is { Count: > 0 } deps
                      && cable.CandidateCount <= 0)
@@ -62,9 +66,6 @@ public sealed class StudyValidationService
         }
         if (PretensionCandidates.FindCycle(state.Cables) is { Count: > 0 } cycle)
             Error("Pretension Setup", $"Circular cable Sync reference: {string.Join(" → ", cycle)} → {cycle[0]}. Set one cable back to Independent.");
-        foreach (var master in state.Cables.Where(c => c.SyncMode != CableSyncMode.Independent))
-            if (PretensionCandidates.FollowersOf(master, state.Cables) is { Count: > 0 } chained)
-                Error("Pretension Setup", $"{master.CableName} is a Sync reference for {string.Join(", ", chained.Select(d => d.CableName))} but is not Independent. Set {master.CableName} back to Independent, or clear those cables first.");
 
         if (state.Study.Mode == IterationStudyMode.FixHeight &&
             !composition.HeightCandidates.Any(c => c.Id == state.Study.FixedHeightCandidateId))

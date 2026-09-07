@@ -1,12 +1,33 @@
 using System.Globalization;
+using System.Windows;
 using System.Windows.Data;
+using COT_VCF.Domain;
 
 namespace COT_VCF.Presentation;
 
-public sealed class NullableDoubleConverter : IValueConverter
+/// <summary>Enum → friendly label for the cable Sync mode dropdown ("SameValues" → "Same Values").</summary>
+public sealed class CableSyncModeLabelConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value is double number ? number.ToString("F2", culture) : "";
+        value is CableSyncMode m ? m.Label() : "";
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        Binding.DoNothing;
+}
+
+/// <summary>Non-empty string → true (drives the Sync-column red-flag).</summary>
+public sealed class NonEmptyStringConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        !string.IsNullOrEmpty(value as string);
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        Binding.DoNothing;
+}
+
+public sealed class NullableDoubleConverter : IValueConverter
+{
+    // Show the number as typed — no forced trailing ".00", no scientific notation for realistic magnitudes.
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is double number && double.IsFinite(number) ? number.ToString("0.######", culture) : "";
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {

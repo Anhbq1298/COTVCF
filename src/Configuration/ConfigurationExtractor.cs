@@ -87,6 +87,7 @@ public sealed class ConfigurationExtractor
             StepForce = c.ApplyRange ? c.StepForce : null,
             SyncMode = c.SyncMode,
             ReferenceCableName = c.ReferenceCableName,
+            SyncFactor = c.SyncFactor,
         }).ToList(),
     };
 

@@ -248,6 +248,16 @@
        <StackPanel Orientation="Horizontal">
         <Button Content="+ Add Cable" Command="{Binding AddCables}" ToolTip="Pick cable objects from the loaded SAP2000 model"/>
         <Button Content="&#8722; Remove" Command="{Binding RemoveCables}" CommandParameter="{Binding SelectedItems, ElementName=Cables}"/>
+        <Border Width="1" Background="{StaticResource Border}" Margin="8,3,8,3"/>
+        <TextBlock Text="Sync selected →" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontSize="11" Margin="0,0,5,0"/>
+        <ComboBox MinWidth="102" MinHeight="0" VerticalContentAlignment="Center"
+                  ItemsSource="{Binding CableSyncModes}" SelectedItem="{Binding BulkSyncMode, Mode=TwoWay}">
+         <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Converter={StaticResource SyncModeLabel}}"/></DataTemplate></ComboBox.ItemTemplate>
+        </ComboBox>
+        <ComboBox MinWidth="96" MinHeight="0" Margin="4,0,0,0" VerticalContentAlignment="Center"
+                  ItemsSource="{Binding CableSyncReferenceOptions}" SelectedItem="{Binding BulkSyncReference, Mode=TwoWay}"/>
+        <Button Content="Apply" Margin="4,0,0,0" Command="{Binding BulkSetCableSync}" CommandParameter="{Binding SelectedItems, ElementName=Cables}"
+                ToolTip="Set the Sync mode + reference on every selected cable row"/>
        </StackPanel>
       </DockPanel>
       <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,3">
@@ -256,7 +266,8 @@
        <TextBlock Text="Variable" Foreground="{StaticResource Muted}" FontSize="11"/>
        <TextBlock Text="{Binding VariableCableCount}" FontWeight="SemiBold" FontSize="11" Margin="4,0,14,0"/>
        <TextBlock Text="Candidates" Foreground="{StaticResource Muted}" FontSize="11"/>
-       <TextBlock Text="{Binding PretensionCandidateCount}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Accent}" Margin="6,0,0,0"/>
+       <TextBlock Text="{Binding PretensionCandidateCount}" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Accent}" Margin="6,0,14,0"/>
+       <TextBlock Text="{Binding SyncGroupSummary}" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center"/>
       </StackPanel>
       <TextBlock Grid.Row="2" Foreground="{StaticResource Muted}" FontSize="10.5" Margin="0,0,0,6" TextWrapping="Wrap"
                Text="{Binding ForceUnit, StringFormat=Define Cable Target Force candidates by SAP load pattern · forces in [{0}] · editing does not modify SAP2000}"/>
@@ -282,22 +293,34 @@
          </DataTemplate>
         </DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
-       <DataGridTemplateColumn Width="2.1*" MinWidth="188">
-        <DataGridTemplateColumn.Header><TextBlock Text="Sync" ToolTip="Independent = its own Cartesian axis. Same Values = copies another Independent cable's candidate values. Same Step = keeps its own Min / Max end points but its candidate index is zipped to another Independent cable (spacing is derived to match the reference's step count). Followers never add a Cartesian dimension."/></DataGridTemplateColumn.Header>
+       <DataGridTemplateColumn Width="2.5*" MinWidth="230">
+        <DataGridTemplateColumn.Header><TextBlock Text="Sync" ToolTip="Independent = its own Cartesian axis. Same Values = copies the reference's candidate values. Same Step = own Min / Max, spacing derived to match the reference's count. Same Ratio / Same Offset = reference × k or + Δ. Chains resolve to the Independent root; followers never add a Cartesian dimension."/></DataGridTemplateColumn.Header>
         <DataGridTemplateColumn.CellStyle>
          <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
           <Setter Property="Background" Value="#EFF5FD"/>
+          <Style.Triggers>
+           <DataTrigger Binding="{Binding SyncProblem, Converter={StaticResource NonEmpty}}" Value="True">
+            <Setter Property="Background" Value="#FDECEC"/>
+            <Setter Property="ToolTip" Value="{Binding SyncProblem}"/>
+           </DataTrigger>
+          </Style.Triggers>
          </Style>
         </DataGridTemplateColumn.CellStyle>
         <DataGridTemplateColumn.CellTemplate><DataTemplate>
-         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="2,1">
+         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="2,1" ToolTip="{Binding SyncPreview}">
           <ComboBox Width="104" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center"
                     ItemsSource="{Binding DataContext.CableSyncModes, RelativeSource={RelativeSource AncestorType=Window}}"
-                    SelectedItem="{Binding SyncMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-          <ComboBox MinWidth="84" MinHeight="0" Padding="4,0" Margin="4,0,0,0" VerticalContentAlignment="Center"
+                    SelectedItem="{Binding SyncMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}">
+           <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Converter={StaticResource SyncModeLabel}}"/></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+          <ComboBox MinWidth="80" MinHeight="0" Padding="4,0" Margin="4,0,0,0" VerticalContentAlignment="Center"
                     Visibility="{Binding CanPickReference, Converter={StaticResource BoolVisibility}}"
-                    ItemsSource="{Binding DataContext.IndependentCableNames, RelativeSource={RelativeSource AncestorType=Window}}"
+                    ItemsSource="{Binding DataContext.CableSyncReferenceOptions, RelativeSource={RelativeSource AncestorType=Window}}"
                     SelectedItem="{Binding ReferenceCableName, Mode=TwoWay, TargetNullValue='', UpdateSourceTrigger=PropertyChanged}"/>
+          <TextBox Width="52" Margin="4,0,0,0" Style="{StaticResource ForceEditor}" TextAlignment="Left"
+                   Visibility="{Binding CanEditFactor, Converter={StaticResource BoolVisibility}}"
+                   ToolTip="k for Same Ratio, Δ [kN] for Same Offset"
+                   Text="{Binding SyncFactor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}}"/>
          </StackPanel>
         </DataTemplate></DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>

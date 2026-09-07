@@ -141,12 +141,28 @@ internal static class StudyComposerChecks
         Check(t3.Count == 3 && t3.All(x => x.CableForces["Cable6c"] == x.CableForces["Cable6a"]),
             "TEST 3 — Same Values follower copies the reference's exact values");
 
-        // TEST 5 — reference must be Independent (no chains)
-        var chained = new CablePretensionConfig { CableName = "Cable6d", LoadCase = CablePretensionConfig.PretensionLoadCase,
-            SyncMode = CableSyncMode.SameStep, ReferenceCableName = "Cable6b" };   // Cable6b is itself a follower
+        // TEST 5 — shallow chains resolve transitively to the Independent root
+        var chained = Range("Cable6d", 5000, 15000, 1);              // own Min/Max, own step ignored
+        chained.SyncMode = CableSyncMode.SameStep; chained.ReferenceCableName = "Cable6b";   // Cable6b follows Cable6a
         var t5 = new List<CablePretensionConfig> { a, b, chained };
-        Check(!PretensionCandidates.IsFollower(chained, t5),
-            "TEST 5 — a cable referencing a follower is NOT treated as a follower");
+        Check(PretensionCandidates.IsFollower(chained, t5)
+              && ReferenceEquals(CableSyncGraph.RootOf(chained, t5), a),
+            "TEST 5 — a chain C → B → A resolves to root A and C is a follower (no extra axis)");
+        var t5c = PretensionCandidates.Enumerate(t5).ToList();
+        Check(t5c.Count == 3
+              && t5c[0].CableForces["Cable6d"] == 5000 && t5c[1].CableForces["Cable6d"] == 10000 && t5c[2].CableForces["Cable6d"] == 15000,
+            "TEST 5 — chained follower is spread over the root's value count");
+        // Same Ratio / Same Offset
+        var ratio = new CablePretensionConfig { CableName = "Cable6r", LoadCase = CablePretensionConfig.PretensionLoadCase,
+            SyncMode = CableSyncMode.SameRatio, ReferenceCableName = "Cable6a", SyncFactor = 1.1 };
+        var offset = new CablePretensionConfig { CableName = "Cable6o", LoadCase = CablePretensionConfig.PretensionLoadCase,
+            SyncMode = CableSyncMode.SameOffset, ReferenceCableName = "Cable6a", SyncFactor = 500 };
+        var tr = PretensionCandidates.Enumerate(new List<CablePretensionConfig> { a, ratio, offset }).ToList();
+        Check(tr.Count == 3
+              && tr[1].CableForces["Cable6r"] == 17500 * 1.1 && tr[1].CableForces["Cable6o"] == 17500 + 500,
+            "TEST 5 — Same Ratio = reference × k, Same Offset = reference + Δ, neither adds an axis");
+        Check((int)PretensionCandidates.TotalCount(new List<CablePretensionConfig> { a, ratio, offset }) == 3,
+            "TEST 5 — Ratio / Offset followers do not multiply the Cartesian product");
 
         // TEST 6 — cycle detection over hand-edited config
         var x1 = new CablePretensionConfig { CableName = "X1", LoadCase = CablePretensionConfig.PretensionLoadCase, SyncMode = CableSyncMode.SameStep, ReferenceCableName = "X2" };

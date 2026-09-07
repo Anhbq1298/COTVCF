@@ -167,11 +167,25 @@ public sealed class MainViewModel : Observable
     public int VariableCableCount => COT_VCF.Application.PretensionCandidates.VariableCount(State.Cables);
     /// <summary>Sync-column mode options.</summary>
     public IReadOnlyList<CableSyncMode> CableSyncModes { get; } =
-        [CableSyncMode.Independent, CableSyncMode.SameValues, CableSyncMode.SameStep];
-    /// <summary>Reference-cable options for the Sync column: a blank plus every cable that is currently
-    /// Independent (a follower can only reference an Independent cable — no chains).</summary>
-    public IEnumerable<string> IndependentCableNames =>
-        new[] { "" }.Concat(State.Cables.Where(c => c.SyncMode == CableSyncMode.Independent).Select(c => c.CableName));
+        [CableSyncMode.Independent, CableSyncMode.SameValues, CableSyncMode.SameStep,
+         CableSyncMode.SameRatio, CableSyncMode.SameOffset];
+    /// <summary>Reference-cable options for the Sync column: a blank plus every other cable. Chains resolve
+    /// transitively to their Independent root, so a follower may reference another follower.</summary>
+    public IEnumerable<string> CableSyncReferenceOptions =>
+        new[] { "" }.Concat(State.Cables.Select(c => c.CableName));
+    /// <summary>"N group(s) · M follower(s)" over the current Sync graph.</summary>
+    public string SyncGroupSummary
+    {
+        get
+        {
+            var (g, f) = COT_VCF.Application.PretensionCandidates.SyncGroupCounts(State.Cables);
+            return f == 0 ? "no synced cables" : $"{g} sync group{(g == 1 ? "" : "s")} · {f} follower{(f == 1 ? "" : "s")}";
+        }
+    }
+    // Bulk "apply Sync to selected rows" editor state.
+    public CableSyncMode BulkSyncMode { get; set; } = CableSyncMode.SameValues;
+    private string? bulkSyncReference;
+    public string? BulkSyncReference { get => bulkSyncReference; set => Set(ref bulkSyncReference, value); }
     public string CablePreviewSummary => SelectedCable is null
         ? $"{CableCount} cable{(CableCount == 1 ? "" : "s")} configured — select a row or cable in the view"
         : $"Selected  ·  {SelectedCable.CableName}  ·  {SelectedCable.Status}";
@@ -599,6 +613,7 @@ public sealed class MainViewModel : Observable
     public Command ApplyGeometry { get; }
     public Command ApplyLoads { get; }
     public Command AddCables { get; }
+    public Command BulkSetCableSync { get; }
     public Command RemoveLoads { get; }
     public Command RemoveCables { get; }
     public Command ConfigureDeflectionOutput { get; }
@@ -683,6 +698,19 @@ public sealed class MainViewModel : Observable
             var removed = list.Cast<CablePretensionConfig>().ToArray();
             foreach (var row in removed) State.Cables.Remove(row);
             if (SelectedCable is not null && removed.Contains(SelectedCable)) SelectedCable = null;
+            Update();
+        }, () => !IsBusy);
+        BulkSetCableSync = new(p =>
+        {
+            if (p is not IList list) return;
+            var rows = list.Cast<CablePretensionConfig>().ToArray();
+            var indep = BulkSyncMode == CableSyncMode.Independent;
+            foreach (var row in rows)
+            {
+                if (string.Equals(row.CableName, BulkSyncReference, StringComparison.OrdinalIgnoreCase)) continue; // never self
+                row.SyncMode = BulkSyncMode;
+                row.ReferenceCableName = indep ? null : BulkSyncReference;
+            }
             Update();
         }, () => !IsBusy);
         ConfigureDeflectionOutput = new(_ => EditDeflectionOutput(), GeometryReady);
@@ -776,19 +804,30 @@ public sealed class MainViewModel : Observable
             ScheduleStudyRegeneration();
             Update();
         };
+        void WireCable(CablePretensionConfig row)
+        {
+            row.Peers = () => State.Cables.ToArray();
+            row.PropertyChanged += (_, ev) =>
+            {
+                Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update();
+                if (ev.PropertyName is nameof(CablePretensionConfig.SyncMode) or nameof(CablePretensionConfig.CableName)
+                    or nameof(CablePretensionConfig.ReferenceCableName) or nameof(CablePretensionConfig.SyncFactor)
+                    or nameof(CablePretensionConfig.MinForce) or nameof(CablePretensionConfig.MaxForce)
+                    or nameof(CablePretensionConfig.StepForce) or nameof(CablePretensionConfig.ApplyRange))
+                {
+                    Notify(nameof(CableSyncReferenceOptions)); Notify(nameof(SyncGroupSummary));
+                    foreach (var c in State.Cables) c.RaiseSyncRecompute();
+                }
+            };
+        }
+        foreach (var row in State.Cables) WireCable(row);
         State.Cables.CollectionChanged += (_, e) =>
         {
-            if (e.NewItems is not null)
-                foreach (CablePretensionConfig row in e.NewItems)
-                    row.PropertyChanged += (_, ev) =>
-                    {
-                        Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update();
-                        if (ev.PropertyName is nameof(CablePretensionConfig.SyncMode) or nameof(CablePretensionConfig.CableName))
-                            Notify(nameof(IndependentCableNames));
-                    };
+            if (e.NewItems is not null) foreach (CablePretensionConfig row in e.NewItems) WireCable(row);
             if (SelectedCable is not null && !State.Cables.Contains(SelectedCable)) SelectedCable = null;
             Dirty(ConfigTabs.Cable);
-            Notify(nameof(IndependentCableNames));
+            Notify(nameof(CableSyncReferenceOptions)); Notify(nameof(SyncGroupSummary));
+            foreach (var c in State.Cables) c.RaiseSyncRecompute();
             ScheduleStudyRegeneration();
             Update();
         };

@@ -96,6 +96,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
                 StepForce = row.StepForce,
                 SyncMode = mode,
                 ReferenceCableName = reference,
+                SyncFactor = row.SyncFactor,
             });
         }
     }

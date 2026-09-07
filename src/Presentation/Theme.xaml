@@ -34,6 +34,8 @@
  <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
  <p:NullableDoubleConverter x:Key="NullableDouble"/>
  <p:EnumMatchConverter x:Key="EnumMatch"/>
+ <p:CableSyncModeLabelConverter x:Key="SyncModeLabel"/>
+ <p:NonEmptyStringConverter x:Key="NonEmpty"/>
 
  <!-- ===================== APPLICATION LOGO ========================= -->
  <!-- Vierendeel truss: two chords, four verticals, three open bays.   -->

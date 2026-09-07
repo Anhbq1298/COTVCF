@@ -24,17 +24,18 @@ public sealed class ConfigurationValidator
 
             if (c.SyncMode != CableSyncMode.Independent)
             {
-                var word = c.SyncMode == CableSyncMode.SameStep ? "Same Step" : "Same Values";
-                var reference = cableList.FirstOrDefault(o => !ReferenceEquals(o, c) &&
-                    o.CableName.Equals(c.ReferenceCableName, StringComparison.OrdinalIgnoreCase));
+                var word = c.SyncMode.Label();
                 if (string.IsNullOrEmpty(c.ReferenceCableName))
                     issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' has no reference cable.", ValidationSeverity.Warning));
-                else if (reference is null)
+                else if (CableSyncGraph.DirectReference(c, cableList) is null)
                     issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' reference {c.ReferenceCableName} does not exist.", ValidationSeverity.Warning));
-                else if (reference.SyncMode != CableSyncMode.Independent)
-                    issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' must reference an Independent cable, but {reference.CableName} is itself synced. Treated as independent.", ValidationSeverity.Warning));
+                else if (CableSyncGraph.RootOf(c, cableList) is null)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' reference chain is broken or circular. Treated as independent.", ValidationSeverity.Warning));
                 else if (c.SyncMode == CableSyncMode.SameStep && c.CandidateCount <= 0)
                     issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' needs its own Min and Max force.", ValidationSeverity.Warning));
+                else if (c.SyncMode is CableSyncMode.SameRatio or CableSyncMode.SameOffset
+                         && (c.SyncFactor is not double f || !double.IsFinite(f) || (c.SyncMode == CableSyncMode.SameRatio && f <= 0)))
+                    issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' needs a {(c.SyncMode == CableSyncMode.SameRatio ? "ratio greater than zero" : "numeric offset")}.", ValidationSeverity.Warning));
             }
         }
         if (PretensionCandidates.FindCycle(cableList) is { Count: > 0 } cycle)
