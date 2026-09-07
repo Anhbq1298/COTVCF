@@ -52,6 +52,7 @@ public sealed record ChartViewDto(
     IReadOnlyList<LegendEntryDto> ColorLegend,   // Value = hex colour
     string DashDimension,                        // first other swept dimension, or same as colour when none
     IReadOnlyList<LegendEntryDto> DashLegend,    // Value = "solid|dash|dot|dashdot|longdash|longdashdot"
+    bool DashMarkers,                            // true when the line dimension is pretension — draw a per-candidate point marker
     string FilterDimension,                      // the remaining swept dimension (no visual encoding), "" when none
     IReadOnlyList<LegendEntryDto> FilterLegend); // Value unused — legend rows are filter-only
 
