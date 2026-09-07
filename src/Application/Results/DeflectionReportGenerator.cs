@@ -56,7 +56,11 @@ public sealed class DeflectionReportGenerator
         IReadOnlyList<CandidateResultDto> results,
         string studyFolder, string baselineName, string baselinePath, IterationStudyMode studyMode)
     {
-        var groupNames = results.SelectMany(r => r.Groups).Select(g => g.GroupName).Distinct(StringComparer.Ordinal).ToArray();
+        // One report group per (monitored point group × result load case) — so a study that extracts Uz
+        // under several cases yields one selectable chart source per case.
+        var groupKeys = results.SelectMany(r => r.Groups)
+            .Select(g => (g.GroupName, g.OutputCase))
+            .Distinct().OrderBy(k => k.GroupName, StringComparer.Ordinal).ThenBy(k => k.OutputCase, StringComparer.Ordinal).ToArray();
 
         var flat = results.Where(r => r.Groups.Any(g => g.Points.Any(p => p.Status == ResultValueStatus.Valid)))
             .OrderBy(r => r.Parameters.RunIndex).Select(r => r.Parameters).ToArray();
@@ -101,15 +105,15 @@ public sealed class DeflectionReportGenerator
             vs.Filter?.Name ?? "", FilterLegendFor(vs.Filter))).ToList();
 
         var groups = new List<DeflectionGroupReportDto>();
-        foreach (var gn in groupNames)
+        foreach (var (gn, oc) in groupKeys)
         {
             var series = new List<DeflectionCandidateSeriesDto>();
-            string outputCase = "", axis = "X";
+            string axis = "X";
             foreach (var r in results.OrderBy(r => r.Parameters.RunIndex))
             {
-                var g = r.Groups.FirstOrDefault(x => x.GroupName == gn);
+                var g = r.Groups.FirstOrDefault(x => x.GroupName == gn && x.OutputCase == oc);
                 if (g is null || g.Points.All(p => p.Status != ResultValueStatus.Valid)) continue; // only candidates with data
-                outputCase = g.OutputCase; axis = g.ProfileAxis.ToString();
+                axis = g.ProfileAxis.ToString();
                 series.Add(new DeflectionCandidateSeriesDto(
                     r.IterationKey, r.Parameters.RunIndex, r.Parameters.LoadLevelKPa, r.Parameters.LoadingLabel,
                     r.Parameters.TrussHeightM, r.Parameters.DeltaHM, r.Parameters.PretensionKN, r.Parameters.PretensionLabel,
@@ -121,7 +125,7 @@ public sealed class DeflectionReportGenerator
                         p.PointName, Axis(p, g.ProfileAxis), p.UzMm, p.Sequence, p.Status.ToString())).ToArray()));
             }
             if (series.Count > 0)
-                groups.Add(new DeflectionGroupReportDto(gn, outputCase, axis, series));
+                groups.Add(new DeflectionGroupReportDto(gn, oc, axis, series));
         }
 
         var warnings = results.SelectMany(r => r.Warnings)
@@ -309,13 +313,14 @@ a{color:var(--acc)}
 
     let vi = init.vi|0, linked = !!init.linked;
     let localGi = init.gi != null ? init.gi : gi;
+    let localGroupSet = init.gi != null;   // a copy carries its own group/case; a linked panel follows the toolbar until its "case:" selector is touched
     let localHidden = new Set(init.hidden || hidden);
     // per-panel legend filters: multi-select focus sets (colour / line / extra filter dimension).
     // Empty = show every value of that dimension.
     let focusC = new Set(), focusD = new Set(), focusF = new Set();
     let zoomX = null, api;
 
-    const curGi = () => linked ? gi : localGi;
+    const curGi = () => (linked && !localGroupSet) ? gi : localGi;
     const curHidden = () => linked ? hidden : localHidden;
     const grp = () => D.groups[curGi()];
     const view = () => D.views[vi];
@@ -367,15 +372,27 @@ a{color:var(--acc)}
       host.classList.toggle('copy', !linked);
       host.querySelector('.pv-dim').textContent = viewLabel(V).toLowerCase();
       host.querySelector('.pv-sub').textContent = (V.filterDimension ? ` (filter: ${V.filterDimension.toLowerCase()})` : '')
-        + (linked ? ' — Uz under the result load case' : ` — copy · ${grp().groupName}`);
+        + (linked ? '' : ' — copy') + ` — Uz under ${grp().outputCase}`;
       rmBtn.hidden = linked;
       ctlEl.innerHTML = '';
-      // group selector: copies only (linked panels follow the top toolbar's Group).
-      if(!linked){
-        const gs=document.createElement('select'); gs.title='Result group for this copy';
-        D.groups.forEach((g,i)=>{ const o=new Option(`${g.groupName} · ${g.outputCase}`, i); if(i===localGi) o.selected=true; gs.add(o); });
-        gs.onchange=()=>{ localGi=+gs.value; localHidden=new Set(); resetFilters(); zoomX=null; syncHeader(); render(); };
+      // monitored-group selector: copies only, and only when more than one monitored group exists.
+      const groupNames = [...new Set(D.groups.map(g=>g.groupName))];
+      if(!linked && groupNames.length > 1){
+        const gs=document.createElement('select'); gs.title='Monitored point group for this copy';
+        groupNames.forEach(n=>{ const o=new Option(n, n); if(n===grp().groupName) o.selected=true; gs.add(o); });
+        gs.onchange=()=>{ const i=D.groups.findIndex(g=>g.groupName===gs.value && g.outputCase===grp().outputCase);
+          localGi = i>=0 ? i : D.groups.findIndex(g=>g.groupName===gs.value); localGroupSet=true;
+          localHidden=new Set(); resetFilters(); zoomX=null; syncHeader(); render(); };
         ctlEl.append(gs);
+      }
+      // load-case selector: on every panel — pick which result load case this chart's Uz is read under.
+      // (Ready for multiple cases; shows the single configured case until the study extracts more.)
+      {
+        const cs=document.createElement('select'); cs.title='Result load case for this chart';
+        D.groups.forEach((g,i)=>{ if(g.groupName!==grp().groupName) return;
+          const o=new Option(`case: ${g.outputCase}`, i); if(i===curGi()) o.selected=true; cs.add(o); });
+        cs.onchange=()=>{ localGi=+cs.value; localGroupSet=true; localHidden=new Set(); resetFilters(); zoomX=null; syncHeader(); render(); };
+        ctlEl.append(cs);
       }
       // view selector: any panel, whenever the study offers more than one relationship.
       if(D.views.length > 1){
@@ -486,7 +503,8 @@ a{color:var(--acc)}
     rmBtn.onclick=()=>{ const ix=panels.indexOf(api); if(ix>=0) panels.splice(ix,1); host.remove(); };
 
     syncHeader();
-    api = { render, reset(){ zoomX=null; }, resetFilters };
+    api = { render, reset(){ zoomX=null; }, resetFilters,
+            followGlobal(){ if(linked){ localGroupSet=false; localGi=gi; syncHeader(); } } };
     return api;
   }
 
@@ -521,7 +539,7 @@ a{color:var(--acc)}
     D.views.forEach((v,vi)=>panels.push(makePanel(null, { vi, linked:true })));
   }
 
-  sel.onchange=()=>{ gi=+sel.value; hi=null; panels.forEach(p=>p.reset()); renderAll(); };
+  sel.onchange=()=>{ gi=+sel.value; hi=null; panels.forEach(p=>{ p.followGlobal(); p.reset(); }); renderAll(); };
   document.getElementById('legendToggle').onchange=e=>{ showLegend=e.target.checked; renderAll(); };
   document.getElementById('showAll').onclick=()=>{ hidden.clear(); panels.forEach(p=>p.resetFilters()); renderAll(); };
   document.getElementById('hideAll').onclick=()=>{ if(!D.groups.length) return; D.groups[gi].series.forEach(s=>hidden.add(s.iterationKey)); renderAll(); };
