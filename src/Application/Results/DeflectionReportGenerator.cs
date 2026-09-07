@@ -335,9 +335,9 @@ a{color:var(--acc)}
         const vp = s.points.filter(p=>p.uzMm!=null);
         const pts = vp.map(p=>`${sx(p.coord).toFixed(1)},${sy(p.uzMm).toFixed(1)}`).join(' ');
         if(!pts) return;
-        const c = legendColor(cfg.legend, s[cfg.field]);
+        const c = legendColor(view.colorLegend, colorKey(s));
         const op = (!hi || s.iterationKey===hi) ? 1 : 0.18, wd = s.iterationKey===hi ? 3.4 : 1.8;
-        P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${dashArr(s.dashKey)}" opacity="${op}" data-k="${s.iterationKey}"/>`);
+        P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${dashArr(view.dashLegend, dashKey(s))}" opacity="${op}" data-k="${s.iterationKey}"/>`);
         vp.forEach(p=>P.push(`<circle cx="${sx(p.coord).toFixed(1)}" cy="${sy(p.uzMm).toFixed(1)}" r="${s.iterationKey===hi?3.4:2.4}" fill="${c}" opacity="${op}" data-k="${s.iterationKey}" data-pt="${p.pointName}" data-x="${p.coord}" data-uz="${p.uzMm}"/>`));
       });
       chart.setAttribute('viewBox',`0 0 ${W} ${H}`);
