@@ -30,8 +30,6 @@ public sealed class ConfigurationValidator
                     issues.Add(new("Cable pretension", $"{c.CableName}: 'Same As' cable {c.SameAsCableName} does not exist.", ValidationSeverity.Warning));
                 else if (!string.IsNullOrEmpty(leader.SameAsCableName))
                     issues.Add(new("Cable pretension", $"{c.CableName}: 'Same As' must reference an independent cable, but {leader.CableName} follows another. Treated as independent.", ValidationSeverity.Warning));
-                else if (c.CandidateCount != leader.CandidateCount)
-                    issues.Add(new("Cable pretension", $"{c.CableName} follows {leader.CableName} but has {c.CandidateCount} candidate(s) vs {leader.CandidateCount} — lockstep clamps to the last value.", ValidationSeverity.Warning));
             }
         }
         return issues;

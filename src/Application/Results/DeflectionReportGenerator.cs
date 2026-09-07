@@ -72,25 +72,15 @@ public sealed class DeflectionReportGenerator
             p => Num(p.PretensionKN),
             k => k == "" ? "none" : $"{double.Parse(k):0.###} kN");
 
-        bool Varies(Dim d) => flat.Select(d.Key).Distinct().Count() > 1;
-
-        // Colour ALWAYS encodes the load candidate (swept in every study mode). The other swept dimensions
-        // fill the line-style and filter slots:
-        //   FixPretension (load × height)     -> 1 chart: colour load, line height
-        //   FixHeight     (load × pretension) -> 1 chart: colour load, line pretension
-        //   Combined      (load × H × P)      -> 2 charts: (colour load, line height, filter pretension)
-        //                                                  (colour load, line pretension, filter height)
-        var allDims = new[] { loadDim, heightDim, preDim };
-        var swept = allDims.Where(Varies).ToList();
-        if (swept.Count == 0) swept.Add(heightDim);                       // degenerate single-candidate study
-        var colorDim = swept.Contains(loadDim) ? loadDim : swept[0];
-        var others = swept.Where(d => d != colorDim).ToList();            // 0, 1 or 2 dimensions
-
-        var viewSpecs = others.Count switch
+        // Always the SAME two complementary charts, whatever the study mode — colour = load candidate,
+        // then the other two dimensions swap between the line-style and the filter slot. A dimension the
+        // study holds fixed simply shows a single legend / filter row.
+        //   A: colour load, line truss height,      filter initial pretension
+        //   B: colour load, line initial pretension, filter truss height
+        var viewSpecs = new List<(Dim Color, Dim Dash, Dim? Filter)>
         {
-            0 => new List<(Dim Color, Dim Dash, Dim? Filter)> { (colorDim, colorDim, null) },
-            1 => [(colorDim, others[0], null)],
-            _ => [(colorDim, others[0], others[1]), (colorDim, others[1], others[0])],
+            (loadDim, heightDim, preDim),
+            (loadDim, preDim, heightDim),
         };
 
         List<LegendEntryDto> ColorLegendFor(Dim d) => flat.Select(d.Key).Distinct()
@@ -449,8 +439,9 @@ a{color:var(--acc)}
         V.dashLegend.forEach(e=>{ const off=groupHidden('d',e.key)?' off':'';
           h.push(`<div class="row dkey${off}" data-k="${e.key}"><span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${e.label}</div>`); });
       }
-      if(V.filterDimension && (V.filterLegend||[]).length > 1){
-        h.push(`<h4>${V.filterDimension} — filter <span class="hint2">${hint(focusF.size)}</span></h4>`);
+      if(V.filterDimension && (V.filterLegend||[]).length >= 1){
+        const fh = (V.filterLegend.length===1) ? 'fixed' : hint(focusF.size);
+        h.push(`<h4>${V.filterDimension} — filter <span class="hint2">${fh}</span></h4>`);
         V.filterLegend.forEach(e=>{ const off=groupHidden('f',e.key)?' off':'';
           h.push(`<div class="row fkey${off}" data-k="${e.key}"><span class="fdot"></span>${e.label}</div>`); });
       }

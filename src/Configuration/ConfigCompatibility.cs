@@ -262,24 +262,22 @@ public sealed class ConfigCompatibilityValidator
         if (cableConfig.Cables.Count == 0) return BigInteger.Zero;
         foreach (var cable in cableConfig.Cables)
         {
-            long rowCount;
-            if (cable.Mode == CableForceMode.Fixed)
-            {
-                if (cable.FixedForce is not double value || !double.IsFinite(value)) return BigInteger.Zero;
-                rowCount = 1;
-            }
-            else
-            {
-                if (cable.MinForce is not double min || cable.MaxForce is not double max || cable.StepForce is not double step ||
-                    !double.IsFinite(min) || !double.IsFinite(max) || !double.IsFinite(step) || step <= 0 || max < min) return BigInteger.Zero;
-                rowCount = (long)Math.Floor((max - min) / step + 1e-6) + 1;
-            }
-            // a follower (Same As another independent cable) steps in lockstep and adds no axis
+            // a follower (Same As another independent cable) mirrors the leader's sweep exactly and adds
+            // no axis — its own force fields are ignored.
             var isFollower = !string.IsNullOrEmpty(cable.SameAsCableName)
                 && cableConfig.Cables.Any(o => !ReferenceEquals(o, cable)
                     && o.CableName.Equals(cable.SameAsCableName, StringComparison.OrdinalIgnoreCase)
                     && string.IsNullOrEmpty(o.SameAsCableName));
-            if (!isFollower) total *= rowCount;
+            if (isFollower) continue;
+
+            if (cable.Mode == CableForceMode.Fixed)
+            {
+                if (cable.FixedForce is not double value || !double.IsFinite(value)) return BigInteger.Zero;
+                continue;
+            }
+            if (cable.MinForce is not double min || cable.MaxForce is not double max || cable.StepForce is not double step ||
+                !double.IsFinite(min) || !double.IsFinite(max) || !double.IsFinite(step) || step <= 0 || max < min) return BigInteger.Zero;
+            total *= (long)Math.Floor((max - min) / step + 1e-6) + 1;
         }
         return total;
     }

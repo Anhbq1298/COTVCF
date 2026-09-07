@@ -195,12 +195,17 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         {
             var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
             if (!Set(ref sameAsCableName, v)) return;
-            Notify(nameof(IsFollower));
-            Notify(nameof(CandidateSummary));
+            Notify(nameof(IsFollower)); Notify(nameof(NotFollower));
+            Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange));
+            Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary));
             Notify(nameof(Status));
         }
     }
+    /// <summary>This cable follows another cable's exact Min / Max / Step sweep (see <see cref="SameAsCableName"/>).</summary>
     public bool IsFollower => !string.IsNullOrEmpty(sameAsCableName);
+    public bool NotFollower => !IsFollower;
+    public bool CanEditTarget => IsFixed && !IsFollower;
+    public bool CanEditRange => applyRange && !IsFollower;
 
     public bool ApplyRange
     {
@@ -210,6 +215,7 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
             if (!Set(ref applyRange, value)) return;
             Notify(nameof(IsFixed));
             Notify(nameof(TargetForce)); Notify(nameof(MinForce)); Notify(nameof(MaxForce)); Notify(nameof(StepForce));
+            Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange));
             Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status));
         }
     }
@@ -230,6 +236,9 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     {
         get
         {
+            // A follower mirrors its leader's sweep exactly; its own force fields are ignored. It never
+            // multiplies the study space, so report 1 (a defined value at every leader step).
+            if (IsFollower) return 1;
             if (!applyRange)
                 return targetForce is double t && double.IsFinite(t) ? 1 : 0;
             if (minForce is not double min || maxForce is not double max || stepForce is not double step

@@ -7,8 +7,8 @@ namespace COT_VCF.Application;
 /// Pure combinatorics over the Tab 3 cable pretension configs. The total number of PRETENSION
 /// candidates is the <b>Cartesian product</b> of every <i>independent</i> cable's candidate count.
 /// A cable with a valid <see cref="CablePretensionConfig.SameAsCableName"/> is a <i>follower</i>: it
-/// adds no axis and instead steps in lockstep with its leader (at the leader's step index j it applies
-/// its own j-th candidate force). Counting is exact and allocation-free (BigInteger); combinations are
+/// adds no axis and instead applies the exact same target force as its leader at every step of the
+/// sweep. Counting is exact and allocation-free (BigInteger); combinations are
 /// produced lazily and only when a caller (such as the frozen study snapshot factory) asks for them.
 /// </summary>
 public static class PretensionCandidates
@@ -44,9 +44,9 @@ public static class PretensionCandidates
 
     /// <summary>
     /// Lazily yields every Cartesian combination as an odometer over the independent cables' candidate
-    /// forces; each follower's force is resolved from its leader's current step index (clamped to the
-    /// follower's own last candidate). One dictionary is allocated per yielded combination — it carries
-    /// every cable (leaders and followers). Yields nothing when any cable currently has no valid candidates.
+    /// forces; each follower is assigned the identical target force as its leader for that combination.
+    /// One dictionary is allocated per yielded combination — it carries every cable (leaders and
+    /// followers). Yields nothing when any independent cable currently has no valid candidates.
     /// </summary>
     public static IEnumerable<PretensionCombination> Enumerate(IReadOnlyList<CablePretensionConfig> cables)
     {
@@ -60,12 +60,6 @@ public static class PretensionCandidates
             leaderForces[i] = leaders[i].GetCandidateForces();
             if (leaderForces[i].Count == 0) yield break;
         }
-        var followerForces = new IReadOnlyList<double>[followers.Count];
-        for (int i = 0; i < followers.Count; i++)
-        {
-            followerForces[i] = followers[i].GetCandidateForces();
-            if (followerForces[i].Count == 0) yield break;
-        }
         var leaderIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < leaders.Count; i++) leaderIndex[leaders[i].CableName] = i;
 
@@ -75,12 +69,8 @@ public static class PretensionCandidates
         {
             var slice = new Dictionary<string, double>(cables.Count, StringComparer.Ordinal);
             for (int i = 0; i < leaders.Count; i++) slice[leaders[i].CableName] = leaderForces[i][cursor[i]];
-            for (int f = 0; f < followers.Count; f++)
-            {
-                var j = cursor[leaderIndex[followers[f].SameAsCableName!]];
-                var own = followerForces[f];
-                slice[followers[f].CableName] = own[Math.Min(j, own.Count - 1)];
-            }
+            foreach (var follower in followers)
+                slice[follower.CableName] = leaderForces[leaderIndex[follower.SameAsCableName!]][cursor[leaderIndex[follower.SameAsCableName!]]];
             yield return new PretensionCombination(index++, slice);
 
             int k = leaders.Count - 1;
