@@ -91,6 +91,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
                 MinForce = row.MinForce,
                 MaxForce = row.MaxForce,
                 StepForce = row.StepForce,
+                SameAsCableName = row.SameAsCableName,
             });
     }
 

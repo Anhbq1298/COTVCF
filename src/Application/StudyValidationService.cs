@@ -40,6 +40,11 @@ public sealed class StudyValidationService
                 Error("Pretension Setup", $"{cable.CableName} has an invalid candidate definition.");
             if (string.IsNullOrWhiteSpace(cable.LoadPattern) || !state.LoadPatterns.Contains(cable.LoadPattern, StringComparer.OrdinalIgnoreCase))
                 Error("Pretension Setup", $"Load pattern {cable.LoadPattern} does not exist in the connected model. Cable target force assignments require a load pattern, not an analysis load case.");
+            if (!string.IsNullOrEmpty(cable.SameAsCableName) &&
+                !state.Cables.Any(o => !ReferenceEquals(o, cable) &&
+                    o.CableName.Equals(cable.SameAsCableName, StringComparison.OrdinalIgnoreCase) &&
+                    string.IsNullOrEmpty(o.SameAsCableName)))
+                Warn("Pretension Setup", $"{cable.CableName}: 'Same As' cable '{cable.SameAsCableName}' is not an independent cable — it will run as an independent axis.");
         }
 
         if (state.Study.Mode == IterationStudyMode.FixHeight &&

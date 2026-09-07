@@ -298,7 +298,15 @@
        <DataGridTemplateColumn Header="Step Force" Width=".8*" MinWidth="70">
         <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding ApplyRange}" Text="{Binding StepForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
-       <DataGridTextColumn Header="Candidates" Binding="{Binding CandidateCount}" IsReadOnly="True" Width=".7*" MinWidth="72" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTemplateColumn Width="1.2*" MinWidth="104">
+        <DataGridTemplateColumn.Header><TextBlock Text="Same As" ToolTip="Step this cable in lockstep with another cable — it adds no independent study axis (keeps the pretension count at the leader's, not the product)"/></DataGridTemplateColumn.Header>
+        <DataGridTemplateColumn.CellTemplate><DataTemplate>
+         <ComboBox BorderThickness="0" Background="Transparent" Padding="4,0" MinHeight="0" VerticalContentAlignment="Center"
+                   ItemsSource="{Binding DataContext.CableReferenceOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                   SelectedItem="{Binding SameAsCableName, Mode=TwoWay, TargetNullValue='', UpdateSourceTrigger=PropertyChanged}"/>
+        </DataTemplate></DataGridTemplateColumn.CellTemplate>
+       </DataGridTemplateColumn>
+       <DataGridTextColumn Header="Candidates" Binding="{Binding CandidateSummary}" IsReadOnly="True" Width=".7*" MinWidth="72" ElementStyle="{StaticResource NumericCell}"/>
        <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="1.1*" MinWidth="96"/>
       </DataGrid.Columns>
       </DataGrid>
@@ -625,8 +633,8 @@
       <TextBlock Text="Deflection · Uz" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
      </StackPanel>
     </TabItem.Header>
-    <Grid Margin="2,2,0,0" MaxWidth="860" HorizontalAlignment="Left">
-     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <Grid Margin="2,2,6,2">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
      <Grid.Resources>
       <Style x:Key="PpModule" TargetType="Expander"><Setter Property="Margin" Value="0,0,0,6"/><Setter Property="BorderBrush" Value="{StaticResource Border}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Padding" Value="10,4,10,10"/></Style>
       <Style x:Key="PpDesc" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="Margin" Value="0,2,0,0"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
@@ -648,22 +656,46 @@
         <StackPanel>
          <TextBlock Text="Vertical deflection profile per monitored-point group · Global Z [mm]" Style="{StaticResource PpDesc}"/>
          <TextBlock Text="{Binding PostProcessStatus}" FontSize="11" FontWeight="SemiBold" Margin="0,4,0,0" TextWrapping="Wrap"/>
-         <DataGrid ItemsSource="{Binding PostProcessRows}" IsReadOnly="True" CanUserDeleteRows="False" HeadersVisibility="Column"
-                   FrozenColumnCount="1" MaxHeight="340" Margin="0,6,0,0" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+         <DataGrid ItemsSource="{Binding PostProcessRows}" IsReadOnly="True" CanUserDeleteRows="False" CanUserResizeRows="False"
+                   HeadersVisibility="Column" RowHeaderWidth="0" MaxHeight="200" Margin="0,6,0,0"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <DataGrid.Resources>
+           <ContextMenu x:Key="PpRowMenu">
+            <MenuItem Header="View Report"
+                      Command="{Binding PlacementTarget.Tag.OpenCandidateDiagnostic, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                      CommandParameter="{Binding}"/>
+            <MenuItem Header="Open Study Folder"
+                      Command="{Binding PlacementTarget.Tag.OpenStudyFolder, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+           </ContextMenu>
+          </DataGrid.Resources>
+          <DataGrid.RowStyle>
+           <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+            <Setter Property="ContextMenu" Value="{StaticResource PpRowMenu}"/>
+            <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=DataGrid}}"/>
+           </Style>
+          </DataGrid.RowStyle>
           <DataGrid.Columns>
-           <DataGridTextColumn Header="Candidate" Binding="{Binding IterationKey}" Width="1.4*" MinWidth="110"/>
-           <DataGridTextColumn Header="Status" Binding="{Binding StatusGlyph}" Width="1*" MinWidth="78"/>
-           <DataGridTextColumn Header="Uz pts" Binding="{Binding PointsText}" Width=".7*" MinWidth="56" ElementStyle="{StaticResource NumericCell}"/>
-           <DataGridTextColumn Header="Warn" Binding="{Binding Warnings}" Width=".55*" MinWidth="46" ElementStyle="{StaticResource NumericCell}"/>
-           <DataGridTemplateColumn Header="Diag" Width="60" MinWidth="54">
+           <DataGridTextColumn Header="File" Binding="{Binding FileName}" Width="*" MinWidth="120"/>
+           <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="1.7*" MinWidth="180"/>
+           <DataGridTemplateColumn Header="Status · output" Width="1.3*" MinWidth="150">
             <DataGridTemplateColumn.CellTemplate><DataTemplate>
-             <Button Content="Open" MinHeight="20" Padding="6,0" Margin="0"
-                     Command="{Binding DataContext.OpenCandidateDiagnostic, RelativeSource={RelativeSource AncestorType=Window}}"
-                     CommandParameter="{Binding}" ToolTip="Open this candidate's diagnostic HTML in the browser"/>
+             <StackPanel Margin="0,1">
+              <TextBlock Text="{Binding StatusLine}" FontSize="11.5"/>
+              <TextBlock Text="{Binding OutputPath}" FontSize="9.5" Foreground="{StaticResource Muted}"
+                         TextTrimming="CharacterEllipsis" ToolTip="{Binding OutputPath}"/>
+             </StackPanel>
             </DataTemplate></DataGridTemplateColumn.CellTemplate>
            </DataGridTemplateColumn>
           </DataGrid.Columns>
          </DataGrid>
+         <Border Height="1" Background="{StaticResource Border}" Margin="0,10,0,8"/>
+         <TextBlock Text="{Binding DeflectionReportName}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionReportPath}"/>
+         <WrapPanel Margin="0,4,0,0">
+          <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Rebuild Deflection_Report.html from Deflection_Results_Source.xlsx — no SAP"/>
+          <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
+          <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
+         </WrapPanel>
         </StackPanel>
        </Expander>
 
@@ -701,16 +733,6 @@
 
       </StackPanel>
      </ScrollViewer>
-
-     <StackPanel Grid.Row="2" Margin="0,8,0,0">
-      <TextBlock Text="{Binding DeflectionReportName}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionReportPath}"/>
-      <WrapPanel Margin="0,4,0,0">
-       <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser"/>
-       <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Rebuild Deflection_Report.html from Deflection_Results_Source.xlsx — no SAP"/>
-       <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
-       <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
-      </WrapPanel>
-     </StackPanel>
     </Grid>
    </TabItem>
 

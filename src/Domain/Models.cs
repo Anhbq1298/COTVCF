@@ -183,6 +183,24 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
 
     private bool applyRange, missing;
     private double? targetForce = 0, minForce, maxForce, stepForce;
+    private string? sameAsCableName;
+
+    /// <summary>When set, this cable does not add an independent study axis: it steps in lockstep with the
+    /// named leader cable — at the leader's step index j it applies its own j-th candidate force. N followers
+    /// of one leader keep the pretension space at count(leader) instead of the full Cartesian product.</summary>
+    public string? SameAsCableName
+    {
+        get => sameAsCableName;
+        set
+        {
+            var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (!Set(ref sameAsCableName, v)) return;
+            Notify(nameof(IsFollower));
+            Notify(nameof(CandidateSummary));
+            Notify(nameof(Status));
+        }
+    }
+    public bool IsFollower => !string.IsNullOrEmpty(sameAsCableName);
 
     public bool ApplyRange
     {
@@ -192,7 +210,7 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
             if (!Set(ref applyRange, value)) return;
             Notify(nameof(IsFixed));
             Notify(nameof(TargetForce)); Notify(nameof(MinForce)); Notify(nameof(MaxForce)); Notify(nameof(StepForce));
-            Notify(nameof(CandidateCount)); Notify(nameof(Status));
+            Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status));
         }
     }
     public bool IsFixed => !applyRange;
@@ -202,7 +220,10 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     public double? MinForce { get => minForce; set { if (Set(ref minForce, value)) { Notify(nameof(MaxForce)); Recount(); } } }
     public double? MaxForce { get => maxForce; set { if (Set(ref maxForce, value)) Recount(); } }
     public double? StepForce { get => stepForce; set { if (Set(ref stepForce, value)) Recount(); } }
-    private void Recount() { Notify(nameof(CandidateCount)); Notify(nameof(Status)); }
+    private void Recount() { Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status)); }
+
+    /// <summary>Grid display for the Candidates column: "lockstep" for a follower, else the candidate count.</summary>
+    public string CandidateSummary => IsFollower ? "lockstep" : CandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     // Efficient count — never allocates the value list (spec: do not materialise just to count).
     public int CandidateCount

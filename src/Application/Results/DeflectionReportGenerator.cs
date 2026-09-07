@@ -74,14 +74,24 @@ public sealed class DeflectionReportGenerator
 
         bool Varies(Dim d) => flat.Select(d.Key).Distinct().Count() > 1;
 
-        // One chart per parameter the study actually sweeps. Load candidate is swept in every study
-        // mode; truss height / pretension depend on the mode (FixHeight / FixPretension hold one).
+        // Colour ALWAYS encodes the load candidate (swept in every study mode). The other swept dimensions
+        // fill the line-style and filter slots:
+        //   FixPretension (load × height)     -> 1 chart: colour load, line height
+        //   FixHeight     (load × pretension) -> 1 chart: colour load, line pretension
+        //   Combined      (load × H × P)      -> 2 charts: (colour load, line height, filter pretension)
+        //                                                  (colour load, line pretension, filter height)
         var allDims = new[] { loadDim, heightDim, preDim };
-        var viewDims = allDims.Where(Varies).ToList();
-        if (viewDims.Count == 0) viewDims.Add(heightDim);   // degenerate single-candidate study
-        // For each view: colour = its own dimension; line style = the first other swept dimension
-        // (falls back to the colour dimension when nothing else varies, so values still separate).
-        var dashDims = viewDims.Select(cd => allDims.FirstOrDefault(d => d != cd && Varies(d)) ?? cd).ToList();
+        var swept = allDims.Where(Varies).ToList();
+        if (swept.Count == 0) swept.Add(heightDim);                       // degenerate single-candidate study
+        var colorDim = swept.Contains(loadDim) ? loadDim : swept[0];
+        var others = swept.Where(d => d != colorDim).ToList();            // 0, 1 or 2 dimensions
+
+        var viewSpecs = others.Count switch
+        {
+            0 => new List<(Dim Color, Dim Dash, Dim? Filter)> { (colorDim, colorDim, null) },
+            1 => [(colorDim, others[0], null)],
+            _ => [(colorDim, others[0], others[1]), (colorDim, others[1], others[0])],
+        };
 
         List<LegendEntryDto> ColorLegendFor(Dim d) => flat.Select(d.Key).Distinct()
             .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
@@ -91,9 +101,14 @@ public sealed class DeflectionReportGenerator
             .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
             .Select((k, i) => new LegendEntryDto(k, d.Label(k), Dashes[i % Dashes.Length]))
             .ToList();
+        List<LegendEntryDto> FilterLegendFor(Dim? d) => d is null ? [] : flat.Select(d.Key).Distinct()
+            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
+            .Select(k => new LegendEntryDto(k, d.Label(k), "")).ToList();
 
-        var views = viewDims.Select((cd, i) => new ChartViewDto(
-            cd.Name, ColorLegendFor(cd), dashDims[i].Name, DashLegendFor(dashDims[i]))).ToList();
+        var views = viewSpecs.Select(vs => new ChartViewDto(
+            vs.Color.Name, ColorLegendFor(vs.Color),
+            vs.Dash.Name, DashLegendFor(vs.Dash),
+            vs.Filter?.Name ?? "", FilterLegendFor(vs.Filter))).ToList();
 
         var groups = new List<DeflectionGroupReportDto>();
         foreach (var gn in groupNames)
@@ -109,8 +124,9 @@ public sealed class DeflectionReportGenerator
                     r.IterationKey, r.Parameters.RunIndex, r.Parameters.LoadLevelKPa, r.Parameters.LoadingLabel,
                     r.Parameters.TrussHeightM, r.Parameters.DeltaHM, r.Parameters.PretensionKN, r.Parameters.PretensionLabel,
                     r.ExtractionStatus.ToString(), r.DiagnosticReportRelativePath,
-                    viewDims.Select(d => d.Key(r.Parameters)).ToArray(),
-                    dashDims.Select(d => d.Key(r.Parameters)).ToArray(),
+                    viewSpecs.Select(vs => vs.Color.Key(r.Parameters)).ToArray(),
+                    viewSpecs.Select(vs => vs.Dash.Key(r.Parameters)).ToArray(),
+                    viewSpecs.Select(vs => vs.Filter?.Key(r.Parameters) ?? "").ToArray(),
                     g.Points.OrderBy(p => p.Sequence).Select(p => new DeflectionPointDto(
                         p.PointName, Axis(p, g.ProfileAxis), p.UzMm, p.Sequence, p.Status.ToString())).ToArray()));
             }
@@ -238,7 +254,8 @@ button{cursor:pointer}button:hover{background:var(--su)}
 .legend h4{margin:8px 0 4px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
 .legend .hint2{font-weight:400;text-transform:none;letter-spacing:0;color:#9aa0a6;font-size:9.5px}
 .legend .row{display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer}
-.legend .row.key:hover,.legend .row.dkey:hover{background:#f0f3f7;border-radius:2px}
+.legend .row.key:hover,.legend .row.dkey:hover,.legend .row.fkey:hover{background:#f0f3f7;border-radius:2px}
+.legend .fdot{width:8px;height:8px;border-radius:50%;background:#9aa0a6;flex:none;margin:0 8px 0 8px}
 .legend .row.off{opacity:.35}
 .legend .row.hi{background:#e8f0fe;border-radius:2px}
 .legend .sw{width:24px;height:0;border-top-width:3px;border-top-style:solid;flex:none}
@@ -303,8 +320,9 @@ a{color:var(--acc)}
     let vi = init.vi|0, linked = !!init.linked;
     let localGi = init.gi != null ? init.gi : gi;
     let localHidden = new Set(init.hidden || hidden);
-    // per-panel legend filters: multi-select focus sets. Empty = show every group of that dimension.
-    let focusC = new Set(), focusD = new Set();
+    // per-panel legend filters: multi-select focus sets (colour / line / extra filter dimension).
+    // Empty = show every value of that dimension.
+    let focusC = new Set(), focusD = new Set(), focusF = new Set();
     let zoomX = null, api;
 
     const curGi = () => linked ? gi : localGi;
@@ -312,28 +330,33 @@ a{color:var(--acc)}
     const grp = () => D.groups[curGi()];
     const view = () => D.views[vi];
     const colorKey = s => s.colorKeys[vi], dashKey = s => s.dashKeys[vi];
-    const inFocus = s => (focusC.size===0 || focusC.has(colorKey(s))) && (focusD.size===0 || focusD.has(dashKey(s)));
+    const filterKey = s => (s.filterKeys && s.filterKeys[vi]) || '';
+    const setFor = dim => dim==='c' ? focusC : dim==='d' ? focusD : focusF;
+    const legendFor = dim => dim==='c' ? view().colorLegend : dim==='d' ? view().dashLegend : (view().filterLegend||[]);
+    const keyForDim = (dim,s) => dim==='c' ? colorKey(s) : dim==='d' ? dashKey(s) : filterKey(s);
+    const inFocus = s => (focusC.size===0 || focusC.has(colorKey(s)))
+      && (focusD.size===0 || focusD.has(dashKey(s)))
+      && (focusF.size===0 || focusF.has(filterKey(s)));
     const visible = () => grp().series.filter(s=>inFocus(s) && !curHidden().has(s.iterationKey));
     const xExtent = () => { const xs=grp().series.flatMap(s=>s.points.filter(p=>p.uzMm!=null).map(p=>p.coord)); return xs.length?[Math.min(...xs),Math.max(...xs)]:[0,1]; };
 
     function afterMutate(){ if(linked) renderAll(); else { render(); if(!mw.hidden) drawMatrix(); } }
-    // group row click: add / remove that group from its focus set. When the set would cover every group
-    // it is cleared (all shown). Multiple groups can be focused at once.
+    // legend row click: add / remove that value from its focus set. When the set would cover every
+    // value it is cleared (all shown). Multiple values can be focused at once.
     function toggleFocus(dim,k){
-      const set = dim==='c' ? focusC : focusD;
+      const set = setFor(dim);
       set.has(k) ? set.delete(k) : set.add(k);
-      const allKeys = (dim==='c' ? view().colorLegend : view().dashLegend).map(e=>e.key);
-      if(allKeys.every(x=>set.has(x))) set.clear();
+      if(legendFor(dim).map(e=>e.key).every(x=>set.has(x))) set.clear();
       hi=null; afterMutate();
     }
-    function groupHidden(dim,keyOf,k){
-      const set = dim==='c' ? focusC : focusD;
+    function groupHidden(dim,k){
+      const set = setFor(dim);
       if(set.size>0 && !set.has(k)) return true;
-      const l=grp().series.filter(s=>keyOf(s)===k);
+      const l=grp().series.filter(s=>keyForDim(dim,s)===k);
       return l.length>0 && l.every(s=>curHidden().has(s.iterationKey));
     }
     function toggleCand(k){ const H=curHidden(); H.has(k)?H.delete(k):H.add(k); afterMutate(); }
-    function resetFilters(){ focusC.clear(); focusD.clear(); }
+    function resetFilters(){ focusC.clear(); focusD.clear(); focusF.clear(); }
 
     function clamp(z){
       const [dx0,dx1]=xExtent(), span=(dx1-dx0)||1, minSpan=span*0.04;
@@ -346,13 +369,15 @@ a{color:var(--acc)}
       return [a,b];
     }
 
+    const viewLabel = v => v.dashDimension && v.dashDimension !== v.colorDimension
+      ? `${v.colorDimension} × ${v.dashDimension}` : v.colorDimension;
+
     function syncHeader(){
       const V=view();
       host.classList.toggle('copy', !linked);
-      host.querySelector('.pv-dim').textContent = V.colorDimension.toLowerCase();
-      host.querySelector('.pv-sub').textContent = linked
-        ? ' — Uz under the result load case'
-        : ` — copy · ${grp().groupName}`;
+      host.querySelector('.pv-dim').textContent = viewLabel(V).toLowerCase();
+      host.querySelector('.pv-sub').textContent = (V.filterDimension ? ` (filter: ${V.filterDimension.toLowerCase()})` : '')
+        + (linked ? ' — Uz under the result load case' : ` — copy · ${grp().groupName}`);
       rmBtn.hidden = linked;
       ctlEl.innerHTML = '';
       // group selector: copies only (linked panels follow the top toolbar's Group).
@@ -362,10 +387,10 @@ a{color:var(--acc)}
         gs.onchange=()=>{ localGi=+gs.value; localHidden=new Set(); resetFilters(); zoomX=null; syncHeader(); render(); };
         ctlEl.append(gs);
       }
-      // colour-by selector: any panel, whenever the study sweeps more than one dimension.
+      // view selector: any panel, whenever the study offers more than one relationship.
       if(D.views.length > 1){
         const vs=document.createElement('select'); vs.title='Which relationship this chart plots';
-        D.views.forEach((v,i)=>{ const o=new Option(`colour by: ${v.colorDimension}`, i); if(i===vi) o.selected=true; vs.add(o); });
+        D.views.forEach((v,i)=>{ const o=new Option(`view: ${viewLabel(v)}`, i); if(i===vi) o.selected=true; vs.add(o); });
         vs.onchange=()=>{ vi=+vs.value; resetFilters(); zoomX=null; syncHeader(); render(); };
         ctlEl.append(vs);
       }
@@ -374,7 +399,7 @@ a{color:var(--acc)}
     function render(){
       const g = grp(), V = view(); if(!g){ chart.innerHTML=''; legendEl.innerHTML=''; return; }
       legendEl.hidden = !showLegend;
-      const W = chart.clientWidth||900, H = chart.clientHeight||360, m={l:58,r:14,t:14,b:40};
+      const W = chart.clientWidth||900, H = chart.clientHeight||360, m={l:58,r:14,t:34,b:40};
       const all = g.series.flatMap(s=>s.points.filter(p=>p.uzMm!=null));
       const [dx0,dx1] = xExtent();
       let x0=dx0, x1=dx1;
@@ -389,6 +414,9 @@ a{color:var(--acc)}
       const eHi = (hi && g.series.some(s=>s.iterationKey===hi)) ? hi : null;
 
       const P=[`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`];
+      const title = `Deflection Uz — ${viewLabel(V)}` + (V.filterDimension ? `  ·  filter: ${V.filterDimension}` : '');
+      P.push(`<text x="${(m.l+W-m.r)/2}" y="18" font-size="12" font-weight="600" fill="#1F4788" text-anchor="middle">${title}</text>`);
+      P.push(`<text x="${(m.l+W-m.r)/2}" y="30" font-size="9.5" fill="#666" text-anchor="middle">${g.groupName} · ${g.outputCase}</text>`);
       ticks(x0,x1,8).forEach(t=>{ const X=sx(t); P.push(`<line x1="${X}" y1="${m.t}" x2="${X}" y2="${H-m.b}" stroke="#eef0f2"/><text x="${X}" y="${H-m.b+16}" font-size="10" fill="#666" text-anchor="middle">${fmt(t)}</text>`); });
       ticks(y0,y1,6).forEach(t=>{ const Y=sy(t); P.push(`<line x1="${m.l}" y1="${Y}" x2="${W-m.r}" y2="${Y}" stroke="${t===0?'#c7ccd2':'#eef0f2'}"/><text x="${m.l-6}" y="${Y+3}" font-size="10" fill="#666" text-anchor="end">${fmt(t)}</text>`); });
       P.push(`<line x1="${m.l}" y1="${m.t}" x2="${m.l}" y2="${H-m.b}" stroke="#333"/><line x1="${m.l}" y1="${H-m.b}" x2="${W-m.r}" y2="${H-m.b}" stroke="#333"/>`);
@@ -412,15 +440,19 @@ a{color:var(--acc)}
     function drawLegend(){
       const g = grp(), V = view(); const h=[];
       const showDash = V.dashDimension !== V.colorDimension && V.dashLegend.length > 1;
-      const cHint = focusC.size>0 ? `${focusC.size} shown · click = filter` : 'click = filter';
-      h.push(`<h4>${V.colorDimension} — colour <span class="hint2">${cHint}</span></h4>`);
-      V.colorLegend.forEach(e=>{ const off=groupHidden('c',colorKey,e.key)?' off':'';
+      const hint = n => n>0 ? `${n} shown · click = filter` : 'click = filter';
+      h.push(`<h4>${V.colorDimension} — colour <span class="hint2">${hint(focusC.size)}</span></h4>`);
+      V.colorLegend.forEach(e=>{ const off=groupHidden('c',e.key)?' off':'';
         h.push(`<div class="row key${off}" data-k="${e.key}"><span class="sw" style="border-top-color:${e.value}"></span>${e.label}</div>`); });
       if(showDash){
-        const dHint = focusD.size>0 ? `${focusD.size} shown · click = filter` : 'click = filter';
-        h.push(`<h4>${V.dashDimension} — line <span class="hint2">${dHint}</span></h4>`);
-        V.dashLegend.forEach(e=>{ const off=groupHidden('d',dashKey,e.key)?' off':'';
+        h.push(`<h4>${V.dashDimension} — line <span class="hint2">${hint(focusD.size)}</span></h4>`);
+        V.dashLegend.forEach(e=>{ const off=groupHidden('d',e.key)?' off':'';
           h.push(`<div class="row dkey${off}" data-k="${e.key}"><span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${e.label}</div>`); });
+      }
+      if(V.filterDimension && (V.filterLegend||[]).length > 1){
+        h.push(`<h4>${V.filterDimension} — filter <span class="hint2">${hint(focusF.size)}</span></h4>`);
+        V.filterLegend.forEach(e=>{ const off=groupHidden('f',e.key)?' off':'';
+          h.push(`<div class="row fkey${off}" data-k="${e.key}"><span class="fdot"></span>${e.label}</div>`); });
       }
       const cands = g.series.filter(inFocus);
       h.push(`<h4>Candidates <span class="hint2">${cands.length}/${g.series.length} · click = show/hide</span></h4>`);
@@ -429,6 +461,7 @@ a{color:var(--acc)}
       legendEl.innerHTML = h.join('');
       legendEl.querySelectorAll('.row.key').forEach(r=>r.onclick=()=>toggleFocus('c', r.dataset.k));
       legendEl.querySelectorAll('.row.dkey').forEach(r=>r.onclick=()=>toggleFocus('d', r.dataset.k));
+      legendEl.querySelectorAll('.row.fkey').forEach(r=>r.onclick=()=>toggleFocus('f', r.dataset.k));
       legendEl.querySelectorAll('.row.cand').forEach(r=>r.onclick=()=>toggleCand(r.dataset.k));
     }
 
@@ -491,9 +524,10 @@ a{color:var(--acc)}
     panelsEl.innerHTML='<p style="padding:20px;color:#666">No deflection results in this study.</p>';
     srcBtn.hidden = true;
   } else {
-    // one chart by default (the study still carries every swept dimension — re-pivot in place with the
-    // "colour by" selector, or press Duplicate to compare two side by side).
-    panels.push(makePanel(null, { vi:0, linked:true }));
+    // one chart for FixHeight / FixPretension (a single load×dim relationship); two for Combined
+    // (load×height with a pretension filter, and load×pretension with a height filter). Re-pivot any
+    // panel in place with the "view" selector, or press Duplicate to compare.
+    D.views.forEach((v,vi)=>panels.push(makePanel(null, { vi, linked:true })));
   }
 
   sel.onchange=()=>{ gi=+sel.value; hi=null; panels.forEach(p=>p.reset()); renderAll(); };

@@ -14,12 +14,25 @@ public sealed class ConfigurationValidator
         issues.AddRange(new TrussGeometryService().Validate(state.Baseline, state.Truss));
         if (!state.BaselineCaptured) issues.Add(new("Truss height", "Capture the baseline geometry."));
         if (state.Cables.Count == 0) issues.Add(new("Cable pretension", "Add at least one cable."));
+        var cableList = state.Cables.ToArray();
         foreach (var c in state.Cables)
         {
             if (!state.Geometry.Members.Any(m => m.Name == c.CableName && m.Kind == MemberKind.Cable))
                 issues.Add(new("Cable pretension", $"{c.CableName} is no longer a cable object in the model."));
             else if (c.CandidateCount <= 0)
                 issues.Add(new("Cable pretension", $"{c.CableName}: {(c.ApplyRange ? "review Min / Max / Step force." : "enter a target force.")}"));
+
+            if (!string.IsNullOrEmpty(c.SameAsCableName))
+            {
+                var leader = cableList.FirstOrDefault(o => !ReferenceEquals(o, c) &&
+                    o.CableName.Equals(c.SameAsCableName, StringComparison.OrdinalIgnoreCase));
+                if (leader is null)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same As' cable {c.SameAsCableName} does not exist.", ValidationSeverity.Warning));
+                else if (!string.IsNullOrEmpty(leader.SameAsCableName))
+                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same As' must reference an independent cable, but {leader.CableName} follows another. Treated as independent.", ValidationSeverity.Warning));
+                else if (c.CandidateCount != leader.CandidateCount)
+                    issues.Add(new("Cable pretension", $"{c.CableName} follows {leader.CableName} but has {c.CandidateCount} candidate(s) vs {leader.CandidateCount} — lockstep clamps to the last value.", ValidationSeverity.Warning));
+            }
         }
         return issues;
     }

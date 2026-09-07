@@ -165,6 +165,8 @@ public sealed class MainViewModel : Observable
     public string IterationSummary => $"MODEL\n{ModelName} - {State.Units}\n\nLOADING CRITERIA\n{State.AppliedPoints.Count} applied points - {State.LoadDefinitions.Count} load definitions\n\nTRUSS HEIGHT\n{State.Truss.MinimumHeight:F4} to {State.Truss.MaximumHeight:F4} {LengthUnit} - step {State.Truss.Increment:F4} {LengthUnit}\n\nCABLE PRETENSION\n{CableCount} cables ({VariableCableCount} variable) - {PretensionCandidateCount} pretension candidates";
     public int CableCount => State.Cables.Count;
     public int VariableCableCount => COT_VCF.Application.PretensionCandidates.VariableCount(State.Cables);
+    /// <summary>"Same As" column options: a blank (independent) plus every current cable name.</summary>
+    public IEnumerable<string> CableReferenceOptions => new[] { "" }.Concat(State.Cables.Select(c => c.CableName));
     public string CablePreviewSummary => SelectedCable is null
         ? $"{CableCount} cable{(CableCount == 1 ? "" : "s")} configured — select a row or cable in the view"
         : $"Selected  ·  {SelectedCable.CableName}  ·  {SelectedCable.Status}";
@@ -299,7 +301,10 @@ public sealed class MainViewModel : Observable
         }
     }
     // ---- Tab 06 Post-Processing: Deflection · Uz ----
-    public sealed record PostProcessRow(string IterationKey, string ExtractionStatus, int Points, int Valid, int Warnings, string DiagnosticRelPath)
+    public sealed record PostProcessRow(
+        string IterationKey, string FileName, string Description,
+        string ExtractionStatus, int Points, int Valid, int Warnings,
+        string OutputPath, string DiagnosticRelPath)
     {
         public string StatusGlyph => ExtractionStatus switch
         {
@@ -309,6 +314,9 @@ public sealed class MainViewModel : Observable
             _ => "× failed",
         };
         public string PointsText => Valid == Points ? $"{Points}" : $"{Valid} / {Points}";
+        public string StatusLine => Warnings > 0
+            ? $"{StatusGlyph} · {Valid}/{Points} Uz · {Warnings} warn"
+            : $"{StatusGlyph} · {Valid}/{Points} Uz";
     }
 
     public ObservableCollection<PostProcessRow> PostProcessRows { get; } = [];
@@ -655,6 +663,7 @@ public sealed class MainViewModel : Observable
                     row.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update(); };
             if (SelectedCable is not null && !State.Cables.Contains(SelectedCable)) SelectedCable = null;
             Dirty(ConfigTabs.Cable);
+            Notify(nameof(CableReferenceOptions));
             ScheduleStudyRegeneration();
             Update();
         };
@@ -1169,7 +1178,11 @@ public sealed class MainViewModel : Observable
     {
         var points = dto.Groups.Sum(g => g.Points.Count);
         var valid = dto.Groups.Sum(g => g.Points.Count(p => p.Status == COT_VCF.Domain.Results.ResultValueStatus.Valid));
-        var row = new PostProcessRow(dto.IterationKey, dto.ExtractionStatus.ToString(), points, valid, dto.Warnings.Count, dto.DiagnosticReportRelativePath);
+        var p = dto.Parameters;
+        var fileName = string.IsNullOrEmpty(dto.CandidateModelPath) ? $"{dto.IterationKey}.sdb" : Path.GetFileName(dto.CandidateModelPath);
+        var description = $"{p.LoadingLabel} · H {p.TrussHeightM:0.##} m · {p.PretensionLabel}";
+        var row = new PostProcessRow(dto.IterationKey, fileName, description, dto.ExtractionStatus.ToString(),
+            points, valid, dto.Warnings.Count, dto.CandidateModelPath, dto.DiagnosticReportRelativePath);
         void add() { PostProcessRows.Add(row); Notify(nameof(PostProcessStatus)); }
         if (System.Windows.Application.Current?.Dispatcher is { } d && !d.CheckAccess()) d.Invoke(add); else add();
     }

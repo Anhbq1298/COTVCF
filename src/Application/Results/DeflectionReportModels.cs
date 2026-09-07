@@ -30,6 +30,7 @@ public sealed record DeflectionCandidateSeriesDto(
     string DiagnosticReportRelativePath,
     IReadOnlyList<string> ColorKeys,   // one per DeflectionReportDto.Views — key into that view's ColorLegend
     IReadOnlyList<string> DashKeys,    // one per view — key into that view's DashLegend
+    IReadOnlyList<string> FilterKeys,  // one per view — key into that view's FilterLegend ("" when the view has none)
     IReadOnlyList<DeflectionPointDto> Points);
 
 public sealed record DeflectionGroupReportDto(
@@ -47,7 +48,9 @@ public sealed record ChartViewDto(
     string ColorDimension,                       // "Load candidate" | "Truss height" | "Initial pretension"
     IReadOnlyList<LegendEntryDto> ColorLegend,   // Value = hex colour
     string DashDimension,                        // first other swept dimension, or same as colour when none
-    IReadOnlyList<LegendEntryDto> DashLegend);   // Value = "solid|dash|dot|dashdot|longdash|longdashdot"
+    IReadOnlyList<LegendEntryDto> DashLegend,    // Value = "solid|dash|dot|dashdot|longdash|longdashdot"
+    string FilterDimension,                      // the remaining swept dimension (no visual encoding), "" when none
+    IReadOnlyList<LegendEntryDto> FilterLegend); // Value unused — legend rows are filter-only
 
 public sealed record DeflectionReportDto(
     StudyMetadataDto Study,

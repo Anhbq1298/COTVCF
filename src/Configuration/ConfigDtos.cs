@@ -135,6 +135,8 @@ public sealed class CableForceRowDto
     public double? MinForce { get; set; }
     public double? MaxForce { get; set; }
     public double? StepForce { get; set; }
+    /// <summary>Name of the independent cable this one steps in lockstep with (null / empty = independent axis).</summary>
+    public string? SameAsCableName { get; set; }
 }
 
 public sealed class OutputSettingsConfigDto
