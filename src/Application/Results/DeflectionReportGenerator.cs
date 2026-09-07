@@ -72,25 +72,28 @@ public sealed class DeflectionReportGenerator
             p => Num(p.PretensionKN),
             k => k == "" ? "none" : $"{double.Parse(k):0.###} kN");
 
-        // View 1 colour = truss height (one colour per height). Line style (shared by both views)
-        // separates the candidates that share a height: the load candidate if it varies, else pretension.
-        var colorDim = heightDim;
-        var dashDim = new[] { loadDim, preDim }
-            .FirstOrDefault(d => flat.Select(d.Key).Distinct().Count() > 1) ?? loadDim;
-        // View 2 colour = initial pretension force (same profile chart, pivoted encoding).
-        var color2Dim = preDim;
+        bool Varies(Dim d) => flat.Select(d.Key).Distinct().Count() > 1;
 
-        List<LegendEntryDto> LegendFor(Dim d) => flat.Select(d.Key).Distinct()
+        // One chart per parameter the study actually sweeps. Load candidate is swept in every study
+        // mode; truss height / pretension depend on the mode (FixHeight / FixPretension hold one).
+        var allDims = new[] { loadDim, heightDim, preDim };
+        var viewDims = allDims.Where(Varies).ToList();
+        if (viewDims.Count == 0) viewDims.Add(heightDim);   // degenerate single-candidate study
+        // For each view: colour = its own dimension; line style = the first other swept dimension
+        // (falls back to the colour dimension when nothing else varies, so values still separate).
+        var dashDims = viewDims.Select(cd => allDims.FirstOrDefault(d => d != cd && Varies(d)) ?? cd).ToList();
+
+        List<LegendEntryDto> ColorLegendFor(Dim d) => flat.Select(d.Key).Distinct()
             .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
             .Select((k, i) => new LegendEntryDto(k, d.Label(k), k == "" ? "#9aa0a6" : Palette[i % Palette.Length]))
             .ToList();
+        List<LegendEntryDto> DashLegendFor(Dim d) => flat.Select(d.Key).Distinct()
+            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
+            .Select((k, i) => new LegendEntryDto(k, d.Label(k), Dashes[i % Dashes.Length]))
+            .ToList();
 
-        var colorLegend = LegendFor(colorDim);
-        var color2Legend = LegendFor(color2Dim);
-        var dashKeys = flat.Select(dashDim.Key).Distinct()
-            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal).ToArray();
-        var dashLegend = dashKeys.Select((k, i) =>
-            new LegendEntryDto(k, dashDim.Label(k), Dashes[i % Dashes.Length])).ToList();
+        var views = viewDims.Select((cd, i) => new ChartViewDto(
+            cd.Name, ColorLegendFor(cd), dashDims[i].Name, DashLegendFor(dashDims[i]))).ToList();
 
         var groups = new List<DeflectionGroupReportDto>();
         foreach (var gn in groupNames)
@@ -106,7 +109,8 @@ public sealed class DeflectionReportGenerator
                     r.IterationKey, r.Parameters.RunIndex, r.Parameters.LoadLevelKPa, r.Parameters.LoadingLabel,
                     r.Parameters.TrussHeightM, r.Parameters.DeltaHM, r.Parameters.PretensionKN, r.Parameters.PretensionLabel,
                     r.ExtractionStatus.ToString(), r.DiagnosticReportRelativePath,
-                    colorDim.Key(r.Parameters), dashDim.Key(r.Parameters), color2Dim.Key(r.Parameters),
+                    viewDims.Select(d => d.Key(r.Parameters)).ToArray(),
+                    dashDims.Select(d => d.Key(r.Parameters)).ToArray(),
                     g.Points.OrderBy(p => p.Sequence).Select(p => new DeflectionPointDto(
                         p.PointName, Axis(p, g.ProfileAxis), p.UzMm, p.Sequence, p.Status.ToString())).ToArray()));
             }
@@ -122,8 +126,7 @@ public sealed class DeflectionReportGenerator
             baselineName, baselinePath, studyFolder, studyMode.ToString(),
             results.Count, DateTimeOffset.Now.ToString("o"), "Uz", "m", "mm");
 
-        return new DeflectionReportDto(study, groups, colorDim.Name, dashDim.Name,
-            colorLegend, dashLegend, color2Dim.Name, color2Legend, warnings);
+        return new DeflectionReportDto(study, groups, views, warnings);
     }
 
     private sealed record Dim(string Name, Func<CandidateParametersDto, string> Key, Func<string, string> Label);
@@ -172,16 +175,13 @@ public sealed class DeflectionReportGenerator
   <span class="sep"></span>
   <span class="hint">wheel = zoom X · drag = pan · double-click = reset · click a colour / line = solo · click a candidate = show/hide</span>
 </div>
-<div id="panels">
-  <section class="panel" data-view="0">
-    <h3>Deflection profile vs <b>truss height</b><span> — U<sub>z</sub> under the result load case</span></h3>
+<div id="panels"></div>
+<template id="panelTpl">
+  <section class="panel">
+    <h3>Deflection profile vs <b class="pv-dim"></b><span> — U<sub>z</sub> under the result load case</span></h3>
     <div class="stage"><svg class="chart" preserveAspectRatio="none"></svg><div class="legend"></div></div>
   </section>
-  <section class="panel" data-view="1">
-    <h3>Deflection profile vs <b>initial pretension force</b><span> — U<sub>z</sub> under the result load case</span></h3>
-    <div class="stage"><svg class="chart" preserveAspectRatio="none"></svg><div class="legend"></div></div>
-  </section>
-</div>
+</template>
 <div id="tip" hidden></div>
 <div id="matrixWrap" hidden>
   <div class="mhdr"><strong>Source Data Matrix</strong><button id="mClose">Close</button></div>
@@ -260,18 +260,13 @@ a{color:var(--acc)}
   const D = JSON.parse(document.getElementById('report-data').textContent);
   const sel = document.getElementById('group'), tip = document.getElementById('tip');
   const dashMap = {solid:'',dash:'8 5',dot:'2 4',dashdot:'10 4 2 4',longdash:'16 6',longdashdot:'16 5 3 5'};
-  const dashName = k => (D.dashLegend.find(e=>e.key===k)||{}).value || 'solid';
-  const dashArr  = k => dashMap[dashName(k)] ?? '';
-  const dashCss  = k => { const v=dashName(k); return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
+  const dashValue = (legend,k) => (legend.find(e=>e.key===k)||{}).value || 'solid';
+  const dashArr = (legend,k) => dashMap[dashValue(legend,k)] ?? '';
+  const dashCss = (legend,k) => { const v=dashValue(legend,k); return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
   const legendColor = (legend,k) => (legend.find(e=>e.key===k)||{}).value || '#9aa0a6';
 
-  // two views of the same deflection profile: 0 = colour by truss height, 1 = colour by initial
-  // pretension force. Line style (dashKey = load candidate) and candidate visibility are shared.
-  const VIEWS = [
-    {field:'colorKey',  legend:D.colorLegend,  dim:D.colorDimension },
-    {field:'colorKey2', legend:D.colorLegend2, dim:D.colorDimension2},
-  ];
-
+  // D.views: one chart per parameter the study sweeps (load candidate always; truss height unless
+  // FixHeight; pretension unless FixPretension). series.colorKeys[i] / series.dashKeys[i] pair with view i.
   let gi = 0, showLegend = true, hidden = new Set(), hi = null;
   const panels = [];
 
@@ -281,10 +276,10 @@ a{color:var(--acc)}
   function grp(){ return D.groups[gi]; }
   function visibleSeries(){ return grp().series.filter(s=>!hidden.has(s.iterationKey)); }
   function xExtent(){ const xs=grp().series.flatMap(s=>s.points.filter(p=>p.uzMm!=null).map(p=>p.coord)); return xs.length?[Math.min(...xs),Math.max(...xs)]:[0,1]; }
-  function groupOff(field,k){ const l=grp().series.filter(s=>s[field]===k); return l.length>0 && l.every(s=>hidden.has(s.iterationKey)); }
+  function groupOff(keyOf,k){ const l=grp().series.filter(s=>keyOf(s)===k); return l.length>0 && l.every(s=>hidden.has(s.iterationKey)); }
   // "solo" a legend group: show only its series, hide the rest. Click the same row again to restore all.
-  function soloGroup(field,k){
-    const all=grp().series, tgt=all.filter(s=>s[field]===k), other=all.filter(s=>s[field]!==k);
+  function soloGroup(keyOf,k){
+    const all=grp().series, tgt=all.filter(s=>keyOf(s)===k), other=all.filter(s=>keyOf(s)!==k);
     const iso = other.length>0 && other.every(s=>hidden.has(s.iterationKey)) && tgt.every(s=>!hidden.has(s.iterationKey));
     hidden.clear(); if(!iso) other.forEach(s=>hidden.add(s.iterationKey)); hi=null; renderAll();
   }
@@ -294,8 +289,10 @@ a{color:var(--acc)}
   function nice(x){ const e=Math.pow(10,Math.floor(Math.log10(Math.abs(x)||1))); const f=x/e; return (f<1.5?1:f<3?2:f<7?5:10)*e; }
   function fmt(v){ return Math.abs(v)>=100?v.toFixed(0):Math.abs(v)>=1?v.toFixed(2):v.toFixed(3); }
 
-  function makePanel(host, cfg){
+  function makePanel(host, view, vi){
     const chart = host.querySelector('.chart'), legendEl = host.querySelector('.legend');
+    const colorKey = s => s.colorKeys[vi], dashKey = s => s.dashKeys[vi];
+    const showDash = view.dashDimension !== view.colorDimension && view.dashLegend.length > 1;
     let zoomX = null;
     // Clamp an X window to the data extent: never wider than the full span, never < 4% of it,
     // never panned past an end. null => un-zoomed / full view.
