@@ -265,6 +265,7 @@ button{cursor:pointer}button:hover{background:var(--su)}
 .legend .row.hi{background:#e8f0fe;border-radius:2px}
 .legend .sw{width:24px;height:0;border-top-width:3px;border-top-style:solid;flex:none}
 .legend .dash{width:26px;height:0;border-top:2px solid #444;flex:none}
+.legend .mk{flex:none;overflow:visible}
 #tip{position:fixed;pointer-events:none;background:#fffffff2;border:1px solid var(--acc);border-radius:3px;padding:6px 8px;font:11px/1.4 Consolas,monospace;z-index:20;max-width:280px}
 #matrixWrap{border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
 .mhdr{display:flex;justify-content:space-between;align-items:center;padding:5px 14px;background:var(--su)}
@@ -495,7 +496,8 @@ a{color:var(--acc)}
         const c = legendColor(V.colorLegend, colorKey(s));
         const on = emph(s), op = (!em || on) ? 1 : 0.15, wd = on ? 3.4 : 1.8;
         const shape = mk ? MSHAPES[Math.max(0, V.dashLegend.findIndex(e=>e.key===dashKey(s))) % MSHAPES.length] : 'circle';
-        P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${dashArr(V.dashLegend, dashKey(s))}" opacity="${op}" data-k="${s.iterationKey}"/>`);
+        // when markers carry the pretension candidate, draw the line solid (marker shape is the P identifier)
+        P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${mk?'':dashArr(V.dashLegend, dashKey(s))}" opacity="${op}" data-k="${s.iterationKey}"/>`);
         vp.forEach(p=>{
           const X=+sx(p.coord).toFixed(1), Y=+sy(p.uzMm).toFixed(1);
           const kd = ` data-k="${s.iterationKey}" data-pt="${p.pointName}" data-x="${p.coord}" data-uz="${p.uzMm}"`;
@@ -519,16 +521,23 @@ a{color:var(--acc)}
       V.colorLegend.filter(e=>cp.has(e.key)).forEach(e=>{
         h.push(`<div class="row key${selMark('c',e.key)}" data-k="${e.key}"><span class="sw" style="border-top-color:${e.value}"></span>${e.label}</div>`); });
       if(showDash){
-        h.push(`<h4>${V.dashDimension} — line${V.dashMarkers?' + marker':''} <span class="hint2">click = highlight</span></h4>`);
+        const mk = V.dashMarkers;
+        h.push(`<h4>${V.dashDimension} — ${mk?'marker':'line'} <span class="hint2">click = highlight</span></h4>`);
         const dp = present(dashKey);
         V.dashLegend.filter(e=>dp.has(e.key)).forEach(e=>{
           const di = V.dashLegend.findIndex(x=>x.key===e.key);
-          const mg = V.dashMarkers ? `<svg width="15" height="12" style="flex:none">${markerSvg(MSHAPES[di%MSHAPES.length],7,6,3.4,'#444',1)}</svg>` : '';
-          h.push(`<div class="row dkey${selMark('d',e.key)}" data-k="${e.key}"><span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${mg}${e.label}</div>`); });
+          const swatch = mk
+            ? `<svg class="mk" width="18" height="16" viewBox="0 0 18 16">${markerSvg(MSHAPES[di%MSHAPES.length],9,8,4.6,'#555',1)}</svg>`
+            : `<span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>`;
+          h.push(`<div class="row dkey${selMark('d',e.key)}" data-k="${e.key}">${swatch}${e.label}</div>`); });
       }
       h.push(`<h4>Candidates <span class="hint2">${inScope.length}/${grp().series.length} in scope · click = show/hide</span></h4>`);
       inScope.forEach(s=>{ const off=curHidden().has(s.iterationKey)?' off':'', on=s.iterationKey===hi?' hi':'';
-        h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}"><span class="sw" style="border-top-color:${legendColor(V.colorLegend,colorKey(s))};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>${s.iterationKey} · ${s.loadingLabel} · H ${(+s.trussHeightM).toFixed(2)}m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}</div>`); });
+        const col = legendColor(V.colorLegend, colorKey(s));
+        const swatch = V.dashMarkers
+          ? `<svg class="mk" width="18" height="16" viewBox="0 0 18 16">${markerSvg(MSHAPES[Math.max(0,V.dashLegend.findIndex(e=>e.key===dashKey(s)))%MSHAPES.length],9,8,4.2,col,1)}</svg>`
+          : `<span class="sw" style="border-top-color:${col};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>`;
+        h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}">${swatch}${s.iterationKey} · ${s.loadingLabel} · H ${(+s.trussHeightM).toFixed(2)}m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}</div>`); });
       legendEl.innerHTML = h.join('');
       legendEl.querySelectorAll('.row.key').forEach(r=>r.onclick=()=>toggleHiSel('c', r.dataset.k));
       legendEl.querySelectorAll('.row.dkey').forEach(r=>r.onclick=()=>toggleHiSel('d', r.dataset.k));
