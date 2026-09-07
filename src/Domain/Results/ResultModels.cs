@@ -70,7 +70,11 @@ public sealed record CandidateParametersDto(
     double TrussHeightM,
     double DeltaHM,             // signed, from baseline
     double? PretensionKN,       // single target force if every assignment is equal; else null
-    string PretensionLabel);    // "P01 · 5000 kN" | "mixed" | "none"
+    string PretensionLabel,     // "P01 · 5000 kN" | "mixed" | "none"
+    IReadOnlyList<PretensionCableDto>? PretensionCables = null); // per-cable target forces for this candidate
+
+/// <summary>One cable's resolved Cable Loads / Target Force for a study candidate.</summary>
+public sealed record PretensionCableDto(string CableName, double TargetForceKN);
 
 public sealed record ResultWarningDto(
     string IterationKey,        // "" for study-level warnings

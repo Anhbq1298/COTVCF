@@ -51,7 +51,7 @@ public sealed class ConsolidatedResultWriter
             "HeightCandidateId", "TrussHeight_m", "DeltaH_m",
             "PretensionCandidateId", "Pretension_kN", "PretensionLabel",
             "ExtractionStatus", "AnalysisStart", "AnalysisFinish", "ExtractionFinish",
-            "DiagnosticHtmlRelPath", "WarningCount");
+            "DiagnosticHtmlRelPath", "WarningCount", "PretensionCables");
         var r = 2;
         foreach (var c in rows)
         {
@@ -76,6 +76,8 @@ public sealed class ConsolidatedResultWriter
             ws.Cell(r, col++).Value = Iso(c.ExtractionCompletedAt);
             ws.Cell(r, col++).Value = c.DiagnosticReportRelativePath;
             ws.Cell(r, col++).Value = c.Warnings.Count;
+            ws.Cell(r, col++).Value = string.Join(";", (p.PretensionCables ?? [])
+                .Select(cb => $"{cb.CableName}={cb.TargetForceKN.ToString("0.######", CultureInfo.InvariantCulture)}"));
             r++;
         }
         Finish(ws);
@@ -200,6 +202,12 @@ public sealed class ConsolidatedResultWriter
         foreach (var row in wb.Worksheet("Candidates").RowsUsed().Skip(1))
         {
             var key = row.Cell(1).GetString();
+            var cables = row.Cell(20).GetString()
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(t => { var i = t.LastIndexOf('='); return i <= 0
+                    ? null
+                    : new PretensionCableDto(t[..i], double.TryParse(t[(i + 1)..], NumberStyles.Float, CultureInfo.InvariantCulture, out var f) ? f : 0); })
+                .Where(c => c is not null).Select(c => c!).ToArray();
             var parameters = new CandidateParametersDto(
                 (long)row.Cell(2).GetDouble(), key,
                 row.Cell(5).GetString(),
@@ -210,7 +218,8 @@ public sealed class ConsolidatedResultWriter
                 row.Cell(9).GetDouble(),
                 row.Cell(10).GetDouble(),
                 row.Cell(12).TryGetValue<double>(out var pk) ? pk : null,
-                row.Cell(13).GetString());
+                row.Cell(13).GetString(),
+                cables);
 
             var groups = pointRows[key]
                 .GroupBy(x => (x.Group, x.Case, x.Axis))

@@ -105,10 +105,15 @@ public sealed class SapResultExtractor
         var pretensionLabel = job.Pretension.Assignments.Count == 0 ? "none"
             : pretension is { } f ? $"{job.PretensionCandidateId} · {f:0.###} kN"
             : $"{job.PretensionCandidateId} · mixed";
+        var cables = job.Pretension.Assignments
+            .GroupBy(a => a.CableName, StringComparer.Ordinal)
+            .OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => new PretensionCableDto(g.Key, g.First().TargetForce))
+            .ToArray();
 
         return new CandidateParametersDto(
             job.RunIndex, job.IterationId, job.LoadingCandidateId, job.HeightCandidateId, job.PretensionCandidateId,
-            loadLevel, loadingLabel, job.Height.Height, job.Height.DeltaH, pretension, pretensionLabel);
+            loadLevel, loadingLabel, job.Height.Height, job.Height.DeltaH, pretension, pretensionLabel, cables);
     }
 
     private static ResultWarningDto Warn(StudyIterationExecutionDto job, string category, ResultWarningSeverity severity, string message) =>

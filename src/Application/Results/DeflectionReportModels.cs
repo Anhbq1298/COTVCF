@@ -34,7 +34,10 @@ public sealed record DeflectionCandidateSeriesDto(
     IReadOnlyList<string> ColorKeys,   // one per DeflectionReportDto.Views — key into that view's ColorLegend
     IReadOnlyList<string> DashKeys,    // one per view — key into that view's DashLegend
     IReadOnlyList<string> FilterKeys,  // one per view — key into that view's FilterLegend ("" when the view has none)
+    IReadOnlyList<PretensionCableEntryDto> PretensionCables,  // per-cable target force for this candidate
     IReadOnlyList<DeflectionPointDto> Points);
+
+public sealed record PretensionCableEntryDto(string Cable, double ForceKN);
 
 public sealed record DeflectionGroupReportDto(
     string GroupName,

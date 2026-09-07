@@ -123,6 +123,7 @@ public sealed class DeflectionReportGenerator
                     viewSpecs.Select(vs => vs.Color.Key(r.Parameters)).ToArray(),
                     viewSpecs.Select(vs => vs.Dash.Key(r.Parameters)).ToArray(),
                     viewSpecs.Select(vs => vs.Filter?.Key(r.Parameters) ?? "").ToArray(),
+                    (r.Parameters.PretensionCables ?? []).Select(c => new PretensionCableEntryDto(c.CableName, c.TargetForceKN)).ToArray(),
                     g.Points.OrderBy(p => p.Sequence).Select(p => new DeflectionPointDto(
                         p.PointName, Axis(p, g.ProfileAxis), p.UzMm, p.Sequence, p.Status.ToString())).ToArray()));
             }
@@ -163,7 +164,11 @@ public sealed class DeflectionReportGenerator
   <div>
     <h1>Deflection Results Viewer</h1>
     <p class="meta">{{Esc(s.BaselineModelName)}} · mode {{Esc(s.StudyMode)}} · {{s.CandidateCount}} candidate(s) ·
-      U<sub>z</sub> [mm] vs coordinate [m] · generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
+      generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
+    <p class="intro">Each line is one study candidate: the vertical deflection U<sub>z</sub> [mm] of every monitored
+      point plotted against its position X [m] along the truss span, under the selected result load case.
+      <b>Colour</b> = load candidate · <b>line style</b> = truss height · <b>marker</b> = pretension candidate.
+      See the <i>Candidate key</i> below for what each L## / H## / P## means.</p>
   </div>
   <details class="lib"><summary>Result Library</summary>
     <ul>
@@ -198,6 +203,7 @@ public sealed class DeflectionReportGenerator
   </section>
 </template>
 <div id="tip" hidden></div>
+<details id="candKey" open><summary>Candidate key — what L## / H## / P## mean</summary><div id="candKeyBody"></div></details>
 <div id="matrixWrap" hidden>
   <div class="mhdr"><strong>Source Data Matrix</strong><button id="mClose">Close</button></div>
   <div id="matrix"></div>
@@ -220,6 +226,7 @@ body{font:13px/1.45 "Segoe UI",system-ui,sans-serif;color:var(--tx);background:#
 [hidden]{display:none!important}
 header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:10px 14px;border-bottom:2px solid var(--acc)}
 h1{font-size:16px;margin:0}.meta{color:var(--mu);margin:3px 0 0;font-size:11.5px}
+.intro{margin:6px 0 0;font-size:11.5px;line-height:1.5;max-width:820px}.intro b{color:var(--acc)}
 .lib{font-size:12px}.lib summary{cursor:pointer;color:var(--acc);font-weight:600}
 .lib ul{list-style:none;margin:6px 0 0;padding:0;border:1px solid var(--bd);border-radius:3px;min-width:180px}
 .lib li{padding:4px 8px;border-bottom:1px solid var(--su);color:var(--mu)}
@@ -267,6 +274,17 @@ button{cursor:pointer}button:hover{background:var(--su)}
 .legend .dash{width:26px;height:0;border-top:2px solid #444;flex:none}
 .legend .mk{flex:none;overflow:visible}
 #tip{position:fixed;pointer-events:none;background:#fffffff2;border:1px solid var(--acc);border-radius:3px;padding:6px 8px;font:11px/1.4 Consolas,monospace;z-index:20;max-width:280px}
+#candKey{border-top:1px solid var(--bd);font-size:11.5px}
+#candKey>summary{cursor:pointer;padding:6px 14px;background:var(--su);font-weight:600;color:var(--acc)}
+#candKeyBody{display:flex;gap:26px;flex-wrap:wrap;padding:10px 14px 14px}
+#candKeyBody .grp{min-width:230px}
+#candKeyBody .pgrp{min-width:340px}
+#candKeyBody h5{margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+#candKeyBody .kr{display:flex;align-items:flex-start;gap:8px;padding:2px 0}
+#candKeyBody .kid{font:600 11px Consolas,monospace;color:var(--tx);min-width:36px;flex:none}
+#candKeyBody .kval{line-height:1.5}
+#candKeyBody .ksw{width:20px;height:0;border-top-width:3px;border-top-style:solid;flex:none}
+#candKeyBody .kmk{flex:none}
 #matrixWrap{border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
 .mhdr{display:flex;justify-content:space-between;align-items:center;padding:5px 14px;background:var(--su)}
 #matrix{overflow:auto;max-height:42vh}
@@ -308,8 +326,8 @@ a{color:var(--acc)}
       case 'square':   return `<rect x="${(x-r).toFixed(1)}" y="${(y-r).toFixed(1)}" width="${(2*r).toFixed(1)}" height="${(2*r).toFixed(1)}" ${a}/>`;
       case 'triangle': return `<polygon points="${x.toFixed(1)},${(y-r*1.25).toFixed(1)} ${(x-r*1.1).toFixed(1)},${(y+r).toFixed(1)} ${(x+r*1.1).toFixed(1)},${(y+r).toFixed(1)}" ${a}/>`;
       case 'diamond':  return `<polygon points="${x.toFixed(1)},${(y-r*1.35).toFixed(1)} ${(x+r*1.35).toFixed(1)},${y.toFixed(1)} ${x.toFixed(1)},${(y+r*1.35).toFixed(1)} ${(x-r*1.35).toFixed(1)},${y.toFixed(1)}" ${a}/>`;
-      case 'plus':     return `<path d="M${(x-r*1.4).toFixed(1)},${y.toFixed(1)} h${(2.8*r).toFixed(1)} M${x.toFixed(1)},${(y-r*1.4).toFixed(1)} v${(2.8*r).toFixed(1)}" stroke="${fill}" stroke-width="1.9" opacity="${op}"/>`;
-      case 'ring':     return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="none" stroke="${fill}" stroke-width="1.9" opacity="${op}"/>`;
+      case 'plus':     return `<path d="M${(x-r*1.4).toFixed(1)},${y.toFixed(1)} h${(2.8*r).toFixed(1)} M${x.toFixed(1)},${(y-r*1.4).toFixed(1)} v${(2.8*r).toFixed(1)}" stroke="${fill}" stroke-width="2.6" stroke-linecap="round" opacity="${op}"/>`;
+      case 'ring':     return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="none" stroke="${fill}" stroke-width="2.6" opacity="${op}"/>`;
       default:         return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" ${a}/>`;
     }
   }
@@ -339,6 +357,31 @@ a{color:var(--acc)}
   const P_IDS = CAND.P.map(o=>o.id);
   const P_ON = P_IDS.length > 1;
   const pShape = s => MSHAPES[Math.max(0, P_IDS.indexOf(s.pretensionId)) % MSHAPES.length];
+
+  // one-off glossary of every candidate id -> its meaning (colour for L, dash for H, marker shape for P)
+  function buildCandKey(){
+    const body = document.getElementById('candKeyBody');
+    const bySeries = id => allSeries.find(s => s.loadId===id || s.heightId===id || s.pretensionId===id);
+    const dashOf = k => { const v = (D.views[0].dashLegend.find(e=>e.key===k)||{}).value; return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
+    const L = `<div class="grp"><h5>Load candidate — colour</h5>` + CAND.L.map((o,i)=>{
+      const col = (D.views[0].colorLegend.find(e=>e.key===bySeries(o.id).colorKeys[0])||{}).value || '#9aa0a6';
+      return `<div class="kr"><span class="ksw" style="border-top-color:${col}"></span><span class="kid">${o.id}</span>${esc(o.label.replace(o.id+' · ',''))}</div>`; }).join('') + `</div>`;
+    const H = `<div class="grp"><h5>Truss height — line</h5>` + CAND.H.map(o=>{
+      const s = bySeries(o.id);
+      return `<div class="kr"><span class="ksw" style="border-top-style:${dashOf(s.dashKeys[0])};border-top-color:#444"></span><span class="kid">${o.id}</span>${esc(o.label.replace(o.id+' · ',''))}${s.deltaHM!=null?` (ΔH ${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)} m)`:''}</div>`; }).join('') + `</div>`;
+    const P = P_ON ? `<div class="grp pgrp"><h5>Pretension candidate — marker</h5>` + CAND.P.map(o=>{
+      const shape = MSHAPES[P_IDS.indexOf(o.id) % MSHAPES.length];
+      const s = bySeries(o.id);
+      const cabs = s.pretensionCables || [];
+      let val;
+      if(cabs.length){
+        const rows=[]; for(let i=0;i<cabs.length;i+=3) rows.push(cabs.slice(i,i+3)
+          .map(c=>`${esc(c.cable)} = ${(+c.forceKN).toFixed(0)} kN`).join(' · '));
+        val = rows.join('<br>');
+      } else val = esc(s.pretensionKN!=null ? `${(+s.pretensionKN).toFixed(0)} kN` : (s.pretensionLabel||'—'));
+      return `<div class="kr"><svg class="kmk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(shape,11,9,5.6,'#555',1)}</svg><span class="kid">${o.id}</span><span class="kval">${val}</span></div>`; }).join('') + `</div>` : '';
+    body.innerHTML = L + H + P;
+  }
 
   // one multi-select dropdown over `opts`; `set` is the backing Set (empty = all); onChange runs after edits.
   function buildMS(tag, opts, set, onChange){
@@ -504,7 +547,10 @@ a{color:var(--acc)}
         vp.forEach(p=>{
           const X=+sx(p.coord).toFixed(1), Y=+sy(p.uzMm).toFixed(1);
           const kd = ` data-k="${s.iterationKey}" data-pt="${p.pointName}" data-x="${p.coord}" data-uz="${p.uzMm}"`;
-          if(P_ON){ P.push(`<circle cx="${X}" cy="${Y}" r="6" fill="transparent"${kd}/>` + markerSvg(pShape(s), X, Y, on?4.6:3.4, c, op)); }
+          if(P_ON){ const r = on?7.5:5.6;
+            P.push(`<circle cx="${X}" cy="${Y}" r="${r+2}" fill="transparent"${kd}/>`
+              + markerSvg(pShape(s), X, Y, r, '#fff', op)          // white halo for contrast over the line
+              + markerSvg(pShape(s), X, Y, r-1.4, c, op)); }
           else { P.push(`<circle cx="${X}" cy="${Y}" r="${on?3.4:2.4}" fill="${c}" opacity="${op}"${kd}/>`); }
         });
       });
@@ -536,13 +582,13 @@ a{color:var(--acc)}
         h.push(`<h4>Pretension candidate — marker <span class="hint2">click = highlight</span></h4>`);
         CAND.P.filter(o=>pPresent.has(o.id)).forEach((o,i)=>{
           const shape = MSHAPES[P_IDS.indexOf(o.id) % MSHAPES.length];
-          h.push(`<div class="row pkey${selMark('p',o.id)}" data-k="${o.id}"><svg class="mk" width="18" height="16" viewBox="0 0 18 16">${markerSvg(shape,9,8,4.6,'#555',1)}</svg>${o.label}</div>`); });
+          h.push(`<div class="row pkey${selMark('p',o.id)}" data-k="${o.id}"><svg class="mk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(shape,11,9,5.6,"#555",1)}</svg>${o.label}</div>`); });
       }
       h.push(`<h4>Candidates <span class="hint2">${inScope.length}/${grp().series.length} in scope · click = show/hide</span></h4>`);
       inScope.forEach(s=>{ const off=curHidden().has(s.iterationKey)?' off':'', on=s.iterationKey===hi?' hi':'';
         const col = legendColor(V.colorLegend, colorKey(s));
         const swatch = P_ON
-          ? `<svg class="mk" width="18" height="16" viewBox="0 0 18 16">${markerSvg(pShape(s),9,8,4.2,col,1)}</svg>`
+          ? `<svg class="mk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(pShape(s),11,9,5.2,col,1)}</svg>`
           : `<span class="sw" style="border-top-color:${col};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>`;
         h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}">${swatch}${s.iterationKey} · ${s.loadingLabel} · H ${(+s.trussHeightM).toFixed(2)}m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}</div>`); });
       legendEl.innerHTML = h.join('');
@@ -616,6 +662,7 @@ a{color:var(--acc)}
     panelsEl.innerHTML='<p style="padding:20px;color:#666">No deflection results in this study.</p>';
     srcBtn.hidden = true;
   } else {
+    buildCandKey();
     // one chart by default — name it, filter it (L / H / P), pick its relationship & case; Duplicate clones it.
     panels.push(makePanel(null, { vi:0, linked:true }));
   }
