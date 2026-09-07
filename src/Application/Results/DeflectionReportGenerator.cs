@@ -64,17 +64,11 @@ public sealed class DeflectionReportGenerator
 
         var flat = results.Where(r => r.Groups.Any(g => g.Points.Any(p => p.Status == ResultValueStatus.Valid)))
             .OrderBy(r => r.Parameters.RunIndex).Select(r => r.Parameters).ToArray();
-        Dim heightDim = new("Truss height",
-            p => p.TrussHeightM.ToString("0.####"),
-            k => $"H = {double.Parse(k):0.###} m");
-        // The "load candidate" is the loading scenario itself — key off its label so two loadings with
-        // the same nominal kPa but different make-up still separate. Falls back to the single-load level.
-        Dim loadDim = new("Load candidate",
-            p => !string.IsNullOrWhiteSpace(p.LoadingLabel) ? p.LoadingLabel!.Trim() : Num(p.LoadLevelKPa),
-            k => k == "" ? "n/a" : double.TryParse(k, out var v) ? $"{v:0.###} kPa" : k);
-        Dim preDim = new("Initial pretension",
-            p => Num(p.PretensionKN),
-            k => k == "" ? "none" : $"{double.Parse(k):0.###} kN");
+        // Legend rows are just the candidate id (L## / H## / P##) — the full make-up of every id is
+        // spelled out in the "Candidate definitions" block under the charts, so the legend stays compact.
+        Dim heightDim = new("Truss height", p => p.HeightCandidateId, k => k);
+        Dim loadDim = new("Load candidate", p => p.LoadingCandidateId, k => k);
+        Dim preDim = new("Initial pretension", p => p.PretensionCandidateId, k => k);
 
         // Always the SAME two complementary charts, whatever the study mode — colour = load candidate,
         // then the other two dimensions swap between the line-style and the filter slot. A dimension the
@@ -148,7 +142,6 @@ public sealed class DeflectionReportGenerator
     private static double Axis(MonitoredPointResultDto p, ProfileCoordinateAxis a) =>
         a switch { ProfileCoordinateAxis.Y => p.Y, ProfileCoordinateAxis.Z => p.Z, _ => p.X };
 
-    private static string Num(double? v) => v is { } d ? d.ToString("0.####") : "";
     private static double SortKey(string k) => k == "" ? double.MaxValue : double.TryParse(k, out var v) ? v : double.MaxValue;
 
     // ---------- HTML ----------
@@ -279,7 +272,7 @@ button{cursor:pointer}button:hover{background:var(--su)}
 #candKey>summary{cursor:pointer;padding:6px 14px;background:var(--su);font-weight:600;color:var(--acc)}
 #candKeyBody{display:flex;gap:36px;flex-wrap:wrap;padding:12px 14px 16px;align-items:flex-start}
 #candKeyBody .grp{min-width:200px}
-#candKeyBody .pgrp{min-width:280px}
+#candKeyBody .pgrp{min-width:340px}
 #candKeyBody h5{margin:0 0 6px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
 #candKeyBody h5 .cnt{color:var(--acc);font-weight:700;font-size:11px;margin-left:3px}
 #candKeyBody .kr{display:flex;align-items:flex-start;gap:8px;padding:2px 0}
@@ -292,11 +285,13 @@ button{cursor:pointer}button:hover{background:var(--su)}
 #candKeyBody table.kt td{padding:2px 8px;text-align:right;white-space:nowrap}
 #candKeyBody table.kt td.kid{text-align:left;padding-left:2px}
 #candKeyBody table.kt td.csw{padding-right:0;width:26px}
-#candKeyBody .pblk{margin-bottom:9px}
+#candKeyBody .pblk{margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--bd)}
+#candKeyBody .pblk:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
 #candKeyBody .pgh{display:flex;align-items:center;gap:8px}
 #candKeyBody .pgh .pgn{color:var(--mu);font-size:10.5px}
-#candKeyBody .ptbl{margin:1px 0 0 26px}
-#candKeyBody .ptbl td:first-child{text-align:left;font-family:Consolas,monospace;color:var(--tx)}
+#candKeyBody .ptbl{margin:3px 0 0 26px}
+#candKeyBody .ptbl td:nth-child(1),#candKeyBody .ptbl td:nth-child(4){text-align:left;font-family:Consolas,monospace;color:var(--tx)}
+#candKeyBody .ptbl td.pgap{width:1px;min-width:1px;padding:0;background:var(--bd)}
 #matrixWrap{border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
 .mhdr{display:flex;justify-content:space-between;align-items:center;padding:5px 14px;background:var(--su)}
 #matrix{overflow:auto;max-height:42vh}
@@ -359,10 +354,12 @@ a{color:var(--acc)}
   const allSeries = D.groups.flatMap(g=>g.series);
   const uniqOpts = (keyFn, labFn) => { const m=new Map(); allSeries.forEach(s=>{ const k=keyFn(s); if(k && !m.has(k)) m.set(k,{id:k,label:labFn(s)}); });
     return [...m.values()].sort((a,b)=>a.id.localeCompare(b.id, undefined, {numeric:true})); };
+  // legend / filter rows carry only the candidate id — the "Candidate definitions" block below the
+  // charts is the single place that spells out what each L## / H## / P## contains.
   const CAND = {
-    L: uniqOpts(s=>s.loadId, s=>`${s.loadId} · ${s.loadingLabel}`),
-    H: uniqOpts(s=>s.heightId, s=>`${s.heightId} · ${(+s.trussHeightM).toFixed(2)} m`),
-    P: uniqOpts(s=>s.pretensionId, s=>`${s.pretensionId} · ${s.pretensionKN!=null?(+s.pretensionKN).toFixed(0)+' kN':s.pretensionLabel}`),
+    L: uniqOpts(s=>s.loadId, s=>s.loadId),
+    H: uniqOpts(s=>s.heightId, s=>s.heightId),
+    P: uniqOpts(s=>s.pretensionId, s=>s.pretensionId),
   };
   // Pretension candidate is ALWAYS shown as a point marker (shape per P id) on every chart, whenever the
   // study sweeps more than one pretension candidate — independent of which relationship a chart plots.
@@ -420,9 +417,13 @@ a{color:var(--acc)}
           ? `${cabs.length} cable target${cabs.length===1?'':'s'}`
           : esc(s.pretensionKN!=null ? `${kfmt(s.pretensionKN)} kN` : (s.pretensionLabel||'—'));
         const hdr = `<div class="pgh"><svg class="kmk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(shape,11,9,5.6,'#555',1)}</svg><span class="kid">${o.id}</span><span class="pgn">${note}</span></div>`;
-        const list = cabs.length
-          ? `<table class="kt ptbl">${cabs.map(c=>`<tr><td>${esc(c.cable)}</td><td>${kfmt(c.forceKN)} kN</td></tr>`).join('')}</table>`
-          : '';
+        let list = '';
+        if(cabs.length){
+          const cell = c => c ? `<td>${esc(c.cable)}</td><td>${kfmt(c.forceKN)} kN</td>` : `<td></td><td></td>`;
+          const rows = [];
+          for(let i=0;i<cabs.length;i+=2) rows.push(`<tr>${cell(cabs[i])}<td class="pgap"></td>${cell(cabs[i+1])}</tr>`);
+          list = `<table class="kt ptbl">${rows.join('')}</table>`;
+        }
         return `<div class="pblk">${hdr}${list}</div>`;
       }).join('') + `</div>`;
     }
@@ -636,7 +637,7 @@ a{color:var(--acc)}
         const swatch = P_ON
           ? `<svg class="mk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(pShape(s),11,9,5.2,col,1)}</svg>`
           : `<span class="sw" style="border-top-color:${col};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>`;
-        h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}">${swatch}${s.iterationKey} · ${s.loadingLabel} · H ${(+s.trussHeightM).toFixed(2)}m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}</div>`); });
+        h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}" title="${esc(s.iterationKey)} · ${esc(s.loadingLabel)} · H ${(+s.trussHeightM).toFixed(2)} m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}">${swatch}${s.iterationKey}</div>`); });
       legendEl.innerHTML = h.join('');
       legendEl.querySelectorAll('.row.key').forEach(r=>r.onclick=()=>toggleHiSel('c', r.dataset.k));
       legendEl.querySelectorAll('.row.dkey').forEach(r=>r.onclick=()=>toggleHiSel('d', r.dataset.k));
