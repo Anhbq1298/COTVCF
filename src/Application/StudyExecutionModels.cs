@@ -44,6 +44,7 @@ public sealed record StudyExecutionProgress
 {
     public int Total { get; init; }
     public int Completed { get; init; }
+    public int Reused { get; init; }
     public int Failed { get; init; }
     public int Cancelled { get; init; }
     public int Running { get; init; }
@@ -67,4 +68,5 @@ public sealed record StudyExecutionResult(
     int Skipped,
     int WorkerCount,
     int PeakConcurrent,
+    int Reused = 0,
     bool AllWorkersFaulted = false);

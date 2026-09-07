@@ -12,12 +12,13 @@ public sealed class StudyValidationService
     {
         var issues = new List<ValidationIssue>();
         void Error(string section, string message) => issues.Add(new(section, message));
+        void Warn(string section, string message) => issues.Add(new(section, message, ValidationSeverity.Warning));
 
         if (!state.IsSapConnected || state.Model is null) Error("SAP Model", "Connect to a SAP2000 model.");
         if (!state.SessionBaselineCaptured) Error("Baseline Model", "The first-connected baseline snapshot is not available.");
         if (!state.BaselineCaptured) Error("Truss Height", "Capture the baseline height from the original model.");
 
-        ValidateBaselineAndOutput(state, composition, Error);
+        ValidateBaselineAndOutput(state, composition, Error, Warn);
 
         foreach (var issue in new ConfigurationValidator().ValidateLoadingCriteria(state))
             issues.Add(issue with { Section = "Loading Setup" });
@@ -68,7 +69,8 @@ public sealed class StudyValidationService
     private static void ValidateBaselineAndOutput(
         ApplicationState state,
         StudyCompositionResult composition,
-        Action<string, string> error)
+        Action<string, string> error,
+        Action<string, string> warn)
     {
         if (state.SessionBaselineModel is not { Path.Length: > 0 } baseline)
         {
@@ -85,13 +87,19 @@ public sealed class StudyValidationService
                 error("Baseline Model", $"Study candidates use kN and m. Set SAP2000 present units to kN / m before reconnecting (current: {baseline.Units}).");
             _ = new StudyPathService().GetStudyRoot(baselinePath);
 
+            var reused = 0;
             foreach (var row in composition.Iterations.Where(row => row.RunIterate))
             {
                 if (File.Exists(row.ModelFullPath))
-                    error("Existing Output", $"{row.IterationId} already has a child model. Existing outputs are never overwritten.");
+                    reused++;
                 else if (Directory.Exists(row.IterationDirectory) && Directory.EnumerateFileSystemEntries(row.IterationDirectory).Any())
-                    error("Existing Output", $"{row.IterationId} already has a non-empty iteration folder. Existing outputs are never overwritten.");
+                    warn("Existing Output", $"{row.IterationId} has a non-empty iteration folder but no child model — it will be rebuilt into that folder.");
             }
+            if (reused > 0)
+                warn("Existing Output",
+                    $"{reused} selected candidate{(reused == 1 ? "" : "s")} already ha{(reused == 1 ? "s" : "ve")} a child model — " +
+                    "the existing analysis is reused (opened, verified, re-extracted), never overwritten. " +
+                    "Delete an iteration folder to force a rebuild.");
         }
         catch (Exception)
         {

@@ -36,7 +36,7 @@ public sealed class MainViewModel : Observable
     private bool studyRefreshPending;
     private bool isStudyRunning;
     private int requestedWorkerCount = 1;
-    private int studyCompletedCount, studyFailedCount, studyRunningCount, studyQueuedCount, studySkippedCount, studyCancelledCount;
+    private int studyCompletedCount, studyReusedCount, studyFailedCount, studyRunningCount, studyQueuedCount, studySkippedCount, studyCancelledCount;
     private int studyPeakConcurrent;
     private StudyBuildState studyBuildState = StudyBuildState.ReadyToBuild;
     private CancellationTokenSource? studyCancellation;
@@ -126,7 +126,7 @@ public sealed class MainViewModel : Observable
 
     // ---- Hoisted model preview: one Structural2DViewer shared by tabs 01-04 (index 0-3) ----
     // Workflow tabs after the SAP Model tab was removed: 0 Loading, 1 Truss, 2 Pretension, 3 Output, 4 Iteration.
-    private const int TabLoading = 0, TabTruss = 1, TabPretension = 2, TabOutput = 3;
+    private const int TabLoading = 0, TabTruss = 1, TabPretension = 2, TabOutput = 3, TabIteration = 4;
     public bool ShowSharedViewer => selectedTab is >= TabLoading and <= TabOutput;
     public bool ShowTrussLegend => selectedTab == TabTruss;
     public GeometryModel SharedViewerModel =>
@@ -197,6 +197,7 @@ public sealed class MainViewModel : Observable
     public int MaxWorkerCount => 3;
     public ObservableCollection<SapWorkerSnapshot> StudyWorkers { get; } = [];
     public int StudyCompletedCount => studyCompletedCount;
+    public int StudyReusedCount => studyReusedCount;
     public int StudyFailedCount => studyFailedCount;
     public int StudyRunningCount => studyRunningCount;
     public int StudyQueuedCount => studyQueuedCount;
@@ -205,7 +206,9 @@ public sealed class MainViewModel : Observable
     public int StudyFinishedCount => studyCompletedCount + studyFailedCount + studyCancelledCount;
     public double StudyOverallProgress => SelectedRunCount == 0 ? 0 : Math.Min(100, 100.0 * StudyFinishedCount / SelectedRunCount);
     public string StudyProgressText => $"{StudyFinishedCount:N0} / {SelectedRunCount:N0}";
-    public string StudyCountsText => $"Ready {StudyCompletedCount:N0}   Running {StudyRunningCount:N0}   Queued {StudyQueuedCount:N0}   Failed {StudyFailedCount:N0}   Skipped {StudySkippedCount:N0}   Workers {StudyWorkers.Count}   Peak {studyPeakConcurrent}";
+    public string StudyCountsText => $"Ready {StudyCompletedCount:N0}" +
+        (studyReusedCount > 0 ? $" (Reused {studyReusedCount:N0})" : "") +
+        $"   Running {StudyRunningCount:N0}   Queued {StudyQueuedCount:N0}   Failed {StudyFailedCount:N0}   Skipped {StudySkippedCount:N0}   Workers {StudyWorkers.Count}   Peak {studyPeakConcurrent}";
     public bool HasStudyWorkers => StudyWorkers.Count > 0;
     public bool CanCancelStudy => IsStudyRunning && studyCancellation is { IsCancellationRequested: false };
     public StudyBuildState StudyBuildState => studyBuildState;
@@ -361,6 +364,9 @@ public sealed class MainViewModel : Observable
         _ => "Not validated yet."
     };
     public string RunStudyLabel => $"Build & Analyze {SelectedRunCount:N0} - {RequestedWorkerCount} Instance{(RequestedWorkerCount == 1 ? "" : "s")}";
+    public string ToolbarStudySummary => SelectedRunCount == 0
+        ? "Study · nothing selected"
+        : $"Study · {SelectedRunCount:N0} run{(SelectedRunCount == 1 ? "" : "s")} selected";
     public bool CanRunStudy => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0;
     public string RunStudyToolTip => RequestedWorkerCount == 1
         ? "Uses the connected SAP2000 instance as worker 1 to build, analyze, save, and verify each child; no additional process is started."
@@ -482,6 +488,7 @@ public sealed class MainViewModel : Observable
     public Command SelectAllStudyRuns { get; }
     public Command ClearAllStudyRuns { get; }
     public Command BuildSelectedModels { get; }
+    public Command RunStudyFromToolbar { get; }
     public Command CancelStudy { get; }
     public Command OpenStudyFolder { get; }
     public Command OpenIterationFolder { get; }
@@ -573,6 +580,9 @@ public sealed class MainViewModel : Observable
         SelectAllStudyRuns = new(_ => SetAllStudyRuns(true), () => !IsBusy && StudyIterations.Count > 0);
         ClearAllStudyRuns = new(_ => SetAllStudyRuns(false), () => !IsBusy && StudyIterations.Count > 0);
         BuildSelectedModels = new(_ => RunStudy(), () => CanRunStudy);
+        // Run the study from anywhere: jump to the Iteration tab (worker monitor + validation live there) then build.
+        RunStudyFromToolbar = new(_ => { SelectedTab = TabIteration; RunStudy(); },
+            () => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0);
         CancelStudy = new(_ => CancelStudyExecution(), () => CanCancelStudy);
         OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => Directory.Exists(StudyRoot));
         OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
@@ -881,7 +891,7 @@ public sealed class MainViewModel : Observable
             nameof(BaselineModelName), nameof(BaselineModelPath), nameof(StudyRoot), nameof(GeneratedRunCount), nameof(SelectedRunCount),
             nameof(StudySelectionSummary), nameof(HasStudyIterations), nameof(ShowStudyEmptyState), nameof(StudyPreviewEmptyText),
             nameof(StudyValidationState), nameof(HasValidationIssues), nameof(ShowValidationStatus), nameof(ValidationStatusText),
-            nameof(RunStudyLabel), nameof(CanRunStudy), nameof(RunStudyToolTip)
+            nameof(RunStudyLabel), nameof(CanRunStudy), nameof(RunStudyToolTip), nameof(ToolbarStudySummary)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
     }
@@ -953,7 +963,7 @@ public sealed class MainViewModel : Observable
             row.ErrorMessage = null;
             row.Status = row.RunIterate ? StudyIterationStatus.Queued : StudyIterationStatus.Skipped;
         }
-        studyCompletedCount = studyFailedCount = studyRunningCount = studyCancelledCount = studyPeakConcurrent = 0;
+        studyCompletedCount = studyReusedCount = studyFailedCount = studyRunningCount = studyCancelledCount = studyPeakConcurrent = 0;
         studyQueuedCount = snapshot.Jobs.Count(job => job.RunIterate);
         studySkippedCount = snapshot.Jobs.Count - studyQueuedCount;
         StudyWorkers.Clear();
@@ -977,6 +987,7 @@ public sealed class MainViewModel : Observable
             DeflectionReportPath = studyExecution.LastDeflectionReportPath;
             RefreshDeflectionArtifacts();
             studyCompletedCount = result.Completed;
+            studyReusedCount = result.Reused;
             studyFailedCount = result.Failed;
             studyCancelledCount = result.Cancelled;
             studyRunningCount = 0;
@@ -990,8 +1001,8 @@ public sealed class MainViewModel : Observable
                     : result.Failed > 0 ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
             Message = studyBuildState switch
             {
-                StudyBuildState.Completed => $"Build and analysis complete - {result.Completed:N0} verified child models are ready.",
-                StudyBuildState.CompletedWithErrors => $"Build and analysis completed with errors - {result.Completed:N0} ready, {result.Failed:N0} failed.",
+                StudyBuildState.Completed => $"Build and analysis complete - {result.Completed:N0} verified child models are ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused existing)" : "")}.",
+                StudyBuildState.CompletedWithErrors => $"Build and analysis completed with errors - {result.Completed:N0} ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused)" : "")}, {result.Failed:N0} failed.",
                 StudyBuildState.Cancelled => $"Build and analysis cancelled - {result.Completed:N0} ready, {result.Cancelled:N0} cancelled.",
                 _ => $"Build and analysis failed - all SAP2000 workers faulted; {result.Completed:N0} models are ready and {result.Failed:N0} failed."
             };
@@ -1034,6 +1045,7 @@ public sealed class MainViewModel : Observable
         if (progress.Total > 0)
         {
             studyCompletedCount = progress.Completed;
+            studyReusedCount = progress.Reused;
             studyFailedCount = progress.Failed;
             studyCancelledCount = progress.Cancelled;
             studyRunningCount = progress.Running;
@@ -1081,7 +1093,7 @@ public sealed class MainViewModel : Observable
         bool leaveUnassignedPlanned = false)
     {
         foreach (var row in StudyIterations.Where(row => row.RunIterate && row.Status is not
-                     (StudyIterationStatus.Ready or StudyIterationStatus.Failed or StudyIterationStatus.Cancelled)))
+                     (StudyIterationStatus.Ready or StudyIterationStatus.Reused or StudyIterationStatus.Failed or StudyIterationStatus.Cancelled)))
         {
             if (leaveUnassignedPlanned && row.AssignedWorkerId is null)
             {
@@ -1098,11 +1110,11 @@ public sealed class MainViewModel : Observable
         foreach (var name in new[]
         {
             nameof(IsStudyRunning), nameof(CanCancelStudy), nameof(CanRunStudy), nameof(StudyWorkers),
-            nameof(HasStudyWorkers), nameof(StudyCompletedCount), nameof(StudyFailedCount),
+            nameof(HasStudyWorkers), nameof(StudyCompletedCount), nameof(StudyReusedCount), nameof(StudyFailedCount),
             nameof(StudyRunningCount), nameof(StudyQueuedCount), nameof(StudySkippedCount),
             nameof(StudyCancelledCount), nameof(StudyFinishedCount), nameof(StudyOverallProgress),
             nameof(StudyProgressText), nameof(StudyCountsText), nameof(StudyBuildState),
-            nameof(StudyBuildStateText), nameof(RunStudyLabel), nameof(RunStudyToolTip)
+            nameof(StudyBuildStateText), nameof(RunStudyLabel), nameof(RunStudyToolTip), nameof(ToolbarStudySummary)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
     }

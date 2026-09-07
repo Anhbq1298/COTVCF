@@ -40,6 +40,7 @@ public enum StudyIterationStatus
     Queued,
     Skipped,
     PreparingFolder,
+    ReusingExisting,
     OpeningBaseline,
     CreatingChild,
     ApplyingGeometry,
@@ -52,6 +53,7 @@ public enum StudyIterationStatus
     ExtractingResults,
     GeneratingDiagnostic,
     Ready,
+    Reused,
     Failed,
     Cancelled
 }
@@ -60,6 +62,7 @@ public enum StudyWorkerStage
 {
     Waiting,
     PreparingFolder,
+    ReusingExisting,
     OpeningBaseline,
     CreatingChild,
     ApplyingGeometry,
@@ -166,6 +169,7 @@ public sealed class StudyIteration : Observable
     public string StatusText => Status switch
     {
         StudyIterationStatus.PreparingFolder => "Preparing Folder",
+        StudyIterationStatus.ReusingExisting => "Reusing Existing",
         StudyIterationStatus.OpeningBaseline => "Opening Baseline",
         StudyIterationStatus.CreatingChild => "Creating Child",
         StudyIterationStatus.ApplyingGeometry => "Applying Geometry",
@@ -176,6 +180,7 @@ public sealed class StudyIteration : Observable
         StudyIterationStatus.Verifying => "Verifying",
         StudyIterationStatus.ExtractingResults => "Extracting Results",
         StudyIterationStatus.GeneratingDiagnostic => "Diagnostic Report",
+        StudyIterationStatus.Reused => "Reused",
         _ => Status.ToString()
     };
     public bool IsRunning => Status is >= StudyIterationStatus.PreparingFolder and <= StudyIterationStatus.GeneratingDiagnostic;
@@ -231,6 +236,7 @@ public sealed class SapWorkerSnapshot : Observable
     {
         null or StudyWorkerStage.Waiting => "Waiting for next candidate...",
         StudyWorkerStage.PreparingFolder => "Preparing Folder",
+        StudyWorkerStage.ReusingExisting => "Reusing Existing Child",
         StudyWorkerStage.OpeningBaseline => "Opening Baseline",
         StudyWorkerStage.CreatingChild => "Creating Child",
         StudyWorkerStage.ApplyingGeometry => "Applying Geometry",
@@ -247,7 +253,7 @@ public sealed class SapWorkerSnapshot : Observable
     };
     public int StageNumber => CurrentStage switch
     {
-        StudyWorkerStage.PreparingFolder => 1,
+        StudyWorkerStage.PreparingFolder or StudyWorkerStage.ReusingExisting => 1,
         StudyWorkerStage.OpeningBaseline => 2,
         StudyWorkerStage.CreatingChild => 3,
         StudyWorkerStage.ApplyingGeometry => 4,

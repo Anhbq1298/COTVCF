@@ -84,10 +84,10 @@ public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactor
                 !string.Equals(expectedModel, Path.GetFullPath(job.ModelFullPath), StringComparison.OrdinalIgnoreCase) ||
                 !expectedDirectory.StartsWith(expectedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Iteration {job.IterationId} has an invalid or unsafe output path.");
-            if (File.Exists(expectedModel))
-                throw new InvalidOperationException($"Existing output will not be overwritten: {expectedModel}");
-            if (Directory.Exists(expectedDirectory) && Directory.EnumerateFileSystemEntries(expectedDirectory).Any())
-                throw new InvalidOperationException($"Existing iteration folder is not empty and will not be overwritten: {expectedDirectory}");
+            // An existing child model is NOT an error: the worker reuses it (opens, verifies, re-extracts
+            // results) instead of rebuilding. Study modes overlap on their fixed dimension by design, so
+            // re-running a neighbouring study must not require deleting the shared candidates first. The
+            // existing .sdb and its result files are never overwritten.
         }
     }
 }

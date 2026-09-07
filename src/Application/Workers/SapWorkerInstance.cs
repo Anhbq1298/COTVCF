@@ -69,17 +69,26 @@ public sealed class SapWorkerInstance : IAsyncDisposable
             if (!started || Snapshot.State == SapWorkerState.Faulted)
                 return new(StudyIterationStatus.Failed, true, $"Worker {WorkerId} is not available.", null);
 
-            SetState(SapWorkerState.Busy, StudyWorkerStage.PreparingFolder, StudyIterationStatus.PreparingFolder,
-                "Candidate accepted.", job.IterationId, job.ModelFullPath, report);
+            var reuse = File.Exists(job.ModelFullPath);
+            SetState(SapWorkerState.Busy,
+                reuse ? StudyWorkerStage.ReusingExisting : StudyWorkerStage.PreparingFolder,
+                reuse ? StudyIterationStatus.ReusingExisting : StudyIterationStatus.PreparingFolder,
+                reuse ? "Existing child model found — reusing." : "Candidate accepted.",
+                job.IterationId, job.ModelFullPath, report);
             try
             {
-                var built = await builder.BuildAsync(host.Gateway, snapshot, job, WorkerId,
-                    (stage, status, message, path) => SetState(SapWorkerState.Busy, stage, status, message, job.IterationId, path, report), token);
+                Action<StudyWorkerStage, StudyIterationStatus, string, string?> stageReport =
+                    (stage, status, message, path) => SetState(SapWorkerState.Busy, stage, status, message, job.IterationId, path, report);
+                var built = reuse
+                    ? await builder.ReuseAsync(host.Gateway, snapshot, job, WorkerId, stageReport, token)
+                    : await builder.BuildAsync(host.Gateway, snapshot, job, WorkerId, stageReport, token);
                 await ReturnToBaselineAsync(job, report);
                 Snapshot.CompletedCount++;
                 SetState(SapWorkerState.Ready, StudyWorkerStage.Waiting, null,
                     "Ready for next candidate.", null, snapshot.BaselineModelPath, report);
-                return new(StudyIterationStatus.Ready, false, "Child model is ready.", built.Child.Path, built.Result);
+                return built.Reused
+                    ? new(StudyIterationStatus.Reused, false, "Existing child model reused — results re-extracted.", built.Child.Path, built.Result)
+                    : new(StudyIterationStatus.Ready, false, "Child model is ready.", built.Child.Path, built.Result);
             }
             catch (OperationCanceledException)
             {

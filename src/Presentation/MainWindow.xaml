@@ -41,6 +41,15 @@
        <TextBlock Text="Load Config"/>
       </StackPanel>
      </Button>
+     <Border Width="1" Background="{StaticResource Border}" Margin="16,3,12,3"/>
+     <TextBlock Text="{Binding ToolbarStudySummary}" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/>
+     <Button Command="{Binding RunStudyFromToolbar}" Style="{StaticResource Primary}" Margin="0"
+             ToolTip="Validate and run the study from anywhere — jumps to the Iteration tab for the worker monitor and any validation issues">
+      <StackPanel Orientation="Horizontal">
+       <Viewbox Width="11" Height="11" Margin="0,0,5,0"><Path Fill="White" Data="M2,1 L13,7 L2,13 Z"/></Viewbox>
+       <TextBlock Text="Run study"/>
+      </StackPanel>
+     </Button>
     </StackPanel>
    </DockPanel>
   </Border>

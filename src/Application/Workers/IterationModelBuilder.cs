@@ -7,8 +7,9 @@ using System.IO;
 namespace COT_VCF.Application.Workers;
 
 /// <summary>The analyzed child plus its extracted deflection result (for consolidation) — the diagnostic
-/// HTML is already written into the candidate folder by the time this is returned.</summary>
-public sealed record CandidateBuildResult(ModelInfo Child, CandidateResultDto Result);
+/// HTML is already written into the candidate folder by the time this is returned. <see cref="Reused"/> is
+/// true when an already-built child model on disk was opened and re-extracted instead of rebuilt.</summary>
+public sealed record CandidateBuildResult(ModelInfo Child, CandidateResultDto Result, bool Reused = false);
 
 public sealed class IterationModelBuilder(
     TrussGeometryService? geometryService = null,
@@ -163,6 +164,104 @@ public sealed class IterationModelBuilder(
                 {
                     diagnosticGenerator.Write(
                         resultExtractor.FailureResult(snapshot, job, $"Failed during {stage}: {ex.Message}", DateTimeOffset.Now),
+                        job.IterationDirectory);
+                }
+                catch { /* the failure diagnostic is best-effort */ }
+            }
+            throw new InvalidOperationException(detail, ex);
+        }
+    }
+
+    /// <summary>Incremental / resume path: the candidate's child <c>.sdb</c> already exists (e.g. it was built
+    /// by an earlier study whose candidate space overlaps this one). Open it, ensure it is analyzed, prove it
+    /// still matches this candidate's resolved L/H/P, and re-extract its deflection results. The existing model
+    /// and its result files are never overwritten.</summary>
+    public async Task<CandidateBuildResult> ReuseAsync(
+        ISapGateway gateway,
+        StudyExecutionSnapshot snapshot,
+        StudyIterationExecutionDto job,
+        int workerId,
+        Action<StudyWorkerStage, StudyIterationStatus, string, string?> report,
+        CancellationToken token)
+    {
+        var stage = StudyWorkerStage.ReusingExisting;
+        try
+        {
+            token.ThrowIfCancellationRequested();
+            report(stage, StudyIterationStatus.ReusingExisting, "Reusing the existing child model.", job.ModelFullPath);
+            if (!File.Exists(job.ModelFullPath))
+                throw new InvalidOperationException($"Expected an existing child model to reuse, none found: {job.ModelFullPath}");
+            Directory.CreateDirectory(job.IterationDirectory);
+            AppendDiagnostic(job, workerId,
+                $"REUSE START child={job.ModelFullPath} candidates=L:{job.LoadingCandidateId},H:{job.HeightCandidateId},P:{job.PretensionCandidateId}");
+
+            token.ThrowIfCancellationRequested();
+            stage = StudyWorkerStage.OpeningBaseline;
+            report(stage, StudyIterationStatus.OpeningBaseline, "Opening the existing child model.", job.ModelFullPath);
+            var child = await gateway.OpenModelAsync(job.ModelFullPath);
+
+            // The resolved geometry is recomputed only so the verifier can compare monitored point positions.
+            var proposed = geometryService.BuildCandidateGeometry(
+                snapshot.BaselineGeometry, snapshot.TopPoints, snapshot.MiddlePoints, snapshot.BottomPoints, job.Height);
+
+            token.ThrowIfCancellationRequested();
+            stage = StudyWorkerStage.RunningAnalysis;
+            var analysisStarted = DateTimeOffset.Now;
+            if (!(await gateway.GetCurrentModelInfoAsync()).IsLocked)
+            {
+                report(stage, StudyIterationStatus.RunningAnalysis, "Existing child is not analyzed — running its analysis cases.", child.Path);
+                await gateway.RunAnalysisAsync(child);
+            }
+            var analysisCompleted = DateTimeOffset.Now;
+            var analyzedChild = await gateway.GetCurrentModelInfoAsync();
+            if (!analyzedChild.IsLocked)
+                throw new InvalidOperationException(
+                    $"The reused child model is unlocked, so no analysis results are available: {job.ModelFullPath}. " +
+                    "Delete its iteration folder to have the study rebuild it.");
+
+            token.ThrowIfCancellationRequested();
+            stage = StudyWorkerStage.Verifying;
+            report(stage, StudyIterationStatus.Verifying, "Confirming the existing child matches this candidate.", analyzedChild.Path);
+            var verified = await verifier.VerifyAsync(gateway, snapshot, job, proposed, analyzedChild, token);
+            AppendDiagnostic(job, workerId,
+                $"REUSE VERIFIED geometryPoints={verified.GeometryPointsVerified},pointLoads={verified.PointLoadsVerified}," +
+                $"cableTargets={verified.CableTargetForcesVerified},active={analyzedChild.Path}");
+
+            token.ThrowIfCancellationRequested();
+            stage = StudyWorkerStage.ExtractingResults;
+            report(stage, StudyIterationStatus.ExtractingResults, "Extracting monitored-point deflection from the reused model.", analyzedChild.Path);
+            var result = await resultExtractor.ExtractAsync(
+                gateway, snapshot, job, analyzedChild, analysisStarted, analysisCompleted, token);
+            AppendDiagnostic(job, workerId,
+                $"REUSE EXTRACTED status={result.ExtractionStatus} groups={result.Groups.Count} " +
+                $"points={result.Groups.Sum(g => g.Points.Count)} warnings={result.Warnings.Count}");
+
+            token.ThrowIfCancellationRequested();
+            stage = StudyWorkerStage.GeneratingDiagnostic;
+            report(stage, StudyIterationStatus.GeneratingDiagnostic, "Writing candidate diagnostic report.", analyzedChild.Path);
+            var diagnosticPath = diagnosticGenerator.Write(result, job.IterationDirectory);
+            AppendDiagnostic(job, workerId, $"REUSE DIAGNOSTIC {diagnosticPath}");
+
+            return new CandidateBuildResult(analyzedChild, result, Reused: true);
+        }
+        catch (OperationCanceledException)
+        {
+            if (Directory.Exists(job.IterationDirectory))
+                AppendDiagnostic(job, workerId, $"REUSE CANCELLED stage={stage}");
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var detail = $"Iteration {job.IterationId} could not reuse its existing child model on Worker {workerId} during {stage}. " +
+                $"Candidates L={job.LoadingCandidateId}, H={job.HeightCandidateId}, P={job.PretensionCandidateId}. {ex.Message} " +
+                "Delete its iteration folder to have the study rebuild it.";
+            if (Directory.Exists(job.IterationDirectory))
+            {
+                AppendDiagnostic(job, workerId, $"REUSE FAILED stage={stage}: {ex}");
+                try
+                {
+                    diagnosticGenerator.Write(
+                        resultExtractor.FailureResult(snapshot, job, $"Reuse failed during {stage}: {ex.Message}", DateTimeOffset.Now),
                         job.IterationDirectory);
                 }
                 catch { /* the failure diagnostic is best-effort */ }

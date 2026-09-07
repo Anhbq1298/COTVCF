@@ -229,7 +229,7 @@ public partial class MainWindow : Window
         "6. Tab 05: select study rows and 1-3 total SAP2000 instances. Run first prepares [O]- groups on the parent baseline and saves it, then workers create children from that prepared parent.\n" +
         "7. Each worker is sequential; workers run in parallel and reopen the immutable baseline before every candidate.\n\n" +
         "Viewer: mouse wheel zooms, drag pans, double-click or Home fits.\n" +
-        "Each child runs the load cases enabled in SAP2000 and is saved again before verification; results are not extracted yet.\n" +
-        "Existing candidate outputs are never overwritten.",
+        "Each child runs the load cases enabled in SAP2000, is verified, and its monitored-point deflection is extracted for Tab 06.\n" +
+        "A candidate whose child model already exists (e.g. from an overlapping study mode) is reused - opened, verified and re-extracted - never rebuilt or overwritten. Delete its iteration folder to force a rebuild.",
         "COT VCF tools - Help", MessageBoxButton.OK, MessageBoxImage.Information);
 }

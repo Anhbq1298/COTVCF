@@ -173,12 +173,17 @@ public sealed class DeflectionReportGenerator
   <span class="sep"></span>
   <button id="srcBtn">View source data</button>
   <span class="sep"></span>
-  <span class="hint">wheel = zoom X · drag = pan · double-click = reset · click a colour / line = solo · click a candidate = show/hide</span>
+  <span class="hint">wheel = zoom X · drag = pan · double-click = reset · click colour / line rows = filter (multi-select) · click a candidate = show/hide · Duplicate = compare</span>
 </div>
 <div id="panels"></div>
 <template id="panelTpl">
   <section class="panel">
-    <h3>Deflection profile vs <b class="pv-dim"></b><span> — U<sub>z</sub> under the result load case</span></h3>
+    <div class="pbar">
+      <h3>Deflection profile vs <b class="pv-dim"></b><span class="pv-sub"> — U<sub>z</sub> under the result load case</span></h3>
+      <span class="pv-ctl"></span>
+      <button class="pv-dup" title="Add an independent copy of this chart to compare a different group / colour / filter">＋ Duplicate</button>
+      <button class="pv-rm" title="Remove this copy" hidden>✕ Remove</button>
+    </div>
     <div class="stage"><svg class="chart" preserveAspectRatio="none"></svg><div class="legend"></div></div>
   </section>
 </template>
@@ -218,8 +223,15 @@ button{cursor:pointer}button:hover{background:var(--su)}
 #srcBtn{border-color:var(--acc);color:var(--acc);font-weight:600}
 #panels{padding-bottom:8px}
 .panel{border-bottom:1px solid var(--bd)}
-.panel h3{margin:0;padding:8px 14px 2px;font-size:12px;font-weight:600}
-.panel h3 b{color:var(--acc)}.panel h3 span{font-weight:400;color:var(--mu)}
+.pbar{display:flex;align-items:center;gap:10px;padding:8px 14px 2px;flex-wrap:wrap}
+.pbar h3{margin:0;padding:0;font-size:12px;font-weight:600}
+.pbar h3 b{color:var(--acc)}.pbar h3 .pv-sub{font-weight:400;color:var(--mu)}
+.pv-ctl{display:flex;gap:6px}
+.pv-ctl select{font-size:11px;padding:2px 4px;max-width:230px}
+.pv-dup{margin-left:auto;font-size:11px;padding:2px 8px}
+.pv-rm{font-size:11px;padding:2px 8px;border-color:#C62828;color:#C62828}
+.panel.copy{background:#fafbfd}
+.panel.copy .pbar{border-left:3px solid var(--acc);padding-left:11px}
 .stage{display:flex;height:390px;padding:4px 6px 10px}
 .chart{flex:1;height:100%;min-width:0;background:#fff}
 .legend{width:250px;flex:none;overflow:auto;border-left:1px solid var(--bd);padding:8px;font-size:11.5px}
@@ -260,42 +272,69 @@ a{color:var(--acc)}
   const D = JSON.parse(document.getElementById('report-data').textContent);
   const sel = document.getElementById('group'), tip = document.getElementById('tip');
   const dashMap = {solid:'',dash:'8 5',dot:'2 4',dashdot:'10 4 2 4',longdash:'16 6',longdashdot:'16 5 3 5'};
-  const dashValue = (legend,k) => (legend.find(e=>e.key===k)||{}).value || 'solid';
-  const dashArr = (legend,k) => dashMap[dashValue(legend,k)] ?? '';
-  const dashCss = (legend,k) => { const v=dashValue(legend,k); return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
-  const legendColor = (legend,k) => (legend.find(e=>e.key===k)||{}).value || '#9aa0a6';
+  const dashValue = (lg,k) => (lg.find(e=>e.key===k)||{}).value || 'solid';
+  const dashArr = (lg,k) => dashMap[dashValue(lg,k)] ?? '';
+  const dashCss = (lg,k) => { const v=dashValue(lg,k); return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
+  const legendColor = (lg,k) => (lg.find(e=>e.key===k)||{}).value || '#9aa0a6';
 
-  // D.views: one chart per parameter the study sweeps (load candidate always; truss height unless
-  // FixHeight; pretension unless FixPretension). series.colorKeys[i] / series.dashKeys[i] pair with view i.
+  // D.views: one chart per parameter the study sweeps. series.colorKeys[i] / series.dashKeys[i] pair with
+  // view i. The original panels are "linked" (driven by the global toolbar); Duplicate makes an
+  // independent copy with its own group / colour dimension / solo filter / zoom for side-by-side compare.
   let gi = 0, showLegend = true, hidden = new Set(), hi = null;
   const panels = [];
+  const tpl = document.getElementById('panelTpl'), panelsEl = document.getElementById('panels');
+  const mw = document.getElementById('matrixWrap'), srcBtn = document.getElementById('srcBtn');
 
   D.groups.forEach((g,i)=>{ const o=document.createElement('option'); o.value=i;
     o.textContent=`${g.groupName}  ·  ${g.outputCase}  ·  ${g.series.length} candidate(s)`; sel.appendChild(o); });
 
-  function grp(){ return D.groups[gi]; }
-  function visibleSeries(){ return grp().series.filter(s=>!hidden.has(s.iterationKey)); }
-  function xExtent(){ const xs=grp().series.flatMap(s=>s.points.filter(p=>p.uzMm!=null).map(p=>p.coord)); return xs.length?[Math.min(...xs),Math.max(...xs)]:[0,1]; }
-  function groupOff(keyOf,k){ const l=grp().series.filter(s=>keyOf(s)===k); return l.length>0 && l.every(s=>hidden.has(s.iterationKey)); }
-  // "solo" a legend group: show only its series, hide the rest. Click the same row again to restore all.
-  function soloGroup(keyOf,k){
-    const all=grp().series, tgt=all.filter(s=>keyOf(s)===k), other=all.filter(s=>keyOf(s)!==k);
-    const iso = other.length>0 && other.every(s=>hidden.has(s.iterationKey)) && tgt.every(s=>!hidden.has(s.iterationKey));
-    hidden.clear(); if(!iso) other.forEach(s=>hidden.add(s.iterationKey)); hi=null; renderAll();
-  }
-  function toggleCand(k){ hidden.has(k)?hidden.delete(k):hidden.add(k); renderAll(); }
-
   function ticks(a,b,n){ const step=nice((b-a)/n); const t0=Math.ceil(a/step)*step,o=[]; for(let v=t0;v<=b+1e-9;v+=step)o.push(+v.toFixed(10)); return o; }
   function nice(x){ const e=Math.pow(10,Math.floor(Math.log10(Math.abs(x)||1))); const f=x/e; return (f<1.5?1:f<3?2:f<7?5:10)*e; }
   function fmt(v){ return Math.abs(v)>=100?v.toFixed(0):Math.abs(v)>=1?v.toFixed(2):v.toFixed(3); }
+  function gVisible(){ return D.groups[gi].series.filter(s=>!hidden.has(s.iterationKey)); }
 
-  function makePanel(host, view, vi){
+  function makePanel(anchorAfter, init){
+    // init: { vi, linked, gi, hidden(Set) }
+    const host = tpl.content.firstElementChild.cloneNode(true);
+    if(anchorAfter) anchorAfter.after(host); else panelsEl.appendChild(host);
     const chart = host.querySelector('.chart'), legendEl = host.querySelector('.legend');
+    const dupBtn = host.querySelector('.pv-dup'), rmBtn = host.querySelector('.pv-rm'), ctlEl = host.querySelector('.pv-ctl');
+
+    let vi = init.vi|0, linked = !!init.linked;
+    let localGi = init.gi != null ? init.gi : gi;
+    let localHidden = new Set(init.hidden || hidden);
+    // per-panel legend filters: multi-select focus sets. Empty = show every group of that dimension.
+    let focusC = new Set(), focusD = new Set();
+    let zoomX = null, api;
+
+    const curGi = () => linked ? gi : localGi;
+    const curHidden = () => linked ? hidden : localHidden;
+    const grp = () => D.groups[curGi()];
+    const view = () => D.views[vi];
     const colorKey = s => s.colorKeys[vi], dashKey = s => s.dashKeys[vi];
-    const showDash = view.dashDimension !== view.colorDimension && view.dashLegend.length > 1;
-    let zoomX = null;
-    // Clamp an X window to the data extent: never wider than the full span, never < 4% of it,
-    // never panned past an end. null => un-zoomed / full view.
+    const inFocus = s => (focusC.size===0 || focusC.has(colorKey(s))) && (focusD.size===0 || focusD.has(dashKey(s)));
+    const visible = () => grp().series.filter(s=>inFocus(s) && !curHidden().has(s.iterationKey));
+    const xExtent = () => { const xs=grp().series.flatMap(s=>s.points.filter(p=>p.uzMm!=null).map(p=>p.coord)); return xs.length?[Math.min(...xs),Math.max(...xs)]:[0,1]; };
+
+    function afterMutate(){ if(linked) renderAll(); else { render(); if(!mw.hidden) drawMatrix(); } }
+    // group row click: add / remove that group from its focus set. When the set would cover every group
+    // it is cleared (all shown). Multiple groups can be focused at once.
+    function toggleFocus(dim,k){
+      const set = dim==='c' ? focusC : focusD;
+      set.has(k) ? set.delete(k) : set.add(k);
+      const allKeys = (dim==='c' ? view().colorLegend : view().dashLegend).map(e=>e.key);
+      if(allKeys.every(x=>set.has(x))) set.clear();
+      hi=null; afterMutate();
+    }
+    function groupHidden(dim,keyOf,k){
+      const set = dim==='c' ? focusC : focusD;
+      if(set.size>0 && !set.has(k)) return true;
+      const l=grp().series.filter(s=>keyOf(s)===k);
+      return l.length>0 && l.every(s=>curHidden().has(s.iterationKey));
+    }
+    function toggleCand(k){ const H=curHidden(); H.has(k)?H.delete(k):H.add(k); afterMutate(); }
+    function resetFilters(){ focusC.clear(); focusD.clear(); }
+
     function clamp(z){
       const [dx0,dx1]=xExtent(), span=(dx1-dx0)||1, minSpan=span*0.04;
       let a=z[0], b=z[1], w=b-a;
@@ -307,15 +346,39 @@ a{color:var(--acc)}
       return [a,b];
     }
 
+    function syncHeader(){
+      const V=view();
+      host.classList.toggle('copy', !linked);
+      host.querySelector('.pv-dim').textContent = V.colorDimension.toLowerCase();
+      host.querySelector('.pv-sub').textContent = linked
+        ? ' — Uz under the result load case'
+        : ` — copy · ${grp().groupName}`;
+      rmBtn.hidden = linked;
+      ctlEl.innerHTML = '';
+      // group selector: copies only (linked panels follow the top toolbar's Group).
+      if(!linked){
+        const gs=document.createElement('select'); gs.title='Result group for this copy';
+        D.groups.forEach((g,i)=>{ const o=new Option(`${g.groupName} · ${g.outputCase}`, i); if(i===localGi) o.selected=true; gs.add(o); });
+        gs.onchange=()=>{ localGi=+gs.value; localHidden=new Set(); resetFilters(); zoomX=null; syncHeader(); render(); };
+        ctlEl.append(gs);
+      }
+      // colour-by selector: any panel, whenever the study sweeps more than one dimension.
+      if(D.views.length > 1){
+        const vs=document.createElement('select'); vs.title='Which relationship this chart plots';
+        D.views.forEach((v,i)=>{ const o=new Option(`colour by: ${v.colorDimension}`, i); if(i===vi) o.selected=true; vs.add(o); });
+        vs.onchange=()=>{ vi=+vs.value; resetFilters(); zoomX=null; syncHeader(); render(); };
+        ctlEl.append(vs);
+      }
+    }
+
     function render(){
-      const g = grp(); if(!g){ chart.innerHTML=''; legendEl.innerHTML=''; return; }
+      const g = grp(), V = view(); if(!g){ chart.innerHTML=''; legendEl.innerHTML=''; return; }
       legendEl.hidden = !showLegend;
-      const W = chart.clientWidth||900, H = chart.clientHeight||380, m={l:58,r:14,t:14,b:40};
+      const W = chart.clientWidth||900, H = chart.clientHeight||360, m={l:58,r:14,t:14,b:40};
       const all = g.series.flatMap(s=>s.points.filter(p=>p.uzMm!=null));
       const [dx0,dx1] = xExtent();
       let x0=dx0, x1=dx1;
       if(zoomX){ x0=zoomX[0]; x1=zoomX[1]; }
-      // never render outside the data extent — no blank gutters from an over-pan / over-zoom
       if(x0<dx0) x0=dx0; if(x1>dx1) x1=dx1; if(x1-x0 < (dx1-dx0)*0.02){ x0=dx0; x1=dx1; }
       let ys = all.map(p=>p.uzMm);
       let y0 = Math.min(...ys,0), y1 = Math.max(...ys,0);
@@ -323,6 +386,7 @@ a{color:var(--acc)}
       const py = 0.06*(y1-y0); y0-=py; y1+=py;
       const sx = v => m.l + (v-x0)/(x1-x0)*(W-m.l-m.r);
       const sy = v => m.t + (y1-v)/(y1-y0)*(H-m.t-m.b);   // standard orientation: +Uz up
+      const eHi = (hi && g.series.some(s=>s.iterationKey===hi)) ? hi : null;
 
       const P=[`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`];
       ticks(x0,x1,8).forEach(t=>{ const X=sx(t); P.push(`<line x1="${X}" y1="${m.t}" x2="${X}" y2="${H-m.b}" stroke="#eef0f2"/><text x="${X}" y="${H-m.b+16}" font-size="10" fill="#666" text-anchor="middle">${fmt(t)}</text>`); });
@@ -331,14 +395,14 @@ a{color:var(--acc)}
       P.push(`<text x="${(m.l+W-m.r)/2}" y="${H-6}" font-size="11" fill="#333" text-anchor="middle">${g.profileAxis} coordinate [m]</text>`);
       P.push(`<text transform="translate(14,${(m.t+H-m.b)/2}) rotate(-90)" font-size="11" fill="#333" text-anchor="middle">Uz [mm]  (− = downward)</text>`);
 
-      visibleSeries().slice().sort((a,b)=>(a.iterationKey===hi?1:0)-(b.iterationKey===hi?1:0)).forEach(s=>{
+      visible().slice().sort((a,b)=>(a.iterationKey===eHi?1:0)-(b.iterationKey===eHi?1:0)).forEach(s=>{
         const vp = s.points.filter(p=>p.uzMm!=null);
         const pts = vp.map(p=>`${sx(p.coord).toFixed(1)},${sy(p.uzMm).toFixed(1)}`).join(' ');
         if(!pts) return;
-        const c = legendColor(view.colorLegend, colorKey(s));
-        const op = (!hi || s.iterationKey===hi) ? 1 : 0.18, wd = s.iterationKey===hi ? 3.4 : 1.8;
-        P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${dashArr(view.dashLegend, dashKey(s))}" opacity="${op}" data-k="${s.iterationKey}"/>`);
-        vp.forEach(p=>P.push(`<circle cx="${sx(p.coord).toFixed(1)}" cy="${sy(p.uzMm).toFixed(1)}" r="${s.iterationKey===hi?3.4:2.4}" fill="${c}" opacity="${op}" data-k="${s.iterationKey}" data-pt="${p.pointName}" data-x="${p.coord}" data-uz="${p.uzMm}"/>`));
+        const c = legendColor(V.colorLegend, colorKey(s));
+        const op = (!eHi || s.iterationKey===eHi) ? 1 : 0.18, wd = s.iterationKey===eHi ? 3.4 : 1.8;
+        P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${dashArr(V.dashLegend, dashKey(s))}" opacity="${op}" data-k="${s.iterationKey}"/>`);
+        vp.forEach(p=>P.push(`<circle cx="${sx(p.coord).toFixed(1)}" cy="${sy(p.uzMm).toFixed(1)}" r="${s.iterationKey===eHi?3.4:2.4}" fill="${c}" opacity="${op}" data-k="${s.iterationKey}" data-pt="${p.pointName}" data-x="${p.coord}" data-uz="${p.uzMm}"/>`));
       });
       chart.setAttribute('viewBox',`0 0 ${W} ${H}`);
       chart.innerHTML = P.join('');
@@ -346,23 +410,25 @@ a{color:var(--acc)}
     }
 
     function drawLegend(){
-      const g = grp(); const h=[];
-      h.push(`<h4>${cfg.dim} — colour <span class="hint2">click = solo</span></h4>`);
-      cfg.legend.forEach(e=>{ const off=groupOff(cfg.field,e.key)?' off':'';
+      const g = grp(), V = view(); const h=[];
+      const showDash = V.dashDimension !== V.colorDimension && V.dashLegend.length > 1;
+      const cHint = focusC.size>0 ? `${focusC.size} shown · click = filter` : 'click = filter';
+      h.push(`<h4>${V.colorDimension} — colour <span class="hint2">${cHint}</span></h4>`);
+      V.colorLegend.forEach(e=>{ const off=groupHidden('c',colorKey,e.key)?' off':'';
         h.push(`<div class="row key${off}" data-k="${e.key}"><span class="sw" style="border-top-color:${e.value}"></span>${e.label}</div>`); });
-      if(D.dashLegend.length){
-        h.push(`<h4>${D.dashDimension} — line <span class="hint2">click = solo</span></h4>`);
-        D.dashLegend.forEach(e=>{ const off=groupOff('dashKey',e.key)?' off':'';
+      if(showDash){
+        const dHint = focusD.size>0 ? `${focusD.size} shown · click = filter` : 'click = filter';
+        h.push(`<h4>${V.dashDimension} — line <span class="hint2">${dHint}</span></h4>`);
+        V.dashLegend.forEach(e=>{ const off=groupHidden('d',dashKey,e.key)?' off':'';
           h.push(`<div class="row dkey${off}" data-k="${e.key}"><span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${e.label}</div>`); });
       }
-      const shown = cfg.legend.map(e=>e.key).filter(k=>!groupOff(cfg.field,k));
-      const cands = shown.length ? g.series.filter(s=>shown.includes(s[cfg.field])) : g.series;
+      const cands = g.series.filter(inFocus);
       h.push(`<h4>Candidates <span class="hint2">${cands.length}/${g.series.length} · click = show/hide</span></h4>`);
-      cands.forEach(s=>{ const off=hidden.has(s.iterationKey)?' off':'', on=s.iterationKey===hi?' hi':'';
-        h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}"><span class="sw" style="border-top-color:${legendColor(cfg.legend,s[cfg.field])};border-top-style:${dashCss(s.dashKey)}"></span>${s.iterationKey} · ${s.loadingLabel} · H ${(+s.trussHeightM).toFixed(2)}m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}</div>`); });
+      cands.forEach(s=>{ const off=curHidden().has(s.iterationKey)?' off':'', on=s.iterationKey===hi?' hi':'';
+        h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}"><span class="sw" style="border-top-color:${legendColor(V.colorLegend,colorKey(s))};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>${s.iterationKey} · ${s.loadingLabel} · H ${(+s.trussHeightM).toFixed(2)}m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}</div>`); });
       legendEl.innerHTML = h.join('');
-      legendEl.querySelectorAll('.row.key').forEach(r=>r.onclick=()=>soloGroup(cfg.field, r.dataset.k));
-      legendEl.querySelectorAll('.row.dkey').forEach(r=>r.onclick=()=>soloGroup('dashKey', r.dataset.k));
+      legendEl.querySelectorAll('.row.key').forEach(r=>r.onclick=()=>toggleFocus('c', r.dataset.k));
+      legendEl.querySelectorAll('.row.dkey').forEach(r=>r.onclick=()=>toggleFocus('d', r.dataset.k));
       legendEl.querySelectorAll('.row.cand').forEach(r=>r.onclick=()=>toggleCand(r.dataset.k));
     }
 
@@ -392,16 +458,21 @@ a{color:var(--acc)}
     window.addEventListener('mouseup',()=>drag=null);
     chart.addEventListener('dblclick',()=>{ zoomX=null; render(); });
 
-    return { render, reset(){ zoomX=null; } };
+    dupBtn.onclick=()=>{ const p = makePanel(host, { vi, linked:false, gi:curGi(), hidden:curHidden() }); panels.push(p); p.render(); };
+    rmBtn.onclick=()=>{ const ix=panels.indexOf(api); if(ix>=0) panels.splice(ix,1); host.remove(); };
+
+    syncHeader();
+    api = { render, reset(){ zoomX=null; }, resetFilters };
+    return api;
   }
 
   function drawMatrix(){
-    const vis = visibleSeries();
+    const vis = gVisible();
     const rowsMap = new Map();
     vis.forEach(s=>s.points.forEach(p=>{ const key=p.pointName+'|'+p.coord; if(!rowsMap.has(key)) rowsMap.set(key,{pt:p.pointName,x:p.coord,vals:{}}); }));
     vis.forEach(s=>s.points.forEach(p=>{ const r=rowsMap.get(p.pointName+'|'+p.coord); if(r) r.vals[s.iterationKey]=p.uzMm; }));
     const rows=[...rowsMap.values()].sort((a,b)=>a.x-b.x);
-    const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${s.iterationKey}" title="click to highlight in both charts">${s.iterationKey}<br><span style="font-weight:400;color:#666">${s.loadingLabel} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
+    const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${s.iterationKey}" title="click to highlight this candidate in every chart">${s.iterationKey}<br><span style="font-weight:400;color:#666">${s.loadingLabel} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
     const body = rows.map(r=>`<tr><th class="k">${r.pt}</th><td>${fmt(r.x)}</td>${vis.map(s=>{const v=r.vals[s.iterationKey];return `<td${s.iterationKey===hi?' class="hi"':''}>${v==null?'—':(+v).toFixed(3)}</td>`;}).join('')}</tr>`).join('');
     document.getElementById('matrix').innerHTML = `<table><thead><tr><th class="k">Point</th><th>X [m]</th>${th}</tr></thead><tbody>${body}</tbody></table>`;
     document.querySelectorAll('#matrix thead th.ch').forEach(el=>el.onclick=()=>{ hi = (hi===el.dataset.k? null : el.dataset.k); renderAll(); });
@@ -414,20 +485,21 @@ a{color:var(--acc)}
       + (D.warnings.length>40?` … (+${D.warnings.length-40})`:'');
   }
 
-  const mw = document.getElementById('matrixWrap'), srcBtn = document.getElementById('srcBtn');
   function renderAll(){ panels.forEach(p=>p.render()); if(!mw.hidden) drawMatrix(); drawWarnings(); }
 
   if(!D.groups.length){
-    document.getElementById('panels').innerHTML='<p style="padding:20px;color:#666">No deflection results in this study.</p>';
+    panelsEl.innerHTML='<p style="padding:20px;color:#666">No deflection results in this study.</p>';
     srcBtn.hidden = true;
   } else {
-    document.querySelectorAll('#panels .panel').forEach(host=>panels.push(makePanel(host, VIEWS[+host.dataset.view])));
+    // one chart by default (the study still carries every swept dimension — re-pivot in place with the
+    // "colour by" selector, or press Duplicate to compare two side by side).
+    panels.push(makePanel(null, { vi:0, linked:true }));
   }
 
   sel.onchange=()=>{ gi=+sel.value; hi=null; panels.forEach(p=>p.reset()); renderAll(); };
   document.getElementById('legendToggle').onchange=e=>{ showLegend=e.target.checked; renderAll(); };
-  document.getElementById('showAll').onclick=()=>{ hidden.clear(); renderAll(); };
-  document.getElementById('hideAll').onclick=()=>{ if(!D.groups.length) return; grp().series.forEach(s=>hidden.add(s.iterationKey)); renderAll(); };
+  document.getElementById('showAll').onclick=()=>{ hidden.clear(); panels.forEach(p=>p.resetFilters()); renderAll(); };
+  document.getElementById('hideAll').onclick=()=>{ if(!D.groups.length) return; D.groups[gi].series.forEach(s=>hidden.add(s.iterationKey)); renderAll(); };
   document.getElementById('reset').onclick=()=>{ panels.forEach(p=>p.reset()); renderAll(); };
   function toggleSrc(show){ mw.hidden=!show; srcBtn.textContent = show?'Hide source data':'View source data'; if(show) drawMatrix(); }
   srcBtn.onclick=()=>toggleSrc(mw.hidden);

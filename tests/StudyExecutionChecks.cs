@@ -19,7 +19,7 @@ internal static class StudyExecutionChecks
         VerificationFailureNeverBecomesReady();
         PretensionFailureReturnsToBaselineAndContinues();
         StartupFailureBlocksAllDispatch();
-        ExistingOutputBlocksBeforeWorkerStartup();
+        ExistingChildModelIsReusedNotRebuilt();
         FaultedWorkerIsRemovedWhileHealthyWorkerContinues();
         CancellationStopsAtStageBoundaries();
     }
@@ -323,20 +323,40 @@ internal static class StudyExecutionChecks
         finally { DeleteRoot(root); }
     }
 
-    private static void ExistingOutputBlocksBeforeWorkerStartup()
+    private static void ExistingChildModelIsReusedNotRebuilt()
     {
         var (root, _, snapshot) = CreateSnapshot(1, 1);
         try
         {
-            var job = snapshot.Jobs.Single(candidate => candidate.RunIterate);
-            Directory.CreateDirectory(job.IterationDirectory);
-            File.WriteAllText(job.ModelFullPath, "existing");
-            var factory = new FakeHostFactory();
-            Throws(() => new StudyExecutionCoordinator(factory)
+            var factory = new FakeHostFactory(reuseHosts: true);
+            var coordinator = new StudyExecutionCoordinator(factory);
+            var first = coordinator
                 .BuildAsync(snapshot, new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None)
-                .GetAwaiter().GetResult());
-            Check(factory.CreateCount == 0 && File.ReadAllText(job.ModelFullPath) == "existing",
-                "Existing candidate output blocks before worker startup and is not overwritten");
+                .GetAwaiter().GetResult();
+            Check(first.Completed == 1 && first.Reused == 0, "First run builds the child model normally");
+
+            var job = snapshot.Jobs.Single(candidate => candidate.RunIterate);
+            var gateway = factory.Gateways.First(g => g.WorkerId == 1);
+            var childBytes = File.ReadAllBytes(job.ModelFullPath);
+            var analysisBefore = gateway.AnalysisAttempts.Count;
+            var saveAsBefore = gateway.SaveAsSources.Count;
+
+            var second = coordinator
+                .BuildAsync(snapshot, new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None)
+                .GetAwaiter().GetResult();
+
+            Check(second.Reused == 1 && second.Completed == 1 && second.Failed == 0,
+                "A second run over the same candidate reuses the existing analyzed child instead of erroring");
+            Check(gateway.SaveAsSources.Count == saveAsBefore,
+                "Reuse never re-creates the child model (no SaveAs)");
+            Check(gateway.AnalysisAttempts.Count == analysisBefore,
+                "Reusing an already-analyzed child does not re-run its analysis");
+            Check(File.ReadAllBytes(job.ModelFullPath).SequenceEqual(childBytes),
+                "The existing child .sdb is never overwritten by a reuse");
+            var studyFolder = Path.GetDirectoryName(job.IterationDirectory)!;
+            Check(File.Exists(Path.Combine(studyFolder, "Deflection_Results_Source.xlsx")) &&
+                  File.Exists(Path.Combine(studyFolder, "Deflection_Report.html")),
+                "Reused candidates are still consolidated into the deflection source workbook and report");
         }
         finally { DeleteRoot(root); }
     }
@@ -484,17 +504,22 @@ internal static class StudyExecutionChecks
         int failStartId = 0,
         int failRuntimeId = 0,
         string? corruptIterationId = null,
-        string? failAnalysisIterationId = null) : ISapInstanceHostFactory
+        string? failAnalysisIterationId = null,
+        bool reuseHosts = false) : ISapInstanceHostFactory
     {
+        private readonly ConcurrentDictionary<int, FakeHost> cache = new();
         public ConcurrentBag<FakeGateway> Gateways { get; } = [];
         public int CreateCount;
         public ISapInstanceHost Create(int instanceId)
         {
+            if (reuseHosts && cache.TryGetValue(instanceId, out var existing)) return existing;
             Interlocked.Increment(ref CreateCount);
             var gateway = new FakeGateway(instanceId, failRuntimeId == instanceId,
                 corruptIterationId, failAnalysisIterationId);
             Gateways.Add(gateway);
-            return new FakeHost(instanceId, gateway, failStartId == instanceId);
+            var host = new FakeHost(instanceId, gateway, failStartId == instanceId);
+            if (reuseHosts) cache[instanceId] = host;
+            return host;
         }
     }
 
