@@ -99,6 +99,7 @@ public sealed class SapResultExtractor
         double? loadLevel = combo.Count == 1 ? combo[0].Qz : null;
         var loadingLabel = combo.Count == 0 ? job.LoadingCandidateId
             : string.Join(" + ", combo.Select(l => $"{l.Name} {l.Qz:0.###} kPa"));
+        var loadComponents = combo.Select(l => new LoadComponentDto(l.Name, l.Qz)).ToArray();
 
         var forces = job.Pretension.Assignments.Select(a => a.TargetForce).Distinct().ToArray();
         double? pretension = forces.Length == 1 ? forces[0] : null;
@@ -113,7 +114,7 @@ public sealed class SapResultExtractor
 
         return new CandidateParametersDto(
             job.RunIndex, job.IterationId, job.LoadingCandidateId, job.HeightCandidateId, job.PretensionCandidateId,
-            loadLevel, loadingLabel, job.Height.Height, job.Height.DeltaH, pretension, pretensionLabel, cables);
+            loadLevel, loadingLabel, job.Height.Height, job.Height.DeltaH, pretension, pretensionLabel, cables, loadComponents);
     }
 
     private static ResultWarningDto Warn(StudyIterationExecutionDto job, string category, ResultWarningSeverity severity, string message) =>

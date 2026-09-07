@@ -124,6 +124,7 @@ public sealed class DeflectionReportGenerator
                     viewSpecs.Select(vs => vs.Dash.Key(r.Parameters)).ToArray(),
                     viewSpecs.Select(vs => vs.Filter?.Key(r.Parameters) ?? "").ToArray(),
                     (r.Parameters.PretensionCables ?? []).Select(c => new PretensionCableEntryDto(c.CableName, c.TargetForceKN)).ToArray(),
+                    (r.Parameters.LoadingComponents ?? []).Select(c => new LoadComponentEntryDto(c.PatternName, c.LevelKPa)).ToArray(),
                     g.Points.OrderBy(p => p.Sequence).Select(p => new DeflectionPointDto(
                         p.PointName, Axis(p, g.ProfileAxis), p.UzMm, p.Sequence, p.Status.ToString())).ToArray()));
             }
@@ -168,7 +169,7 @@ public sealed class DeflectionReportGenerator
     <p class="intro">Each line is one study candidate: the vertical deflection U<sub>z</sub> [mm] of every monitored
       point plotted against its position X [m] along the truss span, under the selected result load case.
       <b>Colour</b> = load candidate · <b>line style</b> = truss height · <b>marker</b> = pretension candidate.
-      See the <i>Candidate key</i> below for what each L## / H## / P## means.</p>
+      See <i>Candidate definitions</i> below for what each L## / H## / P## is.</p>
   </div>
   <details class="lib"><summary>Result Library</summary>
     <ul>
@@ -203,7 +204,7 @@ public sealed class DeflectionReportGenerator
   </section>
 </template>
 <div id="tip" hidden></div>
-<details id="candKey" open><summary>Candidate key — what L## / H## / P## mean</summary><div id="candKeyBody"></div></details>
+<details id="candKey" open><summary>Candidate definitions — what each L## / H## / P## is</summary><div id="candKeyBody"></div></details>
 <div id="matrixWrap" hidden>
   <div class="mhdr"><strong>Source Data Matrix</strong><button id="mClose">Close</button></div>
   <div id="matrix"></div>
@@ -363,9 +364,14 @@ a{color:var(--acc)}
     const body = document.getElementById('candKeyBody');
     const bySeries = id => allSeries.find(s => s.loadId===id || s.heightId===id || s.pretensionId===id);
     const dashOf = k => { const v = (D.views[0].dashLegend.find(e=>e.key===k)||{}).value; return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
-    const L = `<div class="grp"><h5>Load candidate — colour</h5>` + CAND.L.map((o,i)=>{
-      const col = (D.views[0].colorLegend.find(e=>e.key===bySeries(o.id).colorKeys[0])||{}).value || '#9aa0a6';
-      return `<div class="kr"><span class="ksw" style="border-top-color:${col}"></span><span class="kid">${o.id}</span>${esc(o.label.replace(o.id+' · ',''))}</div>`; }).join('') + `</div>`;
+    const L = `<div class="grp"><h5>Load candidate — colour</h5>` + CAND.L.map((o)=>{
+      const s = bySeries(o.id);
+      const col = (D.views[0].colorLegend.find(e=>e.key===s.colorKeys[0])||{}).value || '#9aa0a6';
+      const lc = s.loadingComponents || [];
+      const val = lc.length
+        ? lc.map(c=>`${esc(c.pattern)} = ${(+c.levelKPa).toFixed(2)} kPa`).join(' · ')
+        : esc(o.label.replace(o.id+' · ',''));
+      return `<div class="kr"><span class="ksw" style="border-top-color:${col}"></span><span class="kid">${o.id}</span><span class="kval">${val}</span></div>`; }).join('') + `</div>`;
     const H = `<div class="grp"><h5>Truss height — line</h5>` + CAND.H.map(o=>{
       const s = bySeries(o.id);
       return `<div class="kr"><span class="ksw" style="border-top-style:${dashOf(s.dashKeys[0])};border-top-color:#444"></span><span class="kid">${o.id}</span>${esc(o.label.replace(o.id+' · ',''))}${s.deltaHM!=null?` (ΔH ${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)} m)`:''}</div>`; }).join('') + `</div>`;
