@@ -146,6 +146,11 @@ public sealed class StudyIteration : Observable
     }
     public string PretensionAssignmentDetails => string.Join("; ", PretensionAssignments.Select(assignment =>
         $"{assignment.CableName} @ {assignment.LoadPattern} = {assignment.TargetForce:0.###} kN"));
+    public string HeightAssignmentText =>
+        $"{HeightCandidateId} · ΔH {HeightCandidate.DeltaH:+0.###;-0.###;0} m · {HeightCandidate.Height:0.###} m";
+    public string HeightAssignmentDetails =>
+        $"{HeightCandidateId}: truss height {HeightCandidate.Height:0.###} m (ΔH {HeightCandidate.DeltaH:+0.###;-0.###;0} m from baseline)"
+        + (string.IsNullOrWhiteSpace(HeightCandidate.Reference) ? "" : $"; ref {HeightCandidate.Reference}");
 
     public bool RunIterate { get => runIterate; set => Set(ref runIterate, value); }
     public StudyIterationStatus Status

@@ -483,11 +483,11 @@
           <StackPanel.Resources>
            <Style x:Key="NoteFx" TargetType="c:LatexTextBlock" BasedOn="{StaticResource Formula}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Style>
           </StackPanel.Resources>
-          <StackPanel Orientation="Horizontal" Margin="0,0,0,1"><c:LatexTextBlock Formula="N_L" Style="{StaticResource NoteFx}"/><TextBlock Text="  = Loading candidates (Tab 01)" Foreground="{StaticResource Muted}" FontSize="10.5" VerticalAlignment="Center"/></StackPanel>
-          <StackPanel Orientation="Horizontal" Margin="0,0,0,1"><c:LatexTextBlock Formula="N_H" Style="{StaticResource NoteFx}"/><TextBlock Text="  = Truss-height candidates (Tab 02)" Foreground="{StaticResource Muted}" FontSize="10.5" VerticalAlignment="Center"/></StackPanel>
-          <StackPanel Orientation="Horizontal" Margin="0,0,0,2"><c:LatexTextBlock Formula="N_P" Style="{StaticResource NoteFx}"/><TextBlock Text="  = Pretension candidates (Tab 03)" Foreground="{StaticResource Muted}" FontSize="10.5" VerticalAlignment="Center"/></StackPanel>
-          <TextBlock Foreground="{StaticResource Muted}" FontSize="10.5" TextWrapping="Wrap">
-           <Run Text="Study space = the product of the dimensions the selected mode sweeps; a fixed dimension counts as 1. Cables set to "/><Run FontStyle="Italic" Text="Same As"/><Run Text=" another cable do not add to "/><Run FontStyle="Italic" Text="N"/><Run Text="p."/>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,1"><c:LatexTextBlock Formula="N_L" Style="{StaticResource NoteFx}"/><TextBlock Text="  L01, L02, …  —  loading candidates from Tab 01 (joint loads per pattern)" Foreground="{StaticResource Muted}" FontSize="10.5" VerticalAlignment="Center"/></StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,1"><c:LatexTextBlock Formula="N_H" Style="{StaticResource NoteFx}"/><TextBlock Text="  H01, H02, …  —  truss-height candidates from Tab 02 (ΔH from baseline)" Foreground="{StaticResource Muted}" FontSize="10.5" VerticalAlignment="Center"/></StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,2"><c:LatexTextBlock Formula="N_P" Style="{StaticResource NoteFx}"/><TextBlock Text="  P01, P02, …  —  pretension candidates from Tab 03 (cable target forces)" Foreground="{StaticResource Muted}" FontSize="10.5" VerticalAlignment="Center"/></StackPanel>
+          <TextBlock Foreground="{StaticResource Muted}" FontSize="10.5" TextWrapping="Wrap" Margin="0,2,0,0">
+           <Run Text="Each row of the preview is one study model, named "/><Run FontFamily="Consolas" Text="L##_H##_P##"/><Run Text=" — e.g. "/><Run FontFamily="Consolas" Text="L02_H01_P03"/><Run Text=" combines loading candidate 2, truss-height candidate 1 and pretension candidate 3. Study space = the product of the dimensions the selected mode sweeps; a fixed dimension counts as 1. Cables set to "/><Run FontStyle="Italic" Text="Same As"/><Run Text=" another cable do not add to "/><Run FontStyle="Italic" Text="N"/><Run Text="P" BaselineAlignment="Subscript" FontSize="8"/><Run Text="."/>
           </TextBlock>
          </StackPanel>
          </StackPanel>
@@ -544,14 +544,14 @@
           <DataGridTextColumn Header="SAP Model Name" Binding="{Binding SapModelName}" IsReadOnly="True" Width="180" MinWidth="160">
            <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding ModelFullPath}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
-          <DataGridTextColumn Header="Joint Loads" Binding="{Binding LoadingAssignmentText}" IsReadOnly="True" Width="120" MinWidth="110">
+          <DataGridTextColumn Header="Loading · L##" Binding="{Binding LoadingAssignmentText}" IsReadOnly="True" Width="140" MinWidth="120">
            <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding LoadingAssignmentDetails}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
-          <DataGridTextColumn Header="Cable Target Force" Binding="{Binding PretensionAssignmentText}" IsReadOnly="True" Width="145" MinWidth="135">
-           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding PretensionAssignmentDetails}"/></Style></DataGridTextColumn.ElementStyle>
+          <DataGridTextColumn Header="Truss height · H##" Binding="{Binding HeightAssignmentText}" IsReadOnly="True" Width="150" MinWidth="124">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding HeightAssignmentDetails}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
-          <DataGridTextColumn Header="Height" Binding="{Binding HeightCandidateId}" IsReadOnly="True" Width="74" MinWidth="68">
-           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="ToolTip" Value="{Binding Description}"/></Style></DataGridTextColumn.ElementStyle>
+          <DataGridTextColumn Header="Pretension · P##" Binding="{Binding PretensionAssignmentText}" IsReadOnly="True" Width="170" MinWidth="140">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding PretensionAssignmentDetails}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
           <DataGridTextColumn Header="Worker" Binding="{Binding WorkerText}" IsReadOnly="True" Width="56" MinWidth="52"/>
           <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" IsReadOnly="True" Width="105" MinWidth="92">
