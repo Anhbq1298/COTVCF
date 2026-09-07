@@ -260,6 +260,7 @@ button{cursor:pointer}button:hover{background:var(--su)}
 .legend h4{margin:8px 0 4px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
 .legend .hint2{font-weight:400;text-transform:none;letter-spacing:0;color:#9aa0a6;font-size:9.5px}
 .legend .row{display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer}
+.legend .lcb{flex:none;margin:0 2px 0 0;cursor:pointer}
 .legend .row.key:hover,.legend .row.dkey:hover,.legend .row.pkey:hover{background:#f0f3f7;border-radius:2px}
 .legend .fdot{width:8px;height:8px;border-radius:50%;background:#9aa0a6;flex:none;margin:0 8px 0 8px}
 .legend .row.off{opacity:.35}
@@ -475,7 +476,8 @@ a{color:var(--acc)}
     let localGi = init.gi != null ? init.gi : gi;
     let localGroupSet = init.gi != null;   // a copy carries its own group/case; a linked panel follows the toolbar until its "case:" selector is touched
     let localHidden = new Set(init.hidden || hidden);
-    let zoomX = null, hiSel = null, api;
+    let zoomX = null, api;
+    const hiSel = new Set();   // multi-select highlight: "c:L01" / "d:H02" / "p:P01" — tick legend rows to add/remove
     // per-panel candidate filter + editable name
     const selL = new Set(init.selL||[]), selH = new Set(init.selH||[]), selP = new Set(init.selP||[]);
     let name = init.name || null, nameEdited = !!init.name;
@@ -490,13 +492,14 @@ a{color:var(--acc)}
     // in scope after this panel's L/H/P filter, then the per-candidate show/hide
     const scoped = () => grp().series.filter(passes);
     const visible = () => scoped().filter(s=>!curHidden().has(s.iterationKey));
-    const emph = s => (hi && s.iterationKey===hi) || (hiSel && keyForDim(hiSel.dim,s)===hiSel.key);
-    const anyEmph = () => hi!=null || hiSel!=null;
+    const emph = s => (hi && s.iterationKey===hi)
+      || hiSel.has('c:'+colorKey(s)) || hiSel.has('d:'+dashKey(s)) || hiSel.has('p:'+s.pretensionId);
+    const anyEmph = () => hi!=null || hiSel.size>0;
     const xExtent = () => { const xs=grp().series.flatMap(s=>s.points.filter(p=>p.uzMm!=null).map(p=>p.coord)); return xs.length?[Math.min(...xs),Math.max(...xs)]:[0,1]; };
 
     function afterMutate(){ render(); if(!mw.hidden) drawMatrix(); }
     // legend colour / line row click: highlight that whole group (dim the rest). Click again to clear.
-    function toggleHiSel(dim,k){ hiSel = (hiSel && hiSel.dim===dim && hiSel.key===k) ? null : {dim,key:k}; hi=null; render(); }
+    function toggleHiSel(dim,k){ const t=dim+':'+k; hiSel.has(t)?hiSel.delete(t):hiSel.add(t); hi=null; render(); if(!mw.hidden) drawMatrix(); }
     function toggleCand(k){ const H=curHidden(); H.has(k)?H.delete(k):H.add(k); afterMutate(); }
     function filtSummary(){ return [selL.size&&`${selL.size} L`, selH.size&&`${selH.size} H`, selP.size&&`${selP.size} P`].filter(Boolean).join(' · '); }
 
@@ -531,7 +534,7 @@ a{color:var(--acc)}
         groupNames.forEach(n=>{ const o=new Option(n, n); if(n===grp().groupName) o.selected=true; gs.add(o); });
         gs.onchange=()=>{ const i=D.groups.findIndex(g=>g.groupName===gs.value && g.outputCase===grp().outputCase);
           localGi = i>=0 ? i : D.groups.findIndex(g=>g.groupName===gs.value); localGroupSet=true;
-          hiSel=null; zoomX=null; syncHeader(); render(); };
+          hiSel.clear(); zoomX=null; syncHeader(); render(); };
         ctlEl.append(gs);
       }
       // load-case selector — pick which result load case this chart's Uz is read under.
@@ -539,21 +542,21 @@ a{color:var(--acc)}
         const cs=document.createElement('select'); cs.title='Result load case for this chart';
         D.groups.forEach((g,i)=>{ if(g.groupName!==grp().groupName) return;
           const o=new Option(`case: ${g.outputCase}`, i); if(i===curGi()) o.selected=true; cs.add(o); });
-        cs.onchange=()=>{ localGi=+cs.value; localGroupSet=true; hiSel=null; zoomX=null; syncHeader(); render(); };
+        cs.onchange=()=>{ localGi=+cs.value; localGroupSet=true; hiSel.clear(); zoomX=null; syncHeader(); render(); };
         ctlEl.append(cs);
       }
       // relationship (colour × line) selector.
       if(D.views.length > 1){
         const vs=document.createElement('select'); vs.title='Which relationship this chart plots';
         D.views.forEach((v,i)=>{ const o=new Option(`view: ${viewLabel(v)}`, i); if(i===vi) o.selected=true; vs.add(o); });
-        vs.onchange=()=>{ vi=+vs.value; hiSel=null; zoomX=null; syncHeader(); render(); };
+        vs.onchange=()=>{ vi=+vs.value; hiSel.clear(); zoomX=null; syncHeader(); render(); };
         ctlEl.append(vs);
       }
       // per-chart candidate filter (L / H / P) — multi-select, empty = all.
       ctlEl.append(
-        buildMS('L', CAND.L, selL, ()=>{ hiSel=null; render(); if(!mw.hidden) drawMatrix(); }),
-        buildMS('H', CAND.H, selH, ()=>{ hiSel=null; render(); if(!mw.hidden) drawMatrix(); }),
-        buildMS('P', CAND.P, selP, ()=>{ hiSel=null; render(); if(!mw.hidden) drawMatrix(); }));
+        buildMS('L', CAND.L, selL, ()=>{ hiSel.clear(); render(); if(!mw.hidden) drawMatrix(); }),
+        buildMS('H', CAND.H, selH, ()=>{ hiSel.clear(); render(); if(!mw.hidden) drawMatrix(); }),
+        buildMS('P', CAND.P, selP, ()=>{ hiSel.clear(); render(); if(!mw.hidden) drawMatrix(); }));
     }
 
     function render(){
@@ -611,38 +614,44 @@ a{color:var(--acc)}
       const showDash = V.dashDimension !== V.colorDimension && V.dashLegend.length > 1;
       // legend lists only values that survive the global L / H / P filter
       const present = keyOf => new Set(inScope.map(keyOf));
-      const selMark = (dim,k) => (hiSel && hiSel.dim===dim && hiSel.key===k) ? ' hi' : (hiSel && ' off' || '');
-      h.push(`<h4>${V.colorDimension} — colour <span class="hint2">click = highlight</span></h4>`);
+      const selMark = (dim,k) => hiSel.has(dim+':'+k) ? ' hi' : (hiSel.size ? ' off' : '');
+      const cb = on => `<input type="checkbox" class="lcb"${on?' checked':''}>`;
+      h.push(`<h4>${V.colorDimension} — colour <span class="hint2">tick = highlight (multi)</span></h4>`);
       const cp = present(colorKey);
       V.colorLegend.filter(e=>cp.has(e.key)).forEach(e=>{
-        h.push(`<div class="row key${selMark('c',e.key)}" data-k="${e.key}"><span class="sw" style="border-top-color:${e.value}"></span>${e.label}</div>`); });
+        h.push(`<div class="row key${selMark('c',e.key)}" data-k="${e.key}">${cb(hiSel.has('c:'+e.key))}<span class="sw" style="border-top-color:${e.value}"></span>${e.label}</div>`); });
       // LINE section — only when the line dimension is NOT pretension (pretension is shown as a marker below)
       if(showDash && !V.dashMarkers){
-        h.push(`<h4>${V.dashDimension} — line <span class="hint2">click = highlight</span></h4>`);
+        h.push(`<h4>${V.dashDimension} — line <span class="hint2">tick = highlight (multi)</span></h4>`);
         const dp = present(dashKey);
         V.dashLegend.filter(e=>dp.has(e.key)).forEach(e=>{
-          h.push(`<div class="row dkey${selMark('d',e.key)}" data-k="${e.key}"><span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${e.label}</div>`); });
+          h.push(`<div class="row dkey${selMark('d',e.key)}" data-k="${e.key}">${cb(hiSel.has('d:'+e.key))}<span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${e.label}</div>`); });
       }
       // PRETENSION MARKER section — always present when the study sweeps more than one pretension candidate
       if(P_ON){
         const pPresent = new Set(inScope.map(s=>s.pretensionId));
-        h.push(`<h4>Pretension candidate — marker <span class="hint2">click = highlight</span></h4>`);
+        h.push(`<h4>Pretension candidate — marker <span class="hint2">tick = highlight (multi)</span></h4>`);
         CAND.P.filter(o=>pPresent.has(o.id)).forEach((o,i)=>{
           const shape = MSHAPES[P_IDS.indexOf(o.id) % MSHAPES.length];
-          h.push(`<div class="row pkey${selMark('p',o.id)}" data-k="${o.id}"><svg class="mk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(shape,11,9,5.6,"#555",1)}</svg>${o.label}</div>`); });
+          h.push(`<div class="row pkey${selMark('p',o.id)}" data-k="${o.id}">${cb(hiSel.has('p:'+o.id))}<svg class="mk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(shape,11,9,5.6,"#555",1)}</svg>${o.label}</div>`); });
       }
-      h.push(`<h4>Candidates <span class="hint2">${inScope.length}/${grp().series.length} in scope · click = show/hide</span></h4>`);
-      inScope.forEach(s=>{ const off=curHidden().has(s.iterationKey)?' off':'', on=s.iterationKey===hi?' hi':'';
+      h.push(`<h4>Candidates <span class="hint2">${inScope.length}/${grp().series.length} in scope · tick = show</span></h4>`);
+      inScope.forEach(s=>{ const shown=!curHidden().has(s.iterationKey), off=shown?'':' off', on=s.iterationKey===hi?' hi':'';
         const col = legendColor(V.colorLegend, colorKey(s));
         const swatch = P_ON
           ? `<svg class="mk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(pShape(s),11,9,5.2,col,1)}</svg>`
           : `<span class="sw" style="border-top-color:${col};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>`;
-        h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}" title="${esc(s.iterationKey)} · ${esc(s.loadingLabel)} · H ${(+s.trussHeightM).toFixed(2)} m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}">${swatch}${s.iterationKey}</div>`); });
+        h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}" title="${esc(s.iterationKey)} · ${esc(s.loadingLabel)} · H ${(+s.trussHeightM).toFixed(2)} m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}">${cb(shown)}${swatch}${s.iterationKey}</div>`); });
       legendEl.innerHTML = h.join('');
-      legendEl.querySelectorAll('.row.key').forEach(r=>r.onclick=()=>toggleHiSel('c', r.dataset.k));
-      legendEl.querySelectorAll('.row.dkey').forEach(r=>r.onclick=()=>toggleHiSel('d', r.dataset.k));
-      legendEl.querySelectorAll('.row.pkey').forEach(r=>r.onclick=()=>toggleHiSel('p', r.dataset.k));
-      legendEl.querySelectorAll('.row.cand').forEach(r=>r.onclick=()=>toggleCand(r.dataset.k));
+      const wire = (cls, fn) => legendEl.querySelectorAll('.row.'+cls).forEach(r=>{
+        const act = () => fn(r.dataset.k);
+        r.onclick = act;
+        const box = r.querySelector('.lcb'); if(box) box.onclick = e => { e.stopPropagation(); act(); };
+      });
+      wire('key',  k => toggleHiSel('c', k));
+      wire('dkey', k => toggleHiSel('d', k));
+      wire('pkey', k => toggleHiSel('p', k));
+      wire('cand', k => toggleCand(k));
     }
 
     chart.addEventListener('mousemove',ev=>{

@@ -40,24 +40,31 @@ public sealed class StudyValidationService
                 Error("Pretension Setup", $"{cable.CableName} has an invalid candidate definition.");
             if (string.IsNullOrWhiteSpace(cable.LoadPattern) || !state.LoadPatterns.Contains(cable.LoadPattern, StringComparer.OrdinalIgnoreCase))
                 Error("Pretension Setup", $"Load pattern {cable.LoadPattern} does not exist in the connected model. Cable target force assignments require a load pattern, not an analysis load case.");
-            if (!string.IsNullOrEmpty(cable.SameAsCableName) &&
-                !state.Cables.Any(o => !ReferenceEquals(o, cable) &&
-                    o.CableName.Equals(cable.SameAsCableName, StringComparison.OrdinalIgnoreCase) &&
-                    string.IsNullOrEmpty(o.SameAsCableName) && string.IsNullOrEmpty(o.SameStepCableName)))
-                Warn("Pretension Setup", $"{cable.CableName}: 'Same As' cable '{cable.SameAsCableName}' is not an independent cable — it will run as an independent axis.");
-            if (!string.IsNullOrEmpty(cable.SameStepCableName))
+            if (cable.SyncMode != COT_VCF.Domain.CableSyncMode.Independent)
             {
-                var leader = state.Cables.FirstOrDefault(o => !ReferenceEquals(o, cable) &&
-                    o.CableName.Equals(cable.SameStepCableName, StringComparison.OrdinalIgnoreCase) &&
-                    string.IsNullOrEmpty(o.SameAsCableName) && string.IsNullOrEmpty(o.SameStepCableName));
-                if (leader is null)
-                    Warn("Pretension Setup", $"{cable.CableName}: 'Same Step' cable '{cable.SameStepCableName}' is not an independent cable — it will run as an independent axis.");
-                else if (!cable.ApplyRange)
-                    Error("Pretension Setup", $"{cable.CableName}: 'Same Step' needs its own Min / Max / Step range.");
-                else if (cable.CandidateCount != leader.CandidateCount)
-                    Error("Pretension Setup", $"{cable.CableName}: 'Same Step' must sweep the same number of steps as {leader.CableName} ({cable.CandidateCount} vs {leader.CandidateCount}).");
+                var word = cable.SyncMode == COT_VCF.Domain.CableSyncMode.SameStep ? "Same Step" : "Same Values";
+                var reference = state.Cables.FirstOrDefault(o => !ReferenceEquals(o, cable) &&
+                    o.CableName.Equals(cable.ReferenceCableName, StringComparison.OrdinalIgnoreCase));
+                if (string.IsNullOrEmpty(cable.ReferenceCableName))
+                    Error("Pretension Setup", $"{cable.CableName}: '{word}' needs a reference cable.");
+                else if (reference is null)
+                    Error("Pretension Setup", $"{cable.CableName}: '{word}' reference cable '{cable.ReferenceCableName}' does not exist.");
+                else if (reference.SyncMode != COT_VCF.Domain.CableSyncMode.Independent)
+                    Error("Pretension Setup", $"{cable.CableName}: '{word}' must reference an Independent cable, but {reference.CableName} is itself synced.");
+                else if (cable.SyncMode == COT_VCF.Domain.CableSyncMode.SameStep)
+                {
+                    if (!cable.ApplyRange && reference.CandidateCount != 1)
+                        Error("Pretension Setup", $"{cable.CableName}: 'Same Step' needs its own Min / Max / Step range.");
+                    else if (cable.CandidateCount != reference.CandidateCount)
+                        Error("Pretension Setup", $"{cable.CableName} cannot use Same Step with {reference.CableName}: {reference.CableName} has {reference.CandidateCount} step(s), {cable.CableName} has {cable.CandidateCount}. Same Step cables must generate the same number of values.");
+                }
             }
+            else if (Application.PretensionCandidates.FollowersOf(cable, state.Cables) is { Count: > 0 } deps
+                     && cable.CandidateCount <= 0)
+                Error("Pretension Setup", $"{cable.CableName} is a Sync reference for {string.Join(", ", deps.Select(d => d.CableName))} but has no valid candidates.");
         }
+        if (Application.PretensionCandidates.FindCycle(state.Cables) is { Count: > 0 } cycle)
+            Error("Pretension Setup", $"Circular cable Sync reference: {string.Join(" → ", cycle)} → {cycle[0]}. Set one cable back to Independent.");
 
         if (state.Study.Mode == IterationStudyMode.FixHeight &&
             !composition.HeightCandidates.Any(c => c.Id == state.Study.FixedHeightCandidateId))

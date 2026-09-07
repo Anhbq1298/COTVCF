@@ -161,6 +161,19 @@ public sealed class TrussHeightConfiguration : Observable
 // One selected SAP2000 cable and its candidate PRETENSION target-force definition (Fixed or Range).
 // Editing this never touches SAP2000 — values are candidate definitions only.
 public sealed record PretensionCombination(long CombinationIndex, IReadOnlyDictionary<string, double> CableForces);
+
+/// <summary>How a cable's pretension candidates relate to another cable.</summary>
+public enum CableSyncMode
+{
+    /// <summary>Own range / fixed value; one axis of the pretension Cartesian product.</summary>
+    Independent,
+    /// <summary>Follows the exact candidate values of an independent reference cable. Adds no axis.</summary>
+    SameValues,
+    /// <summary>Keeps its own Min / Max / Step range, but its candidate index is zipped to an independent
+    /// reference cable (candidate j pairs with the reference's candidate j). Adds no axis.</summary>
+    SameStep
+}
+
 public sealed class CablePretensionConfig : Observable, IDataErrorInfo
 {
     public const string PretensionLoadCase = "PRETENSION";
@@ -183,55 +196,61 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
 
     private bool applyRange, missing;
     private double? targetForce = 0, minForce, maxForce, stepForce;
-    private string? sameAsCableName, sameStepCableName;
+    private CableSyncMode syncMode = CableSyncMode.Independent;
+    private string? referenceCableName;
 
-    /// <summary>"Same As" — this cable mirrors the named leader's <b>exact</b> Min / Max / Step sweep. Its own
-    /// force fields are ignored. It adds no independent study axis (keeps the pretension count at the leader's,
-    /// not the Cartesian product). Mutually exclusive with <see cref="SameStepCableName"/>.</summary>
-    public string? SameAsCableName
+    /// <summary>Independent / Same Values / Same Step. See <see cref="CableSyncMode"/>. Setting Independent
+    /// clears <see cref="ReferenceCableName"/>.</summary>
+    public CableSyncMode SyncMode
     {
-        get => sameAsCableName;
+        get => syncMode;
+        set
+        {
+            if (!Set(ref syncMode, value)) return;
+            if (value == CableSyncMode.Independent && referenceCableName is not null)
+            { referenceCableName = null; Notify(nameof(ReferenceCableName)); }
+            NotifySyncState();
+        }
+    }
+    /// <summary>The independent cable this one follows (for Same Values / Same Step). Never itself.</summary>
+    public string? ReferenceCableName
+    {
+        get => referenceCableName;
         set
         {
             var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-            if (!Set(ref sameAsCableName, v)) return;
-            if (v is not null && sameStepCableName is not null) { sameStepCableName = null; Notify(nameof(SameStepCableName)); }
-            NotifyFollowerState();
+            if (v is not null && string.Equals(v, CableName, StringComparison.OrdinalIgnoreCase)) v = null;
+            if (!Set(ref referenceCableName, v)) return;
+            NotifySyncState();
         }
     }
-    /// <summary>"Same Step" — this cable keeps its <b>own</b> Min / Max / Step range but is zipped to the named
-    /// leader by step index: candidate j of this cable pairs with candidate j of the leader. Requires the same
-    /// number of steps as the leader. Adds no independent axis. Mutually exclusive with <see cref="SameAsCableName"/>.</summary>
-    public string? SameStepCableName
+    private void NotifySyncState()
     {
-        get => sameStepCableName;
-        set
-        {
-            var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-            if (!Set(ref sameStepCableName, v)) return;
-            if (v is not null && sameAsCableName is not null) { sameAsCableName = null; Notify(nameof(SameAsCableName)); }
-            NotifyFollowerState();
-        }
-    }
-    private void NotifyFollowerState()
-    {
-        Notify(nameof(IsSameAsFollower)); Notify(nameof(IsSameStepFollower));
-        Notify(nameof(IsFollower)); Notify(nameof(NotFollower));
-        Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange)); Notify(nameof(CanToggleRange));
-        Notify(nameof(CanEditSameAs)); Notify(nameof(CanEditSameStep));
+        Notify(nameof(IsIndependent)); Notify(nameof(IsSameValuesFollower)); Notify(nameof(IsSameStepFollower));
+        Notify(nameof(IsFollower)); Notify(nameof(NotFollower)); Notify(nameof(SyncSummary));
+        Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange)); Notify(nameof(CanToggleRange)); Notify(nameof(CanPickReference));
         Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status));
     }
 
-    public bool IsSameAsFollower => !string.IsNullOrEmpty(sameAsCableName);
-    public bool IsSameStepFollower => !string.IsNullOrEmpty(sameStepCableName);
-    /// <summary>Any lock-step follower ("Same As" or "Same Step") — contributes no independent axis.</summary>
-    public bool IsFollower => IsSameAsFollower || IsSameStepFollower;
+    public bool IsIndependent => syncMode == CableSyncMode.Independent;
+    public bool IsSameValuesFollower => syncMode == CableSyncMode.SameValues && !string.IsNullOrEmpty(referenceCableName);
+    public bool IsSameStepFollower => syncMode == CableSyncMode.SameStep && !string.IsNullOrEmpty(referenceCableName);
+    /// <summary>Any lock-step follower (Same Values or Same Step) — contributes no independent axis.</summary>
+    public bool IsFollower => IsSameValuesFollower || IsSameStepFollower;
     public bool NotFollower => !IsFollower;
+
     public bool CanEditTarget => IsFixed && !IsFollower;
-    public bool CanEditRange => applyRange && !IsSameAsFollower;   // a Same Step follower edits its own range
-    public bool CanToggleRange => !IsSameAsFollower;
-    public bool CanEditSameAs => !IsSameStepFollower;
-    public bool CanEditSameStep => !IsSameAsFollower;
+    public bool CanEditRange => applyRange && !IsSameValuesFollower;   // a Same Step follower edits its own range
+    public bool CanToggleRange => !IsSameValuesFollower;
+    public bool CanPickReference => syncMode != CableSyncMode.Independent;
+
+    /// <summary>Compact grid text for the Sync column.</summary>
+    public string SyncSummary => syncMode switch
+    {
+        CableSyncMode.SameValues => referenceCableName is { } r ? $"= {r}" : "Same Values · pick cable",
+        CableSyncMode.SameStep => referenceCableName is { } r ? $"Step · {r}" : "Same Step · pick cable",
+        _ => "Independent"
+    };
 
     public bool ApplyRange
     {
@@ -254,18 +273,24 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     public double? StepForce { get => stepForce; set { if (Set(ref stepForce, value)) Recount(); } }
     private void Recount() { Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status)); }
 
-    /// <summary>Grid display for the Candidates column: "lockstep" for a follower, else the candidate count.</summary>
-    public string CandidateSummary => IsFollower ? "lockstep" : CandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    /// <summary>Grid display for the Candidates column: "linked" (Same Values), "lockstep" (Same Step),
+    /// else the independent candidate count.</summary>
+    public string CandidateSummary => syncMode switch
+    {
+        CableSyncMode.SameValues => "linked",
+        CableSyncMode.SameStep => "lockstep",
+        _ => CandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+    };
 
     // Efficient count — never allocates the value list (spec: do not materialise just to count).
     public int CandidateCount
     {
         get
         {
-            // "Same As" mirrors its leader's sweep exactly; its own force fields are ignored, so report 1.
-            // "Same Step" keeps its own real Min / Max / Step count (needed to check it matches the leader's);
+            // Same Values mirrors its reference's sweep exactly; its own force fields are ignored, so report 1.
+            // Same Step keeps its own real Min / Max / Step count (needed to check it matches the reference's);
             // it is still excluded from the Cartesian product by PretensionCandidates.Leaders().
-            if (IsSameAsFollower) return 1;
+            if (IsSameValuesFollower) return 1;
             if (!applyRange)
                 return targetForce is double t && double.IsFinite(t) ? 1 : 0;
             if (minForce is not double min || maxForce is not double max || stepForce is not double step
