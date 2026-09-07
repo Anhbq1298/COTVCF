@@ -68,11 +68,11 @@ public static class PretensionCandidates
         foreach (var start in cables)
         {
             var path = new List<string>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var node = start.CableName;
             while (node is not null && refOf.TryGetValue(node, out var next))
             {
-                if (!seen.Add(node)) { path.Add(node); return path.SkipWhile(p => !p.Equals(node, StringComparison.OrdinalIgnoreCase)).ToList(); }
+                int at = path.FindIndex(p => p.Equals(node, StringComparison.OrdinalIgnoreCase));
+                if (at >= 0) return path.Skip(at).ToList();   // node repeats → cycle is path[at..]
                 path.Add(node);
                 node = next;
             }

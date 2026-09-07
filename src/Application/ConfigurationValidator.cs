@@ -22,27 +22,23 @@ public sealed class ConfigurationValidator
             else if (c.CandidateCount <= 0)
                 issues.Add(new("Cable pretension", $"{c.CableName}: {(c.ApplyRange ? "review Min / Max / Step force." : "enter a target force.")}"));
 
-            if (!string.IsNullOrEmpty(c.SameAsCableName))
+            if (c.SyncMode != CableSyncMode.Independent)
             {
-                var leader = cableList.FirstOrDefault(o => !ReferenceEquals(o, c) &&
-                    o.CableName.Equals(c.SameAsCableName, StringComparison.OrdinalIgnoreCase));
-                if (leader is null)
-                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same As' cable {c.SameAsCableName} does not exist.", ValidationSeverity.Warning));
-                else if (!string.IsNullOrEmpty(leader.SameAsCableName) || !string.IsNullOrEmpty(leader.SameStepCableName))
-                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same As' must reference an independent cable, but {leader.CableName} follows another. Treated as independent.", ValidationSeverity.Warning));
-            }
-            if (!string.IsNullOrEmpty(c.SameStepCableName))
-            {
-                var leader = cableList.FirstOrDefault(o => !ReferenceEquals(o, c) &&
-                    o.CableName.Equals(c.SameStepCableName, StringComparison.OrdinalIgnoreCase));
-                if (leader is null)
-                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' cable {c.SameStepCableName} does not exist.", ValidationSeverity.Warning));
-                else if (!string.IsNullOrEmpty(leader.SameAsCableName) || !string.IsNullOrEmpty(leader.SameStepCableName))
-                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' must reference an independent cable, but {leader.CableName} follows another. Treated as independent.", ValidationSeverity.Warning));
-                else if (c.CandidateCount != leader.CandidateCount)
-                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' sweeps {c.CandidateCount} step(s) but {leader.CableName} sweeps {leader.CandidateCount}.", ValidationSeverity.Warning));
+                var word = c.SyncMode == CableSyncMode.SameStep ? "Same Step" : "Same Values";
+                var reference = cableList.FirstOrDefault(o => !ReferenceEquals(o, c) &&
+                    o.CableName.Equals(c.ReferenceCableName, StringComparison.OrdinalIgnoreCase));
+                if (string.IsNullOrEmpty(c.ReferenceCableName))
+                    issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' has no reference cable.", ValidationSeverity.Warning));
+                else if (reference is null)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' reference {c.ReferenceCableName} does not exist.", ValidationSeverity.Warning));
+                else if (reference.SyncMode != CableSyncMode.Independent)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' must reference an Independent cable, but {reference.CableName} is itself synced. Treated as independent.", ValidationSeverity.Warning));
+                else if (c.SyncMode == CableSyncMode.SameStep && c.CandidateCount != reference.CandidateCount)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' generates {c.CandidateCount} value(s) but {reference.CableName} generates {reference.CandidateCount}.", ValidationSeverity.Warning));
             }
         }
+        if (PretensionCandidates.FindCycle(cableList) is { Count: > 0 } cycle)
+            issues.Add(new("Cable pretension", $"Circular Sync reference: {string.Join(" → ", cycle)} → {cycle[0]}. Set one cable to Independent.", ValidationSeverity.Warning));
         return issues;
     }
     public IReadOnlyList<ValidationIssue> ValidateLoads(ApplicationState state)

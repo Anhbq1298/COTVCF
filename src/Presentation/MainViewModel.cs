@@ -165,8 +165,13 @@ public sealed class MainViewModel : Observable
     public string IterationSummary => $"MODEL\n{ModelName} - {State.Units}\n\nLOADING CRITERIA\n{State.AppliedPoints.Count} applied points - {State.LoadDefinitions.Count} load definitions\n\nTRUSS HEIGHT\n{State.Truss.MinimumHeight:F4} to {State.Truss.MaximumHeight:F4} {LengthUnit} - step {State.Truss.Increment:F4} {LengthUnit}\n\nCABLE PRETENSION\n{CableCount} cables ({VariableCableCount} variable) - {PretensionCandidateCount} pretension candidates";
     public int CableCount => State.Cables.Count;
     public int VariableCableCount => COT_VCF.Application.PretensionCandidates.VariableCount(State.Cables);
-    /// <summary>"Same As" column options: a blank (independent) plus every current cable name.</summary>
-    public IEnumerable<string> CableReferenceOptions => new[] { "" }.Concat(State.Cables.Select(c => c.CableName));
+    /// <summary>Sync-column mode options.</summary>
+    public IReadOnlyList<CableSyncMode> CableSyncModes { get; } =
+        [CableSyncMode.Independent, CableSyncMode.SameValues, CableSyncMode.SameStep];
+    /// <summary>Reference-cable options for the Sync column: a blank plus every cable that is currently
+    /// Independent (a follower can only reference an Independent cable — no chains).</summary>
+    public IEnumerable<string> IndependentCableNames =>
+        new[] { "" }.Concat(State.Cables.Where(c => c.SyncMode == CableSyncMode.Independent).Select(c => c.CableName));
     public string CablePreviewSummary => SelectedCable is null
         ? $"{CableCount} cable{(CableCount == 1 ? "" : "s")} configured — select a row or cable in the view"
         : $"Selected  ·  {SelectedCable.CableName}  ·  {SelectedCable.Status}";
@@ -757,10 +762,15 @@ public sealed class MainViewModel : Observable
         {
             if (e.NewItems is not null)
                 foreach (CablePretensionConfig row in e.NewItems)
-                    row.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update(); };
+                    row.PropertyChanged += (_, ev) =>
+                    {
+                        Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update();
+                        if (ev.PropertyName is nameof(CablePretensionConfig.SyncMode) or nameof(CablePretensionConfig.CableName))
+                            Notify(nameof(IndependentCableNames));
+                    };
             if (SelectedCable is not null && !State.Cables.Contains(SelectedCable)) SelectedCable = null;
             Dirty(ConfigTabs.Cable);
-            Notify(nameof(CableReferenceOptions));
+            Notify(nameof(IndependentCableNames));
             ScheduleStudyRegeneration();
             Update();
         };

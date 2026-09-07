@@ -85,8 +85,8 @@ public sealed class ConfigurationExtractor
             MinForce = c.ApplyRange ? c.MinForce : null,
             MaxForce = c.ApplyRange ? c.MaxForce : null,
             StepForce = c.ApplyRange ? c.StepForce : null,
-            SameAsCableName = c.SameAsCableName,
-            SameStepCableName = c.SameStepCableName,
+            SyncMode = c.SyncMode,
+            ReferenceCableName = c.ReferenceCableName,
         }).ToList(),
     };
 

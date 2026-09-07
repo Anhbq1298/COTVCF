@@ -135,9 +135,13 @@ public sealed class CableForceRowDto
     public double? MinForce { get; set; }
     public double? MaxForce { get; set; }
     public double? StepForce { get; set; }
-    /// <summary>"Same As" leader — this cable mirrors that cable's exact sweep (null / empty = independent axis).</summary>
+    /// <summary>Independent / SameValues / SameStep. See <see cref="CableSyncMode"/>.</summary>
+    public CableSyncMode SyncMode { get; set; } = CableSyncMode.Independent;
+    /// <summary>The Independent cable this row follows (for SameValues / SameStep).</summary>
+    public string? ReferenceCableName { get; set; }
+
+    // ---- legacy (read-only migration) — v1.x wrote these; applicator maps them to SyncMode/ReferenceCableName ----
     public string? SameAsCableName { get; set; }
-    /// <summary>"Same Step" leader — this cable keeps its own range but is zipped to that cable by step index.</summary>
     public string? SameStepCableName { get; set; }
 }
 

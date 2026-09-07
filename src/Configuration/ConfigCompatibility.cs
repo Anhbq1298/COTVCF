@@ -262,14 +262,19 @@ public sealed class ConfigCompatibilityValidator
         if (cableConfig.Cables.Count == 0) return BigInteger.Zero;
         foreach (var cable in cableConfig.Cables)
         {
-            // a follower ("Same As" or "Same Step" another independent cable) is zipped to its leader and
-            // adds no independent axis.
-            var followName = !string.IsNullOrEmpty(cable.SameAsCableName) ? cable.SameAsCableName
-                : !string.IsNullOrEmpty(cable.SameStepCableName) ? cable.SameStepCableName : null;
+            // a follower (SameValues / SameStep of an Independent cable) is zipped to its reference and
+            // adds no independent axis. Tolerate v1.x SameAs / SameStep field names during migration.
+            var followName =
+                cable.SyncMode != CableSyncMode.Independent && !string.IsNullOrEmpty(cable.ReferenceCableName) ? cable.ReferenceCableName
+                : !string.IsNullOrEmpty(cable.SameStepCableName) ? cable.SameStepCableName
+                : !string.IsNullOrEmpty(cable.SameAsCableName) ? cable.SameAsCableName : null;
+            bool IndependentDto(CableForceRowDto o) =>
+                o.SyncMode == CableSyncMode.Independent
+                && string.IsNullOrEmpty(o.SameAsCableName) && string.IsNullOrEmpty(o.SameStepCableName);
             var isFollower = followName is not null
                 && cableConfig.Cables.Any(o => !ReferenceEquals(o, cable)
                     && o.CableName.Equals(followName, StringComparison.OrdinalIgnoreCase)
-                    && string.IsNullOrEmpty(o.SameAsCableName) && string.IsNullOrEmpty(o.SameStepCableName));
+                    && IndependentDto(o));
             if (isFollower) continue;
 
             if (cable.Mode == CableForceMode.Fixed)

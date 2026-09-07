@@ -298,29 +298,28 @@
        <DataGridTemplateColumn Header="Step Force" Width=".8*" MinWidth="70">
         <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditRange}" Text="{Binding StepForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
-       <DataGridTemplateColumn Width="1.2*" MinWidth="104">
-        <DataGridTemplateColumn.Header><TextBlock Text="Same As" ToolTip="Mirror another cable's exact Min / Max / Step sweep — same force values, no independent axis"/></DataGridTemplateColumn.Header>
+       <DataGridTemplateColumn Width="1.9*" MinWidth="164">
+        <DataGridTemplateColumn.Header><TextBlock Text="Sync" ToolTip="Independent = its own Cartesian axis. Same Values = copies another Independent cable's candidate values. Same Step = keeps its own Min / Max / Step range but its candidate index is zipped to another Independent cable (same number of steps). Followers never add a Cartesian dimension."/></DataGridTemplateColumn.Header>
         <DataGridTemplateColumn.CellTemplate><DataTemplate>
-         <ComboBox BorderThickness="0" Background="Transparent" Padding="4,0" MinHeight="0" VerticalContentAlignment="Center"
-                   IsEnabled="{Binding CanEditSameAs}"
-                   ItemsSource="{Binding DataContext.CableReferenceOptions, RelativeSource={RelativeSource AncestorType=Window}}"
-                   SelectedItem="{Binding SameAsCableName, Mode=TwoWay, TargetNullValue='', UpdateSourceTrigger=PropertyChanged}"/>
+         <TextBlock Text="{Binding SyncSummary}" VerticalAlignment="Center" Margin="4,0" TextTrimming="CharacterEllipsis"/>
         </DataTemplate></DataGridTemplateColumn.CellTemplate>
-       </DataGridTemplateColumn>
-       <DataGridTemplateColumn Width="1.2*" MinWidth="104">
-        <DataGridTemplateColumn.Header><TextBlock Text="Same Step" ToolTip="Keep this cable's own Min / Max / Step range but zip it to another cable by step index — candidate j pairs with the leader's candidate j. Needs the same number of steps. No independent axis."/></DataGridTemplateColumn.Header>
-        <DataGridTemplateColumn.CellTemplate><DataTemplate>
-         <ComboBox BorderThickness="0" Background="Transparent" Padding="4,0" MinHeight="0" VerticalContentAlignment="Center"
-                   IsEnabled="{Binding CanEditSameStep}"
-                   ItemsSource="{Binding DataContext.CableReferenceOptions, RelativeSource={RelativeSource AncestorType=Window}}"
-                   SelectedItem="{Binding SameStepCableName, Mode=TwoWay, TargetNullValue='', UpdateSourceTrigger=PropertyChanged}"/>
-        </DataTemplate></DataGridTemplateColumn.CellTemplate>
+        <DataGridTemplateColumn.CellEditingTemplate><DataTemplate>
+         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <ComboBox Width="106" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center"
+                    ItemsSource="{Binding DataContext.CableSyncModes, RelativeSource={RelativeSource AncestorType=Window}}"
+                    SelectedItem="{Binding SyncMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+          <ComboBox Width="Auto" MinWidth="88" MinHeight="0" Padding="4,0" Margin="4,0,0,0" VerticalContentAlignment="Center"
+                    IsEnabled="{Binding CanPickReference}"
+                    ItemsSource="{Binding DataContext.IndependentCableNames, RelativeSource={RelativeSource AncestorType=Window}}"
+                    SelectedItem="{Binding ReferenceCableName, Mode=TwoWay, TargetNullValue='', UpdateSourceTrigger=PropertyChanged}"/>
+         </StackPanel>
+        </DataTemplate></DataGridTemplateColumn.CellEditingTemplate>
        </DataGridTemplateColumn>
        <DataGridTextColumn Header="Candidates" Binding="{Binding CandidateSummary}" IsReadOnly="True" Width=".7*" MinWidth="72" ElementStyle="{StaticResource NumericCell}"/>
        <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="1.1*" MinWidth="96"/>
       </DataGrid.Columns>
       </DataGrid>
-      <TextBlock Grid.Row="4" Text="Total candidates = product of each cable's candidate count (Cartesian). Assignment happens later in Run." Style="{StaticResource Hint}" Margin="0,6,0,0"/>
+      <TextBlock Grid.Row="4" Text="Total candidates = product of the Independent cables' candidate counts. Same Values / Same Step followers are zipped, not multiplied. Assignment happens later in Run." Style="{StaticResource Hint}" Margin="0,6,0,0"/>
     </Grid>
    </TabItem>
 
