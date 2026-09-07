@@ -35,7 +35,7 @@ public sealed class MainViewModel : Observable
     private bool normalizingStudyCandidateIds;
     private bool studyRefreshPending;
     private bool isStudyRunning;
-    private int requestedWorkerCount = 1;
+    private int requestedWorkerCount = 2;
     private int studyCompletedCount, studyReusedCount, studyFailedCount, studyRunningCount, studyQueuedCount, studySkippedCount, studyCancelledCount;
     private int studyPeakConcurrent;
     private StudyBuildState studyBuildState = StudyBuildState.ReadyToBuild;
@@ -183,7 +183,55 @@ public sealed class MainViewModel : Observable
     public int HeightCandidateCount => State.BaselineCaptured ? State.Truss.CandidateCount : 0;
     public IReadOnlyList<StudyHeightCandidate> HeightStudyCandidates => studyComposition.HeightCandidates;
     public IReadOnlyList<StudyPretensionCandidate> PretensionStudyCandidates => studyComposition.PretensionCandidates;
+    public IReadOnlyList<LoadingStudyCandidate> LoadingStudyCandidates => studyComposition.LoadingCandidates;
     public IReadOnlyList<StudyIteration> StudyIterations => studyComposition.Iterations;
+
+    // ---- Tab 05: candidate definitions (master grid shows IDs only; these back the collapsible lists) ----
+    public sealed record LoadingDefRow(string Id, string Loads);
+    public sealed record HeightDefRow(string Id, string Delta, string Height);
+    public sealed record PretensionDefRow(string Cable, string Force);
+    public sealed record PretensionDefGroup(string Id, string Summary, IReadOnlyList<PretensionDefRow> Cables);
+
+    public IReadOnlyList<LoadingDefRow> LoadingDefinitionRows => LoadingStudyCandidates
+        .Select(c => new LoadingDefRow(c.Id, c.Combination.Loads.Count == 0
+            ? "—"
+            : string.Join("      ", c.Combination.Loads.Select(l => $"{l.Name} {l.Qz:0.###} kPa"))))
+        .ToArray();
+
+    public IReadOnlyList<HeightDefRow> HeightDefinitionRows => HeightStudyCandidates
+        .Select(c => new HeightDefRow(c.Id,
+            $"{c.Candidate.DeltaH:+0.###;-0.###;0} {c.Unit}",
+            $"{c.Candidate.Height:0.###} {c.Unit}"))
+        .ToArray();
+
+    public IReadOnlyList<PretensionDefGroup> PretensionDefinitionGroups => PretensionStudyCandidates
+        .Select(c => new PretensionDefGroup(c.Id,
+            c.Assignments.Count == 0 ? "no target-force assignments"
+                : $"{c.Assignments.Count} cable target{(c.Assignments.Count == 1 ? "" : "s")}",
+            c.Assignments.Select(a => new PretensionDefRow(a.CableName, $"{a.TargetForce:N0} kN")).ToArray()))
+        .ToArray();
+
+    public string LoadingCandidatesTotalText => $"{LoadingCandidateCount} in total";
+    public string HeightCandidatesTotalText => $"{HeightCandidateCount} in total";
+    public string PretensionCandidatesTotalText => $"{PretensionCandidateCount} in total";
+
+    private StudyIteration? selectedStudyIteration;
+    public StudyIteration? SelectedStudyIteration
+    {
+        get => selectedStudyIteration;
+        set { if (Set(ref selectedStudyIteration, value)) Notify(nameof(SelectedCandidateBreadcrumb)); }
+    }
+    public string SelectedCandidateBreadcrumb => selectedStudyIteration is null
+        ? "Select a study row to trace its L / H / P"
+        : $"{selectedStudyIteration.LoadingCandidateId} · {selectedStudyIteration.HeightCandidateId} · {selectedStudyIteration.PretensionCandidateId}    {selectedStudyIteration.SapModelName}";
+
+    // ---- Tab 05: execution worker slots (always 3; the ones past the requested count are shown "not in use") ----
+    public sealed record WorkerSlotVm(int Number, bool InUse, string Role);
+    public IReadOnlyList<WorkerSlotVm> WorkerSlots => Enumerable.Range(1, MaxWorkerCount)
+        .Select(n => new WorkerSlotVm(n, n <= RequestedWorkerCount,
+            n > RequestedWorkerCount ? "Not in use"
+                : n == 1 ? "Connected baseline instance" : "Background instance"))
+        .ToArray();
     public IReadOnlyList<int> WorkerCountOptions { get; } = [1, 2, 3];
     public int RequestedWorkerCount
     {
@@ -194,6 +242,7 @@ public sealed class MainViewModel : Observable
             if (!Set(ref requestedWorkerCount, next)) return;
             Notify(nameof(RunStudyLabel));
             Notify(nameof(RunStudyToolTip));
+            Notify(nameof(WorkerSlots));
         }
     }
     public int MaxWorkerCount => 3;
@@ -893,7 +942,10 @@ public sealed class MainViewModel : Observable
         if (pretensionCandidatesChanged) Notify(nameof(PretensionStudyCandidates));
         foreach (var name in new[]
         {
-            nameof(StudyIterations),
+            nameof(StudyIterations), nameof(LoadingStudyCandidates),
+            nameof(LoadingDefinitionRows), nameof(HeightDefinitionRows), nameof(PretensionDefinitionGroups),
+            nameof(LoadingCandidatesTotalText), nameof(HeightCandidatesTotalText), nameof(PretensionCandidatesTotalText),
+            nameof(SelectedCandidateBreadcrumb), nameof(WorkerSlots),
             nameof(FixedHeightCandidateId), nameof(FixedPretensionCandidateId),
             nameof(FixedHeightValueText), nameof(FixedPretensionValueText), nameof(StudyLoadingCell),
             nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudySpaceFormula), nameof(StudyTotalRuns),

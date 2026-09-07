@@ -16,6 +16,15 @@
  <SolidColorBrush x:Key="Frame" Color="#5A6470"/>
  <SolidColorBrush x:Key="Selected" Color="#DCEBFB"/>
  <SolidColorBrush x:Key="SelectedBorder" Color="#AFC7DF"/>
+ <!-- 45° diagonal hatch — marks a disabled / not-in-use surface -->
+ <DrawingBrush x:Key="HatchBrush" TileMode="Tile" Viewport="0,0,7,7" ViewportUnits="Absolute" Stretch="None">
+  <DrawingBrush.Drawing>
+   <GeometryDrawing>
+    <GeometryDrawing.Geometry><GeometryGroup><LineGeometry StartPoint="0,7" EndPoint="7,0"/><LineGeometry StartPoint="-1,1" EndPoint="1,-1"/><LineGeometry StartPoint="6,8" EndPoint="8,6"/></GeometryGroup></GeometryDrawing.Geometry>
+    <GeometryDrawing.Pen><Pen Thickness="1" Brush="#C7CCD2"/></GeometryDrawing.Pen>
+   </GeometryDrawing>
+  </DrawingBrush.Drawing>
+ </DrawingBrush>
  <!-- Viewport tokens (consumed by ModelCanvas.OnRender) — white model background -->
  <SolidColorBrush x:Key="ViewportBg" Color="#FFFFFF"/>
  <SolidColorBrush x:Key="ViewportGrid" Color="#EEF0F2"/>
@@ -237,6 +246,12 @@
   <Setter Property="TextAlignment" Value="Right"/>
   <Setter Property="VerticalAlignment" Value="Center"/>
   <Setter Property="Margin" Value="6,0"/>
+ </Style>
+ <Style x:Key="IdCell" TargetType="TextBlock">
+  <Setter Property="FontFamily" Value="Consolas"/>
+  <Setter Property="FontSize" Value="12"/>
+  <Setter Property="TextAlignment" Value="Center"/>
+  <Setter Property="VerticalAlignment" Value="Center"/>
  </Style>
 
  <!-- ================== LEFT WORKFLOW TAB STRIP =================== -->
