@@ -102,12 +102,14 @@ public static class PretensionCandidates
         var leaderIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < leaders.Count; i++) leaderIndex[leaders[i].CableName] = i;
 
-        // Same Step followers carry their own force list, indexed by the reference's cursor.
+        // Same Step followers carry their own force list — Min..Max spread over the reference's value count,
+        // indexed by the reference's cursor. The follower supplies only Min / Max; its spacing is derived.
         var stepForces = new Dictionary<CablePretensionConfig, IReadOnlyList<double>>();
         foreach (var f in followers)
             if (f.SyncMode == CableSyncMode.SameStep)
             {
-                var own = f.GetCandidateForces();
+                var refCount = leaderForces[leaderIndex[ReferenceOf(f)!]].Count;
+                var own = f.GetCandidateForces(refCount);
                 if (own.Count == 0) yield break;
                 stepForces[f] = own;
             }

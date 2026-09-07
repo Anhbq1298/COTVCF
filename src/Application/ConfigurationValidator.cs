@@ -33,8 +33,8 @@ public sealed class ConfigurationValidator
                     issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' reference {c.ReferenceCableName} does not exist.", ValidationSeverity.Warning));
                 else if (reference.SyncMode != CableSyncMode.Independent)
                     issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' must reference an Independent cable, but {reference.CableName} is itself synced. Treated as independent.", ValidationSeverity.Warning));
-                else if (c.SyncMode == CableSyncMode.SameStep && c.CandidateCount != reference.CandidateCount)
-                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' generates {c.CandidateCount} value(s) but {reference.CableName} generates {reference.CandidateCount}.", ValidationSeverity.Warning));
+                else if (c.SyncMode == CableSyncMode.SameStep && c.CandidateCount <= 0)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' needs its own Min and Max force.", ValidationSeverity.Warning));
             }
         }
         if (PretensionCandidates.FindCycle(cableList) is { Count: > 0 } cycle)

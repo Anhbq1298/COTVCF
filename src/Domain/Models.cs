@@ -228,7 +228,8 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     {
         Notify(nameof(IsIndependent)); Notify(nameof(IsSameValuesFollower)); Notify(nameof(IsSameStepFollower));
         Notify(nameof(IsFollower)); Notify(nameof(NotFollower)); Notify(nameof(SyncSummary));
-        Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange)); Notify(nameof(CanToggleRange)); Notify(nameof(CanPickReference));
+        Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange)); Notify(nameof(CanEditStepForce));
+        Notify(nameof(CanToggleRange)); Notify(nameof(CanPickReference));
         Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status));
     }
 
@@ -240,7 +241,12 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     public bool NotFollower => !IsFollower;
 
     public bool CanEditTarget => IsFixed && !IsFollower;
-    public bool CanEditRange => applyRange && !IsSameValuesFollower;   // a Same Step follower edits its own range
+    /// <summary>Min / Max are editable for an independent cable and for a Same Step follower (its own end
+    /// points), but not for a Same Values follower (it mirrors the reference).</summary>
+    public bool CanEditRange => applyRange && !IsSameValuesFollower;
+    /// <summary>Step Force is only entered for an independent cable. A Same Step follower's spacing is
+    /// derived so it lands on exactly the reference's number of values.</summary>
+    public bool CanEditStepForce => CanEditRange && syncMode != CableSyncMode.SameStep;
     public bool CanToggleRange => !IsSameValuesFollower;
     public bool CanPickReference => syncMode != CableSyncMode.Independent;
 
@@ -260,7 +266,7 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
             if (!Set(ref applyRange, value)) return;
             Notify(nameof(IsFixed));
             Notify(nameof(TargetForce)); Notify(nameof(MinForce)); Notify(nameof(MaxForce)); Notify(nameof(StepForce));
-            Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange));
+            Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange)); Notify(nameof(CanEditStepForce));
             Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status));
         }
     }
@@ -287,10 +293,12 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     {
         get
         {
-            // Same Values mirrors its reference's sweep exactly; its own force fields are ignored, so report 1.
-            // Same Step keeps its own real Min / Max / Step count (needed to check it matches the reference's);
-            // it is still excluded from the Cartesian product by PretensionCandidates.Leaders().
+            // Same Values mirrors its reference exactly (1). Same Step has no independent count of its own —
+            // its value count is the reference's, resolved at enumeration time; report 1 when its own end
+            // points are valid. Both are excluded from the Cartesian product by PretensionCandidates.Leaders().
             if (IsSameValuesFollower) return 1;
+            if (IsSameStepFollower)
+                return minForce is double lo && maxForce is double hi && double.IsFinite(lo) && double.IsFinite(hi) && hi >= lo ? 1 : 0;
             if (!applyRange)
                 return targetForce is double t && double.IsFinite(t) ? 1 : 0;
             if (minForce is not double min || maxForce is not double max || stepForce is not double step
@@ -309,6 +317,10 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     /// Materialised only on demand; never appends an off-grid Max.</summary>
     public IReadOnlyList<double> GetCandidateForces()
     {
+        // A Same Step follower has no step of its own — its spacing is set at enumeration time from the
+        // reference's value count. Return its end points as a reasonable stand-alone fallback.
+        if (IsSameStepFollower)
+            return minForce is double lo && maxForce is double hi ? (lo == hi ? [lo] : [lo, hi]) : [];
         var count = CandidateCount;
         if (count <= 0) return [];
         if (count > MaterializeCeiling) throw new InvalidOperationException($"{CableName}: {count:N0} candidate forces exceed the {MaterializeCeiling:N0} limit. Widen the step.");
@@ -317,13 +329,23 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         return Enumerable.Range(0, count).Select(i => min + i * step).ToArray();
     }
 
+    /// <summary>The <paramref name="count"/> evenly-spaced force values from Min to Max inclusive — used by a
+    /// Same Step follower, whose count is taken from its reference cable.</summary>
+    public IReadOnlyList<double> GetCandidateForces(int count)
+    {
+        if (count <= 0 || minForce is not double lo || maxForce is not double hi || !double.IsFinite(lo) || !double.IsFinite(hi)) return [];
+        if (count == 1) return [lo];
+        var step = (hi - lo) / (count - 1);
+        return Enumerable.Range(0, count).Select(i => i == count - 1 ? hi : lo + i * step).ToArray();
+    }
+
     string IDataErrorInfo.Error => "";
     public string this[string columnName] => columnName switch
     {
         nameof(TargetForce) when IsFixed && (TargetForce is not double v || !double.IsFinite(v)) => "Enter a target force.",
         nameof(MinForce) when ApplyRange && (MinForce is not double v || !double.IsFinite(v)) => "Enter a minimum force.",
         nameof(MaxForce) when ApplyRange && (MaxForce is not double v || !double.IsFinite(v) || MinForce is not double min || v < min) => "Max force must be greater than or equal to Min force.",
-        nameof(StepForce) when ApplyRange && (StepForce is not double v || !double.IsFinite(v) || v <= 0) => "Step force must be greater than zero.",
+        nameof(StepForce) when CanEditStepForce && (StepForce is not double v || !double.IsFinite(v) || v <= 0) => "Step force must be greater than zero.",
         _ => ""
     };
 }

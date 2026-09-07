@@ -107,13 +107,22 @@ internal static class StudyComposerChecks
         b.SyncMode = CableSyncMode.SameStep; b.ReferenceCableName = "Cable6a";
         Check(b.IsSameStepFollower && b.CandidateSummary == "lockstep" && b.SyncSummary == "Step · Cable6a",
             "Same Step follower shows 'lockstep' / 'Step · <ref>'");
-        Check(b.CandidateCount == 3 && b.CanEditRange && !b.CanEditTarget, "Same Step follower keeps its own editable range");
+        Check(b.CandidateCount == 1 && b.CanEditRange && !b.CanEditStepForce && !b.CanEditTarget,
+            "Same Step follower edits its own Min/Max but not Step (derived) or Target");
         var t1 = PretensionCandidates.Enumerate(new List<CablePretensionConfig> { a, b }).ToList();
         Check(t1.Count == 3
             && t1[0].CableForces["Cable6a"] == 15000 && t1[0].CableForces["Cable6b"] == 20000
             && t1[1].CableForces["Cable6a"] == 17500 && t1[1].CableForces["Cable6b"] == 25000
             && t1[2].CableForces["Cable6a"] == 20000 && t1[2].CableForces["Cable6b"] == 30000,
             "TEST 1 — Same Step zips index-for-index, total = 3 (not 9)");
+
+        // Same Step derives its spacing from the reference — no Step Force needed, no count mismatch possible
+        var bd = Range("Cable6bd", 10000, 16000, 999);   // Step value here is ignored
+        bd.SyncMode = CableSyncMode.SameStep; bd.ReferenceCableName = "Cable6a";
+        var td = PretensionCandidates.Enumerate(new List<CablePretensionConfig> { a, bd }).ToList();
+        Check(td.Count == 3
+            && td[0].CableForces["Cable6bd"] == 10000 && td[1].CableForces["Cable6bd"] == 13000 && td[2].CableForces["Cable6bd"] == 16000,
+            "Same Step spacing is derived to land on exactly the reference's value count");
 
         // TEST 2 — Cartesian × Same Step
         var c = Range("Cable7a", 30000, 45000, 5000);   // [30000, 35000, 40000, 45000] — independent axis

@@ -51,13 +51,10 @@ public sealed class StudyValidationService
                     Error("Pretension Setup", $"{cable.CableName}: '{word}' reference cable '{cable.ReferenceCableName}' does not exist.");
                 else if (reference.SyncMode != CableSyncMode.Independent)
                     Error("Pretension Setup", $"{cable.CableName}: '{word}' must reference an Independent cable, but {reference.CableName} is itself synced.");
-                else if (cable.SyncMode == CableSyncMode.SameStep)
-                {
-                    if (!cable.ApplyRange && reference.CandidateCount != 1)
-                        Error("Pretension Setup", $"{cable.CableName}: 'Same Step' needs its own Min / Max / Step range.");
-                    else if (cable.CandidateCount != reference.CandidateCount)
-                        Error("Pretension Setup", $"{cable.CableName} cannot use Same Step with {reference.CableName}: {reference.CableName} has {reference.CandidateCount} step(s), {cable.CableName} has {cable.CandidateCount}. Same Step cables must generate the same number of values.");
-                }
+                else if (cable.SyncMode == CableSyncMode.SameStep
+                         && (!cable.ApplyRange || cable.MinForce is not double lo || cable.MaxForce is not double hi
+                             || !double.IsFinite(lo) || !double.IsFinite(hi) || hi < lo))
+                    Error("Pretension Setup", $"{cable.CableName}: 'Same Step' needs its own Min and Max force (the spacing is derived from {reference.CableName}).");
             }
             else if (PretensionCandidates.FollowersOf(cable, state.Cables) is { Count: > 0 } deps
                      && cable.CandidateCount <= 0)

@@ -282,38 +282,40 @@
          </DataTemplate>
         </DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
+       <DataGridTemplateColumn Width="2.1*" MinWidth="188">
+        <DataGridTemplateColumn.Header><TextBlock Text="Sync" ToolTip="Independent = its own Cartesian axis. Same Values = copies another Independent cable's candidate values. Same Step = keeps its own Min / Max end points but its candidate index is zipped to another Independent cable (spacing is derived to match the reference's step count). Followers never add a Cartesian dimension."/></DataGridTemplateColumn.Header>
+        <DataGridTemplateColumn.CellStyle>
+         <Style TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+          <Setter Property="Background" Value="#EFF5FD"/>
+         </Style>
+        </DataGridTemplateColumn.CellStyle>
+        <DataGridTemplateColumn.CellTemplate><DataTemplate>
+         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="2,1">
+          <ComboBox Width="104" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center"
+                    ItemsSource="{Binding DataContext.CableSyncModes, RelativeSource={RelativeSource AncestorType=Window}}"
+                    SelectedItem="{Binding SyncMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+          <ComboBox MinWidth="84" MinHeight="0" Padding="4,0" Margin="4,0,0,0" VerticalContentAlignment="Center"
+                    Visibility="{Binding CanPickReference, Converter={StaticResource BoolVisibility}}"
+                    ItemsSource="{Binding DataContext.IndependentCableNames, RelativeSource={RelativeSource AncestorType=Window}}"
+                    SelectedItem="{Binding ReferenceCableName, Mode=TwoWay, TargetNullValue='', UpdateSourceTrigger=PropertyChanged}"/>
+         </StackPanel>
+        </DataTemplate></DataGridTemplateColumn.CellTemplate>
+       </DataGridTemplateColumn>
        <DataGridTemplateColumn Width="58" MinWidth="58">
         <DataGridTemplateColumn.Header><TextBlock Text="Range" ToolTip="Apply a Min / Max / Step range instead of a fixed target force"/></DataGridTemplateColumn.Header>
         <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding ApplyRange, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanToggleRange}" HorizontalAlignment="Center" VerticalAlignment="Center"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
        <DataGridTemplateColumn Header="Target Force" Width=".95*" MinWidth="82">
-        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditTarget}" Text="{Binding TargetForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditTarget}" Text="{Binding TargetForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
        <DataGridTemplateColumn Header="Min Force" Width=".85*" MinWidth="74">
-        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditRange}" Text="{Binding MinForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditRange}" Text="{Binding MinForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
        <DataGridTemplateColumn Header="Max Force" Width=".85*" MinWidth="74">
-        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditRange}" Text="{Binding MaxForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditRange}" Text="{Binding MaxForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
        <DataGridTemplateColumn Header="Step Force" Width=".8*" MinWidth="70">
-        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditRange}" Text="{Binding StepForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
-       </DataGridTemplateColumn>
-       <DataGridTemplateColumn Width="1.9*" MinWidth="164">
-        <DataGridTemplateColumn.Header><TextBlock Text="Sync" ToolTip="Independent = its own Cartesian axis. Same Values = copies another Independent cable's candidate values. Same Step = keeps its own Min / Max / Step range but its candidate index is zipped to another Independent cable (same number of steps). Followers never add a Cartesian dimension."/></DataGridTemplateColumn.Header>
-        <DataGridTemplateColumn.CellTemplate><DataTemplate>
-         <TextBlock Text="{Binding SyncSummary}" VerticalAlignment="Center" Margin="4,0" TextTrimming="CharacterEllipsis"/>
-        </DataTemplate></DataGridTemplateColumn.CellTemplate>
-        <DataGridTemplateColumn.CellEditingTemplate><DataTemplate>
-         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <ComboBox Width="106" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center"
-                    ItemsSource="{Binding DataContext.CableSyncModes, RelativeSource={RelativeSource AncestorType=Window}}"
-                    SelectedItem="{Binding SyncMode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-          <ComboBox Width="Auto" MinWidth="88" MinHeight="0" Padding="4,0" Margin="4,0,0,0" VerticalContentAlignment="Center"
-                    IsEnabled="{Binding CanPickReference}"
-                    ItemsSource="{Binding DataContext.IndependentCableNames, RelativeSource={RelativeSource AncestorType=Window}}"
-                    SelectedItem="{Binding ReferenceCableName, Mode=TwoWay, TargetNullValue='', UpdateSourceTrigger=PropertyChanged}"/>
-         </StackPanel>
-        </DataTemplate></DataGridTemplateColumn.CellEditingTemplate>
+        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditStepForce}" Text="{Binding StepForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
        <DataGridTextColumn Header="Candidates" Binding="{Binding CandidateSummary}" IsReadOnly="True" Width=".7*" MinWidth="72" ElementStyle="{StaticResource NumericCell}"/>
        <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="1.1*" MinWidth="96"/>

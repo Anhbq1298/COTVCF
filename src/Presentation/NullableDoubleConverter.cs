@@ -10,10 +10,15 @@ public sealed class NullableDoubleConverter : IValueConverter
 
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
-        var text = value?.ToString();
+        var text = value?.ToString()?.Trim();
         if (string.IsNullOrWhiteSpace(text)) return null;
-        if (double.TryParse(text, NumberStyles.Float | NumberStyles.AllowThousands, culture, out var number) && double.IsFinite(number)) return number;
-        throw new FormatException("Enter a finite number.");
+        // Lenient: accept anything that reads as a number — thousands separators, exponent, leading sign,
+        // decimal comma or dot. Unparseable text is ignored (keeps the last good value) rather than flagged.
+        const NumberStyles styles = NumberStyles.Float | NumberStyles.AllowThousands | NumberStyles.AllowParentheses;
+        if (double.TryParse(text, styles, culture, out var n) && double.IsFinite(n)) return n;
+        if (double.TryParse(text, styles, CultureInfo.InvariantCulture, out n) && double.IsFinite(n)) return n;
+        if (double.TryParse(text.Replace(',', '.'), styles, CultureInfo.InvariantCulture, out n) && double.IsFinite(n)) return n;
+        return Binding.DoNothing;
     }
 }
 
