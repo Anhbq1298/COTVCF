@@ -135,8 +135,10 @@ public sealed class CableForceRowDto
     public double? MinForce { get; set; }
     public double? MaxForce { get; set; }
     public double? StepForce { get; set; }
-    /// <summary>Name of the independent cable this one steps in lockstep with (null / empty = independent axis).</summary>
+    /// <summary>"Same As" leader — this cable mirrors that cable's exact sweep (null / empty = independent axis).</summary>
     public string? SameAsCableName { get; set; }
+    /// <summary>"Same Step" leader — this cable keeps its own range but is zipped to that cable by step index.</summary>
+    public string? SameStepCableName { get; set; }
 }
 
 public sealed class OutputSettingsConfigDto

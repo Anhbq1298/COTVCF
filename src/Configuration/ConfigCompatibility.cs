@@ -262,12 +262,14 @@ public sealed class ConfigCompatibilityValidator
         if (cableConfig.Cables.Count == 0) return BigInteger.Zero;
         foreach (var cable in cableConfig.Cables)
         {
-            // a follower (Same As another independent cable) mirrors the leader's sweep exactly and adds
-            // no axis — its own force fields are ignored.
-            var isFollower = !string.IsNullOrEmpty(cable.SameAsCableName)
+            // a follower ("Same As" or "Same Step" another independent cable) is zipped to its leader and
+            // adds no independent axis.
+            var followName = !string.IsNullOrEmpty(cable.SameAsCableName) ? cable.SameAsCableName
+                : !string.IsNullOrEmpty(cable.SameStepCableName) ? cable.SameStepCableName : null;
+            var isFollower = followName is not null
                 && cableConfig.Cables.Any(o => !ReferenceEquals(o, cable)
-                    && o.CableName.Equals(cable.SameAsCableName, StringComparison.OrdinalIgnoreCase)
-                    && string.IsNullOrEmpty(o.SameAsCableName));
+                    && o.CableName.Equals(followName, StringComparison.OrdinalIgnoreCase)
+                    && string.IsNullOrEmpty(o.SameAsCableName) && string.IsNullOrEmpty(o.SameStepCableName));
             if (isFollower) continue;
 
             if (cable.Mode == CableForceMode.Fixed)

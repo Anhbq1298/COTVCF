@@ -28,8 +28,19 @@ public sealed class ConfigurationValidator
                     o.CableName.Equals(c.SameAsCableName, StringComparison.OrdinalIgnoreCase));
                 if (leader is null)
                     issues.Add(new("Cable pretension", $"{c.CableName}: 'Same As' cable {c.SameAsCableName} does not exist.", ValidationSeverity.Warning));
-                else if (!string.IsNullOrEmpty(leader.SameAsCableName))
+                else if (!string.IsNullOrEmpty(leader.SameAsCableName) || !string.IsNullOrEmpty(leader.SameStepCableName))
                     issues.Add(new("Cable pretension", $"{c.CableName}: 'Same As' must reference an independent cable, but {leader.CableName} follows another. Treated as independent.", ValidationSeverity.Warning));
+            }
+            if (!string.IsNullOrEmpty(c.SameStepCableName))
+            {
+                var leader = cableList.FirstOrDefault(o => !ReferenceEquals(o, c) &&
+                    o.CableName.Equals(c.SameStepCableName, StringComparison.OrdinalIgnoreCase));
+                if (leader is null)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' cable {c.SameStepCableName} does not exist.", ValidationSeverity.Warning));
+                else if (!string.IsNullOrEmpty(leader.SameAsCableName) || !string.IsNullOrEmpty(leader.SameStepCableName))
+                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' must reference an independent cable, but {leader.CableName} follows another. Treated as independent.", ValidationSeverity.Warning));
+                else if (c.CandidateCount != leader.CandidateCount)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' sweeps {c.CandidateCount} step(s) but {leader.CableName} sweeps {leader.CandidateCount}.", ValidationSeverity.Warning));
             }
         }
         return issues;

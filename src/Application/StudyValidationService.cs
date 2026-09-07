@@ -43,8 +43,20 @@ public sealed class StudyValidationService
             if (!string.IsNullOrEmpty(cable.SameAsCableName) &&
                 !state.Cables.Any(o => !ReferenceEquals(o, cable) &&
                     o.CableName.Equals(cable.SameAsCableName, StringComparison.OrdinalIgnoreCase) &&
-                    string.IsNullOrEmpty(o.SameAsCableName)))
+                    string.IsNullOrEmpty(o.SameAsCableName) && string.IsNullOrEmpty(o.SameStepCableName)))
                 Warn("Pretension Setup", $"{cable.CableName}: 'Same As' cable '{cable.SameAsCableName}' is not an independent cable — it will run as an independent axis.");
+            if (!string.IsNullOrEmpty(cable.SameStepCableName))
+            {
+                var leader = state.Cables.FirstOrDefault(o => !ReferenceEquals(o, cable) &&
+                    o.CableName.Equals(cable.SameStepCableName, StringComparison.OrdinalIgnoreCase) &&
+                    string.IsNullOrEmpty(o.SameAsCableName) && string.IsNullOrEmpty(o.SameStepCableName));
+                if (leader is null)
+                    Warn("Pretension Setup", $"{cable.CableName}: 'Same Step' cable '{cable.SameStepCableName}' is not an independent cable — it will run as an independent axis.");
+                else if (!cable.ApplyRange)
+                    Error("Pretension Setup", $"{cable.CableName}: 'Same Step' needs its own Min / Max / Step range.");
+                else if (cable.CandidateCount != leader.CandidateCount)
+                    Error("Pretension Setup", $"{cable.CableName}: 'Same Step' must sweep the same number of steps as {leader.CableName} ({cable.CandidateCount} vs {leader.CandidateCount}).");
+            }
         }
 
         if (state.Study.Mode == IterationStudyMode.FixHeight &&

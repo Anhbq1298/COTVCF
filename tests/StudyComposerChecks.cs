@@ -86,6 +86,46 @@ internal static class StudyComposerChecks
               elevenJointCandidate.Loads.Select(load => load.PointName).Distinct(StringComparer.Ordinal).Count() == 11 &&
               elevenJointCandidate.Loads.Select(load => load.LoadPattern).Distinct(StringComparer.Ordinal).Count() == 2,
             "Eleven Tab 1 joints and two load patterns produce all 22 point-load assignments");
+
+        SameStepChecks();
+    }
+
+    // "Same Step": a follower keeps its OWN Min / Max / Step range but is zipped to its leader by step
+    // index — it must not multiply the Cartesian product. "Same As" still copies the leader's force.
+    private static void SameStepChecks()
+    {
+        CablePretensionConfig Range(string name, double min, double max, double step) => new()
+        {
+            CableName = name, LoadCase = CablePretensionConfig.PretensionLoadCase,
+            ApplyRange = true, MinForce = min, MaxForce = max, StepForce = step
+        };
+        var a = Range("Cable6a", 15000, 20000, 2500);   // [15000, 17500, 20000]
+        var b = Range("Cable6b", 20000, 30000, 5000);   // [20000, 25000, 30000] — zipped to Cable6a
+        b.SameStepCableName = "Cable6a";
+        var c = Range("Cable7a", 30000, 35000, 5000);   // [30000, 35000] — independent axis
+        var cables = new List<CablePretensionConfig> { a, b, c };
+
+        Check(b.IsFollower && b.CandidateSummary == "lockstep", "Same Step follower shows 'lockstep'");
+        Check(b.CandidateCount == 3 && b.CanEditRange, "Same Step follower keeps its own editable step count");
+        Check((int)PretensionCandidates.TotalCount(cables) == 6, "Same Step is zipped not Cartesian: 3 x 2 = 6 (not 18)");
+        Check(PretensionCandidates.VariableCount(cables) == 2, "Same Step follower is not a variable axis");
+
+        var combos = PretensionCandidates.Enumerate(cables).ToList();
+        Check(combos.Count == 6, "Same Step yields 6 combinations");
+        Check(combos[0].CableForces["Cable6a"] == 15000 && combos[0].CableForces["Cable6b"] == 20000, "step 0 zips 15000 -> 20000");
+        Check(combos[2].CableForces["Cable6a"] == 17500 && combos[2].CableForces["Cable6b"] == 25000, "step 1 zips 17500 -> 25000");
+        Check(combos[4].CableForces["Cable6a"] == 20000 && combos[4].CableForces["Cable6b"] == 30000, "step 2 zips 20000 -> 30000");
+        Check(combos.Select(x => x.CableForces["Cable7a"]).Distinct().OrderBy(v => v).SequenceEqual(new[] { 30000.0, 35000.0 }),
+            "Cable7a still sweeps its own independent axis");
+
+        var d = new CablePretensionConfig { CableName = "Cable6c", LoadCase = CablePretensionConfig.PretensionLoadCase, SameAsCableName = "Cable6a" };
+        var withSameAs = PretensionCandidates.Enumerate(new List<CablePretensionConfig> { a, d }).ToList();
+        Check(withSameAs.Count == 3 && withSameAs.All(x => x.CableForces["Cable6c"] == x.CableForces["Cable6a"]),
+            "Same As still copies the leader's exact force (not its own range)");
+
+        b.SameStepCableName = null; b.SameAsCableName = "Cable6a";
+        Check(b.IsSameAsFollower && !b.IsSameStepFollower && b.SameStepCableName is null,
+            "Setting Same As clears Same Step (mutually exclusive)");
     }
 
     internal static ApplicationState CreateState()

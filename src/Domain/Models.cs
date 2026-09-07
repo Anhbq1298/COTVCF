@@ -183,11 +183,11 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
 
     private bool applyRange, missing;
     private double? targetForce = 0, minForce, maxForce, stepForce;
-    private string? sameAsCableName;
+    private string? sameAsCableName, sameStepCableName;
 
-    /// <summary>When set, this cable does not add an independent study axis: it steps in lockstep with the
-    /// named leader cable — at the leader's step index j it applies its own j-th candidate force. N followers
-    /// of one leader keep the pretension space at count(leader) instead of the full Cartesian product.</summary>
+    /// <summary>"Same As" — this cable mirrors the named leader's <b>exact</b> Min / Max / Step sweep. Its own
+    /// force fields are ignored. It adds no independent study axis (keeps the pretension count at the leader's,
+    /// not the Cartesian product). Mutually exclusive with <see cref="SameStepCableName"/>.</summary>
     public string? SameAsCableName
     {
         get => sameAsCableName;
@@ -195,17 +195,43 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         {
             var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
             if (!Set(ref sameAsCableName, v)) return;
-            Notify(nameof(IsFollower)); Notify(nameof(NotFollower));
-            Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange));
-            Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary));
-            Notify(nameof(Status));
+            if (v is not null && sameStepCableName is not null) { sameStepCableName = null; Notify(nameof(SameStepCableName)); }
+            NotifyFollowerState();
         }
     }
-    /// <summary>This cable follows another cable's exact Min / Max / Step sweep (see <see cref="SameAsCableName"/>).</summary>
-    public bool IsFollower => !string.IsNullOrEmpty(sameAsCableName);
+    /// <summary>"Same Step" — this cable keeps its <b>own</b> Min / Max / Step range but is zipped to the named
+    /// leader by step index: candidate j of this cable pairs with candidate j of the leader. Requires the same
+    /// number of steps as the leader. Adds no independent axis. Mutually exclusive with <see cref="SameAsCableName"/>.</summary>
+    public string? SameStepCableName
+    {
+        get => sameStepCableName;
+        set
+        {
+            var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (!Set(ref sameStepCableName, v)) return;
+            if (v is not null && sameAsCableName is not null) { sameAsCableName = null; Notify(nameof(SameAsCableName)); }
+            NotifyFollowerState();
+        }
+    }
+    private void NotifyFollowerState()
+    {
+        Notify(nameof(IsSameAsFollower)); Notify(nameof(IsSameStepFollower));
+        Notify(nameof(IsFollower)); Notify(nameof(NotFollower));
+        Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange)); Notify(nameof(CanToggleRange));
+        Notify(nameof(CanEditSameAs)); Notify(nameof(CanEditSameStep));
+        Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status));
+    }
+
+    public bool IsSameAsFollower => !string.IsNullOrEmpty(sameAsCableName);
+    public bool IsSameStepFollower => !string.IsNullOrEmpty(sameStepCableName);
+    /// <summary>Any lock-step follower ("Same As" or "Same Step") — contributes no independent axis.</summary>
+    public bool IsFollower => IsSameAsFollower || IsSameStepFollower;
     public bool NotFollower => !IsFollower;
     public bool CanEditTarget => IsFixed && !IsFollower;
-    public bool CanEditRange => applyRange && !IsFollower;
+    public bool CanEditRange => applyRange && !IsSameAsFollower;   // a Same Step follower edits its own range
+    public bool CanToggleRange => !IsSameAsFollower;
+    public bool CanEditSameAs => !IsSameStepFollower;
+    public bool CanEditSameStep => !IsSameAsFollower;
 
     public bool ApplyRange
     {
@@ -236,9 +262,10 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     {
         get
         {
-            // A follower mirrors its leader's sweep exactly; its own force fields are ignored. It never
-            // multiplies the study space, so report 1 (a defined value at every leader step).
-            if (IsFollower) return 1;
+            // "Same As" mirrors its leader's sweep exactly; its own force fields are ignored, so report 1.
+            // "Same Step" keeps its own real Min / Max / Step count (needed to check it matches the leader's);
+            // it is still excluded from the Cartesian product by PretensionCandidates.Leaders().
+            if (IsSameAsFollower) return 1;
             if (!applyRange)
                 return targetForce is double t && double.IsFinite(t) ? 1 : 0;
             if (minForce is not double min || maxForce is not double max || stepForce is not double step

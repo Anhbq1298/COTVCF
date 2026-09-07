@@ -6,9 +6,10 @@ namespace COT_VCF.Application;
 /// <summary>
 /// Pure combinatorics over the Tab 3 cable pretension configs. The total number of PRETENSION
 /// candidates is the <b>Cartesian product</b> of every <i>independent</i> cable's candidate count.
-/// A cable with a valid <see cref="CablePretensionConfig.SameAsCableName"/> is a <i>follower</i>: it
-/// adds no axis and instead applies the exact same target force as its leader at every step of the
-/// sweep. Counting is exact and allocation-free (BigInteger); combinations are
+/// A cable with a valid <see cref="CablePretensionConfig.SameAsCableName"/> or
+/// <see cref="CablePretensionConfig.SameStepCableName"/> is a <i>follower</i>: it adds no axis and is
+/// zipped to its leader by step index (Same As copies the leader's force; Same Step uses its own range).
+/// Counting is exact and allocation-free (BigInteger); combinations are
 /// produced lazily and only when a caller (such as the frozen study snapshot factory) asks for them.
 /// </summary>
 public static class PretensionCandidates
@@ -16,13 +17,22 @@ public static class PretensionCandidates
     // Compatibility name retained; target-force assignments consume a SAP load pattern.
     public const string LoadCase = CablePretensionConfig.PretensionLoadCase;
 
+    /// <summary>The independent cable this one locks onto — via "Same As" or "Same Step" — or null.</summary>
+    private static string? FollowedName(CablePretensionConfig c) =>
+        !string.IsNullOrEmpty(c.SameAsCableName) ? c.SameAsCableName
+        : !string.IsNullOrEmpty(c.SameStepCableName) ? c.SameStepCableName
+        : null;
+
     /// <summary>True when <paramref name="cable"/> follows another cable that exists in <paramref name="all"/>
     /// and is itself independent (no chains, no self-reference).</summary>
-    public static bool IsFollower(CablePretensionConfig cable, IReadOnlyList<CablePretensionConfig> all) =>
-        !string.IsNullOrEmpty(cable.SameAsCableName)
-        && all.Any(other => !ReferenceEquals(other, cable)
-                            && other.CableName.Equals(cable.SameAsCableName, StringComparison.OrdinalIgnoreCase)
-                            && string.IsNullOrEmpty(other.SameAsCableName));
+    public static bool IsFollower(CablePretensionConfig cable, IReadOnlyList<CablePretensionConfig> all)
+    {
+        var name = FollowedName(cable);
+        return name is not null
+            && all.Any(other => !ReferenceEquals(other, cable)
+                                && other.CableName.Equals(name, StringComparison.OrdinalIgnoreCase)
+                                && FollowedName(other) is null);
+    }
 
     private static List<CablePretensionConfig> Leaders(IReadOnlyList<CablePretensionConfig> cables) =>
         cables.Where(c => !IsFollower(c, cables)).ToList();
@@ -44,9 +54,10 @@ public static class PretensionCandidates
 
     /// <summary>
     /// Lazily yields every Cartesian combination as an odometer over the independent cables' candidate
-    /// forces; each follower is assigned the identical target force as its leader for that combination.
-    /// One dictionary is allocated per yielded combination — it carries every cable (leaders and
-    /// followers). Yields nothing when any independent cable currently has no valid candidates.
+    /// forces. At the leader's step index j, a "Same As" follower takes the leader's j-th force; a
+    /// "Same Step" follower takes its <b>own</b> j-th force (its own range, zipped by index). One
+    /// dictionary is allocated per yielded combination. Yields nothing when any independent cable — or a
+    /// "Same Step" follower's own range — currently has no valid candidates.
     /// </summary>
     public static IEnumerable<PretensionCombination> Enumerate(IReadOnlyList<CablePretensionConfig> cables)
     {
@@ -63,6 +74,16 @@ public static class PretensionCandidates
         var leaderIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (int i = 0; i < leaders.Count; i++) leaderIndex[leaders[i].CableName] = i;
 
+        // "Same Step" followers carry their own force list, indexed by the leader's cursor.
+        var stepForces = new Dictionary<CablePretensionConfig, IReadOnlyList<double>>();
+        foreach (var f in followers)
+            if (!string.IsNullOrEmpty(f.SameStepCableName))
+            {
+                var own = f.GetCandidateForces();
+                if (own.Count == 0) yield break;
+                stepForces[f] = own;
+            }
+
         var cursor = new int[leaders.Count];
         long index = 0;
         while (true)
@@ -70,7 +91,13 @@ public static class PretensionCandidates
             var slice = new Dictionary<string, double>(cables.Count, StringComparer.Ordinal);
             for (int i = 0; i < leaders.Count; i++) slice[leaders[i].CableName] = leaderForces[i][cursor[i]];
             foreach (var follower in followers)
-                slice[follower.CableName] = leaderForces[leaderIndex[follower.SameAsCableName!]][cursor[leaderIndex[follower.SameAsCableName!]]];
+            {
+                int li = leaderIndex[FollowedName(follower)!];
+                int j = cursor[li];
+                slice[follower.CableName] = stepForces.TryGetValue(follower, out var own)
+                    ? own[Math.Min(j, own.Count - 1)]
+                    : leaderForces[li][j];
+            }
             yield return new PretensionCombination(index++, slice);
 
             int k = leaders.Count - 1;
