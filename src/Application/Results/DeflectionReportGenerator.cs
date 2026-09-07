@@ -115,7 +115,9 @@ public sealed class DeflectionReportGenerator
                 if (g is null || g.Points.All(p => p.Status != ResultValueStatus.Valid)) continue; // only candidates with data
                 axis = g.ProfileAxis.ToString();
                 series.Add(new DeflectionCandidateSeriesDto(
-                    r.IterationKey, r.Parameters.RunIndex, r.Parameters.LoadLevelKPa, r.Parameters.LoadingLabel,
+                    r.IterationKey, r.Parameters.RunIndex,
+                    r.Parameters.LoadingCandidateId, r.Parameters.HeightCandidateId, r.Parameters.PretensionCandidateId,
+                    r.Parameters.LoadLevelKPa, r.Parameters.LoadingLabel,
                     r.Parameters.TrussHeightM, r.Parameters.DeltaHM, r.Parameters.PretensionKN, r.Parameters.PretensionLabel,
                     r.ExtractionStatus.ToString(), r.DiagnosticReportRelativePath,
                     viewSpecs.Select(vs => vs.Color.Key(r.Parameters)).ToArray(),
@@ -176,14 +178,14 @@ public sealed class DeflectionReportGenerator
 <div id="toolbar">
   <label>Group <select id="group"></select></label>
   <span class="sep"></span>
-  <label><input type="checkbox" id="legendToggle" checked> Plot legend</label>
-  <button id="showAll">Show all</button>
-  <button id="hideAll">Hide all</button>
-  <button id="reset">Reset zoom</button>
+  <span id="candFilter"></span>
   <span class="sep"></span>
+  <label><input type="checkbox" id="legendToggle" checked> Plot legend</label>
+  <button id="clearBtn">Clear filter</button>
+  <button id="reset">Reset zoom</button>
   <button id="srcBtn">View source data</button>
   <span class="sep"></span>
-  <span class="hint">wheel = zoom X · drag = pan · double-click = reset · click colour / line rows = filter (multi-select) · click a candidate = show/hide · Duplicate = compare</span>
+  <span class="hint">candidate dropdowns (L / H / P) = global filter (multi-select) · click a legend row = highlight · wheel = zoom X · drag = pan · dbl-click = reset · Duplicate = compare</span>
 </div>
 <div id="panels"></div>
 <template id="panelTpl">
@@ -231,6 +233,15 @@ h1{font-size:16px;margin:0}.meta{color:var(--mu);margin:3px 0 0;font-size:11.5px
 select,button{font:12px "Segoe UI",sans-serif;padding:3px 8px;border:1px solid var(--bd);background:#fff;border-radius:3px}
 button{cursor:pointer}button:hover{background:var(--su)}
 #srcBtn{border-color:var(--acc);color:var(--acc);font-weight:600}
+/* candidate multi-select dropdowns (L / H / P global filter) */
+#candFilter{display:flex;gap:6px}
+.ms{position:relative}
+.ms>button{font:12px "Segoe UI",sans-serif;padding:3px 8px;min-width:88px;text-align:left}
+.ms.act>button{border-color:var(--acc);color:var(--acc);font-weight:600}
+.ms-pop{position:absolute;top:100%;left:0;z-index:30;margin-top:2px;background:#fff;border:1px solid var(--bd);border-radius:3px;box-shadow:0 4px 14px #0002;max-height:280px;overflow:auto;min-width:200px;padding:4px 0}
+.ms-pop label{display:flex;align-items:center;gap:6px;padding:3px 10px;font-size:11.5px;cursor:pointer;white-space:nowrap}
+.ms-pop label:hover{background:var(--su)}
+.ms-pop .all{border-bottom:1px solid var(--bd);font-weight:600}
 #panels{padding-bottom:8px}
 .panel{border-bottom:1px solid var(--bd)}
 .pbar{display:flex;align-items:center;gap:10px;padding:8px 14px 2px;flex-wrap:wrap}
@@ -288,10 +299,11 @@ a{color:var(--acc)}
   const dashCss = (lg,k) => { const v=dashValue(lg,k); return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
   const legendColor = (lg,k) => (lg.find(e=>e.key===k)||{}).value || '#9aa0a6';
 
-  // D.views: one chart per parameter the study sweeps. series.colorKeys[i] / series.dashKeys[i] pair with
-  // view i. The original panels are "linked" (driven by the global toolbar); Duplicate makes an
-  // independent copy with its own group / colour dimension / solo filter / zoom for side-by-side compare.
-  let gi = 0, showLegend = true, hidden = new Set(), hi = null;
+  // Global candidate filter (multi-select L / H / P dropdowns) drives every chart; the legends list only
+  // what survives it, and a legend-row click HIGHLIGHTS that group. `hidden` = per-candidate show/hide,
+  // `hi` = single highlighted candidate (matrix / candidate list), `hiSel` = highlighted legend group.
+  let gi = 0, showLegend = true, hidden = new Set(), hi = null, hiSel = null;
+  const selL = new Set(), selH = new Set(), selP = new Set();   // empty = all
   const panels = [];
   const tpl = document.getElementById('panelTpl'), panelsEl = document.getElementById('panels');
   const mw = document.getElementById('matrixWrap'), srcBtn = document.getElementById('srcBtn');
@@ -299,10 +311,50 @@ a{color:var(--acc)}
   D.groups.forEach((g,i)=>{ const o=document.createElement('option'); o.value=i;
     o.textContent=`${g.groupName}  ·  ${g.outputCase}  ·  ${g.series.length} candidate(s)`; sel.appendChild(o); });
 
+  const passesGlobal = s => (selL.size===0||selL.has(s.loadId)) && (selH.size===0||selH.has(s.heightId)) && (selP.size===0||selP.has(s.pretensionId));
+
+  // one multi-select dropdown (id, label) pairs; `set` is the backing Set (empty = all).
+  function buildMS(tag, opts, set){
+    const wrap=document.createElement('span'); wrap.className='ms';
+    const btn=document.createElement('button'); wrap.appendChild(btn);
+    const pop=document.createElement('div'); pop.className='ms-pop'; pop.hidden=true; pop.onclick=e=>e.stopPropagation(); wrap.appendChild(pop);
+    const allL=document.createElement('label'); allL.className='all';
+    const allCb=document.createElement('input'); allCb.type='checkbox';
+    allL.append(allCb, document.createTextNode(' All ' + tag));
+    pop.appendChild(allL);
+    const boxes=[];
+    opts.forEach(o=>{ const l=document.createElement('label'); const cb=document.createElement('input'); cb.type='checkbox'; cb.value=o.id;
+      l.append(cb, document.createTextNode(' ' + o.label)); pop.appendChild(l); boxes.push(cb);
+      cb.onchange=()=>{ cb.checked?set.add(o.id):set.delete(o.id); if(set.size===opts.length) set.clear(); sync(); renderAll(); };
+    });
+    allCb.onclick=e=>{ e.preventDefault(); set.clear(); sync(); renderAll(); };
+    function sync(){
+      const n=set.size;
+      btn.textContent = `${tag}: ` + (n===0 ? 'all' : n<=2 ? [...set].join(', ') : `${n} of ${opts.length}`);
+      wrap.classList.toggle('act', n>0);
+      allCb.checked = n===0;
+      boxes.forEach(cb=>cb.checked = n>0 && set.has(cb.value));
+    }
+    btn.onclick=e=>{ e.stopPropagation(); document.querySelectorAll('.ms-pop').forEach(p=>{ if(p!==pop) p.hidden=true; }); pop.hidden=!pop.hidden; };
+    sync();
+    return wrap;
+  }
+
+  function buildCandFilter(){
+    const host=document.getElementById('candFilter'); host.innerHTML='';
+    const all = D.groups.flatMap(g=>g.series);
+    const uniq = (keyFn, labFn) => { const m=new Map(); all.forEach(s=>{ const k=keyFn(s); if(k && !m.has(k)) m.set(k, {id:k, label:labFn(s)}); });
+      return [...m.values()].sort((a,b)=>a.id.localeCompare(b.id, undefined, {numeric:true})); };
+    host.appendChild(buildMS('L', uniq(s=>s.loadId, s=>`${s.loadId} · ${s.loadingLabel}`), selL));
+    host.appendChild(buildMS('H', uniq(s=>s.heightId, s=>`${s.heightId} · ${(+s.trussHeightM).toFixed(2)} m`), selH));
+    host.appendChild(buildMS('P', uniq(s=>s.pretensionId, s=>`${s.pretensionId} · ${s.pretensionKN!=null?(+s.pretensionKN).toFixed(0)+' kN':s.pretensionLabel}`), selP));
+  }
+  document.addEventListener('click',()=>document.querySelectorAll('.ms-pop').forEach(p=>p.hidden=true));
+
   function ticks(a,b,n){ const step=nice((b-a)/n); const t0=Math.ceil(a/step)*step,o=[]; for(let v=t0;v<=b+1e-9;v+=step)o.push(+v.toFixed(10)); return o; }
   function nice(x){ const e=Math.pow(10,Math.floor(Math.log10(Math.abs(x)||1))); const f=x/e; return (f<1.5?1:f<3?2:f<7?5:10)*e; }
   function fmt(v){ return Math.abs(v)>=100?v.toFixed(0):Math.abs(v)>=1?v.toFixed(2):v.toFixed(3); }
-  function gVisible(){ return D.groups[gi].series.filter(s=>!hidden.has(s.iterationKey)); }
+  function gVisible(){ return D.groups[gi].series.filter(s=>passesGlobal(s) && !hidden.has(s.iterationKey)); }
 
   function makePanel(anchorAfter, init){
     // init: { vi, linked, gi, hidden(Set) }
@@ -315,9 +367,6 @@ a{color:var(--acc)}
     let localGi = init.gi != null ? init.gi : gi;
     let localGroupSet = init.gi != null;   // a copy carries its own group/case; a linked panel follows the toolbar until its "case:" selector is touched
     let localHidden = new Set(init.hidden || hidden);
-    // per-panel legend filters: multi-select focus sets (colour / line / extra filter dimension).
-    // Empty = show every value of that dimension.
-    let focusC = new Set(), focusD = new Set(), focusF = new Set();
     let zoomX = null, api;
 
     const curGi = () => (linked && !localGroupSet) ? gi : localGi;
@@ -325,33 +374,18 @@ a{color:var(--acc)}
     const grp = () => D.groups[curGi()];
     const view = () => D.views[vi];
     const colorKey = s => s.colorKeys[vi], dashKey = s => s.dashKeys[vi];
-    const filterKey = s => (s.filterKeys && s.filterKeys[vi]) || '';
-    const setFor = dim => dim==='c' ? focusC : dim==='d' ? focusD : focusF;
-    const legendFor = dim => dim==='c' ? view().colorLegend : dim==='d' ? view().dashLegend : (view().filterLegend||[]);
-    const keyForDim = (dim,s) => dim==='c' ? colorKey(s) : dim==='d' ? dashKey(s) : filterKey(s);
-    const inFocus = s => (focusC.size===0 || focusC.has(colorKey(s)))
-      && (focusD.size===0 || focusD.has(dashKey(s)))
-      && (focusF.size===0 || focusF.has(filterKey(s)));
-    const visible = () => grp().series.filter(s=>inFocus(s) && !curHidden().has(s.iterationKey));
+    const keyForDim = (dim,s) => dim==='c' ? colorKey(s) : dashKey(s);
+    // in scope after the global L/H/P filter and the per-candidate show/hide
+    const scoped = () => grp().series.filter(passesGlobal);
+    const visible = () => scoped().filter(s=>!curHidden().has(s.iterationKey));
+    const emph = s => (hi && s.iterationKey===hi) || (hiSel && keyForDim(hiSel.dim,s)===hiSel.key);
+    const anyEmph = () => hi!=null || hiSel!=null;
     const xExtent = () => { const xs=grp().series.flatMap(s=>s.points.filter(p=>p.uzMm!=null).map(p=>p.coord)); return xs.length?[Math.min(...xs),Math.max(...xs)]:[0,1]; };
 
     function afterMutate(){ if(linked) renderAll(); else { render(); if(!mw.hidden) drawMatrix(); } }
-    // legend row click: add / remove that value from its focus set. When the set would cover every
-    // value it is cleared (all shown). Multiple values can be focused at once.
-    function toggleFocus(dim,k){
-      const set = setFor(dim);
-      set.has(k) ? set.delete(k) : set.add(k);
-      if(legendFor(dim).map(e=>e.key).every(x=>set.has(x))) set.clear();
-      hi=null; afterMutate();
-    }
-    function groupHidden(dim,k){
-      const set = setFor(dim);
-      if(set.size>0 && !set.has(k)) return true;
-      const l=grp().series.filter(s=>keyForDim(dim,s)===k);
-      return l.length>0 && l.every(s=>curHidden().has(s.iterationKey));
-    }
+    // legend colour / line row click: highlight that whole group (dim the rest). Click again to clear.
+    function toggleHiSel(dim,k){ hiSel = (hiSel && hiSel.dim===dim && hiSel.key===k) ? null : {dim,key:k}; hi=null; renderAll(); }
     function toggleCand(k){ const H=curHidden(); H.has(k)?H.delete(k):H.add(k); afterMutate(); }
-    function resetFilters(){ focusC.clear(); focusD.clear(); focusF.clear(); }
 
     function clamp(z){
       const [dx0,dx1]=xExtent(), span=(dx1-dx0)||1, minSpan=span*0.04;
@@ -371,8 +405,7 @@ a{color:var(--acc)}
       const V=view();
       host.classList.toggle('copy', !linked);
       host.querySelector('.pv-dim').textContent = viewLabel(V).toLowerCase();
-      host.querySelector('.pv-sub').textContent = (V.filterDimension ? ` (filter: ${V.filterDimension.toLowerCase()})` : '')
-        + (linked ? '' : ' — copy') + ` — Uz under ${grp().outputCase}`;
+      host.querySelector('.pv-sub').textContent = (linked ? '' : ' — copy') + ` — Uz under ${grp().outputCase}`;
       rmBtn.hidden = linked;
       ctlEl.innerHTML = '';
       // monitored-group selector: copies only, and only when more than one monitored group exists.
@@ -382,7 +415,7 @@ a{color:var(--acc)}
         groupNames.forEach(n=>{ const o=new Option(n, n); if(n===grp().groupName) o.selected=true; gs.add(o); });
         gs.onchange=()=>{ const i=D.groups.findIndex(g=>g.groupName===gs.value && g.outputCase===grp().outputCase);
           localGi = i>=0 ? i : D.groups.findIndex(g=>g.groupName===gs.value); localGroupSet=true;
-          localHidden=new Set(); resetFilters(); zoomX=null; syncHeader(); render(); };
+          localHidden=new Set(); hiSel=null; zoomX=null; syncHeader(); render(); };
         ctlEl.append(gs);
       }
       // load-case selector: on every panel — pick which result load case this chart's Uz is read under.
@@ -391,14 +424,14 @@ a{color:var(--acc)}
         const cs=document.createElement('select'); cs.title='Result load case for this chart';
         D.groups.forEach((g,i)=>{ if(g.groupName!==grp().groupName) return;
           const o=new Option(`case: ${g.outputCase}`, i); if(i===curGi()) o.selected=true; cs.add(o); });
-        cs.onchange=()=>{ localGi=+cs.value; localGroupSet=true; localHidden=new Set(); resetFilters(); zoomX=null; syncHeader(); render(); };
+        cs.onchange=()=>{ localGi=+cs.value; localGroupSet=true; localHidden=new Set(); hiSel=null; zoomX=null; syncHeader(); render(); };
         ctlEl.append(cs);
       }
       // view selector: any panel, whenever the study offers more than one relationship.
       if(D.views.length > 1){
         const vs=document.createElement('select'); vs.title='Which relationship this chart plots';
         D.views.forEach((v,i)=>{ const o=new Option(`view: ${viewLabel(v)}`, i); if(i===vi) o.selected=true; vs.add(o); });
-        vs.onchange=()=>{ vi=+vs.value; resetFilters(); zoomX=null; syncHeader(); render(); };
+        vs.onchange=()=>{ vi=+vs.value; hiSel=null; zoomX=null; syncHeader(); render(); };
         ctlEl.append(vs);
       }
     }
@@ -418,10 +451,11 @@ a{color:var(--acc)}
       const py = 0.06*(y1-y0); y0-=py; y1+=py;
       const sx = v => m.l + (v-x0)/(x1-x0)*(W-m.l-m.r);
       const sy = v => m.t + (y1-v)/(y1-y0)*(H-m.t-m.b);   // standard orientation: +Uz up
-      const eHi = (hi && g.series.some(s=>s.iterationKey===hi)) ? hi : null;
+      const em = anyEmph();
 
       const P=[`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`];
-      const title = `Deflection Uz — ${viewLabel(V)}` + (V.filterDimension ? `  ·  filter: ${V.filterDimension}` : '');
+      const filt = [selL.size&&`${selL.size} L`, selH.size&&`${selH.size} H`, selP.size&&`${selP.size} P`].filter(Boolean).join(' · ');
+      const title = `Deflection Uz — ${viewLabel(V)}` + (filt ? `  ·  filter: ${filt}` : '');
       P.push(`<text x="${(m.l+W-m.r)/2}" y="18" font-size="12" font-weight="600" fill="#1F4788" text-anchor="middle">${title}</text>`);
       P.push(`<text x="${(m.l+W-m.r)/2}" y="30" font-size="9.5" fill="#666" text-anchor="middle">${g.groupName} · ${g.outputCase}</text>`);
       ticks(x0,x1,8).forEach(t=>{ const X=sx(t); P.push(`<line x1="${X}" y1="${m.t}" x2="${X}" y2="${H-m.b}" stroke="#eef0f2"/><text x="${X}" y="${H-m.b+16}" font-size="10" fill="#666" text-anchor="middle">${fmt(t)}</text>`); });
@@ -430,14 +464,14 @@ a{color:var(--acc)}
       P.push(`<text x="${(m.l+W-m.r)/2}" y="${H-6}" font-size="11" fill="#333" text-anchor="middle">${g.profileAxis} coordinate [m]</text>`);
       P.push(`<text transform="translate(14,${(m.t+H-m.b)/2}) rotate(-90)" font-size="11" fill="#333" text-anchor="middle">Uz [mm]  (− = downward)</text>`);
 
-      visible().slice().sort((a,b)=>(a.iterationKey===eHi?1:0)-(b.iterationKey===eHi?1:0)).forEach(s=>{
+      visible().slice().sort((a,b)=>(emph(a)?1:0)-(emph(b)?1:0)).forEach(s=>{
         const vp = s.points.filter(p=>p.uzMm!=null);
         const pts = vp.map(p=>`${sx(p.coord).toFixed(1)},${sy(p.uzMm).toFixed(1)}`).join(' ');
         if(!pts) return;
         const c = legendColor(V.colorLegend, colorKey(s));
-        const op = (!eHi || s.iterationKey===eHi) ? 1 : 0.18, wd = s.iterationKey===eHi ? 3.4 : 1.8;
+        const on = emph(s), op = (!em || on) ? 1 : 0.15, wd = on ? 3.4 : 1.8;
         P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${dashArr(V.dashLegend, dashKey(s))}" opacity="${op}" data-k="${s.iterationKey}"/>`);
-        vp.forEach(p=>P.push(`<circle cx="${sx(p.coord).toFixed(1)}" cy="${sy(p.uzMm).toFixed(1)}" r="${s.iterationKey===eHi?3.4:2.4}" fill="${c}" opacity="${op}" data-k="${s.iterationKey}" data-pt="${p.pointName}" data-x="${p.coord}" data-uz="${p.uzMm}"/>`));
+        vp.forEach(p=>P.push(`<circle cx="${sx(p.coord).toFixed(1)}" cy="${sy(p.uzMm).toFixed(1)}" r="${on?3.4:2.4}" fill="${c}" opacity="${op}" data-k="${s.iterationKey}" data-pt="${p.pointName}" data-x="${p.coord}" data-uz="${p.uzMm}"/>`));
       });
       chart.setAttribute('viewBox',`0 0 ${W} ${H}`);
       chart.innerHTML = P.join('');
@@ -445,31 +479,27 @@ a{color:var(--acc)}
     }
 
     function drawLegend(){
-      const g = grp(), V = view(); const h=[];
+      const V = view(); const h=[]; const inScope = scoped();
       const showDash = V.dashDimension !== V.colorDimension && V.dashLegend.length > 1;
-      const hint = n => n>0 ? `${n} shown · click = filter` : 'click = filter';
-      h.push(`<h4>${V.colorDimension} — colour <span class="hint2">${hint(focusC.size)}</span></h4>`);
-      V.colorLegend.forEach(e=>{ const off=groupHidden('c',e.key)?' off':'';
-        h.push(`<div class="row key${off}" data-k="${e.key}"><span class="sw" style="border-top-color:${e.value}"></span>${e.label}</div>`); });
+      // legend lists only values that survive the global L / H / P filter
+      const present = keyOf => new Set(inScope.map(keyOf));
+      const selMark = (dim,k) => (hiSel && hiSel.dim===dim && hiSel.key===k) ? ' hi' : (hiSel && ' off' || '');
+      h.push(`<h4>${V.colorDimension} — colour <span class="hint2">click = highlight</span></h4>`);
+      const cp = present(colorKey);
+      V.colorLegend.filter(e=>cp.has(e.key)).forEach(e=>{
+        h.push(`<div class="row key${selMark('c',e.key)}" data-k="${e.key}"><span class="sw" style="border-top-color:${e.value}"></span>${e.label}</div>`); });
       if(showDash){
-        h.push(`<h4>${V.dashDimension} — line <span class="hint2">${hint(focusD.size)}</span></h4>`);
-        V.dashLegend.forEach(e=>{ const off=groupHidden('d',e.key)?' off':'';
-          h.push(`<div class="row dkey${off}" data-k="${e.key}"><span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${e.label}</div>`); });
+        h.push(`<h4>${V.dashDimension} — line <span class="hint2">click = highlight</span></h4>`);
+        const dp = present(dashKey);
+        V.dashLegend.filter(e=>dp.has(e.key)).forEach(e=>{
+          h.push(`<div class="row dkey${selMark('d',e.key)}" data-k="${e.key}"><span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${e.label}</div>`); });
       }
-      if(V.filterDimension && (V.filterLegend||[]).length >= 1){
-        const fh = (V.filterLegend.length===1) ? 'fixed' : hint(focusF.size);
-        h.push(`<h4>${V.filterDimension} — filter <span class="hint2">${fh}</span></h4>`);
-        V.filterLegend.forEach(e=>{ const off=groupHidden('f',e.key)?' off':'';
-          h.push(`<div class="row fkey${off}" data-k="${e.key}"><span class="fdot"></span>${e.label}</div>`); });
-      }
-      const cands = g.series.filter(inFocus);
-      h.push(`<h4>Candidates <span class="hint2">${cands.length}/${g.series.length} · click = show/hide</span></h4>`);
-      cands.forEach(s=>{ const off=curHidden().has(s.iterationKey)?' off':'', on=s.iterationKey===hi?' hi':'';
+      h.push(`<h4>Candidates <span class="hint2">${inScope.length}/${grp().series.length} in scope · click = show/hide</span></h4>`);
+      inScope.forEach(s=>{ const off=curHidden().has(s.iterationKey)?' off':'', on=s.iterationKey===hi?' hi':'';
         h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}"><span class="sw" style="border-top-color:${legendColor(V.colorLegend,colorKey(s))};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>${s.iterationKey} · ${s.loadingLabel} · H ${(+s.trussHeightM).toFixed(2)}m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}</div>`); });
       legendEl.innerHTML = h.join('');
-      legendEl.querySelectorAll('.row.key').forEach(r=>r.onclick=()=>toggleFocus('c', r.dataset.k));
-      legendEl.querySelectorAll('.row.dkey').forEach(r=>r.onclick=()=>toggleFocus('d', r.dataset.k));
-      legendEl.querySelectorAll('.row.fkey').forEach(r=>r.onclick=()=>toggleFocus('f', r.dataset.k));
+      legendEl.querySelectorAll('.row.key').forEach(r=>r.onclick=()=>toggleHiSel('c', r.dataset.k));
+      legendEl.querySelectorAll('.row.dkey').forEach(r=>r.onclick=()=>toggleHiSel('d', r.dataset.k));
       legendEl.querySelectorAll('.row.cand').forEach(r=>r.onclick=()=>toggleCand(r.dataset.k));
     }
 
@@ -503,7 +533,7 @@ a{color:var(--acc)}
     rmBtn.onclick=()=>{ const ix=panels.indexOf(api); if(ix>=0) panels.splice(ix,1); host.remove(); };
 
     syncHeader();
-    api = { render, reset(){ zoomX=null; }, resetFilters,
+    api = { render, reset(){ zoomX=null; }, resync(){ syncHeader(); },
             followGlobal(){ if(linked){ localGroupSet=false; localGi=gi; syncHeader(); } } };
     return api;
   }
@@ -517,7 +547,7 @@ a{color:var(--acc)}
     const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${s.iterationKey}" title="click to highlight this candidate in every chart">${s.iterationKey}<br><span style="font-weight:400;color:#666">${s.loadingLabel} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
     const body = rows.map(r=>`<tr><th class="k">${r.pt}</th><td>${fmt(r.x)}</td>${vis.map(s=>{const v=r.vals[s.iterationKey];return `<td${s.iterationKey===hi?' class="hi"':''}>${v==null?'—':(+v).toFixed(3)}</td>`;}).join('')}</tr>`).join('');
     document.getElementById('matrix').innerHTML = `<table><thead><tr><th class="k">Point</th><th>X [m]</th>${th}</tr></thead><tbody>${body}</tbody></table>`;
-    document.querySelectorAll('#matrix thead th.ch').forEach(el=>el.onclick=()=>{ hi = (hi===el.dataset.k? null : el.dataset.k); renderAll(); });
+    document.querySelectorAll('#matrix thead th.ch').forEach(el=>el.onclick=()=>{ hi = (hi===el.dataset.k? null : el.dataset.k); hiSel=null; renderAll(); });
   }
 
   function drawWarnings(){
@@ -533,16 +563,15 @@ a{color:var(--acc)}
     panelsEl.innerHTML='<p style="padding:20px;color:#666">No deflection results in this study.</p>';
     srcBtn.hidden = true;
   } else {
-    // one chart for FixHeight / FixPretension (a single load×dim relationship); two for Combined
-    // (load×height with a pretension filter, and load×pretension with a height filter). Re-pivot any
-    // panel in place with the "view" selector, or press Duplicate to compare.
+    buildCandFilter();
+    // two complementary charts: Load × Truss height, and Load × Initial pretension. Narrow either with the
+    // global L / H / P dropdowns; click a legend row to highlight; press Duplicate to compare.
     D.views.forEach((v,vi)=>panels.push(makePanel(null, { vi, linked:true })));
   }
 
-  sel.onchange=()=>{ gi=+sel.value; hi=null; panels.forEach(p=>{ p.followGlobal(); p.reset(); }); renderAll(); };
+  sel.onchange=()=>{ gi=+sel.value; hi=null; hiSel=null; panels.forEach(p=>{ p.followGlobal(); p.reset(); }); renderAll(); };
   document.getElementById('legendToggle').onchange=e=>{ showLegend=e.target.checked; renderAll(); };
-  document.getElementById('showAll').onclick=()=>{ hidden.clear(); panels.forEach(p=>p.resetFilters()); renderAll(); };
-  document.getElementById('hideAll').onclick=()=>{ if(!D.groups.length) return; D.groups[gi].series.forEach(s=>hidden.add(s.iterationKey)); renderAll(); };
+  document.getElementById('clearBtn').onclick=()=>{ selL.clear(); selH.clear(); selP.clear(); hidden.clear(); hi=null; hiSel=null; buildCandFilter(); renderAll(); };
   document.getElementById('reset').onclick=()=>{ panels.forEach(p=>p.reset()); renderAll(); };
   function toggleSrc(show){ mw.hidden=!show; srcBtn.textContent = show?'Hide source data':'View source data'; if(show) drawMatrix(); }
   srcBtn.onclick=()=>toggleSrc(mw.hidden);

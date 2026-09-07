@@ -20,6 +20,9 @@ public sealed record DeflectionPointDto(
 public sealed record DeflectionCandidateSeriesDto(
     string IterationKey,
     long RunIndex,
+    string LoadId,            // "L01" — study loading candidate id
+    string HeightId,          // "H01" — study truss-height candidate id
+    string PretensionId,      // "P01" — study pretension candidate id
     double? LoadLevelKPa,
     string LoadingLabel,
     double TrussHeightM,
