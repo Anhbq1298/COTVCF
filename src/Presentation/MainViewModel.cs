@@ -438,6 +438,20 @@ public sealed class MainViewModel : Observable
     public bool HasNoDeflectionReport => !HasDeflectionReport;
     public Uri? DeflectionReportUri => HasDeflectionReport ? new Uri(DeflectionReportPath!) : null;
     public string DeflectionReportName => HasDeflectionReport ? Path.GetFileName(DeflectionReportPath!) : "No report generated yet";
+
+    private string? cableForceReportPath;
+    public string? CableForceReportPath
+    {
+        get => cableForceReportPath;
+        private set
+        {
+            if (!Set(ref cableForceReportPath, value)) return;
+            Notify(nameof(HasCableForceReport));
+            Notify(nameof(CableForceReportName));
+        }
+    }
+    public bool HasCableForceReport => !string.IsNullOrEmpty(CableForceReportPath) && File.Exists(CableForceReportPath);
+    public string CableForceReportName => HasCableForceReport ? Path.GetFileName(CableForceReportPath!) : "No cable-force report generated yet";
     public string ResultsWorkbookPath => Directory.Exists(StudyRoot)
         ? Path.Combine(StudyRoot, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName) : "";
     public bool HasResultsWorkbook => !string.IsNullOrEmpty(ResultsWorkbookPath) && File.Exists(ResultsWorkbookPath);
@@ -602,6 +616,8 @@ public sealed class MainViewModel : Observable
     public Command OpenIterationFolder { get; }
     public Command OpenDeflectionReport { get; }
     public Command RegenerateDeflectionReport { get; }
+    public Command OpenCableForceReport { get; }
+    public Command RegenerateCableForceReport { get; }
     public Command OpenResultsWorkbook { get; }
     public Command OpenCandidateDiagnostic { get; }
     public Command ViewIterationError { get; }
@@ -697,6 +713,7 @@ public sealed class MainViewModel : Observable
         OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => Directory.Exists(StudyRoot));
         OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
         OpenDeflectionReport = new(_ => TryOpenFile(DeflectionReportPath), () => HasDeflectionReport);
+        OpenCableForceReport = new(_ => TryOpenFile(CableForceReportPath), () => HasCableForceReport);
         OpenResultsWorkbook = new(_ => TryOpenFile(ResultsWorkbookPath), () => HasResultsWorkbook);
         OpenCandidateDiagnostic = new(p =>
         {
@@ -704,6 +721,7 @@ public sealed class MainViewModel : Observable
                 TryOpenFile(Path.Combine(StudyRoot, row.DiagnosticRelPath.Replace('/', Path.DirectorySeparatorChar)));
         });
         RegenerateDeflectionReport = new(_ => RegenerateReport(), () => !IsBusy);
+        RegenerateCableForceReport = new(_ => RegenerateCableForceReportAsync(), () => !IsBusy);
         ViewIterationError = new(p =>
         {
             if (p is StudyIteration { ErrorMessage.Length: > 0 } row)
@@ -1104,6 +1122,7 @@ public sealed class MainViewModel : Observable
         {
             var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token, AddPostProcessRow);
             DeflectionReportPath = studyExecution.LastDeflectionReportPath;
+            CableForceReportPath = studyExecution.LastCableForceReportPath;
             RefreshDeflectionArtifacts();
             studyCompletedCount = result.Completed;
             studyReusedCount = result.Reused;
@@ -1284,6 +1303,28 @@ public sealed class MainViewModel : Observable
         finally { IsBusy = false; }
     }
 
+    private async void RegenerateCableForceReportAsync()
+    {
+        if (IsBusy) return;
+        if (!HasResultsWorkbook)
+        {
+            CableForceReportPath = null;
+            Message = $"No {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName} found in {StudyRoot}. Run the study on Tab 05 first.";
+            return;
+        }
+        IsBusy = true;
+        try
+        {
+            var path = await Task.Run(() => new COT_VCF.Application.Results.CableForceReportGenerator().RegenerateFromWorkbook(StudyRoot));
+            CableForceReportPath = File.Exists(path) ? path : null;
+            Message = CableForceReportPath is null
+                ? "No cable-force results in the workbook — configure cables and a cable result case in Output Settings, then re-run."
+                : $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
+        }
+        catch (Exception ex) { Message = ex.Message; Warn("Regenerate Cable Force Report", ex.Message); }
+        finally { IsBusy = false; }
+    }
+
     private void AddPostProcessRow(COT_VCF.Domain.Results.CandidateResultDto dto)
     {
         var points = dto.Groups.Sum(g => g.Points.Count);
@@ -1305,8 +1346,11 @@ public sealed class MainViewModel : Observable
             var report = Directory.Exists(StudyRoot)
                 ? Path.Combine(StudyRoot, COT_VCF.Application.Results.DeflectionReportGenerator.ReportFileName) : null;
             DeflectionReportPath = report is not null && File.Exists(report) ? report : null;
+            var cfReport = Directory.Exists(StudyRoot)
+                ? Path.Combine(StudyRoot, COT_VCF.Application.Results.CableForceReportGenerator.ReportFileName) : null;
+            CableForceReportPath = cfReport is not null && File.Exists(cfReport) ? cfReport : null;
         }
-        catch { DeflectionReportPath = null; }
+        catch { DeflectionReportPath = null; CableForceReportPath = null; }
         Notify(nameof(HasResultsWorkbook));
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(PostProcessStatus));
@@ -1679,6 +1723,7 @@ public sealed class MainViewModel : Observable
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
             nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount),
             nameof(HasDeflectionReport), nameof(HasNoDeflectionReport), nameof(DeflectionReportUri), nameof(DeflectionReportName),
+            nameof(HasCableForceReport), nameof(CableForceReportName),
             nameof(HasResultsWorkbook), nameof(ResultsWorkbookPath), nameof(PostProcessStatus)
         }) Notify(name);
         NotifySharedViewer();

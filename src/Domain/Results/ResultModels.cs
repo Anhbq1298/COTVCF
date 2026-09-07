@@ -41,6 +41,15 @@ public sealed record JointDisplacement(
     ResultValueStatus Status,
     string? Warning = null);
 
+/// <summary>Governing axial force [kN] read for one cable under one selected output case (max |P| over the
+/// cable's analysis elements). <see cref="Status"/> says whether <see cref="ForceKN"/> is meaningful — a
+/// missing result is never reported as 0.</summary>
+public sealed record CableForceRead(
+    string CableName,
+    double? ForceKN,
+    ResultValueStatus Status,
+    string? Warning = null);
+
 // ============================ extraction-side DTOs ============================
 
 public sealed record MonitoredPointResultDto(
@@ -56,6 +65,16 @@ public sealed record MonitoredPointGroupResultDto(
     string OutputCase,          // the case actually selected in SAP for this read
     ProfileCoordinateAxis ProfileAxis,
     IReadOnlyList<MonitoredPointResultDto> Points);   // already sorted by ProfileAxis
+
+/// <summary>One cable's post-processing row: its resolved pretension target and the analysed axial force
+/// read under the configured cable result case. <see cref="ForceKN"/> is null unless <see cref="Status"/>
+/// is <see cref="ResultValueStatus.Valid"/> — never coerced to 0.</summary>
+public sealed record CableForceResultDto(
+    string CableName,
+    double? TargetForceKN,
+    double? ForceKN,
+    ResultValueStatus Status,
+    string? Warning = null);
 
 /// <summary>Study parameters resolved for one candidate. Fields that a given study mode does not vary are still
 /// populated from the frozen candidate; single-value convenience fields are null when the candidate is mixed.</summary>
@@ -99,7 +118,8 @@ public sealed record CandidateResultDto(
     DateTimeOffset ExtractionCompletedAt,
     CandidateExtractionStatus ExtractionStatus,
     IReadOnlyList<MonitoredPointGroupResultDto> Groups,
-    IReadOnlyList<ResultWarningDto> Warnings)
+    IReadOnlyList<ResultWarningDto> Warnings,
+    IReadOnlyList<CableForceResultDto>? CableForces = null)
 {
     public string DiagnosticReportFileName => $"Deflection_Diagnostic_{IterationKey}.html";
     public string DiagnosticReportRelativePath => $"{IterationKey}/{DiagnosticReportFileName}";

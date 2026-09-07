@@ -879,10 +879,17 @@
        </Expander>
 
        <Expander Style="{StaticResource PpModule}">
-        <Expander.Header><TextBlock Text="05  CABLE FORCES" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <Expander.Header><TextBlock Text="05  CABLE FORCES · kN" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="Cable tension [kN] under the result load case" Style="{StaticResource PpDesc}"/>
-         <TextBlock Text="○ Not implemented yet" Style="{StaticResource PpTodo}"/>
+         <TextBlock Text="Analysed cable axial force per configured cable · read under the Output Settings cable result case · one chart per cable · shared Y-scale" Style="{StaticResource PpDesc}"/>
+         <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>
+         <TextBlock Text="{Binding CableForceReportName}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding CableForceReportPath}"/>
+         <WrapPanel Margin="0,4,0,0">
+          <Button Content="View Report" Command="{Binding OpenCableForceReport}" Style="{StaticResource Primary}" ToolTip="Open Cable_Forces_Report.html in your web browser"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Rebuild Cable_Forces_Report.html from Deflection_Results_Source.xlsx — no SAP"/>
+          <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
+          <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
+         </WrapPanel>
         </StackPanel>
        </Expander>
 

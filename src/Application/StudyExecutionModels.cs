@@ -35,6 +35,8 @@ public sealed record StudyExecutionSnapshot(
     // Frozen after Tab 04 groups have been prepared on and saved into the parent.
     public IReadOnlyList<OutputSapGroupDefinition> OutputGroups { get; init; } = [];
     public string CableResultLoadCase { get; init; } = "";
+    // Cable-force post-processing (Tab 06.05): the cables whose axial force is read under CableResultLoadCase.
+    public IReadOnlyList<string> CableResultCables { get; init; } = [];
     // Deflection post-processing (Tab 06): monitored points + the SAP case their Uz is read under.
     public IReadOnlyList<string> DeflectionPoints { get; init; } = [];
     public string DeflectionOutputCase { get; init; } = "";

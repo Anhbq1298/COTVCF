@@ -41,4 +41,11 @@ public interface ISapGateway : IDisposable
     /// is never reported as 0.</summary>
     Task<IReadOnlyList<JointDisplacement>> GetJointDisplacementsAsync(
         IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected);
+
+    /// <summary>Reads the governing axial force (max |P|, kN) for each cable from the analyzed active model
+    /// under exactly one output case or combo. Selects only that case for output first. One row per
+    /// requested cable, in the same order; each row carries an explicit <see cref="ResultValueStatus"/> —
+    /// a missing result is never reported as 0.</summary>
+    Task<IReadOnlyList<CableForceRead>> GetCableForcesAsync(
+        IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected);
 }

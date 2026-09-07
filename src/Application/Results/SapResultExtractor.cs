@@ -68,6 +68,9 @@ public sealed class SapResultExtractor
                 : CandidateExtractionStatus.ExtractedOk;
         }
 
+        // Cable forces (Tab 06.05) — additive: never changes the deflection-driven ExtractionStatus, only warns.
+        var cableForces = await ExtractCableForcesAsync(gateway, snapshot, job, analyzedChild, warnings);
+
         return new CandidateResultDto(
             job.IterationId,
             job.ModelFullPath,
@@ -80,7 +83,42 @@ public sealed class SapResultExtractor
             DateTimeOffset.Now,
             status,
             groups,
-            warnings);
+            warnings,
+            cableForces);
+    }
+
+    private async Task<IReadOnlyList<CableForceResultDto>> ExtractCableForcesAsync(
+        ISapGateway gateway, StudyExecutionSnapshot snapshot, StudyIterationExecutionDto job,
+        ModelInfo analyzedChild, List<ResultWarningDto> warnings)
+    {
+        var cables = snapshot.CableResultCables ?? [];
+        var resultCase = snapshot.CableResultLoadCase ?? "";
+        var targets = job.Pretension.Assignments
+            .GroupBy(a => a.CableName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => (double?)g.First().TargetForce, StringComparer.Ordinal);
+
+        if (cables.Count == 0 || string.IsNullOrWhiteSpace(resultCase))
+        {
+            if (cables.Count > 0)
+                warnings.Add(Warn(job, "CableForce", ResultWarningSeverity.Warning,
+                    "Cable result load case is not configured in Output Settings — cable forces were not extracted."));
+            return [];
+        }
+
+        var reads = await gateway.GetCableForcesAsync(cables, resultCase, isCombo: false, analyzedChild);
+        if (reads.Count > 0 && reads.All(r => r.Status == ResultValueStatus.CaseNotFound))
+            reads = await gateway.GetCableForcesAsync(cables, resultCase, isCombo: true, analyzedChild);
+
+        var rows = reads.Select(r => new CableForceResultDto(
+            r.CableName,
+            targets.TryGetValue(r.CableName, out var t) ? t : null,
+            r.Status == ResultValueStatus.Valid ? r.ForceKN : null,
+            r.Status, r.Warning)).ToArray();
+
+        foreach (var r in rows.Where(r => r.Status != ResultValueStatus.Valid))
+            warnings.Add(Warn(job, "CableForce", ResultWarningSeverity.Warning,
+                $"{r.CableName}: {r.Status}{(r.Warning is null ? "" : $" — {r.Warning}")}"));
+        return rows;
     }
 
     /// <summary>Builds a failure DTO when analysis or verification never succeeded, so a diagnostic

@@ -33,6 +33,7 @@ public sealed class ConsolidatedResultWriter
         using var wb = new XLWorkbook();
         Candidates(wb.Worksheets.Add("Candidates"), ordered);
         MonitoredPointResults(wb.Worksheets.Add("MonitoredPointResults"), ordered);
+        CableForceResults(wb.Worksheets.Add("CableForceResults"), ordered);
         OutputConfiguration(wb.Worksheets.Add("OutputConfiguration"), deflectionPoints, deflectionCase);
         Warnings(wb.Worksheets.Add("Warnings"), ordered);
         Meta(wb.Worksheets.Add("Meta"), baselineName, baselinePath, studyFolder, studyMode, ordered.Count);
@@ -113,6 +114,26 @@ public sealed class ConsolidatedResultWriter
         Finish(ws);
     }
 
+    private static void CableForceResults(IXLWorksheet ws, IReadOnlyList<CandidateResultDto> rows)
+    {
+        Header(ws, "IterationKey", "RunIndex", "Cable", "TargetForce_kN", "Force_kN", "ResultStatus", "Warning");
+        var r = 2;
+        foreach (var c in rows)
+            foreach (var cf in c.CableForces ?? [])
+            {
+                var col = 1;
+                ws.Cell(r, col++).Value = c.IterationKey;
+                ws.Cell(r, col++).Value = c.Parameters.RunIndex;
+                ws.Cell(r, col++).Value = cf.CableName;
+                SetNum(ws.Cell(r, col++), cf.TargetForceKN);
+                SetNum(ws.Cell(r, col++), cf.ForceKN);
+                ws.Cell(r, col++).Value = cf.Status.ToString();
+                ws.Cell(r, col++).Value = cf.Warning ?? "";
+                r++;
+            }
+        Finish(ws);
+    }
+
     private static void OutputConfiguration(IXLWorksheet ws, IReadOnlyList<string> points, string outputCase)
     {
         Header(ws, "GroupName", "PointName", "OutputCase", "Direction", "ProfileAxis");
@@ -175,6 +196,17 @@ public sealed class ConsolidatedResultWriter
         var studyMode = Enum.TryParse<IterationStudyMode>(meta.GetValueOrDefault("StudyMode"), out var m) ? m : IterationStudyMode.Combined;
         var baselineName = meta.GetValueOrDefault("BaselineModelName", "");
         var baselinePath = meta.GetValueOrDefault("BaselineModelPath", "");
+
+        var cableForceByKey = wb.Worksheets.Contains("CableForceResults")
+            ? wb.Worksheet("CableForceResults").RowsUsed().Skip(1)
+                .ToLookup(row => row.Cell(1).GetString(), row => new CableForceResultDto(
+                    row.Cell(3).GetString(),
+                    row.Cell(4).TryGetValue<double>(out var tf) ? tf : null,
+                    row.Cell(5).TryGetValue<double>(out var f) ? f : null,
+                    Enum.TryParse<ResultValueStatus>(row.Cell(6).GetString(), out var s) ? s : ResultValueStatus.ApiError,
+                    string.IsNullOrEmpty(row.Cell(7).GetString()) ? null : row.Cell(7).GetString()),
+                    StringComparer.Ordinal)
+            : null;
 
         var pointRows = wb.Worksheet("MonitoredPointResults").RowsUsed().Skip(1)
             .Select(row => new
@@ -244,7 +276,8 @@ public sealed class ConsolidatedResultWriter
                 key, row.Cell(4).GetString(), baselinePath, baselineName, studyMode, parameters,
                 ParseIso(row.Cell(15).GetString()), ParseIso(row.Cell(16).GetString()), ParseIso(row.Cell(17).GetString()),
                 Enum.TryParse<CandidateExtractionStatus>(row.Cell(14).GetString(), out var es) ? es : CandidateExtractionStatus.ExtractedOk,
-                groups, warnRows[key].ToArray()));
+                groups, warnRows[key].ToArray(),
+                cableForceByKey?[key].ToArray() ?? []));
         }
         return candidates.OrderBy(c => c.Parameters.RunIndex).ToArray();
     }

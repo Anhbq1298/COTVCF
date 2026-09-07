@@ -597,6 +597,21 @@ internal static class StudyExecutionChecks
             }
             return rows;
         });
+        public async Task<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>> GetCableForcesAsync(
+            IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) => await Tracked<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>>(async () =>
+        {
+            Verify(expected); await Task.Delay(1);
+            var rows = new List<COT_VCF.Domain.Results.CableForceRead>();
+            foreach (var name in cableNames)
+            {
+                if (!analysisComplete)
+                { rows.Add(new(name, null, COT_VCF.Domain.Results.ResultValueStatus.AnalysisNotRun)); continue; }
+                // deterministic synthetic axial force in kN, keyed off the cable name so it is stable
+                var force = 900.0 + (Math.Abs(name.GetHashCode()) % 400);
+                rows.Add(new(name, Math.Round(force, 1), COT_VCF.Domain.Results.ResultValueStatus.Valid));
+            }
+            return rows;
+        });
         public Task<IReadOnlyList<SapGroupSnapshot>> ReadOutputGroupsAsync(IReadOnlyList<string> groupNames, ModelInfo expected) =>
             Task.FromResult<IReadOnlyList<SapGroupSnapshot>>(groupNames.Select(name => new SapGroupSnapshot(name, false, [], [], [])).ToArray());
         public Task ReplaceOutputGroupsAsync(IReadOnlyList<OutputSapGroupDefinition> groups, ModelInfo expected) => Task.CompletedTask;

@@ -247,6 +247,79 @@ public sealed class SapGateway : ISapGateway
         Verify(expected);
         return results;
     });
+    public Task<IReadOnlyList<CableForceRead>> GetCableForcesAsync(
+        IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) =>
+        worker.Run<IReadOnlyList<CableForceRead>>(() =>
+    {
+        Verify(expected);
+        var results = new List<CableForceRead>(cableNames.Count);
+
+        if (!ReadInfo().IsLocked)
+        {
+            foreach (var name in cableNames)
+                results.Add(new(name, null, ResultValueStatus.AnalysisNotRun, "The model holds no analysis results."));
+            return results;
+        }
+        if (!Model.GetPresentUnits().ToString().StartsWith("kN_m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Cable force extraction expects kN, m units; the model is in {ReadInfo().Units}.");
+
+        Check(Model.Results.Setup.DeselectAllCasesAndCombosForOutput(), "Results.Setup.DeselectAllCasesAndCombosForOutput");
+        var select = isCombo
+            ? Model.Results.Setup.SetComboSelectedForOutput(outputCase)
+            : Model.Results.Setup.SetCaseSelectedForOutput(outputCase);
+        if (select != 0)
+        {
+            foreach (var name in cableNames)
+                results.Add(new(name, null, ResultValueStatus.CaseNotFound,
+                    $"Output {(isCombo ? "combo" : "case")} '{outputCase}' is not in the model."));
+            return results;
+        }
+
+        foreach (var name in cableNames)
+        {
+            // A cable object resolves to one or more analysis (frame) elements. Read FrameForce for each and
+            // take the governing axial force (max |P|) — mirrors the Cable Axial Forces VBA module.
+            int elmCount = 0; string[] elmNames = []; double[] relI = [], relJ = [];
+            var elmRc = Model.CableObj.GetElm(name, ref elmCount, ref elmNames, ref relI, ref relJ);
+            if (elmRc != 0)
+            {
+                results.Add(new(name, null, ResultValueStatus.PointNotFound, $"CableObj.GetElm returned {elmRc} for cable '{name}'."));
+                continue;
+            }
+            if (elmCount <= 0 || elmNames.Length == 0)
+            {
+                results.Add(new(name, null, ResultValueStatus.NoResult, $"No analysis elements for cable '{name}'."));
+                continue;
+            }
+
+            double? governing = null;
+            var apiFailed = false;
+            for (int e = 0; e < elmCount && e < elmNames.Length; e++)
+            {
+                if (string.IsNullOrWhiteSpace(elmNames[e])) continue;
+                int n = 0;
+                string[] obj = [], elm = [], loadCase = [], stepType = [];
+                double[] objSt = [], elmSt = [], stepNum = [], p = [], v2 = [], v3 = [], tq = [], m2 = [], m3 = [];
+                var rc = Model.Results.FrameForce(elmNames[e], eItemTypeElm.Element, ref n, ref obj, ref objSt,
+                    ref elm, ref elmSt, ref loadCase, ref stepType, ref stepNum, ref p, ref v2, ref v3, ref tq, ref m2, ref m3);
+                if (rc != 0) { apiFailed = true; continue; }
+                for (int i = 0; i < n && i < p.Length; i++)
+                {
+                    var mag = Math.Abs(p[i]);
+                    if (double.IsFinite(mag) && (governing is null || mag > governing)) governing = mag;
+                }
+            }
+
+            results.Add(governing is { } g
+                ? new(name, g, ResultValueStatus.Valid)
+                : new(name, null, apiFailed ? ResultValueStatus.ApiError : ResultValueStatus.NoResult,
+                    apiFailed ? $"Results.FrameForce failed for every element of cable '{name}'."
+                              : $"No axial-force row for cable '{name}' under '{outputCase}'."));
+        }
+
+        Verify(expected);
+        return results;
+    });
     public Task<IReadOnlyList<PointLoad>> GetPointLoadsAsync(string pointName, ModelInfo expected) => worker.Run<IReadOnlyList<PointLoad>>(() =>
     {
         Verify(expected);

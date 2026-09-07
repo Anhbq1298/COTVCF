@@ -11,6 +11,8 @@ public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactor
 
     /// <summary>Absolute path of the last <c>Deflection_Report.html</c> written by a run, or null.</summary>
     public string? LastDeflectionReportPath { get; private set; }
+    /// <summary>Absolute path of the last <c>Cable_Forces_Report.html</c> written by a run, or null.</summary>
+    public string? LastCableForceReportPath { get; private set; }
 
     public async Task<StudyExecutionResult> BuildAsync(
         StudyExecutionSnapshot snapshot,
@@ -54,10 +56,14 @@ public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactor
                 LastDeflectionReportPath = new DeflectionReportGenerator().Generate(
                     studyFolder, consolidator.Snapshot(),
                     snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+                if (consolidator.Snapshot().Any(r => (r.CableForces?.Count ?? 0) > 0))
+                    LastCableForceReportPath = new CableForceReportGenerator().Generate(
+                        studyFolder, consolidator.Snapshot(),
+                        snapshot.BaselineModel.Name, snapshot.StudyMode, snapshot.CableResultLoadCase);
             }
             catch (Exception ex)
             {
-                progress.Report(new StudyExecutionProgress { WorkerId = 0, Message = $"Deflection consolidation failed: {ex.Message}" });
+                progress.Report(new StudyExecutionProgress { WorkerId = 0, Message = $"Result consolidation failed: {ex.Message}" });
             }
         }
         return result;
