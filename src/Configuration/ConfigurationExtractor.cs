@@ -90,6 +90,7 @@ public sealed class ConfigurationExtractor
             SyncMode = c.SyncMode,
             ReferenceCableName = c.ReferenceCableName,
             SyncFactor = c.SyncFactor,
+            SectionName = c.SectionName,
             SectionAreaM2 = c.SectionAreaM2,
             DesignCapacityKN = c.DesignCapacityKN,
         }).ToList(),

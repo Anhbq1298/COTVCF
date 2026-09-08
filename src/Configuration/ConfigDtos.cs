@@ -150,6 +150,10 @@ public sealed class CableForceRowDto
     /// <summary>k for SameRatio, Δ [kN] for SameOffset.</summary>
     public double? SyncFactor { get; set; }
 
+    /// <summary>SAP cable-section property name assigned to this cable (e.g. "109T15.7"). Read straight from
+    /// the model; informational only. Null when no section was retrieved.</summary>
+    public string? SectionName { get; set; }
+
     /// <summary>Cross-section area [m²] read from the SAP cable section on connect. Persisted so the resolved
     /// <see cref="DesignCapacityKN"/> can be recomputed offline when the global strength / φ change. Null when
     /// no section was retrieved.</summary>

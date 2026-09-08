@@ -351,8 +351,11 @@
        <DataGridTemplateColumn Header="Step Force" Width=".8*" MinWidth="70">
         <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditStepForce}" Text="{Binding StepForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
-       <DataGridTextColumn Binding="{Binding SectionAreaM2, StringFormat={}{0:0.#####}}" IsReadOnly="True" Width=".8*" MinWidth="68" ElementStyle="{StaticResource NumericCell}">
-        <DataGridTextColumn.Header><TextBlock Text="Area m²" ToolTip="Cross-section area read from the SAP cable section on + Add Cable"/></DataGridTextColumn.Header>
+       <DataGridTextColumn Binding="{Binding SectionName}" IsReadOnly="True" Width=".9*" MinWidth="76">
+        <DataGridTextColumn.Header><TextBlock Text="Section" ToolTip="SAP cable-section property assigned to this cable — read straight from the model, not editable"/></DataGridTextColumn.Header>
+       </DataGridTextColumn>
+       <DataGridTextColumn Binding="{Binding SectionAreaM2, StringFormat={}{0:0.######}}" IsReadOnly="True" Width=".8*" MinWidth="72" ElementStyle="{StaticResource NumericCell}">
+        <DataGridTextColumn.Header><TextBlock Text="Area m²" ToolTip="Cross-section area from the SAP cable section — read straight from the model, not editable"/></DataGridTextColumn.Header>
        </DataGridTextColumn>
        <DataGridTemplateColumn Width=".95*" MinWidth="86">
         <DataGridTemplateColumn.Header><TextBlock Text="Capacity kN" ToolTip="Design capacity for the utilisation views in the cable-force report. Auto = area × strength × φ; type to override until the next retrieve."/></DataGridTemplateColumn.Header>

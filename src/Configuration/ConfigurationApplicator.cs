@@ -100,6 +100,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
                 SyncMode = mode,
                 ReferenceCableName = reference,
                 SyncFactor = row.SyncFactor,
+                SectionName = string.IsNullOrWhiteSpace(row.SectionName) ? null : row.SectionName,
                 SectionAreaM2 = row.SectionAreaM2 is { } a && double.IsFinite(a) && a > 0 ? a : null,
                 DesignCapacityKN = row.DesignCapacityKN is { } cap && double.IsFinite(cap) && cap > 0 ? cap : null,
             });

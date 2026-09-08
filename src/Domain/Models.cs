@@ -485,8 +485,12 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     }
 
     private double? sectionAreaM2, designCapacityKn;
-    /// <summary>Cross-section area [m²] read from the SAP cable section on connect. Kept so the resolved
-    /// capacity can be recomputed when the global strength / φ change. Null until a section is retrieved.</summary>
+    private string? sectionName;
+    /// <summary>SAP cable-section property assigned to this cable (e.g. "109T15.7"). Read-only: retrieved
+    /// straight from the model on + Add Cable and never editable in the app.</summary>
+    public string? SectionName { get => sectionName; set => Set(ref sectionName, value); }
+    /// <summary>Cross-section area [m²] read straight from the SAP cable section on + Add Cable. Read-only in
+    /// the app. Kept so the resolved capacity can be recomputed when the global strength / φ change.</summary>
     public double? SectionAreaM2 { get => sectionAreaM2; set => Set(ref sectionAreaM2, value); }
     /// <summary>Resolved cable design capacity [kN] — <c>area × strength × 1000 × φ</c>, or a hand-entered
     /// override. Null when no capacity has been resolved; the cable report then has no utilisation view for

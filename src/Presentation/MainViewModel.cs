@@ -1793,17 +1793,18 @@ public sealed class MainViewModel : Observable
 
             try
             {
-                var areas = await workflow.ReadCableSectionAreasAsync(added.Select(c => c.CableName));
+                var sections = await workflow.ReadCableSectionsAsync(added.Select(c => c.CableName));
                 foreach (var cable in added)
-                    if (areas.TryGetValue(cable.CableName, out var area))
+                    if (sections.TryGetValue(cable.CableName, out var section) && section.AreaM2 > 0)
                     {
-                        cable.SectionAreaM2 = area;
+                        cable.SectionName = section.PropertyName;
+                        cable.SectionAreaM2 = section.AreaM2;
                         if (cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor) is { } capacity)
                             cable.DesignCapacityKN = capacity;
                         sized++;
                     }
             }
-            catch (Exception ex) { Warn("Add Cable", $"Could not read cable section areas: {ex.Message}"); }
+            catch (Exception ex) { Warn("Add Cable", $"Could not read cable sections: {ex.Message}"); }
             finally { IsBusy = false; }
         }
 
