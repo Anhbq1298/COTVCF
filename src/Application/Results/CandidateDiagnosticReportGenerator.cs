@@ -2,6 +2,7 @@ using System.IO;
 using System.Net;
 using System.Text;
 using COT_VCF.Domain.Results;
+using COT_VCF.Infrastructure;
 
 namespace COT_VCF.Application.Results;
 
@@ -13,7 +14,7 @@ public sealed class CandidateDiagnosticReportGenerator
     {
         Directory.CreateDirectory(iterationDirectory);
         var path = Path.Combine(iterationDirectory, result.DiagnosticReportFileName);
-        File.WriteAllText(path, BuildHtml(result), new UTF8Encoding(false));
+        AtomicFile.WriteAllText(path, BuildHtml(result), new UTF8Encoding(false));
         return path;
     }
 

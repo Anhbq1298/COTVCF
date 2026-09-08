@@ -229,6 +229,7 @@ internal static class Program
             try { workflow.RefreshAsync().GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
             Assert(!state.BaselineCaptured && state.Truss.TopPoints.Contains("top") && state.PointLoads.Count == 2, "External geometry changes invalidate baseline but preserve setup");
             OutputSettingsChecks.Run();
+            ReliabilityChecks.Run();
             StudyComposerChecks.Run();
             StudyExecutionChecks.Run();
             GatewayChecks.Run();

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using COT_VCF.Application;
 using COT_VCF.Domain;
+using COT_VCF.Infrastructure;
 
 namespace COT_VCF.Configuration;
 
@@ -103,7 +104,7 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
             path = picked!;
         }
 
-        File.WriteAllText(path, JsonSerializer.Serialize(project, Json));
+        AtomicFile.WriteAllText(path, JsonSerializer.Serialize(project, Json));
         // In-memory project == what is on disk; only the tabs written from the UI become clean.
         Session.SetProject(path, project);
         Session.ClearDirty(uiTabs & effective);

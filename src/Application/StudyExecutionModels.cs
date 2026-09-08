@@ -71,4 +71,21 @@ public sealed record StudyExecutionResult(
     int WorkerCount,
     int PeakConcurrent,
     int Reused = 0,
-    bool AllWorkersFaulted = false);
+    bool AllWorkersFaulted = false)
+{
+    public StudyArtifactOutcome Artifacts { get; init; } = StudyArtifactOutcome.NotProduced;
+    public StudyRunReference? Run { get; init; }
+}
+
+public enum StudyArtifactState { NotProduced, Ready, Failed }
+
+public sealed record StudyArtifactOutcome(
+    StudyArtifactState State,
+    string? WorkbookPath,
+    string? DeflectionReportPath,
+    string? CableForceReportPath,
+    string? ErrorMessage)
+{
+    public static StudyArtifactOutcome NotProduced { get; } = new(StudyArtifactState.NotProduced, null, null, null, null);
+    public static StudyArtifactOutcome Failed(string message) => new(StudyArtifactState.Failed, null, null, null, message);
+}

@@ -33,13 +33,13 @@ public sealed class NullableDoubleConverter : IValueConverter
     {
         var text = value?.ToString()?.Trim();
         if (string.IsNullOrWhiteSpace(text)) return null;
-        // Lenient: accept anything that reads as a number — thousands separators, exponent, leading sign,
-        // decimal comma or dot. Unparseable text is ignored (keeps the last good value) rather than flagged.
+        // Accept common engineering-number formats, but never retain a hidden previous value when the
+        // visible editor text is malformed. ValidatesOnExceptions surfaces this as an inline WPF error.
         const NumberStyles styles = NumberStyles.Float | NumberStyles.AllowThousands | NumberStyles.AllowParentheses;
         if (double.TryParse(text, styles, culture, out var n) && double.IsFinite(n)) return n;
         if (double.TryParse(text, styles, CultureInfo.InvariantCulture, out n) && double.IsFinite(n)) return n;
         if (double.TryParse(text.Replace(',', '.'), styles, CultureInfo.InvariantCulture, out n) && double.IsFinite(n)) return n;
-        return Binding.DoNothing;
+        throw new FormatException("Enter a finite number.");
     }
 }
 

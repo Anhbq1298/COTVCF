@@ -40,11 +40,36 @@ public sealed class SapGateway : ISapGateway
     public Task<ModelInfo> ConnectAsync() => worker.Run(() =>
     {
         // GetObject attaches only. Never call CreateObject or ApplicationStart.
-        cHelper helper = new Helper();
-        api = helper.GetObject("CSI.SAP2000.API.SapObject");
-        if (api is null) throw new InvalidOperationException("No running SAP2000 instance is available. Open SAP2000 and a model, then connect again.");
-        model = api.SapModel;
-        return ReadInfo();
+        cHelper? helper = null;
+        cOAPI? nextApi = null;
+        cSapModel? nextModel = null;
+        var previousApi = api;
+        var previousModel = model;
+        try
+        {
+            helper = new Helper();
+            nextApi = helper.GetObject("CSI.SAP2000.API.SapObject");
+            if (nextApi is null) throw new InvalidOperationException("No running SAP2000 instance is available. Open SAP2000 and a model, then connect again.");
+            nextModel = nextApi.SapModel ?? throw new InvalidOperationException("The running SAP2000 instance did not expose an active model.");
+            api = nextApi;
+            model = nextModel;
+            var info = ReadInfo();
+            ReleaseIfReplaced(previousModel, nextModel);
+            ReleaseIfReplaced(previousApi, nextApi);
+            return info;
+        }
+        catch
+        {
+            api = previousApi;
+            model = previousModel;
+            ReleaseIfReplaced(nextModel, previousModel);
+            ReleaseIfReplaced(nextApi, previousApi);
+            throw;
+        }
+        finally
+        {
+            ReleaseComReference(helper, final: true);
+        }
     });
     public Task<ModelInfo> OpenModelAsync(string modelPath) => worker.Run(() =>
     {
@@ -779,15 +804,28 @@ public sealed class SapGateway : ISapGateway
         var currentApi = api;
         model = null;
         api = null;
-        if (currentModel is not null && Marshal.IsComObject(currentModel)) Marshal.FinalReleaseComObject(currentModel);
-        if (currentApi is not null && Marshal.IsComObject(currentApi)) Marshal.FinalReleaseComObject(currentApi);
+        ReleaseComReference(currentModel, final: true);
+        ReleaseComReference(currentApi, final: true);
         return true;
     });
 
+    private static void ReleaseIfReplaced(object? oldReference, object? replacement)
+    {
+        if (oldReference is null || ReferenceEquals(oldReference, replacement)) return;
+        ReleaseComReference(oldReference, final: false);
+    }
+
+    private static void ReleaseComReference(object? reference, bool final)
+    {
+        if (reference is null || !Marshal.IsComObject(reference)) return;
+        if (final) Marshal.FinalReleaseComObject(reference);
+        else Marshal.ReleaseComObject(reference);
+    }
+
     public void Dispose()
     {
-        model = null;
-        api = null;
-        if (ownsWorker) worker.Dispose(); // Controller SAP2000 remains running; no ApplicationExit.
+        if (!ownsWorker) { model = null; api = null; return; }
+        try { ReleaseComReferencesAsync().GetAwaiter().GetResult(); }
+        finally { worker.Dispose(); } // Controller SAP2000 remains running; no ApplicationExit.
     }
 }

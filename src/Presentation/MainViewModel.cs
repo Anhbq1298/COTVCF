@@ -466,8 +466,11 @@ public sealed class MainViewModel : Observable
     }
     public bool HasCableForceReport => !string.IsNullOrEmpty(CableForceReportPath) && File.Exists(CableForceReportPath);
     public string CableForceReportName => HasCableForceReport ? Path.GetFileName(CableForceReportPath!) : "No cable-force report generated yet";
-    public string ResultsWorkbookPath => Directory.Exists(StudyRoot)
-        ? Path.Combine(StudyRoot, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName) : "";
+    private bool useCurrentRunArtifacts;
+    private string? currentRunWorkbookPath;
+    public string ResultsWorkbookPath => useCurrentRunArtifacts
+        ? currentRunWorkbookPath ?? ""
+        : Directory.Exists(StudyRoot) ? Path.Combine(StudyRoot, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName) : "";
     public bool HasResultsWorkbook => !string.IsNullOrEmpty(ResultsWorkbookPath) && File.Exists(ResultsWorkbookPath);
     public string PostProcessStatus
     {
@@ -1144,6 +1147,12 @@ public sealed class MainViewModel : Observable
         studySkippedCount = snapshot.Jobs.Count - studyQueuedCount;
         StudyWorkers.Clear();
         PostProcessRows.Clear();
+        useCurrentRunArtifacts = true;
+        currentRunWorkbookPath = null;
+        DeflectionReportPath = null;
+        CableForceReportPath = null;
+        Notify(nameof(ResultsWorkbookPath));
+        Notify(nameof(HasResultsWorkbook));
         for (int id = 1; id <= RequestedWorkerCount; id++)
             StudyWorkers.Add(new SapWorkerSnapshot { WorkerId = id, State = SapWorkerState.Offline });
 
@@ -1160,9 +1169,11 @@ public sealed class MainViewModel : Observable
         try
         {
             var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token, AddPostProcessRow);
-            DeflectionReportPath = studyExecution.LastDeflectionReportPath;
-            CableForceReportPath = studyExecution.LastCableForceReportPath;
-            RefreshDeflectionArtifacts();
+            currentRunWorkbookPath = result.Artifacts.WorkbookPath;
+            DeflectionReportPath = result.Artifacts.DeflectionReportPath;
+            CableForceReportPath = result.Artifacts.CableForceReportPath;
+            Notify(nameof(ResultsWorkbookPath));
+            Notify(nameof(HasResultsWorkbook));
             studyCompletedCount = result.Completed;
             studyReusedCount = result.Reused;
             studyFailedCount = result.Failed;
@@ -1175,11 +1186,14 @@ public sealed class MainViewModel : Observable
                 ? StudyBuildState.Failed
                 : result.Cancelled > 0 && studyCancellation.IsCancellationRequested
                     ? StudyBuildState.Cancelled
-                    : result.Failed > 0 ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
+                    : result.Failed > 0 || result.Artifacts.State == StudyArtifactState.Failed
+                        ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
             Message = studyBuildState switch
             {
                 StudyBuildState.Completed => $"Build and analysis complete - {result.Completed:N0} verified child models are ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused existing)" : "")}.",
-                StudyBuildState.CompletedWithErrors => $"Build and analysis completed with errors - {result.Completed:N0} ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused)" : "")}, {result.Failed:N0} failed.",
+                StudyBuildState.CompletedWithErrors => result.Artifacts.State == StudyArtifactState.Failed
+                    ? $"Child analysis finished, but result artifacts failed: {result.Artifacts.ErrorMessage}"
+                    : $"Build and analysis completed with errors - {result.Completed:N0} ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused)" : "")}, {result.Failed:N0} failed.",
                 StudyBuildState.Cancelled => $"Build and analysis cancelled - {result.Completed:N0} ready, {result.Cancelled:N0} cancelled.",
                 _ => $"Build and analysis failed - all SAP2000 workers faulted; {result.Completed:N0} models are ready and {result.Failed:N0} failed."
             };
@@ -1328,7 +1342,6 @@ public sealed class MainViewModel : Observable
             PostProcessRows.Clear();
             DeflectionReportPath = null;
             Message = $"No {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName} found in {StudyRoot}. Run the study on Tab 05 to produce deflection results.";
-            RefreshDeflectionArtifacts();
             return;
         }
         IsBusy = true;
@@ -1382,6 +1395,8 @@ public sealed class MainViewModel : Observable
     {
         try
         {
+            useCurrentRunArtifacts = false;
+            currentRunWorkbookPath = null;
             var report = Directory.Exists(StudyRoot)
                 ? Path.Combine(StudyRoot, COT_VCF.Application.Results.DeflectionReportGenerator.ReportFileName) : null;
             DeflectionReportPath = report is not null && File.Exists(report) ? report : null;
@@ -1414,7 +1429,7 @@ public sealed class MainViewModel : Observable
     private bool LoadingCriteriaValid() => State.TributaryWidthB > 0 && double.IsFinite(State.TributaryWidthB) &&
         State.NumberOfStories >= 1 && State.NumberOfStories <= int.MaxValue && State.NumberOfStories == Math.Truncate(State.NumberOfStories) &&
         State.AppliedPoints.All(point => State.Geometry.Points.ContainsKey(point.PointName)) &&
-        State.LoadDefinitions.Count > 0 && State.LoadDefinitions.All(row => row.CandidateValues.Count > 0 && State.LoadPatterns.Contains(row.LoadName, StringComparer.Ordinal)) &&
+        State.LoadDefinitions.Count > 0 && State.LoadDefinitions.All(row => row.CandidateCount > 0 && row.CandidateCount <= LoadDefinition.MaterializeCeiling && State.LoadPatterns.Contains(row.LoadName, StringComparer.Ordinal)) &&
         !State.LoadDefinitions.GroupBy(row => row.LoadName, StringComparer.Ordinal).Any(group => group.Count() > 1);
 
     public LoadingCandidatePreview? CreateLoadingCandidatePreview()
@@ -1440,7 +1455,14 @@ public sealed class MainViewModel : Observable
             tributaryAreas[points[i].PointName] = tributaryLength * State.TributaryWidthB;
         }
 
-        // A loading combination is a Cartesian pick of one qz per load definition.
+        // A loading combination is a Cartesian pick of one qz per load definition. Reject the product before
+        // materializing per-axis values or the preview rows.
+        var total = LoadingCandidates.TotalCount(State.LoadDefinitions);
+        if (total > StudyCompositionService.MaxPreviewRows)
+        {
+            Message = $"Loading preview has {total:N0} combinations; reduce it to {StudyCompositionService.MaxPreviewRows:N0} or fewer.";
+            return null;
+        }
         var combinations = LoadingCandidates.Enumerate(State.LoadDefinitions.ToArray()).ToArray();
         if (combinations.Length == 0)
         {

@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
+using COT_VCF.Infrastructure;
 
 namespace COT_VCF.Application.Results;
 
@@ -34,7 +35,7 @@ public sealed class DeflectionReportGenerator
         Directory.CreateDirectory(studyFolder);
         var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode);
         var path = Path.Combine(studyFolder, ReportFileName);
-        File.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
+        AtomicFile.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
         return path;
     }
 
@@ -325,7 +326,7 @@ a{color:var(--acc)}
   const dashArr = (lg,k) => dashMap[dashValue(lg,k)] ?? '';
   const dashCss = (lg,k) => { const v=dashValue(lg,k); return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
   const legendColor = (lg,k) => (lg.find(e=>e.key===k)||{}).value || '#9aa0a6';
-  const esc = t => String(t).replace(/[<&>]/g, c=>({'<':'&lt;','&':'&amp;','>':'&gt;'}[c]));
+  const esc = t => String(t).replace(/[<&>"]/g, c=>({'<':'&lt;','&':'&amp;','>':'&gt;','"':'&quot;'}[c]));
   // point markers — used when the line dimension is the pretension candidate (dashes alone repeat past 6)
   const MSHAPES = ['circle','square','triangle','diamond','plus','ring'];
   function markerSvg(shape, x, y, r, fill, op, kd){
@@ -641,7 +642,7 @@ a{color:var(--acc)}
         const swatch = P_ON
           ? `<svg class="mk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(pShape(s),11,9,5.2,col,1)}</svg>`
           : `<span class="sw" style="border-top-color:${col};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>`;
-        h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}" title="${esc(s.iterationKey)} · ${esc(s.loadingLabel)} · H ${(+s.trussHeightM).toFixed(2)} m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}">${cb(shown)}${swatch}${s.iterationKey}</div>`); });
+        h.push(`<div class="row cand${off}${on}" data-k="${esc(s.iterationKey)}" title="${esc(s.iterationKey)} · ${esc(s.loadingLabel)} · H ${(+s.trussHeightM).toFixed(2)} m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}">${cb(shown)}${swatch}${esc(s.iterationKey)}</div>`); });
       legendEl.innerHTML = h.join('');
       const wire = (cls, fn) => legendEl.querySelectorAll('.row.'+cls).forEach(r=>{
         const act = () => fn(r.dataset.k);
@@ -659,9 +660,9 @@ a{color:var(--acc)}
       if(t.tagName==='circle'){
         const k=t.dataset.k, s=grp().series.find(x=>x.iterationKey===k);
         tip.hidden=false;
-        tip.innerHTML = `${k}<br>point ${t.dataset.pt}<br>X ${(+t.dataset.x).toFixed(3)} m<br>Uz ${(+t.dataset.uz).toFixed(3)} mm<br>`
-          + `${s.loadingLabel}<br>H ${(+s.trussHeightM).toFixed(3)} m (ΔH ${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)})<br>`
-          + `${s.pretensionLabel}<br>case ${grp().outputCase}`;
+        tip.innerHTML = `${esc(k)}<br>point ${esc(t.dataset.pt)}<br>X ${(+t.dataset.x).toFixed(3)} m<br>Uz ${(+t.dataset.uz).toFixed(3)} mm<br>`
+          + `${esc(s.loadingLabel)}<br>H ${(+s.trussHeightM).toFixed(3)} m (ΔH ${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)})<br>`
+          + `${esc(s.pretensionLabel)}<br>case ${esc(grp().outputCase)}`;
         tip.style.left = Math.min(ev.clientX+12, window.innerWidth - tip.offsetWidth - 8) + 'px';
         tip.style.top  = Math.min(ev.clientY+12, window.innerHeight - tip.offsetHeight - 8) + 'px';
       } else tip.hidden=true;
@@ -699,8 +700,8 @@ a{color:var(--acc)}
     vis.forEach(s=>s.points.forEach(p=>{ const key=p.pointName+'|'+p.coord; if(!rowsMap.has(key)) rowsMap.set(key,{pt:p.pointName,x:p.coord,vals:{}}); }));
     vis.forEach(s=>s.points.forEach(p=>{ const r=rowsMap.get(p.pointName+'|'+p.coord); if(r) r.vals[s.iterationKey]=p.uzMm; }));
     const rows=[...rowsMap.values()].sort((a,b)=>a.x-b.x);
-    const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${s.iterationKey}" title="click to highlight this candidate in every chart">${s.iterationKey}<br><span style="font-weight:400;color:#666">${s.loadingLabel} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
-    const body = rows.map(r=>`<tr><th class="k">${r.pt}</th><td>${fmt(r.x)}</td>${vis.map(s=>{const v=r.vals[s.iterationKey];return `<td${s.iterationKey===hi?' class="hi"':''}>${v==null?'—':(+v).toFixed(3)}</td>`;}).join('')}</tr>`).join('');
+    const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${esc(s.iterationKey)}" title="click to highlight this candidate in every chart">${esc(s.iterationKey)}<br><span style="font-weight:400;color:#666">${esc(s.loadingLabel)} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
+    const body = rows.map(r=>`<tr><th class="k">${esc(r.pt)}</th><td>${fmt(r.x)}</td>${vis.map(s=>{const v=r.vals[s.iterationKey];return `<td${s.iterationKey===hi?' class="hi"':''}>${v==null?'—':(+v).toFixed(3)}</td>`;}).join('')}</tr>`).join('');
     document.getElementById('matrix').innerHTML = `<table><thead><tr><th class="k">Point</th><th>X [m]</th>${th}</tr></thead><tbody>${body}</tbody></table>`;
     document.querySelectorAll('#matrix thead th.ch').forEach(el=>el.onclick=()=>{ hi = (hi===el.dataset.k? null : el.dataset.k); renderAll(); });
   }
@@ -708,7 +709,7 @@ a{color:var(--acc)}
   function drawWarnings(){
     const w = document.getElementById('warns');
     if(!D.warnings.length){ w.textContent=''; return; }
-    w.innerHTML = '<strong>Warnings:</strong> ' + D.warnings.slice(0,40).map(x=>`<span class="${x.severity==='Error'?'e':''}">[${x.iterationKey||'study'}] ${x.category}: ${x.message}</span>`).join(' · ')
+    w.innerHTML = '<strong>Warnings:</strong> ' + D.warnings.slice(0,40).map(x=>`<span class="${x.severity==='Error'?'e':''}">[${esc(x.iterationKey||'study')}] ${esc(x.category)}: ${esc(x.message)}</span>`).join(' · ')
       + (D.warnings.length>40?` … (+${D.warnings.length-40})`:'');
   }
 

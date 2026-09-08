@@ -3,6 +3,7 @@ using System.IO;
 using System.Text.Json;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
+using COT_VCF.Infrastructure;
 
 namespace COT_VCF.Application.Results;
 
@@ -28,7 +29,7 @@ public sealed class CableForceReportGenerator
         Directory.CreateDirectory(studyFolder);
         var dto = Build(results, baselineName, studyMode, cableResultCase);
         var path = Path.Combine(studyFolder, ReportFileName);
-        File.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
+        AtomicFile.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
         return path;
     }
 
@@ -256,7 +257,7 @@ function leg(){
   const b = document.getElementById("legend"); b.innerHTML = "";
   defs().forEach(sv => { const d = document.createElement("div");
     d.className = "li" + (hidden.has(sv.key) ? " off" : "");
-    d.innerHTML = `<span class="sw" style="border-top-color:${sv.color}"></span>${sv.label}`;
+    d.innerHTML = `<span class="sw" style="border-top-color:${sv.color}"></span>${esc(sv.label)}`;
     d.onclick = () => { hidden.has(sv.key) ? hidden.delete(sv.key) : hidden.add(sv.key); all(); };
     b.appendChild(d); });
 }
@@ -322,7 +323,7 @@ function draw(card, cable){
     let h = `<b>${esc(cable)}</b><br><span style="color:#cbd5e1">${plot === "h" ? "Height" : "Pretension"} = ${esc(z.label)}</span>`;
     defs().filter(sv => !hidden.has(sv.key)).forEach(sv => {
       const r = cand(sv.key, xkey), f = r && r.forces[cable];
-      if (r) h += `<div style="display:grid;grid-template-columns:1fr auto;gap:8px"><span>${sv.key} &middot; ${r.candidateId}</span><b>${f == null ? "n/a" : (+f).toFixed(1) + " kN"}</b></div>`;
+      if (r) h += `<div style="display:grid;grid-template-columns:1fr auto;gap:8px"><span>${esc(sv.key)} &middot; ${esc(r.candidateId)}</span><b>${f == null ? "n/a" : (+f).toFixed(1) + " kN"}</b></div>`;
     });
     tip.innerHTML = h; tip.style.display = "block"; tip.style.left = "12px"; tip.style.top = "12px";
   };
@@ -342,27 +343,27 @@ function charts(){
   const b = document.getElementById("charts"); b.innerHTML = "";
   if (!D.rows.length){ b.innerHTML = '<p style="padding:20px;color:#666">No cable-force results in this study.</p>'; return; }
   D.cables.forEach((c, i) => { const x = document.createElement("section"); x.className = "card";
-    x.innerHTML = `<div class="ch"><span class="ct">${String(i + 1).padStart(2, "0")} · ${c}</span>`
+    x.innerHTML = `<div class="ch"><span class="ct">${String(i + 1).padStart(2, "0")} · ${esc(c)}</span>`
       + `<span class="cs">series = ${plot === "h" ? "Pretension" : "Height"} · shared Y-scale</span></div>`
       + `<div class="stage"><svg></svg><div class="tip"></div></div>`;
     b.appendChild(x); draw(x, c); });
 }
 function all(){ leg(); charts(); pinText(); }
 
-document.getElementById("lk").innerHTML = D.loads.map(x => `<div class="kr"><b>${x.id}</b><span>${x.label.replace(x.id + " · ", "")}</span></div>`).join("");
-document.getElementById("hk").innerHTML = D.heights.map(x => `<div class="kr"><b>${x.id}</b><span>${(+x.value).toFixed(2)} m</span></div>`).join("");
-document.getElementById("pk").innerHTML = D.pretensions.map(x => `<div class="kr"><b>${x.id}</b><span>${x.mixed ? "mixed per cable" : (x.value != null ? (+x.value).toFixed(0) + " kN" : "—")}</span></div>`).join("");
+document.getElementById("lk").innerHTML = D.loads.map(x => `<div class="kr"><b>${esc(x.id)}</b><span>${esc(x.label.replace(x.id + " · ", ""))}</span></div>`).join("");
+document.getElementById("hk").innerHTML = D.heights.map(x => `<div class="kr"><b>${esc(x.id)}</b><span>${(+x.value).toFixed(2)} m</span></div>`).join("");
+document.getElementById("pk").innerHTML = D.pretensions.map(x => `<div class="kr"><b>${esc(x.id)}</b><span>${x.mixed ? "mixed per cable" : (x.value != null ? (+x.value).toFixed(0) + " kN" : "—")}</span></div>`).join("");
 document.getElementById("tb").innerHTML = D.rows.flatMap(r => D.cables.map(c => {
   const f = r.forces[c], t = r.targets[c];
-  return `<tr><td>${r.run}</td><td>${r.candidateId}</td><td>${r.iterationKey}</td><td>${r.loadId}</td>`
-    + `<td>${r.heightId} · ${(+r.heightM).toFixed(2)}</td><td>${r.pretLabel}</td><td>${c}</td>`
+  return `<tr><td>${r.run}</td><td>${esc(r.candidateId)}</td><td>${esc(r.iterationKey)}</td><td>${esc(r.loadId)}</td>`
+    + `<td>${esc(r.heightId)} · ${(+r.heightM).toFixed(2)}</td><td>${esc(r.pretLabel)}</td><td>${esc(c)}</td>`
     + `<td class="num">${t == null ? "—" : (+t).toFixed(0)}</td>`
     + `<td class="num ${f == null ? "missing" : ""}">${f == null ? "Result unavailable" : (+f).toFixed(1)}</td></tr>`;
 })).join("");
 
 const wb = document.getElementById("warns");
 wb.innerHTML = D.warnings.length
-  ? "<strong>Warnings:</strong> " + D.warnings.slice(0, 40).map(w => `<span class="${w.isError ? "e" : ""}">[${w.iterationKey || "study"}] ${w.message}</span>`).join(" · ")
+  ? "<strong>Warnings:</strong> " + D.warnings.slice(0, 40).map(w => `<span class="${w.isError ? "e" : ""}">[${esc(w.iterationKey || "study")}] ${esc(w.message)}</span>`).join(" · ")
     + (D.warnings.length > 40 ? ` … (+${D.warnings.length - 40})` : "")
   : "";
 

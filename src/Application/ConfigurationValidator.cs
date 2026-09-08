@@ -72,6 +72,8 @@ public sealed class ConfigurationValidator
                 issues.Add(new("Loading criteria", $"{row.LoadName}: qz must be zero or greater."));
             if (row.ApplyIncrementStep && (row.MinQz is not double min || !double.IsFinite(min) || min < 0 || row.MaxQz is not double max || !double.IsFinite(max) || max < min || row.IncrementStep is not double step || !double.IsFinite(step) || step <= 0))
                 issues.Add(new("Loading criteria", $"{row.LoadName}: review minimum, maximum and increment step."));
+            else if (row.CandidateCount > LoadDefinition.MaterializeCeiling)
+                issues.Add(new("Loading criteria", $"{row.LoadName}: {row.CandidateCount:N0} values exceed the {LoadDefinition.MaterializeCeiling:N0} limit. Widen the increment step."));
         }
         if (state.LoadDefinitions.Where(row => !string.IsNullOrWhiteSpace(row.LoadName))
             .GroupBy(row => row.LoadName, StringComparer.Ordinal).Any(group => group.Count() > 1))

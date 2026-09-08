@@ -3,6 +3,8 @@ using COT_VCF.Application;
 using COT_VCF.Application.Workers;
 using COT_VCF.Domain;
 using System.IO;
+using COT_VCF.Application.Results;
+using COT_VCF.Domain.Results;
 
 internal static class StudyExecutionChecks
 {
@@ -11,6 +13,7 @@ internal static class StudyExecutionChecks
         PathServiceIsPureAndDeterministic();
         SnapshotResolvesCompleteCandidates();
         OneWorkerPersistsAndVerifiesOneCandidate();
+        ArtifactFailureIsReportedWithoutStalePaths();
         OneWorkerDoesNotAccumulateOrLeakCandidateState();
         FixedModesAndCombinedPhysicallyApplyResolvedCandidates();
         ConnectedBaselineCountsAsWorkerOne();
@@ -59,6 +62,8 @@ internal static class StudyExecutionChecks
             var job = snapshot.Jobs.Single(candidate => candidate.RunIterate);
             var gateway = factory.Gateways.Single();
             Check(result.Completed == 1 && result.Failed == 0 &&
+                  result.Artifacts.State == StudyArtifactState.Ready &&
+                  File.Exists(result.Artifacts.WorkbookPath) &&
                   stages.Contains(StudyIterationStatus.RunningAnalysis) &&
                   stages.Contains(StudyIterationStatus.Verifying) &&
                   stages.Contains(StudyIterationStatus.ExtractingResults) && File.Exists(job.ModelFullPath),
@@ -103,6 +108,22 @@ internal static class StudyExecutionChecks
             Check(diagnostic.Contains("ANALYZED", StringComparison.Ordinal) &&
                   diagnostic.Contains("VERIFIED", StringComparison.Ordinal),
                 "Per-candidate diagnostics record analysis and the verified L/H/P transaction");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void ArtifactFailureIsReportedWithoutStalePaths()
+    {
+        var (root, _, snapshot) = CreateSnapshot(1, 1);
+        try
+        {
+            var coordinator = new StudyExecutionCoordinator(new FakeHostFactory(), new FailingArtifactPublisher());
+            var result = coordinator.BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+            Check(result.Completed == 1 && result.Artifacts.State == StudyArtifactState.Failed &&
+                  result.Artifacts.ErrorMessage!.Contains("simulated artifact failure", StringComparison.Ordinal) &&
+                  coordinator.LastDeflectionReportPath is null && coordinator.LastCableForceReportPath is null,
+                "artifact failure is explicit and never reuses a prior report path");
         }
         finally { DeleteRoot(root); }
     }
@@ -493,6 +514,12 @@ internal static class StudyExecutionChecks
     {
         if (!condition) throw new Exception("FAIL: " + name);
         Console.WriteLine("PASS: " + name);
+    }
+
+    private sealed class FailingArtifactPublisher : IStudyArtifactPublisher
+    {
+        public StudyArtifactOutcome Publish(StudyExecutionSnapshot snapshot, IReadOnlyList<CandidateResultDto> results) =>
+            throw new IOException("simulated artifact failure");
     }
 
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>

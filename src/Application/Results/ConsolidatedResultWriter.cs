@@ -4,6 +4,7 @@ using System.IO;
 using ClosedXML.Excel;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
+using COT_VCF.Infrastructure;
 
 namespace COT_VCF.Application.Results;
 
@@ -38,8 +39,7 @@ public sealed class ConsolidatedResultWriter
         Warnings(wb.Worksheets.Add("Warnings"), ordered);
         Meta(wb.Worksheets.Add("Meta"), baselineName, baselinePath, studyFolder, studyMode, ordered.Count);
 
-        if (File.Exists(path)) File.Delete(path);
-        wb.SaveAs(path);
+        AtomicFile.Write(path, wb.SaveAs);
         return path;
     }
 

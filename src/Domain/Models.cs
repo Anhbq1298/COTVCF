@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace COT_VCF.Domain;
@@ -55,6 +56,7 @@ public sealed class AppliedPoint : Observable
 }
 public sealed class LoadDefinition : Observable, IDataErrorInfo
 {
+    public const int MaterializeCeiling = 1_000_000;
     private string loadName = "";
     private bool applyIncrementStep;
     private double? qz = 0, minQz, maxQz, incrementStep;
@@ -66,6 +68,7 @@ public sealed class LoadDefinition : Observable, IDataErrorInfo
         {
             if (!Set(ref applyIncrementStep, value)) return;
             Notify(nameof(IsSingleValue));
+            Notify(nameof(CandidateCount));
             Notify(nameof(CandidateValues));
             Notify(nameof(Qz));
             Notify(nameof(MinQz));
@@ -74,21 +77,40 @@ public sealed class LoadDefinition : Observable, IDataErrorInfo
         }
     }
     public bool IsSingleValue => !ApplyIncrementStep;
-    public double? Qz { get => qz; set { if (Set(ref qz, value)) Notify(nameof(CandidateValues)); } }
-    public double? MinQz { get => minQz; set { if (Set(ref minQz, value)) { Notify(nameof(MaxQz)); Notify(nameof(CandidateValues)); } } }
-    public double? MaxQz { get => maxQz; set { if (Set(ref maxQz, value)) Notify(nameof(CandidateValues)); } }
-    public double? IncrementStep { get => incrementStep; set { if (Set(ref incrementStep, value)) Notify(nameof(CandidateValues)); } }
-    public IReadOnlyList<double> CandidateValues
+    public double? Qz { get => qz; set { if (Set(ref qz, value)) { Notify(nameof(CandidateCount)); Notify(nameof(CandidateValues)); } } }
+    public double? MinQz { get => minQz; set { if (Set(ref minQz, value)) { Notify(nameof(MaxQz)); Notify(nameof(CandidateCount)); Notify(nameof(CandidateValues)); } } }
+    public double? MaxQz { get => maxQz; set { if (Set(ref maxQz, value)) { Notify(nameof(CandidateCount)); Notify(nameof(CandidateValues)); } } }
+    public double? IncrementStep { get => incrementStep; set { if (Set(ref incrementStep, value)) { Notify(nameof(CandidateCount)); Notify(nameof(CandidateValues)); } } }
+
+    /// <summary>Allocation-free candidate cardinality. Values above the materialization ceiling are retained
+    /// as a count so callers can reject the range before allocating it.</summary>
+    public BigInteger CandidateCount
     {
         get
         {
             if (!ApplyIncrementStep)
-                return Qz is double single && double.IsFinite(single) && single >= 0 ? [single] : [];
+                return Qz is double single && double.IsFinite(single) && single >= 0 ? BigInteger.One : BigInteger.Zero;
             if (MinQz is not double min || MaxQz is not double max || IncrementStep is not double step ||
                 !double.IsFinite(min) || !double.IsFinite(max) || !double.IsFinite(step) || min < 0 || max < min || step <= 0)
-                return [];
-            var intervals = (int)Math.Floor((max - min) / step + 1e-10);
-            return Enumerable.Range(0, intervals + 1).Select(i => min + i * step).ToArray();
+                return BigInteger.Zero;
+            var intervals = Math.Floor((max - min) / step + 1e-10);
+            if (!double.IsFinite(intervals)) return new BigInteger(MaterializeCeiling) + 1;
+            return intervals < 0 ? BigInteger.Zero : new BigInteger(intervals) + 1;
+        }
+    }
+
+    public IReadOnlyList<double> CandidateValues
+    {
+        get
+        {
+            var count = CandidateCount;
+            if (count <= 0) return [];
+            if (count > MaterializeCeiling)
+                throw new InvalidOperationException($"{(string.IsNullOrWhiteSpace(LoadName) ? "Loading range" : LoadName)}: {count:N0} candidate values exceed the {MaterializeCeiling:N0} materialization limit. Widen the step.");
+            if (!ApplyIncrementStep) return [Qz!.Value];
+            var min = MinQz!.Value;
+            var step = IncrementStep!.Value;
+            return Enumerable.Range(0, (int)count).Select(i => min + i * step).ToArray();
         }
     }
     string IDataErrorInfo.Error => "";
@@ -98,6 +120,7 @@ public sealed class LoadDefinition : Observable, IDataErrorInfo
         nameof(MinQz) when ApplyIncrementStep && (MinQz is not double value || !double.IsFinite(value) || value < 0) => "Minimum qz must be zero or greater.",
         nameof(MaxQz) when ApplyIncrementStep && (MaxQz is not double value || !double.IsFinite(value) || MinQz is not double min || value < min) => "Maximum qz must be greater than or equal to minimum qz.",
         nameof(IncrementStep) when ApplyIncrementStep && (IncrementStep is not double value || !double.IsFinite(value) || value <= 0) => "Increment step must be greater than zero.",
+        nameof(IncrementStep) when ApplyIncrementStep && CandidateCount > MaterializeCeiling => $"Range exceeds {MaterializeCeiling:N0} values. Widen the step.",
         _ => ""
     };
 }
