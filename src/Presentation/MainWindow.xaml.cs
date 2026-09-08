@@ -142,8 +142,6 @@ public partial class MainWindow : Window
             Content = "Close",
             IsCancel = true,
             HorizontalAlignment = HorizontalAlignment.Right,
-            MinHeight = 30,
-            Padding = new Thickness(12, 4, 12, 4),
             Margin = new Thickness(0, 12, 0, 0)
         };
         close.Click += (_, _) => dialog.Close();
@@ -197,7 +195,7 @@ public partial class MainWindow : Window
         DockPanel.SetDock(summary, Dock.Top);
         panel.Children.Add(summary);
 
-        var close = new Button { Content = "Close", IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right, MinHeight = 28, Padding = new Thickness(12, 4, 12, 4), Margin = new Thickness(0, 10, 0, 0) };
+        var close = new Button { Content = "Close", IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
         close.Click += (_, _) => dialog.Close();
         DockPanel.SetDock(close, Dock.Bottom);
         panel.Children.Add(close);
@@ -239,5 +237,5 @@ public partial class MainWindow : Window
         "Viewer: mouse wheel zooms, drag pans, double-click or Home fits.\n" +
         "Each child runs the load cases enabled in SAP2000, is verified, and its monitored-point deflection is extracted for Tab 06.\n" +
         "A candidate whose child model already exists (e.g. from an overlapping study mode) is reused - opened, verified and re-extracted - never rebuilt or overwritten. Delete its iteration folder to force a rebuild.",
-        "COT VCF tools - Help", MessageBoxButton.OK, MessageBoxImage.Information);
+        "COT VCF Parametric Automation — Help", MessageBoxButton.OK, MessageBoxImage.Information);
 }

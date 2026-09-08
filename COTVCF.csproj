@@ -17,10 +17,13 @@
     <!-- Build Output Configuration -->
     
     <!-- Assembly Info -->
+    <!-- AssemblyName stays "COT VCF tools": it is the .exe/.dll file name and the
+         pack:// assembly token used by the test host and skill docs. The product
+         name shown to users is set below and in the UI. -->
     <AssemblyName>COT VCF tools</AssemblyName>
     <RootNamespace>COT_VCF</RootNamespace>
-    <Title>COT VCF tools</Title>
-    <Product>COT VCF tools</Product>
+    <Title>COT VCF Parametric Automation</Title>
+    <Product>COT VCF Parametric Automation</Product>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <FileVersion>1.0.0.0</FileVersion>
   </PropertyGroup>

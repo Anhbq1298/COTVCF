@@ -10,7 +10,7 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
     {
         var info = await sap.ConnectAsync();
         if (state.Model is { } old && (old.Path != info.Path || old.UnitsCode != info.UnitsCode) && (state.AppliedPoints.Count > 0 || state.PointLoads.Count > 0 || state.Cables.Count > 0 || state.BaselineCaptured))
-            throw new InvalidOperationException("The model or units differ from this session. Close and reopen COT VCF tools to begin a new configuration; the current setup has been retained.");
+            throw new InvalidOperationException("The model or units differ from this session. Close and reopen COT VCF Parametric Automation to begin a new configuration; the current setup has been retained.");
         if (state.Model is { } previous && (previous.Path != info.Path || previous.UnitsCode != info.UnitsCode))
         {
             state.Geometry = GeometryModel.Empty; state.Baseline = GeometryModel.Empty; state.Preview = GeometryModel.Empty; state.LoadPatterns.Clear();
@@ -23,7 +23,7 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
     public async Task RefreshAsync()
     {
         var snapshot = await sap.ReadAsync();
-        if (state.Model is { } old && (old.Path != snapshot.Info.Path || old.UnitsCode != snapshot.Info.UnitsCode)) throw new InvalidOperationException("The model or its units changed. Restore the original model and units, or restart COT VCF tools for a new session.");
+        if (state.Model is { } old && (old.Path != snapshot.Info.Path || old.UnitsCode != snapshot.Info.UnitsCode)) throw new InvalidOperationException("The model or its units changed. Restore the original model and units, or restart COT VCF Parametric Automation for a new session.");
         state.Model = snapshot.Info;
         if (!state.SessionBaselineCaptured)
         {

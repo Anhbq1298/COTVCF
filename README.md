@@ -1,4 +1,4 @@
-# COT VCF tools
+# COT VCF Parametric Automation
 
 WPF / .NET 8 desktop application for defining structural-study candidates from an existing SAP2000 model, then building and analyzing one isolated child `.sdb` model per selected combination.
 

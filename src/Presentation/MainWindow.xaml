@@ -1,4 +1,4 @@
-<Window x:Class="COT_VCF.Presentation.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls" Title="COT VCF tools" Icon="{StaticResource AppLogo}" Width="1440" Height="810" MinWidth="1100" MinHeight="660" WindowStartupLocation="Manual">
+<Window x:Class="COT_VCF.Presentation.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls" Title="COT VCF Parametric Automation" Icon="{StaticResource AppLogo}" Width="1440" Height="810" MinWidth="1100" MinHeight="660" WindowStartupLocation="Manual">
  <DockPanel>
 
   <!-- ============================ TOP BAR ============================ -->
@@ -15,7 +15,7 @@
        </Style>
       </TextBlock.Style>
      </TextBlock>
-     <TextBlock Text="{Binding StatusLine}" Foreground="{StaticResource Muted}" FontSize="11" FontFamily="Consolas" Margin="0,0,12,0"/>
+     <TextBlock Text="{Binding StatusLine}" Style="{StaticResource MonoSmall}" Margin="0,0,12,0"/>
      <Button Content="Connect SAP" Command="{Binding Connect}" Style="{StaticResource Primary}"/>
      <Button Command="{Binding Refresh}" Style="{StaticResource IconButton}" ToolTip="Refresh connection and geometry">
       <Viewbox Width="15" Height="15"><Path Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Data="M14,5 A6,6 0 1 0 16,11 M16,11 L16,6 M16,11 L11,11"/></Viewbox>
@@ -24,11 +24,11 @@
     </StackPanel>
     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
      <Image Source="{StaticResource AppLogo}" Width="20" Height="20" Margin="0,0,8,0"/>
-     <TextBlock Text="COT VCF tools" FontSize="13" FontWeight="Bold"/>
-     <TextBlock Text="PARAMETRIC STRUCTURAL WORKFLOW" Margin="12,1,0,0" Foreground="{StaticResource Muted}" FontSize="10"/>
+     <TextBlock Text="COT VCF Parametric Automation" Style="{StaticResource BannerTitle}"/>
+     <TextBlock Text="PARAMETRIC STRUCTURAL WORKFLOW" Style="{StaticResource BannerEyebrow}" Margin="12,1,0,0"/>
      <Border Width="1" Background="{StaticResource Border}" Margin="16,3,14,3"/>
-     <TextBlock Text="{Binding ProjectName}" VerticalAlignment="Center" FontSize="11" Margin="0,0,12,0"
-               Foreground="{StaticResource Muted}" MaxWidth="260" TextTrimming="CharacterEllipsis"/>
+     <TextBlock Text="{Binding ProjectName}" Style="{StaticResource FieldLabel}" Margin="0,0,12,0"
+               MaxWidth="260" TextTrimming="CharacterEllipsis"/>
      <Button Command="{Binding SaveAllConfig}" ToolTip="Save every tab into the active project file (creates it the first time)" Margin="0,0,6,0">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M2,2 L11,2 L14,5 L14,14 L2,14 Z M5,2 L5,6 L11,6 M4.5,14 L4.5,9.5 L11.5,9.5 L11.5,14"/></Viewbox>
@@ -42,7 +42,7 @@
       </StackPanel>
      </Button>
      <Border Width="1" Background="{StaticResource Border}" Margin="16,3,12,3"/>
-     <TextBlock Text="{Binding ToolbarStudySummary}" VerticalAlignment="Center" FontSize="11" Foreground="{StaticResource Muted}" Margin="0,0,8,0"/>
+     <TextBlock Text="{Binding ToolbarStudySummary}" Style="{StaticResource FieldLabel}" Margin="0,0,8,0"/>
      <Button Command="{Binding RunStudyFromToolbar}" Style="{StaticResource Primary}" Margin="0"
              ToolTip="Validate and run the study from anywhere — jumps to the Iteration tab for the worker monitor and any validation issues">
       <StackPanel Orientation="Horizontal">
@@ -59,8 +59,8 @@
    <StackPanel>
     <ProgressBar Height="2" IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}" Margin="0,0,0,4"/>
     <DockPanel>
-     <TextBlock DockPanel.Dock="Right" Text="{Binding State.Units}" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource Muted}" Margin="16,0,0,0"/>
-     <TextBlock Text="{Binding Message}" FontSize="11" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite"/>
+     <TextBlock DockPanel.Dock="Right" Text="{Binding State.Units}" Style="{StaticResource MonoSmall}" Margin="16,0,0,0"/>
+     <TextBlock Text="{Binding Message}" TextTrimming="CharacterEllipsis" AutomationProperties.LiveSetting="Polite"/>
     </DockPanel>
    </StackPanel>
   </Border>
@@ -79,8 +79,8 @@
    <TabItem>
     <TabItem.Header>
      <StackPanel Width="124">
-      <TextBlock Text="01  LOADING" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
-      <TextBlock Text="{Binding LoadStatus}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
+      <TextBlock Text="01  LOADING" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="{Binding LoadStatus}" Style="{StaticResource TabHeaderStatus}"/>
      </StackPanel>
     </TabItem.Header>
     <Grid IsEnabled="{Binding IsIdle}">
@@ -119,7 +119,7 @@
         <DataGrid x:Name="LoadDefinitionsGrid" Grid.Row="2" ItemsSource="{Binding State.LoadDefinitions}" IsEnabled="{Binding IsIdle}" CanUserDeleteRows="False" SelectionMode="Single" FrozenColumnCount="0">
          <DataGrid.Resources>
           <Style x:Key="LoadValueEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-           <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="6,0"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="FontFamily" Value="Consolas"/><Setter Property="TextAlignment" Value="Right"/>
+           <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="6,0"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="TextAlignment" Value="Right"/>
            <Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Trigger></Style.Triggers>
           </Style>
          </DataGrid.Resources>
@@ -154,8 +154,8 @@
    <TabItem>
     <TabItem.Header>
      <StackPanel Width="124">
-      <TextBlock Text="02  TRUSS HEIGHT" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
-      <TextBlock Text="{Binding TrussStatus}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
+      <TextBlock Text="02  TRUSS HEIGHT" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="{Binding TrussStatus}" Style="{StaticResource TabHeaderStatus}"/>
      </StackPanel>
     </TabItem.Header>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -174,7 +174,7 @@
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,0,6">
-         <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="#C62828" VerticalAlignment="Center" Margin="0,0,6,0"/><TextBlock Text="Top chord" FontWeight="SemiBold"/></StackPanel>
+         <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="{StaticResource ChordTop}" VerticalAlignment="Center" Margin="0,0,6,0"/><TextBlock Text="Top chord" FontWeight="SemiBold"/></StackPanel>
          <TextBlock Text="{Binding TopSummary}" Foreground="{StaticResource Muted}" FontSize="11"/>
         </StackPanel>
         <Button Grid.Row="0" Grid.Column="1" Content="Select" Command="{Binding SelectGroup}" CommandParameter="Top" Margin="6,0,6,6" VerticalAlignment="Center"/>
@@ -183,7 +183,7 @@
                     ToolTip="Top chord elevation stays fixed while generating candidates."/>
 
         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,6">
-         <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="#2563EB" VerticalAlignment="Center" Margin="0,0,6,0"/><TextBlock Text="Middle" FontWeight="SemiBold"/></StackPanel>
+         <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="{StaticResource ChordMiddle}" VerticalAlignment="Center" Margin="0,0,6,0"/><TextBlock Text="Middle" FontWeight="SemiBold"/></StackPanel>
          <TextBlock Text="{Binding MiddleSummary}" Foreground="{StaticResource Muted}" FontSize="11"/>
         </StackPanel>
         <Button Grid.Row="1" Grid.Column="1" Content="Select" Command="{Binding SelectGroup}" CommandParameter="Middle" Margin="6,0,6,6" VerticalAlignment="Center"/>
@@ -192,7 +192,7 @@
                     ToolTip="Middle chord elevation stays fixed while generating candidates."/>
 
         <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,0,6">
-         <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="#2E7D32" VerticalAlignment="Center" Margin="0,0,6,0"/><TextBlock Text="Bottom chord" FontWeight="SemiBold"/></StackPanel>
+         <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="{StaticResource ChordBottom}" VerticalAlignment="Center" Margin="0,0,6,0"/><TextBlock Text="Bottom chord" FontWeight="SemiBold"/></StackPanel>
          <TextBlock Text="{Binding BottomSummary}" Foreground="{StaticResource Muted}" FontSize="11"/>
         </StackPanel>
         <Button Grid.Row="2" Grid.Column="1" Content="Select" Command="{Binding SelectGroup}" CommandParameter="Bottom" Margin="6,0,6,6" VerticalAlignment="Center"/>
@@ -204,7 +204,7 @@
        <TextBlock Text="{Binding GroupWarning}" TextWrapping="Wrap" Foreground="{StaticResource Warning}" FontSize="11" Margin="0,2,0,6"/>
        <Button Content="Capture Baseline" Command="{Binding CaptureBaseline}" HorizontalAlignment="Left" Margin="0,0,0,4"
               ToolTip="Freeze the selected chord coordinates and truss height H&#8320; as the immutable reference for every candidate."/>
-       <TextBlock Text="{Binding BaselineStatus}" FontFamily="Consolas" FontSize="11" Foreground="{StaticResource Success}" Margin="0,0,0,12"/>
+       <TextBlock Text="{Binding BaselineStatus}" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Success}" Margin="0,0,0,12"/>
 
        <TextBlock Text="HEIGHT RANGE" Style="{StaticResource Subheading}"/>
        <c:EngineeringInput Label="Minimum height" Value="{Binding State.Truss.MinimumHeight}" Unit="{Binding LengthUnit}"/>
@@ -213,14 +213,14 @@
        <Grid Margin="0,2,0,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <TextBlock Text="Generated candidates" Foreground="{StaticResource Muted}"/>
-        <TextBlock Grid.Column="1" Text="{Binding CandidateCountText}" FontFamily="Consolas" FontWeight="SemiBold"/>
+        <TextBlock Grid.Column="1" Text="{Binding CandidateCountText}" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold"/>
        </Grid>
        <TextBlock Text="{Binding CandidateWarning}" TextWrapping="Wrap" Foreground="{StaticResource Warning}" FontSize="10.5" Margin="0,2,0,10"/>
 
        <TextBlock Text="PREVIEW" Style="{StaticResource Subheading}"/>
        <c:EngineeringInput Label="Preview height" Value="{Binding State.Truss.CurrentHeight}" Unit="{Binding LengthUnit}"/>
        <Slider Minimum="{Binding State.Truss.MinimumHeight}" Maximum="{Binding State.Truss.MaximumHeight}" TickFrequency="{Binding State.Truss.Increment}" Value="{Binding State.Truss.CurrentHeight}" Margin="0,4,0,4" AutomationProperties.Name="Preview truss height"/>
-       <TextBlock Text="{Binding PreviewDelta}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+       <TextBlock Text="{Binding PreviewDelta}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"/>
        <StackPanel Orientation="Horizontal">
         <Button Content="Reset Preview" Command="{Binding ResetPreview}"/>
         <Button Content="View Candidates" Click="ViewTrussCandidates_Click" Style="{StaticResource Primary}"
@@ -236,8 +236,8 @@
    <TabItem>
     <TabItem.Header>
      <StackPanel Width="124">
-      <TextBlock Text="03  PRETENSION" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
-      <TextBlock Text="{Binding CableStatus}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
+      <TextBlock Text="03  PRETENSION" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="{Binding CableStatus}" Style="{StaticResource TabHeaderStatus}"/>
      </StackPanel>
     </TabItem.Header>
     <Grid IsEnabled="{Binding IsIdle}">
@@ -277,7 +277,7 @@
                 CanUserDeleteRows="False" FrozenColumnCount="1" ScrollViewer.HorizontalScrollBarVisibility="Auto">
       <DataGrid.Resources>
        <Style x:Key="ForceEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-        <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="6,0"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="FontFamily" Value="Consolas"/><Setter Property="TextAlignment" Value="Right"/>
+        <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="6,0"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="TextAlignment" Value="Right"/>
         <Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Trigger></Style.Triggers>
        </Style>
       </DataGrid.Resources>
@@ -352,8 +352,8 @@
    <TabItem>
     <TabItem.Header>
      <StackPanel Width="124">
-      <TextBlock Text="04  OUTPUT SETTINGS" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
-      <TextBlock Text="{Binding OutputStatus}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
+      <TextBlock Text="04  OUTPUT SETTINGS" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="{Binding OutputStatus}" Style="{StaticResource TabHeaderStatus}"/>
      </StackPanel>
     </TabItem.Header>
     <Grid IsEnabled="{Binding IsIdle}" Margin="2,2,0,0">
@@ -431,8 +431,8 @@
    <TabItem>
     <TabItem.Header>
      <StackPanel Width="124">
-      <TextBlock Text="05  ITERATION" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
-      <TextBlock Text="{Binding StudyBuildStateText}" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
+      <TextBlock Text="05  ITERATION" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="{Binding StudyBuildStateText}" Style="{StaticResource TabHeaderStatus}"/>
      </StackPanel>
     </TabItem.Header>
     <Grid>
@@ -453,12 +453,12 @@
             <Setter Property="Foreground" Value="{StaticResource Text}"/>
            </Style>
            <Style x:Key="DefRowId" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Foreground" Value="{StaticResource Accent}"/>
            </Style>
            <Style x:Key="DefRowVal" TargetType="TextBlock">
-            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
            </Style>
            <Style x:Key="DefColHead" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource Muted}"/>
@@ -469,7 +469,7 @@
          <TextBlock DockPanel.Dock="Top" Text="CANDIDATE DEFINITIONS" Style="{StaticResource Subheading}"/>
          <TextBlock DockPanel.Dock="Top" Text="The preview grid shows IDs only — expand a list to see what each ID means. Hovering a grid cell also shows its definition." Style="{StaticResource Hint}"/>
          <Border DockPanel.Dock="Top" Background="{StaticResource Raised}" BorderBrush="{StaticResource Border}" BorderThickness="1" Padding="6,3" Margin="0,0,0,6">
-          <TextBlock Text="{Binding SelectedCandidateBreadcrumb}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"/>
+          <TextBlock Text="{Binding SelectedCandidateBreadcrumb}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"/>
          </Border>
 
          <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -615,7 +615,7 @@
           <TextBlock Text="FIXED CABLE PRETENSION" Style="{StaticResource Subheading}"/>
           <ComboBox ItemsSource="{Binding PretensionStudyCandidates}" DisplayMemberPath="DisplayName" SelectedValuePath="Id"
                     SelectedValue="{Binding FixedPretensionCandidateId, Mode=TwoWay}"/>
-          <TextBlock Text="{Binding FixedPretensionValueText}" FontFamily="Consolas" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,5,0,0"/>
+          <TextBlock Text="{Binding FixedPretensionValueText}" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,5,0,0"/>
          </StackPanel>
         </Border>
 
@@ -625,7 +625,7 @@
           <TextBlock Text="FIXED TRUSS HEIGHT" Style="{StaticResource Subheading}"/>
           <ComboBox ItemsSource="{Binding HeightStudyCandidates}" DisplayMemberPath="DisplayName" SelectedValuePath="Id"
                     SelectedValue="{Binding FixedHeightCandidateId, Mode=TwoWay}"/>
-          <TextBlock Text="{Binding FixedHeightValueText}" FontFamily="Consolas" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,5,0,0"/>
+          <TextBlock Text="{Binding FixedHeightValueText}" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,5,0,0"/>
          </StackPanel>
         </Border>
 
@@ -636,14 +636,14 @@
          <TextBlock Grid.Column="1" Text="Available" Foreground="{StaticResource Muted}" FontSize="10.5"/>
          <TextBlock Grid.Column="2" Text="Current Study" Foreground="{StaticResource Muted}" FontSize="10.5"/>
          <StackPanel Grid.Row="1" Orientation="Horizontal"><TextBlock Text="Loading"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_L" Style="{StaticResource Formula}"/></StackPanel>
-         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding LoadingCandidateCount}" FontFamily="Consolas"/>
-         <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding StudyLoadingCell}" FontFamily="Consolas"/>
+         <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding LoadingCandidateCount}" FontFamily="{StaticResource MonoFont}"/>
+         <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding StudyLoadingCell}" FontFamily="{StaticResource MonoFont}"/>
          <StackPanel Grid.Row="2" Orientation="Horizontal"><TextBlock Text="Height"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_H" Style="{StaticResource Formula}"/></StackPanel>
-         <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding HeightCandidateCount}" FontFamily="Consolas"/>
-         <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding StudyHeightCell}" FontFamily="Consolas" TextTrimming="CharacterEllipsis" ToolTip="{Binding StudyHeightCell}"/>
+         <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding HeightCandidateCount}" FontFamily="{StaticResource MonoFont}"/>
+         <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding StudyHeightCell}" FontFamily="{StaticResource MonoFont}" TextTrimming="CharacterEllipsis" ToolTip="{Binding StudyHeightCell}"/>
          <StackPanel Grid.Row="3" Orientation="Horizontal"><TextBlock Text="Pretension"/><TextBlock Text="  "/><c:LatexTextBlock Formula="N_P" Style="{StaticResource Formula}"/></StackPanel>
-         <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PretensionCandidateCount}" FontFamily="Consolas"/>
-         <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding StudyPretensionCell}" FontFamily="Consolas" TextTrimming="CharacterEllipsis" ToolTip="{Binding StudyPretensionCell}"/>
+         <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding PretensionCandidateCount}" FontFamily="{StaticResource MonoFont}"/>
+         <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding StudyPretensionCell}" FontFamily="{StaticResource MonoFont}" TextTrimming="CharacterEllipsis" ToolTip="{Binding StudyPretensionCell}"/>
         </Grid>
 
         <StackPanel Margin="0,2,0,0">
@@ -661,7 +661,7 @@
        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="3*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
        <DockPanel Grid.Row="0" Margin="0,0,0,7">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-         <TextBlock Text="{Binding StudySelectionSummary}" Foreground="{StaticResource Accent}" FontFamily="Consolas" FontWeight="SemiBold" Margin="0,0,10,0"/>
+         <TextBlock Text="{Binding StudySelectionSummary}" Foreground="{StaticResource Accent}" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Margin="0,0,10,0"/>
          <Button Content="Select All" Command="{Binding SelectAllStudyRuns}" MinHeight="24" Padding="8,2"/>
          <Button Content="Clear All" Command="{Binding ClearAllStudyRuns}" MinHeight="24" Padding="8,2" Margin="0"/>
         </StackPanel>
@@ -734,7 +734,7 @@
           <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
           <TextBlock Text="WORKER MONITOR" Style="{StaticResource Subheading}" Margin="0"/>
           <ProgressBar Grid.Column="1" Height="8" Minimum="0" Maximum="100" Value="{Binding StudyOverallProgress, Mode=OneWay}" Margin="10,3"/>
-          <TextBlock Grid.Column="2" Text="{Binding StudyProgressText}" FontFamily="Consolas" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+          <TextBlock Grid.Column="2" Text="{Binding StudyProgressText}" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
          </Grid>
          <ItemsControl Grid.Row="1" ItemsSource="{Binding WorkerMonitorSlots}" Margin="0,6,0,5">
           <ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Rows="1"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
@@ -753,22 +753,22 @@
             <Grid>
              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
              <DockPanel>
-              <TextBlock DockPanel.Dock="Right" Text="{Binding Snapshot.StateText}" FontFamily="Consolas" FontSize="10" FontWeight="SemiBold" Visibility="{Binding ShowLive, Converter={StaticResource BoolVisibility}}"/>
+              <TextBlock DockPanel.Dock="Right" Text="{Binding Snapshot.StateText}" FontFamily="{StaticResource MonoFont}" FontSize="10" FontWeight="SemiBold" Visibility="{Binding ShowLive, Converter={StaticResource BoolVisibility}}"/>
               <TextBlock Text="{Binding InstanceName}" FontWeight="SemiBold"/>
              </DockPanel>
              <TextBlock Grid.Row="1" Margin="0,6,0,0" Text="{Binding StatusLabel}" Foreground="{StaticResource Muted}" FontSize="10.5"
                         Visibility="{Binding ShowStatus, Converter={StaticResource BoolVisibility}}"/>
              <Grid Grid.Row="1" Visibility="{Binding ShowLive, Converter={StaticResource BoolVisibility}}">
               <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-              <TextBlock Text="{Binding Snapshot.GateText}" FontFamily="Consolas" FontSize="10" Foreground="{StaticResource Muted}"/>
-              <DockPanel Grid.Row="1" Margin="0,4,0,0"><TextBlock DockPanel.Dock="Right" Text="{Binding Snapshot.StageProgressText}" FontFamily="Consolas" FontSize="10" Foreground="{StaticResource Muted}"/><TextBlock Text="{Binding Snapshot.CurrentIterationId, TargetNullValue=Waiting}" FontFamily="Consolas" TextTrimming="CharacterEllipsis"/></DockPanel>
-              <DockPanel Grid.Row="2"><TextBlock DockPanel.Dock="Right" Text="{Binding Snapshot.CompletedCount, StringFormat=Ready: {0}}" FontFamily="Consolas" FontSize="10"/><TextBlock Text="{Binding Snapshot.StageText}" FontSize="10.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding Snapshot.LastMessage}"/></DockPanel>
+              <TextBlock Text="{Binding Snapshot.GateText}" FontFamily="{StaticResource MonoFont}" FontSize="10" Foreground="{StaticResource Muted}"/>
+              <DockPanel Grid.Row="1" Margin="0,4,0,0"><TextBlock DockPanel.Dock="Right" Text="{Binding Snapshot.StageProgressText}" FontFamily="{StaticResource MonoFont}" FontSize="10" Foreground="{StaticResource Muted}"/><TextBlock Text="{Binding Snapshot.CurrentIterationId, TargetNullValue=Waiting}" FontFamily="{StaticResource MonoFont}" TextTrimming="CharacterEllipsis"/></DockPanel>
+              <DockPanel Grid.Row="2"><TextBlock DockPanel.Dock="Right" Text="{Binding Snapshot.CompletedCount, StringFormat=Ready: {0}}" FontFamily="{StaticResource MonoFont}" FontSize="10"/><TextBlock Text="{Binding Snapshot.StageText}" FontSize="10.5" TextTrimming="CharacterEllipsis" ToolTip="{Binding Snapshot.LastMessage}"/></DockPanel>
              </Grid>
             </Grid>
            </Border>
           </DataTemplate></ItemsControl.ItemTemplate>
          </ItemsControl>
-         <DockPanel Grid.Row="2"><TextBlock DockPanel.Dock="Right" Text="{Binding StudyBuildStateText}" FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/><TextBlock Text="{Binding StudyCountsText}" FontFamily="Consolas" FontSize="10.5"/></DockPanel>
+         <DockPanel Grid.Row="2"><TextBlock DockPanel.Dock="Right" Text="{Binding StudyBuildStateText}" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/><TextBlock Text="{Binding StudyCountsText}" FontFamily="{StaticResource MonoFont}" FontSize="10.5"/></DockPanel>
          </Grid>
         </StackPanel>
        </Border>
@@ -809,8 +809,8 @@
    <TabItem>
     <TabItem.Header>
      <StackPanel Width="124">
-      <TextBlock Text="06  POST-PROCESSING" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
-      <TextBlock Text="Deflection · Uz" FontSize="10" Foreground="{StaticResource Muted}" Margin="0,1,0,0"/>
+      <TextBlock Text="06  POST-PROCESSING" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="Deflection · Uz" Style="{StaticResource TabHeaderStatus}"/>
      </StackPanel>
     </TabItem.Header>
     <Grid Margin="2,2,6,2">
@@ -869,7 +869,7 @@
           </DataGrid.Columns>
          </DataGrid>
          <Border Height="1" Background="{StaticResource Border}" Margin="0,10,0,8"/>
-         <TextBlock Text="{Binding DeflectionReportName}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionReportPath}"/>
+         <TextBlock Text="{Binding DeflectionReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser"/>
           <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Rebuild Deflection_Report.html from Deflection_Results_Source.xlsx — no SAP"/>
@@ -908,7 +908,7 @@
         <StackPanel>
          <TextBlock Text="Analysed cable axial force per configured cable · read under the Output Settings cable result case · one chart per cable · shared Y-scale" Style="{StaticResource PpDesc}"/>
          <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>
-         <TextBlock Text="{Binding CableForceReportName}" FontFamily="Consolas" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding CableForceReportPath}"/>
+         <TextBlock Text="{Binding CableForceReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding CableForceReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenCableForceReport}" Style="{StaticResource Primary}" ToolTip="Open Cable_Forces_Report.html in your web browser"/>
           <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Rebuild Cable_Forces_Report.html from Deflection_Results_Source.xlsx — no SAP"/>
@@ -928,7 +928,7 @@
   <GridSplitter x:Name="ViewerSplitter" Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="{StaticResource Border}"/>
 
   <DockPanel x:Name="SharedViewerPane" Grid.Column="2" Margin="10,10,10,10" LastChildFill="True">
-   <TextBlock DockPanel.Dock="Top" Text="{Binding SharedViewerCaption}" FontFamily="Consolas" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
+   <TextBlock DockPanel.Dock="Top" Text="{Binding SharedViewerCaption}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
    <TextBlock DockPanel.Dock="Bottom" Text="{Binding SharedViewerHint}" Style="{StaticResource Hint}" Margin="2,6,0,0"/>
    <Grid>
     <c:Structural2DViewer x:Name="SharedViewer" ShowPointLabels="True"
@@ -941,12 +941,12 @@
                           Cables="{Binding SharedViewerCables}"
                           SelectedCable="{Binding SelectedCable, Mode=TwoWay}"
                           AutomationProperties.Name="Shared structural model preview"/>
-    <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,8" Background="#F2F3F5" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3"
+    <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,8" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3"
             Visibility="{Binding ShowTrussLegend, Converter={StaticResource BoolVisibility}}">
      <StackPanel Orientation="Horizontal">
-      <Ellipse Width="8" Height="8" Fill="#C62828" VerticalAlignment="Center"/><TextBlock Text="Top" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,10,0"/>
-      <Ellipse Width="8" Height="8" Fill="#2563EB" VerticalAlignment="Center"/><TextBlock Text="Middle" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,10,0"/>
-      <Ellipse Width="8" Height="8" Fill="#2E7D32" VerticalAlignment="Center"/><TextBlock Text="Bottom" FontSize="10" Foreground="{StaticResource Muted}" Margin="4,0,0,0"/>
+      <Ellipse Width="8" Height="8" Fill="{StaticResource ChordTop}" VerticalAlignment="Center"/><TextBlock Text="Top" Style="{StaticResource Caption}" Margin="4,0,10,0"/>
+      <Ellipse Width="8" Height="8" Fill="{StaticResource ChordMiddle}" VerticalAlignment="Center"/><TextBlock Text="Middle" Style="{StaticResource Caption}" Margin="4,0,10,0"/>
+      <Ellipse Width="8" Height="8" Fill="{StaticResource ChordBottom}" VerticalAlignment="Center"/><TextBlock Text="Bottom" Style="{StaticResource Caption}" Margin="4,0,0,0"/>
      </StackPanel>
     </Border>
    </Grid>
