@@ -187,6 +187,29 @@ public sealed class MainViewModel : Observable
             return f == 0 ? "no synced cables" : $"{g} sync group{(g == 1 ? "" : "s")} · {f} follower{(f == 1 ? "" : "s")}";
         }
     }
+    /// <summary>Global cable material strength [MPa] (Grade 1860 strand by default). Editing it recomputes the
+    /// Capacity column for every cable that has a retrieved section area.</summary>
+    public double CableStrengthMpa
+    {
+        get => State.CableStrengthMpa;
+        set { if (State.CableStrengthMpa == value) return; State.CableStrengthMpa = value; Notify(); RecomputeCableCapacities(); Update(); }
+    }
+    /// <summary>Global strength-reduction coefficient φ (default 0.5). Editing it recomputes the Capacity column.</summary>
+    public double CableStrengthReductionFactor
+    {
+        get => State.CableStrengthReductionFactor;
+        set { if (State.CableStrengthReductionFactor == value) return; State.CableStrengthReductionFactor = value; Notify(); RecomputeCableCapacities(); Update(); }
+    }
+
+    /// <summary>Refresh each cable's <see cref="CablePretensionConfig.DesignCapacityKN"/> from its section area
+    /// and the global strength / φ. Cables with no retrieved area keep whatever capacity was typed in.</summary>
+    private void RecomputeCableCapacities()
+    {
+        foreach (var cable in State.Cables)
+            if (cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor) is { } capacity)
+                cable.DesignCapacityKN = capacity;
+    }
+
     // Bulk "apply Sync to selected rows" editor state.
     public CableSyncMode BulkSyncMode { get; set; } = CableSyncMode.SameValues;
     private string? bulkSyncReference;
@@ -1749,8 +1772,9 @@ public sealed class MainViewModel : Observable
         if (added.Count == 0) { Message = "Cable selection unchanged."; Update(); return; }
         SelectedCable = added[0];
 
-        // Pre-fill each new row from the target force already assigned in the connected SAP2000 model.
-        int prefilled = 0;
+        // Pre-fill each new row from the connected SAP2000 model: its existing target force, and its section
+        // area (→ resolved design capacity for the utilisation views in the cable-force report).
+        int prefilled = 0, sized = 0;
         if (State.Model is not null)
         {
             IsBusy = true;
@@ -1766,11 +1790,25 @@ public sealed class MainViewModel : Observable
                     }
             }
             catch (Exception ex) { Warn("Add Cable", $"Could not read existing target forces: {ex.Message}"); }
+
+            try
+            {
+                var areas = await workflow.ReadCableSectionAreasAsync(added.Select(c => c.CableName));
+                foreach (var cable in added)
+                    if (areas.TryGetValue(cable.CableName, out var area))
+                    {
+                        cable.SectionAreaM2 = area;
+                        if (cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor) is { } capacity)
+                            cable.DesignCapacityKN = capacity;
+                        sized++;
+                    }
+            }
+            catch (Exception ex) { Warn("Add Cable", $"Could not read cable section areas: {ex.Message}"); }
             finally { IsBusy = false; }
         }
 
-        Message = prefilled > 0
-            ? $"Added {added.Count} cable{(added.Count == 1 ? "" : "s")} · {prefilled} pre-filled from SAP2000. Remove with − Remove."
+        Message = prefilled > 0 || sized > 0
+            ? $"Added {added.Count} cable{(added.Count == 1 ? "" : "s")} · {prefilled} pre-filled, {sized} sized from SAP2000. Remove with − Remove."
             : $"Added {added.Count} cable{(added.Count == 1 ? "" : "s")}. Remove with − Remove.";
         Update();
     }

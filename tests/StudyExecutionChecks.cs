@@ -673,6 +673,7 @@ internal static class StudyExecutionChecks
             Verify(expected); await Task.Delay(1);
             return currentTargets.Values.Where(force => force.CableName.Equals(cableName, StringComparison.OrdinalIgnoreCase)).ToArray();
         });
+        public Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected) => Task.FromResult<IReadOnlyList<CableSection>>([]);
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => Task.FromResult<IReadOnlyList<ForceSource>>([]);
         public Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<string>>(["DEAD", "SERVICE", "PRETENSION"]);
         public async Task<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>> GetJointDisplacementsAsync(

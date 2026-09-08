@@ -34,6 +34,9 @@ public record ModelInfo(string Path, string Version, int UnitsCode, string Force
 public record ModelSnapshot(ModelInfo Info, GeometryModel Geometry, IReadOnlyList<string> LoadPatterns);
 public record PointLoad(string PointName, string LoadPattern, double Fx, double Fy, double Fz);
 public record CableTargetForce(string CableName, string LoadPattern, double TargetForce, double RelativeDistance);
+/// <summary>One cable's assigned section property and cross-section area [m²], read from SAP.
+/// <see cref="AreaM2"/> is 0 with a <see cref="Problem"/> when the section could not be read.</summary>
+public record CableSection(string CableName, double AreaM2, string? PropertyName = null, string? Problem = null);
 public record ForceSource(string ObjectName, MemberKind Kind, string Source, double? Force, string? Problem = null);
 public enum ValidationSeverity { Error, Warning, Info }
 public record ValidationIssue(string Section, string Message, ValidationSeverity Severity = ValidationSeverity.Error);

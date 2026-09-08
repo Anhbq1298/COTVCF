@@ -369,6 +369,38 @@ public sealed class SapGateway : ISapGateway
         Verify(expected);
         return assignments;
     });
+    public Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected) =>
+        worker.Run<IReadOnlyList<CableSection>>(() =>
+    {
+        Verify(expected);
+        var results = new List<CableSection>(cableNames.Count);
+        // Cable section area is length²; the study session runs in kN/m/C, so the value is m². Assert it.
+        if (!Model.GetPresentUnits().ToString().StartsWith("kN_m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Cable section retrieval expects kN, m units; the model is in {ReadInfo().Units}.");
+
+        int total = 0; string[] all = [];
+        Check(Model.CableObj.GetNameList(ref total, ref all), "CableObj.GetNameList");
+        var known = all.Take(total).ToArray();
+
+        foreach (var name in cableNames)
+        {
+            var actual = known.FirstOrDefault(n => n.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (actual is null) { results.Add(new(name, 0, Problem: $"Cable '{name}' is not in the model.")); continue; }
+
+            string prop = "";
+            var propRc = Model.CableObj.GetProperty(actual, ref prop);
+            if (propRc != 0 || string.IsNullOrWhiteSpace(prop))
+            { results.Add(new(actual, 0, Problem: $"CableObj.GetProperty returned {propRc} for '{actual}'.")); continue; }
+
+            string mat = "", notes = "", guid = ""; double area = 0; int color = 0;
+            var areaRc = Model.PropCable.GetProp(prop, ref mat, ref area, ref color, ref notes, ref guid);
+            results.Add(areaRc == 0 && double.IsFinite(area) && area > 0
+                ? new(actual, area, prop)
+                : new(actual, 0, prop, $"PropCable.GetProp returned {areaRc} (area {area}) for section '{prop}'."));
+        }
+        Verify(expected);
+        return results;
+    });
     public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => worker.Run<IReadOnlyList<ForceSource>>(() =>
     {
         Verify(expected);
