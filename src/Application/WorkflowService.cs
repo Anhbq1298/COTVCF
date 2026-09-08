@@ -145,9 +145,9 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
     /// connected model. Empty when offline; every requested cable that resolved is keyed by its name.</summary>
     public async Task<IReadOnlyDictionary<string, CableSection>> ReadCableSectionsAsync(IEnumerable<string> cableNames)
     {
-        var result = new Dictionary<string, CableSection>(StringComparer.Ordinal);
+        var result = new Dictionary<string, CableSection>(StringComparer.OrdinalIgnoreCase);
         if (state.Model is null) return result;
-        var names = cableNames.Distinct(StringComparer.Ordinal).ToArray();
+        var names = cableNames.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (names.Length == 0) return result;
         foreach (var section in await sap.GetCableSectionsAsync(names, state.Model))
             result[section.CableName] = section;

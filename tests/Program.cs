@@ -55,6 +55,22 @@ internal static class Program
                 Directory.CreateDirectory(".work");
                 using (var stream = File.Create(".work/loading-tab.png")) loadingEncoder.Save(stream);
 
+                vm.SelectedTab = 2;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                var refreshCableSectionsButton = FindVisuals<Button>(window)
+                    .Single(button => button.Name == "RefreshCableSectionsButton");
+                Assert(refreshCableSectionsButton.Content is Viewbox && vm.RefreshCableSections.CanExecute(null),
+                    "Cable tab renders an enabled icon-only section/area refresh action");
+                vm.RefreshCableSections.Execute(null);
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                var refreshedCable = uiState.Cables.Single();
+                Assert(uiSap.CableSectionReadCount == 1 && uiSap.Writes == 0 &&
+                       refreshedCable.SectionName == "SEC_CABLE" &&
+                       Math.Abs((refreshedCable.SectionAreaM2 ?? 0) - 0.001) < 1e-12 &&
+                       Math.Abs((refreshedCable.DesignCapacityKN ?? 0) - 930) < 1e-9,
+                    "Cable section refresh reads SAP once and updates section, area, and capacity without writing the model");
+
                 vm.SelectedTab = 4;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
@@ -267,6 +283,7 @@ internal static class Program
     {
         public required ModelSnapshot Snapshot { get; init; }
         public int Writes { get; private set; }
+        public int CableSectionReadCount { get; private set; }
         public Task<ModelInfo> ConnectAsync() => Task.FromResult(Snapshot.Info);
         public Task<ModelInfo> OpenModelAsync(string modelPath) => Task.FromResult(Snapshot.Info with { Path = modelPath });
         public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => Task.FromResult(expected with { Path = targetPath, IsLocked = false });
@@ -278,7 +295,12 @@ internal static class Program
         public Task<Position> GetPointPositionAsync(string pointName, ModelInfo expected) => Task.FromResult(Snapshot.Geometry.Points[pointName].Position);
         public Task<IReadOnlyList<PointLoad>> GetPointLoadsAsync(string pointName, ModelInfo expected) => Task.FromResult<IReadOnlyList<PointLoad>>([]);
         public Task<IReadOnlyList<CableTargetForce>> GetCableTargetForcesAsync(string cableName, ModelInfo expected) => Task.FromResult<IReadOnlyList<CableTargetForce>>([]);
-        public Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected) => Task.FromResult<IReadOnlyList<CableSection>>([]);
+        public Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected)
+        {
+            CableSectionReadCount++;
+            return Task.FromResult<IReadOnlyList<CableSection>>(cableNames
+                .Select(name => new CableSection(name, 0.001, "SEC_CABLE")).ToArray());
+        }
         public Task<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>> GetJointDisplacementsAsync(IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) => Task.FromResult<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>>([]);
         public Task<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>> GetCableForcesAsync(IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) => Task.FromResult<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>>([]);
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> m, ModelInfo e) => Task.FromResult<IReadOnlyList<ForceSource>>([]);

@@ -19,7 +19,7 @@ internal static class LiveStudyCheck
 
         ModelSnapshot model;
         IReadOnlyList<PointLoad> baselineLoads;
-        await using (var reader = new SapInstanceHost(1))
+        await using (var reader = new SapInstanceHostFactory().Create(1))
         {
             var info = await reader.StartAsync(baselinePath, CancellationToken.None);
             model = await reader.Gateway.ReadAsync();
@@ -117,7 +117,7 @@ internal static class LiveStudyCheck
             throw new InvalidOperationException($"Live study build did not complete: completed={result.Completed}, failed={result.Failed}.");
 
         var jobs = snapshot.Jobs.Where(candidate => candidate.RunIterate).ToArray();
-        await using var independentReader = new SapInstanceHost(2);
+        await using var independentReader = new SapInstanceHostFactory().Create(2);
         await independentReader.StartAsync(jobs[0].ModelFullPath, CancellationToken.None);
         var verifier = new IterationCandidateVerifier();
         var geometryCount = 0;

@@ -76,6 +76,12 @@ public sealed class SapGateway : ISapGateway
         if (string.IsNullOrWhiteSpace(modelPath)) throw new InvalidOperationException("A baseline model path is required.");
         var fullPath = Path.GetFullPath(modelPath);
         if (!File.Exists(fullPath)) throw new FileNotFoundException("The baseline SAP2000 model no longer exists.", fullPath);
+        // A model left locked by a previous analysis (routine on the connected instance that also
+        // serves as study worker 1, e.g. when returning to baseline after a child is analysed)
+        // makes SAP2000 reject File.OpenFile with a nonzero code. Clear the lock first; OpenFile
+        // then reloads the requested model cleanly from disk.
+        if (model is not null && Model.GetModelIsLocked())
+            Check(Model.SetModelIsLocked(false), "SetModelIsLocked", fullPath);
         Check(Model.File.OpenFile(fullPath), "File.OpenFile", fullPath);
         var info = ReadInfo();
         if (!SamePath(info.Path, fullPath))

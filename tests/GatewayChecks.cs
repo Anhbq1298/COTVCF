@@ -71,6 +71,13 @@ internal static class GatewayChecks
             Throws(() => gateway.RunAnalysisAsync(child).GetAwaiter().GetResult());
             Check(fake.AnalysisRuns == 3 && !fake.Locked,
                 "RunAnalysis that executes no load cases leaves the model unlocked and is rejected");
+            // Returning to the baseline happens with the just-analysed child still locked, which is
+            // exactly the state SAP2000 rejects File.OpenFile in.
+            fake.Locked = true;
+            var unlocksBeforeReopen = fake.UnlockCount;
+            var rebaselined = gateway.OpenModelAsync(baselinePath).GetAwaiter().GetResult();
+            Check(rebaselined.Path == baselinePath && !fake.Locked && fake.UnlockCount == unlocksBeforeReopen + 1,
+                "OpenModel clears a locked model before File.OpenFile so worker 1 can return to the baseline");
         }
         finally { Directory.Delete(lifecycleRoot, true); }
     }

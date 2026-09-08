@@ -692,6 +692,7 @@ public sealed class MainViewModel : Observable
     public Command ApplyGeometry { get; }
     public Command ApplyLoads { get; }
     public Command AddCables { get; }
+    public Command RefreshCableSections { get; }
     public Command BulkSetCableSync { get; }
     public Command RemoveLoads { get; }
     public Command RemoveCables { get; }
@@ -778,6 +779,8 @@ public sealed class MainViewModel : Observable
         ApplyGeometry = new(_ => Run("Applying geometry to SAP2000...", workflow.ApplyGeometryAsync, "Geometry applied. The original baseline is retained."), () => GeometryReady() && State.BaselineCaptured);
         ApplyLoads = new(_ => Run("Applying point loads to SAP2000...", workflow.ApplyLoadsAsync, "Point loads applied. Existing moments preserved."), () => GeometryReady() && State.PointLoads.Count > 0);
         AddCables = new(_ => AddCablesFromSelection(), GeometryReady);
+        RefreshCableSections = new(_ => RefreshCableSectionsFromSap(),
+            () => Ready() && State.Model is not null && State.Cables.Count > 0);
         RemoveLoads = new(p => { if (p is IList list) foreach (var row in list.Cast<PointLoadConfiguration>().ToArray()) State.PointLoads.Remove(row); Update(); }, () => !IsBusy);
         RemoveCables = new(p =>
         {
@@ -1856,6 +1859,62 @@ public sealed class MainViewModel : Observable
             ? $"Added {added.Count} cable{(added.Count == 1 ? "" : "s")} · {prefilled} pre-filled, {sized} sized from SAP2000. Remove with − Remove."
             : $"Added {added.Count} cable{(added.Count == 1 ? "" : "s")}. Remove with − Remove.";
         Update();
+    }
+
+    private async void RefreshCableSectionsFromSap()
+    {
+        if (IsBusy || !State.IsSapConnected || State.Model is null || State.Cables.Count == 0) return;
+        var cables = State.Cables.ToArray();
+        IsBusy = true;
+        Message = $"Refreshing section and area for {cables.Length} cable{(cables.Length == 1 ? "" : "s")} from SAP2000...";
+        try
+        {
+            var sections = await workflow.ReadCableSectionsAsync(cables.Select(cable => cable.CableName));
+            var problems = new List<string>();
+            var refreshed = 0;
+            foreach (var cable in cables)
+            {
+                if (!sections.TryGetValue(cable.CableName, out var section))
+                {
+                    cable.SectionName = null;
+                    cable.SectionAreaM2 = null;
+                    cable.DesignCapacityKN = null;
+                    problems.Add($"{cable.CableName}: SAP2000 returned no section row.");
+                    continue;
+                }
+
+                cable.SectionName = string.IsNullOrWhiteSpace(section.PropertyName) ? null : section.PropertyName;
+                if (section.AreaM2 > 0 && double.IsFinite(section.AreaM2))
+                {
+                    cable.SectionAreaM2 = section.AreaM2;
+                    cable.DesignCapacityKN = cable.ResolveCapacity(
+                        State.CableStrengthMpa, State.CableStrengthReductionFactor);
+                    refreshed++;
+                }
+                else
+                {
+                    cable.SectionAreaM2 = null;
+                    cable.DesignCapacityKN = null;
+                    problems.Add(section.Problem ?? $"{cable.CableName}: section area is unavailable.");
+                }
+            }
+
+            Message = problems.Count == 0
+                ? $"Refreshed section, area, and design capacity for {refreshed} cable{(refreshed == 1 ? "" : "s")}."
+                : $"Refreshed {refreshed} of {cables.Length} cable sections; {problems.Count} could not be read.";
+            if (problems.Count > 0)
+                Warn("Refresh Cable Sections", string.Join("\n", problems.Select(problem => "• " + problem)), warning: true);
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+            Warn("Refresh Cable Sections", ex.Message, warning: true);
+        }
+        finally
+        {
+            IsBusy = false;
+            Update();
+        }
     }
 
     private const string ConfigFilter = "COT VCF Configuration (*.json)|*.json|JSON Files (*.json)|*.json";
