@@ -76,16 +76,15 @@ public sealed class SapGateway : ISapGateway
         if (string.IsNullOrWhiteSpace(modelPath)) throw new InvalidOperationException("A baseline model path is required.");
         var fullPath = Path.GetFullPath(modelPath);
         if (!File.Exists(fullPath)) throw new FileNotFoundException("The baseline SAP2000 model no longer exists.", fullPath);
-        // A model left locked by a previous analysis (routine on the connected instance that also
-        // serves as study worker 1, e.g. when returning to baseline after a child is analysed)
-        // makes SAP2000 reject File.OpenFile with a nonzero code. Clear the lock first; OpenFile
-        // then reloads the requested model cleanly from disk.
-        if (model is not null && Model.GetModelIsLocked())
-            Check(Model.SetModelIsLocked(false), "SetModelIsLocked", fullPath);
-        Check(Model.File.OpenFile(fullPath), "File.OpenFile", fullPath);
+        // SAP2000 26 returns a nonzero code from File.OpenFile whenever it replaces a model that is
+        // already open — the open still succeeds. Only a fresh instance with no model loaded
+        // returns 0. The active model read back below is the authoritative result, so the return
+        // code is kept for diagnostics instead of being treated as a failure.
+        var openCode = Model.File.OpenFile(fullPath);
         var info = ReadInfo();
         if (!SamePath(info.Path, fullPath))
-            throw new InvalidOperationException($"SAP2000 opened a different model than requested. Expected {fullPath}; active {info.Path}.");
+            throw new InvalidOperationException(
+                $"SAP2000 did not open the requested model (File.OpenFile returned {openCode}). Expected {fullPath}; active {info.Path}.");
         return info;
     });
     public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => worker.Run(() =>
