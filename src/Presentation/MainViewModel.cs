@@ -496,6 +496,30 @@ public sealed class MainViewModel : Observable
     }
     public bool HasCableForceReport => !string.IsNullOrEmpty(CableForceReportPath) && File.Exists(CableForceReportPath);
     public string CableForceReportName => HasCableForceReport ? Path.GetFileName(CableForceReportPath!) : "No cable-force report generated yet";
+    private string? shortlistReportPath;
+    public string? ShortlistReportPath
+    {
+        get => shortlistReportPath;
+        private set
+        {
+            if (!Set(ref shortlistReportPath, value)) return;
+            Notify(nameof(HasShortlistReport));
+            Notify(nameof(ShortlistReportName));
+        }
+    }
+    public bool HasShortlistReport => !string.IsNullOrEmpty(ShortlistReportPath) && File.Exists(ShortlistReportPath);
+    public string ShortlistReportName => HasShortlistReport ? Path.GetFileName(ShortlistReportPath!) : "No shortlist generated yet";
+    private string? shortlistWorkbookPath;
+    public string? ShortlistWorkbookPath
+    {
+        get => shortlistWorkbookPath;
+        private set
+        {
+            if (!Set(ref shortlistWorkbookPath, value)) return;
+            Notify(nameof(HasShortlistWorkbook));
+        }
+    }
+    public bool HasShortlistWorkbook => !string.IsNullOrEmpty(ShortlistWorkbookPath) && File.Exists(ShortlistWorkbookPath);
     private bool useCurrentRunArtifacts;
     private string? currentRunWorkbookPath;
     public string ResultsWorkbookPath => useCurrentRunArtifacts
@@ -693,6 +717,8 @@ public sealed class MainViewModel : Observable
     public Command RegenerateDeflectionReport { get; }
     public Command OpenCableForceReport { get; }
     public Command RegenerateCableForceReport { get; }
+    public Command OpenShortlistReport { get; }
+    public Command OpenShortlistWorkbook { get; }
     public Command OpenResultsWorkbook { get; }
     public Command OpenRunManifest { get; }
     public Command OpenCandidateDiagnostic { get; }
@@ -819,6 +845,8 @@ public sealed class MainViewModel : Observable
         OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
         OpenDeflectionReport = new(_ => TryOpenFile(DeflectionReportPath), () => HasDeflectionReport);
         OpenCableForceReport = new(_ => TryOpenFile(CableForceReportPath), () => HasCableForceReport);
+        OpenShortlistReport = new(_ => TryOpenFile(ShortlistReportPath), () => HasShortlistReport);
+        OpenShortlistWorkbook = new(_ => TryOpenFile(ShortlistWorkbookPath), () => HasShortlistWorkbook);
         OpenResultsWorkbook = new(_ => TryOpenFile(ResultsWorkbookPath), () => HasResultsWorkbook);
         OpenRunManifest = new(_ => TryOpenFile(RunManifestPath), () => HasRunManifest);
         OpenCandidateDiagnostic = new(p =>
@@ -1261,6 +1289,8 @@ public sealed class MainViewModel : Observable
         currentRunWorkbookPath = null;
         DeflectionReportPath = null;
         CableForceReportPath = null;
+        ShortlistReportPath = null;
+        ShortlistWorkbookPath = null;
         SetRunReference(null, artifactsVerified: false);
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(HasResultsWorkbook));
@@ -1284,6 +1314,8 @@ public sealed class MainViewModel : Observable
             currentRunWorkbookPath = result.Artifacts.WorkbookPath;
             DeflectionReportPath = result.Artifacts.DeflectionReportPath;
             CableForceReportPath = result.Artifacts.CableForceReportPath;
+            ShortlistReportPath = result.Artifacts.ShortlistReportPath;
+            ShortlistWorkbookPath = result.Artifacts.ShortlistWorkbookPath;
             SetRunReference(result.Run, result.Artifacts.State == StudyArtifactState.Ready);
             Notify(nameof(ResultsWorkbookPath));
             Notify(nameof(HasResultsWorkbook));
@@ -1584,6 +1616,8 @@ public sealed class MainViewModel : Observable
                 discoveredWorkbookPath = null;
                 DeflectionReportPath = null;
                 CableForceReportPath = null;
+                ShortlistReportPath = null;
+                ShortlistWorkbookPath = null;
                 SetRunReference(null, artifactsVerified: false);
             }
             else
@@ -1591,11 +1625,21 @@ public sealed class MainViewModel : Observable
                 discoveredWorkbookPath = StudyRunJournal.ValidArtifactPath(manifest, "Workbook");
                 DeflectionReportPath = StudyRunJournal.ValidArtifactPath(manifest, "DeflectionReport");
                 CableForceReportPath = StudyRunJournal.ValidArtifactPath(manifest, "CableForceReport");
+                ShortlistReportPath = StudyRunJournal.ValidArtifactPath(manifest, "ShortlistReport");
+                ShortlistWorkbookPath = StudyRunJournal.ValidArtifactPath(manifest, "ShortlistWorkbook");
                 SetRunReference(new StudyRunReference(manifest.RunId, Path.Combine(StudyRoot, StudyRunJournal.FileName),
                     manifest.BaselineSha256, manifest.SnapshotSha256, manifest.State), StudyRunJournal.ArtifactsAreIntact(manifest));
             }
         }
-        catch { discoveredWorkbookPath = null; DeflectionReportPath = null; CableForceReportPath = null; SetRunReference(null, false); }
+        catch
+        {
+            discoveredWorkbookPath = null;
+            DeflectionReportPath = null;
+            CableForceReportPath = null;
+            ShortlistReportPath = null;
+            ShortlistWorkbookPath = null;
+            SetRunReference(null, false);
+        }
         Notify(nameof(HasResultsWorkbook));
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(PostProcessStatus));

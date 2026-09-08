@@ -24,7 +24,10 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
             snapshot.CableResultLoadCase);
         var ordered = consolidator.Snapshot();
         var hasCableReport = ordered.Any(r => (r.CableForces?.Count ?? 0) > 0);
-        IReadOnlyList<string> currentReports = hasCableReport ? ["deflection", "cable"] : ["deflection"];
+        IReadOnlyList<string> currentReports = hasCableReport
+            ? ["deflection", "cable", "shortlist"]
+            : ["deflection", "shortlist"];
+        var decisions = new StudyDecisionService().Evaluate(ordered, snapshot.DecisionCriteria);
 
         var deflectionGen = new DeflectionReportGenerator();
         var deflection = deflectionGen.Generate(studyFolder, ordered,
@@ -37,6 +40,9 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
                 snapshot.BaselineModel.Name, snapshot.StudyMode, snapshot.CableResultLoadCase,
                 snapshot.CableDesignCapacities, currentReports);
         }
-        return new(StudyArtifactState.Ready, workbook, deflection, cable, null);
+        var shortlist = new StudyShortlistExporter().Export(studyFolder, decisions,
+            snapshot.DecisionCriteria, siblingReports: currentReports);
+        return new(StudyArtifactState.Ready, workbook, deflection, cable, null,
+            shortlist.WorkbookPath, shortlist.HtmlPath);
     }
 }

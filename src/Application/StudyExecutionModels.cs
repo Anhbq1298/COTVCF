@@ -1,4 +1,5 @@
 using COT_VCF.Domain;
+using COT_VCF.Application.Results;
 
 namespace COT_VCF.Application;
 
@@ -44,6 +45,8 @@ public sealed record StudyExecutionSnapshot(
     // Deflection post-processing (Tab 06): monitored points + the SAP case their Uz is read under.
     public IReadOnlyList<string> DeflectionPoints { get; init; } = [];
     public string DeflectionOutputCase { get; init; } = "";
+    // Frozen decision/ranking criteria used to derive the shortlist from this exact execution snapshot.
+    public StudyDecisionCriteria DecisionCriteria { get; init; } = new(50, 75, null, null, 0.9, 0.5, 0.3, 0.2);
 }
 
 public sealed record StudyExecutionProgress
@@ -90,7 +93,9 @@ public sealed record StudyArtifactOutcome(
     string? WorkbookPath,
     string? DeflectionReportPath,
     string? CableForceReportPath,
-    string? ErrorMessage)
+    string? ErrorMessage,
+    string? ShortlistWorkbookPath = null,
+    string? ShortlistReportPath = null)
 {
     public static StudyArtifactOutcome NotProduced { get; } = new(StudyArtifactState.NotProduced, null, null, null, null);
     public static StudyArtifactOutcome Failed(string message) => new(StudyArtifactState.Failed, null, null, null, message);

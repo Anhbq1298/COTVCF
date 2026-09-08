@@ -59,6 +59,9 @@ internal static class StudyExecutionChecks
             var factory = new FakeHostFactory();
             var stages = new ConcurrentBag<StudyIterationStatus?>();
             var candidateResults = new ConcurrentBag<COT_VCF.Domain.Results.CandidateResultDto>();
+            var expectedStudyFolder = Path.GetDirectoryName(snapshot.Jobs.Single(candidate => candidate.RunIterate).IterationDirectory)!;
+            Directory.CreateDirectory(expectedStudyFolder);
+            File.WriteAllText(Path.Combine(expectedStudyFolder, CableForceReportGenerator.ReportFileName), "stale prior-run cable report");
             var result = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
                 new InlineProgress<StudyExecutionProgress>(progress => stages.Add(progress.IterationStatus)),
                 CancellationToken.None, candidateResults.Add).GetAwaiter().GetResult();
@@ -94,10 +97,19 @@ internal static class StudyExecutionChecks
             var reportHtml = Path.Combine(studyFolder, "Deflection_Report.html");
             Check(File.Exists(xlsx) && File.Exists(reportHtml),
                 "Study run writes the consolidated Deflection workbook and the final HTML report to the Study folder");
+            Check(File.Exists(result.Artifacts.ShortlistReportPath) && File.Exists(result.Artifacts.ShortlistWorkbookPath),
+                "Study run publishes the ranked shortlist HTML and workbook as first-class artifacts");
+            var shortlistHtml = File.ReadAllText(result.Artifacts.ShortlistReportPath!);
+            Check(shortlistHtml.Contains("Result Library", StringComparison.Ordinal) &&
+                  shortlistHtml.Contains(DeflectionReportGenerator.ReportFileName, StringComparison.Ordinal) &&
+                  shortlistHtml.Contains(job.IterationId, StringComparison.Ordinal),
+                "Shortlist report links the current result library and includes the ranked candidate");
             var manifest = StudyRunJournal.TryRead(studyFolder);
             Check(result.Run is not null && File.Exists(result.Run.ManifestPath) && manifest is not null &&
                   manifest.RunId == result.Run.RunId && manifest.State == StudyRunState.Completed &&
                   manifest.Candidates.Single(candidate => candidate.Selected).Status == StudyIterationStatus.Ready &&
+                  manifest.Artifacts.Any(artifact => artifact.Kind == "ShortlistReport") &&
+                  manifest.Artifacts.Any(artifact => artifact.Kind == "ShortlistWorkbook") &&
                   StudyRunJournal.ArtifactsAreIntact(manifest),
                 "Study run atomically records candidate status, provenance hashes, and verifiable artifacts");
             var readBack = COT_VCF.Application.Results.ConsolidatedResultWriter.Read(xlsx);
@@ -107,9 +119,11 @@ internal static class StudyExecutionChecks
                 "Consolidated workbook round-trips the candidate and its monitored-point Uz rows");
             var finalHtml = File.ReadAllText(reportHtml);
             Check(finalHtml.Contains("id=\"report-data\"") && finalHtml.Contains("Deflection Results Viewer") &&
-                  finalHtml.Contains(job.IterationId) && finalHtml.Contains("Result Library") &&
-                  !finalHtml.Contains("http://") && !finalHtml.Contains("https://") && !finalHtml.Contains("cdn."),
-                "Final HTML embeds the report JSON, has the Result Library, and references nothing external");
+                   finalHtml.Contains(job.IterationId) && finalHtml.Contains("Result Library") &&
+                   finalHtml.Contains(StudyShortlistExporter.HtmlFileName, StringComparison.Ordinal) &&
+                   !finalHtml.Contains(CableForceReportGenerator.ReportFileName, StringComparison.Ordinal) &&
+                   !finalHtml.Contains("http://") && !finalHtml.Contains("https://") && !finalHtml.Contains("cdn."),
+                "Final HTML embeds current-run data, excludes stale sibling reports, and references nothing external");
             Check(gateway.AnalysisAttempts.Contains(Path.GetFullPath(job.ModelFullPath)) &&
                   gateway.SavedAfterAnalysis.Contains(Path.GetFullPath(job.ModelFullPath)),
                 "RunAnalysis persists the analyzed child; the worker never re-saves or reopens it");
@@ -384,6 +398,19 @@ internal static class StudyExecutionChecks
             Check(snapshot.BaselineGeometry.Points["top"].Position.Z == 15 &&
                   !ReferenceEquals(snapshot.BaselineGeometry.Points, state.Baseline.Points),
                 "Execution snapshot owns an immutable baseline geometry copy");
+            var fingerprint = Fingerprints.SnapshotSha256(snapshot);
+            var capacityChanged = snapshot with
+            {
+                CableDesignCapacities = new Dictionary<string, double>(StringComparer.Ordinal) { ["Cable-A"] = 1234 }
+            };
+            Check(fingerprint != Fingerprints.SnapshotSha256(capacityChanged),
+                "Study provenance fingerprint changes when a report-affecting cable capacity changes");
+            var criteriaChanged = snapshot with
+            {
+                DecisionCriteria = snapshot.DecisionCriteria with { DeflectionPassLimitMm = snapshot.DecisionCriteria.DeflectionPassLimitMm + 1 }
+            };
+            Check(fingerprint != Fingerprints.SnapshotSha256(criteriaChanged),
+                "Study provenance fingerprint changes when shortlist decision criteria change");
             state.LoadDefinitions[0].MinQz = 999;
             state.Truss.MinimumHeight = 999;
             state.Cables[0].MinForce = 999;

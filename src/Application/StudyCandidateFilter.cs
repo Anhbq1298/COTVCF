@@ -72,7 +72,8 @@ public sealed class StudyCandidateFilter
         double? loadHeightLimit,
         double? pretensionHeightLimit)
     {
-        if (fixedHeight < 0 || fixedPretension < 0) return BigInteger.Zero;
+        if (fixedHeight < 0 || fixedHeight >= heights.Count ||
+            fixedPretension < 0 || fixedPretension >= pretensions.Count) return BigInteger.Zero;
         var allowedLoads = loads.Where((_, index) => loadAllowed[index]).OrderBy(value => value).ToArray();
         var allowedPretensions = pretensions.Where((_, index) => pretensionAllowed[index]).OrderBy(value => value).ToArray();
         BigInteger count = 0;
@@ -115,41 +116,96 @@ public sealed class StudyCandidateFilter
         double? pretensionHeightLimit)
     {
         long index = 0;
-        if (fixedHeight < 0 || fixedPretension < 0) yield break;
-        for (var l = 0; l < loads.Count; l++)
+        if (fixedHeight < 0 || fixedHeight >= heights.Count ||
+            fixedPretension < 0 || fixedPretension >= pretensions.Count) yield break;
+
+        var allowedLoads = loads.Select((value, candidateIndex) => new IndexedMetric(candidateIndex, value))
+            .Where(item => loadAllowed[item.Index]).ToArray();
+        var allowedPretensions = pretensions.Select((value, candidateIndex) => new IndexedMetric(candidateIndex, value))
+            .Where(item => pretensionAllowed[item.Index])
+            .OrderBy(item => item.Value).ThenBy(item => item.Index).ToArray();
+        var allowedPretensionValues = allowedPretensions.Select(item => item.Value).ToArray();
+
+        if (mode == IterationStudyMode.FixHeight)
         {
-            if (!loadAllowed[l]) continue;
-            if (mode == IterationStudyMode.FixHeight)
+            if (!heightAllowed[fixedHeight]) yield break;
+            var height = heights[fixedHeight];
+            var eligiblePretensions = EligibleAtMost(allowedPretensions, height, pretensionHeightLimit);
+            foreach (var load in allowedLoads)
             {
-                if (!heightAllowed[fixedHeight] || !PassLoadHeight(loads[l], heights[fixedHeight], loadHeightLimit)) continue;
-                for (var p = 0; p < pretensions.Count; p++)
-                    if (pretensionAllowed[p] && PassPretensionHeight(pretensions[p], heights[fixedHeight], pretensionHeightLimit))
-                        yield return new(index++, l, fixedHeight, p);
-                continue;
+                if (!PassLoadHeight(load.Value, height, loadHeightLimit)) continue;
+                foreach (var pretension in eligiblePretensions)
+                    yield return new(index++, load.Index, fixedHeight, pretension);
             }
-            for (var h = 0; h < heights.Count; h++)
+            yield break;
+        }
+
+        if (mode == IterationStudyMode.FixPretension && !pretensionAllowed[fixedPretension]) yield break;
+        var heightCandidates = heights.Select((value, candidateIndex) => new IndexedMetric(candidateIndex, value))
+            .Where(item => heightAllowed[item.Index] &&
+                (mode != IterationStudyMode.FixPretension || PassPretensionHeight(pretensions[fixedPretension], item.Value, pretensionHeightLimit)) &&
+                (mode != IterationStudyMode.Combined || EligibleCount(allowedPretensionValues, item.Value, pretensionHeightLimit) > 0))
+            .OrderBy(item => item.Value).ThenBy(item => item.Index).ToArray();
+
+        foreach (var load in allowedLoads)
+        {
+            foreach (var heightIndex in EligibleAtLeast(heightCandidates, load.Value, loadHeightLimit))
             {
-                if (!heightAllowed[h] || !PassLoadHeight(loads[l], heights[h], loadHeightLimit)) continue;
                 if (mode == IterationStudyMode.FixPretension)
                 {
-                    if (pretensionAllowed[fixedPretension] && PassPretensionHeight(pretensions[fixedPretension], heights[h], pretensionHeightLimit))
-                        yield return new(index++, l, h, fixedPretension);
+                    yield return new(index++, load.Index, heightIndex, fixedPretension);
                 }
                 else
                 {
-                    for (var p = 0; p < pretensions.Count; p++)
-                        if (pretensionAllowed[p] && PassPretensionHeight(pretensions[p], heights[h], pretensionHeightLimit))
-                            yield return new(index++, l, h, p);
+                    foreach (var pretensionIndex in EligibleAtMost(allowedPretensions, heights[heightIndex], pretensionHeightLimit))
+                        yield return new(index++, load.Index, heightIndex, pretensionIndex);
                 }
             }
         }
+    }
+
+    private static int[] EligibleAtLeast(IReadOnlyList<IndexedMetric> sortedValues, double load, double? limit)
+    {
+        if (limit is null) return sortedValues.OrderBy(item => item.Index).Select(item => item.Index).ToArray();
+        var denominator = limit.Value + Tolerance(limit.Value);
+        if (denominator <= 0) return [];
+        var minimum = load / denominator;
+        var lo = 0;
+        var hi = sortedValues.Count;
+        while (lo < hi)
+        {
+            var mid = lo + (hi - lo) / 2;
+            if (sortedValues[mid].Value < minimum) lo = mid + 1;
+            else hi = mid;
+        }
+        return sortedValues.Skip(lo)
+            .Where(item => PassLoadHeight(load, item.Value, limit))
+            .OrderBy(item => item.Index).Select(item => item.Index).ToArray();
+    }
+
+    private static int[] EligibleAtMost(IReadOnlyList<IndexedMetric> sortedValues, double height, double? limit)
+    {
+        if (limit is null) return sortedValues.OrderBy(item => item.Index).Select(item => item.Index).ToArray();
+        if (height <= 0) return [];
+        var maximum = height * (limit.Value + Tolerance(limit.Value));
+        var lo = 0;
+        var hi = sortedValues.Count;
+        while (lo < hi)
+        {
+            var mid = lo + (hi - lo) / 2;
+            if (sortedValues[mid].Value <= maximum) lo = mid + 1;
+            else hi = mid;
+        }
+        return sortedValues.Take(lo)
+            .Where(item => PassPretensionHeight(item.Value, height, limit))
+            .OrderBy(item => item.Index).Select(item => item.Index).ToArray();
     }
 
     private static int EligibleCount(IReadOnlyList<double> sortedValues, double height, double? limit)
     {
         if (limit is null) return sortedValues.Count;
         if (height <= 0) return 0;
-        var maximum = limit.Value * height + Tolerance(limit.Value * height);
+        var maximum = height * (limit.Value + Tolerance(limit.Value));
         var lo = 0;
         var hi = sortedValues.Count;
         while (lo < hi)
@@ -162,9 +218,9 @@ public sealed class StudyCandidateFilter
     }
 
     private static bool PassLoadHeight(double load, double height, double? limit) =>
-        limit is not double max || height > 0 && load / height <= max + Tolerance(max);
+        limit is not double max || height > 0 && load <= height * (max + Tolerance(max));
     private static bool PassPretensionHeight(double force, double height, double? limit) =>
-        limit is not double max || height > 0 && force / height <= max + Tolerance(max);
+        limit is not double max || height > 0 && force <= height * (max + Tolerance(max));
     private static bool InBounds(double value, double? minimum, double? maximum) =>
         (minimum is not double lo || value >= lo - Tolerance(lo)) &&
         (maximum is not double hi || value <= hi + Tolerance(hi));
@@ -173,4 +229,6 @@ public sealed class StudyCandidateFilter
     private static double PretensionMetric(StudyPretensionCandidate candidate) =>
         candidate.Assignments.Count == 0 ? 0 : candidate.Assignments.Max(item => Math.Abs(item.TargetForce));
     private static double Tolerance(double value) => 1e-9 * Math.Max(1, Math.Abs(value));
+
+    private sealed record IndexedMetric(int Index, double Value);
 }

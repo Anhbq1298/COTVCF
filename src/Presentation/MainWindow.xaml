@@ -989,9 +989,23 @@
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
-       </Expander>
+        </Expander>
 
-      </StackPanel>
+        <Expander Style="{StaticResource PpModule}">
+         <Expander.Header><TextBlock Text="06  STUDY SHORTLIST" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+         <StackPanel>
+          <TextBlock Text="Ranked Pass and Warning candidates from the frozen study decision criteria · lower score is preferred" Style="{StaticResource PpDesc}"/>
+          <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>
+          <TextBlock Text="{Binding ShortlistReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ShortlistReportPath}"/>
+          <WrapPanel Margin="0,4,0,0">
+           <Button Content="View Report" Command="{Binding OpenShortlistReport}" Style="{StaticResource Primary}" ToolTip="Open Study_Shortlist.html in your web browser"/>
+           <Button Content="Open Excel" Command="{Binding OpenShortlistWorkbook}" ToolTip="Open Study_Shortlist.xlsx"/>
+           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
+          </WrapPanel>
+         </StackPanel>
+        </Expander>
+
+       </StackPanel>
      </ScrollViewer>
     </Grid>
    </TabItem>

@@ -265,7 +265,9 @@ public sealed class StudyRunJournal
         {
             ("Workbook", outcome.WorkbookPath),
             ("DeflectionReport", outcome.DeflectionReportPath),
-            ("CableForceReport", outcome.CableForceReportPath)
+            ("CableForceReport", outcome.CableForceReportPath),
+            ("ShortlistWorkbook", outcome.ShortlistWorkbookPath),
+            ("ShortlistReport", outcome.ShortlistReportPath)
         })
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) continue;
@@ -332,6 +334,9 @@ public static class Fingerprints
             snapshot.DeflectionOutputCase,
             snapshot.CableResultCables,
             snapshot.CableResultLoadCase,
+            snapshot.DecisionCriteria,
+            CableDesignCapacities = snapshot.CableDesignCapacities.OrderBy(item => item.Key, StringComparer.Ordinal)
+                .Select(item => new { Cable = item.Key, CapacityKN = item.Value }),
             FilteredCandidateKeys = snapshot.Jobs.OrderBy(job => job.RunIndex).Select(job => job.IterationId),
             Jobs = snapshot.Jobs.OrderBy(job => job.RunIndex).Select(job => new
             {

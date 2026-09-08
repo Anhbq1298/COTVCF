@@ -1,4 +1,5 @@
 using COT_VCF.Domain;
+using COT_VCF.Application.Results;
 using System.IO;
 
 namespace COT_VCF.Application;
@@ -44,6 +45,7 @@ public sealed class StudyExecutionSnapshotFactory(StudyCandidateResolver? resolv
                 .ToDictionary(g => g.Key, g => g.First().DesignCapacityKN!.Value, StringComparer.Ordinal),
             DeflectionPoints = state.OutputSettings.DeflectionPoints.ToArray(),
             DeflectionOutputCase = state.OutputSettings.DeflectionOutputCaseName,
+            DecisionCriteria = StudyDecisionCriteria.From(state.Study),
         };
     }
 

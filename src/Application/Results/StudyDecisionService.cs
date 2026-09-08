@@ -190,15 +190,18 @@ public sealed class StudyShortlistExporter
     public const string WorkbookFileName = "Study_Shortlist.xlsx";
 
     public StudyShortlistArtifacts Export(string studyRoot, IReadOnlyList<CandidateDecisionResult> decisions,
-        StudyDecisionCriteria criteria, int count = 10)
+        StudyDecisionCriteria criteria, int count = 10, IReadOnlyList<string>? siblingReports = null)
     {
         Directory.CreateDirectory(studyRoot);
         var rows = decisions.Where(item => item.Status is CandidateDecisionStatus.Pass or CandidateDecisionStatus.Warning)
             .OrderBy(item => item.Rank).Take(Math.Max(1, count)).ToArray();
+        var siblings = siblingReports is null
+            ? ReportNav.PresentIn(studyRoot, "shortlist")
+            : new HashSet<string>(siblingReports, StringComparer.Ordinal);
         var workbook = Path.Combine(studyRoot, WorkbookFileName);
         AtomicFile.Write(workbook, path => WriteWorkbook(path, rows, criteria));
         var html = Path.Combine(studyRoot, HtmlFileName);
-        AtomicFile.WriteAllText(html, Html(rows, criteria));
+        AtomicFile.WriteAllText(html, Html(rows, criteria, siblings));
         return new(html, workbook);
     }
 
@@ -226,12 +229,15 @@ public sealed class StudyShortlistExporter
         ws.Columns().AdjustToContents(); criteriaSheet.Columns().AdjustToContents(); wb.SaveAs(path);
     }
 
-    private static string Html(IReadOnlyList<CandidateDecisionResult> rows, StudyDecisionCriteria criteria)
+    private static string Html(IReadOnlyList<CandidateDecisionResult> rows, StudyDecisionCriteria criteria,
+        IReadOnlySet<string> siblingReports)
     {
         static string E(object? value) => WebUtility.HtmlEncode(Convert.ToString(value, CultureInfo.InvariantCulture) ?? "");
         var body = string.Join("", rows.Select(item => $"<tr><td>{item.Rank}</td><td>{E(item.IterationKey)}</td><td>{item.Status}</td><td>{E(item.ScoreText)}</td><td>{E(item.DeflectionText)}</td><td>{E(item.CableForceText)}</td><td>{item.HeightM:0.###} m</td><td>{E(item.GoverningReason)}</td></tr>"));
+        var library = ReportNav.Library("shortlist", siblingReports);
         return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>COTVCF Study Shortlist</title>" +
-               "<style>body{font:14px system-ui;margin:24px;color:#202124}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d4d7dc;padding:7px;text-align:left}th{background:#eef2f5}small{color:#5f6368}</style></head><body>" +
+               "<style>body{font:14px system-ui;margin:24px;color:#202124}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d4d7dc;padding:7px;text-align:left}th{background:#eef2f5}small{color:#5f6368}.lib{margin:0 0 18px;border:1px solid #d4d7dc;border-radius:6px;padding:8px 12px}.lib summary{font-weight:700;cursor:pointer}.lib ul{display:flex;gap:8px;flex-wrap:wrap;list-style:none;padding:8px 0 0;margin:0}.lib li{display:flex;gap:7px;align-items:center;border:1px solid #d4d7dc;border-radius:4px;padding:6px 9px}.lib li.on{background:#eef2f5;font-weight:700}.lib span{color:#5f6368;font-size:11px}.lib a{color:#175ea8;text-decoration:none}</style></head><body>" +
+               library +
                $"<h1>Study Shortlist</h1><p><small>|U3| Pass ≤ {criteria.DeflectionPassLimitMm:0.###} mm · Fail &gt; {criteria.DeflectionFailLimitMm:0.###} mm · Ranking weights D/P/H = {criteria.DeflectionWeight:0.###}/{criteria.PretensionWeight:0.###}/{criteria.HeightWeight:0.###}</small></p>" +
                "<table><thead><tr><th>Rank</th><th>Candidate</th><th>Decision</th><th>Score</th><th>Max |U3|</th><th>Cable force</th><th>Height</th><th>Governing reason</th></tr></thead><tbody>" + body + "</tbody></table></body></html>";
     }

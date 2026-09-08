@@ -15,6 +15,7 @@ public static class ReportNav
     [
         new("deflection", "Deflection · Uz", DeflectionReportGenerator.ReportFileName),
         new("cable",      "Cable Forces",   CableForceReportGenerator.ReportFileName),
+        new("shortlist",  "Study Shortlist", StudyShortlistExporter.HtmlFileName),
     ];
 
     /// <summary>Result-Library markup for the report identified by <paramref name="current"/>.

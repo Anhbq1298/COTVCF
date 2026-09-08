@@ -46,7 +46,7 @@ public sealed class CableForceReportGenerator
         var results = ConsolidatedResultWriter.Read(wbPath);
         var mode = results.Count > 0 ? results[0].StudyMode : IterationStudyMode.Combined;
         var name = results.Count > 0 ? results[0].BaselineModelName : "";
-        var resultCase = results.SelectMany(r => r.CableForces ?? []).Any() ? "(see Output Settings)" : "";
+        var resultCase = ConsolidatedResultWriter.ReadCableResultCase(wbPath);
         var capacities = ConsolidatedResultWriter.ReadCableCapacities(wbPath);
         return Generate(studyFolder, results, name, mode, resultCase, capacities);
     }

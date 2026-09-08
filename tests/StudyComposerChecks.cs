@@ -2,6 +2,7 @@ using COT_VCF.Application;
 using COT_VCF.Configuration;
 using COT_VCF.Domain;
 using System.Numerics;
+using System.Diagnostics;
 
 internal static class StudyComposerChecks
 {
@@ -96,6 +97,34 @@ internal static class StudyComposerChecks
         Check(reduced.UnfilteredRunCount == BigInteger.Parse("1000000000") &&
               reduced.ExpectedRunCount == 1 && reduced.Iterations.Count == 1,
             "A billion-row Cartesian space is counted exactly and reduced without materializing the product");
+
+        const int sparseAxisSize = 50_000;
+        var sparseLoads = Enumerable.Range(0, sparseAxisSize).Select(i => new LoadingStudyCandidate
+        {
+            Id = $"L{i}",
+            Combination = new LoadingCombination(i, [("LIVE", (double)sparseAxisSize)]),
+            PointLoads = [],
+            Loads = []
+        }).ToArray();
+        var sparseHeights = Enumerable.Range(0, sparseAxisSize)
+            .Select(i => new StudyHeightCandidate($"H{i}", new TrussCandidate(i, i + 1, 0, "", 0, 0, 0), "m"))
+            .ToArray();
+        StudyPretensionCandidate[] sparsePretensions =
+        [
+            new("P0", new PretensionCombination(0, new Dictionary<string, double> { ["Cable-A"] = 1 }),
+                [new PretensionAssignment("Cable-A", CablePretensionConfig.PretensionLoadCase, 1)])
+        ];
+        var sparseEvaluation = new StudyCandidateFilter().Evaluate(new IterationStudyConfig
+        {
+            UseCandidateFilters = true,
+            MaxLoadingToHeightRatio = 1
+        }, IterationStudyMode.Combined, sparseLoads, sparseHeights, sparsePretensions, 0, 0);
+        var sparseTimer = Stopwatch.StartNew();
+        var sparseRows = sparseEvaluation.Enumerate().ToArray();
+        sparseTimer.Stop();
+        Check(sparseEvaluation.Count == sparseAxisSize && sparseRows.Length == sparseAxisSize &&
+              sparseRows.All(row => row.HeightIndex == sparseAxisSize - 1) && sparseTimer.Elapsed < TimeSpan.FromSeconds(5),
+            "Sparse cross-filters enumerate 50,000 surviving rows without scanning the 2.5-billion-pair product");
 
         foreach (var row in combined.Iterations.Take(4)) state.Study.SetRunSelected(row.IterationKey, false);
         var restored = composer.Compose(state);

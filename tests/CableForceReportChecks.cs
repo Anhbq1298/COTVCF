@@ -87,15 +87,19 @@ internal static class CableForceReportChecks
         {
             var writer = new ConsolidatedResultWriter();
             foreach (var r in results) writer.Add(r);
-            var xlsx = writer.Write(tmp, [], "", "COT Framing_V1.2.sdb", @"C:\base.sdb", IterationStudyMode.Combined);
+            var xlsx = writer.Write(tmp, [], "SERVICE", "COT Framing_V1.2.sdb", @"C:\base.sdb",
+                IterationStudyMode.Combined, caps, "CABLE_FORCE");
             var back = ConsolidatedResultWriter.Read(xlsx);
             var backRow3 = back.Single(r => r.Parameters.RunIndex == 3);
             Check(back.All(r => (r.CableForces?.Count ?? 0) == 2), "workbook round-trips 2 cable-force rows per candidate");
             Check(backRow3.CableForces!.Single(c => c.CableName == "Cable1b-2").ForceKN is null &&
                   backRow3.CableForces!.Single(c => c.CableName == "Cable1b-2").Status == ResultValueStatus.NoResult,
                 "workbook preserves the missing cable force as null + its status");
-            Check(new CableForceReportGenerator().RegenerateFromWorkbook(tmp).EndsWith("Cable_Forces_Report.html"),
-                "Cable_Forces_Report.html regenerates from the workbook alone (no SAP)");
+            var regenerated = new CableForceReportGenerator().RegenerateFromWorkbook(tmp);
+            Check(regenerated.EndsWith("Cable_Forces_Report.html") &&
+                  ConsolidatedResultWriter.ReadCableResultCase(xlsx) == "CABLE_FORCE" &&
+                  File.ReadAllText(regenerated).Contains("cable result case: CABLE_FORCE", StringComparison.Ordinal),
+                "Cable report regenerates with its exact result case from the workbook alone (no SAP)");
         }
         finally { try { Directory.Delete(tmp, true); } catch { } }
     }

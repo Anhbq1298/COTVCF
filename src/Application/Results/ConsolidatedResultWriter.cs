@@ -15,7 +15,7 @@ namespace COT_VCF.Application.Results;
 public sealed class ConsolidatedResultWriter
 {
     public const string WorkbookFileName = "Deflection_Results_Source.xlsx";
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
     private readonly ConcurrentBag<CandidateResultDto> results = [];
 
@@ -26,7 +26,8 @@ public sealed class ConsolidatedResultWriter
 
     public string Write(string studyFolder, IReadOnlyList<string> deflectionPoints, string deflectionCase,
         string baselineName, string baselinePath, IterationStudyMode studyMode,
-        IReadOnlyDictionary<string, double>? cableCapacities = null)
+        IReadOnlyDictionary<string, double>? cableCapacities = null,
+        string cableResultCase = "")
     {
         Directory.CreateDirectory(studyFolder);
         var path = Path.Combine(studyFolder, WorkbookFileName);
@@ -39,7 +40,8 @@ public sealed class ConsolidatedResultWriter
         CableProperties(wb.Worksheets.Add("CableProperties"), cableCapacities);
         OutputConfiguration(wb.Worksheets.Add("OutputConfiguration"), deflectionPoints, deflectionCase);
         Warnings(wb.Worksheets.Add("Warnings"), ordered);
-        Meta(wb.Worksheets.Add("Meta"), baselineName, baselinePath, studyFolder, studyMode, ordered.Count);
+        Meta(wb.Worksheets.Add("Meta"), baselineName, baselinePath, studyFolder, studyMode, ordered.Count,
+            deflectionCase, cableResultCase);
 
         AtomicFile.Write(path, wb.SaveAs);
         return path;
@@ -187,18 +189,20 @@ public sealed class ConsolidatedResultWriter
     }
 
     private static void Meta(IXLWorksheet ws, string baselineName, string baselinePath, string studyFolder,
-        IterationStudyMode mode, int candidateCount)
+        IterationStudyMode mode, int candidateCount, string deflectionOutputCase, string cableResultCase)
     {
         Header(ws, "Key", "Value");
         var kv = new (string, string)[]
         {
             ("SchemaVersion", SchemaVersion.ToString()),
-            ("Module", "Deflection"),
+            ("Module", "StudyResults"),
             ("BaselineModelName", baselineName),
             ("BaselineModelPath", baselinePath),
             ("StudyFolder", studyFolder),
             ("StudyMode", mode.ToString()),
             ("CandidateCount", candidateCount.ToString()),
+            ("DeflectionOutputCase", deflectionOutputCase),
+            ("CableResultCase", cableResultCase),
             ("GeneratedAt", Iso(DateTimeOffset.Now)),
         };
         for (var i = 0; i < kv.Length; i++) { ws.Cell(i + 2, 1).Value = kv[i].Item1; ws.Cell(i + 2, 2).Value = kv[i].Item2; }
@@ -216,6 +220,16 @@ public sealed class ConsolidatedResultWriter
         return wb.Worksheet("CableProperties").RowsUsed().Skip(1)
             .Where(row => !string.IsNullOrWhiteSpace(row.Cell(1).GetString()) && row.Cell(2).TryGetValue<double>(out var v) && double.IsFinite(v) && v > 0)
             .ToDictionary(row => row.Cell(1).GetString(), row => row.Cell(2).GetDouble(), StringComparer.Ordinal);
+    }
+
+    /// <summary>The SAP load case/combo used to extract cable forces. Empty for schema-v1 workbooks.</summary>
+    public static string ReadCableResultCase(string workbookPath)
+    {
+        using var wb = new XLWorkbook(workbookPath);
+        if (!wb.Worksheets.Contains("Meta")) return "";
+        return wb.Worksheet("Meta").RowsUsed().Skip(1)
+            .FirstOrDefault(row => row.Cell(1).GetString().Equals("CableResultCase", StringComparison.OrdinalIgnoreCase))?
+            .Cell(2).GetString() ?? "";
     }
 
     public static IReadOnlyList<CandidateResultDto> Read(string workbookPath)

@@ -122,6 +122,11 @@ internal static class Program
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
                 Directory.CreateDirectory(".work");
                 using (var stream = File.Create(".work/study-tab.png")) encoder.Save(stream);
+                vm.SelectedTab = 5;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "06  STUDY SHORTLIST"),
+                    "Post-processing UI exposes the ranked shortlist report and workbook module");
                 window.Close(); bindingListener.Flush();
                 if (bindingLog.ToString().Length > 0) throw new Exception("WPF binding errors: " + bindingLog);
                 Console.WriteLine("PASS: Tab 5 rendered with no WPF binding errors.");
@@ -233,6 +238,7 @@ internal static class Program
             ReliabilityChecks.Run();
             StudyComposerChecks.Run();
             StudyExecutionChecks.Run();
+            StudyDecisionChecks.Run();
             GatewayChecks.Run();
             CableForceReportChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
