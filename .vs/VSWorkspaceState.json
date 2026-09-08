@@ -1,6 +1,12 @@
 {
   "ExpandedNodes": [
-    ""
+    "",
+    "\\src",
+    "\\src\\Presentation",
+    "\\src\\Presentation\\Controls",
+    "\\src\\UI",
+    "\\src\\UI\\Templates"
   ],
+  "SelectedNode": "\\src\\Presentation\\Controls\\EngineeringInput.xaml",
   "PreviewInSolutionExplorer": false
 }
