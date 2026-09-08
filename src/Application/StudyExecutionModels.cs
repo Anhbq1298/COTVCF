@@ -37,6 +37,10 @@ public sealed record StudyExecutionSnapshot(
     public string CableResultLoadCase { get; init; } = "";
     // Cable-force post-processing (Tab 06.05): the cables whose axial force is read under CableResultLoadCase.
     public IReadOnlyList<string> CableResultCables { get; init; } = [];
+    // Per-cable design capacity [kN] from the Pretension tab. Drives the utilisation views in the cable report;
+    // empty when no capacity is configured.
+    public IReadOnlyDictionary<string, double> CableDesignCapacities { get; init; } =
+        new Dictionary<string, double>();
     // Deflection post-processing (Tab 06): monitored points + the SAP case their Uz is read under.
     public IReadOnlyList<string> DeflectionPoints { get; init; } = [];
     public string DeflectionOutputCase { get; init; } = "";

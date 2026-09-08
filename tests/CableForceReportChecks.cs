@@ -61,6 +61,17 @@ internal static class CableForceReportChecks
               !html.Contains("http://") && !html.Contains("https://") && !html.Contains("cdn."),
             "Cable Forces HTML is self-contained, has the Result Library, and shows 'Result unavailable' for gaps");
 
+        // capacity → utilisation view + Result-Library cross-link
+        var caps = new Dictionary<string, double> { ["Cable1a-2"] = 2000, ["Cable1b-2"] = 2500 };
+        var capDto = gen.Build(results, "COT Framing_V1.2.sdb", IterationStudyMode.Combined, "CABLE_FORCE",
+            caps, new[] { "cable", "deflection" });
+        Check(capDto.Capacities.Count == 2 && capDto.Capacities["Cable1a-2"] == 2000,
+            "configured cable design capacities flow into the report DTO");
+        var capHtml = gen.BuildHtml(capDto);
+        Check(capHtml.Contains("% of capacity") && capHtml.Contains("Deflection_Report.html") &&
+              !capHtml.Contains("http://") && !capHtml.Contains("https://"),
+            "the report offers the utilisation toggle and links the sibling deflection report when it exists");
+
         // workbook round-trip of the cable-force rows
         var tmp = Path.Combine(Path.GetTempPath(), "cotvcf_cf_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tmp);

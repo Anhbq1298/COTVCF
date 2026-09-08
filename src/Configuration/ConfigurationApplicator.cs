@@ -80,6 +80,9 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
 
     private void ApplyCables(CableForceConfigDto d)
     {
+        state.CableStrengthMpa = double.IsFinite(d.CableStrengthMpa) && d.CableStrengthMpa > 0 ? d.CableStrengthMpa : 1860;
+        state.CableStrengthReductionFactor = double.IsFinite(d.StrengthReductionFactor) && d.StrengthReductionFactor > 0 ? d.StrengthReductionFactor : 0.5;
+
         state.Cables.Clear();
         foreach (var row in d.Cables ?? [])
         {
@@ -97,6 +100,8 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
                 SyncMode = mode,
                 ReferenceCableName = reference,
                 SyncFactor = row.SyncFactor,
+                SectionAreaM2 = row.SectionAreaM2 is { } a && double.IsFinite(a) && a > 0 ? a : null,
+                DesignCapacityKN = row.DesignCapacityKN is { } cap && double.IsFinite(cap) && cap > 0 ? cap : null,
             });
         }
     }

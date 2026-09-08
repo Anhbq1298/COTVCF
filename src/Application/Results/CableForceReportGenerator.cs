@@ -24,10 +24,12 @@ public sealed class CableForceReportGenerator
     public string Generate(
         string studyFolder,
         IReadOnlyList<CandidateResultDto> results,
-        string baselineName, IterationStudyMode studyMode, string cableResultCase)
+        string baselineName, IterationStudyMode studyMode, string cableResultCase,
+        IReadOnlyDictionary<string, double>? capacities = null)
     {
         Directory.CreateDirectory(studyFolder);
-        var dto = Build(results, baselineName, studyMode, cableResultCase);
+        var siblings = ReportNav.PresentIn(studyFolder, "cable");
+        var dto = Build(results, baselineName, studyMode, cableResultCase, capacities, siblings.ToArray());
         var path = Path.Combine(studyFolder, ReportFileName);
         AtomicFile.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
         return path;
@@ -42,14 +44,17 @@ public sealed class CableForceReportGenerator
         var mode = results.Count > 0 ? results[0].StudyMode : IterationStudyMode.Combined;
         var name = results.Count > 0 ? results[0].BaselineModelName : "";
         var resultCase = results.SelectMany(r => r.CableForces ?? []).Any() ? "(see Output Settings)" : "";
-        return Generate(studyFolder, results, name, mode, resultCase);
+        var capacities = ConsolidatedResultWriter.ReadCableCapacities(wbPath);
+        return Generate(studyFolder, results, name, mode, resultCase, capacities);
     }
 
     // ---------- DTO assembly ----------
 
     public CableForceReportDto Build(
         IReadOnlyList<CandidateResultDto> results,
-        string baselineName, IterationStudyMode studyMode, string cableResultCase)
+        string baselineName, IterationStudyMode studyMode, string cableResultCase,
+        IReadOnlyDictionary<string, double>? capacities = null,
+        IReadOnlyList<string>? siblingReports = null)
     {
         var withCf = results.Where(r => (r.CableForces?.Count ?? 0) > 0)
             .OrderBy(r => r.Parameters.RunIndex).ToArray();
@@ -115,7 +120,14 @@ public sealed class CableForceReportGenerator
             string.IsNullOrWhiteSpace(cableResultCase) ? "(not configured)" : cableResultCase,
             DateTimeOffset.Now.ToString("o"));
 
-        return new CableForceReportDto(study, cables, loads, heights, pretensions, rows, yMin, yMax, warnings);
+        // Keep only positive, finite capacities for cables that are actually in this report.
+        var cableSet = new HashSet<string>(cables, StringComparer.Ordinal);
+        var caps = (capacities ?? new Dictionary<string, double>())
+            .Where(kv => cableSet.Contains(kv.Key) && double.IsFinite(kv.Value) && kv.Value > 0)
+            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+
+        return new CableForceReportDto(study, cables, loads, heights, pretensions, rows, yMin, yMax, warnings,
+            caps, (siblingReports ?? ["cable"]).ToArray());
     }
 
     private static string Num(double? v) => v is { } d ? d.ToString("0.###", CultureInfo.InvariantCulture) : "n/a";
@@ -127,9 +139,9 @@ public sealed class CableForceReportGenerator
     {
         var s = dto.Study;
         var json = JsonSerializer.Serialize(dto, Json);
+        var library = ReportNav.Library("cable", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
-<!doctype html>
-<html><head><meta charset="utf-8"><title>Cable Forces — {{Esc(s.BaselineModelName)}}</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Cable Forces — {{Esc(s.BaselineModelName)}}</title>
 <style>{{Style}}</style></head>
 <body>
 <header>
@@ -138,21 +150,18 @@ public sealed class CableForceReportGenerator
     <p class="meta">{{Esc(s.BaselineModelName)}} · {{Esc(s.StudyMode)}} · {{s.CandidateCount}} candidate(s) ·
       cable result case: {{Esc(s.ResultCase)}} · generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
     <p class="intro">One cable = one chart. Shared Y-scale. Pick a load level, then organise the same Cartesian
-      product by <b>Truss Height</b> or <b>Pretension</b> on X. A missing result is a gap, never 0 kN. A mixed
-      pretension candidate stays categorical (P01 / P02 …) on the X axis.</p>
+      product by <b>Truss Height</b> or <b>Pretension</b> on X. Switch <b>Value</b> to <b>% of capacity</b> to read
+      utilisation. A missing result is a gap, never 0 kN. A mixed pretension candidate stays categorical
+      (P01 / P02 …) on the X axis.</p>
   </div>
-  <details class="lib" open><summary>Result Library</summary><ul>
-    <li>01 · Deflection U<sub>z</sub><span>available</span></li>
-    <li>02 · Top Chords<span>future</span></li>
-    <li>03 · Bottom Chords<span>future</span></li>
-    <li>04 · Vierendeel Members<span>future</span></li>
-    <li class="on">05 · Cable Forces<span>active</span></li>
-  </ul></details>
+  {{library}}
 </header>
 
 <div id="bar">
   <label>Load <select id="load"></select></label><span class="sep"></span>
   <span class="small">Plot by</span><button id="bh" class="active">Height on X</button><button id="bp">Pretension on X</button>
+  <span class="sep"></span>
+  <span class="small">Value</span><button id="vk" class="active">Force (kN)</button><button id="vu">% of capacity</button>
   <span class="sep"></span><button id="reset">Reset</button><button id="clear">Clear pin</button>
   <span class="small" id="yinfo"></span>
   <span class="small">hover = synced crosshair · click = pin candidate</span>
@@ -170,7 +179,7 @@ public sealed class CableForceReportGenerator
 
 <details class="block"><summary>Source Data</summary><div class="body"><div class="tablewrap"><table><thead><tr>
   <th>Run</th><th>Candidate</th><th>Iteration Key</th><th>Load</th><th>Height</th><th>Pretension</th><th>Cable</th>
-  <th class="num">Target PT</th><th class="num">Force</th>
+  <th class="num">Target PT</th><th class="num">Force</th><th class="num">% cap</th>
 </tr></thead><tbody id="tb"></tbody></table></div></div></details>
 
 <div id="warns"></div>
@@ -227,16 +236,45 @@ th{position:sticky;top:0;background:#eef1f4;padding:6px;border-bottom:1px solid 
 td{padding:5px 6px;border-bottom:1px solid #eee;white-space:nowrap}
 .num{text-align:right}.missing{color:#b42318;font-weight:600}
 #warns{padding:6px 14px;font-size:11px;color:#8a6d00}#warns .e{color:#C62828}
+a{color:var(--acc)}
+.ref100{stroke:#C62828;stroke-width:1.2;stroke-dasharray:5 3}
+button:disabled{opacity:.4;cursor:not-allowed}
+.util{margin-left:8px;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;border:1px solid currentColor;letter-spacing:.02em}
+.util.ok{color:#2E7D32}.util.warn{color:#B26A00}.util.bad{color:#C62828}
+.capnote{font-size:10px;color:var(--mu);margin-left:8px}
 """;
 
     private const string Script = """
 const D = JSON.parse(document.getElementById("report-data").textContent);
 const COL = ["#1f77b4","#d62728","#2ca02c","#ff7f0e","#9467bd","#8c564b","#17becf","#bcbd22"];
-let load = D.loads.length ? D.loads[Math.min(1, D.loads.length - 1)].id : "", plot = "h";
+let load = D.loads.length ? D.loads[Math.min(1, D.loads.length - 1)].id : "", plot = "h", vmode = "kn";
 const hidden = new Set(); let pinned = null, lastX = null;
 
-document.getElementById("yinfo").textContent = D.rows.length
-  ? "Shared Y-scale: " + Math.round(D.yMin) + " → " + Math.round(D.yMax) + " kN" : "no cable-force results";
+// design capacity per cable [kN]; empty when none configured
+const CAP = D.capacities || {};
+const CAPS_ANY = Object.keys(CAP).length > 0;
+const utOn = () => vmode === "ut";
+// a value in the current mode: kN as-is, or % of capacity (null when the cable has no capacity in ut mode)
+const tv = (f, cable) => { if (f == null) return null; if (utOn()) return CAP[cable] ? f / CAP[cable] * 100 : null; return f; };
+const unit = cable => (utOn() && CAP[cable] ? "%" : "kN");
+// governing utilisation for one cable = worst force over every candidate / its capacity
+function govUtil(cable){ if (!CAP[cable]) return null;
+  let mx = 0; D.rows.forEach(r => { const f = r.forces[cable]; if (f != null && f > mx) mx = f; });
+  return mx / CAP[cable] * 100; }
+function yDom(){
+  if (!utOn()) return [D.yMin, D.yMax];
+  let mx = 0;
+  D.rows.forEach(r => D.cables.forEach(c => { const f = r.forces[c]; if (f != null && CAP[c]) mx = Math.max(mx, f / CAP[c] * 100); }));
+  return [0, Math.max(110, Math.ceil(mx / 10) * 10 + 5)];
+}
+function yInfo(){
+  const el = document.getElementById("yinfo");
+  if (!D.rows.length){ el.textContent = "no cable-force results"; return; }
+  const [a, b] = yDom();
+  el.textContent = utOn()
+    ? "Shared Y-scale: 0 → " + Math.round(b) + " % of capacity"
+    : "Shared Y-scale: " + Math.round(a) + " → " + Math.round(b) + " kN";
+}
 document.getElementById("mixnote").hidden = !D.pretensions.some(p => p.mixed);
 
 const ls = document.getElementById("load");
@@ -275,18 +313,21 @@ function draw(card, cable){
   const pw = W - m.l - m.r, ph = H - m.t - m.b;
   const xv = xvals(), xmin = Math.min(...xv.map(z => z.v)), xmax = Math.max(...xv.map(z => z.v));
   const X = v => m.l + (xmax === xmin ? .5 : (v - xmin) / (xmax - xmin)) * pw;
-  const Y = v => m.t + (D.yMax - v) / (D.yMax - D.yMin) * ph;
+  const [yLo, yHi] = yDom();
+  const Y = v => m.t + (yHi - v) / (yHi - yLo) * ph;
   const P = [];
-  for (let i = 0; i <= 5; i++){ const yy = m.t + i / 5 * ph, val = D.yMax - i / 5 * (D.yMax - D.yMin);
+  for (let i = 0; i <= 5; i++){ const yy = m.t + i / 5 * ph, val = yHi - i / 5 * (yHi - yLo);
     P.push(`<line x1="${m.l}" y1="${yy}" x2="${W - m.r}" y2="${yy}" class="grid"/>`);
     P.push(`<text x="${m.l - 7}" y="${yy + 3}" text-anchor="end" class="tick">${Math.round(val)}</text>`); }
+  if (utOn() && 100 <= yHi && 100 >= yLo)
+    P.push(`<line x1="${m.l}" y1="${Y(100)}" x2="${W - m.r}" y2="${Y(100)}" class="ref100"/>`);
   xv.forEach(z => { const xx = X(z.v);
     P.push(`<line x1="${xx}" y1="${m.t}" x2="${xx}" y2="${H - m.b}" class="grid"/>`);
     P.push(`<text x="${xx}" y="${H - m.b + 16}" text-anchor="middle" class="tick">${esc(z.label)}</text>`); });
   P.push(`<line x1="${m.l}" y1="${H - m.b}" x2="${W - m.r}" y2="${H - m.b}" class="axis"/>`);
   P.push(`<line x1="${m.l}" y1="${m.t}" x2="${m.l}" y2="${H - m.b}" class="axis"/>`);
   P.push(`<text x="${m.l + pw / 2}" y="${H - 7}" text-anchor="middle" class="al">${plot === "h" ? "Truss Height (m)" : "Pretension Candidate"}</text>`);
-  P.push(`<text x="13" y="${m.t + ph / 2}" text-anchor="middle" class="al" transform="rotate(-90 13 ${m.t + ph / 2})">Cable Force (kN)</text>`);
+  P.push(`<text x="13" y="${m.t + ph / 2}" text-anchor="middle" class="al" transform="rotate(-90 13 ${m.t + ph / 2})">${utOn() ? "Utilisation (% of capacity)" : "Cable Force (kN)"}</text>`);
 
   defs().forEach(sv => {
     if (hidden.has(sv.key)) return;
@@ -294,20 +335,20 @@ function draw(card, cable){
     const flush = () => { if (seg.length > 1)
       P.push(`<path d="${seg.map((p, i) => `${i ? "L" : "M"} ${X(p.x)} ${Y(p.f)}`).join(" ")}" fill="none" stroke="${sv.color}" stroke-width="1.8"/>`);
       seg = []; };
-    xv.forEach(z => { const r = cand(sv.key, z.key), f = r && r.forces[cable];
-      if (f == null) { flush(); return; }
-      seg.push({ x:z.v, f });
-      P.push(`<circle cx="${X(z.v)}" cy="${Y(f)}" r="2.6" fill="#fff" stroke="${sv.color}" stroke-width="1.4"/>`); });
+    xv.forEach(z => { const r = cand(sv.key, z.key), v = tv(r && r.forces[cable], cable);
+      if (v == null) { flush(); return; }
+      seg.push({ x:z.v, f:v });
+      P.push(`<circle cx="${X(z.v)}" cy="${Y(v)}" r="2.6" fill="#fff" stroke="${sv.color}" stroke-width="1.4"/>`); });
     flush();
   });
 
   if (pinned){
     const r = D.rows.find(q => q.candidateId === pinned);
     if (r && r.loadId === load){
-      const xk = plot === "h" ? r.heightId : r.pretId, z = xv.find(q => q.key === xk), f = r.forces[cable];
-      if (z && f != null){
+      const xk = plot === "h" ? r.heightId : r.pretId, z = xv.find(q => q.key === xk), v = tv(r.forces[cable], cable);
+      if (z && v != null){
         P.push(`<line x1="${X(z.v)}" y1="${m.t}" x2="${X(z.v)}" y2="${H - m.b}" class="pinline"/>`);
-        P.push(`<circle cx="${X(z.v)}" cy="${Y(f)}" r="5" fill="#fff" stroke="#1F4788" stroke-width="2.2"/>`);
+        P.push(`<circle cx="${X(z.v)}" cy="${Y(v)}" r="5" fill="#fff" stroke="#1F4788" stroke-width="2.2"/>`);
       }
     }
   }
@@ -322,8 +363,8 @@ function draw(card, cable){
     cross.setAttribute("x1", X(z.v)); cross.setAttribute("x2", X(z.v)); cross.setAttribute("visibility", "visible");
     let h = `<b>${esc(cable)}</b><br><span style="color:#cbd5e1">${plot === "h" ? "Height" : "Pretension"} = ${esc(z.label)}</span>`;
     defs().filter(sv => !hidden.has(sv.key)).forEach(sv => {
-      const r = cand(sv.key, xkey), f = r && r.forces[cable];
-      if (r) h += `<div style="display:grid;grid-template-columns:1fr auto;gap:8px"><span>${esc(sv.key)} &middot; ${esc(r.candidateId)}</span><b>${f == null ? "n/a" : (+f).toFixed(1) + " kN"}</b></div>`;
+      const r = cand(sv.key, xkey), f = r && r.forces[cable], v = tv(f, cable);
+      if (r) h += `<div style="display:grid;grid-template-columns:1fr auto;gap:8px"><span>${esc(sv.key)} &middot; ${esc(r.candidateId)}</span><b>${v == null ? (f == null ? "n/a" : "no capacity") : (+v).toFixed(1) + " " + unit(cable)}</b></div>`;
     });
     tip.innerHTML = h; tip.style.display = "block"; tip.style.left = "12px"; tip.style.top = "12px";
   };
@@ -343,22 +384,27 @@ function charts(){
   const b = document.getElementById("charts"); b.innerHTML = "";
   if (!D.rows.length){ b.innerHTML = '<p style="padding:20px;color:#666">No cable-force results in this study.</p>'; return; }
   D.cables.forEach((c, i) => { const x = document.createElement("section"); x.className = "card";
-    x.innerHTML = `<div class="ch"><span class="ct">${String(i + 1).padStart(2, "0")} · ${esc(c)}</span>`
+    const gu = govUtil(c);
+    const chip = gu != null
+      ? `<span class="util ${gu >= 100 ? "bad" : gu >= 85 ? "warn" : "ok"}">gov ${gu.toFixed(0)}% cap</span>`
+      : (CAPS_ANY ? '<span class="capnote">no capacity set</span>' : '');
+    x.innerHTML = `<div class="ch"><span class="ct">${String(i + 1).padStart(2, "0")} · ${esc(c)}${chip}</span>`
       + `<span class="cs">series = ${plot === "h" ? "Pretension" : "Height"} · shared Y-scale</span></div>`
       + `<div class="stage"><svg></svg><div class="tip"></div></div>`;
     b.appendChild(x); draw(x, c); });
 }
-function all(){ leg(); charts(); pinText(); }
+function all(){ leg(); charts(); pinText(); yInfo(); }
 
 document.getElementById("lk").innerHTML = D.loads.map(x => `<div class="kr"><b>${esc(x.id)}</b><span>${esc(x.label.replace(x.id + " · ", ""))}</span></div>`).join("");
 document.getElementById("hk").innerHTML = D.heights.map(x => `<div class="kr"><b>${esc(x.id)}</b><span>${(+x.value).toFixed(2)} m</span></div>`).join("");
 document.getElementById("pk").innerHTML = D.pretensions.map(x => `<div class="kr"><b>${esc(x.id)}</b><span>${x.mixed ? "mixed per cable" : (x.value != null ? (+x.value).toFixed(0) + " kN" : "—")}</span></div>`).join("");
 document.getElementById("tb").innerHTML = D.rows.flatMap(r => D.cables.map(c => {
-  const f = r.forces[c], t = r.targets[c];
+  const f = r.forces[c], t = r.targets[c], cap = CAP[c];
   return `<tr><td>${r.run}</td><td>${esc(r.candidateId)}</td><td>${esc(r.iterationKey)}</td><td>${esc(r.loadId)}</td>`
     + `<td>${esc(r.heightId)} · ${(+r.heightM).toFixed(2)}</td><td>${esc(r.pretLabel)}</td><td>${esc(c)}</td>`
     + `<td class="num">${t == null ? "—" : (+t).toFixed(0)}</td>`
-    + `<td class="num ${f == null ? "missing" : ""}">${f == null ? "Result unavailable" : (+f).toFixed(1)}</td></tr>`;
+    + `<td class="num ${f == null ? "missing" : ""}">${f == null ? "Result unavailable" : (+f).toFixed(1)}</td>`
+    + `<td class="num">${cap && f != null ? (f / cap * 100).toFixed(0) + "%" : "—"}</td></tr>`;
 })).join("");
 
 const wb = document.getElementById("warns");
@@ -367,13 +413,20 @@ wb.innerHTML = D.warnings.length
     + (D.warnings.length > 40 ? ` … (+${D.warnings.length - 40})` : "")
   : "";
 
+const vkBtn = document.getElementById("vk"), vuBtn = document.getElementById("vu");
+if (!CAPS_ANY){ vuBtn.disabled = true; vuBtn.title = "Set a design capacity on the Pretension tab to read utilisation"; }
+function setVMode(mode){ vmode = mode;
+  vkBtn.classList.toggle("active", mode === "kn"); vuBtn.classList.toggle("active", mode === "ut"); all(); }
+vkBtn.onclick = () => setVMode("kn");
+vuBtn.onclick = () => { if (!vuBtn.disabled) setVMode("ut"); };
+
 ls.onchange = e => { load = e.target.value; pinned = null; all(); };
 document.getElementById("bh").onclick = () => { plot = "h";
   document.getElementById("bh").classList.add("active"); document.getElementById("bp").classList.remove("active"); all(); };
 document.getElementById("bp").onclick = () => { plot = "p";
   document.getElementById("bp").classList.add("active"); document.getElementById("bh").classList.remove("active"); all(); };
 document.getElementById("clear").onclick = () => { pinned = null; all(); };
-document.getElementById("reset").onclick = () => { hidden.clear(); pinned = null; plot = "h";
+document.getElementById("reset").onclick = () => { hidden.clear(); pinned = null; plot = "h"; setVMode("kn");
   document.getElementById("bh").classList.add("active"); document.getElementById("bp").classList.remove("active"); all(); };
 window.addEventListener("resize", charts);
 all();

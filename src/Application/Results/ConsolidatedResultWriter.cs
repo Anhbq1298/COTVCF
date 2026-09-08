@@ -25,7 +25,8 @@ public sealed class ConsolidatedResultWriter
         results.OrderBy(r => r.Parameters.RunIndex).ThenBy(r => r.IterationKey, StringComparer.Ordinal).ToArray();
 
     public string Write(string studyFolder, IReadOnlyList<string> deflectionPoints, string deflectionCase,
-        string baselineName, string baselinePath, IterationStudyMode studyMode)
+        string baselineName, string baselinePath, IterationStudyMode studyMode,
+        IReadOnlyDictionary<string, double>? cableCapacities = null)
     {
         Directory.CreateDirectory(studyFolder);
         var path = Path.Combine(studyFolder, WorkbookFileName);
@@ -35,6 +36,7 @@ public sealed class ConsolidatedResultWriter
         Candidates(wb.Worksheets.Add("Candidates"), ordered);
         MonitoredPointResults(wb.Worksheets.Add("MonitoredPointResults"), ordered);
         CableForceResults(wb.Worksheets.Add("CableForceResults"), ordered);
+        CableProperties(wb.Worksheets.Add("CableProperties"), cableCapacities);
         OutputConfiguration(wb.Worksheets.Add("OutputConfiguration"), deflectionPoints, deflectionCase);
         Warnings(wb.Worksheets.Add("Warnings"), ordered);
         Meta(wb.Worksheets.Add("Meta"), baselineName, baselinePath, studyFolder, studyMode, ordered.Count);
@@ -134,6 +136,23 @@ public sealed class ConsolidatedResultWriter
         Finish(ws);
     }
 
+    /// <summary>Per-cable design capacity [kN] — study-global post-processing input, so the utilisation views
+    /// in Cable_Forces_Report.html survive a SAP-free regeneration from this workbook alone.</summary>
+    private static void CableProperties(IXLWorksheet ws, IReadOnlyDictionary<string, double>? capacities)
+    {
+        Header(ws, "Cable", "DesignCapacity_kN");
+        var r = 2;
+        foreach (var kv in (capacities ?? new Dictionary<string, double>())
+            .Where(kv => double.IsFinite(kv.Value) && kv.Value > 0)
+            .OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        {
+            ws.Cell(r, 1).Value = kv.Key;
+            SetNum(ws.Cell(r, 2), kv.Value);
+            r++;
+        }
+        Finish(ws);
+    }
+
     private static void OutputConfiguration(IXLWorksheet ws, IReadOnlyList<string> points, string outputCase)
     {
         Header(ws, "GroupName", "PointName", "OutputCase", "Direction", "ProfileAxis");
@@ -187,6 +206,17 @@ public sealed class ConsolidatedResultWriter
     }
 
     // ---------- read-back for report regeneration ----------
+
+    /// <summary>The per-cable design capacities [kN] stored by <see cref="Write"/>. Empty when the workbook
+    /// predates the CableProperties sheet or no capacity was configured.</summary>
+    public static IReadOnlyDictionary<string, double> ReadCableCapacities(string workbookPath)
+    {
+        using var wb = new XLWorkbook(workbookPath);
+        if (!wb.Worksheets.Contains("CableProperties")) return new Dictionary<string, double>();
+        return wb.Worksheet("CableProperties").RowsUsed().Skip(1)
+            .Where(row => !string.IsNullOrWhiteSpace(row.Cell(1).GetString()) && row.Cell(2).TryGetValue<double>(out var v) && double.IsFinite(v) && v > 0)
+            .ToDictionary(row => row.Cell(1).GetString(), row => row.Cell(2).GetDouble(), StringComparer.Ordinal);
+    }
 
     public static IReadOnlyList<CandidateResultDto> Read(string workbookPath)
     {

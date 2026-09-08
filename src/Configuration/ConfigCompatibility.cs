@@ -132,6 +132,11 @@ public sealed class ConfigCompatibilityValidator
                 .GroupBy(row => row.CableName, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
                 tc.Problems.Add("each cable can appear only once.");
 
+            if (!double.IsFinite(t4.CableStrengthMpa) || t4.CableStrengthMpa <= 0)
+                tc.Problems.Add("cable strength must be a positive number of MPa.");
+            if (!double.IsFinite(t4.StrengthReductionFactor) || t4.StrengthReductionFactor <= 0 || t4.StrengthReductionFactor > 1)
+                tc.Problems.Add("strength-reduction coefficient φ must be greater than zero and at most one.");
+
             var runtime = rows.Select(ToRuntimeCable).ToArray();
             foreach (var cable in runtime) cable.Peers = () => runtime;
 
@@ -171,6 +176,11 @@ public sealed class ConfigCompatibilityValidator
                     if (ResolvedEndpointForces(cable, runtime).Any(value => !double.IsFinite(value)))
                         tc.Problems.Add($"{tag}: resolved Sync force is not finite.");
                 }
+
+                if (row.SectionAreaM2 is double area && (!double.IsFinite(area) || area <= 0))
+                    tc.Problems.Add($"{tag}: section area must be greater than zero.");
+                if (row.DesignCapacityKN is double capacity && (!double.IsFinite(capacity) || capacity <= 0))
+                    tc.Problems.Add($"{tag}: design capacity must be greater than zero.");
 
                 if (!currentCables.TryGetValue(row.CableName, out var cm)) { tc.Problems.Add($"missing cable {row.CableName}"); continue; }
                 if (savedCables.TryGetValue(row.CableName, out var sc))

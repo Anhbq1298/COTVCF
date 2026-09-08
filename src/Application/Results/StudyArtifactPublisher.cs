@@ -20,14 +20,22 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
         var consolidator = new ConsolidatedResultWriter();
         foreach (var result in results) consolidator.Add(result);
         var workbook = consolidator.Write(studyFolder, snapshot.DeflectionPoints, snapshot.DeflectionOutputCase,
-            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode, snapshot.CableDesignCapacities);
         var ordered = consolidator.Snapshot();
-        var deflection = new DeflectionReportGenerator().Generate(studyFolder, ordered,
+
+        var deflectionGen = new DeflectionReportGenerator();
+        var deflection = deflectionGen.Generate(studyFolder, ordered,
             snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+
         string? cable = null;
         if (ordered.Any(r => (r.CableForces?.Count ?? 0) > 0))
+        {
             cable = new CableForceReportGenerator().Generate(studyFolder, ordered,
-                snapshot.BaselineModel.Name, snapshot.StudyMode, snapshot.CableResultLoadCase);
+                snapshot.BaselineModel.Name, snapshot.StudyMode, snapshot.CableResultLoadCase, snapshot.CableDesignCapacities);
+            // Re-emit the deflection report now the cable report exists, so its Result Library links across.
+            deflection = deflectionGen.Generate(studyFolder, ordered,
+                snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+        }
         return new(StudyArtifactState.Ready, workbook, deflection, cable, null);
     }
 }

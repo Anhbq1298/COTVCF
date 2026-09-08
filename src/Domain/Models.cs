@@ -481,6 +481,20 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         return Enumerable.Range(0, count).Select(i => i == count - 1 ? hi : lo + i * step).ToArray();
     }
 
+    private double? sectionAreaM2, designCapacityKn;
+    /// <summary>Cross-section area [m²] read from the SAP cable section on connect. Kept so the resolved
+    /// capacity can be recomputed when the global strength / φ change. Null until a section is retrieved.</summary>
+    public double? SectionAreaM2 { get => sectionAreaM2; set => Set(ref sectionAreaM2, value); }
+    /// <summary>Resolved cable design capacity [kN] — <c>area × strength × 1000 × φ</c>, or a hand-entered
+    /// override. Null when no capacity has been resolved; the cable report then has no utilisation view for
+    /// this cable and falls back to "% of study max".</summary>
+    public double? DesignCapacityKN { get => designCapacityKn; set => Set(ref designCapacityKn, value); }
+    /// <summary>Capacity [kN] implied by this cable's section area and the supplied global strength [MPa] / φ,
+    /// or null when the area is unknown or non-positive.</summary>
+    public double? ResolveCapacity(double strengthMpa, double phi) =>
+        sectionAreaM2 is { } a && double.IsFinite(a) && a > 0 && double.IsFinite(strengthMpa) && strengthMpa > 0 && double.IsFinite(phi) && phi > 0
+            ? a * strengthMpa * 1000.0 * phi : null;
+
     string IDataErrorInfo.Error => "";
     public string this[string columnName] => columnName switch
     {
@@ -488,6 +502,7 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         nameof(MinForce) when ApplyRange && (MinForce is not double v || !double.IsFinite(v)) => "Enter a minimum force.",
         nameof(MaxForce) when ApplyRange && (MaxForce is not double v || !double.IsFinite(v) || MinForce is not double min || v < min) => "Max force must be greater than or equal to Min force.",
         nameof(StepForce) when CanEditStepForce && (StepForce is not double v || !double.IsFinite(v) || v <= 0) => "Step force must be greater than zero.",
+        nameof(DesignCapacityKN) when DesignCapacityKN is double cap && (!double.IsFinite(cap) || cap <= 0) => "Design capacity must be greater than zero.",
         _ => ""
     };
 }
@@ -556,6 +571,7 @@ public sealed class ApplicationState : Observable
     private IReadOnlyDictionary<string, double> sessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
     private string connection = "Disconnected";
     private double tributaryWidthB = 1, numberOfStories = 1;
+    private double cableStrengthMpa = 1860, cableStrengthReductionFactor = 0.5;
     public ModelInfo? Model { get => model; set { Set(ref model, value); Notify(nameof(Units)); } }
     public string Connection { get => connection; set { Set(ref connection, value); Notify(nameof(IsSapConnected)); } }
     public bool IsSapConnected => Connection == "Connected";
@@ -579,6 +595,11 @@ public sealed class ApplicationState : Observable
     public double TributaryWidthB { get => tributaryWidthB; set => Set(ref tributaryWidthB, value); }
     public double NumberOfStories { get => numberOfStories; set => Set(ref numberOfStories, value); }
     public ObservableCollection<CablePretensionConfig> Cables { get; } = [];
+    /// <summary>Global cable material strength [MPa] (Grade 1860 strand by default) used with
+    /// <see cref="CableStrengthReductionFactor"/> to resolve each cable's design capacity from its section area.</summary>
+    public double CableStrengthMpa { get => cableStrengthMpa; set => Set(ref cableStrengthMpa, value); }
+    /// <summary>Global strength-reduction coefficient φ (default 0.5) applied to <c>area × strength</c>.</summary>
+    public double CableStrengthReductionFactor { get => cableStrengthReductionFactor; set => Set(ref cableStrengthReductionFactor, value); }
     public TrussHeightConfiguration Truss { get; } = new();
     public OutputSettingsConfiguration OutputSettings { get; } = new();
     public IterationStudyConfig Study { get; } = new();

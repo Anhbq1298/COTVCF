@@ -123,6 +123,14 @@ public sealed class TrussHeightConfigDto
 public sealed class CableForceConfigDto
 {
     public List<CableForceRowDto> Cables { get; set; } = new();
+
+    /// <summary>Global cable material strength [MPa] used to resolve each cable's design capacity from its
+    /// section area. Default is Grade 1860 strand.</summary>
+    public double CableStrengthMpa { get; set; } = 1860;
+
+    /// <summary>Global strength-reduction coefficient φ applied to <c>area × strength</c> when resolving design
+    /// capacity. Default 0.5.</summary>
+    public double StrengthReductionFactor { get; set; } = 0.5;
 }
 
 public sealed class CableForceRowDto
@@ -141,6 +149,16 @@ public sealed class CableForceRowDto
     public string? ReferenceCableName { get; set; }
     /// <summary>k for SameRatio, Δ [kN] for SameOffset.</summary>
     public double? SyncFactor { get; set; }
+
+    /// <summary>Cross-section area [m²] read from the SAP cable section on connect. Persisted so the resolved
+    /// <see cref="DesignCapacityKN"/> can be recomputed offline when the global strength / φ change. Null when
+    /// no section was retrieved.</summary>
+    public double? SectionAreaM2 { get; set; }
+
+    /// <summary>Resolved cable design capacity [kN] used by the utilisation views in the cable-force report:
+    /// <c>SectionAreaM2 × CableStrengthMpa × 1000 × StrengthReductionFactor</c>, or a hand-entered override.
+    /// Null when no capacity has been resolved for this cable — the report then falls back to "% of study max".</summary>
+    public double? DesignCapacityKN { get; set; }
 
     // ---- legacy (read-only migration) — v1.x wrote these; applicator maps them to SyncMode/ReferenceCableName ----
     public string? SameAsCableName { get; set; }

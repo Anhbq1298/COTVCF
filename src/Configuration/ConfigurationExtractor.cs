@@ -76,6 +76,8 @@ public sealed class ConfigurationExtractor
 
     private static CableForceConfigDto ExtractCables(ApplicationState s) => new()
     {
+        CableStrengthMpa = s.CableStrengthMpa,
+        StrengthReductionFactor = s.CableStrengthReductionFactor,
         Cables = s.Cables.Select(c => new CableForceRowDto
         {
             CableName = c.CableName,
@@ -88,6 +90,8 @@ public sealed class ConfigurationExtractor
             SyncMode = c.SyncMode,
             ReferenceCableName = c.ReferenceCableName,
             SyncFactor = c.SyncFactor,
+            SectionAreaM2 = c.SectionAreaM2,
+            DesignCapacityKN = c.DesignCapacityKN,
         }).ToList(),
     };
 
