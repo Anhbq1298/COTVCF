@@ -15,6 +15,7 @@ internal static class StudyExecutionChecks
         OneWorkerPersistsAndVerifiesOneCandidate();
         ArtifactFailureIsReportedWithoutStalePaths();
         ResumeAndRetryUseLatestCompatibleRun();
+        ResumePublishesTheCompleteParentSelection();
         ExplicitRebuildArchivesInsteadOfOverwriting();
         OneWorkerDoesNotAccumulateOrLeakCandidateState();
         FixedModesAndCombinedPhysicallyApplyResolvedCandidates();
@@ -81,6 +82,8 @@ internal static class StudyExecutionChecks
 
             var diagHtmlPath = Path.Combine(job.IterationDirectory, $"Deflection_Diagnostic_{job.IterationId}.html");
             Check(File.Exists(diagHtmlPath), "A candidate diagnostic HTML is written into the candidate folder");
+            Check(File.Exists(Path.Combine(job.IterationDirectory, CandidateResultStore.FileName)),
+                "A successful candidate persists a durable result payload for interrupted-run recovery");
             var diagHtml = File.ReadAllText(diagHtmlPath);
             Check(diagHtml.Contains("Candidate Diagnostic Report") && diagHtml.Contains("QA/QC") &&
                   diagHtml.Contains("Monitored Deflection") && diagHtml.Contains(">top<"),
@@ -169,6 +172,38 @@ internal static class StudyExecutionChecks
                   retried.Jobs.Count(job => job.RunIterate) == 1 &&
                   retried.Jobs.Single(job => job.RunIterate).IterationId == jobs[1].IterationId,
                 "Resume and Retry dispatch only their eligible candidate subsets");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void ResumePublishesTheCompleteParentSelection()
+    {
+        var (root, _, snapshot) = CreateSnapshot(3, 1);
+        try
+        {
+            var factory = new FakeHostFactory(reuseHosts: true);
+            var first = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+            Check(first.Completed == 3, "Resume fixture first publishes all selected candidates");
+
+            var jobs = snapshot.Jobs.Where(job => job.RunIterate).OrderBy(job => job.RunIndex).ToArray();
+            var parent = StudyRunJournal.Start(snapshot);
+            foreach (var job in jobs.Take(2))
+                parent.Report(new StudyExecutionProgress { IterationId = job.IterationId,
+                    Stage = StudyWorkerStage.Completed, IterationStatus = StudyIterationStatus.Ready });
+            parent.Report(new StudyExecutionProgress { IterationId = jobs[2].IterationId,
+                Stage = StudyWorkerStage.ApplyingGeometry, IterationStatus = StudyIterationStatus.ApplyingGeometry });
+
+            File.Delete(Path.Combine(jobs[2].IterationDirectory, CandidateResultStore.FileName));
+            var resume = new StudyResumeService();
+            var resumed = resume.Select(snapshot, resume.Assess(snapshot), StudyRunIntent.ResumeInterrupted);
+            var result = new StudyExecutionCoordinator(factory).BuildAsync(resumed,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None, null,
+                StudyRunIntent.ResumeInterrupted, parent.RunId).GetAwaiter().GetResult();
+            var consolidated = ConsolidatedResultWriter.Read(result.Artifacts.WorkbookPath!);
+            Check(consolidated.Count == 3 && consolidated.Select(row => row.IterationKey)
+                    .ToHashSet(StringComparer.Ordinal).SetEquals(jobs.Select(job => job.IterationId)),
+                "Resume merges verified parent results with newly resumed candidates in the authoritative workbook");
         }
         finally { DeleteRoot(root); }
     }

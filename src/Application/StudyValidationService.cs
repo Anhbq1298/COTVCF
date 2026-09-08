@@ -32,6 +32,10 @@ public sealed class StudyValidationService
         foreach (var issue in new OutputSettingsValidator().Validate(state))
             issues.Add(issue);
 
+        if (!double.IsFinite(state.CableStrengthMpa) || state.CableStrengthMpa <= 0)
+            Error("Pretension Setup", "Cable strength must be a positive finite value in MPa.");
+        if (!double.IsFinite(state.CableStrengthReductionFactor) || state.CableStrengthReductionFactor is <= 0 or > 1)
+            Error("Pretension Setup", "Strength-reduction coefficient φ must be greater than zero and at most one.");
         if (state.Cables.Count == 0) Error("Pretension Setup", "No cable pretension candidates are available from Tab 3.");
         foreach (var cable in state.Cables)
         {
@@ -39,6 +43,8 @@ public sealed class StudyValidationService
                 Error("Pretension Setup", $"Cable {cable.CableName} no longer exists in the model.");
             if (cable.CandidateCount <= 0)
                 Error("Pretension Setup", $"{cable.CableName} has an invalid candidate definition.");
+            if (cable.DesignCapacityKN is double capacity && (!double.IsFinite(capacity) || capacity <= 0))
+                Error("Pretension Setup", $"{cable.CableName} design capacity must be a positive finite value in kN.");
             if (string.IsNullOrWhiteSpace(cable.LoadPattern) || !state.LoadPatterns.Contains(cable.LoadPattern, StringComparer.OrdinalIgnoreCase))
                 Error("Pretension Setup", $"Load pattern {cable.LoadPattern} does not exist in the connected model. Cable target force assignments require a load pattern, not an analysis load case.");
             if (cable.SyncMode != CableSyncMode.Independent)

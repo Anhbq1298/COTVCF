@@ -193,10 +193,7 @@ public sealed class StudyRunJournal
             var root = Path.GetFullPath(new StudyPathService().GetStudyRoot(snapshot.BaselineModelPath));
             var baselineHash = Fingerprints.FileSha256(snapshot.BaselineModelPath);
             var snapshotHash = Fingerprints.SnapshotSha256(snapshot);
-            var paths = new List<string> { Path.Combine(root, FileName) };
-            var historyRoot = Path.Combine(root, HistoryDirectoryName);
-            if (Directory.Exists(historyRoot)) paths.AddRange(Directory.EnumerateFiles(historyRoot, "*.json"));
-            return paths.Where(File.Exists)
+            return ManifestPaths(root).Where(File.Exists)
                 .Select(TryReadPath)
                 .Where(item => item is not null &&
                     item.BaselineSha256.Equals(baselineHash, StringComparison.OrdinalIgnoreCase) &&
@@ -204,6 +201,22 @@ public sealed class StudyRunJournal
                 .DistinctBy(item => item!.RunId)
                 .OrderByDescending(item => item!.StartedAt)
                 .FirstOrDefault();
+        }
+        catch { return null; }
+    }
+
+    public static StudyRunManifest? TryReadCompatibleRun(StudyExecutionSnapshot snapshot, string? runId)
+    {
+        if (string.IsNullOrWhiteSpace(runId)) return null;
+        try
+        {
+            var root = Path.GetFullPath(new StudyPathService().GetStudyRoot(snapshot.BaselineModelPath));
+            var baselineHash = Fingerprints.FileSha256(snapshot.BaselineModelPath);
+            var snapshotHash = Fingerprints.SnapshotSha256(snapshot);
+            return ManifestPaths(root).Where(File.Exists).Select(TryReadPath).FirstOrDefault(item =>
+                item is not null && item.RunId.Equals(runId, StringComparison.Ordinal) &&
+                item.BaselineSha256.Equals(baselineHash, StringComparison.OrdinalIgnoreCase) &&
+                item.SnapshotSha256.Equals(snapshotHash, StringComparison.OrdinalIgnoreCase));
         }
         catch { return null; }
     }
@@ -280,6 +293,14 @@ public sealed class StudyRunJournal
     {
         try { return JsonSerializer.Deserialize<StudyRunManifest>(File.ReadAllText(path), Json); }
         catch { return null; }
+    }
+
+    private static IEnumerable<string> ManifestPaths(string studyRoot)
+    {
+        yield return Path.Combine(studyRoot, FileName);
+        var historyRoot = Path.Combine(studyRoot, HistoryDirectoryName);
+        if (!Directory.Exists(historyRoot)) yield break;
+        foreach (var path in Directory.EnumerateFiles(historyRoot, "*.json")) yield return path;
     }
 }
 

@@ -30,10 +30,11 @@ public sealed class DeflectionReportGenerator
     public string Generate(
         string studyFolder,
         IReadOnlyList<CandidateResultDto> results,
-        string baselineName, string baselinePath, IterationStudyMode studyMode)
+        string baselineName, string baselinePath, IterationStudyMode studyMode,
+        IReadOnlyList<string>? siblingReports = null)
     {
         Directory.CreateDirectory(studyFolder);
-        var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode);
+        var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode, siblingReports);
         var path = Path.Combine(studyFolder, ReportFileName);
         AtomicFile.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
         return path;
@@ -55,7 +56,8 @@ public sealed class DeflectionReportGenerator
 
     public DeflectionReportDto Build(
         IReadOnlyList<CandidateResultDto> results,
-        string studyFolder, string baselineName, string baselinePath, IterationStudyMode studyMode)
+        string studyFolder, string baselineName, string baselinePath, IterationStudyMode studyMode,
+        IReadOnlyList<string>? siblingReports = null)
     {
         // One report group per (monitored point group × result load case) — so a study that extracts Uz
         // under several cases yields one selectable chart source per case.
@@ -135,7 +137,7 @@ public sealed class DeflectionReportGenerator
             baselineName, baselinePath, studyFolder, studyMode.ToString(),
             results.Count, DateTimeOffset.Now.ToString("o"), "Uz", "m", "mm");
 
-        var siblings = ReportNav.PresentIn(studyFolder, "deflection").ToArray();
+        var siblings = siblingReports?.ToArray() ?? ReportNav.PresentIn(studyFolder, "deflection").ToArray();
         return new DeflectionReportDto(study, groups, views, warnings, siblings);
     }
 

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.RegularExpressions;
 using COT_VCF.Application.Results;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
@@ -60,6 +61,13 @@ internal static class CableForceReportChecks
               html.Contains("Result Library") && html.Contains("Result unavailable") &&
               !html.Contains("http://") && !html.Contains("https://") && !html.Contains("cdn."),
             "Cable Forces HTML is self-contained, has the Result Library, and shows 'Result unavailable' for gaps");
+        var htmlIds = Regex.Matches(html, "\\bid=\\\"([^\\\"]+)\\\"")
+            .Select(match => match.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+        var scriptIds = Regex.Matches(html, "(?:document\\.getElementById|el)\\(\\\"([^\\\"]+)\\\"\\)")
+            .Select(match => match.Groups[1].Value).ToArray();
+        Check(scriptIds.All(htmlIds.Contains) &&
+              new[] { "tornado", "trellis", "heatmap", "gov", "meters" }.All(htmlIds.Contains),
+            "Cable Forces report script references only DOM elements present in the narrative report markup");
 
         // capacity → utilisation view + Result-Library cross-link
         var caps = new Dictionary<string, double> { ["Cable1a-2"] = 2000, ["Cable1b-2"] = 2500 };

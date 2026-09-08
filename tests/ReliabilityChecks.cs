@@ -28,6 +28,8 @@ internal static class ReliabilityChecks
         var expected = 0.0125 * 1770 * 1000 * 0.45;
         Check(cable.ResolveCapacity(1770, 0.45) is { } r && Math.Abs(r - expected) < 1e-6,
             "ResolveCapacity = area × strength × 1000 × φ");
+        Check(cable.ResolveCapacity(1770, 1.01) is null,
+            "ResolveCapacity rejects a strength-reduction coefficient above one");
         cable.DesignCapacityKN = cable.ResolveCapacity(1770, 0.45);
 
         var dto = new ConfigurationExtractor().Extract(state, ["LIVE"], ConfigTabs.Loading | ConfigTabs.Truss | ConfigTabs.Cable);
@@ -43,6 +45,11 @@ internal static class ReliabilityChecks
               && badCheck.Cable.Problems.Any(p => p.Contains("design capacity", StringComparison.OrdinalIgnoreCase))
               && badCheck.Cable.Problems.Any(p => p.Contains("φ", StringComparison.Ordinal)),
             "config compatibility rejects a non-positive design capacity and an out-of-range φ");
+        state.CableStrengthReductionFactor = 1.4;
+        var composition = new StudyCompositionService().Compose(state);
+        var studyIssues = new StudyValidationService().Validate(state, composition);
+        Check(studyIssues.Any(issue => issue.Message.Contains("coefficient", StringComparison.OrdinalIgnoreCase)),
+            "study preflight blocks an out-of-range strength-reduction coefficient");
     }
 
     private static void AtomicWritePreservesTheDestinationOnFailure()

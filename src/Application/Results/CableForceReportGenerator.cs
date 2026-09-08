@@ -25,10 +25,13 @@ public sealed class CableForceReportGenerator
         string studyFolder,
         IReadOnlyList<CandidateResultDto> results,
         string baselineName, IterationStudyMode studyMode, string cableResultCase,
-        IReadOnlyDictionary<string, double>? capacities = null)
+        IReadOnlyDictionary<string, double>? capacities = null,
+        IReadOnlyList<string>? siblingReports = null)
     {
         Directory.CreateDirectory(studyFolder);
-        var siblings = ReportNav.PresentIn(studyFolder, "cable");
+        var siblings = siblingReports is null
+            ? ReportNav.PresentIn(studyFolder, "cable")
+            : new HashSet<string>(siblingReports, StringComparer.Ordinal);
         var dto = Build(results, baselineName, studyMode, cableResultCase, capacities, siblings.ToArray());
         var path = Path.Combine(studyFolder, ReportFileName);
         AtomicFile.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
@@ -159,8 +162,8 @@ public sealed class CableForceReportGenerator
 <div id="bar">
   <span class="small">Value</span><button id="vk" class="active">Force (kN)</button><button id="vu">% of capacity</button>
   <span class="sep"></span>
-  <label class="small">Sensitivity cable <select id="govcable"></select></label>
-  <span class="small" id="yinfo"></span>
+  <label class="small">Sensitivity cable <select id="govcable" aria-label="Cable used for sensitivity analysis"></select></label>
+  <span class="small" id="yinfo" aria-live="polite"></span>
 </div>
 
 <section class="blk">
@@ -195,7 +198,7 @@ public sealed class CableForceReportGenerator
 <div id="warns"></div>
 
 <script id="report-data" type="application/json">{{json}}</script>
-<script>{{Script}}</script>
+<script>{{ScriptV2}}</script>
 </body></html>
 """;
     }
@@ -253,6 +256,7 @@ svg{display:block}
 .trellis .th:last-child{border-right:0}
 .trellis .rl{background:var(--su);display:flex;flex-direction:column;justify-content:center;padding:5px 8px;gap:1px}
 .trellis .rl b{font-size:11.5px}.trellis .rl span{font-size:9.5px;color:var(--mu)}
+.trellis .pan{min-width:220px;padding:3px;background:#fff}.trellis .empty{display:flex;align-items:center;justify-content:center;min-height:112px;color:var(--mu);font-size:10.5px}
 .trellis .pan:last-child{border-right:0}
 .trellis-lastrow>div{border-bottom:0}
 .pan svg{width:100%;height:auto}
@@ -481,5 +485,144 @@ document.getElementById("reset").onclick = () => { hidden.clear(); pinned = null
   document.getElementById("bh").classList.add("active"); document.getElementById("bp").classList.remove("active"); all(); };
 window.addEventListener("resize", charts);
 all();
+""";
+
+    // Narrative report introduced after the original chart viewer. Keep this script self-contained so the
+    // generated HTML remains portable and can be regenerated from the workbook without external assets.
+    private const string ScriptV2 = """
+const D = JSON.parse(document.getElementById("report-data").textContent);
+const CAP = D.capacities || {};
+const CAPS_ANY = Object.keys(CAP).length > 0;
+let vmode = "kn", selectedCable = D.cables[0] || "";
+const el = id => document.getElementById(id);
+const esc = t => String(t == null ? "" : t).replace(/[<&>"]/g, c => ({"<":"&lt;","&":"&amp;",">":"&gt;",'"':"&quot;"}[c]));
+const finite = v => typeof v === "number" && Number.isFinite(v);
+const utOn = () => vmode === "ut";
+const value = (row, cable) => {
+  const force = row && row.forces ? row.forces[cable] : null;
+  if (!finite(force)) return null;
+  return utOn() ? (finite(CAP[cable]) && CAP[cable] > 0 ? force / CAP[cable] * 100 : null) : force;
+};
+const unit = () => utOn() ? "%" : "kN";
+const fmt = v => finite(v) ? v.toFixed(1) : "n/a";
+const mean = xs => xs.length ? xs.reduce((a,b) => a+b, 0) / xs.length : null;
+const median = xs => {
+  if (!xs.length) return null;
+  const s = [...xs].sort((a,b) => a-b), m = Math.floor(s.length/2);
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
+};
+function values(cable, rows=D.rows){ return rows.map(r => value(r,cable)).filter(finite); }
+function yDom(){
+  if (!utOn()) return [D.yMin,D.yMax];
+  const all=D.rows.flatMap(r => D.cables.map(c => value(r,c))).filter(finite);
+  const mx=all.length ? Math.max(...all) : 0;
+  return [0,Math.max(110,Math.ceil(mx/10)*10+5)];
+}
+function yInfo(){
+  const info=el("yinfo");
+  if (!D.rows.length){ info.textContent="No cable-force results"; return; }
+  const [a,b]=yDom();
+  info.textContent=utOn()?`Shared Y-scale: 0 → ${Math.round(b)} % of capacity`:`Shared Y-scale: ${Math.round(a)} → ${Math.round(b)} kN`;
+}
+
+function factorStats(cable){
+  return [
+    {label:"Loading",key:"loadId",levels:D.loads},
+    {label:"Pretension",key:"pretId",levels:D.pretensions},
+    {label:"Truss height",key:"heightId",levels:D.heights}
+  ].map(factor => {
+    const groups=factor.levels.map(level => ({level,average:mean(values(cable,D.rows.filter(r => r[factor.key]===level.id)))})).filter(x => finite(x.average));
+    if (!groups.length) return {...factor,spread:null,low:null,high:null};
+    const low=groups.reduce((a,b) => a.average<=b.average?a:b), high=groups.reduce((a,b) => a.average>=b.average?a:b);
+    return {...factor,spread:high.average-low.average,low,high};
+  });
+}
+function drawDrivers(){
+  const stats=factorStats(selectedCable), valid=stats.filter(x => finite(x.spread));
+  const maxSpread=valid.length?Math.max(...valid.map(x => x.spread),1e-9):1;
+  el("tornlead").innerHTML=selectedCable
+    ? `Sensitivity for <b>${esc(selectedCable)}</b>, measured as the spread between factor-level mean ${utOn()?"utilisations":"forces"}. Larger bars have more influence in this study grid.`
+    : "No cable-force results are available.";
+  if (!valid.length){ el("tornado").innerHTML='<p class="lead">Not enough valid results for sensitivity analysis.</p>'; el("tornread").innerHTML=""; return; }
+  const W=620,H=34+valid.length*38,left=102,right=72,width=W-left-right;
+  const svg=[`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cable-force factor sensitivity">`];
+  valid.forEach((s,i) => {
+    const y=18+i*38,w=s.spread/maxSpread*width;
+    svg.push(`<text x="${left-8}" y="${y+12}" text-anchor="end" class="al">${esc(s.label)}</text>`);
+    svg.push(`<rect x="${left}" y="${y}" width="${width}" height="18" fill="#F3F4F6" rx="2"/>`);
+    svg.push(`<rect x="${left}" y="${y}" width="${w}" height="18" class="tbar" rx="2"/>`);
+    svg.push(`<text x="${left+w+7}" y="${y+13}" class="tick">Δ ${fmt(s.spread)} ${unit()}</text>`);
+  });
+  svg.push("</svg>"); el("tornado").innerHTML=svg.join("");
+  el("tornread").innerHTML=valid.map(s => `<div class="readrow"><span class="lab">${esc(s.label)}</span><span class="big">Δ ${fmt(s.spread)} ${unit()}</span>`
+    + `<span class="note">low: ${esc(s.low.level.label)}<br>high: ${esc(s.high.level.label)}</span><span class="mini"><i style="width:${Math.max(1,s.spread/maxSpread*100)}%"></i></span></div>`).join("");
+}
+
+function series(cable,loadId){
+  return D.heights.map(h => {
+    const rows=D.rows.filter(r => r.loadId===loadId && r.heightId===h.id), xs=values(cable,rows);
+    return xs.length?{x:+h.value,label:h.id,lo:Math.min(...xs),mid:median(xs),hi:Math.max(...xs)}:null;
+  }).filter(Boolean);
+}
+function drawPanel(panel,cable,loadId){
+  const points=series(cable,loadId),svg=panel.querySelector("svg");
+  if (!points.length){ panel.classList.add("empty"); panel.textContent=utOn()&&!CAP[cable]?"No design capacity":"No valid results"; return; }
+  const W=260,H=132,m={l:39,r:8,t:8,b:25},pw=W-m.l-m.r,ph=H-m.t-m.b;
+  const xmin=Math.min(...points.map(p=>p.x)),xmax=Math.max(...points.map(p=>p.x)),[ylo,yhi]=yDom();
+  const X=x=>m.l+(xmax===xmin ? .5 : (x-xmin)/(xmax-xmin))*pw,Y=y=>m.t+(yhi-y)/(yhi-ylo)*ph,p=[];
+  for(let i=0;i<=3;i++){const y=m.t+i/3*ph,v=yhi-i/3*(yhi-ylo);p.push(`<line x1="${m.l}" y1="${y}" x2="${W-m.r}" y2="${y}" class="grid"/><text x="${m.l-5}" y="${y+3}" text-anchor="end" class="tick">${Math.round(v)}</text>`);}
+  if(utOn()&&ylo<=100&&yhi>=100)p.push(`<line x1="${m.l}" y1="${Y(100)}" x2="${W-m.r}" y2="${Y(100)}" class="ref100"/>`);
+  if(points.length>1){
+    const band=points.map(q=>`${X(q.x)},${Y(q.hi)}`).concat([...points].reverse().map(q=>`${X(q.x)},${Y(q.lo)}`)).join(" ");
+    p.push(`<polygon points="${band}" class="sband"/><path d="${points.map((q,i)=>`${i?"L":"M"} ${X(q.x)} ${Y(q.mid)}`).join(" ")}" class="sline"/>`);
+  }
+  points.forEach(q=>{p.push(`<line x1="${X(q.x)}" y1="${Y(q.lo)}" x2="${X(q.x)}" y2="${Y(q.hi)}" stroke="#8fbce9"/><circle cx="${X(q.x)}" cy="${Y(q.mid)}" r="2.5" class="sdot"/><text x="${X(q.x)}" y="${H-8}" text-anchor="middle" class="tick">${esc(q.label)}</text>`);});
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);svg.setAttribute("role","img");svg.setAttribute("aria-label",`${cable}, ${loadId}: force by truss height`);svg.innerHTML=p.join("");
+}
+function drawTrellis(){
+  const grid=el("trellis");
+  if(!D.rows.length||!D.cables.length||!D.loads.length){grid.innerHTML='<p class="lead" style="padding:10px">No cable-force results are available.</p>';return;}
+  grid.style.gridTemplateColumns=`84px repeat(${D.cables.length},minmax(220px,1fr))`;
+  grid.innerHTML='<div class="thc"></div>'+D.cables.map(c=>`<div class="th">${esc(c)}</div>`).join("");
+  D.loads.forEach((load,li)=>{
+    const last=li===D.loads.length-1?" trellis-lastrow":"";
+    grid.insertAdjacentHTML("beforeend",`<div class="rl${last}"><b>${esc(load.id)}</b><span>${esc(load.label.replace(load.id+" · ",""))}</span></div>`);
+    D.cables.forEach(c=>{const panel=document.createElement("div");panel.className="pan"+last;panel.innerHTML="<svg></svg>";grid.appendChild(panel);drawPanel(panel,c,load.id);});
+  });
+  el("trlegend").innerHTML='<span class="ln"></span> median across pretension candidates <span class="bd"></span> min–max band <span>· X = truss-height candidate</span>'+(utOn()?'<span>· red dashed = 100% capacity</span>':'');
+}
+
+function governingRows(){
+  return D.cables.map(cable=>{let best=null;D.rows.forEach(row=>{const v=value(row,cable);if(finite(v)&&(!best||v>best.v))best={cable,row,v};});return best;}).filter(Boolean);
+}
+function heatClass(v,max){if(!finite(v)||max<=0)return"h0";const q=v/max;return q>.8?"h4":q>.6?"h3":q>.4?"h2":q>.2?"h1":"h0";}
+function drawGoverning(){
+  const perCable=governingRows(),overall=perCable.length?perCable.reduce((a,b)=>a.v>=b.v?a:b):null,allCells=[];
+  D.cables.forEach(c=>D.loads.forEach(l=>{let best=null;D.rows.filter(r=>r.loadId===l.id).forEach(row=>{const v=value(row,c);if(finite(v)&&(!best||v>best.v))best={cable:c,row,v};});if(best)allCells.push(best);}));
+  const mx=allCells.length?Math.max(...allCells.map(x=>x.v)):1;
+  el("heatmap").innerHTML='<thead><tr><th class="cap">Cable</th>'+D.loads.map(l=>`<th>${esc(l.id)}</th>`).join("")+'</tr></thead><tbody>'
+    +D.cables.map(c=>'<tr><th class="cap">'+esc(c)+'</th>'+D.loads.map(l=>{const cell=allCells.find(x=>x.cable===c&&x.row.loadId===l.id);if(!cell)return'<td><i class="h0">n/a</i></td>';const gov=overall&&cell.row.candidateId===overall.row.candidateId&&c===overall.cable?' gov':'';return`<td class="${gov.trim()}" title="${esc(cell.row.iterationKey)}"><i class="${heatClass(cell.v,mx)}">${fmt(cell.v)}</i></td>`;}).join("")+'</tr>').join("")+'</tbody>';
+  el("hmlead").innerHTML=utOn()?'Each cell is the worst utilisation for one cable × loading candidate. The outlined cell governs; 100% means design capacity is reached.':'Each cell is the maximum cable force for one cable × loading candidate. Colour is relative to the study maximum; the outlined cell governs.';
+  el("hmkey").innerHTML='<b>low</b><u style="background:var(--h0)"></u><u style="background:var(--h1)"></u><u style="background:var(--h2)"></u><u style="background:var(--h3)"></u><u style="background:var(--h4)"></u><b>high</b>';
+  const gov=el("gov");
+  if(!overall){gov.hidden=true;gov.innerHTML="";}else{const r=overall.row,force=r.forces[overall.cable],util=CAP[overall.cable]?force/CAP[overall.cable]*100:null;gov.hidden=false;gov.innerHTML=`<span class="pill">Governing</span><span class="l1">${esc(overall.cable)} · ${fmt(overall.v)} ${unit()}</span><span class="l2">${esc(r.iterationKey)} · load ${esc(r.loadId)} · height ${esc(r.heightId)} (${(+r.heightM).toFixed(2)} m) · pretension ${esc(r.pretId)}`+(finite(util)?` · ${util.toFixed(1)}% capacity`:"")+"</span>";}
+  const meterMax=Math.max(...perCable.map(x=>x.v),utOn()?110:1);
+  el("meters").innerHTML=perCable.map(x=>{const pct=Math.min(100,x.v/meterMax*100),cls=utOn()?(x.v>=100?"bad":x.v>=85?"warn":"ok"):"ok",color=cls==="bad"?"#C62828":cls==="warn"?"#F57C00":"#2E7D32";return`<div class="meter"><span class="mc">${esc(x.cable)}</span><span class="trk"><i class="fil" style="width:${pct}%;background:${color}"></i>${utOn()?'<i class="tk" style="left:'+Math.min(100,100/meterMax*100)+'%"></i>':''}</span><span class="mv"><b class="util ${cls}">${fmt(x.v)} ${unit()}</b> · ${esc(x.row.candidateId)}</span></div>`;}).join("");
+}
+
+function drawTableAndWarnings(){
+  el("tb").innerHTML=D.rows.flatMap(r=>D.cables.map(c=>{const f=r.forces[c],t=r.targets[c],cap=CAP[c];return`<tr><td>${r.run}</td><td>${esc(r.candidateId)}</td><td>${esc(r.iterationKey)}</td><td>${esc(r.loadId)}</td><td>${esc(r.heightId)} · ${(+r.heightM).toFixed(2)}</td><td>${esc(r.pretLabel)}</td><td>${esc(c)}</td><td class="num">${t==null?"—":(+t).toFixed(0)}</td><td class="num ${f==null?"missing":""}">${f==null?"Result unavailable":(+f).toFixed(1)}</td><td class="num">${cap&&f!=null?(f/cap*100).toFixed(0)+"%":"—"}</td></tr>`;})).join("");
+  el("warns").innerHTML=D.warnings.length?"<strong>Warnings:</strong> "+D.warnings.slice(0,40).map(w=>`<span class="${w.isError?"e":""}">[${esc(w.iterationKey||"study")}] ${esc(w.message)}</span>`).join(" · ")+(D.warnings.length>40?` … (+${D.warnings.length-40})`:""):"";
+}
+function render(){yInfo();drawDrivers();drawTrellis();drawGoverning();}
+const cableSelect=el("govcable");
+D.cables.forEach(c=>{const o=document.createElement("option");o.value=c;o.textContent=c;cableSelect.appendChild(o);});
+cableSelect.disabled=!D.cables.length;cableSelect.onchange=e=>{selectedCable=e.target.value;drawDrivers();};
+const vkBtn=el("vk"),vuBtn=el("vu");
+if(!CAPS_ANY){vuBtn.disabled=true;vuBtn.title="Set a design capacity on the Pretension tab to read utilisation";}
+function setVMode(mode){vmode=mode;vkBtn.classList.toggle("active",mode==="kn");vuBtn.classList.toggle("active",mode==="ut");render();}
+vkBtn.onclick=()=>setVMode("kn");vuBtn.onclick=()=>{if(!vuBtn.disabled)setVMode("ut");};
+window.addEventListener("resize",drawTrellis);
+drawTableAndWarnings();render();
 """;
 }

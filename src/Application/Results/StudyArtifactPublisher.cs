@@ -20,21 +20,22 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
         var consolidator = new ConsolidatedResultWriter();
         foreach (var result in results) consolidator.Add(result);
         var workbook = consolidator.Write(studyFolder, snapshot.DeflectionPoints, snapshot.DeflectionOutputCase,
-            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode, snapshot.CableDesignCapacities);
+            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode, snapshot.CableDesignCapacities,
+            snapshot.CableResultLoadCase);
         var ordered = consolidator.Snapshot();
+        var hasCableReport = ordered.Any(r => (r.CableForces?.Count ?? 0) > 0);
+        IReadOnlyList<string> currentReports = hasCableReport ? ["deflection", "cable"] : ["deflection"];
 
         var deflectionGen = new DeflectionReportGenerator();
         var deflection = deflectionGen.Generate(studyFolder, ordered,
-            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode, currentReports);
 
         string? cable = null;
-        if (ordered.Any(r => (r.CableForces?.Count ?? 0) > 0))
+        if (hasCableReport)
         {
             cable = new CableForceReportGenerator().Generate(studyFolder, ordered,
-                snapshot.BaselineModel.Name, snapshot.StudyMode, snapshot.CableResultLoadCase, snapshot.CableDesignCapacities);
-            // Re-emit the deflection report now the cable report exists, so its Result Library links across.
-            deflection = deflectionGen.Generate(studyFolder, ordered,
-                snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+                snapshot.BaselineModel.Name, snapshot.StudyMode, snapshot.CableResultLoadCase,
+                snapshot.CableDesignCapacities, currentReports);
         }
         return new(StudyArtifactState.Ready, workbook, deflection, cable, null);
     }

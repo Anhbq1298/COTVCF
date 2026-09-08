@@ -499,7 +499,8 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     /// <summary>Capacity [kN] implied by this cable's section area and the supplied global strength [MPa] / φ,
     /// or null when the area is unknown or non-positive.</summary>
     public double? ResolveCapacity(double strengthMpa, double phi) =>
-        sectionAreaM2 is { } a && double.IsFinite(a) && a > 0 && double.IsFinite(strengthMpa) && strengthMpa > 0 && double.IsFinite(phi) && phi > 0
+        sectionAreaM2 is { } a && double.IsFinite(a) && a > 0 && double.IsFinite(strengthMpa) && strengthMpa > 0 &&
+        double.IsFinite(phi) && phi is > 0 and <= 1
             ? a * strengthMpa * 1000.0 * phi : null;
 
     string IDataErrorInfo.Error => "";
