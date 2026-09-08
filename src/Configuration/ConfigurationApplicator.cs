@@ -82,6 +82,9 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
     {
         state.Cables.Clear();
         foreach (var row in d.Cables ?? [])
+        {
+            // Prefer the current schema; fall back to migrating v1.x SameAs / SameStep fields.
+            var (mode, reference) = ResolveSync(row);
             state.Cables.Add(new CablePretensionConfig
             {
                 CableName = row.CableName,
@@ -91,7 +94,22 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
                 MinForce = row.MinForce,
                 MaxForce = row.MaxForce,
                 StepForce = row.StepForce,
+                SyncMode = mode,
+                ReferenceCableName = reference,
+                SyncFactor = row.SyncFactor,
             });
+        }
+    }
+
+    private static (CableSyncMode Mode, string? Reference) ResolveSync(CableForceRowDto row)
+    {
+        if (row.SyncMode != CableSyncMode.Independent && !string.IsNullOrWhiteSpace(row.ReferenceCableName))
+            return (row.SyncMode, row.ReferenceCableName);
+        if (!string.IsNullOrWhiteSpace(row.SameStepCableName))
+            return (CableSyncMode.SameStep, row.SameStepCableName);
+        if (!string.IsNullOrWhiteSpace(row.SameAsCableName))
+            return (CableSyncMode.SameValues, row.SameAsCableName);
+        return (CableSyncMode.Independent, null);
     }
 
     private void ApplyOutput(OutputSettingsConfigDto d)

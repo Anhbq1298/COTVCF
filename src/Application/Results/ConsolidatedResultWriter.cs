@@ -4,6 +4,7 @@ using System.IO;
 using ClosedXML.Excel;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
+using COT_VCF.Infrastructure;
 
 namespace COT_VCF.Application.Results;
 
@@ -33,12 +34,12 @@ public sealed class ConsolidatedResultWriter
         using var wb = new XLWorkbook();
         Candidates(wb.Worksheets.Add("Candidates"), ordered);
         MonitoredPointResults(wb.Worksheets.Add("MonitoredPointResults"), ordered);
+        CableForceResults(wb.Worksheets.Add("CableForceResults"), ordered);
         OutputConfiguration(wb.Worksheets.Add("OutputConfiguration"), deflectionPoints, deflectionCase);
         Warnings(wb.Worksheets.Add("Warnings"), ordered);
         Meta(wb.Worksheets.Add("Meta"), baselineName, baselinePath, studyFolder, studyMode, ordered.Count);
 
-        if (File.Exists(path)) File.Delete(path);
-        wb.SaveAs(path);
+        AtomicFile.Write(path, wb.SaveAs);
         return path;
     }
 
@@ -51,7 +52,7 @@ public sealed class ConsolidatedResultWriter
             "HeightCandidateId", "TrussHeight_m", "DeltaH_m",
             "PretensionCandidateId", "Pretension_kN", "PretensionLabel",
             "ExtractionStatus", "AnalysisStart", "AnalysisFinish", "ExtractionFinish",
-            "DiagnosticHtmlRelPath", "WarningCount");
+            "DiagnosticHtmlRelPath", "WarningCount", "PretensionCables", "LoadingComponents");
         var r = 2;
         foreach (var c in rows)
         {
@@ -76,6 +77,10 @@ public sealed class ConsolidatedResultWriter
             ws.Cell(r, col++).Value = Iso(c.ExtractionCompletedAt);
             ws.Cell(r, col++).Value = c.DiagnosticReportRelativePath;
             ws.Cell(r, col++).Value = c.Warnings.Count;
+            ws.Cell(r, col++).Value = string.Join(";", (p.PretensionCables ?? [])
+                .Select(cb => $"{cb.CableName}={cb.TargetForceKN.ToString("0.######", CultureInfo.InvariantCulture)}"));
+            ws.Cell(r, col++).Value = string.Join(";", (p.LoadingComponents ?? [])
+                .Select(lc => $"{lc.PatternName}={lc.LevelKPa.ToString("0.######", CultureInfo.InvariantCulture)}"));
             r++;
         }
         Finish(ws);
@@ -106,6 +111,26 @@ public sealed class ConsolidatedResultWriter
                     ws.Cell(r, col++).Value = pt.Warning ?? "";
                     r++;
                 }
+        Finish(ws);
+    }
+
+    private static void CableForceResults(IXLWorksheet ws, IReadOnlyList<CandidateResultDto> rows)
+    {
+        Header(ws, "IterationKey", "RunIndex", "Cable", "TargetForce_kN", "Force_kN", "ResultStatus", "Warning");
+        var r = 2;
+        foreach (var c in rows)
+            foreach (var cf in c.CableForces ?? [])
+            {
+                var col = 1;
+                ws.Cell(r, col++).Value = c.IterationKey;
+                ws.Cell(r, col++).Value = c.Parameters.RunIndex;
+                ws.Cell(r, col++).Value = cf.CableName;
+                SetNum(ws.Cell(r, col++), cf.TargetForceKN);
+                SetNum(ws.Cell(r, col++), cf.ForceKN);
+                ws.Cell(r, col++).Value = cf.Status.ToString();
+                ws.Cell(r, col++).Value = cf.Warning ?? "";
+                r++;
+            }
         Finish(ws);
     }
 
@@ -172,6 +197,17 @@ public sealed class ConsolidatedResultWriter
         var baselineName = meta.GetValueOrDefault("BaselineModelName", "");
         var baselinePath = meta.GetValueOrDefault("BaselineModelPath", "");
 
+        var cableForceByKey = wb.Worksheets.Contains("CableForceResults")
+            ? wb.Worksheet("CableForceResults").RowsUsed().Skip(1)
+                .ToLookup(row => row.Cell(1).GetString(), row => new CableForceResultDto(
+                    row.Cell(3).GetString(),
+                    row.Cell(4).TryGetValue<double>(out var tf) ? tf : null,
+                    row.Cell(5).TryGetValue<double>(out var f) ? f : null,
+                    Enum.TryParse<ResultValueStatus>(row.Cell(6).GetString(), out var s) ? s : ResultValueStatus.ApiError,
+                    string.IsNullOrEmpty(row.Cell(7).GetString()) ? null : row.Cell(7).GetString()),
+                    StringComparer.Ordinal)
+            : null;
+
         var pointRows = wb.Worksheet("MonitoredPointResults").RowsUsed().Skip(1)
             .Select(row => new
             {
@@ -200,6 +236,18 @@ public sealed class ConsolidatedResultWriter
         foreach (var row in wb.Worksheet("Candidates").RowsUsed().Skip(1))
         {
             var key = row.Cell(1).GetString();
+            var cables = row.Cell(20).GetString()
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(t => { var i = t.LastIndexOf('='); return i <= 0
+                    ? null
+                    : new PretensionCableDto(t[..i], double.TryParse(t[(i + 1)..], NumberStyles.Float, CultureInfo.InvariantCulture, out var f) ? f : 0); })
+                .Where(c => c is not null).Select(c => c!).ToArray();
+            var loadComponents = row.Cell(21).GetString()
+                .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(t => { var i = t.LastIndexOf('='); return i <= 0
+                    ? null
+                    : new LoadComponentDto(t[..i], double.TryParse(t[(i + 1)..], NumberStyles.Float, CultureInfo.InvariantCulture, out var q) ? q : 0); })
+                .Where(c => c is not null).Select(c => c!).ToArray();
             var parameters = new CandidateParametersDto(
                 (long)row.Cell(2).GetDouble(), key,
                 row.Cell(5).GetString(),
@@ -210,7 +258,9 @@ public sealed class ConsolidatedResultWriter
                 row.Cell(9).GetDouble(),
                 row.Cell(10).GetDouble(),
                 row.Cell(12).TryGetValue<double>(out var pk) ? pk : null,
-                row.Cell(13).GetString());
+                row.Cell(13).GetString(),
+                cables,
+                loadComponents);
 
             var groups = pointRows[key]
                 .GroupBy(x => (x.Group, x.Case, x.Axis))
@@ -226,7 +276,8 @@ public sealed class ConsolidatedResultWriter
                 key, row.Cell(4).GetString(), baselinePath, baselineName, studyMode, parameters,
                 ParseIso(row.Cell(15).GetString()), ParseIso(row.Cell(16).GetString()), ParseIso(row.Cell(17).GetString()),
                 Enum.TryParse<CandidateExtractionStatus>(row.Cell(14).GetString(), out var es) ? es : CandidateExtractionStatus.ExtractedOk,
-                groups, warnRows[key].ToArray()));
+                groups, warnRows[key].ToArray(),
+                cableForceByKey?[key].ToArray() ?? []));
         }
         return candidates.OrderBy(c => c.Parameters.RunIndex).ToArray();
     }

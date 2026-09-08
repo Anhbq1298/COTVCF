@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
+using COT_VCF.Infrastructure;
 
 namespace COT_VCF.Application.Results;
 
@@ -34,7 +35,7 @@ public sealed class DeflectionReportGenerator
         Directory.CreateDirectory(studyFolder);
         var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode);
         var path = Path.Combine(studyFolder, ReportFileName);
-        File.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
+        AtomicFile.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
         return path;
     }
 
@@ -56,62 +57,74 @@ public sealed class DeflectionReportGenerator
         IReadOnlyList<CandidateResultDto> results,
         string studyFolder, string baselineName, string baselinePath, IterationStudyMode studyMode)
     {
-        var groupNames = results.SelectMany(r => r.Groups).Select(g => g.GroupName).Distinct(StringComparer.Ordinal).ToArray();
+        // One report group per (monitored point group × result load case) — so a study that extracts Uz
+        // under several cases yields one selectable chart source per case.
+        var groupKeys = results.SelectMany(r => r.Groups)
+            .Select(g => (g.GroupName, g.OutputCase))
+            .Distinct().OrderBy(k => k.GroupName, StringComparer.Ordinal).ThenBy(k => k.OutputCase, StringComparer.Ordinal).ToArray();
 
         var flat = results.Where(r => r.Groups.Any(g => g.Points.Any(p => p.Status == ResultValueStatus.Valid)))
             .OrderBy(r => r.Parameters.RunIndex).Select(r => r.Parameters).ToArray();
-        Dim heightDim = new("Truss height",
-            p => p.TrussHeightM.ToString("0.####"),
-            k => $"H = {double.Parse(k):0.###} m");
-        // The "load candidate" is the loading scenario itself — key off its label so two loadings with
-        // the same nominal kPa but different make-up still separate. Falls back to the single-load level.
-        Dim loadDim = new("Load candidate",
-            p => !string.IsNullOrWhiteSpace(p.LoadingLabel) ? p.LoadingLabel!.Trim() : Num(p.LoadLevelKPa),
-            k => k == "" ? "n/a" : double.TryParse(k, out var v) ? $"{v:0.###} kPa" : k);
-        Dim preDim = new("Initial pretension",
-            p => Num(p.PretensionKN),
-            k => k == "" ? "none" : $"{double.Parse(k):0.###} kN");
+        // Legend rows are just the candidate id (L## / H## / P##) — the full make-up of every id is
+        // spelled out in the "Candidate definitions" block under the charts, so the legend stays compact.
+        Dim heightDim = new("Truss height", p => p.HeightCandidateId, k => k);
+        Dim loadDim = new("Load candidate", p => p.LoadingCandidateId, k => k);
+        Dim preDim = new("Initial pretension", p => p.PretensionCandidateId, k => k);
 
-        // View 1 colour = truss height (one colour per height). Line style (shared by both views)
-        // separates the candidates that share a height: the load candidate if it varies, else pretension.
-        var colorDim = heightDim;
-        var dashDim = new[] { loadDim, preDim }
-            .FirstOrDefault(d => flat.Select(d.Key).Distinct().Count() > 1) ?? loadDim;
-        // View 2 colour = initial pretension force (same profile chart, pivoted encoding).
-        var color2Dim = preDim;
+        // Always the SAME two complementary charts, whatever the study mode — colour = load candidate,
+        // then the other two dimensions swap between the line-style and the filter slot. A dimension the
+        // study holds fixed simply shows a single legend / filter row.
+        //   A: colour load, line truss height,      filter initial pretension
+        //   B: colour load, line initial pretension, filter truss height
+        var viewSpecs = new List<(Dim Color, Dim Dash, Dim? Filter)>
+        {
+            (loadDim, heightDim, preDim),
+            (loadDim, preDim, heightDim),
+        };
 
-        List<LegendEntryDto> LegendFor(Dim d) => flat.Select(d.Key).Distinct()
+        List<LegendEntryDto> ColorLegendFor(Dim d) => flat.Select(d.Key).Distinct()
             .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
             .Select((k, i) => new LegendEntryDto(k, d.Label(k), k == "" ? "#9aa0a6" : Palette[i % Palette.Length]))
             .ToList();
+        List<LegendEntryDto> DashLegendFor(Dim d) => flat.Select(d.Key).Distinct()
+            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
+            .Select((k, i) => new LegendEntryDto(k, d.Label(k), Dashes[i % Dashes.Length]))
+            .ToList();
+        List<LegendEntryDto> FilterLegendFor(Dim? d) => d is null ? [] : flat.Select(d.Key).Distinct()
+            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
+            .Select(k => new LegendEntryDto(k, d.Label(k), "")).ToList();
 
-        var colorLegend = LegendFor(colorDim);
-        var color2Legend = LegendFor(color2Dim);
-        var dashKeys = flat.Select(dashDim.Key).Distinct()
-            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal).ToArray();
-        var dashLegend = dashKeys.Select((k, i) =>
-            new LegendEntryDto(k, dashDim.Label(k), Dashes[i % Dashes.Length])).ToList();
+        var views = viewSpecs.Select(vs => new ChartViewDto(
+            vs.Color.Name, ColorLegendFor(vs.Color),
+            vs.Dash.Name, DashLegendFor(vs.Dash), ReferenceEquals(vs.Dash, preDim),
+            vs.Filter?.Name ?? "", FilterLegendFor(vs.Filter))).ToList();
 
         var groups = new List<DeflectionGroupReportDto>();
-        foreach (var gn in groupNames)
+        foreach (var (gn, oc) in groupKeys)
         {
             var series = new List<DeflectionCandidateSeriesDto>();
-            string outputCase = "", axis = "X";
+            string axis = "X";
             foreach (var r in results.OrderBy(r => r.Parameters.RunIndex))
             {
-                var g = r.Groups.FirstOrDefault(x => x.GroupName == gn);
+                var g = r.Groups.FirstOrDefault(x => x.GroupName == gn && x.OutputCase == oc);
                 if (g is null || g.Points.All(p => p.Status != ResultValueStatus.Valid)) continue; // only candidates with data
-                outputCase = g.OutputCase; axis = g.ProfileAxis.ToString();
+                axis = g.ProfileAxis.ToString();
                 series.Add(new DeflectionCandidateSeriesDto(
-                    r.IterationKey, r.Parameters.RunIndex, r.Parameters.LoadLevelKPa, r.Parameters.LoadingLabel,
+                    r.IterationKey, r.Parameters.RunIndex,
+                    r.Parameters.LoadingCandidateId, r.Parameters.HeightCandidateId, r.Parameters.PretensionCandidateId,
+                    r.Parameters.LoadLevelKPa, r.Parameters.LoadingLabel,
                     r.Parameters.TrussHeightM, r.Parameters.DeltaHM, r.Parameters.PretensionKN, r.Parameters.PretensionLabel,
                     r.ExtractionStatus.ToString(), r.DiagnosticReportRelativePath,
-                    colorDim.Key(r.Parameters), dashDim.Key(r.Parameters), color2Dim.Key(r.Parameters),
+                    viewSpecs.Select(vs => vs.Color.Key(r.Parameters)).ToArray(),
+                    viewSpecs.Select(vs => vs.Dash.Key(r.Parameters)).ToArray(),
+                    viewSpecs.Select(vs => vs.Filter?.Key(r.Parameters) ?? "").ToArray(),
+                    (r.Parameters.PretensionCables ?? []).Select(c => new PretensionCableEntryDto(c.CableName, c.TargetForceKN)).ToArray(),
+                    (r.Parameters.LoadingComponents ?? []).Select(c => new LoadComponentEntryDto(c.PatternName, c.LevelKPa)).ToArray(),
                     g.Points.OrderBy(p => p.Sequence).Select(p => new DeflectionPointDto(
                         p.PointName, Axis(p, g.ProfileAxis), p.UzMm, p.Sequence, p.Status.ToString())).ToArray()));
             }
             if (series.Count > 0)
-                groups.Add(new DeflectionGroupReportDto(gn, outputCase, axis, series));
+                groups.Add(new DeflectionGroupReportDto(gn, oc, axis, series));
         }
 
         var warnings = results.SelectMany(r => r.Warnings)
@@ -122,8 +135,7 @@ public sealed class DeflectionReportGenerator
             baselineName, baselinePath, studyFolder, studyMode.ToString(),
             results.Count, DateTimeOffset.Now.ToString("o"), "Uz", "m", "mm");
 
-        return new DeflectionReportDto(study, groups, colorDim.Name, dashDim.Name,
-            colorLegend, dashLegend, color2Dim.Name, color2Legend, warnings);
+        return new DeflectionReportDto(study, groups, views, warnings);
     }
 
     private sealed record Dim(string Name, Func<CandidateParametersDto, string> Key, Func<string, string> Label);
@@ -131,7 +143,6 @@ public sealed class DeflectionReportGenerator
     private static double Axis(MonitoredPointResultDto p, ProfileCoordinateAxis a) =>
         a switch { ProfileCoordinateAxis.Y => p.Y, ProfileCoordinateAxis.Z => p.Z, _ => p.X };
 
-    private static string Num(double? v) => v is { } d ? d.ToString("0.####") : "";
     private static double SortKey(string k) => k == "" ? double.MaxValue : double.TryParse(k, out var v) ? v : double.MaxValue;
 
     // ---------- HTML ----------
@@ -148,7 +159,11 @@ public sealed class DeflectionReportGenerator
   <div>
     <h1>Deflection Results Viewer</h1>
     <p class="meta">{{Esc(s.BaselineModelName)}} · mode {{Esc(s.StudyMode)}} · {{s.CandidateCount}} candidate(s) ·
-      U<sub>z</sub> [mm] vs coordinate [m] · generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
+      generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
+    <p class="intro">Each line is one study candidate: the vertical deflection U<sub>z</sub> [mm] of every monitored
+      point plotted against its position X [m] along the truss span, under the selected result load case.
+      <b>Colour</b> = load candidate · <b>line style</b> = truss height · <b>marker</b> = pretension candidate.
+      See <i>Candidate definitions</i> below for what each L## / H## / P## is.</p>
   </div>
   <details class="lib"><summary>Result Library</summary>
     <ul>
@@ -164,25 +179,26 @@ public sealed class DeflectionReportGenerator
   <label>Group <select id="group"></select></label>
   <span class="sep"></span>
   <label><input type="checkbox" id="legendToggle" checked> Plot legend</label>
-  <button id="showAll">Show all</button>
-  <button id="hideAll">Hide all</button>
   <button id="reset">Reset zoom</button>
-  <span class="sep"></span>
   <button id="srcBtn">View source data</button>
   <span class="sep"></span>
-  <span class="hint">wheel = zoom X · drag = pan · double-click = reset · click a colour / line = solo · click a candidate = show/hide</span>
+  <span class="hint">each chart has its own name + L / H / P filter · click a legend row = highlight · wheel = zoom X · drag = pan · dbl-click = reset · Duplicate clones the chart</span>
 </div>
-<div id="panels">
-  <section class="panel" data-view="0">
-    <h3>Deflection profile vs <b>truss height</b><span> — U<sub>z</sub> under the result load case</span></h3>
+<div id="panels"></div>
+<template id="panelTpl">
+  <section class="panel">
+    <div class="pbar">
+      <input class="pv-name" title="Chart name — click to edit" spellcheck="false">
+      <span class="pv-sub"></span>
+      <span class="pv-ctl"></span>
+      <button class="pv-dup" title="Duplicate this chart with all its current settings">＋ Duplicate</button>
+      <button class="pv-rm" title="Remove this chart" hidden>✕ Remove</button>
+    </div>
     <div class="stage"><svg class="chart" preserveAspectRatio="none"></svg><div class="legend"></div></div>
   </section>
-  <section class="panel" data-view="1">
-    <h3>Deflection profile vs <b>initial pretension force</b><span> — U<sub>z</sub> under the result load case</span></h3>
-    <div class="stage"><svg class="chart" preserveAspectRatio="none"></svg><div class="legend"></div></div>
-  </section>
-</div>
+</template>
 <div id="tip" hidden></div>
+<details id="candKey" open><summary>Candidate definitions — what each L## / H## / P## is</summary><div id="candKeyBody"></div></details>
 <div id="matrixWrap" hidden>
   <div class="mhdr"><strong>Source Data Matrix</strong><button id="mClose">Close</button></div>
   <div id="matrix"></div>
@@ -205,6 +221,7 @@ body{font:13px/1.45 "Segoe UI",system-ui,sans-serif;color:var(--tx);background:#
 [hidden]{display:none!important}
 header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:10px 14px;border-bottom:2px solid var(--acc)}
 h1{font-size:16px;margin:0}.meta{color:var(--mu);margin:3px 0 0;font-size:11.5px}
+.intro{margin:6px 0 0;font-size:11.5px;line-height:1.5;max-width:820px}.intro b{color:var(--acc)}
 .lib{font-size:12px}.lib summary{cursor:pointer;color:var(--acc);font-weight:600}
 .lib ul{list-style:none;margin:6px 0 0;padding:0;border:1px solid var(--bd);border-radius:3px;min-width:180px}
 .lib li{padding:4px 8px;border-bottom:1px solid var(--su);color:var(--mu)}
@@ -216,22 +233,67 @@ h1{font-size:16px;margin:0}.meta{color:var(--mu);margin:3px 0 0;font-size:11.5px
 select,button{font:12px "Segoe UI",sans-serif;padding:3px 8px;border:1px solid var(--bd);background:#fff;border-radius:3px}
 button{cursor:pointer}button:hover{background:var(--su)}
 #srcBtn{border-color:var(--acc);color:var(--acc);font-weight:600}
+/* candidate multi-select dropdowns (L / H / P global filter) */
+#candFilter{display:flex;gap:6px}
+.ms{position:relative}
+.ms>button{font:12px "Segoe UI",sans-serif;padding:3px 8px;min-width:88px;text-align:left}
+.ms.act>button{border-color:var(--acc);color:var(--acc);font-weight:600}
+.ms-pop{position:absolute;top:100%;left:0;z-index:30;margin-top:2px;background:#fff;border:1px solid var(--bd);border-radius:3px;box-shadow:0 4px 14px #0002;max-height:280px;overflow:auto;min-width:200px;padding:4px 0}
+.ms-pop label{display:flex;align-items:center;gap:6px;padding:3px 10px;font-size:11.5px;cursor:pointer;white-space:nowrap}
+.ms-pop label:hover{background:var(--su)}
+.ms-pop .all{border-bottom:1px solid var(--bd);font-weight:600}
 #panels{padding-bottom:8px}
 .panel{border-bottom:1px solid var(--bd)}
-.panel h3{margin:0;padding:8px 14px 2px;font-size:12px;font-weight:600}
-.panel h3 b{color:var(--acc)}.panel h3 span{font-weight:400;color:var(--mu)}
+.pbar{display:flex;align-items:center;gap:8px;padding:8px 14px 2px;flex-wrap:wrap}
+.pv-name{font:600 12.5px "Segoe UI",sans-serif;color:var(--acc);border:1px solid transparent;background:transparent;padding:2px 5px;border-radius:3px;min-width:200px;max-width:360px}
+.pv-name:hover{border-color:var(--bd)}
+.pv-name:focus{border-color:var(--acc);background:#fff;outline:none}
+.pv-sub{font-size:11px;color:var(--mu)}
+.pv-ctl{display:flex;gap:6px;flex-wrap:wrap}
+.pv-ctl select{font-size:11px;padding:2px 4px;max-width:230px}
+.pv-dup{margin-left:auto;font-size:11px;padding:2px 8px}
+.pv-rm{font-size:11px;padding:2px 8px;border-color:#C62828;color:#C62828}
+.panel.copy{background:#fafbfd}
+.panel.copy .pbar{border-left:3px solid var(--acc);padding-left:11px}
 .stage{display:flex;height:390px;padding:4px 6px 10px}
 .chart{flex:1;height:100%;min-width:0;background:#fff}
 .legend{width:250px;flex:none;overflow:auto;border-left:1px solid var(--bd);padding:8px;font-size:11.5px}
 .legend h4{margin:8px 0 4px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
 .legend .hint2{font-weight:400;text-transform:none;letter-spacing:0;color:#9aa0a6;font-size:9.5px}
 .legend .row{display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer}
-.legend .row.key:hover,.legend .row.dkey:hover{background:#f0f3f7;border-radius:2px}
+.legend .lcb{flex:none;margin:0 2px 0 0;cursor:pointer}
+.legend .row.key:hover,.legend .row.dkey:hover,.legend .row.pkey:hover{background:#f0f3f7;border-radius:2px}
+.legend .fdot{width:8px;height:8px;border-radius:50%;background:#9aa0a6;flex:none;margin:0 8px 0 8px}
 .legend .row.off{opacity:.35}
 .legend .row.hi{background:#e8f0fe;border-radius:2px}
 .legend .sw{width:24px;height:0;border-top-width:3px;border-top-style:solid;flex:none}
 .legend .dash{width:26px;height:0;border-top:2px solid #444;flex:none}
+.legend .mk{flex:none;overflow:visible}
 #tip{position:fixed;pointer-events:none;background:#fffffff2;border:1px solid var(--acc);border-radius:3px;padding:6px 8px;font:11px/1.4 Consolas,monospace;z-index:20;max-width:280px}
+#candKey{border-top:1px solid var(--bd);font-size:11.5px}
+#candKey>summary{cursor:pointer;padding:6px 14px;background:var(--su);font-weight:600;color:var(--acc)}
+#candKeyBody{display:flex;gap:36px;flex-wrap:wrap;padding:12px 14px 16px;align-items:flex-start}
+#candKeyBody .grp{min-width:200px}
+#candKeyBody .pgrp{min-width:340px}
+#candKeyBody h5{margin:0 0 6px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+#candKeyBody h5 .cnt{color:var(--acc);font-weight:700;font-size:11px;margin-left:3px}
+#candKeyBody .kr{display:flex;align-items:flex-start;gap:8px;padding:2px 0}
+#candKeyBody .kid{font:600 11px Consolas,monospace;color:var(--tx);flex:none}
+#candKeyBody .kval{line-height:1.5}
+#candKeyBody .ksw{display:inline-block;width:22px;height:0;border-top-width:3px;border-top-style:solid;flex:none;vertical-align:middle}
+#candKeyBody .kmk{flex:none}
+#candKeyBody table.kt{border-collapse:collapse;font-size:11px}
+#candKeyBody table.kt th{font-weight:400;color:var(--mu);text-align:right;padding:0 8px 3px;font-size:10px;white-space:nowrap}
+#candKeyBody table.kt td{padding:2px 8px;text-align:right;white-space:nowrap}
+#candKeyBody table.kt td.kid{text-align:left;padding-left:2px}
+#candKeyBody table.kt td.csw{padding-right:0;width:26px}
+#candKeyBody .pblk{margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--bd)}
+#candKeyBody .pblk:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+#candKeyBody .pgh{display:flex;align-items:center;gap:8px}
+#candKeyBody .pgh .pgn{color:var(--mu);font-size:10.5px}
+#candKeyBody .ptbl{margin:3px 0 0 26px}
+#candKeyBody .ptbl td:nth-child(1),#candKeyBody .ptbl td:nth-child(4){text-align:left;font-family:Consolas,monospace;color:var(--tx)}
+#candKeyBody .ptbl td.pgap{width:1px;min-width:1px;padding:0;background:var(--bd)}
 #matrixWrap{border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
 .mhdr{display:flex;justify-content:space-between;align-items:center;padding:5px 14px;background:var(--su)}
 #matrix{overflow:auto;max-height:42vh}
@@ -260,45 +322,188 @@ a{color:var(--acc)}
   const D = JSON.parse(document.getElementById('report-data').textContent);
   const sel = document.getElementById('group'), tip = document.getElementById('tip');
   const dashMap = {solid:'',dash:'8 5',dot:'2 4',dashdot:'10 4 2 4',longdash:'16 6',longdashdot:'16 5 3 5'};
-  const dashName = k => (D.dashLegend.find(e=>e.key===k)||{}).value || 'solid';
-  const dashArr  = k => dashMap[dashName(k)] ?? '';
-  const dashCss  = k => { const v=dashName(k); return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
-  const legendColor = (legend,k) => (legend.find(e=>e.key===k)||{}).value || '#9aa0a6';
+  const dashValue = (lg,k) => (lg.find(e=>e.key===k)||{}).value || 'solid';
+  const dashArr = (lg,k) => dashMap[dashValue(lg,k)] ?? '';
+  const dashCss = (lg,k) => { const v=dashValue(lg,k); return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
+  const legendColor = (lg,k) => (lg.find(e=>e.key===k)||{}).value || '#9aa0a6';
+  const esc = t => String(t).replace(/[<&>"]/g, c=>({'<':'&lt;','&':'&amp;','>':'&gt;','"':'&quot;'}[c]));
+  // point markers — used when the line dimension is the pretension candidate (dashes alone repeat past 6)
+  const MSHAPES = ['circle','square','triangle','diamond','plus','ring'];
+  function markerSvg(shape, x, y, r, fill, op, kd){
+    const a = `fill="${fill}" opacity="${op}"${kd||''}`;
+    switch(shape){
+      case 'square':   return `<rect x="${(x-r).toFixed(1)}" y="${(y-r).toFixed(1)}" width="${(2*r).toFixed(1)}" height="${(2*r).toFixed(1)}" ${a}/>`;
+      case 'triangle': return `<polygon points="${x.toFixed(1)},${(y-r*1.25).toFixed(1)} ${(x-r*1.1).toFixed(1)},${(y+r).toFixed(1)} ${(x+r*1.1).toFixed(1)},${(y+r).toFixed(1)}" ${a}/>`;
+      case 'diamond':  return `<polygon points="${x.toFixed(1)},${(y-r*1.35).toFixed(1)} ${(x+r*1.35).toFixed(1)},${y.toFixed(1)} ${x.toFixed(1)},${(y+r*1.35).toFixed(1)} ${(x-r*1.35).toFixed(1)},${y.toFixed(1)}" ${a}/>`;
+      case 'plus':     return `<path d="M${(x-r*1.4).toFixed(1)},${y.toFixed(1)} h${(2.8*r).toFixed(1)} M${x.toFixed(1)},${(y-r*1.4).toFixed(1)} v${(2.8*r).toFixed(1)}" stroke="${fill}" stroke-width="2.6" stroke-linecap="round" opacity="${op}"/>`;
+      case 'ring':     return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="none" stroke="${fill}" stroke-width="2.6" opacity="${op}"/>`;
+      default:         return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" ${a}/>`;
+    }
+  }
 
-  // two views of the same deflection profile: 0 = colour by truss height, 1 = colour by initial
-  // pretension force. Line style (dashKey = load candidate) and candidate visibility are shared.
-  const VIEWS = [
-    {field:'colorKey',  legend:D.colorLegend,  dim:D.colorDimension },
-    {field:'colorKey2', legend:D.colorLegend2, dim:D.colorDimension2},
-  ];
-
+  // Each chart panel is a self-contained view: editable name, its own L / H / P candidate filter,
+  // colour/line relationship, load case and zoom. Duplicate clones the whole config; one chart by default.
+  // `hidden` = per-candidate show/hide (shared), `hi` = matrix-highlighted candidate (shared).
   let gi = 0, showLegend = true, hidden = new Set(), hi = null;
   const panels = [];
+  const tpl = document.getElementById('panelTpl'), panelsEl = document.getElementById('panels');
+  const mw = document.getElementById('matrixWrap'), srcBtn = document.getElementById('srcBtn');
 
   D.groups.forEach((g,i)=>{ const o=document.createElement('option'); o.value=i;
     o.textContent=`${g.groupName}  ·  ${g.outputCase}  ·  ${g.series.length} candidate(s)`; sel.appendChild(o); });
 
-  function grp(){ return D.groups[gi]; }
-  function visibleSeries(){ return grp().series.filter(s=>!hidden.has(s.iterationKey)); }
-  function xExtent(){ const xs=grp().series.flatMap(s=>s.points.filter(p=>p.uzMm!=null).map(p=>p.coord)); return xs.length?[Math.min(...xs),Math.max(...xs)]:[0,1]; }
-  function groupOff(field,k){ const l=grp().series.filter(s=>s[field]===k); return l.length>0 && l.every(s=>hidden.has(s.iterationKey)); }
-  // "solo" a legend group: show only its series, hide the rest. Click the same row again to restore all.
-  function soloGroup(field,k){
-    const all=grp().series, tgt=all.filter(s=>s[field]===k), other=all.filter(s=>s[field]!==k);
-    const iso = other.length>0 && other.every(s=>hidden.has(s.iterationKey)) && tgt.every(s=>!hidden.has(s.iterationKey));
-    hidden.clear(); if(!iso) other.forEach(s=>hidden.add(s.iterationKey)); hi=null; renderAll();
+  // study-wide candidate option lists (L / H / P) — identity is the same across groups / cases
+  const allSeries = D.groups.flatMap(g=>g.series);
+  const uniqOpts = (keyFn, labFn) => { const m=new Map(); allSeries.forEach(s=>{ const k=keyFn(s); if(k && !m.has(k)) m.set(k,{id:k,label:labFn(s)}); });
+    return [...m.values()].sort((a,b)=>a.id.localeCompare(b.id, undefined, {numeric:true})); };
+  // legend / filter rows carry only the candidate id — the "Candidate definitions" block below the
+  // charts is the single place that spells out what each L## / H## / P## contains.
+  const CAND = {
+    L: uniqOpts(s=>s.loadId, s=>s.loadId),
+    H: uniqOpts(s=>s.heightId, s=>s.heightId),
+    P: uniqOpts(s=>s.pretensionId, s=>s.pretensionId),
+  };
+  // Pretension candidate is ALWAYS shown as a point marker (shape per P id) on every chart, whenever the
+  // study sweeps more than one pretension candidate — independent of which relationship a chart plots.
+  const P_IDS = CAND.P.map(o=>o.id);
+  const P_ON = P_IDS.length > 1;
+  const pShape = s => MSHAPES[Math.max(0, P_IDS.indexOf(s.pretensionId)) % MSHAPES.length];
+
+  // one-off glossary of every candidate id -> its meaning (colour for L, dash for H, marker shape for P)
+  // Candidate definitions block — mirrors the Tab 05 "Candidate Definitions" panel:
+  // Loading = one column per load pattern; Truss height = ΔH + height columns; Pretension = per-cable list.
+  function buildCandKey(){
+    const body = document.getElementById('candKeyBody');
+    const bySeries = id => allSeries.find(s => s.loadId===id || s.heightId===id || s.pretensionId===id);
+    const dashOf = k => { const v = (D.views[0].dashLegend.find(e=>e.key===k)||{}).value; return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
+    const colOf = s => (D.views[0].colorLegend.find(e=>e.key===s.colorKeys[0])||{}).value || '#9aa0a6';
+    const kfmt = n => (+n).toLocaleString('en-US',{maximumFractionDigits:0});
+    const h5 = (t,n) => `<h5>${t} <span class="cnt">${n}</span></h5>`;
+
+    // ---- Loading candidates: a column per load pattern ----
+    const LCOLS = [...new Set(allSeries.flatMap(s => (s.loadingComponents||[]).map(c=>c.pattern)))];
+    let L;
+    if(LCOLS.length){
+      const head = `<tr><th></th><th></th>${LCOLS.map(p=>`<th>${esc(p)}</th>`).join('')}</tr>`;
+      const rows = CAND.L.map(o=>{
+        const s = bySeries(o.id);
+        const map = {}; (s.loadingComponents||[]).forEach(c=>map[c.pattern]=c.levelKPa);
+        const cells = LCOLS.map(p=> p in map ? `<td>${(+map[p]).toFixed(2)} kPa</td>` : `<td>—</td>`).join('');
+        return `<tr><td class="csw"><span class="ksw" style="border-top-color:${colOf(s)}"></span></td><td class="kid">${o.id}</td>${cells}</tr>`;
+      }).join('');
+      L = `<div class="grp">${h5('Loading candidates', CAND.L.length)}<table class="kt">${head}${rows}</table></div>`;
+    } else {
+      L = `<div class="grp">${h5('Loading candidates', CAND.L.length)}` + CAND.L.map(o=>{
+        const s = bySeries(o.id);
+        return `<div class="kr"><span class="ksw" style="border-top-color:${colOf(s)}"></span><span class="kid">${o.id}</span><span class="kval">${esc(s.loadingLabel)}</span></div>`;
+      }).join('') + `</div>`;
+    }
+
+    // ---- Truss-height candidates: ΔH baseline + truss height ----
+    const Hhead = `<tr><th></th><th></th><th>ΔH baseline</th><th>Truss height</th></tr>`;
+    const Hrows = CAND.H.map(o=>{
+      const s = bySeries(o.id);
+      const dh = s.deltaHM!=null ? `${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)} m` : '—';
+      return `<tr><td class="csw"><span class="ksw" style="border-top-style:${dashOf(s.dashKeys[0])};border-top-color:#444"></span></td><td class="kid">${o.id}</td><td>${dh}</td><td>${(+s.trussHeightM).toFixed(2)} m</td></tr>`;
+    }).join('');
+    const H = `<div class="grp">${h5('Truss-height candidates', CAND.H.length)}<table class="kt">${Hhead}${Hrows}</table></div>`;
+
+    // ---- Pretension candidates: per-P block, one row per cable ----
+    let P = '';
+    if(P_ON){
+      P = `<div class="grp pgrp">${h5('Pretension candidates', CAND.P.length)}` + CAND.P.map(o=>{
+        const shape = MSHAPES[P_IDS.indexOf(o.id) % MSHAPES.length];
+        const s = bySeries(o.id);
+        const cabs = s.pretensionCables || [];
+        const note = cabs.length
+          ? `${cabs.length} cable target${cabs.length===1?'':'s'}`
+          : esc(s.pretensionKN!=null ? `${kfmt(s.pretensionKN)} kN` : (s.pretensionLabel||'—'));
+        const hdr = `<div class="pgh"><svg class="kmk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(shape,11,9,5.6,'#555',1)}</svg><span class="kid">${o.id}</span><span class="pgn">${note}</span></div>`;
+        let list = '';
+        if(cabs.length){
+          const cell = c => c ? `<td>${esc(c.cable)}</td><td>${kfmt(c.forceKN)} kN</td>` : `<td></td><td></td>`;
+          const rows = [];
+          for(let i=0;i<cabs.length;i+=2) rows.push(`<tr>${cell(cabs[i])}<td class="pgap"></td>${cell(cabs[i+1])}</tr>`);
+          list = `<table class="kt ptbl">${rows.join('')}</table>`;
+        }
+        return `<div class="pblk">${hdr}${list}</div>`;
+      }).join('') + `</div>`;
+    }
+    body.innerHTML = L + H + P;
   }
-  function toggleCand(k){ hidden.has(k)?hidden.delete(k):hidden.add(k); renderAll(); }
+
+  // one multi-select dropdown over `opts`; `set` is the backing Set (empty = all); onChange runs after edits.
+  function buildMS(tag, opts, set, onChange){
+    const wrap=document.createElement('span'); wrap.className='ms';
+    const btn=document.createElement('button'); wrap.appendChild(btn);
+    const pop=document.createElement('div'); pop.className='ms-pop'; pop.hidden=true; pop.onclick=e=>e.stopPropagation(); wrap.appendChild(pop);
+    const allL=document.createElement('label'); allL.className='all';
+    const allCb=document.createElement('input'); allCb.type='checkbox';
+    allL.append(allCb, document.createTextNode(' All ' + tag));
+    pop.appendChild(allL);
+    const boxes=[];
+    opts.forEach(o=>{ const l=document.createElement('label'); const cb=document.createElement('input'); cb.type='checkbox'; cb.value=o.id;
+      l.append(cb, document.createTextNode(' ' + o.label)); pop.appendChild(l); boxes.push(cb);
+      cb.onchange=()=>{ cb.checked?set.add(o.id):set.delete(o.id); if(set.size===opts.length) set.clear(); sync(); onChange(); };
+    });
+    allCb.onclick=e=>{ e.preventDefault(); set.clear(); sync(); onChange(); };
+    function sync(){
+      const n=set.size;
+      btn.textContent = `${tag}: ` + (n===0 ? 'all' : n<=2 ? [...set].join(', ') : `${n}/${opts.length}`);
+      wrap.classList.toggle('act', n>0);
+      allCb.checked = n===0;
+      boxes.forEach(cb=>cb.checked = n>0 && set.has(cb.value));
+    }
+    btn.onclick=e=>{ e.stopPropagation(); document.querySelectorAll('.ms-pop').forEach(p=>{ if(p!==pop) p.hidden=true; }); pop.hidden=!pop.hidden; };
+    sync();
+    return wrap;
+  }
+  document.addEventListener('click',()=>document.querySelectorAll('.ms-pop').forEach(p=>p.hidden=true));
 
   function ticks(a,b,n){ const step=nice((b-a)/n); const t0=Math.ceil(a/step)*step,o=[]; for(let v=t0;v<=b+1e-9;v+=step)o.push(+v.toFixed(10)); return o; }
   function nice(x){ const e=Math.pow(10,Math.floor(Math.log10(Math.abs(x)||1))); const f=x/e; return (f<1.5?1:f<3?2:f<7?5:10)*e; }
   function fmt(v){ return Math.abs(v)>=100?v.toFixed(0):Math.abs(v)>=1?v.toFixed(2):v.toFixed(3); }
+  function gVisible(){ return D.groups[gi].series.filter(s=>!hidden.has(s.iterationKey)); }
 
-  function makePanel(host, cfg){
+  function makePanel(anchorAfter, init){
+    // init: { vi, linked, gi, hidden(Set), name, selL[], selH[], selP[] }
+    const host = tpl.content.firstElementChild.cloneNode(true);
+    if(anchorAfter) anchorAfter.after(host); else panelsEl.appendChild(host);
     const chart = host.querySelector('.chart'), legendEl = host.querySelector('.legend');
-    let zoomX = null;
-    // Clamp an X window to the data extent: never wider than the full span, never < 4% of it,
-    // never panned past an end. null => un-zoomed / full view.
+    const dupBtn = host.querySelector('.pv-dup'), rmBtn = host.querySelector('.pv-rm'), ctlEl = host.querySelector('.pv-ctl');
+    const nameEl = host.querySelector('.pv-name');
+
+    let vi = init.vi|0, linked = !!init.linked;
+    let localGi = init.gi != null ? init.gi : gi;
+    let localGroupSet = init.gi != null;   // a copy carries its own group/case; a linked panel follows the toolbar until its "case:" selector is touched
+    let localHidden = new Set(init.hidden || hidden);
+    let zoomX = null, api;
+    const hiSel = new Set();   // multi-select highlight: "c:L01" / "d:H02" / "p:P01" — tick legend rows to add/remove
+    // per-panel candidate filter + editable name
+    const selL = new Set(init.selL||[]), selH = new Set(init.selH||[]), selP = new Set(init.selP||[]);
+    let name = init.name || null, nameEdited = !!init.name;
+
+    const curGi = () => (linked && !localGroupSet) ? gi : localGi;
+    const curHidden = () => linked ? hidden : localHidden;
+    const grp = () => D.groups[curGi()];
+    const view = () => D.views[vi];
+    const colorKey = s => s.colorKeys[vi], dashKey = s => s.dashKeys[vi];
+    const keyForDim = (dim,s) => dim==='c' ? colorKey(s) : dim==='p' ? s.pretensionId : dashKey(s);
+    const passes = s => (selL.size===0||selL.has(s.loadId)) && (selH.size===0||selH.has(s.heightId)) && (selP.size===0||selP.has(s.pretensionId));
+    // in scope after this panel's L/H/P filter, then the per-candidate show/hide
+    const scoped = () => grp().series.filter(passes);
+    const visible = () => scoped().filter(s=>!curHidden().has(s.iterationKey));
+    const emph = s => (hi && s.iterationKey===hi)
+      || hiSel.has('c:'+colorKey(s)) || hiSel.has('d:'+dashKey(s)) || hiSel.has('p:'+s.pretensionId);
+    const anyEmph = () => hi!=null || hiSel.size>0;
+    const xExtent = () => { const xs=grp().series.flatMap(s=>s.points.filter(p=>p.uzMm!=null).map(p=>p.coord)); return xs.length?[Math.min(...xs),Math.max(...xs)]:[0,1]; };
+
+    function afterMutate(){ render(); if(!mw.hidden) drawMatrix(); }
+    // legend colour / line row click: highlight that whole group (dim the rest). Click again to clear.
+    function toggleHiSel(dim,k){ const t=dim+':'+k; hiSel.has(t)?hiSel.delete(t):hiSel.add(t); hi=null; render(); if(!mw.hidden) drawMatrix(); }
+    function toggleCand(k){ const H=curHidden(); H.has(k)?H.delete(k):H.add(k); afterMutate(); }
+    function filtSummary(){ return [selL.size&&`${selL.size} L`, selH.size&&`${selH.size} H`, selP.size&&`${selP.size} P`].filter(Boolean).join(' · '); }
+
     function clamp(z){
       const [dx0,dx1]=xExtent(), span=(dx1-dx0)||1, minSpan=span*0.04;
       let a=z[0], b=z[1], w=b-a;
@@ -310,15 +515,59 @@ a{color:var(--acc)}
       return [a,b];
     }
 
+    const viewLabel = v => v.dashDimension && v.dashDimension !== v.colorDimension
+      ? `${v.colorDimension} × ${v.dashDimension}` : v.colorDimension;
+
+    const defaultName = () => `Deflection Uz — ${viewLabel(view())}`;
+    nameEl.value = name || defaultName();
+    nameEl.oninput = () => { name = nameEl.value; nameEdited = name !== defaultName(); render(); };
+
+    function syncHeader(){
+      host.classList.toggle('copy', !linked);
+      if(!nameEdited){ name = defaultName(); nameEl.value = name; }
+      host.querySelector('.pv-sub').textContent = `Uz under ${grp().outputCase}`;
+      rmBtn.hidden = linked;
+      ctlEl.innerHTML = '';
+      // monitored-group selector: only when more than one monitored group exists.
+      const groupNames = [...new Set(D.groups.map(g=>g.groupName))];
+      if(groupNames.length > 1){
+        const gs=document.createElement('select'); gs.title='Monitored point group';
+        groupNames.forEach(n=>{ const o=new Option(n, n); if(n===grp().groupName) o.selected=true; gs.add(o); });
+        gs.onchange=()=>{ const i=D.groups.findIndex(g=>g.groupName===gs.value && g.outputCase===grp().outputCase);
+          localGi = i>=0 ? i : D.groups.findIndex(g=>g.groupName===gs.value); localGroupSet=true;
+          hiSel.clear(); zoomX=null; syncHeader(); render(); };
+        ctlEl.append(gs);
+      }
+      // load-case selector — pick which result load case this chart's Uz is read under.
+      {
+        const cs=document.createElement('select'); cs.title='Result load case for this chart';
+        D.groups.forEach((g,i)=>{ if(g.groupName!==grp().groupName) return;
+          const o=new Option(`case: ${g.outputCase}`, i); if(i===curGi()) o.selected=true; cs.add(o); });
+        cs.onchange=()=>{ localGi=+cs.value; localGroupSet=true; hiSel.clear(); zoomX=null; syncHeader(); render(); };
+        ctlEl.append(cs);
+      }
+      // relationship (colour × line) selector.
+      if(D.views.length > 1){
+        const vs=document.createElement('select'); vs.title='Which relationship this chart plots';
+        D.views.forEach((v,i)=>{ const o=new Option(`view: ${viewLabel(v)}`, i); if(i===vi) o.selected=true; vs.add(o); });
+        vs.onchange=()=>{ vi=+vs.value; hiSel.clear(); zoomX=null; syncHeader(); render(); };
+        ctlEl.append(vs);
+      }
+      // per-chart candidate filter (L / H / P) — multi-select, empty = all.
+      ctlEl.append(
+        buildMS('L', CAND.L, selL, ()=>{ hiSel.clear(); render(); if(!mw.hidden) drawMatrix(); }),
+        buildMS('H', CAND.H, selH, ()=>{ hiSel.clear(); render(); if(!mw.hidden) drawMatrix(); }),
+        buildMS('P', CAND.P, selP, ()=>{ hiSel.clear(); render(); if(!mw.hidden) drawMatrix(); }));
+    }
+
     function render(){
-      const g = grp(); if(!g){ chart.innerHTML=''; legendEl.innerHTML=''; return; }
+      const g = grp(), V = view(); if(!g){ chart.innerHTML=''; legendEl.innerHTML=''; return; }
       legendEl.hidden = !showLegend;
-      const W = chart.clientWidth||900, H = chart.clientHeight||380, m={l:58,r:14,t:14,b:40};
+      const W = chart.clientWidth||900, H = chart.clientHeight||360, m={l:58,r:14,t:34,b:40};
       const all = g.series.flatMap(s=>s.points.filter(p=>p.uzMm!=null));
       const [dx0,dx1] = xExtent();
       let x0=dx0, x1=dx1;
       if(zoomX){ x0=zoomX[0]; x1=zoomX[1]; }
-      // never render outside the data extent — no blank gutters from an over-pan / over-zoom
       if(x0<dx0) x0=dx0; if(x1>dx1) x1=dx1; if(x1-x0 < (dx1-dx0)*0.02){ x0=dx0; x1=dx1; }
       let ys = all.map(p=>p.uzMm);
       let y0 = Math.min(...ys,0), y1 = Math.max(...ys,0);
@@ -326,22 +575,35 @@ a{color:var(--acc)}
       const py = 0.06*(y1-y0); y0-=py; y1+=py;
       const sx = v => m.l + (v-x0)/(x1-x0)*(W-m.l-m.r);
       const sy = v => m.t + (y1-v)/(y1-y0)*(H-m.t-m.b);   // standard orientation: +Uz up
+      const em = anyEmph();
 
       const P=[`<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`];
+      const fs = filtSummary();
+      P.push(`<text x="${(m.l+W-m.r)/2}" y="18" font-size="12" font-weight="600" fill="#1F4788" text-anchor="middle">${esc(name||defaultName())}${fs?`  ·  ${fs}`:''}</text>`);
+      P.push(`<text x="${(m.l+W-m.r)/2}" y="30" font-size="9.5" fill="#666" text-anchor="middle">${g.groupName} · ${g.outputCase} · ${viewLabel(V)}</text>`);
       ticks(x0,x1,8).forEach(t=>{ const X=sx(t); P.push(`<line x1="${X}" y1="${m.t}" x2="${X}" y2="${H-m.b}" stroke="#eef0f2"/><text x="${X}" y="${H-m.b+16}" font-size="10" fill="#666" text-anchor="middle">${fmt(t)}</text>`); });
       ticks(y0,y1,6).forEach(t=>{ const Y=sy(t); P.push(`<line x1="${m.l}" y1="${Y}" x2="${W-m.r}" y2="${Y}" stroke="${t===0?'#c7ccd2':'#eef0f2'}"/><text x="${m.l-6}" y="${Y+3}" font-size="10" fill="#666" text-anchor="end">${fmt(t)}</text>`); });
       P.push(`<line x1="${m.l}" y1="${m.t}" x2="${m.l}" y2="${H-m.b}" stroke="#333"/><line x1="${m.l}" y1="${H-m.b}" x2="${W-m.r}" y2="${H-m.b}" stroke="#333"/>`);
       P.push(`<text x="${(m.l+W-m.r)/2}" y="${H-6}" font-size="11" fill="#333" text-anchor="middle">${g.profileAxis} coordinate [m]</text>`);
       P.push(`<text transform="translate(14,${(m.t+H-m.b)/2}) rotate(-90)" font-size="11" fill="#333" text-anchor="middle">Uz [mm]  (− = downward)</text>`);
 
-      visibleSeries().slice().sort((a,b)=>(a.iterationKey===hi?1:0)-(b.iterationKey===hi?1:0)).forEach(s=>{
+      const lineSolid = V.dashMarkers;   // this view's line dim IS pretension -> solid line, marker carries P
+      visible().slice().sort((a,b)=>(emph(a)?1:0)-(emph(b)?1:0)).forEach(s=>{
         const vp = s.points.filter(p=>p.uzMm!=null);
         const pts = vp.map(p=>`${sx(p.coord).toFixed(1)},${sy(p.uzMm).toFixed(1)}`).join(' ');
         if(!pts) return;
-        const c = legendColor(cfg.legend, s[cfg.field]);
-        const op = (!hi || s.iterationKey===hi) ? 1 : 0.18, wd = s.iterationKey===hi ? 3.4 : 1.8;
-        P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${dashArr(s.dashKey)}" opacity="${op}" data-k="${s.iterationKey}"/>`);
-        vp.forEach(p=>P.push(`<circle cx="${sx(p.coord).toFixed(1)}" cy="${sy(p.uzMm).toFixed(1)}" r="${s.iterationKey===hi?3.4:2.4}" fill="${c}" opacity="${op}" data-k="${s.iterationKey}" data-pt="${p.pointName}" data-x="${p.coord}" data-uz="${p.uzMm}"/>`));
+        const c = legendColor(V.colorLegend, colorKey(s));
+        const on = emph(s), op = (!em || on) ? 1 : 0.15, wd = on ? 3.4 : 1.8;
+        P.push(`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="${wd}" stroke-dasharray="${lineSolid?'':dashArr(V.dashLegend, dashKey(s))}" opacity="${op}" data-k="${s.iterationKey}"/>`);
+        vp.forEach(p=>{
+          const X=+sx(p.coord).toFixed(1), Y=+sy(p.uzMm).toFixed(1);
+          const kd = ` data-k="${s.iterationKey}" data-pt="${p.pointName}" data-x="${p.coord}" data-uz="${p.uzMm}"`;
+          if(P_ON){ const r = on?7.5:5.6;
+            P.push(`<circle cx="${X}" cy="${Y}" r="${r+2}" fill="transparent"${kd}/>`
+              + markerSvg(pShape(s), X, Y, r, '#fff', op)          // white halo for contrast over the line
+              + markerSvg(pShape(s), X, Y, r-1.4, c, op)); }
+          else { P.push(`<circle cx="${X}" cy="${Y}" r="${on?3.4:2.4}" fill="${c}" opacity="${op}"${kd}/>`); }
+        });
       });
       chart.setAttribute('viewBox',`0 0 ${W} ${H}`);
       chart.innerHTML = P.join('');
@@ -349,24 +611,48 @@ a{color:var(--acc)}
     }
 
     function drawLegend(){
-      const g = grp(); const h=[];
-      h.push(`<h4>${cfg.dim} — colour <span class="hint2">click = solo</span></h4>`);
-      cfg.legend.forEach(e=>{ const off=groupOff(cfg.field,e.key)?' off':'';
-        h.push(`<div class="row key${off}" data-k="${e.key}"><span class="sw" style="border-top-color:${e.value}"></span>${e.label}</div>`); });
-      if(D.dashLegend.length){
-        h.push(`<h4>${D.dashDimension} — line <span class="hint2">click = solo</span></h4>`);
-        D.dashLegend.forEach(e=>{ const off=groupOff('dashKey',e.key)?' off':'';
-          h.push(`<div class="row dkey${off}" data-k="${e.key}"><span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${e.label}</div>`); });
+      const V = view(); const h=[]; const inScope = scoped();
+      const showDash = V.dashDimension !== V.colorDimension && V.dashLegend.length > 1;
+      // legend lists only values that survive the global L / H / P filter
+      const present = keyOf => new Set(inScope.map(keyOf));
+      const selMark = (dim,k) => hiSel.has(dim+':'+k) ? ' hi' : (hiSel.size ? ' off' : '');
+      const cb = on => `<input type="checkbox" class="lcb"${on?' checked':''}>`;
+      h.push(`<h4>${V.colorDimension} — colour <span class="hint2">tick = highlight (multi)</span></h4>`);
+      const cp = present(colorKey);
+      V.colorLegend.filter(e=>cp.has(e.key)).forEach(e=>{
+        h.push(`<div class="row key${selMark('c',e.key)}" data-k="${e.key}">${cb(hiSel.has('c:'+e.key))}<span class="sw" style="border-top-color:${e.value}"></span>${e.label}</div>`); });
+      // LINE section — only when the line dimension is NOT pretension (pretension is shown as a marker below)
+      if(showDash && !V.dashMarkers){
+        h.push(`<h4>${V.dashDimension} — line <span class="hint2">tick = highlight (multi)</span></h4>`);
+        const dp = present(dashKey);
+        V.dashLegend.filter(e=>dp.has(e.key)).forEach(e=>{
+          h.push(`<div class="row dkey${selMark('d',e.key)}" data-k="${e.key}">${cb(hiSel.has('d:'+e.key))}<span class="dash" style="border-top-style:${e.value==='dot'?'dotted':(e.value==='solid'?'solid':'dashed')}"></span>${e.label}</div>`); });
       }
-      const shown = cfg.legend.map(e=>e.key).filter(k=>!groupOff(cfg.field,k));
-      const cands = shown.length ? g.series.filter(s=>shown.includes(s[cfg.field])) : g.series;
-      h.push(`<h4>Candidates <span class="hint2">${cands.length}/${g.series.length} · click = show/hide</span></h4>`);
-      cands.forEach(s=>{ const off=hidden.has(s.iterationKey)?' off':'', on=s.iterationKey===hi?' hi':'';
-        h.push(`<div class="row cand${off}${on}" data-k="${s.iterationKey}"><span class="sw" style="border-top-color:${legendColor(cfg.legend,s[cfg.field])};border-top-style:${dashCss(s.dashKey)}"></span>${s.iterationKey} · ${s.loadingLabel} · H ${(+s.trussHeightM).toFixed(2)}m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}</div>`); });
+      // PRETENSION MARKER section — always present when the study sweeps more than one pretension candidate
+      if(P_ON){
+        const pPresent = new Set(inScope.map(s=>s.pretensionId));
+        h.push(`<h4>Pretension candidate — marker <span class="hint2">tick = highlight (multi)</span></h4>`);
+        CAND.P.filter(o=>pPresent.has(o.id)).forEach((o,i)=>{
+          const shape = MSHAPES[P_IDS.indexOf(o.id) % MSHAPES.length];
+          h.push(`<div class="row pkey${selMark('p',o.id)}" data-k="${o.id}">${cb(hiSel.has('p:'+o.id))}<svg class="mk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(shape,11,9,5.6,"#555",1)}</svg>${o.label}</div>`); });
+      }
+      h.push(`<h4>Candidates <span class="hint2">${inScope.length}/${grp().series.length} in scope · tick = show</span></h4>`);
+      inScope.forEach(s=>{ const shown=!curHidden().has(s.iterationKey), off=shown?'':' off', on=s.iterationKey===hi?' hi':'';
+        const col = legendColor(V.colorLegend, colorKey(s));
+        const swatch = P_ON
+          ? `<svg class="mk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(pShape(s),11,9,5.2,col,1)}</svg>`
+          : `<span class="sw" style="border-top-color:${col};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>`;
+        h.push(`<div class="row cand${off}${on}" data-k="${esc(s.iterationKey)}" title="${esc(s.iterationKey)} · ${esc(s.loadingLabel)} · H ${(+s.trussHeightM).toFixed(2)} m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}">${cb(shown)}${swatch}${esc(s.iterationKey)}</div>`); });
       legendEl.innerHTML = h.join('');
-      legendEl.querySelectorAll('.row.key').forEach(r=>r.onclick=()=>soloGroup(cfg.field, r.dataset.k));
-      legendEl.querySelectorAll('.row.dkey').forEach(r=>r.onclick=()=>soloGroup('dashKey', r.dataset.k));
-      legendEl.querySelectorAll('.row.cand').forEach(r=>r.onclick=()=>toggleCand(r.dataset.k));
+      const wire = (cls, fn) => legendEl.querySelectorAll('.row.'+cls).forEach(r=>{
+        const act = () => fn(r.dataset.k);
+        r.onclick = act;
+        const box = r.querySelector('.lcb'); if(box) box.onclick = e => { e.stopPropagation(); act(); };
+      });
+      wire('key',  k => toggleHiSel('c', k));
+      wire('dkey', k => toggleHiSel('d', k));
+      wire('pkey', k => toggleHiSel('p', k));
+      wire('cand', k => toggleCand(k));
     }
 
     chart.addEventListener('mousemove',ev=>{
@@ -374,9 +660,9 @@ a{color:var(--acc)}
       if(t.tagName==='circle'){
         const k=t.dataset.k, s=grp().series.find(x=>x.iterationKey===k);
         tip.hidden=false;
-        tip.innerHTML = `${k}<br>point ${t.dataset.pt}<br>X ${(+t.dataset.x).toFixed(3)} m<br>Uz ${(+t.dataset.uz).toFixed(3)} mm<br>`
-          + `${s.loadingLabel}<br>H ${(+s.trussHeightM).toFixed(3)} m (ΔH ${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)})<br>`
-          + `${s.pretensionLabel}<br>case ${grp().outputCase}`;
+        tip.innerHTML = `${esc(k)}<br>point ${esc(t.dataset.pt)}<br>X ${(+t.dataset.x).toFixed(3)} m<br>Uz ${(+t.dataset.uz).toFixed(3)} mm<br>`
+          + `${esc(s.loadingLabel)}<br>H ${(+s.trussHeightM).toFixed(3)} m (ΔH ${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)})<br>`
+          + `${esc(s.pretensionLabel)}<br>case ${esc(grp().outputCase)}`;
         tip.style.left = Math.min(ev.clientX+12, window.innerWidth - tip.offsetWidth - 8) + 'px';
         tip.style.top  = Math.min(ev.clientY+12, window.innerHeight - tip.offsetHeight - 8) + 'px';
       } else tip.hidden=true;
@@ -395,17 +681,27 @@ a{color:var(--acc)}
     window.addEventListener('mouseup',()=>drag=null);
     chart.addEventListener('dblclick',()=>{ zoomX=null; render(); });
 
-    return { render, reset(){ zoomX=null; } };
+    dupBtn.onclick=()=>{
+      const p = makePanel(host, { vi, linked:false, gi:curGi(), hidden:curHidden(),
+        name:(name||defaultName())+' (copy)', selL:[...selL], selH:[...selH], selP:[...selP] });
+      panels.push(p); p.render();
+    };
+    rmBtn.onclick=()=>{ const ix=panels.indexOf(api); if(ix>=0) panels.splice(ix,1); host.remove(); };
+
+    syncHeader();
+    api = { render, reset(){ zoomX=null; }, resync(){ syncHeader(); },
+            followGlobal(){ if(linked){ localGroupSet=false; localGi=gi; syncHeader(); } } };
+    return api;
   }
 
   function drawMatrix(){
-    const vis = visibleSeries();
+    const vis = gVisible();
     const rowsMap = new Map();
     vis.forEach(s=>s.points.forEach(p=>{ const key=p.pointName+'|'+p.coord; if(!rowsMap.has(key)) rowsMap.set(key,{pt:p.pointName,x:p.coord,vals:{}}); }));
     vis.forEach(s=>s.points.forEach(p=>{ const r=rowsMap.get(p.pointName+'|'+p.coord); if(r) r.vals[s.iterationKey]=p.uzMm; }));
     const rows=[...rowsMap.values()].sort((a,b)=>a.x-b.x);
-    const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${s.iterationKey}" title="click to highlight in both charts">${s.iterationKey}<br><span style="font-weight:400;color:#666">${s.loadingLabel} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
-    const body = rows.map(r=>`<tr><th class="k">${r.pt}</th><td>${fmt(r.x)}</td>${vis.map(s=>{const v=r.vals[s.iterationKey];return `<td${s.iterationKey===hi?' class="hi"':''}>${v==null?'—':(+v).toFixed(3)}</td>`;}).join('')}</tr>`).join('');
+    const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${esc(s.iterationKey)}" title="click to highlight this candidate in every chart">${esc(s.iterationKey)}<br><span style="font-weight:400;color:#666">${esc(s.loadingLabel)} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
+    const body = rows.map(r=>`<tr><th class="k">${esc(r.pt)}</th><td>${fmt(r.x)}</td>${vis.map(s=>{const v=r.vals[s.iterationKey];return `<td${s.iterationKey===hi?' class="hi"':''}>${v==null?'—':(+v).toFixed(3)}</td>`;}).join('')}</tr>`).join('');
     document.getElementById('matrix').innerHTML = `<table><thead><tr><th class="k">Point</th><th>X [m]</th>${th}</tr></thead><tbody>${body}</tbody></table>`;
     document.querySelectorAll('#matrix thead th.ch').forEach(el=>el.onclick=()=>{ hi = (hi===el.dataset.k? null : el.dataset.k); renderAll(); });
   }
@@ -413,24 +709,23 @@ a{color:var(--acc)}
   function drawWarnings(){
     const w = document.getElementById('warns');
     if(!D.warnings.length){ w.textContent=''; return; }
-    w.innerHTML = '<strong>Warnings:</strong> ' + D.warnings.slice(0,40).map(x=>`<span class="${x.severity==='Error'?'e':''}">[${x.iterationKey||'study'}] ${x.category}: ${x.message}</span>`).join(' · ')
+    w.innerHTML = '<strong>Warnings:</strong> ' + D.warnings.slice(0,40).map(x=>`<span class="${x.severity==='Error'?'e':''}">[${esc(x.iterationKey||'study')}] ${esc(x.category)}: ${esc(x.message)}</span>`).join(' · ')
       + (D.warnings.length>40?` … (+${D.warnings.length-40})`:'');
   }
 
-  const mw = document.getElementById('matrixWrap'), srcBtn = document.getElementById('srcBtn');
   function renderAll(){ panels.forEach(p=>p.render()); if(!mw.hidden) drawMatrix(); drawWarnings(); }
 
   if(!D.groups.length){
-    document.getElementById('panels').innerHTML='<p style="padding:20px;color:#666">No deflection results in this study.</p>';
+    panelsEl.innerHTML='<p style="padding:20px;color:#666">No deflection results in this study.</p>';
     srcBtn.hidden = true;
   } else {
-    document.querySelectorAll('#panels .panel').forEach(host=>panels.push(makePanel(host, VIEWS[+host.dataset.view])));
+    buildCandKey();
+    // one chart by default — name it, filter it (L / H / P), pick its relationship & case; Duplicate clones it.
+    panels.push(makePanel(null, { vi:0, linked:true }));
   }
 
-  sel.onchange=()=>{ gi=+sel.value; hi=null; panels.forEach(p=>p.reset()); renderAll(); };
+  sel.onchange=()=>{ gi=+sel.value; hi=null; panels.forEach(p=>{ p.followGlobal(); p.reset(); }); renderAll(); };
   document.getElementById('legendToggle').onchange=e=>{ showLegend=e.target.checked; renderAll(); };
-  document.getElementById('showAll').onclick=()=>{ hidden.clear(); renderAll(); };
-  document.getElementById('hideAll').onclick=()=>{ if(!D.groups.length) return; grp().series.forEach(s=>hidden.add(s.iterationKey)); renderAll(); };
   document.getElementById('reset').onclick=()=>{ panels.forEach(p=>p.reset()); renderAll(); };
   function toggleSrc(show){ mw.hidden=!show; srcBtn.textContent = show?'Hide source data':'View source data'; if(show) drawMatrix(); }
   srcBtn.onclick=()=>toggleSrc(mw.hidden);

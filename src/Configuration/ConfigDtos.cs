@@ -135,6 +135,16 @@ public sealed class CableForceRowDto
     public double? MinForce { get; set; }
     public double? MaxForce { get; set; }
     public double? StepForce { get; set; }
+    /// <summary>Independent / SameValues / SameStep / SameRatio / SameOffset. See <see cref="CableSyncMode"/>.</summary>
+    public CableSyncMode SyncMode { get; set; } = CableSyncMode.Independent;
+    /// <summary>The cable this row follows (for any non-Independent mode).</summary>
+    public string? ReferenceCableName { get; set; }
+    /// <summary>k for SameRatio, Δ [kN] for SameOffset.</summary>
+    public double? SyncFactor { get; set; }
+
+    // ---- legacy (read-only migration) — v1.x wrote these; applicator maps them to SyncMode/ReferenceCableName ----
+    public string? SameAsCableName { get; set; }
+    public string? SameStepCableName { get; set; }
 }
 
 public sealed class OutputSettingsConfigDto

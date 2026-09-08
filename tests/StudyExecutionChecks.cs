@@ -3,6 +3,8 @@ using COT_VCF.Application;
 using COT_VCF.Application.Workers;
 using COT_VCF.Domain;
 using System.IO;
+using COT_VCF.Application.Results;
+using COT_VCF.Domain.Results;
 
 internal static class StudyExecutionChecks
 {
@@ -11,6 +13,7 @@ internal static class StudyExecutionChecks
         PathServiceIsPureAndDeterministic();
         SnapshotResolvesCompleteCandidates();
         OneWorkerPersistsAndVerifiesOneCandidate();
+        ArtifactFailureIsReportedWithoutStalePaths();
         OneWorkerDoesNotAccumulateOrLeakCandidateState();
         FixedModesAndCombinedPhysicallyApplyResolvedCandidates();
         ConnectedBaselineCountsAsWorkerOne();
@@ -19,7 +22,7 @@ internal static class StudyExecutionChecks
         VerificationFailureNeverBecomesReady();
         PretensionFailureReturnsToBaselineAndContinues();
         StartupFailureBlocksAllDispatch();
-        ExistingOutputBlocksBeforeWorkerStartup();
+        ExistingChildModelIsReusedNotRebuilt();
         FaultedWorkerIsRemovedWhileHealthyWorkerContinues();
         CancellationStopsAtStageBoundaries();
     }
@@ -59,6 +62,8 @@ internal static class StudyExecutionChecks
             var job = snapshot.Jobs.Single(candidate => candidate.RunIterate);
             var gateway = factory.Gateways.Single();
             Check(result.Completed == 1 && result.Failed == 0 &&
+                  result.Artifacts.State == StudyArtifactState.Ready &&
+                  File.Exists(result.Artifacts.WorkbookPath) &&
                   stages.Contains(StudyIterationStatus.RunningAnalysis) &&
                   stages.Contains(StudyIterationStatus.Verifying) &&
                   stages.Contains(StudyIterationStatus.ExtractingResults) && File.Exists(job.ModelFullPath),
@@ -103,6 +108,22 @@ internal static class StudyExecutionChecks
             Check(diagnostic.Contains("ANALYZED", StringComparison.Ordinal) &&
                   diagnostic.Contains("VERIFIED", StringComparison.Ordinal),
                 "Per-candidate diagnostics record analysis and the verified L/H/P transaction");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void ArtifactFailureIsReportedWithoutStalePaths()
+    {
+        var (root, _, snapshot) = CreateSnapshot(1, 1);
+        try
+        {
+            var coordinator = new StudyExecutionCoordinator(new FakeHostFactory(), new FailingArtifactPublisher());
+            var result = coordinator.BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+            Check(result.Completed == 1 && result.Artifacts.State == StudyArtifactState.Failed &&
+                  result.Artifacts.ErrorMessage!.Contains("simulated artifact failure", StringComparison.Ordinal) &&
+                  coordinator.LastDeflectionReportPath is null && coordinator.LastCableForceReportPath is null,
+                "artifact failure is explicit and never reuses a prior report path");
         }
         finally { DeleteRoot(root); }
     }
@@ -323,20 +344,40 @@ internal static class StudyExecutionChecks
         finally { DeleteRoot(root); }
     }
 
-    private static void ExistingOutputBlocksBeforeWorkerStartup()
+    private static void ExistingChildModelIsReusedNotRebuilt()
     {
         var (root, _, snapshot) = CreateSnapshot(1, 1);
         try
         {
-            var job = snapshot.Jobs.Single(candidate => candidate.RunIterate);
-            Directory.CreateDirectory(job.IterationDirectory);
-            File.WriteAllText(job.ModelFullPath, "existing");
-            var factory = new FakeHostFactory();
-            Throws(() => new StudyExecutionCoordinator(factory)
+            var factory = new FakeHostFactory(reuseHosts: true);
+            var coordinator = new StudyExecutionCoordinator(factory);
+            var first = coordinator
                 .BuildAsync(snapshot, new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None)
-                .GetAwaiter().GetResult());
-            Check(factory.CreateCount == 0 && File.ReadAllText(job.ModelFullPath) == "existing",
-                "Existing candidate output blocks before worker startup and is not overwritten");
+                .GetAwaiter().GetResult();
+            Check(first.Completed == 1 && first.Reused == 0, "First run builds the child model normally");
+
+            var job = snapshot.Jobs.Single(candidate => candidate.RunIterate);
+            var gateway = factory.Gateways.First(g => g.WorkerId == 1);
+            var childBytes = File.ReadAllBytes(job.ModelFullPath);
+            var analysisBefore = gateway.AnalysisAttempts.Count;
+            var saveAsBefore = gateway.SaveAsSources.Count;
+
+            var second = coordinator
+                .BuildAsync(snapshot, new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None)
+                .GetAwaiter().GetResult();
+
+            Check(second.Reused == 1 && second.Completed == 1 && second.Failed == 0,
+                "A second run over the same candidate reuses the existing analyzed child instead of erroring");
+            Check(gateway.SaveAsSources.Count == saveAsBefore,
+                "Reuse never re-creates the child model (no SaveAs)");
+            Check(gateway.AnalysisAttempts.Count == analysisBefore,
+                "Reusing an already-analyzed child does not re-run its analysis");
+            Check(File.ReadAllBytes(job.ModelFullPath).SequenceEqual(childBytes),
+                "The existing child .sdb is never overwritten by a reuse");
+            var studyFolder = Path.GetDirectoryName(job.IterationDirectory)!;
+            Check(File.Exists(Path.Combine(studyFolder, "Deflection_Results_Source.xlsx")) &&
+                  File.Exists(Path.Combine(studyFolder, "Deflection_Report.html")),
+                "Reused candidates are still consolidated into the deflection source workbook and report");
         }
         finally { DeleteRoot(root); }
     }
@@ -475,6 +516,12 @@ internal static class StudyExecutionChecks
         Console.WriteLine("PASS: " + name);
     }
 
+    private sealed class FailingArtifactPublisher : IStudyArtifactPublisher
+    {
+        public StudyArtifactOutcome Publish(StudyExecutionSnapshot snapshot, IReadOnlyList<CandidateResultDto> results) =>
+            throw new IOException("simulated artifact failure");
+    }
+
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
     {
         public void Report(T value) => report(value);
@@ -484,17 +531,22 @@ internal static class StudyExecutionChecks
         int failStartId = 0,
         int failRuntimeId = 0,
         string? corruptIterationId = null,
-        string? failAnalysisIterationId = null) : ISapInstanceHostFactory
+        string? failAnalysisIterationId = null,
+        bool reuseHosts = false) : ISapInstanceHostFactory
     {
+        private readonly ConcurrentDictionary<int, FakeHost> cache = new();
         public ConcurrentBag<FakeGateway> Gateways { get; } = [];
         public int CreateCount;
         public ISapInstanceHost Create(int instanceId)
         {
+            if (reuseHosts && cache.TryGetValue(instanceId, out var existing)) return existing;
             Interlocked.Increment(ref CreateCount);
             var gateway = new FakeGateway(instanceId, failRuntimeId == instanceId,
                 corruptIterationId, failAnalysisIterationId);
             Gateways.Add(gateway);
-            return new FakeHost(instanceId, gateway, failStartId == instanceId);
+            var host = new FakeHost(instanceId, gateway, failStartId == instanceId);
+            if (reuseHosts) cache[instanceId] = host;
+            return host;
         }
     }
 
@@ -569,6 +621,21 @@ internal static class StudyExecutionChecks
                 // deterministic synthetic deflection: parabolic-ish along X, in mm
                 var uz = -Math.Round(1.5 * (10 - Math.Abs(5 - p.Position.X)), 3);
                 rows.Add(new(name, p.Position.X, p.Position.Y, p.Position.Z, uz, COT_VCF.Domain.Results.ResultValueStatus.Valid));
+            }
+            return rows;
+        });
+        public async Task<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>> GetCableForcesAsync(
+            IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) => await Tracked<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>>(async () =>
+        {
+            Verify(expected); await Task.Delay(1);
+            var rows = new List<COT_VCF.Domain.Results.CableForceRead>();
+            foreach (var name in cableNames)
+            {
+                if (!analysisComplete)
+                { rows.Add(new(name, null, COT_VCF.Domain.Results.ResultValueStatus.AnalysisNotRun)); continue; }
+                // deterministic synthetic axial force in kN, keyed off the cable name so it is stable
+                var force = 900.0 + (Math.Abs(name.GetHashCode()) % 400);
+                rows.Add(new(name, Math.Round(force, 1), COT_VCF.Domain.Results.ResultValueStatus.Valid));
             }
             return rows;
         });

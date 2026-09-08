@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace COT_VCF.Domain;
@@ -55,6 +56,7 @@ public sealed class AppliedPoint : Observable
 }
 public sealed class LoadDefinition : Observable, IDataErrorInfo
 {
+    public const int MaterializeCeiling = 1_000_000;
     private string loadName = "";
     private bool applyIncrementStep;
     private double? qz = 0, minQz, maxQz, incrementStep;
@@ -66,6 +68,7 @@ public sealed class LoadDefinition : Observable, IDataErrorInfo
         {
             if (!Set(ref applyIncrementStep, value)) return;
             Notify(nameof(IsSingleValue));
+            Notify(nameof(CandidateCount));
             Notify(nameof(CandidateValues));
             Notify(nameof(Qz));
             Notify(nameof(MinQz));
@@ -74,21 +77,40 @@ public sealed class LoadDefinition : Observable, IDataErrorInfo
         }
     }
     public bool IsSingleValue => !ApplyIncrementStep;
-    public double? Qz { get => qz; set { if (Set(ref qz, value)) Notify(nameof(CandidateValues)); } }
-    public double? MinQz { get => minQz; set { if (Set(ref minQz, value)) { Notify(nameof(MaxQz)); Notify(nameof(CandidateValues)); } } }
-    public double? MaxQz { get => maxQz; set { if (Set(ref maxQz, value)) Notify(nameof(CandidateValues)); } }
-    public double? IncrementStep { get => incrementStep; set { if (Set(ref incrementStep, value)) Notify(nameof(CandidateValues)); } }
-    public IReadOnlyList<double> CandidateValues
+    public double? Qz { get => qz; set { if (Set(ref qz, value)) { Notify(nameof(CandidateCount)); Notify(nameof(CandidateValues)); } } }
+    public double? MinQz { get => minQz; set { if (Set(ref minQz, value)) { Notify(nameof(MaxQz)); Notify(nameof(CandidateCount)); Notify(nameof(CandidateValues)); } } }
+    public double? MaxQz { get => maxQz; set { if (Set(ref maxQz, value)) { Notify(nameof(CandidateCount)); Notify(nameof(CandidateValues)); } } }
+    public double? IncrementStep { get => incrementStep; set { if (Set(ref incrementStep, value)) { Notify(nameof(CandidateCount)); Notify(nameof(CandidateValues)); } } }
+
+    /// <summary>Allocation-free candidate cardinality. Values above the materialization ceiling are retained
+    /// as a count so callers can reject the range before allocating it.</summary>
+    public BigInteger CandidateCount
     {
         get
         {
             if (!ApplyIncrementStep)
-                return Qz is double single && double.IsFinite(single) && single >= 0 ? [single] : [];
+                return Qz is double single && double.IsFinite(single) && single >= 0 ? BigInteger.One : BigInteger.Zero;
             if (MinQz is not double min || MaxQz is not double max || IncrementStep is not double step ||
                 !double.IsFinite(min) || !double.IsFinite(max) || !double.IsFinite(step) || min < 0 || max < min || step <= 0)
-                return [];
-            var intervals = (int)Math.Floor((max - min) / step + 1e-10);
-            return Enumerable.Range(0, intervals + 1).Select(i => min + i * step).ToArray();
+                return BigInteger.Zero;
+            var intervals = Math.Floor((max - min) / step + 1e-10);
+            if (!double.IsFinite(intervals)) return new BigInteger(MaterializeCeiling) + 1;
+            return intervals < 0 ? BigInteger.Zero : new BigInteger(intervals) + 1;
+        }
+    }
+
+    public IReadOnlyList<double> CandidateValues
+    {
+        get
+        {
+            var count = CandidateCount;
+            if (count <= 0) return [];
+            if (count > MaterializeCeiling)
+                throw new InvalidOperationException($"{(string.IsNullOrWhiteSpace(LoadName) ? "Loading range" : LoadName)}: {count:N0} candidate values exceed the {MaterializeCeiling:N0} materialization limit. Widen the step.");
+            if (!ApplyIncrementStep) return [Qz!.Value];
+            var min = MinQz!.Value;
+            var step = IncrementStep!.Value;
+            return Enumerable.Range(0, (int)count).Select(i => min + i * step).ToArray();
         }
     }
     string IDataErrorInfo.Error => "";
@@ -98,6 +120,7 @@ public sealed class LoadDefinition : Observable, IDataErrorInfo
         nameof(MinQz) when ApplyIncrementStep && (MinQz is not double value || !double.IsFinite(value) || value < 0) => "Minimum qz must be zero or greater.",
         nameof(MaxQz) when ApplyIncrementStep && (MaxQz is not double value || !double.IsFinite(value) || MinQz is not double min || value < min) => "Maximum qz must be greater than or equal to minimum qz.",
         nameof(IncrementStep) when ApplyIncrementStep && (IncrementStep is not double value || !double.IsFinite(value) || value <= 0) => "Increment step must be greater than zero.",
+        nameof(IncrementStep) when ApplyIncrementStep && CandidateCount > MaterializeCeiling => $"Range exceeds {MaterializeCeiling:N0} values. Widen the step.",
         _ => ""
     };
 }
@@ -161,6 +184,91 @@ public sealed class TrussHeightConfiguration : Observable
 // One selected SAP2000 cable and its candidate PRETENSION target-force definition (Fixed or Range).
 // Editing this never touches SAP2000 — values are candidate definitions only.
 public sealed record PretensionCombination(long CombinationIndex, IReadOnlyDictionary<string, double> CableForces);
+
+/// <summary>How a cable's pretension candidates relate to another cable. Every non-Independent mode is a
+/// <i>follower</i>: it adds no Cartesian axis and is zipped to its reference by candidate index.</summary>
+public enum CableSyncMode
+{
+    /// <summary>Own range / fixed value; one axis of the pretension Cartesian product.</summary>
+    Independent,
+    /// <summary>Follows the exact candidate values of the reference cable.</summary>
+    SameValues,
+    /// <summary>Keeps its own Min / Max end points, but its spacing is derived so it lands on exactly the
+    /// reference's number of values (candidate j pairs with the reference's candidate j).</summary>
+    SameStep,
+    /// <summary>Follower value j = reference value j × <see cref="CablePretensionConfig.SyncFactor"/> (k).</summary>
+    SameRatio,
+    /// <summary>Follower value j = reference value j + <see cref="CablePretensionConfig.SyncFactor"/> (Δ, kN).</summary>
+    SameOffset
+}
+
+public static class CableSyncModeText
+{
+    public static string Label(this CableSyncMode m) => m switch
+    {
+        CableSyncMode.SameValues => "Same Values",
+        CableSyncMode.SameStep => "Same Step",
+        CableSyncMode.SameRatio => "Same Ratio",
+        CableSyncMode.SameOffset => "Same Offset",
+        _ => "Independent"
+    };
+}
+
+/// <summary>Pure dependency-graph helpers over a set of cable configs. A follower chain (C follows B follows
+/// an Independent A) is resolved transitively; a broken or cyclic chain resolves to nothing.</summary>
+public static class CableSyncGraph
+{
+    public static string? ReferenceOf(CablePretensionConfig c) =>
+        c.SyncMode == CableSyncMode.Independent || string.IsNullOrEmpty(c.ReferenceCableName) ? null : c.ReferenceCableName;
+
+    public static CablePretensionConfig? DirectReference(CablePretensionConfig c, IReadOnlyList<CablePretensionConfig> all) =>
+        ReferenceOf(c) is { } name
+            ? all.FirstOrDefault(o => !ReferenceEquals(o, c) && o.CableName.Equals(name, StringComparison.OrdinalIgnoreCase))
+            : null;
+
+    /// <summary>The Independent cable at the end of <paramref name="c"/>'s reference chain, or null when the
+    /// chain is broken (missing reference) or cyclic.</summary>
+    public static CablePretensionConfig? RootOf(CablePretensionConfig c, IReadOnlyList<CablePretensionConfig> all)
+    {
+        var seen = new HashSet<CablePretensionConfig>();
+        var node = c;
+        while (node is not null)
+        {
+            if (!seen.Add(node)) return null;                 // cycle
+            if (node.SyncMode == CableSyncMode.Independent) return node;
+            node = DirectReference(node, all);
+        }
+        return null;                                          // dangling reference
+    }
+
+    public static bool IsFollower(CablePretensionConfig c, IReadOnlyList<CablePretensionConfig> all) =>
+        c.SyncMode != CableSyncMode.Independent && RootOf(c, all) is { } r && !ReferenceEquals(r, c);
+
+    /// <summary>The resolved candidate force list for a follower — its direct reference's resolved values with
+    /// this cable's follower rule applied. Independent cables just return their own <c>GetCandidateForces()</c>.</summary>
+    public static IReadOnlyList<double> ResolvedForces(CablePretensionConfig c, IReadOnlyList<CablePretensionConfig> all)
+        => ResolvedForces(c, all, []);
+
+    private static IReadOnlyList<double> ResolvedForces(
+        CablePretensionConfig c, IReadOnlyList<CablePretensionConfig> all, HashSet<CablePretensionConfig> seen)
+    {
+        if (c.SyncMode == CableSyncMode.Independent) return c.GetCandidateForces();
+        if (!seen.Add(c)) return [];                          // cycle guard
+        var reference = DirectReference(c, all);
+        if (reference is null) return [];
+        var refForces = ResolvedForces(reference, all, seen);
+        if (refForces.Count == 0) return [];
+        return c.SyncMode switch
+        {
+            CableSyncMode.SameValues  => refForces,
+            CableSyncMode.SameStep    => c.GetCandidateForces(refForces.Count),
+            CableSyncMode.SameRatio   => refForces.Select(v => v * (c.SyncFactor ?? 1.0)).ToArray(),
+            CableSyncMode.SameOffset  => refForces.Select(v => v + (c.SyncFactor ?? 0.0)).ToArray(),
+            _ => refForces
+        };
+    }
+}
+
 public sealed class CablePretensionConfig : Observable, IDataErrorInfo
 {
     public const string PretensionLoadCase = "PRETENSION";
@@ -182,7 +290,111 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     public string LoadCase { get => LoadPattern; set => LoadPattern = value; }
 
     private bool applyRange, missing;
-    private double? targetForce = 0, minForce, maxForce, stepForce;
+    private double? targetForce = 0, minForce, maxForce, stepForce, syncFactor;
+    private CableSyncMode syncMode = CableSyncMode.Independent;
+    private string? referenceCableName;
+
+    /// <summary>Set once by the view-model so a row can resolve its Sync reference / preview / problem against
+    /// its siblings. Null in isolation (unit tests pass an explicit list instead).</summary>
+    public Func<IReadOnlyList<CablePretensionConfig>>? Peers { get; set; }
+    private IReadOnlyList<CablePretensionConfig> PeerList => Peers?.Invoke() ?? [this];
+
+    /// <summary>Independent / Same Values / Same Step. See <see cref="CableSyncMode"/>. Setting Independent
+    /// clears <see cref="ReferenceCableName"/>.</summary>
+    public CableSyncMode SyncMode
+    {
+        get => syncMode;
+        set
+        {
+            if (!Set(ref syncMode, value)) return;
+            if (value == CableSyncMode.Independent && referenceCableName is not null)
+            { referenceCableName = null; Notify(nameof(ReferenceCableName)); }
+            NotifySyncState();
+        }
+    }
+    /// <summary>The independent cable this one follows (for Same Values / Same Step). Never itself.</summary>
+    public string? ReferenceCableName
+    {
+        get => referenceCableName;
+        set
+        {
+            var v = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (v is not null && string.Equals(v, CableName, StringComparison.OrdinalIgnoreCase)) v = null;
+            if (!Set(ref referenceCableName, v)) return;
+            NotifySyncState();
+        }
+    }
+    /// <summary>k for Same Ratio (default 1), Δ [kN] for Same Offset (default 0). Ignored by other modes.</summary>
+    public double? SyncFactor { get => syncFactor; set { if (Set(ref syncFactor, value)) NotifySyncState(); } }
+
+    private void NotifySyncState()
+    {
+        Notify(nameof(IsIndependent)); Notify(nameof(IsFollower)); Notify(nameof(NotFollower));
+        Notify(nameof(IsSameStepFollower)); Notify(nameof(SyncSummary)); Notify(nameof(SyncProblem)); Notify(nameof(SyncPreview));
+        Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange)); Notify(nameof(CanEditStepForce));
+        Notify(nameof(CanEditFactor)); Notify(nameof(CanToggleRange)); Notify(nameof(CanPickReference));
+        Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status));
+    }
+    /// <summary>Re-raise the sibling-dependent Sync properties — call on every row when any row's Sync changes.</summary>
+    public void RaiseSyncRecompute()
+    { Notify(nameof(SyncProblem)); Notify(nameof(SyncPreview)); Notify(nameof(SyncSummary)); Notify(nameof(CandidateCount)); Notify(nameof(Status)); }
+
+    public bool IsIndependent => syncMode == CableSyncMode.Independent;
+    public bool IsSameStepFollower => syncMode == CableSyncMode.SameStep && !string.IsNullOrEmpty(referenceCableName);
+    /// <summary>Any non-Independent mode with a reference set — contributes no independent axis.</summary>
+    public bool IsFollower => syncMode != CableSyncMode.Independent && !string.IsNullOrEmpty(referenceCableName);
+    public bool NotFollower => !IsFollower;
+
+    public bool CanEditTarget => IsFixed && !IsFollower;
+    /// <summary>Min / Max are editable for an Independent cable and a Same Step follower (its own end points).</summary>
+    public bool CanEditRange => applyRange && syncMode is CableSyncMode.Independent or CableSyncMode.SameStep;
+    /// <summary>Step Force is only entered for an Independent cable — a Same Step follower's spacing is derived.</summary>
+    public bool CanEditStepForce => CanEditRange && syncMode == CableSyncMode.Independent;
+    public bool CanEditFactor => syncMode is CableSyncMode.SameRatio or CableSyncMode.SameOffset;
+    public bool CanToggleRange => syncMode is CableSyncMode.Independent or CableSyncMode.SameStep;
+    public bool CanPickReference => syncMode != CableSyncMode.Independent;
+
+    /// <summary>Compact grid text for the Sync column.</summary>
+    public string SyncSummary => syncMode switch
+    {
+        CableSyncMode.Independent => "Independent",
+        _ when string.IsNullOrEmpty(referenceCableName) => $"{syncMode.Label()} · pick cable",
+        CableSyncMode.SameValues => $"= {referenceCableName}",
+        CableSyncMode.SameStep => $"Step · {referenceCableName}",
+        CableSyncMode.SameRatio => $"× {(syncFactor ?? 1.0):0.###} · {referenceCableName}",
+        CableSyncMode.SameOffset => $"{(syncFactor ?? 0.0):+0.###;-0.###;0} · {referenceCableName}",
+        _ => syncMode.Label()
+    };
+
+    /// <summary>"" when the Sync config is fine; otherwise a short message (drives the grid red-flag).</summary>
+    public string SyncProblem
+    {
+        get
+        {
+            if (syncMode == CableSyncMode.Independent) return "";
+            if (string.IsNullOrEmpty(referenceCableName)) return "Pick a reference cable.";
+            var all = PeerList;
+            if (CableSyncGraph.DirectReference(this, all) is null) return $"Reference cable '{referenceCableName}' does not exist.";
+            if (CableSyncGraph.RootOf(this, all) is null) return "Circular Sync reference.";
+            if (CanEditFactor && (syncFactor is not double f || !double.IsFinite(f) || (syncMode == CableSyncMode.SameRatio && f <= 0)))
+                return syncMode == CableSyncMode.SameRatio ? "Ratio must be greater than zero." : "Enter an offset value.";
+            if (syncMode == CableSyncMode.SameStep && CandidateCount <= 0) return "Enter this cable's own Min and Max force.";
+            return "";
+        }
+    }
+
+    /// <summary>The resolved candidate forces this follower would apply, e.g. "10000 · 13000 · 16000". "" for
+    /// an Independent cable or a broken chain.</summary>
+    public string SyncPreview
+    {
+        get
+        {
+            if (syncMode == CableSyncMode.Independent) return "";
+            var v = CableSyncGraph.ResolvedForces(this, PeerList);
+            return v.Count == 0 ? "" : string.Join("  ·  ", v.Take(12).Select(x => x.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture)))
+                + (v.Count > 12 ? "  …" : "");
+        }
+    }
 
     public bool ApplyRange
     {
@@ -192,7 +404,9 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
             if (!Set(ref applyRange, value)) return;
             Notify(nameof(IsFixed));
             Notify(nameof(TargetForce)); Notify(nameof(MinForce)); Notify(nameof(MaxForce)); Notify(nameof(StepForce));
-            Notify(nameof(CandidateCount)); Notify(nameof(Status));
+            Notify(nameof(CanEditTarget)); Notify(nameof(CanEditRange)); Notify(nameof(CanEditStepForce));
+            Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status));
+            Notify(nameof(SyncProblem)); Notify(nameof(SyncPreview));
         }
     }
     public bool IsFixed => !applyRange;
@@ -202,13 +416,31 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     public double? MinForce { get => minForce; set { if (Set(ref minForce, value)) { Notify(nameof(MaxForce)); Recount(); } } }
     public double? MaxForce { get => maxForce; set { if (Set(ref maxForce, value)) Recount(); } }
     public double? StepForce { get => stepForce; set { if (Set(ref stepForce, value)) Recount(); } }
-    private void Recount() { Notify(nameof(CandidateCount)); Notify(nameof(Status)); }
+    private void Recount() { Notify(nameof(CandidateCount)); Notify(nameof(CandidateSummary)); Notify(nameof(Status)); Notify(nameof(SyncPreview)); Notify(nameof(SyncProblem)); }
+
+    /// <summary>Grid display for the Candidates column: "linked" (Same Values), "lockstep" (Same Step),
+    /// "×k" / "±Δ" (Same Ratio / Offset), else the independent candidate count.</summary>
+    public string CandidateSummary => syncMode switch
+    {
+        CableSyncMode.Independent => CandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        CableSyncMode.SameValues => "linked",
+        CableSyncMode.SameStep => "lockstep",
+        CableSyncMode.SameRatio => $"×{(syncFactor ?? 1.0):0.###}",
+        CableSyncMode.SameOffset => $"{(syncFactor ?? 0.0):+0.###;-0.###;0}",
+        _ => "linked"
+    };
 
     // Efficient count — never allocates the value list (spec: do not materialise just to count).
     public int CandidateCount
     {
         get
         {
+            // A follower has no independent count — its value count comes from its reference at enumeration
+            // time. Report 1 when its own inputs are valid (Same Step needs Min/Max), else 0. Followers are
+            // excluded from the Cartesian product by PretensionCandidates.Leaders().
+            if (syncMode == CableSyncMode.SameStep && !string.IsNullOrEmpty(referenceCableName))
+                return minForce is double lo && maxForce is double hi && double.IsFinite(lo) && double.IsFinite(hi) && hi >= lo ? 1 : 0;
+            if (IsFollower) return 1;
             if (!applyRange)
                 return targetForce is double t && double.IsFinite(t) ? 1 : 0;
             if (minForce is not double min || maxForce is not double max || stepForce is not double step
@@ -227,6 +459,10 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     /// Materialised only on demand; never appends an off-grid Max.</summary>
     public IReadOnlyList<double> GetCandidateForces()
     {
+        // A Same Step follower has no step of its own — its spacing is set at enumeration time from the
+        // reference's value count. Return its end points as a reasonable stand-alone fallback.
+        if (IsSameStepFollower)
+            return minForce is double lo && maxForce is double hi ? (lo == hi ? [lo] : [lo, hi]) : [];
         var count = CandidateCount;
         if (count <= 0) return [];
         if (count > MaterializeCeiling) throw new InvalidOperationException($"{CableName}: {count:N0} candidate forces exceed the {MaterializeCeiling:N0} limit. Widen the step.");
@@ -235,13 +471,23 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         return Enumerable.Range(0, count).Select(i => min + i * step).ToArray();
     }
 
+    /// <summary>The <paramref name="count"/> evenly-spaced force values from Min to Max inclusive — used by a
+    /// Same Step follower, whose count is taken from its reference cable.</summary>
+    public IReadOnlyList<double> GetCandidateForces(int count)
+    {
+        if (count <= 0 || minForce is not double lo || maxForce is not double hi || !double.IsFinite(lo) || !double.IsFinite(hi)) return [];
+        if (count == 1) return [lo];
+        var step = (hi - lo) / (count - 1);
+        return Enumerable.Range(0, count).Select(i => i == count - 1 ? hi : lo + i * step).ToArray();
+    }
+
     string IDataErrorInfo.Error => "";
     public string this[string columnName] => columnName switch
     {
         nameof(TargetForce) when IsFixed && (TargetForce is not double v || !double.IsFinite(v)) => "Enter a target force.",
         nameof(MinForce) when ApplyRange && (MinForce is not double v || !double.IsFinite(v)) => "Enter a minimum force.",
         nameof(MaxForce) when ApplyRange && (MaxForce is not double v || !double.IsFinite(v) || MinForce is not double min || v < min) => "Max force must be greater than or equal to Min force.",
-        nameof(StepForce) when ApplyRange && (StepForce is not double v || !double.IsFinite(v) || v <= 0) => "Step force must be greater than zero.",
+        nameof(StepForce) when CanEditStepForce && (StepForce is not double v || !double.IsFinite(v) || v <= 0) => "Step force must be greater than zero.",
         _ => ""
     };
 }

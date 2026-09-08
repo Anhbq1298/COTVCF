@@ -27,7 +27,7 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         if (owner is not null) dialog.Owner = owner;
         var panel = new StackPanel { Margin = new Thickness(18) };
         panel.Children.Add(Label("Output component", "The monitored deflection component is fixed."));
-        panel.Children.Add(new TextBlock { Text = "U3 — Global Z   ·   unit mm", Foreground = System.Windows.Media.Brushes.DimGray, Margin = new Thickness(0, 0, 0, 10) });
+        panel.Children.Add(new TextBlock { Text = "U3 — Global Z   ·   unit mm", Foreground = MutedBrush, Margin = new Thickness(0, 0, 0, 10) });
         panel.Children.Add(Label("Deflection output case", "SAP analysis load case the U3 deflection is read under. Empty until you pick one — never defaulted."));
         var combo = new ComboBox
         {
@@ -108,8 +108,8 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
 
         var root = new DockPanel { Margin = new Thickness(16) };
         var heading = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
-        heading.Children.Add(new TextBlock { Text = "MEMBER FORCE OUTPUT GROUPS", FontWeight = FontWeights.SemiBold, FontSize = 14 });
-        heading.Children.Add(new TextBlock { Text = "P / V2 / V3 [kN]   ·   T / M2 / M3 [kNm]", Foreground = System.Windows.Media.Brushes.DimGray });
+        heading.Children.Add(new TextBlock { Text = "MEMBER FORCE OUTPUT GROUPS", Style = HeadingStyle });
+        heading.Children.Add(new TextBlock { Text = "P / V2 / V3 [kN]   ·   T / M2 / M3 [kNm]", Foreground = MutedBrush });
         DockPanel.SetDock(heading, Dock.Top); root.Children.Add(heading);
 
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
@@ -234,6 +234,12 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         Title = title, Width = width, Height = height, MinWidth = Math.Min(width, 420), MinHeight = Math.Min(height, 180),
         WindowStartupLocation = WindowStartupLocation.CenterOwner
     };
+
+    // Pull shared look from Theme.xaml so every dialog matches the main window.
+    private static System.Windows.Media.Brush MutedBrush =>
+        (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("Muted");
+
+    private static Style HeadingStyle => (Style)System.Windows.Application.Current.FindResource("Heading");
 
     private static TextBlock Label(string text, string toolTip) => new()
     {

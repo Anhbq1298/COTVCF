@@ -86,6 +86,101 @@ internal static class StudyComposerChecks
               elevenJointCandidate.Loads.Select(load => load.PointName).Distinct(StringComparer.Ordinal).Count() == 11 &&
               elevenJointCandidate.Loads.Select(load => load.LoadPattern).Distinct(StringComparer.Ordinal).Count() == 2,
             "Eleven Tab 1 joints and two load patterns produce all 22 point-load assignments");
+
+        CableSyncChecks();
+    }
+
+    // Cable Sync: Independent contributes a Cartesian axis; SameValues copies the reference's values;
+    // SameStep keeps its OWN Min / Max / Step range but zips its candidate index to the reference.
+    // Neither follower multiplies the product. Only Independent → Independent references are honoured.
+    private static void CableSyncChecks()
+    {
+        CablePretensionConfig Range(string name, double min, double max, double step) => new()
+        {
+            CableName = name, LoadCase = CablePretensionConfig.PretensionLoadCase,
+            ApplyRange = true, MinForce = min, MaxForce = max, StepForce = step
+        };
+
+        // TEST 1 — Same Step zip
+        var a = Range("Cable6a", 15000, 20000, 2500);   // [15000, 17500, 20000]
+        var b = Range("Cable6b", 20000, 30000, 5000);   // [20000, 25000, 30000] — zipped to Cable6a
+        b.SyncMode = CableSyncMode.SameStep; b.ReferenceCableName = "Cable6a";
+        Check(b.IsSameStepFollower && b.CandidateSummary == "lockstep" && b.SyncSummary == "Step · Cable6a",
+            "Same Step follower shows 'lockstep' / 'Step · <ref>'");
+        Check(b.CandidateCount == 1 && b.CanEditRange && !b.CanEditStepForce && !b.CanEditTarget,
+            "Same Step follower edits its own Min/Max but not Step (derived) or Target");
+        var t1 = PretensionCandidates.Enumerate(new List<CablePretensionConfig> { a, b }).ToList();
+        Check(t1.Count == 3
+            && t1[0].CableForces["Cable6a"] == 15000 && t1[0].CableForces["Cable6b"] == 20000
+            && t1[1].CableForces["Cable6a"] == 17500 && t1[1].CableForces["Cable6b"] == 25000
+            && t1[2].CableForces["Cable6a"] == 20000 && t1[2].CableForces["Cable6b"] == 30000,
+            "TEST 1 — Same Step zips index-for-index, total = 3 (not 9)");
+
+        // Same Step derives its spacing from the reference — no Step Force needed, no count mismatch possible
+        var bd = Range("Cable6bd", 10000, 16000, 999);   // Step value here is ignored
+        bd.SyncMode = CableSyncMode.SameStep; bd.ReferenceCableName = "Cable6a";
+        var td = PretensionCandidates.Enumerate(new List<CablePretensionConfig> { a, bd }).ToList();
+        Check(td.Count == 3
+            && td[0].CableForces["Cable6bd"] == 10000 && td[1].CableForces["Cable6bd"] == 13000 && td[2].CableForces["Cable6bd"] == 16000,
+            "Same Step spacing is derived to land on exactly the reference's value count");
+
+        // TEST 2 — Cartesian × Same Step
+        var c = Range("Cable7a", 30000, 45000, 5000);   // [30000, 35000, 40000, 45000] — independent axis
+        var t2 = new List<CablePretensionConfig> { a, b, c };
+        Check((int)PretensionCandidates.TotalCount(t2) == 12 && PretensionCandidates.VariableCount(t2) == 2,
+            "TEST 2 — Independent A(3) × Independent C(4) with SameStep B = 12 (not 3·3·4)");
+        Check(PretensionCandidates.Enumerate(t2).Select(x => x.CableForces["Cable7a"]).Distinct().Count() == 4,
+            "TEST 2 — Cable7a still sweeps its own axis");
+
+        // TEST 3 — Same Values
+        var e = new CablePretensionConfig { CableName = "Cable6c", LoadCase = CablePretensionConfig.PretensionLoadCase,
+            SyncMode = CableSyncMode.SameValues, ReferenceCableName = "Cable6a" };
+        Check(e.CandidateSummary == "linked" && e.CandidateCount == 1 && !e.CanEditRange && !e.CanEditTarget,
+            "TEST 3 — Same Values follower is 'linked', fields locked");
+        var t3 = PretensionCandidates.Enumerate(new List<CablePretensionConfig> { a, e }).ToList();
+        Check(t3.Count == 3 && t3.All(x => x.CableForces["Cable6c"] == x.CableForces["Cable6a"]),
+            "TEST 3 — Same Values follower copies the reference's exact values");
+
+        // TEST 5 — shallow chains resolve transitively to the Independent root
+        var chained = Range("Cable6d", 5000, 15000, 1);              // own Min/Max, own step ignored
+        chained.SyncMode = CableSyncMode.SameStep; chained.ReferenceCableName = "Cable6b";   // Cable6b follows Cable6a
+        var t5 = new List<CablePretensionConfig> { a, b, chained };
+        Check(PretensionCandidates.IsFollower(chained, t5)
+              && ReferenceEquals(CableSyncGraph.RootOf(chained, t5), a),
+            "TEST 5 — a chain C → B → A resolves to root A and C is a follower (no extra axis)");
+        var t5c = PretensionCandidates.Enumerate(t5).ToList();
+        Check(t5c.Count == 3
+              && t5c[0].CableForces["Cable6d"] == 5000 && t5c[1].CableForces["Cable6d"] == 10000 && t5c[2].CableForces["Cable6d"] == 15000,
+            "TEST 5 — chained follower is spread over the root's value count");
+        // Same Ratio / Same Offset
+        var ratio = new CablePretensionConfig { CableName = "Cable6r", LoadCase = CablePretensionConfig.PretensionLoadCase,
+            SyncMode = CableSyncMode.SameRatio, ReferenceCableName = "Cable6a", SyncFactor = 1.1 };
+        var offset = new CablePretensionConfig { CableName = "Cable6o", LoadCase = CablePretensionConfig.PretensionLoadCase,
+            SyncMode = CableSyncMode.SameOffset, ReferenceCableName = "Cable6a", SyncFactor = 500 };
+        var tr = PretensionCandidates.Enumerate(new List<CablePretensionConfig> { a, ratio, offset }).ToList();
+        Check(tr.Count == 3
+              && tr[1].CableForces["Cable6r"] == 17500 * 1.1 && tr[1].CableForces["Cable6o"] == 17500 + 500,
+            "TEST 5 — Same Ratio = reference × k, Same Offset = reference + Δ, neither adds an axis");
+        Check((int)PretensionCandidates.TotalCount(new List<CablePretensionConfig> { a, ratio, offset }) == 3,
+            "TEST 5 — Ratio / Offset followers do not multiply the Cartesian product");
+
+        // TEST 6 — cycle detection over hand-edited config
+        var x1 = new CablePretensionConfig { CableName = "X1", LoadCase = CablePretensionConfig.PretensionLoadCase, SyncMode = CableSyncMode.SameStep, ReferenceCableName = "X2" };
+        var x2 = new CablePretensionConfig { CableName = "X2", LoadCase = CablePretensionConfig.PretensionLoadCase, SyncMode = CableSyncMode.SameStep, ReferenceCableName = "X1" };
+        var cyc = PretensionCandidates.FindCycle(new List<CablePretensionConfig> { x1, x2 });
+        Check(cyc.Count == 2 && cyc.Contains("X1") && cyc.Contains("X2"), "TEST 6 — circular Sync reference is detected");
+        Check(PretensionCandidates.FindCycle(t2).Count == 0, "acyclic graph reports no cycle");
+
+        // TEST 7 — master with followers
+        Check(PretensionCandidates.FollowersOf(a, t2).Select(f => f.CableName).OrderBy(n => n).SequenceEqual(new[] { "Cable6b" }),
+            "TEST 7 — FollowersOf reports the cables that reference a master");
+
+        // mode/reference hygiene
+        b.SyncMode = CableSyncMode.Independent;
+        Check(b.ReferenceCableName is null && b.CandidateSummary == "3", "Setting Independent clears the reference");
+        var self = new CablePretensionConfig { CableName = "Cable9", LoadCase = CablePretensionConfig.PretensionLoadCase, SyncMode = CableSyncMode.SameValues };
+        self.ReferenceCableName = "Cable9";
+        Check(self.ReferenceCableName is null, "A cable can never reference itself");
     }
 
     internal static ApplicationState CreateState()
@@ -162,6 +257,7 @@ internal static class StudyComposerChecks
         public Task<IReadOnlyList<PointLoad>> GetPointLoadsAsync(string pointName, ModelInfo expected) => Task.FromResult<IReadOnlyList<PointLoad>>([]);
         public Task<IReadOnlyList<CableTargetForce>> GetCableTargetForcesAsync(string cableName, ModelInfo expected) => Task.FromResult<IReadOnlyList<CableTargetForce>>([]);
         public Task<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>> GetJointDisplacementsAsync(IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();
+        public Task<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>> GetCableForcesAsync(IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) =>
             Task.FromResult<IReadOnlyList<ForceSource>>([]);
         public Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected) => Task.CompletedTask;

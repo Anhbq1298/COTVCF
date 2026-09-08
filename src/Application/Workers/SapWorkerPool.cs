@@ -14,7 +14,7 @@ public sealed class SapWorkerPool(
     private readonly IterationModelBuilder builder = builder ?? new();
     private readonly List<SapWorkerInstance> workers = [];
     private StudyExecutionSnapshot? snapshot;
-    private int total, completed, failed, running, queued, skipped, cancelled, peakConcurrent;
+    private int total, completed, reused, failed, running, queued, skipped, cancelled, peakConcurrent;
     private bool stopped;
 
     public IReadOnlyList<SapWorkerSnapshot> Workers => workers.Select(worker => worker.Snapshot).ToArray();
@@ -98,6 +98,7 @@ public sealed class SapWorkerPool(
         }
 
         return new(total, completed, failed, cancelled, skipped, workers.Count, peakConcurrent,
+            Volatile.Read(ref reused),
             workers.Count > 0 && workers.All(worker => worker.Snapshot.State == SapWorkerState.Faulted));
     }
 
@@ -138,6 +139,7 @@ public sealed class SapWorkerPool(
                 switch (result.Status)
                 {
                     case StudyIterationStatus.Ready: Interlocked.Increment(ref completed); break;
+                    case StudyIterationStatus.Reused: Interlocked.Increment(ref completed); Interlocked.Increment(ref reused); break;
                     case StudyIterationStatus.Cancelled: Interlocked.Increment(ref cancelled); break;
                     default: Interlocked.Increment(ref failed); break;
                 }
@@ -147,7 +149,7 @@ public sealed class SapWorkerPool(
                     catch { /* consolidation is downstream; a sink error must not fault the worker lane */ }
                 }
                 Report(progress, worker.WorkerId, job.IterationId,
-                    result.Status == StudyIterationStatus.Ready ? StudyWorkerStage.Completed : StudyWorkerStage.Waiting,
+                    result.Status is StudyIterationStatus.Ready or StudyIterationStatus.Reused ? StudyWorkerStage.Completed : StudyWorkerStage.Waiting,
                     result.Status, result.WorkerFaulted ? SapWorkerState.Faulted : worker.Snapshot.State,
                     result.ModelPath ?? job.ModelFullPath, worker.Snapshot.CompletedCount, result.Message);
                 if (result.WorkerFaulted) break;
@@ -203,6 +205,7 @@ public sealed class SapWorkerPool(
     {
         Total = Volatile.Read(ref total),
         Completed = Volatile.Read(ref completed),
+        Reused = Volatile.Read(ref reused),
         Failed = Volatile.Read(ref failed),
         Cancelled = Volatile.Read(ref cancelled),
         Running = Volatile.Read(ref running),

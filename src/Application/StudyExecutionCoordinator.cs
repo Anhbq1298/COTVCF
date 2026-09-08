@@ -2,15 +2,28 @@ using COT_VCF.Application.Results;
 using COT_VCF.Application.Workers;
 using COT_VCF.Domain.Results;
 using System.IO;
+using System.Collections.Concurrent;
 
 namespace COT_VCF.Application;
 
-public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactory)
+public sealed class StudyExecutionCoordinator
 {
+    private readonly ISapInstanceHostFactory hostFactory;
+    private readonly IStudyArtifactPublisher artifactPublisher;
     private readonly StudyPathService paths = new();
+
+    public StudyExecutionCoordinator(ISapInstanceHostFactory hostFactory, IStudyArtifactPublisher? artifactPublisher = null)
+    {
+        this.hostFactory = hostFactory;
+        this.artifactPublisher = artifactPublisher ?? new StudyArtifactPublisher();
+    }
 
     /// <summary>Absolute path of the last <c>Deflection_Report.html</c> written by a run, or null.</summary>
     public string? LastDeflectionReportPath { get; private set; }
+    /// <summary>Absolute path of the last <c>Cable_Forces_Report.html</c> written by a run, or null.</summary>
+    public string? LastCableForceReportPath { get; private set; }
+    public StudyArtifactOutcome LastArtifactOutcome { get; private set; } = StudyArtifactOutcome.NotProduced;
+    public StudyRunReference? LastRunReference { get; private set; }
 
     public async Task<StudyExecutionResult> BuildAsync(
         StudyExecutionSnapshot snapshot,
@@ -19,48 +32,77 @@ public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactor
         Action<CandidateResultDto>? onCandidateResult = null)
     {
         ValidateSnapshot(snapshot);
-        var consolidator = new ConsolidatedResultWriter();
+        LastDeflectionReportPath = null;
+        LastCableForceReportPath = null;
+        LastArtifactOutcome = StudyArtifactOutcome.NotProduced;
+        LastRunReference = null;
+        var journal = StudyRunJournal.Start(snapshot);
+        LastRunReference = journal.Reference();
+        var trackedProgress = new ForwardingProgress<StudyExecutionProgress>(item =>
+        {
+            journal.Report(item);
+            progress.Report(item);
+        });
+        var candidateResults = new ConcurrentBag<CandidateResultDto>();
         await using var pool = new SapWorkerPool(hostFactory, onCandidateResult: dto =>
         {
-            consolidator.Add(dto);
+            candidateResults.Add(dto);
             onCandidateResult?.Invoke(dto);
         });
-        Exception? executionError = null;
-        StudyExecutionResult result;
         try
         {
-            await pool.StartAsync(snapshot, progress, token);
-            result = await pool.ExecuteAsync(progress, token);
-        }
-        catch (Exception ex)
-        {
-            executionError = ex;
-            throw;
-        }
-        finally
-        {
-            try { await pool.StopAsync(progress); }
-            catch when (executionError is not null) { }
-        }
-
-        // Consolidate the deflection results — best-effort; a completed study is never failed by this.
-        if (consolidator.Count > 0)
-        {
+            Exception? executionError = null;
+            StudyExecutionResult result;
             try
             {
-                var studyFolder = Path.GetFullPath(paths.GetStudyRoot(snapshot.BaselineModelPath));
-                consolidator.Write(studyFolder, snapshot.DeflectionPoints, snapshot.DeflectionOutputCase,
-                    snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
-                LastDeflectionReportPath = new DeflectionReportGenerator().Generate(
-                    studyFolder, consolidator.Snapshot(),
-                    snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+                await pool.StartAsync(snapshot, trackedProgress, token);
+                result = await pool.ExecuteAsync(trackedProgress, token);
             }
             catch (Exception ex)
             {
-                progress.Report(new StudyExecutionProgress { WorkerId = 0, Message = $"Deflection consolidation failed: {ex.Message}" });
+                executionError = ex;
+                throw;
             }
+            finally
+            {
+                try { await pool.StopAsync(trackedProgress); }
+                catch when (executionError is not null) { }
+            }
+
+            if (!candidateResults.IsEmpty)
+            {
+                try
+                {
+                    LastArtifactOutcome = artifactPublisher.Publish(snapshot,
+                        candidateResults.OrderBy(item => item.Parameters.RunIndex).ToArray());
+                    LastDeflectionReportPath = LastArtifactOutcome.DeflectionReportPath;
+                    LastCableForceReportPath = LastArtifactOutcome.CableForceReportPath;
+                }
+                catch (Exception ex)
+                {
+                    LastArtifactOutcome = StudyArtifactOutcome.Failed(ex.Message);
+                    trackedProgress.Report(new StudyExecutionProgress { WorkerId = 0, Message = $"Result consolidation failed: {ex.Message}" });
+                }
+            }
+            else if (result.Completed > 0)
+            {
+                LastArtifactOutcome = StudyArtifactOutcome.Failed("Completed candidates returned no extractable result payload.");
+            }
+            var completed = result with { Artifacts = LastArtifactOutcome };
+            var run = journal.Complete(completed);
+            LastRunReference = run;
+            return completed with { Run = run };
         }
-        return result;
+        catch (Exception ex)
+        {
+            LastRunReference = journal.Fail(ex);
+            throw;
+        }
+    }
+
+    private sealed class ForwardingProgress<T>(Action<T> report) : IProgress<T>
+    {
+        public void Report(T value) => report(value);
     }
 
     private void ValidateSnapshot(StudyExecutionSnapshot snapshot)
@@ -84,10 +126,10 @@ public sealed class StudyExecutionCoordinator(ISapInstanceHostFactory hostFactor
                 !string.Equals(expectedModel, Path.GetFullPath(job.ModelFullPath), StringComparison.OrdinalIgnoreCase) ||
                 !expectedDirectory.StartsWith(expectedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Iteration {job.IterationId} has an invalid or unsafe output path.");
-            if (File.Exists(expectedModel))
-                throw new InvalidOperationException($"Existing output will not be overwritten: {expectedModel}");
-            if (Directory.Exists(expectedDirectory) && Directory.EnumerateFileSystemEntries(expectedDirectory).Any())
-                throw new InvalidOperationException($"Existing iteration folder is not empty and will not be overwritten: {expectedDirectory}");
+            // An existing child model is NOT an error: the worker reuses it (opens, verifies, re-extracts
+            // results) instead of rebuilding. Study modes overlap on their fixed dimension by design, so
+            // re-running a neighbouring study must not require deleting the shared candidates first. The
+            // existing .sdb and its result files are never overwritten.
         }
     }
 }

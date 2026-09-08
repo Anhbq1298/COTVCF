@@ -14,13 +14,32 @@ public sealed class ConfigurationValidator
         issues.AddRange(new TrussGeometryService().Validate(state.Baseline, state.Truss));
         if (!state.BaselineCaptured) issues.Add(new("Truss height", "Capture the baseline geometry."));
         if (state.Cables.Count == 0) issues.Add(new("Cable pretension", "Add at least one cable."));
+        var cableList = state.Cables.ToArray();
         foreach (var c in state.Cables)
         {
             if (!state.Geometry.Members.Any(m => m.Name == c.CableName && m.Kind == MemberKind.Cable))
                 issues.Add(new("Cable pretension", $"{c.CableName} is no longer a cable object in the model."));
             else if (c.CandidateCount <= 0)
                 issues.Add(new("Cable pretension", $"{c.CableName}: {(c.ApplyRange ? "review Min / Max / Step force." : "enter a target force.")}"));
+
+            if (c.SyncMode != CableSyncMode.Independent)
+            {
+                var word = c.SyncMode.Label();
+                if (string.IsNullOrEmpty(c.ReferenceCableName))
+                    issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' has no reference cable.", ValidationSeverity.Warning));
+                else if (CableSyncGraph.DirectReference(c, cableList) is null)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' reference {c.ReferenceCableName} does not exist.", ValidationSeverity.Warning));
+                else if (CableSyncGraph.RootOf(c, cableList) is null)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' reference chain is broken or circular. Treated as independent.", ValidationSeverity.Warning));
+                else if (c.SyncMode == CableSyncMode.SameStep && c.CandidateCount <= 0)
+                    issues.Add(new("Cable pretension", $"{c.CableName}: 'Same Step' needs its own Min and Max force.", ValidationSeverity.Warning));
+                else if (c.SyncMode is CableSyncMode.SameRatio or CableSyncMode.SameOffset
+                         && (c.SyncFactor is not double f || !double.IsFinite(f) || (c.SyncMode == CableSyncMode.SameRatio && f <= 0)))
+                    issues.Add(new("Cable pretension", $"{c.CableName}: '{word}' needs a {(c.SyncMode == CableSyncMode.SameRatio ? "ratio greater than zero" : "numeric offset")}.", ValidationSeverity.Warning));
+            }
         }
+        if (PretensionCandidates.FindCycle(cableList) is { Count: > 0 } cycle)
+            issues.Add(new("Cable pretension", $"Circular Sync reference: {string.Join(" → ", cycle)} → {cycle[0]}. Set one cable to Independent.", ValidationSeverity.Warning));
         return issues;
     }
     public IReadOnlyList<ValidationIssue> ValidateLoads(ApplicationState state)
@@ -53,6 +72,8 @@ public sealed class ConfigurationValidator
                 issues.Add(new("Loading criteria", $"{row.LoadName}: qz must be zero or greater."));
             if (row.ApplyIncrementStep && (row.MinQz is not double min || !double.IsFinite(min) || min < 0 || row.MaxQz is not double max || !double.IsFinite(max) || max < min || row.IncrementStep is not double step || !double.IsFinite(step) || step <= 0))
                 issues.Add(new("Loading criteria", $"{row.LoadName}: review minimum, maximum and increment step."));
+            else if (row.CandidateCount > LoadDefinition.MaterializeCeiling)
+                issues.Add(new("Loading criteria", $"{row.LoadName}: {row.CandidateCount:N0} values exceed the {LoadDefinition.MaterializeCeiling:N0} limit. Widen the increment step."));
         }
         if (state.LoadDefinitions.Where(row => !string.IsNullOrWhiteSpace(row.LoadName))
             .GroupBy(row => row.LoadName, StringComparer.Ordinal).Any(group => group.Count() > 1))

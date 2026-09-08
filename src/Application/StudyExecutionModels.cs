@@ -35,6 +35,8 @@ public sealed record StudyExecutionSnapshot(
     // Frozen after Tab 04 groups have been prepared on and saved into the parent.
     public IReadOnlyList<OutputSapGroupDefinition> OutputGroups { get; init; } = [];
     public string CableResultLoadCase { get; init; } = "";
+    // Cable-force post-processing (Tab 06.05): the cables whose axial force is read under CableResultLoadCase.
+    public IReadOnlyList<string> CableResultCables { get; init; } = [];
     // Deflection post-processing (Tab 06): monitored points + the SAP case their Uz is read under.
     public IReadOnlyList<string> DeflectionPoints { get; init; } = [];
     public string DeflectionOutputCase { get; init; } = "";
@@ -44,6 +46,7 @@ public sealed record StudyExecutionProgress
 {
     public int Total { get; init; }
     public int Completed { get; init; }
+    public int Reused { get; init; }
     public int Failed { get; init; }
     public int Cancelled { get; init; }
     public int Running { get; init; }
@@ -67,4 +70,22 @@ public sealed record StudyExecutionResult(
     int Skipped,
     int WorkerCount,
     int PeakConcurrent,
-    bool AllWorkersFaulted = false);
+    int Reused = 0,
+    bool AllWorkersFaulted = false)
+{
+    public StudyArtifactOutcome Artifacts { get; init; } = StudyArtifactOutcome.NotProduced;
+    public StudyRunReference? Run { get; init; }
+}
+
+public enum StudyArtifactState { NotProduced, Ready, Failed }
+
+public sealed record StudyArtifactOutcome(
+    StudyArtifactState State,
+    string? WorkbookPath,
+    string? DeflectionReportPath,
+    string? CableForceReportPath,
+    string? ErrorMessage)
+{
+    public static StudyArtifactOutcome NotProduced { get; } = new(StudyArtifactState.NotProduced, null, null, null, null);
+    public static StudyArtifactOutcome Failed(string message) => new(StudyArtifactState.Failed, null, null, null, message);
+}

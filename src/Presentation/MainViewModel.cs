@@ -35,8 +35,8 @@ public sealed class MainViewModel : Observable
     private bool normalizingStudyCandidateIds;
     private bool studyRefreshPending;
     private bool isStudyRunning;
-    private int requestedWorkerCount = 1;
-    private int studyCompletedCount, studyFailedCount, studyRunningCount, studyQueuedCount, studySkippedCount, studyCancelledCount;
+    private int requestedWorkerCount = 2;
+    private int studyCompletedCount, studyReusedCount, studyFailedCount, studyRunningCount, studyQueuedCount, studySkippedCount, studyCancelledCount;
     private int studyPeakConcurrent;
     private StudyBuildState studyBuildState = StudyBuildState.ReadyToBuild;
     private CancellationTokenSource? studyCancellation;
@@ -126,7 +126,7 @@ public sealed class MainViewModel : Observable
 
     // ---- Hoisted model preview: one Structural2DViewer shared by tabs 01-04 (index 0-3) ----
     // Workflow tabs after the SAP Model tab was removed: 0 Loading, 1 Truss, 2 Pretension, 3 Output, 4 Iteration.
-    private const int TabLoading = 0, TabTruss = 1, TabPretension = 2, TabOutput = 3;
+    private const int TabLoading = 0, TabTruss = 1, TabPretension = 2, TabOutput = 3, TabIteration = 4;
     public bool ShowSharedViewer => selectedTab is >= TabLoading and <= TabOutput;
     public bool ShowTrussLegend => selectedTab == TabTruss;
     public GeometryModel SharedViewerModel =>
@@ -165,6 +165,27 @@ public sealed class MainViewModel : Observable
     public string IterationSummary => $"MODEL\n{ModelName} - {State.Units}\n\nLOADING CRITERIA\n{State.AppliedPoints.Count} applied points - {State.LoadDefinitions.Count} load definitions\n\nTRUSS HEIGHT\n{State.Truss.MinimumHeight:F4} to {State.Truss.MaximumHeight:F4} {LengthUnit} - step {State.Truss.Increment:F4} {LengthUnit}\n\nCABLE PRETENSION\n{CableCount} cables ({VariableCableCount} variable) - {PretensionCandidateCount} pretension candidates";
     public int CableCount => State.Cables.Count;
     public int VariableCableCount => COT_VCF.Application.PretensionCandidates.VariableCount(State.Cables);
+    /// <summary>Sync-column mode options.</summary>
+    public IReadOnlyList<CableSyncMode> CableSyncModes { get; } =
+        [CableSyncMode.Independent, CableSyncMode.SameValues, CableSyncMode.SameStep,
+         CableSyncMode.SameRatio, CableSyncMode.SameOffset];
+    /// <summary>Reference-cable options for the Sync column: a blank plus every other cable. Chains resolve
+    /// transitively to their Independent root, so a follower may reference another follower.</summary>
+    public IEnumerable<string> CableSyncReferenceOptions =>
+        new[] { "" }.Concat(State.Cables.Select(c => c.CableName));
+    /// <summary>"N group(s) · M follower(s)" over the current Sync graph.</summary>
+    public string SyncGroupSummary
+    {
+        get
+        {
+            var (g, f) = COT_VCF.Application.PretensionCandidates.SyncGroupCounts(State.Cables);
+            return f == 0 ? "no synced cables" : $"{g} sync group{(g == 1 ? "" : "s")} · {f} follower{(f == 1 ? "" : "s")}";
+        }
+    }
+    // Bulk "apply Sync to selected rows" editor state.
+    public CableSyncMode BulkSyncMode { get; set; } = CableSyncMode.SameValues;
+    private string? bulkSyncReference;
+    public string? BulkSyncReference { get => bulkSyncReference; set => Set(ref bulkSyncReference, value); }
     public string CablePreviewSummary => SelectedCable is null
         ? $"{CableCount} cable{(CableCount == 1 ? "" : "s")} configured — select a row or cable in the view"
         : $"Selected  ·  {SelectedCable.CableName}  ·  {SelectedCable.Status}";
@@ -181,7 +202,99 @@ public sealed class MainViewModel : Observable
     public int HeightCandidateCount => State.BaselineCaptured ? State.Truss.CandidateCount : 0;
     public IReadOnlyList<StudyHeightCandidate> HeightStudyCandidates => studyComposition.HeightCandidates;
     public IReadOnlyList<StudyPretensionCandidate> PretensionStudyCandidates => studyComposition.PretensionCandidates;
+    public IReadOnlyList<LoadingStudyCandidate> LoadingStudyCandidates => studyComposition.LoadingCandidates;
     public IReadOnlyList<StudyIteration> StudyIterations => studyComposition.Iterations;
+
+    // ---- Tab 05: candidate definitions (master grid shows IDs only; these back the collapsible lists) ----
+    public sealed record LoadingDefRow(string Id, IReadOnlyList<string> Values);
+    public sealed record HeightDefRow(string Id, string Delta, string Height);
+    public sealed record PretensionDefRow(string Cable, string Force);
+    public sealed record PretensionDefGroup(string Id, string Summary, IReadOnlyList<PretensionDefRow> Cables);
+
+    /// <summary>Distinct load-pattern names across every loading candidate — the column headers for the list.</summary>
+    public IReadOnlyList<string> LoadingDefinitionColumns => LoadingStudyCandidates
+        .SelectMany(c => c.Combination.Loads.Select(l => l.Name))
+        .Distinct(StringComparer.Ordinal)
+        .ToArray();
+
+    public IReadOnlyList<LoadingDefRow> LoadingDefinitionRows
+    {
+        get
+        {
+            var cols = LoadingDefinitionColumns;
+            return LoadingStudyCandidates.Select(c =>
+            {
+                var byName = c.Combination.Loads
+                    .GroupBy(l => l.Name, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().Qz, StringComparer.Ordinal);
+                return new LoadingDefRow(c.Id, cols
+                    .Select(n => byName.TryGetValue(n, out var q) ? $"{q:0.###} kPa" : "—")
+                    .ToArray());
+            }).ToArray();
+        }
+    }
+
+    public IReadOnlyList<HeightDefRow> HeightDefinitionRows => HeightStudyCandidates
+        .Select(c => new HeightDefRow(c.Id,
+            $"{c.Candidate.DeltaH:+0.###;-0.###;0} {c.Unit}",
+            $"{c.Candidate.Height:0.###} {c.Unit}"))
+        .ToArray();
+
+    public IReadOnlyList<PretensionDefGroup> PretensionDefinitionGroups => PretensionStudyCandidates
+        .Select(c => new PretensionDefGroup(c.Id,
+            c.Assignments.Count == 0 ? "no target-force assignments"
+                : $"{c.Assignments.Count} cable target{(c.Assignments.Count == 1 ? "" : "s")}",
+            c.Assignments.Select(a => new PretensionDefRow(a.CableName, $"{a.TargetForce:N0} kN")).ToArray()))
+        .ToArray();
+
+    public string LoadingCandidatesTotalText => $"{LoadingCandidateCount} in total";
+    public string HeightCandidatesTotalText => $"{HeightCandidateCount} in total";
+    public string PretensionCandidatesTotalText => $"{PretensionCandidateCount} in total";
+
+    private StudyIteration? selectedStudyIteration;
+    public StudyIteration? SelectedStudyIteration
+    {
+        get => selectedStudyIteration;
+        set { if (Set(ref selectedStudyIteration, value)) Notify(nameof(SelectedCandidateBreadcrumb)); }
+    }
+    public string SelectedCandidateBreadcrumb => selectedStudyIteration is null
+        ? "Select a study row to trace its L / H / P"
+        : $"{selectedStudyIteration.LoadingCandidateId} · {selectedStudyIteration.HeightCandidateId} · {selectedStudyIteration.PretensionCandidateId}    {selectedStudyIteration.SapModelName}";
+
+    // ---- Tab 05: worker monitor slots — always MaxWorkerCount cards; the ones past the requested
+    //      instance count are shown hatched / "not in use", regardless of whether a study is running ----
+    public sealed class WorkerMonitorSlot : Observable
+    {
+        private bool inUse;
+        private SapWorkerSnapshot? snapshot;
+        public required int Number { get; init; }
+        public string InstanceName => $"Instance {Number}";
+        public bool InUse
+        {
+            get => inUse;
+            set { if (Set(ref inUse, value)) { Notify(nameof(ShowLive)); Notify(nameof(ShowStatus)); Notify(nameof(StatusLabel)); } }
+        }
+        public SapWorkerSnapshot? Snapshot
+        {
+            get => snapshot;
+            set { if (Set(ref snapshot, value)) { Notify(nameof(ShowLive)); Notify(nameof(ShowStatus)); Notify(nameof(StatusLabel)); } }
+        }
+        public bool ShowLive => inUse && snapshot is not null;
+        public bool ShowStatus => !ShowLive;
+        public string StatusLabel => !inUse ? "Not in use" : snapshot is null ? "Idle — start a study run" : "";
+    }
+
+    public ObservableCollection<WorkerMonitorSlot> WorkerMonitorSlots { get; } =
+        new(Enumerable.Range(1, 3).Select(n => new WorkerMonitorSlot { Number = n }));
+
+    private void SyncWorkerMonitorSlots()
+    {
+        foreach (var slot in WorkerMonitorSlots)
+        {
+            slot.InUse = slot.Number <= RequestedWorkerCount;
+            slot.Snapshot = StudyWorkers.FirstOrDefault(w => w.WorkerId == slot.Number);
+        }
+    }
     public IReadOnlyList<int> WorkerCountOptions { get; } = [1, 2, 3];
     public int RequestedWorkerCount
     {
@@ -192,11 +305,13 @@ public sealed class MainViewModel : Observable
             if (!Set(ref requestedWorkerCount, next)) return;
             Notify(nameof(RunStudyLabel));
             Notify(nameof(RunStudyToolTip));
+            SyncWorkerMonitorSlots();
         }
     }
     public int MaxWorkerCount => 3;
     public ObservableCollection<SapWorkerSnapshot> StudyWorkers { get; } = [];
     public int StudyCompletedCount => studyCompletedCount;
+    public int StudyReusedCount => studyReusedCount;
     public int StudyFailedCount => studyFailedCount;
     public int StudyRunningCount => studyRunningCount;
     public int StudyQueuedCount => studyQueuedCount;
@@ -205,7 +320,9 @@ public sealed class MainViewModel : Observable
     public int StudyFinishedCount => studyCompletedCount + studyFailedCount + studyCancelledCount;
     public double StudyOverallProgress => SelectedRunCount == 0 ? 0 : Math.Min(100, 100.0 * StudyFinishedCount / SelectedRunCount);
     public string StudyProgressText => $"{StudyFinishedCount:N0} / {SelectedRunCount:N0}";
-    public string StudyCountsText => $"Ready {StudyCompletedCount:N0}   Running {StudyRunningCount:N0}   Queued {StudyQueuedCount:N0}   Failed {StudyFailedCount:N0}   Skipped {StudySkippedCount:N0}   Workers {StudyWorkers.Count}   Peak {studyPeakConcurrent}";
+    public string StudyCountsText => $"Ready {StudyCompletedCount:N0}" +
+        (studyReusedCount > 0 ? $" (Reused {studyReusedCount:N0})" : "") +
+        $"   Running {StudyRunningCount:N0}   Queued {StudyQueuedCount:N0}   Failed {StudyFailedCount:N0}   Skipped {StudySkippedCount:N0}   Workers {StudyWorkers.Count}   Peak {studyPeakConcurrent}";
     public bool HasStudyWorkers => StudyWorkers.Count > 0;
     public bool CanCancelStudy => IsStudyRunning && studyCancellation is { IsCancellationRequested: false };
     public StudyBuildState StudyBuildState => studyBuildState;
@@ -283,6 +400,8 @@ public sealed class MainViewModel : Observable
             return $"{LoadingCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} \\times {h} \\times {p} = {StudyTotalRuns}";
         }
     }
+    /// <summary>Symbolic + numeric total, e.g. "N_L \times N_H \times N_P = 4 \times 5 \times 2 = 40".</summary>
+    public string StudySpaceHeadlineFormula => $"N_L \\times N_H \\times N_P = {StudySpaceFormula}";
     public string StudyTotalRuns => StudyPlan.TotalRuns(State.Study.Mode, LoadingCandidateCount, HeightCandidateCount, PretensionRuns)
         .ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
     public string BaselineModelName => State.SessionBaselineModel?.Name ?? "Baseline unavailable";
@@ -296,7 +415,10 @@ public sealed class MainViewModel : Observable
         }
     }
     // ---- Tab 06 Post-Processing: Deflection · Uz ----
-    public sealed record PostProcessRow(string IterationKey, string ExtractionStatus, int Points, int Valid, int Warnings, string DiagnosticRelPath)
+    public sealed record PostProcessRow(
+        string IterationKey, string FileName, string Description,
+        string ExtractionStatus, int Points, int Valid, int Warnings,
+        string OutputPath, string DiagnosticRelPath)
     {
         public string StatusGlyph => ExtractionStatus switch
         {
@@ -306,6 +428,9 @@ public sealed class MainViewModel : Observable
             _ => "× failed",
         };
         public string PointsText => Valid == Points ? $"{Points}" : $"{Valid} / {Points}";
+        public string StatusLine => Warnings > 0
+            ? $"{StatusGlyph} · {Valid}/{Points} Uz · {Warnings} warn"
+            : $"{StatusGlyph} · {Valid}/{Points} Uz";
     }
 
     public ObservableCollection<PostProcessRow> PostProcessRows { get; } = [];
@@ -327,8 +452,25 @@ public sealed class MainViewModel : Observable
     public bool HasNoDeflectionReport => !HasDeflectionReport;
     public Uri? DeflectionReportUri => HasDeflectionReport ? new Uri(DeflectionReportPath!) : null;
     public string DeflectionReportName => HasDeflectionReport ? Path.GetFileName(DeflectionReportPath!) : "No report generated yet";
-    public string ResultsWorkbookPath => Directory.Exists(StudyRoot)
-        ? Path.Combine(StudyRoot, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName) : "";
+
+    private string? cableForceReportPath;
+    public string? CableForceReportPath
+    {
+        get => cableForceReportPath;
+        private set
+        {
+            if (!Set(ref cableForceReportPath, value)) return;
+            Notify(nameof(HasCableForceReport));
+            Notify(nameof(CableForceReportName));
+        }
+    }
+    public bool HasCableForceReport => !string.IsNullOrEmpty(CableForceReportPath) && File.Exists(CableForceReportPath);
+    public string CableForceReportName => HasCableForceReport ? Path.GetFileName(CableForceReportPath!) : "No cable-force report generated yet";
+    private bool useCurrentRunArtifacts;
+    private string? currentRunWorkbookPath;
+    public string ResultsWorkbookPath => useCurrentRunArtifacts
+        ? currentRunWorkbookPath ?? ""
+        : Directory.Exists(StudyRoot) ? Path.Combine(StudyRoot, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName) : "";
     public bool HasResultsWorkbook => !string.IsNullOrEmpty(ResultsWorkbookPath) && File.Exists(ResultsWorkbookPath);
     public string PostProcessStatus
     {
@@ -361,6 +503,9 @@ public sealed class MainViewModel : Observable
         _ => "Not validated yet."
     };
     public string RunStudyLabel => $"Build & Analyze {SelectedRunCount:N0} - {RequestedWorkerCount} Instance{(RequestedWorkerCount == 1 ? "" : "s")}";
+    public string ToolbarStudySummary => SelectedRunCount == 0
+        ? "Study · nothing selected"
+        : $"Study · {SelectedRunCount:N0} run{(SelectedRunCount == 1 ? "" : "s")} selected";
     public bool CanRunStudy => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0;
     public string RunStudyToolTip => RequestedWorkerCount == 1
         ? "Uses the connected SAP2000 instance as worker 1 to build, analyze, save, and verify each child; no additional process is started."
@@ -471,6 +616,7 @@ public sealed class MainViewModel : Observable
     public Command ApplyGeometry { get; }
     public Command ApplyLoads { get; }
     public Command AddCables { get; }
+    public Command BulkSetCableSync { get; }
     public Command RemoveLoads { get; }
     public Command RemoveCables { get; }
     public Command ConfigureDeflectionOutput { get; }
@@ -482,11 +628,14 @@ public sealed class MainViewModel : Observable
     public Command SelectAllStudyRuns { get; }
     public Command ClearAllStudyRuns { get; }
     public Command BuildSelectedModels { get; }
+    public Command RunStudyFromToolbar { get; }
     public Command CancelStudy { get; }
     public Command OpenStudyFolder { get; }
     public Command OpenIterationFolder { get; }
     public Command OpenDeflectionReport { get; }
     public Command RegenerateDeflectionReport { get; }
+    public Command OpenCableForceReport { get; }
+    public Command RegenerateCableForceReport { get; }
     public Command OpenResultsWorkbook { get; }
     public Command OpenCandidateDiagnostic { get; }
     public Command ViewIterationError { get; }
@@ -518,8 +667,10 @@ public sealed class MainViewModel : Observable
         StudyWorkers.CollectionChanged += (_, _) =>
         {
             Notify(nameof(HasStudyWorkers));
+            SyncWorkerMonitorSlots();
             NotifyStudyExecution();
         };
+        SyncWorkerMonitorSlots();
         bool Ready() => !IsBusy && State.IsSapConnected;
         bool GeometryReady() => Ready() && State.Geometry.Points.Count > 0;
 
@@ -552,6 +703,19 @@ public sealed class MainViewModel : Observable
             if (SelectedCable is not null && removed.Contains(SelectedCable)) SelectedCable = null;
             Update();
         }, () => !IsBusy);
+        BulkSetCableSync = new(p =>
+        {
+            if (p is not IList list) return;
+            var rows = list.Cast<CablePretensionConfig>().ToArray();
+            var indep = BulkSyncMode == CableSyncMode.Independent;
+            foreach (var row in rows)
+            {
+                if (string.Equals(row.CableName, BulkSyncReference, StringComparison.OrdinalIgnoreCase)) continue; // never self
+                row.SyncMode = BulkSyncMode;
+                row.ReferenceCableName = indep ? null : BulkSyncReference;
+            }
+            Update();
+        }, () => !IsBusy);
         ConfigureDeflectionOutput = new(_ => EditDeflectionOutput(), GeometryReady);
         ConfigureMemberForceOutput = new(_ => EditMemberForceOutput(), GeometryReady);
         ConfigureFoundationOutput = new(_ => EditFoundationOutput(), GeometryReady);
@@ -573,10 +737,14 @@ public sealed class MainViewModel : Observable
         SelectAllStudyRuns = new(_ => SetAllStudyRuns(true), () => !IsBusy && StudyIterations.Count > 0);
         ClearAllStudyRuns = new(_ => SetAllStudyRuns(false), () => !IsBusy && StudyIterations.Count > 0);
         BuildSelectedModels = new(_ => RunStudy(), () => CanRunStudy);
+        // Run the study from anywhere: jump to the Iteration tab (worker monitor + validation live there) then build.
+        RunStudyFromToolbar = new(_ => { SelectedTab = TabIteration; RunStudy(); },
+            () => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0);
         CancelStudy = new(_ => CancelStudyExecution(), () => CanCancelStudy);
         OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => Directory.Exists(StudyRoot));
         OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
         OpenDeflectionReport = new(_ => TryOpenFile(DeflectionReportPath), () => HasDeflectionReport);
+        OpenCableForceReport = new(_ => TryOpenFile(CableForceReportPath), () => HasCableForceReport);
         OpenResultsWorkbook = new(_ => TryOpenFile(ResultsWorkbookPath), () => HasResultsWorkbook);
         OpenCandidateDiagnostic = new(p =>
         {
@@ -584,6 +752,7 @@ public sealed class MainViewModel : Observable
                 TryOpenFile(Path.Combine(StudyRoot, row.DiagnosticRelPath.Replace('/', Path.DirectorySeparatorChar)));
         });
         RegenerateDeflectionReport = new(_ => RegenerateReport(), () => !IsBusy);
+        RegenerateCableForceReport = new(_ => RegenerateCableForceReportAsync(), () => !IsBusy);
         ViewIterationError = new(p =>
         {
             if (p is StudyIteration { ErrorMessage.Length: > 0 } row)
@@ -638,13 +807,30 @@ public sealed class MainViewModel : Observable
             ScheduleStudyRegeneration();
             Update();
         };
+        void WireCable(CablePretensionConfig row)
+        {
+            row.Peers = () => State.Cables.ToArray();
+            row.PropertyChanged += (_, ev) =>
+            {
+                Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update();
+                if (ev.PropertyName is nameof(CablePretensionConfig.SyncMode) or nameof(CablePretensionConfig.CableName)
+                    or nameof(CablePretensionConfig.ReferenceCableName) or nameof(CablePretensionConfig.SyncFactor)
+                    or nameof(CablePretensionConfig.MinForce) or nameof(CablePretensionConfig.MaxForce)
+                    or nameof(CablePretensionConfig.StepForce) or nameof(CablePretensionConfig.ApplyRange))
+                {
+                    Notify(nameof(CableSyncReferenceOptions)); Notify(nameof(SyncGroupSummary));
+                    foreach (var c in State.Cables) c.RaiseSyncRecompute();
+                }
+            };
+        }
+        foreach (var row in State.Cables) WireCable(row);
         State.Cables.CollectionChanged += (_, e) =>
         {
-            if (e.NewItems is not null)
-                foreach (CablePretensionConfig row in e.NewItems)
-                    row.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update(); };
+            if (e.NewItems is not null) foreach (CablePretensionConfig row in e.NewItems) WireCable(row);
             if (SelectedCable is not null && !State.Cables.Contains(SelectedCable)) SelectedCable = null;
             Dirty(ConfigTabs.Cable);
+            Notify(nameof(CableSyncReferenceOptions)); Notify(nameof(SyncGroupSummary));
+            foreach (var c in State.Cables) c.RaiseSyncRecompute();
             ScheduleStudyRegeneration();
             Update();
         };
@@ -874,14 +1060,17 @@ public sealed class MainViewModel : Observable
         if (pretensionCandidatesChanged) Notify(nameof(PretensionStudyCandidates));
         foreach (var name in new[]
         {
-            nameof(StudyIterations),
+            nameof(StudyIterations), nameof(LoadingStudyCandidates),
+            nameof(LoadingDefinitionColumns), nameof(LoadingDefinitionRows), nameof(HeightDefinitionRows), nameof(PretensionDefinitionGroups),
+            nameof(LoadingCandidatesTotalText), nameof(HeightCandidatesTotalText), nameof(PretensionCandidatesTotalText),
+            nameof(SelectedCandidateBreadcrumb), nameof(StudySpaceHeadlineFormula),
             nameof(FixedHeightCandidateId), nameof(FixedPretensionCandidateId),
             nameof(FixedHeightValueText), nameof(FixedPretensionValueText), nameof(StudyLoadingCell),
             nameof(StudyHeightCell), nameof(StudyPretensionCell), nameof(StudySpaceFormula), nameof(StudyTotalRuns),
             nameof(BaselineModelName), nameof(BaselineModelPath), nameof(StudyRoot), nameof(GeneratedRunCount), nameof(SelectedRunCount),
             nameof(StudySelectionSummary), nameof(HasStudyIterations), nameof(ShowStudyEmptyState), nameof(StudyPreviewEmptyText),
             nameof(StudyValidationState), nameof(HasValidationIssues), nameof(ShowValidationStatus), nameof(ValidationStatusText),
-            nameof(RunStudyLabel), nameof(CanRunStudy), nameof(RunStudyToolTip)
+            nameof(RunStudyLabel), nameof(CanRunStudy), nameof(RunStudyToolTip), nameof(ToolbarStudySummary)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
     }
@@ -953,11 +1142,17 @@ public sealed class MainViewModel : Observable
             row.ErrorMessage = null;
             row.Status = row.RunIterate ? StudyIterationStatus.Queued : StudyIterationStatus.Skipped;
         }
-        studyCompletedCount = studyFailedCount = studyRunningCount = studyCancelledCount = studyPeakConcurrent = 0;
+        studyCompletedCount = studyReusedCount = studyFailedCount = studyRunningCount = studyCancelledCount = studyPeakConcurrent = 0;
         studyQueuedCount = snapshot.Jobs.Count(job => job.RunIterate);
         studySkippedCount = snapshot.Jobs.Count - studyQueuedCount;
         StudyWorkers.Clear();
         PostProcessRows.Clear();
+        useCurrentRunArtifacts = true;
+        currentRunWorkbookPath = null;
+        DeflectionReportPath = null;
+        CableForceReportPath = null;
+        Notify(nameof(ResultsWorkbookPath));
+        Notify(nameof(HasResultsWorkbook));
         for (int id = 1; id <= RequestedWorkerCount; id++)
             StudyWorkers.Add(new SapWorkerSnapshot { WorkerId = id, State = SapWorkerState.Offline });
 
@@ -974,9 +1169,13 @@ public sealed class MainViewModel : Observable
         try
         {
             var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token, AddPostProcessRow);
-            DeflectionReportPath = studyExecution.LastDeflectionReportPath;
-            RefreshDeflectionArtifacts();
+            currentRunWorkbookPath = result.Artifacts.WorkbookPath;
+            DeflectionReportPath = result.Artifacts.DeflectionReportPath;
+            CableForceReportPath = result.Artifacts.CableForceReportPath;
+            Notify(nameof(ResultsWorkbookPath));
+            Notify(nameof(HasResultsWorkbook));
             studyCompletedCount = result.Completed;
+            studyReusedCount = result.Reused;
             studyFailedCount = result.Failed;
             studyCancelledCount = result.Cancelled;
             studyRunningCount = 0;
@@ -987,11 +1186,14 @@ public sealed class MainViewModel : Observable
                 ? StudyBuildState.Failed
                 : result.Cancelled > 0 && studyCancellation.IsCancellationRequested
                     ? StudyBuildState.Cancelled
-                    : result.Failed > 0 ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
+                    : result.Failed > 0 || result.Artifacts.State == StudyArtifactState.Failed
+                        ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
             Message = studyBuildState switch
             {
-                StudyBuildState.Completed => $"Build and analysis complete - {result.Completed:N0} verified child models are ready.",
-                StudyBuildState.CompletedWithErrors => $"Build and analysis completed with errors - {result.Completed:N0} ready, {result.Failed:N0} failed.",
+                StudyBuildState.Completed => $"Build and analysis complete - {result.Completed:N0} verified child models are ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused existing)" : "")}.",
+                StudyBuildState.CompletedWithErrors => result.Artifacts.State == StudyArtifactState.Failed
+                    ? $"Child analysis finished, but result artifacts failed: {result.Artifacts.ErrorMessage}"
+                    : $"Build and analysis completed with errors - {result.Completed:N0} ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused)" : "")}, {result.Failed:N0} failed.",
                 StudyBuildState.Cancelled => $"Build and analysis cancelled - {result.Completed:N0} ready, {result.Cancelled:N0} cancelled.",
                 _ => $"Build and analysis failed - all SAP2000 workers faulted; {result.Completed:N0} models are ready and {result.Failed:N0} failed."
             };
@@ -1034,6 +1236,7 @@ public sealed class MainViewModel : Observable
         if (progress.Total > 0)
         {
             studyCompletedCount = progress.Completed;
+            studyReusedCount = progress.Reused;
             studyFailedCount = progress.Failed;
             studyCancelledCount = progress.Cancelled;
             studyRunningCount = progress.Running;
@@ -1081,7 +1284,7 @@ public sealed class MainViewModel : Observable
         bool leaveUnassignedPlanned = false)
     {
         foreach (var row in StudyIterations.Where(row => row.RunIterate && row.Status is not
-                     (StudyIterationStatus.Ready or StudyIterationStatus.Failed or StudyIterationStatus.Cancelled)))
+                     (StudyIterationStatus.Ready or StudyIterationStatus.Reused or StudyIterationStatus.Failed or StudyIterationStatus.Cancelled)))
         {
             if (leaveUnassignedPlanned && row.AssignedWorkerId is null)
             {
@@ -1098,11 +1301,11 @@ public sealed class MainViewModel : Observable
         foreach (var name in new[]
         {
             nameof(IsStudyRunning), nameof(CanCancelStudy), nameof(CanRunStudy), nameof(StudyWorkers),
-            nameof(HasStudyWorkers), nameof(StudyCompletedCount), nameof(StudyFailedCount),
+            nameof(HasStudyWorkers), nameof(StudyCompletedCount), nameof(StudyReusedCount), nameof(StudyFailedCount),
             nameof(StudyRunningCount), nameof(StudyQueuedCount), nameof(StudySkippedCount),
             nameof(StudyCancelledCount), nameof(StudyFinishedCount), nameof(StudyOverallProgress),
             nameof(StudyProgressText), nameof(StudyCountsText), nameof(StudyBuildState),
-            nameof(StudyBuildStateText), nameof(RunStudyLabel), nameof(RunStudyToolTip)
+            nameof(StudyBuildStateText), nameof(RunStudyLabel), nameof(RunStudyToolTip), nameof(ToolbarStudySummary)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
     }
@@ -1139,7 +1342,6 @@ public sealed class MainViewModel : Observable
             PostProcessRows.Clear();
             DeflectionReportPath = null;
             Message = $"No {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName} found in {StudyRoot}. Run the study on Tab 05 to produce deflection results.";
-            RefreshDeflectionArtifacts();
             return;
         }
         IsBusy = true;
@@ -1153,11 +1355,37 @@ public sealed class MainViewModel : Observable
         finally { IsBusy = false; }
     }
 
+    private async void RegenerateCableForceReportAsync()
+    {
+        if (IsBusy) return;
+        if (!HasResultsWorkbook)
+        {
+            CableForceReportPath = null;
+            Message = $"No {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName} found in {StudyRoot}. Run the study on Tab 05 first.";
+            return;
+        }
+        IsBusy = true;
+        try
+        {
+            var path = await Task.Run(() => new COT_VCF.Application.Results.CableForceReportGenerator().RegenerateFromWorkbook(StudyRoot));
+            CableForceReportPath = File.Exists(path) ? path : null;
+            Message = CableForceReportPath is null
+                ? "No cable-force results in the workbook — configure cables and a cable result case in Output Settings, then re-run."
+                : $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
+        }
+        catch (Exception ex) { Message = ex.Message; Warn("Regenerate Cable Force Report", ex.Message); }
+        finally { IsBusy = false; }
+    }
+
     private void AddPostProcessRow(COT_VCF.Domain.Results.CandidateResultDto dto)
     {
         var points = dto.Groups.Sum(g => g.Points.Count);
         var valid = dto.Groups.Sum(g => g.Points.Count(p => p.Status == COT_VCF.Domain.Results.ResultValueStatus.Valid));
-        var row = new PostProcessRow(dto.IterationKey, dto.ExtractionStatus.ToString(), points, valid, dto.Warnings.Count, dto.DiagnosticReportRelativePath);
+        var p = dto.Parameters;
+        var fileName = string.IsNullOrEmpty(dto.CandidateModelPath) ? $"{dto.IterationKey}.sdb" : Path.GetFileName(dto.CandidateModelPath);
+        var description = $"{p.LoadingLabel} · H {p.TrussHeightM:0.##} m · {p.PretensionLabel}";
+        var row = new PostProcessRow(dto.IterationKey, fileName, description, dto.ExtractionStatus.ToString(),
+            points, valid, dto.Warnings.Count, dto.CandidateModelPath, dto.DiagnosticReportRelativePath);
         void add() { PostProcessRows.Add(row); Notify(nameof(PostProcessStatus)); }
         if (System.Windows.Application.Current?.Dispatcher is { } d && !d.CheckAccess()) d.Invoke(add); else add();
     }
@@ -1167,11 +1395,16 @@ public sealed class MainViewModel : Observable
     {
         try
         {
+            useCurrentRunArtifacts = false;
+            currentRunWorkbookPath = null;
             var report = Directory.Exists(StudyRoot)
                 ? Path.Combine(StudyRoot, COT_VCF.Application.Results.DeflectionReportGenerator.ReportFileName) : null;
             DeflectionReportPath = report is not null && File.Exists(report) ? report : null;
+            var cfReport = Directory.Exists(StudyRoot)
+                ? Path.Combine(StudyRoot, COT_VCF.Application.Results.CableForceReportGenerator.ReportFileName) : null;
+            CableForceReportPath = cfReport is not null && File.Exists(cfReport) ? cfReport : null;
         }
-        catch { DeflectionReportPath = null; }
+        catch { DeflectionReportPath = null; CableForceReportPath = null; }
         Notify(nameof(HasResultsWorkbook));
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(PostProcessStatus));
@@ -1196,7 +1429,7 @@ public sealed class MainViewModel : Observable
     private bool LoadingCriteriaValid() => State.TributaryWidthB > 0 && double.IsFinite(State.TributaryWidthB) &&
         State.NumberOfStories >= 1 && State.NumberOfStories <= int.MaxValue && State.NumberOfStories == Math.Truncate(State.NumberOfStories) &&
         State.AppliedPoints.All(point => State.Geometry.Points.ContainsKey(point.PointName)) &&
-        State.LoadDefinitions.Count > 0 && State.LoadDefinitions.All(row => row.CandidateValues.Count > 0 && State.LoadPatterns.Contains(row.LoadName, StringComparer.Ordinal)) &&
+        State.LoadDefinitions.Count > 0 && State.LoadDefinitions.All(row => row.CandidateCount > 0 && row.CandidateCount <= LoadDefinition.MaterializeCeiling && State.LoadPatterns.Contains(row.LoadName, StringComparer.Ordinal)) &&
         !State.LoadDefinitions.GroupBy(row => row.LoadName, StringComparer.Ordinal).Any(group => group.Count() > 1);
 
     public LoadingCandidatePreview? CreateLoadingCandidatePreview()
@@ -1222,7 +1455,14 @@ public sealed class MainViewModel : Observable
             tributaryAreas[points[i].PointName] = tributaryLength * State.TributaryWidthB;
         }
 
-        // A loading combination is a Cartesian pick of one qz per load definition.
+        // A loading combination is a Cartesian pick of one qz per load definition. Reject the product before
+        // materializing per-axis values or the preview rows.
+        var total = LoadingCandidates.TotalCount(State.LoadDefinitions);
+        if (total > StudyCompositionService.MaxPreviewRows)
+        {
+            Message = $"Loading preview has {total:N0} combinations; reduce it to {StudyCompositionService.MaxPreviewRows:N0} or fewer.";
+            return null;
+        }
         var combinations = LoadingCandidates.Enumerate(State.LoadDefinitions.ToArray()).ToArray();
         if (combinations.Length == 0)
         {
@@ -1544,6 +1784,7 @@ public sealed class MainViewModel : Observable
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
             nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount),
             nameof(HasDeflectionReport), nameof(HasNoDeflectionReport), nameof(DeflectionReportUri), nameof(DeflectionReportName),
+            nameof(HasCableForceReport), nameof(CableForceReportName),
             nameof(HasResultsWorkbook), nameof(ResultsWorkbookPath), nameof(PostProcessStatus)
         }) Notify(name);
         NotifySharedViewer();

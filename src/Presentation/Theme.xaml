@@ -16,6 +16,21 @@
  <SolidColorBrush x:Key="Frame" Color="#5A6470"/>
  <SolidColorBrush x:Key="Selected" Color="#DCEBFB"/>
  <SolidColorBrush x:Key="SelectedBorder" Color="#AFC7DF"/>
+ <!-- Translucent-looking chip behind floating viewer controls / legends. -->
+ <SolidColorBrush x:Key="Overlay" Color="#F2F3F5"/>
+ <!-- Truss chord-group identity — used for legend dots and viewer overlays. -->
+ <SolidColorBrush x:Key="ChordTop" Color="#C62828"/>
+ <SolidColorBrush x:Key="ChordMiddle" Color="#2563EB"/>
+ <SolidColorBrush x:Key="ChordBottom" Color="#2E7D32"/>
+ <!-- 45° diagonal hatch — marks a disabled / not-in-use surface -->
+ <DrawingBrush x:Key="HatchBrush" TileMode="Tile" Viewport="0,0,7,7" ViewportUnits="Absolute" Stretch="None">
+  <DrawingBrush.Drawing>
+   <GeometryDrawing>
+    <GeometryDrawing.Geometry><GeometryGroup><LineGeometry StartPoint="0,7" EndPoint="7,0"/><LineGeometry StartPoint="-1,1" EndPoint="1,-1"/><LineGeometry StartPoint="6,8" EndPoint="8,6"/></GeometryGroup></GeometryDrawing.Geometry>
+    <GeometryDrawing.Pen><Pen Thickness="1" Brush="#C7CCD2"/></GeometryDrawing.Pen>
+   </GeometryDrawing>
+  </DrawingBrush.Drawing>
+ </DrawingBrush>
  <!-- Viewport tokens (consumed by ModelCanvas.OnRender) — white model background -->
  <SolidColorBrush x:Key="ViewportBg" Color="#FFFFFF"/>
  <SolidColorBrush x:Key="ViewportGrid" Color="#EEF0F2"/>
@@ -25,6 +40,8 @@
  <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
  <p:NullableDoubleConverter x:Key="NullableDouble"/>
  <p:EnumMatchConverter x:Key="EnumMatch"/>
+ <p:CableSyncModeLabelConverter x:Key="SyncModeLabel"/>
+ <p:NonEmptyStringConverter x:Key="NonEmpty"/>
 
  <!-- ===================== APPLICATION LOGO ========================= -->
  <!-- Vierendeel truss: two chords, four verticals, three open bays.   -->
@@ -44,18 +61,53 @@
  </DrawingImage>
 
  <!-- ======================== TYPOGRAPHY =========================== -->
+ <!-- One type system for the whole app. Two families, one size ramp.   -->
+ <!--   UiFont   — every label, heading, banner, grid header and body.   -->
+ <!--   MonoFont — numeric values, IDs, paths, status/telemetry read-out.-->
+ <!-- Size ramp: 15 heading · 13 banner · 12 body · 11 section/label     -->
+ <!--            · 10.5 hint/mono-small · 10 caption.                     -->
+ <FontFamily x:Key="UiFont">Segoe UI</FontFamily>
+ <FontFamily x:Key="MonoFont">Consolas, Cascadia Mono, Courier New</FontFamily>
+
  <Style TargetType="Window">
-  <Setter Property="FontFamily" Value="Segoe UI"/>
+  <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
   <Setter Property="FontSize" Value="12"/>
   <Setter Property="Background" Value="{StaticResource Background}"/>
   <Setter Property="Foreground" Value="{StaticResource Text}"/>
  </Style>
- <Style TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/></Style>
- <Style x:Key="Heading" TargetType="TextBlock"><Setter Property="FontSize" Value="15"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Margin" Value="0,0,0,4"/></Style>
- <Style x:Key="Subheading" TargetType="TextBlock"><Setter Property="FontSize" Value="11"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="Margin" Value="0,2,0,6"/></Style>
- <Style x:Key="Hint" TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="FontSize" Value="10.5"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="Margin" Value="0,0,0,8"/></Style>
+ <Style TargetType="TextBlock">
+  <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+  <Setter Property="FontSize" Value="12"/>
+  <Setter Property="VerticalAlignment" Value="Center"/>
+ </Style>
+
+ <!-- Page / dialog heading. -->
+ <Style x:Key="Heading" TargetType="TextBlock"><Setter Property="FontFamily" Value="{StaticResource UiFont}"/><Setter Property="FontSize" Value="15"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{StaticResource Text}"/><Setter Property="Margin" Value="0,0,0,4"/></Style>
+ <!-- Section label above a group of controls (typically an ALL-CAPS string). -->
+ <Style x:Key="Subheading" TargetType="TextBlock"><Setter Property="FontFamily" Value="{StaticResource UiFont}"/><Setter Property="FontSize" Value="11"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="Margin" Value="0,2,0,6"/></Style>
+ <!-- Inline field label / small key text. -->
+ <Style x:Key="FieldLabel" TargetType="TextBlock"><Setter Property="FontFamily" Value="{StaticResource UiFont}"/><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Style>
+ <!-- Explanatory hint paragraph. -->
+ <Style x:Key="Hint" TargetType="TextBlock"><Setter Property="FontFamily" Value="{StaticResource UiFont}"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="FontSize" Value="10.5"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="Margin" Value="0,0,0,8"/></Style>
+ <!-- Smallest annotation / secondary caption. -->
+ <Style x:Key="Caption" TargetType="TextBlock"><Setter Property="FontFamily" Value="{StaticResource UiFont}"/><Setter Property="FontSize" Value="10"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Style>
+
+ <!-- Top-bar (banner) product name + eyebrow. -->
+ <Style x:Key="BannerTitle" TargetType="TextBlock"><Setter Property="FontFamily" Value="{StaticResource UiFont}"/><Setter Property="FontSize" Value="13"/><Setter Property="FontWeight" Value="Bold"/><Setter Property="Foreground" Value="{StaticResource Text}"/></Style>
+ <Style x:Key="BannerEyebrow" TargetType="TextBlock" BasedOn="{StaticResource Caption}"/>
+
+ <!-- Left workflow-tab header: title line + status line. -->
+ <Style x:Key="TabHeaderTitle" TargetType="TextBlock"><Setter Property="FontFamily" Value="{StaticResource UiFont}"/><Setter Property="FontSize" Value="12"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{StaticResource Text}"/></Style>
+ <Style x:Key="TabHeaderStatus" TargetType="TextBlock" BasedOn="{StaticResource Caption}"><Setter Property="Margin" Value="0,1,0,0"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style>
+
+ <!-- Monospace read-outs. Mono = inline value · MonoSmall = telemetry line
+      · MonoStrong = emphasised figure (accent). -->
+ <Style x:Key="Mono" TargetType="TextBlock"><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="FontSize" Value="12"/></Style>
+ <Style x:Key="MonoSmall" TargetType="TextBlock" BasedOn="{StaticResource Mono}"><Setter Property="FontSize" Value="10.5"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Style>
+ <Style x:Key="MonoStrong" TargetType="TextBlock" BasedOn="{StaticResource Mono}"><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Foreground" Value="{StaticResource Accent}"/></Style>
+
  <Style x:Key="Formula" TargetType="c:LatexTextBlock">
-  <Setter Property="FontFamily" Value="Cambria Math, Segoe UI"/>
+  <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
   <Setter Property="FontSize" Value="12"/>
   <Setter Property="Foreground" Value="{StaticResource Muted}"/>
   <Setter Property="TextWrapping" Value="Wrap"/>
@@ -181,7 +233,11 @@
   <Setter Property="SelectionUnit" Value="FullRow"/>
   <Setter Property="RowHeight" Value="24"/>
   <Setter Property="ColumnHeaderHeight" Value="26"/>
+  <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
   <Setter Property="FontSize" Value="12"/>
+  <Setter Property="RowHeaderWidth" Value="0"/>
+  <Setter Property="EnableRowVirtualization" Value="True"/>
+  <Setter Property="VerticalContentAlignment" Value="Center"/>
   <Setter Property="AlternatingRowBackground" Value="{StaticResource Surface}"/>
   <Setter Property="Background" Value="{StaticResource Raised}"/>
   <Setter Property="RowBackground" Value="{StaticResource Raised}"/>
@@ -232,11 +288,17 @@
   </Style.Triggers>
  </Style>
  <Style x:Key="NumericCell" TargetType="TextBlock">
-  <Setter Property="FontFamily" Value="Consolas"/>
+  <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
   <Setter Property="FontSize" Value="12"/>
   <Setter Property="TextAlignment" Value="Right"/>
   <Setter Property="VerticalAlignment" Value="Center"/>
   <Setter Property="Margin" Value="6,0"/>
+ </Style>
+ <Style x:Key="IdCell" TargetType="TextBlock">
+  <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+  <Setter Property="FontSize" Value="12"/>
+  <Setter Property="TextAlignment" Value="Center"/>
+  <Setter Property="VerticalAlignment" Value="Center"/>
  </Style>
 
  <!-- ================== LEFT WORKFLOW TAB STRIP =================== -->

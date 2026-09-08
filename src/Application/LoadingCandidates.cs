@@ -6,7 +6,7 @@ namespace COT_VCF.Application;
 /// <summary>
 /// Tab 01 loading candidate space. A loading scenario needs a value for <b>every</b> load definition,
 /// so the candidate count is the <b>Cartesian product</b> of each definition's candidate values —
-/// N_L = ∏ CandidateValues.Count — not the sum. Same shape as <see cref="PretensionCandidates"/>.
+/// N_L = ∏ CandidateCount — not the sum. Same shape as <see cref="PretensionCandidates"/>.
 /// </summary>
 public static class LoadingCandidates
 {
@@ -17,7 +17,7 @@ public static class LoadingCandidates
         foreach (var d in definitions)
         {
             any = true;
-            int n = d.CandidateValues.Count;
+            var n = d.CandidateCount;
             if (n <= 0) return BigInteger.Zero;
             total *= n;
         }

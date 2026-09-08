@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
-using System.Windows.Media;
 
 namespace COT_VCF.Presentation.Controls;
 
@@ -27,7 +26,10 @@ public sealed class LatexTextBlock : TextBlock
 
     public LatexTextBlock()
     {
-        FontFamily = new FontFamily("Cambria Math, Segoe UI");
+        // No distinct math typeface: this control only does sub/superscript layout.
+        // Font family is left to inherit — the "Formula" style (Theme.xaml) sets it to
+        // the shared UiFont token, and a styleless instance still inherits UiFont from
+        // the ambient TextBlock/Window style — so rendered math matches the rest of the UI.
         VerticalAlignment = VerticalAlignment.Center;
         DependencyPropertyDescriptor.FromProperty(FontSizeProperty, typeof(TextBlock))
             .AddValueChanged(this, (_, _) =>

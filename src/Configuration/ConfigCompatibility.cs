@@ -54,6 +54,12 @@ public sealed class ConfigCompatibilityValidator
         if (string.IsNullOrWhiteSpace(cfg.ConfigVersion)) r.FileErrors.Add("Missing configVersion.");
         else if (Array.IndexOf(SupportedVersions, cfg.ConfigVersion) < 0) r.FileErrors.Add($"Unsupported configVersion '{cfg.ConfigVersion}'.");
         if (cfg.PresentTabs == ConfigTabs.None) r.FileErrors.Add("The file contains no tab configuration to load.");
+        if (cfg.Units is null || cfg.Units.Length != "m" || cfg.Units.Force != "kN" || cfg.Units.Pressure != "kPa")
+            r.FileErrors.Add("Configuration units must be m, kN and kPa.");
+        if ((cfg.Model?.Points ?? []).GroupBy(p => p.Name, StringComparer.Ordinal).Any(g => g.Count() > 1) ||
+            (cfg.Model?.Cables ?? []).GroupBy(c => c.Name, StringComparer.Ordinal).Any(g => g.Count() > 1) ||
+            (cfg.Model?.Frames ?? []).GroupBy(f => f.Name, StringComparer.Ordinal).Any(g => g.Count() > 1))
+            r.FileErrors.Add("The model snapshot contains duplicate object names.");
         if (!r.FileValid) return r;
 
         var currentFile = state.Model is { } m ? System.IO.Path.GetFileName(m.Path) : "";
@@ -88,10 +94,13 @@ public sealed class ConfigCompatibilityValidator
                 if (row.IncrementEnabled)
                 {
                     if (row.MinQz is null || row.MaxQz is null || row.StepQz is null) tc.Problems.Add($"{tag}: range needs Min, Max and Step qz.");
+                    else if (!double.IsFinite(row.MinQz.Value) || !double.IsFinite(row.MaxQz.Value) || !double.IsFinite(row.StepQz.Value)) tc.Problems.Add($"{tag}: range values must be finite.");
+                    else if (row.MinQz < 0) tc.Problems.Add($"{tag}: minimum qz must be zero or greater.");
                     else if (row.StepQz <= 0) tc.Problems.Add($"{tag}: step qz must be greater than zero.");
                     else if (row.MaxQz < row.MinQz) tc.Problems.Add($"{tag}: max qz must be at least min qz.");
+                    else if (LoadingRowCount(row) > LoadDefinition.MaterializeCeiling) tc.Problems.Add($"{tag}: range exceeds {LoadDefinition.MaterializeCeiling:N0} values.");
                 }
-                else if (row.FixedQz is null || !double.IsFinite(row.FixedQz.Value)) tc.Problems.Add($"{tag}: a fixed qz value is required.");
+                else if (row.FixedQz is null || !double.IsFinite(row.FixedQz.Value) || row.FixedQz.Value < 0) tc.Problems.Add($"{tag}: a finite, nonnegative fixed qz value is required.");
             }
             if ((t2.LoadDefinitions ?? []).Where(row => !string.IsNullOrWhiteSpace(row.LoadName))
                 .GroupBy(row => row.LoadName, StringComparer.Ordinal).Any(group => group.Count() > 1))
@@ -108,7 +117,8 @@ public sealed class ConfigCompatibilityValidator
             if (!Enum.IsDefined(t3.ReferenceElevation)) tc.Problems.Add("reference elevation is invalid.");
             if ((t3.TopPoints?.Count ?? 0) == 0 || (t3.MiddlePoints?.Count ?? 0) == 0 || (t3.BottomPoints?.Count ?? 0) == 0)
                 tc.Problems.Add("top, middle and bottom point groups are all required.");
-            if (!(t3.StepDeltaH > 0)) tc.Problems.Add("step ΔH must be greater than zero.");
+            if (!double.IsFinite(t3.MinDeltaH) || !double.IsFinite(t3.MaxDeltaH) || !double.IsFinite(t3.StepDeltaH)) tc.Problems.Add("height-range values must be finite.");
+            else if (!(t3.StepDeltaH > 0)) tc.Problems.Add("step ΔH must be greater than zero.");
             if (t3.MaxDeltaH < t3.MinDeltaH) tc.Problems.Add("max ΔH must be at least min ΔH.");
             foreach (var name in Concat(t3.TopPoints, t3.MiddlePoints, t3.BottomPoints)) CheckPoint(tc, name);
         }
@@ -117,18 +127,50 @@ public sealed class ConfigCompatibilityValidator
         if (cfg.Tab04CableForce is { } t4)
         {
             var tc = r.Cable; tc.Present = true;
-            foreach (var row in t4.Cables ?? [])
+            var rows = t4.Cables ?? [];
+            if (rows.Where(row => !string.IsNullOrWhiteSpace(row.CableName))
+                .GroupBy(row => row.CableName, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+                tc.Problems.Add("each cable can appear only once.");
+
+            var runtime = rows.Select(ToRuntimeCable).ToArray();
+            foreach (var cable in runtime) cable.Peers = () => runtime;
+
+            for (var index = 0; index < rows.Count; index++)
             {
+                var row = rows[index];
+                var cable = runtime[index];
                 var tag = Name(row.CableName);
                 if (string.IsNullOrWhiteSpace(row.PretensionLoadCase)) tc.Problems.Add($"{tag}: target-force load pattern is required.");
                 else if (!patterns.Contains(row.PretensionLoadCase)) tc.Problems.Add($"{tag}: load pattern {row.PretensionLoadCase} does not exist in the model. Cable target force assignments require a load pattern, not an analysis load case.");
-                if (row.Mode == CableForceMode.Range)
+                if (!Enum.IsDefined(row.Mode)) tc.Problems.Add($"{tag}: cable-force mode is invalid.");
+                if (!Enum.IsDefined(row.SyncMode)) tc.Problems.Add($"{tag}: Sync mode is invalid.");
+
+                if (cable.SyncMode == CableSyncMode.Independent && row.Mode == CableForceMode.Range)
                 {
                     if (row.MinForce is null || row.MaxForce is null || row.StepForce is null) tc.Problems.Add($"{tag}: range needs Min, Max and Step force.");
+                    else if (!double.IsFinite(row.MinForce.Value) || !double.IsFinite(row.MaxForce.Value) || !double.IsFinite(row.StepForce.Value)) tc.Problems.Add($"{tag}: range values must be finite.");
                     else if (row.StepForce <= 0) tc.Problems.Add($"{tag}: step force must be greater than zero.");
                     else if (row.MaxForce < row.MinForce) tc.Problems.Add($"{tag}: max force must be at least min force.");
+                    else if (cable.CandidateCount > CablePretensionConfig.MaterializeCeiling) tc.Problems.Add($"{tag}: range exceeds {CablePretensionConfig.MaterializeCeiling:N0} values.");
                 }
-                else if (row.FixedForce is null || !double.IsFinite(row.FixedForce.Value)) tc.Problems.Add($"{tag}: a fixed target force is required.");
+                else if (cable.SyncMode == CableSyncMode.Independent &&
+                         (row.FixedForce is null || !double.IsFinite(row.FixedForce.Value)))
+                    tc.Problems.Add($"{tag}: a fixed target force is required.");
+
+                if (cable.SyncMode != CableSyncMode.Independent)
+                {
+                    if (string.IsNullOrWhiteSpace(cable.ReferenceCableName)) tc.Problems.Add($"{tag}: {cable.SyncMode.Label()} needs a reference cable.");
+                    else if (CableSyncGraph.DirectReference(cable, runtime) is null) tc.Problems.Add($"{tag}: reference cable '{cable.ReferenceCableName}' does not exist.");
+                    else if (CableSyncGraph.RootOf(cable, runtime) is null) tc.Problems.Add($"{tag}: reference chain is broken or circular.");
+                    if (cable.SyncMode == CableSyncMode.SameStep &&
+                        (row.Mode != CableForceMode.Range || row.MinForce is not double lo || row.MaxForce is not double hi || !double.IsFinite(lo) || !double.IsFinite(hi) || hi < lo))
+                        tc.Problems.Add($"{tag}: Same Step needs finite Min and Max force values.");
+                    if (cable.SyncMode is CableSyncMode.SameRatio or CableSyncMode.SameOffset &&
+                        (row.SyncFactor is not double factor || !double.IsFinite(factor) || (cable.SyncMode == CableSyncMode.SameRatio && factor <= 0)))
+                        tc.Problems.Add($"{tag}: {cable.SyncMode.Label()} needs a {(cable.SyncMode == CableSyncMode.SameRatio ? "ratio greater than zero" : "finite offset")}.");
+                    if (ResolvedEndpointForces(cable, runtime).Any(value => !double.IsFinite(value)))
+                        tc.Problems.Add($"{tag}: resolved Sync force is not finite.");
+                }
 
                 if (!currentCables.TryGetValue(row.CableName, out var cm)) { tc.Problems.Add($"missing cable {row.CableName}"); continue; }
                 if (savedCables.TryGetValue(row.CableName, out var sc))
@@ -142,6 +184,8 @@ public sealed class ConfigCompatibilityValidator
                     }
                 }
             }
+            if (PretensionCandidates.FindCycle(runtime) is { Count: > 0 } cycle)
+                tc.Problems.Add($"circular Sync reference: {string.Join(" → ", cycle)} → {cycle[0]}.");
         }
 
         // ---- Tab 04 Output Settings ----
@@ -255,6 +299,72 @@ public sealed class ConfigCompatibilityValidator
         var count = Math.Floor((h.MaxDeltaH - h.MinDeltaH) / h.StepDeltaH + 1e-9) + 1;
         return count > long.MaxValue ? long.MaxValue : (long)count;
     }
+    private static BigInteger LoadingRowCount(LoadingRowDto row)
+    {
+        if (!row.IncrementEnabled) return row.FixedQz is double fixedQz && double.IsFinite(fixedQz) && fixedQz >= 0 ? BigInteger.One : BigInteger.Zero;
+        if (row.MinQz is not double min || row.MaxQz is not double max || row.StepQz is not double step ||
+            !double.IsFinite(min) || !double.IsFinite(max) || !double.IsFinite(step) || min < 0 || max < min || step <= 0) return BigInteger.Zero;
+        var intervals = Math.Floor((max - min) / step + 1e-10);
+        return !double.IsFinite(intervals) ? new BigInteger(LoadDefinition.MaterializeCeiling) + 1 : new BigInteger(intervals) + 1;
+    }
+
+    private static CablePretensionConfig ToRuntimeCable(CableForceRowDto row)
+    {
+        var (mode, reference) = ResolveSync(row);
+        return new CablePretensionConfig
+        {
+            CableName = row.CableName,
+            LoadPattern = row.PretensionLoadCase,
+            ApplyRange = row.Mode == CableForceMode.Range,
+            TargetForce = row.FixedForce,
+            MinForce = row.MinForce,
+            MaxForce = row.MaxForce,
+            StepForce = row.StepForce,
+            SyncMode = mode,
+            ReferenceCableName = reference,
+            SyncFactor = row.SyncFactor
+        };
+    }
+
+    private static (CableSyncMode Mode, string? Reference) ResolveSync(CableForceRowDto row)
+    {
+        if (Enum.IsDefined(row.SyncMode) && row.SyncMode != CableSyncMode.Independent && !string.IsNullOrWhiteSpace(row.ReferenceCableName))
+            return (row.SyncMode, row.ReferenceCableName);
+        if (!string.IsNullOrWhiteSpace(row.SameStepCableName)) return (CableSyncMode.SameStep, row.SameStepCableName);
+        if (!string.IsNullOrWhiteSpace(row.SameAsCableName)) return (CableSyncMode.SameValues, row.SameAsCableName);
+        return (Enum.IsDefined(row.SyncMode) ? row.SyncMode : CableSyncMode.Independent, row.ReferenceCableName);
+    }
+
+    private static IReadOnlyList<double> ResolvedEndpointForces(CablePretensionConfig cable, IReadOnlyList<CablePretensionConfig> all)
+    {
+        var chain = new List<CablePretensionConfig>();
+        var seen = new HashSet<CablePretensionConfig>();
+        var current = cable;
+        while (seen.Add(current))
+        {
+            chain.Add(current);
+            if (current.SyncMode == CableSyncMode.Independent) break;
+            if (CableSyncGraph.DirectReference(current, all) is not { } next) return [];
+            current = next;
+        }
+        if (chain[^1].SyncMode != CableSyncMode.Independent) return [];
+        chain.Reverse();
+        var root = chain[0];
+        var values = root.ApplyRange
+            ? new[] { root.MinForce ?? double.NaN, root.MaxForce ?? double.NaN }
+            : new[] { root.TargetForce ?? double.NaN };
+        foreach (var follower in chain.Skip(1))
+        {
+            values = follower.SyncMode switch
+            {
+                CableSyncMode.SameStep => new[] { follower.MinForce ?? double.NaN, follower.MaxForce ?? double.NaN },
+                CableSyncMode.SameRatio => values.Select(v => v * (follower.SyncFactor ?? double.NaN)).ToArray(),
+                CableSyncMode.SameOffset => values.Select(v => v + (follower.SyncFactor ?? double.NaN)).ToArray(),
+                _ => values
+            };
+        }
+        return values;
+    }
     private static BigInteger PretensionCandidateCount(CotVcfConfigDto cfg, ApplicationState state)
     {
         if (cfg.Tab04CableForce is not { } cableConfig) return PretensionCandidates.TotalCount(state.Cables);
@@ -262,6 +372,14 @@ public sealed class ConfigCompatibilityValidator
         if (cableConfig.Cables.Count == 0) return BigInteger.Zero;
         foreach (var cable in cableConfig.Cables)
         {
+            // a follower (any non-Independent Sync mode with a reference) adds no independent axis.
+            // Tolerate v1.x SameAs / SameStep field names during migration.
+            var isFollower =
+                (cable.SyncMode != CableSyncMode.Independent && !string.IsNullOrEmpty(cable.ReferenceCableName))
+                || !string.IsNullOrEmpty(cable.SameStepCableName)
+                || !string.IsNullOrEmpty(cable.SameAsCableName);
+            if (isFollower) continue;
+
             if (cable.Mode == CableForceMode.Fixed)
             {
                 if (cable.FixedForce is not double value || !double.IsFinite(value)) return BigInteger.Zero;
