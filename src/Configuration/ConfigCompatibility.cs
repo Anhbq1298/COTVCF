@@ -279,11 +279,42 @@ public sealed class ConfigCompatibilityValidator
                 tc.Problems.Add("fixed pretension candidate ID is invalid.");
             else if (t6.StudyMode == IterationStudyMode.FixPretension && CandidateOrdinal(t6.FixedPretensionCandidateId) > PretensionCandidateCount(cfg, state))
                 tc.Problems.Add($"fixed pretension candidate {t6.FixedPretensionCandidateId} does not exist.");
+            if (t6.UseCandidateFilters)
+            {
+                ValidateBounds(t6.MinLoadingKpa, t6.MaxLoadingKpa, "loading", tc.Problems);
+                ValidateBounds(t6.MinHeightM, t6.MaxHeightM, "height", tc.Problems);
+                ValidateBounds(t6.MinPretensionKn, t6.MaxPretensionKn, "pretension", tc.Problems);
+                ValidatePositive(t6.MaxLoadingToHeightRatio, "maximum loading/height ratio", tc.Problems);
+                ValidatePositive(t6.MaxPretensionToHeightRatio, "maximum pretension/height ratio", tc.Problems);
+            }
+            ValidateBounds(t6.DeflectionPassLimitMm, t6.DeflectionFailLimitMm, "absolute deflection", tc.Problems);
+            ValidateBounds(t6.MinimumCableForceKn, t6.MaximumCableForceKn, "cable force", tc.Problems);
+            if (t6.DeflectionPassLimitMm is double pass && pass < 0) tc.Problems.Add("deflection Pass limit cannot be negative.");
+            if (t6.DeflectionFailLimitMm is double fail && fail < 0) tc.Problems.Add("deflection Fail limit cannot be negative.");
+            if (!double.IsFinite(t6.DecisionWarningUtilization) || t6.DecisionWarningUtilization <= 0 || t6.DecisionWarningUtilization >= 1)
+                tc.Problems.Add("decision warning utilization must be between zero and one.");
+            var weights = new[] { t6.DeflectionRankWeight, t6.PretensionRankWeight, t6.HeightRankWeight };
+            if (weights.Any(value => !double.IsFinite(value) || value < 0) || weights.Sum() <= 0)
+                tc.Problems.Add("decision ranking weights must be finite, nonnegative, and have a positive total.");
             // OutputDirectory is retained for JSON compatibility only. Runtime study paths are always
             // derived from the connected immutable baseline model.
         }
 
         return r;
+    }
+
+    private static void ValidateBounds(double? minimum, double? maximum, string name, List<string> problems)
+    {
+        if (minimum is double lo && !double.IsFinite(lo)) problems.Add($"minimum {name} filter must be finite.");
+        if (maximum is double hi && !double.IsFinite(hi)) problems.Add($"maximum {name} filter must be finite.");
+        if (minimum is double min && maximum is double max && double.IsFinite(min) && double.IsFinite(max) && max < min)
+            problems.Add($"maximum {name} filter must be greater than or equal to its minimum.");
+    }
+
+    private static void ValidatePositive(double? value, string name, List<string> problems)
+    {
+        if (value is double number && (!double.IsFinite(number) || number <= 0))
+            problems.Add($"{name} must be finite and greater than zero.");
     }
 
     private static IEnumerable<string> Concat(params List<string>?[] groups) =>

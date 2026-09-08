@@ -1,6 +1,7 @@
 using COT_VCF.Application;
 using COT_VCF.Configuration;
 using COT_VCF.Domain;
+using System.Numerics;
 
 internal static class StudyComposerChecks
 {
@@ -54,6 +55,47 @@ internal static class StudyComposerChecks
               combined.Iterations[1].IterationKey == "L01_H01_P02" &&
               combined.Iterations[6].IterationKey == "L01_H02_P01" &&
               combined.Iterations[36].IterationKey == "L02_H01_P01", "Cartesian ordering is deterministic");
+
+        var filteredState = CreateState();
+        filteredState.Study.Mode = IterationStudyMode.Combined;
+        filteredState.Study.UseCandidateFilters = true;
+        filteredState.Study.MaxLoadingKpa = 3;
+        filteredState.Study.MinHeightM = 20;
+        filteredState.Study.MaxPretensionKn = 1200;
+        filteredState.Study.MaxLoadingToHeightRatio = 0.12;
+        filteredState.Study.MaxPretensionToHeightRatio = 55;
+        var filtered = composer.Compose(filteredState);
+        Check(filtered.UnfilteredRunCount == 216 && filtered.ExpectedRunCount == 20 &&
+              filtered.Iterations.Count == 20 && filtered.FilterAudit.ExcludedCount == 196,
+            "Persisted axis bounds and cross-dimension L/H + P/H predicates produce an exact audited count");
+        var filteredDto = new ConfigurationExtractor().ExtractStudySection(filteredState);
+        var restoredFilterState = CreateState();
+        var filterCheck = new ConfigValidationResult();
+        filterCheck.Study.Present = true;
+        new ConfigurationApplicator(restoredFilterState, new WorkflowService(new NoOpSap(), restoredFilterState))
+            .Apply(new CotVcfConfigDto { Tab05IterationStudy = filteredDto }, filterCheck);
+        Check(restoredFilterState.Study.UseCandidateFilters &&
+              restoredFilterState.Study.MaxLoadingToHeightRatio == 0.12 &&
+              composer.Compose(restoredFilterState).ExpectedRunCount == 20,
+            "Candidate filters round-trip through the project configuration and reproduce the same study rows");
+
+        var billionState = CreateState();
+        billionState.Study.Mode = IterationStudyMode.Combined;
+        billionState.LoadDefinitions[0].MaxQz = 1000;
+        billionState.Truss.MinimumHeight = 18;
+        billionState.Truss.MaximumHeight = 1017;
+        billionState.Truss.Increment = 1;
+        billionState.Cables[0].MinForce = 1000;
+        billionState.Cables[0].MaxForce = 1999;
+        billionState.Cables[0].StepForce = 1;
+        billionState.Study.UseCandidateFilters = true;
+        billionState.Study.MaxLoadingKpa = 1;
+        billionState.Study.MaxHeightM = 18;
+        billionState.Study.MaxPretensionKn = 1000;
+        var reduced = composer.Compose(billionState);
+        Check(reduced.UnfilteredRunCount == BigInteger.Parse("1000000000") &&
+              reduced.ExpectedRunCount == 1 && reduced.Iterations.Count == 1,
+            "A billion-row Cartesian space is counted exactly and reduced without materializing the product");
 
         foreach (var row in combined.Iterations.Take(4)) state.Study.SetRunSelected(row.IterationKey, false);
         var restored = composer.Compose(state);

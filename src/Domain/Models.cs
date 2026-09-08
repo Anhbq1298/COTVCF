@@ -497,11 +497,37 @@ public sealed class IterationStudyConfig : Observable
 {
     private IterationStudyMode mode = IterationStudyMode.FixPretension;
     private string fixedHeightCandidateId = "H01", fixedPretensionCandidateId = "P01", outputDirectory = "";
+    private bool useCandidateFilters;
+    private double? minLoadingKpa, maxLoadingKpa, minHeightM, maxHeightM, minPretensionKn, maxPretensionKn;
+    private double? maxLoadingToHeightRatio, maxPretensionToHeightRatio;
+    private double? deflectionPassLimitMm = 50, deflectionFailLimitMm = 75;
+    private double? minimumCableForceKn, maximumCableForceKn;
+    private double decisionWarningUtilization = 0.9;
+    private double deflectionRankWeight = 0.5, pretensionRankWeight = 0.3, heightRankWeight = 0.2;
     private readonly HashSet<string> excludedIterationKeys = new(StringComparer.Ordinal);
     public IterationStudyMode Mode { get => mode; set => Set(ref mode, value); }
     public string FixedHeightCandidateId { get => fixedHeightCandidateId; set => Set(ref fixedHeightCandidateId, value ?? ""); }
     public string FixedPretensionCandidateId { get => fixedPretensionCandidateId; set => Set(ref fixedPretensionCandidateId, value ?? ""); }
     public string OutputDirectory { get => outputDirectory; set => Set(ref outputDirectory, value?.Trim() ?? ""); }
+    public bool UseCandidateFilters { get => useCandidateFilters; set => Set(ref useCandidateFilters, value); }
+    public double? MinLoadingKpa { get => minLoadingKpa; set => Set(ref minLoadingKpa, value); }
+    public double? MaxLoadingKpa { get => maxLoadingKpa; set => Set(ref maxLoadingKpa, value); }
+    public double? MinHeightM { get => minHeightM; set => Set(ref minHeightM, value); }
+    public double? MaxHeightM { get => maxHeightM; set => Set(ref maxHeightM, value); }
+    public double? MinPretensionKn { get => minPretensionKn; set => Set(ref minPretensionKn, value); }
+    public double? MaxPretensionKn { get => maxPretensionKn; set => Set(ref maxPretensionKn, value); }
+    /// <summary>Optional cross-dimension predicate: max |qz| / height must not exceed this kPa/m value.</summary>
+    public double? MaxLoadingToHeightRatio { get => maxLoadingToHeightRatio; set => Set(ref maxLoadingToHeightRatio, value); }
+    /// <summary>Optional cross-dimension predicate: max |target force| / height must not exceed this kN/m value.</summary>
+    public double? MaxPretensionToHeightRatio { get => maxPretensionToHeightRatio; set => Set(ref maxPretensionToHeightRatio, value); }
+    public double? DeflectionPassLimitMm { get => deflectionPassLimitMm; set => Set(ref deflectionPassLimitMm, value); }
+    public double? DeflectionFailLimitMm { get => deflectionFailLimitMm; set => Set(ref deflectionFailLimitMm, value); }
+    public double? MinimumCableForceKn { get => minimumCableForceKn; set => Set(ref minimumCableForceKn, value); }
+    public double? MaximumCableForceKn { get => maximumCableForceKn; set => Set(ref maximumCableForceKn, value); }
+    public double DecisionWarningUtilization { get => decisionWarningUtilization; set => Set(ref decisionWarningUtilization, value); }
+    public double DeflectionRankWeight { get => deflectionRankWeight; set => Set(ref deflectionRankWeight, value); }
+    public double PretensionRankWeight { get => pretensionRankWeight; set => Set(ref pretensionRankWeight, value); }
+    public double HeightRankWeight { get => heightRankWeight; set => Set(ref heightRankWeight, value); }
     public IReadOnlyCollection<string> ExcludedIterationKeys => excludedIterationKeys;
 
     public bool IsRunSelected(string iterationKey) => !excludedIterationKeys.Contains(iterationKey);

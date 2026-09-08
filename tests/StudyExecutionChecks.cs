@@ -14,6 +14,8 @@ internal static class StudyExecutionChecks
         SnapshotResolvesCompleteCandidates();
         OneWorkerPersistsAndVerifiesOneCandidate();
         ArtifactFailureIsReportedWithoutStalePaths();
+        ResumeAndRetryUseLatestCompatibleRun();
+        ExplicitRebuildArchivesInsteadOfOverwriting();
         OneWorkerDoesNotAccumulateOrLeakCandidateState();
         FixedModesAndCombinedPhysicallyApplyResolvedCandidates();
         ConnectedBaselineCountsAsWorkerOne();
@@ -89,6 +91,12 @@ internal static class StudyExecutionChecks
             var reportHtml = Path.Combine(studyFolder, "Deflection_Report.html");
             Check(File.Exists(xlsx) && File.Exists(reportHtml),
                 "Study run writes the consolidated Deflection workbook and the final HTML report to the Study folder");
+            var manifest = StudyRunJournal.TryRead(studyFolder);
+            Check(result.Run is not null && File.Exists(result.Run.ManifestPath) && manifest is not null &&
+                  manifest.RunId == result.Run.RunId && manifest.State == StudyRunState.Completed &&
+                  manifest.Candidates.Single(candidate => candidate.Selected).Status == StudyIterationStatus.Ready &&
+                  StudyRunJournal.ArtifactsAreIntact(manifest),
+                "Study run atomically records candidate status, provenance hashes, and verifiable artifacts");
             var readBack = COT_VCF.Application.Results.ConsolidatedResultWriter.Read(xlsx);
             Check(readBack.Count == 1 && readBack[0].IterationKey == job.IterationId &&
                   readBack[0].Groups.Single().Points.Count == 3 &&
@@ -124,6 +132,66 @@ internal static class StudyExecutionChecks
                   result.Artifacts.ErrorMessage!.Contains("simulated artifact failure", StringComparison.Ordinal) &&
                   coordinator.LastDeflectionReportPath is null && coordinator.LastCableForceReportPath is null,
                 "artifact failure is explicit and never reuses a prior report path");
+            var studyFolder = Path.GetDirectoryName(snapshot.Jobs.Single(job => job.RunIterate).IterationDirectory)!;
+            var manifest = StudyRunJournal.TryRead(studyFolder);
+            Check(result.Run is not null && manifest?.State == StudyRunState.CompletedWithErrors &&
+                  manifest.Artifacts.Count == 0,
+                "artifact failure is preserved in the run manifest without publishing stale artifact entries");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void ResumeAndRetryUseLatestCompatibleRun()
+    {
+        var (root, _, snapshot) = CreateSnapshot(3, 1);
+        try
+        {
+            var jobs = snapshot.Jobs.Where(job => job.RunIterate).ToArray();
+            var original = StudyRunJournal.Start(snapshot);
+            original.Report(new StudyExecutionProgress { IterationId = jobs[0].IterationId,
+                Stage = StudyWorkerStage.ApplyingGeometry, IterationStatus = StudyIterationStatus.ApplyingGeometry });
+            original.Report(new StudyExecutionProgress { IterationId = jobs[1].IterationId,
+                Stage = StudyWorkerStage.Waiting, IterationStatus = StudyIterationStatus.Failed, Message = "test failure" });
+            original.Report(new StudyExecutionProgress { IterationId = jobs[2].IterationId,
+                Stage = StudyWorkerStage.Completed, IterationStatus = StudyIterationStatus.Ready });
+
+            // A newer, incompatible latest manifest must not hide the compatible run retained in RunHistory.
+            _ = StudyRunJournal.Start(snapshot with { DeflectionOutputCase = "A_DIFFERENT_CASE" });
+            var assessment = new StudyResumeService().Assess(snapshot);
+            var resumed = new StudyResumeService().Select(snapshot, assessment, StudyRunIntent.ResumeInterrupted);
+            var retried = new StudyResumeService().Select(snapshot, assessment, StudyRunIntent.RetryFailed);
+            Check(assessment.Compatible && assessment.Manifest?.RunId == original.RunId &&
+                  assessment.ResumeIds.SetEquals([jobs[0].IterationId]) &&
+                  assessment.RetryIds.SetEquals([jobs[1].IterationId]),
+                "Resume discovery finds the latest compatible history and classifies unfinished, failed, and verified candidates");
+            Check(resumed.Jobs.Count(job => job.RunIterate) == 1 &&
+                  resumed.Jobs.Single(job => job.RunIterate).IterationId == jobs[0].IterationId &&
+                  retried.Jobs.Count(job => job.RunIterate) == 1 &&
+                  retried.Jobs.Single(job => job.RunIterate).IterationId == jobs[1].IterationId,
+                "Resume and Retry dispatch only their eligible candidate subsets");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void ExplicitRebuildArchivesInsteadOfOverwriting()
+    {
+        var (root, _, snapshot) = CreateSnapshot(1, 1);
+        try
+        {
+            var selected = snapshot.Jobs.Single(job => job.RunIterate);
+            var excluded = snapshot.Jobs.First(job => !job.RunIterate);
+            Directory.CreateDirectory(selected.IterationDirectory);
+            Directory.CreateDirectory(excluded.IterationDirectory);
+            File.WriteAllText(selected.ModelFullPath, "selected child bytes");
+            File.WriteAllText(Path.Combine(excluded.IterationDirectory, "keep.txt"), "excluded");
+            var archived = new StudyRebuildArchive().Archive(snapshot);
+            var archivedModel = Path.Combine(archived.ArchiveRoot, selected.IterationId, selected.ModelName);
+            Check(!Directory.Exists(selected.IterationDirectory) && File.Exists(archivedModel) &&
+                  File.ReadAllText(archivedModel) == "selected child bytes" &&
+                  File.Exists(Path.Combine(archived.ArchiveRoot, "RebuildArchive.json")),
+                "Explicit rebuild moves selected candidate data into a recoverable archive before rebuilding");
+            Check(File.Exists(Path.Combine(excluded.IterationDirectory, "keep.txt")),
+                "Explicit rebuild never moves or overwrites an excluded candidate folder");
         }
         finally { DeleteRoot(root); }
     }

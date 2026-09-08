@@ -116,6 +116,23 @@ public sealed class ConfigurationExtractor
         FixedPretensionCandidateId = s.Study.FixedPretensionCandidateId,
         OutputDirectory = DerivedStudyRoot(s),
         ExcludedIterationKeys = s.Study.ExcludedIterationKeys.OrderBy(k => k, StringComparer.Ordinal).ToList(),
+        UseCandidateFilters = s.Study.UseCandidateFilters,
+        MinLoadingKpa = s.Study.MinLoadingKpa,
+        MaxLoadingKpa = s.Study.MaxLoadingKpa,
+        MinHeightM = s.Study.MinHeightM,
+        MaxHeightM = s.Study.MaxHeightM,
+        MinPretensionKn = s.Study.MinPretensionKn,
+        MaxPretensionKn = s.Study.MaxPretensionKn,
+        MaxLoadingToHeightRatio = s.Study.MaxLoadingToHeightRatio,
+        MaxPretensionToHeightRatio = s.Study.MaxPretensionToHeightRatio,
+        DeflectionPassLimitMm = s.Study.DeflectionPassLimitMm,
+        DeflectionFailLimitMm = s.Study.DeflectionFailLimitMm,
+        MinimumCableForceKn = s.Study.MinimumCableForceKn,
+        MaximumCableForceKn = s.Study.MaximumCableForceKn,
+        DecisionWarningUtilization = s.Study.DecisionWarningUtilization,
+        DeflectionRankWeight = s.Study.DeflectionRankWeight,
+        PretensionRankWeight = s.Study.PretensionRankWeight,
+        HeightRankWeight = s.Study.HeightRankWeight,
     };
 
     private static string DerivedStudyRoot(ApplicationState state)

@@ -94,8 +94,9 @@ internal static class Program
                        vm.StudyIterations.All(row => row.HeightCandidateId == "H02"),
                     "Tab 5 switches directly from H01 to H02 without clearing the ComboBox");
                 var grids = FindVisuals<DataGrid>(window).ToArray();
-                Assert(grids.Any(grid => grid.Name == "StudyPreviewGrid" && grid.Items.Count == 36 && grid.Columns.Count == 9),
-                    "Study Preview DataGrid renders joint-load, cable-target, worker, status, run, and open columns");
+                Assert(grids.Any(grid => grid.Name == "StudyPreviewGrid" && grid.Items.Count == 36 && grid.Columns.Count == 10 &&
+                                         grid.Columns.Any(column => Equals(column.Header, "Resume"))),
+                    "Study Preview DataGrid renders joint-load, cable-target, worker, status, resume, run, and open columns");
 
                 vm.StudyWorkers.Add(new SapWorkerSnapshot
                 {

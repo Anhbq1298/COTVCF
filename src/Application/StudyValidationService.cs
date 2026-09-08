@@ -1,6 +1,7 @@
 using COT_VCF.Domain;
 using COT_VCF.Geometry;
 using System.IO;
+using COT_VCF.Application.Results;
 
 namespace COT_VCF.Application;
 
@@ -74,6 +75,19 @@ public sealed class StudyValidationService
             !composition.PretensionCandidates.Any(c => c.Id == state.Study.FixedPretensionCandidateId))
             Error("Fixed Parameter", "Select one valid pretension candidate from Tab 3.");
 
+        if (state.Study.UseCandidateFilters)
+        {
+            ValidateBounds(state.Study.MinLoadingKpa, state.Study.MaxLoadingKpa, "loading", Error);
+            ValidateBounds(state.Study.MinHeightM, state.Study.MaxHeightM, "height", Error);
+            ValidateBounds(state.Study.MinPretensionKn, state.Study.MaxPretensionKn, "pretension", Error);
+            ValidatePositive(state.Study.MaxLoadingToHeightRatio, "maximum loading/height ratio", Error);
+            ValidatePositive(state.Study.MaxPretensionToHeightRatio, "maximum pretension/height ratio", Error);
+            if (composition.ExpectedRunCount == 0)
+                Error("Candidate Filters", "The active candidate filters exclude every study iteration.");
+        }
+        try { StudyDecisionService.Validate(StudyDecisionCriteria.From(state.Study)); }
+        catch (Exception ex) { Error("Decision Criteria", ex.Message); }
+
         if (composition.PreviewLimitExceeded)
             Error("Study Preview", $"The study exceeds the {StudyCompositionService.MaxPreviewRows:N0}-row preview limit. Reduce the candidate space.");
         else if (composition.Iterations.Count == 0)
@@ -89,6 +103,20 @@ public sealed class StudyValidationService
             Error("Study Preview", "One or more generated output paths are invalid.");
 
         return issues.Distinct().ToArray();
+    }
+
+    private static void ValidateBounds(double? minimum, double? maximum, string name, Action<string, string> error)
+    {
+        if (minimum is double lo && !double.IsFinite(lo)) error("Candidate Filters", $"Minimum {name} must be finite.");
+        if (maximum is double hi && !double.IsFinite(hi)) error("Candidate Filters", $"Maximum {name} must be finite.");
+        if (minimum is double min && maximum is double max && double.IsFinite(min) && double.IsFinite(max) && max < min)
+            error("Candidate Filters", $"Maximum {name} must be greater than or equal to its minimum.");
+    }
+
+    private static void ValidatePositive(double? value, string name, Action<string, string> error)
+    {
+        if (value is double number && (!double.IsFinite(number) || number <= 0))
+            error("Candidate Filters", $"The {name} must be finite and greater than zero.");
     }
 
     private static void ValidateBaselineAndOutput(

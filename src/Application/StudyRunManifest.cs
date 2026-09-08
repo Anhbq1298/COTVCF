@@ -9,6 +9,7 @@ using COT_VCF.Domain;
 namespace COT_VCF.Application;
 
 public enum StudyRunState { Running, Completed, CompletedWithErrors, Cancelled, Failed }
+public enum StudyRunIntent { AllSelected, ResumeInterrupted, RetryFailed, RebuildSelected }
 
 public sealed class StudyRunManifest
 {
@@ -17,6 +18,8 @@ public sealed class StudyRunManifest
     public DateTimeOffset StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public StudyRunState State { get; set; } = StudyRunState.Running;
+    public StudyRunIntent Intent { get; set; }
+    public string? ParentRunId { get; set; }
     public string? Message { get; set; }
     public string BaselineModelPath { get; set; } = "";
     public string BaselineSha256 { get; set; } = "";
@@ -59,6 +62,7 @@ public sealed record StudyRunReference(
 public sealed class StudyRunJournal
 {
     public const string FileName = "StudyRun.json";
+    public const string HistoryDirectoryName = "RunHistory";
     private static readonly JsonSerializerOptions Json = new()
     {
         WriteIndented = true,
@@ -69,24 +73,31 @@ public sealed class StudyRunJournal
 
     private readonly object gate = new();
     private readonly string manifestPath;
+    private readonly string historyPath;
     private readonly StudyRunManifest manifest;
 
-    private StudyRunJournal(string manifestPath, StudyRunManifest manifest)
+    private StudyRunJournal(string manifestPath, string historyPath, StudyRunManifest manifest)
     {
         this.manifestPath = manifestPath;
+        this.historyPath = historyPath;
         this.manifest = manifest;
     }
 
     public string ManifestPath => manifestPath;
     public string RunId => manifest.RunId;
 
-    public static StudyRunJournal Start(StudyExecutionSnapshot snapshot)
+    public static StudyRunJournal Start(
+        StudyExecutionSnapshot snapshot,
+        StudyRunIntent intent = StudyRunIntent.AllSelected,
+        string? parentRunId = null)
     {
         var studyRoot = Path.GetFullPath(new StudyPathService().GetStudyRoot(snapshot.BaselineModelPath));
         Directory.CreateDirectory(studyRoot);
         var manifest = new StudyRunManifest
         {
             StartedAt = DateTimeOffset.UtcNow,
+            Intent = intent,
+            ParentRunId = parentRunId,
             BaselineModelPath = Path.GetFullPath(snapshot.BaselineModelPath),
             BaselineSha256 = Fingerprints.FileSha256(snapshot.BaselineModelPath),
             SnapshotSha256 = Fingerprints.SnapshotSha256(snapshot),
@@ -105,7 +116,9 @@ public sealed class StudyRunJournal
                 Message = job.RunIterate ? "Queued for dispatch." : "Excluded from this run."
             }).ToList()
         };
-        var journal = new StudyRunJournal(Path.Combine(studyRoot, FileName), manifest);
+        var historyRoot = Path.Combine(studyRoot, HistoryDirectoryName);
+        var historyPath = Path.Combine(historyRoot, $"{manifest.StartedAt:yyyyMMddTHHmmssfffZ}_{manifest.RunId}.json");
+        var journal = new StudyRunJournal(Path.Combine(studyRoot, FileName), historyPath, manifest);
         journal.Save();
         return journal;
     }
@@ -173,17 +186,65 @@ public sealed class StudyRunJournal
         catch { return null; }
     }
 
-    public static bool ArtifactsAreIntact(StudyRunManifest manifest) =>
-        manifest.Artifacts.Count > 0 && manifest.Artifacts.All(entry =>
+    public static StudyRunManifest? TryReadLatestCompatible(StudyExecutionSnapshot snapshot)
+    {
+        try
         {
-            try
-            {
-                var full = Path.GetFullPath(entry.Path);
-                return File.Exists(full) && new FileInfo(full).Length == entry.Size &&
-                       string.Equals(Fingerprints.FileSha256(full), entry.Sha256, StringComparison.OrdinalIgnoreCase);
-            }
-            catch { return false; }
-        });
+            var root = Path.GetFullPath(new StudyPathService().GetStudyRoot(snapshot.BaselineModelPath));
+            var baselineHash = Fingerprints.FileSha256(snapshot.BaselineModelPath);
+            var snapshotHash = Fingerprints.SnapshotSha256(snapshot);
+            var paths = new List<string> { Path.Combine(root, FileName) };
+            var historyRoot = Path.Combine(root, HistoryDirectoryName);
+            if (Directory.Exists(historyRoot)) paths.AddRange(Directory.EnumerateFiles(historyRoot, "*.json"));
+            return paths.Where(File.Exists)
+                .Select(TryReadPath)
+                .Where(item => item is not null &&
+                    item.BaselineSha256.Equals(baselineHash, StringComparison.OrdinalIgnoreCase) &&
+                    item.SnapshotSha256.Equals(snapshotHash, StringComparison.OrdinalIgnoreCase))
+                .DistinctBy(item => item!.RunId)
+                .OrderByDescending(item => item!.StartedAt)
+                .FirstOrDefault();
+        }
+        catch { return null; }
+    }
+
+    public static bool ArtifactsAreIntact(StudyRunManifest manifest) =>
+        manifest.Artifacts.Count > 0 && manifest.Artifacts.All(ArtifactIsIntact);
+
+    public static string? ValidArtifactPath(StudyRunManifest manifest, string kind)
+    {
+        var artifact = manifest.Artifacts.FirstOrDefault(item => item.Kind.Equals(kind, StringComparison.Ordinal));
+        return artifact is not null && ArtifactIsIntact(artifact) ? Path.GetFullPath(artifact.Path) : null;
+    }
+
+    public static bool RefreshArtifact(string studyRoot, string kind, string path)
+    {
+        try
+        {
+            var root = Path.GetFullPath(studyRoot);
+            var full = Path.GetFullPath(path);
+            if (!File.Exists(full)) return false;
+            var manifest = TryRead(root);
+            if (manifest is null) return false;
+            manifest.Artifacts.RemoveAll(item => item.Kind.Equals(kind, StringComparison.Ordinal));
+            manifest.Artifacts.Add(new StudyRunArtifactManifest(
+                kind, full, new FileInfo(full).Length, Fingerprints.FileSha256(full)));
+            AtomicFile.WriteAllText(Path.Combine(root, FileName), JsonSerializer.Serialize(manifest, Json));
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private static bool ArtifactIsIntact(StudyRunArtifactManifest entry)
+    {
+        try
+        {
+            var full = Path.GetFullPath(entry.Path);
+            return File.Exists(full) && new FileInfo(full).Length == entry.Size &&
+                   string.Equals(Fingerprints.FileSha256(full), entry.Sha256, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
 
     private static IEnumerable<StudyRunArtifactManifest> ArtifactEntries(StudyArtifactOutcome outcome)
     {
@@ -208,7 +269,18 @@ public sealed class StudyRunJournal
         lock (gate) SaveLocked();
     }
 
-    private void SaveLocked() => AtomicFile.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest, Json));
+    private void SaveLocked()
+    {
+        var json = JsonSerializer.Serialize(manifest, Json);
+        AtomicFile.WriteAllText(manifestPath, json);
+        AtomicFile.WriteAllText(historyPath, json);
+    }
+
+    private static StudyRunManifest? TryReadPath(string path)
+    {
+        try { return JsonSerializer.Deserialize<StudyRunManifest>(File.ReadAllText(path), Json); }
+        catch { return null; }
+    }
 }
 
 public static class Fingerprints
@@ -239,9 +311,10 @@ public static class Fingerprints
             snapshot.DeflectionOutputCase,
             snapshot.CableResultCables,
             snapshot.CableResultLoadCase,
+            FilteredCandidateKeys = snapshot.Jobs.OrderBy(job => job.RunIndex).Select(job => job.IterationId),
             Jobs = snapshot.Jobs.OrderBy(job => job.RunIndex).Select(job => new
             {
-                job.RunIndex, job.IterationId, job.RunIterate,
+                job.RunIndex, job.IterationId,
                 Loads = job.Loading.Loads.OrderBy(load => load.PointName, StringComparer.Ordinal)
                     .ThenBy(load => load.LoadPattern, StringComparer.Ordinal),
                 job.Height.Height, job.Height.DeltaH,

@@ -29,19 +29,22 @@ public sealed class StudyExecutionCoordinator
         StudyExecutionSnapshot snapshot,
         IProgress<StudyExecutionProgress> progress,
         CancellationToken token,
-        Action<CandidateResultDto>? onCandidateResult = null)
+        Action<CandidateResultDto>? onCandidateResult = null,
+        StudyRunIntent intent = StudyRunIntent.AllSelected,
+        string? parentRunId = null)
     {
         ValidateSnapshot(snapshot);
         LastDeflectionReportPath = null;
         LastCableForceReportPath = null;
         LastArtifactOutcome = StudyArtifactOutcome.NotProduced;
         LastRunReference = null;
-        var journal = StudyRunJournal.Start(snapshot);
+        var journal = StudyRunJournal.Start(snapshot, intent, parentRunId);
         LastRunReference = journal.Reference();
         var trackedProgress = new ForwardingProgress<StudyExecutionProgress>(item =>
         {
-            journal.Report(item);
-            progress.Report(item);
+            var tracked = item with { RunId = journal.RunId, ManifestPath = journal.ManifestPath };
+            journal.Report(tracked);
+            progress.Report(tracked);
         });
         var candidateResults = new ConcurrentBag<CandidateResultDto>();
         await using var pool = new SapWorkerPool(hostFactory, onCandidateResult: dto =>
@@ -51,6 +54,8 @@ public sealed class StudyExecutionCoordinator
         });
         try
         {
+            if (intent == StudyRunIntent.RebuildSelected)
+                _ = new StudyRebuildArchive().Archive(snapshot);
             Exception? executionError = null;
             StudyExecutionResult result;
             try

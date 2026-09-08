@@ -107,6 +107,8 @@ public sealed class StudyIteration : Observable
     private int? assignedWorkerId;
     private string? currentStageText;
     private string? errorMessage;
+    private string resumeDispositionText = "No prior run";
+    private string resumeReason = "No compatible run has been inspected.";
 
     public required long RunIndex { get; init; }
     public required string IterationId { get; init; }
@@ -170,6 +172,8 @@ public sealed class StudyIteration : Observable
     }
     public string? CurrentStageText { get => currentStageText; set => Set(ref currentStageText, value); }
     public string? ErrorMessage { get => errorMessage; set { if (Set(ref errorMessage, value)) Notify(nameof(HasError)); } }
+    public string ResumeDispositionText { get => resumeDispositionText; set => Set(ref resumeDispositionText, value); }
+    public string ResumeReason { get => resumeReason; set => Set(ref resumeReason, value); }
     public string WorkerText => AssignedWorkerId is int id ? $"#{id}" : "";
     public string StatusText => Status switch
     {

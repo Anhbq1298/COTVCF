@@ -175,4 +175,21 @@ public sealed class IterationStudyConfigDto
     // Retained for version-1.0 compatibility. Runtime output is derived from the connected baseline path.
     public string OutputDirectory { get; set; } = "";
     public List<string> ExcludedIterationKeys { get; set; } = new();
+    public bool UseCandidateFilters { get; set; }
+    public double? MinLoadingKpa { get; set; }
+    public double? MaxLoadingKpa { get; set; }
+    public double? MinHeightM { get; set; }
+    public double? MaxHeightM { get; set; }
+    public double? MinPretensionKn { get; set; }
+    public double? MaxPretensionKn { get; set; }
+    public double? MaxLoadingToHeightRatio { get; set; }
+    public double? MaxPretensionToHeightRatio { get; set; }
+    public double? DeflectionPassLimitMm { get; set; } = 50;
+    public double? DeflectionFailLimitMm { get; set; } = 75;
+    public double? MinimumCableForceKn { get; set; }
+    public double? MaximumCableForceKn { get; set; }
+    public double DecisionWarningUtilization { get; set; } = 0.9;
+    public double DeflectionRankWeight { get; set; } = 0.5;
+    public double PretensionRankWeight { get; set; } = 0.3;
+    public double HeightRankWeight { get; set; } = 0.2;
 }

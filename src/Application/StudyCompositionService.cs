@@ -40,7 +40,11 @@ public sealed record StudyCompositionResult(
     BigInteger ExpectedRunCount,
     bool PreviewLimitExceeded,
     string EffectiveFixedHeightId,
-    string EffectiveFixedPretensionId);
+    string EffectiveFixedPretensionId)
+{
+    public BigInteger UnfilteredRunCount { get; init; } = ExpectedRunCount;
+    public StudyFilterAudit FilterAudit { get; init; } = StudyFilterAudit.None(ExpectedRunCount);
+}
 
 public sealed class StudyCompositionService
 {
@@ -56,11 +60,11 @@ public sealed class StudyCompositionService
         var pretensionCount = state.Cables.Count == 0 || state.Cables.Any(c => c.CandidateCount <= 0)
             ? BigInteger.Zero
             : PretensionCandidates.TotalCount(state.Cables);
-        var expected = StudyPlan.TotalRuns(state.Study.Mode, ToIntCount(loadCount), heightCount, pretensionCount);
+        var unfiltered = StudyPlan.TotalRuns(state.Study.Mode, ToIntCount(loadCount), heightCount, pretensionCount);
 
         var candidateLimitExceeded = loadCount > MaxPreviewRows || heightCount > MaxPreviewRows || pretensionCount > MaxPreviewRows;
         if (loadCount <= 0 || heightCount <= 0 || pretensionCount <= 0 || candidateLimitExceeded)
-            return Empty(expected, candidateLimitExceeded || expected > MaxPreviewRows, state.Study);
+            return Empty(unfiltered, candidateLimitExceeded || unfiltered > MaxPreviewRows, state.Study);
 
         var loads = LoadingCandidates.Enumerate(state.LoadDefinitions.ToArray())
             .Select(c =>
@@ -104,17 +108,19 @@ public sealed class StudyCompositionService
 
         var fixedHeight = ResolveId(state.Study.FixedHeightCandidateId, heights.Select(c => c.Id));
         var fixedPretension = ResolveId(state.Study.FixedPretensionCandidateId, pretensions.Select(c => c.Id));
-        if (expected > MaxPreviewRows)
-            return new(loads, heights, pretensions, [], expected, true, fixedHeight, fixedPretension);
-
         int fixedHeightIndex = Array.FindIndex(heights, c => c.Id == fixedHeight);
         int fixedPretensionIndex = Array.FindIndex(pretensions, c => c.Id == fixedPretension);
         if ((state.Study.Mode == IterationStudyMode.FixHeight && fixedHeightIndex < 0) ||
             (state.Study.Mode == IterationStudyMode.FixPretension && fixedPretensionIndex < 0))
-            return new(loads, heights, pretensions, [], expected, false, fixedHeight, fixedPretension);
-        var rows = new List<StudyIteration>((int)expected);
-        foreach (var run in StudyPlan.Enumerate(state.Study.Mode, loads.Length, heights.Length, pretensions.LongLength,
-                     fixedHeightIndex, fixedPretensionIndex))
+            return new(loads, heights, pretensions, [], BigInteger.Zero, false, fixedHeight, fixedPretension)
+                { UnfilteredRunCount = unfiltered, FilterAudit = new(unfiltered, 0, new Dictionary<string, BigInteger>()) };
+        var filter = new StudyCandidateFilter().Evaluate(state.Study, state.Study.Mode, loads, heights, pretensions,
+            fixedHeightIndex, fixedPretensionIndex);
+        if (filter.Count > MaxPreviewRows)
+            return new(loads, heights, pretensions, [], filter.Count, true, fixedHeight, fixedPretension)
+                { UnfilteredRunCount = unfiltered, FilterAudit = filter.Audit };
+        var rows = new List<StudyIteration>((int)filter.Count);
+        foreach (var run in filter.Enumerate())
         {
             var load = loads[run.LoadIndex];
             var height = heights[run.HeightIndex];
@@ -150,7 +156,8 @@ public sealed class StudyCompositionService
             });
         }
 
-        return new(loads, heights, pretensions, rows, expected, false, fixedHeight, fixedPretension);
+        return new(loads, heights, pretensions, rows, filter.Count, false, fixedHeight, fixedPretension)
+            { UnfilteredRunCount = unfiltered, FilterAudit = filter.Audit };
     }
 
     public static string CandidateId(char prefix, long zeroBasedIndex) => $"{prefix}{zeroBasedIndex + 1:D2}";

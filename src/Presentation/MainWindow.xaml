@@ -629,6 +629,30 @@
          </StackPanel>
         </Border>
 
+        <Expander Header="CANDIDATE FILTERS" Margin="0,0,0,10">
+         <StackPanel Margin="8,5,8,8">
+          <CheckBox Content="Enable persisted engineering filters" IsChecked="{Binding State.Study.UseCandidateFilters}" Margin="0,0,0,5"/>
+          <Grid IsEnabled="{Binding State.Study.UseCandidateFilters}">
+           <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="76"/><ColumnDefinition Width="76"/></Grid.ColumnDefinitions>
+           <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+           <TextBlock Grid.Column="1" Text="Min" Style="{StaticResource Hint}"/><TextBlock Grid.Column="2" Text="Max" Style="{StaticResource Hint}"/>
+           <TextBlock Grid.Row="1" Text="|qz| [kPa]" VerticalAlignment="Center"/>
+           <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding State.Study.MinLoadingKpa, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+           <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding State.Study.MaxLoadingKpa, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+           <TextBlock Grid.Row="2" Text="Height [m]" VerticalAlignment="Center"/>
+           <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding State.Study.MinHeightM, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+           <TextBox Grid.Row="2" Grid.Column="2" Text="{Binding State.Study.MaxHeightM, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+           <TextBlock Grid.Row="3" Text="|Pret.| [kN]" VerticalAlignment="Center"/>
+           <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding State.Study.MinPretensionKn, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+           <TextBox Grid.Row="3" Grid.Column="2" Text="{Binding State.Study.MaxPretensionKn, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+           <TextBlock Grid.Row="4" Text="Max ratio L/H · P/H" VerticalAlignment="Center" ToolTip="Cross-dimension predicates: max |qz| / height [kPa/m] and max |pretension| / height [kN/m]"/>
+           <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding State.Study.MaxLoadingToHeightRatio, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" ToolTip="Maximum |qz| / height [kPa/m]"/>
+           <TextBox Grid.Row="4" Grid.Column="2" Text="{Binding State.Study.MaxPretensionToHeightRatio, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}" ToolTip="Maximum |pretension| / height [kN/m]"/>
+          </Grid>
+          <TextBlock Text="{Binding FilterAuditText}" Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+         </StackPanel>
+        </Expander>
+
         <TextBlock Text="CANDIDATE SUMMARY" Style="{StaticResource Subheading}"/>
         <Grid Margin="0,0,0,10">
          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="70"/><ColumnDefinition Width="120"/></Grid.ColumnDefinitions>
@@ -698,6 +722,9 @@
           <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" IsReadOnly="True" Width="105" MinWidth="92">
            <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding CurrentStageText}"/></Style></DataGridTextColumn.ElementStyle>
           </DataGridTextColumn>
+          <DataGridTextColumn Header="Resume" Binding="{Binding ResumeDispositionText}" IsReadOnly="True" Width="92" MinWidth="78">
+           <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding ResumeReason}"/></Style></DataGridTextColumn.ElementStyle>
+          </DataGridTextColumn>
           <DataGridCheckBoxColumn Header="Run" Binding="{Binding RunIterate, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="48" MinWidth="46"/>
           <DataGridTemplateColumn Header="Open" Width="52" MinWidth="50" IsReadOnly="True">
            <DataGridTemplateColumn.CellTemplate><DataTemplate>
@@ -725,6 +752,11 @@
           <StackPanel>
            <TextBlock Text="Total SAP2000 Instances" Style="{StaticResource Subheading}" Margin="0"/>
            <TextBlock Text="SAP2000 instances — defaults to 2. Worker 1 is the connected instance; 2 and 3 start in the background. Sequential per worker · parallel across workers." Style="{StaticResource Hint}" Margin="0"/>
+           <DockPanel Margin="0,3,0,0">
+            <Button DockPanel.Dock="Right" Content="Open Manifest" Command="{Binding OpenRunManifest}" Padding="8,1" MinHeight="22" Margin="8,0,0,0"/>
+           <TextBlock Text="{Binding RunProvenanceText}" Style="{StaticResource MonoSmall}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+          </DockPanel>
+          <TextBlock Text="{Binding ResumeStatusText}" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ResumeStatusText}" Margin="0,2,0,0"/>
           </StackPanel>
          </DockPanel>
          <Border Height="1" Background="{StaticResource Border}" Margin="0,0,0,6"/>
@@ -773,7 +805,19 @@
         </StackPanel>
        </Border>
 
-       <Border x:Name="StudyValidationPanel" Grid.Row="4" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Margin="0,8,0,0" MaxHeight="116">
+       <StackPanel Grid.Row="4">
+       <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Margin="0,8,0,0" Padding="8,5">
+        <StackPanel>
+         <DockPanel><TextBlock Text="PREFLIGHT" Style="{StaticResource Subheading}" Margin="0"/><TextBlock DockPanel.Dock="Right" Text="{Binding PreflightSummary}" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" ToolTip="{Binding PreflightSummary}"/></DockPanel>
+         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,3,0,0">
+          <ItemsControl ItemsSource="{Binding PreflightMetrics}">
+           <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+           <ItemsControl.ItemTemplate><DataTemplate><Border BorderBrush="{StaticResource Border}" BorderThickness="0,0,1,0" Padding="0,0,10,0" Margin="0,0,10,0" ToolTip="{Binding Detail}"><StackPanel><TextBlock Text="{Binding Label}" Style="{StaticResource Hint}"/><TextBlock Text="{Binding Value}" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold"/></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate>
+          </ItemsControl>
+         </ScrollViewer>
+        </StackPanel>
+       </Border>
+       <Border x:Name="StudyValidationPanel" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Margin="0,6,0,0" MaxHeight="116">
         <Grid>
          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
          <TextBlock Text="VALIDATION ISSUES" Style="{StaticResource Subheading}" Margin="8,5,8,4"/>
@@ -782,6 +826,7 @@
          <DataGrid Grid.Row="1" ItemsSource="{Binding Issues}" IsReadOnly="True" CanUserDeleteRows="False" HeadersVisibility="Column"
                    Visibility="{Binding HasValidationIssues, Converter={StaticResource BoolVisibility}}" MaxHeight="106">
           <DataGrid.Columns>
+           <DataGridTemplateColumn Header="Go" Width="42"><DataGridTemplateColumn.CellTemplate><DataTemplate><Button Content="Go" MinHeight="20" Padding="4,0" Margin="0" Command="{Binding DataContext.NavigateToIssue, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/></DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
            <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="76"/>
            <DataGridTextColumn Header="Section" Binding="{Binding Section}" Width="130"/>
            <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*">
@@ -789,14 +834,21 @@
            </DataGridTextColumn>
           </DataGrid.Columns>
          </DataGrid>
-        </Grid>
+       </Grid>
        </Border>
+       </StackPanel>
       </Grid>
      </Grid>
 
      <Grid Grid.Row="1" Margin="0,10,0,0">
       <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <Button Content="Validate Study" Command="{Binding Validate}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0">
+       <Button Content="Inspect Run" Command="{Binding InspectPreviousRun}" ToolTip="Check the latest manifest against this baseline and study definition"/>
+       <Button Content="Resume" Command="{Binding ResumeInterruptedStudy}" ToolTip="Continue only unfinished candidates from the latest compatible run"/>
+       <Button Content="Retry Failed" Command="{Binding RetryFailedStudy}" ToolTip="Dispatch only failed or cancelled candidates from the latest compatible run"/>
+       <Button Content="Rebuild Selected" Command="{Binding RebuildSelectedModels}" ToolTip="Archive selected candidate folders, then rebuild them without overwriting"/>
+      </StackPanel>
       <Button Grid.Column="2" Content="Open Study Folder" Command="{Binding OpenStudyFolder}"/>
       <Button Grid.Column="3" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 05 into the active project"/>
       <Button Grid.Column="4" Content="Cancel Remaining" Command="{Binding CancelStudy}"/>

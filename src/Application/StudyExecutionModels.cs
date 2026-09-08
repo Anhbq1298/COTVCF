@@ -44,6 +44,8 @@ public sealed record StudyExecutionSnapshot(
 
 public sealed record StudyExecutionProgress
 {
+    public string? RunId { get; init; }
+    public string? ManifestPath { get; init; }
     public int Total { get; init; }
     public int Completed { get; init; }
     public int Reused { get; init; }

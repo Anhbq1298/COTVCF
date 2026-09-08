@@ -20,6 +20,8 @@ public sealed class MainViewModel : Observable
     private readonly ConfigService config;
     private readonly StudyExecutionCoordinator? studyExecution;
     private readonly StudyExecutionSnapshotFactory studySnapshotFactory;
+    private readonly StudyResumeService studyResume = new();
+    private readonly StudyPreflightService studyPreflight = new();
     private readonly IOutputSettingsDialogService? outputDialogs;
     private readonly OutputGroupPreparationService? outputGroupPreparation;
     private bool busy;
@@ -40,6 +42,9 @@ public sealed class MainViewModel : Observable
     private int studyPeakConcurrent;
     private StudyBuildState studyBuildState = StudyBuildState.ReadyToBuild;
     private CancellationTokenSource? studyCancellation;
+    private StudyResumeAssessment? resumeAssessment;
+    private string resumeStatusText = "No compatible interrupted run inspected.";
+    private StudyPreflightReport preflightReport = StudyPreflightReport.Empty;
 
     public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); } }
     public bool IsIdle => !IsBusy;
@@ -305,6 +310,7 @@ public sealed class MainViewModel : Observable
             if (!Set(ref requestedWorkerCount, next)) return;
             Notify(nameof(RunStudyLabel));
             Notify(nameof(RunStudyToolTip));
+            InvalidateStudyValidation();
             SyncWorkerMonitorSlots();
         }
     }
@@ -397,13 +403,14 @@ public sealed class MainViewModel : Observable
         {
             var h = StudyNeedsFixedHeight ? "1" : HeightCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var p = StudyNeedsFixedPretension ? "1" : PretensionRuns.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
-            return $"{LoadingCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} \\times {h} \\times {p} = {StudyTotalRuns}";
+            var factors = $"{LoadingCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} \\times {h} \\times {p}";
+            var raw = studyComposition.UnfilteredRunCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+            return State.Study.UseCandidateFilters ? $"{factors} = {raw} \\rightarrow {StudyTotalRuns}" : $"{factors} = {StudyTotalRuns}";
         }
     }
     /// <summary>Symbolic + numeric total, e.g. "N_L \times N_H \times N_P = 4 \times 5 \times 2 = 40".</summary>
     public string StudySpaceHeadlineFormula => $"N_L \\times N_H \\times N_P = {StudySpaceFormula}";
-    public string StudyTotalRuns => StudyPlan.TotalRuns(State.Study.Mode, LoadingCandidateCount, HeightCandidateCount, PretensionRuns)
-        .ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+    public string StudyTotalRuns => studyComposition.ExpectedRunCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
     public string BaselineModelName => State.SessionBaselineModel?.Name ?? "Baseline unavailable";
     public string BaselineModelPath => State.SessionBaselineModel?.Path ?? "";
     public string StudyRoot
@@ -470,8 +477,18 @@ public sealed class MainViewModel : Observable
     private string? currentRunWorkbookPath;
     public string ResultsWorkbookPath => useCurrentRunArtifacts
         ? currentRunWorkbookPath ?? ""
-        : Directory.Exists(StudyRoot) ? Path.Combine(StudyRoot, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName) : "";
+        : discoveredWorkbookPath ?? "";
     public bool HasResultsWorkbook => !string.IsNullOrEmpty(ResultsWorkbookPath) && File.Exists(ResultsWorkbookPath);
+    private string? runManifestPath;
+    private string? currentRunId;
+    private StudyRunState? currentRunState;
+    private bool runArtifactsVerified;
+    public string? RunManifestPath => runManifestPath;
+    public bool HasRunManifest => !string.IsNullOrWhiteSpace(runManifestPath) && File.Exists(runManifestPath);
+    public string RunProvenanceText => currentRunId is null
+        ? "No study run manifest yet."
+        : $"Run {currentRunId[..Math.Min(8, currentRunId.Length)]} · {currentRunState} · " +
+          (currentRunState == StudyRunState.Running ? "recording provenance" : runArtifactsVerified ? "artifacts verified" : "artifact check required");
     public string PostProcessStatus
     {
         get
@@ -506,10 +523,22 @@ public sealed class MainViewModel : Observable
     public string ToolbarStudySummary => SelectedRunCount == 0
         ? "Study · nothing selected"
         : $"Study · {SelectedRunCount:N0} run{(SelectedRunCount == 1 ? "" : "s")} selected";
-    public bool CanRunStudy => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0;
+    public bool CanRunStudy => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0 && preflightReport.Ready;
     public string RunStudyToolTip => RequestedWorkerCount == 1
         ? "Uses the connected SAP2000 instance as worker 1 to build, analyze, save, and verify each child; no additional process is started."
         : $"Uses the connected SAP2000 instance as worker 1 and starts {RequestedWorkerCount - 1} additional processes. Up to {RequestedWorkerCount} child models build and analyze concurrently.";
+    public int ResumableRunCount => resumeAssessment?.ResumeIds.Count ?? 0;
+    public int RetryableRunCount => resumeAssessment?.RetryIds.Count ?? 0;
+    public bool CanResumeStudy => CanRunStudy && ResumableRunCount > 0;
+    public bool CanRetryStudy => CanRunStudy && RetryableRunCount > 0;
+    public bool CanRebuildStudy => CanRunStudy;
+    public string ResumeStatusText => resumeStatusText;
+    public IReadOnlyList<StudyPreflightMetric> PreflightMetrics => preflightReport.Metrics;
+    public string PreflightSummary => preflightReport.Summary;
+    public bool PreflightReady => preflightReport.Ready;
+    public string FilterAuditText => !State.Study.UseCandidateFilters
+        ? "Filters off · all generated combinations retained."
+        : $"{studyComposition.UnfilteredRunCount:N0} → {studyComposition.ExpectedRunCount:N0} rows · {studyComposition.FilterAudit.ExcludedCount:N0} filtered out.";
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
     public string StatusLine => State.IsSapConnected
         ? $"{ModelName}  ·  {State.Units}  ·  {(State.Model?.IsLocked == true ? "Locked" : "Unlocked")}"
@@ -625,9 +654,14 @@ public sealed class MainViewModel : Observable
     public Command ConfigureCableOutput { get; }
     public Command ValidateOutputSettings { get; }
     public Command Validate { get; }
+    public Command NavigateToIssue { get; }
     public Command SelectAllStudyRuns { get; }
     public Command ClearAllStudyRuns { get; }
     public Command BuildSelectedModels { get; }
+    public Command InspectPreviousRun { get; }
+    public Command ResumeInterruptedStudy { get; }
+    public Command RetryFailedStudy { get; }
+    public Command RebuildSelectedModels { get; }
     public Command RunStudyFromToolbar { get; }
     public Command CancelStudy { get; }
     public Command OpenStudyFolder { get; }
@@ -637,6 +671,7 @@ public sealed class MainViewModel : Observable
     public Command OpenCableForceReport { get; }
     public Command RegenerateCableForceReport { get; }
     public Command OpenResultsWorkbook { get; }
+    public Command OpenRunManifest { get; }
     public Command OpenCandidateDiagnostic { get; }
     public Command ViewIterationError { get; }
     public Command SaveTabConfig { get; }
@@ -732,20 +767,37 @@ public sealed class MainViewModel : Observable
         {
             if (CommitEditors?.Invoke() == false) return;
             RegenerateStudyPreview();
-            ValidateStudy(showMessage: true);
+            if (ValidateStudy(showMessage: true)) InspectResumeState();
         }, () => !IsBusy);
+        NavigateToIssue = new(p =>
+        {
+            if (p is not ValidationIssue issue) return;
+            SelectedTab = issue.Section switch
+            {
+                "Loading Setup" => TabLoading,
+                "Truss Height" => TabTruss,
+                "Pretension Setup" => TabPretension,
+                "Output Settings" or "Monitored Deflection" or "Member Forces" or "Foundation Reactions" or "Cable Forces" => TabOutput,
+                _ => TabIteration
+            };
+            Message = $"Review {issue.Section}: {issue.Message}";
+        });
         SelectAllStudyRuns = new(_ => SetAllStudyRuns(true), () => !IsBusy && StudyIterations.Count > 0);
         ClearAllStudyRuns = new(_ => SetAllStudyRuns(false), () => !IsBusy && StudyIterations.Count > 0);
         BuildSelectedModels = new(_ => RunStudy(), () => CanRunStudy);
+        InspectPreviousRun = new(_ => InspectResumeState(), () => !IsBusy && State.IsSapConnected && StudyIterations.Count > 0);
+        ResumeInterruptedStudy = new(_ => RunStudy(StudyRunIntent.ResumeInterrupted), () => CanResumeStudy);
+        RetryFailedStudy = new(_ => RunStudy(StudyRunIntent.RetryFailed), () => CanRetryStudy);
+        RebuildSelectedModels = new(_ => RunStudy(StudyRunIntent.RebuildSelected), () => CanRebuildStudy);
         // Run the study from anywhere: jump to the Iteration tab (worker monitor + validation live there) then build.
-        RunStudyFromToolbar = new(_ => { SelectedTab = TabIteration; RunStudy(); },
-            () => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0);
+        RunStudyFromToolbar = new(_ => { SelectedTab = TabIteration; RunStudy(); }, () => CanRunStudy);
         CancelStudy = new(_ => CancelStudyExecution(), () => CanCancelStudy);
         OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => Directory.Exists(StudyRoot));
         OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
         OpenDeflectionReport = new(_ => TryOpenFile(DeflectionReportPath), () => HasDeflectionReport);
         OpenCableForceReport = new(_ => TryOpenFile(CableForceReportPath), () => HasCableForceReport);
         OpenResultsWorkbook = new(_ => TryOpenFile(ResultsWorkbookPath), () => HasResultsWorkbook);
+        OpenRunManifest = new(_ => TryOpenFile(RunManifestPath), () => HasRunManifest);
         OpenCandidateDiagnostic = new(p =>
         {
             if (p is PostProcessRow row && Directory.Exists(StudyRoot))
@@ -1052,6 +1104,10 @@ public sealed class MainViewModel : Observable
     {
         studyValidationState = StudyValidationState.NotValidated;
         Issues.Clear();
+        preflightReport = StudyPreflightReport.Empty;
+        resumeAssessment = null;
+        resumeStatusText = "Study definition or selection changed; inspect provenance again before Resume/Retry.";
+        ApplyResumeAssessment(null);
     }
 
     private void NotifyStudyPresentation(bool heightCandidatesChanged = false, bool pretensionCandidatesChanged = false)
@@ -1070,7 +1126,10 @@ public sealed class MainViewModel : Observable
             nameof(BaselineModelName), nameof(BaselineModelPath), nameof(StudyRoot), nameof(GeneratedRunCount), nameof(SelectedRunCount),
             nameof(StudySelectionSummary), nameof(HasStudyIterations), nameof(ShowStudyEmptyState), nameof(StudyPreviewEmptyText),
             nameof(StudyValidationState), nameof(HasValidationIssues), nameof(ShowValidationStatus), nameof(ValidationStatusText),
-            nameof(RunStudyLabel), nameof(CanRunStudy), nameof(RunStudyToolTip), nameof(ToolbarStudySummary)
+            nameof(RunStudyLabel), nameof(CanRunStudy), nameof(RunStudyToolTip), nameof(ToolbarStudySummary),
+            nameof(ResumableRunCount), nameof(RetryableRunCount), nameof(CanResumeStudy), nameof(CanRetryStudy),
+            nameof(CanRebuildStudy), nameof(ResumeStatusText)
+            , nameof(PreflightMetrics), nameof(PreflightSummary), nameof(PreflightReady), nameof(FilterAuditText)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
     }
@@ -1084,19 +1143,47 @@ public sealed class MainViewModel : Observable
             : Issues.Any(issue => issue.Severity == ValidationSeverity.Warning)
                 ? StudyValidationState.ValidWithWarnings
                 : StudyValidationState.Valid;
+        preflightReport = studyPreflight.Inspect(State, studyComposition, Issues.ToArray(), RequestedWorkerCount);
         if (showMessage)
             Message = studyValidationState is StudyValidationState.Valid or StudyValidationState.ValidWithWarnings
                 ? $"Study is valid - {SelectedRunCount:N0} iterations are ready to build and analyze."
                 : $"{Issues.Count} study validation issue{(Issues.Count == 1 ? "" : "s")} need review.";
         NotifyStudyPresentation();
-        return studyValidationState is StudyValidationState.Valid or StudyValidationState.ValidWithWarnings;
+        return preflightReport.Ready;
     }
 
-    private async void RunStudy()
+    private async void RunStudy(StudyRunIntent intent = StudyRunIntent.AllSelected)
     {
         if (IsBusy || studyExecution is null) return;
         if (CommitEditors?.Invoke() == false) return;
         RegenerateStudyPreview();
+        StudyRunManifest? parentManifest = null;
+        if (intent is StudyRunIntent.ResumeInterrupted or StudyRunIntent.RetryFailed)
+        {
+            try
+            {
+                var provisional = studySnapshotFactory.Create(State, studyComposition, RequestedWorkerCount);
+                resumeAssessment = studyResume.Assess(provisional);
+                resumeStatusText = resumeAssessment.Message;
+                ApplyResumeAssessment(resumeAssessment);
+                var selected = studyResume.Select(provisional, resumeAssessment, intent);
+                ApplyExecutionSelection(selected.Jobs.Where(job => job.RunIterate).Select(job => job.IterationId));
+                parentManifest = resumeAssessment.Manifest;
+                RegenerateStudyPreview();
+            }
+            catch (Exception ex)
+            {
+                Message = ex.Message;
+                Warn(intent == StudyRunIntent.ResumeInterrupted ? "Unable to Resume Study" : "Unable to Retry Study", ex.Message);
+                NotifyStudyPresentation();
+                return;
+            }
+        }
+        if (intent == StudyRunIntent.RebuildSelected && MessageBox.Show(
+                $"Rebuild {SelectedRunCount:N0} selected candidate folder{(SelectedRunCount == 1 ? "" : "s")}?\n\nExisting folders will be moved to Study\\RebuildArchive before new child models are created. Nothing is deleted.",
+                "Archive and Rebuild Selected Candidates", System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes)
+            return;
         if (!ValidateStudy(showMessage: true)) return;
 
         if (outputGroupPreparation is null)
@@ -1151,6 +1238,7 @@ public sealed class MainViewModel : Observable
         currentRunWorkbookPath = null;
         DeflectionReportPath = null;
         CableForceReportPath = null;
+        SetRunReference(null, artifactsVerified: false);
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(HasResultsWorkbook));
         for (int id = 1; id <= RequestedWorkerCount; id++)
@@ -1168,10 +1256,12 @@ public sealed class MainViewModel : Observable
         var progress = new Progress<StudyExecutionProgress>(ApplyStudyProgress);
         try
         {
-            var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token, AddPostProcessRow);
+            var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token, AddPostProcessRow,
+                intent, parentManifest?.RunId);
             currentRunWorkbookPath = result.Artifacts.WorkbookPath;
             DeflectionReportPath = result.Artifacts.DeflectionReportPath;
             CableForceReportPath = result.Artifacts.CableForceReportPath;
+            SetRunReference(result.Run, result.Artifacts.State == StudyArtifactState.Ready);
             Notify(nameof(ResultsWorkbookPath));
             Notify(nameof(HasResultsWorkbook));
             studyCompletedCount = result.Completed;
@@ -1200,12 +1290,14 @@ public sealed class MainViewModel : Observable
         }
         catch (OperationCanceledException)
         {
+            SetRunReference(studyExecution.LastRunReference, artifactsVerified: false);
             studyBuildState = StudyBuildState.Cancelled;
             MarkUnfinishedIterations(StudyIterationStatus.Cancelled, "Cancelled before worker assignment.");
             Message = "Study build and analysis cancelled at a safe SAP2000 stage boundary.";
         }
         catch (Exception ex)
         {
+            SetRunReference(studyExecution.LastRunReference, artifactsVerified: false);
             studyBuildState = StudyBuildState.Failed;
             MarkUnfinishedIterations(StudyIterationStatus.Failed, ex.Message, leaveUnassignedPlanned: true);
             Message = ex.Message;
@@ -1218,8 +1310,65 @@ public sealed class MainViewModel : Observable
             studyCancellation = null;
             IsStudyRunning = false;
             IsBusy = false;
+            InspectResumeState();
             NotifyStudyExecution();
             Update();
+        }
+    }
+
+    private void ApplyExecutionSelection(IEnumerable<string> iterationIds)
+    {
+        var selected = iterationIds.ToHashSet(StringComparer.Ordinal);
+        suppressStudySelectionEvents = true;
+        try
+        {
+            foreach (var row in StudyIterations)
+            {
+                row.RunIterate = selected.Contains(row.IterationId);
+                State.Study.SetRunSelected(row.IterationId, row.RunIterate);
+            }
+        }
+        finally { suppressStudySelectionEvents = false; }
+        config.Session.MarkDirty(ConfigTabs.Study);
+    }
+
+    private void InspectResumeState()
+    {
+        try
+        {
+            if (!State.IsSapConnected || StudyIterations.Count == 0)
+                throw new InvalidOperationException("Connect and generate the study to inspect Resume/Retry eligibility.");
+            var snapshot = studySnapshotFactory.Create(State, studyComposition, RequestedWorkerCount);
+            resumeAssessment = studyResume.Assess(snapshot);
+            resumeStatusText = resumeAssessment.Message;
+            ApplyResumeAssessment(resumeAssessment);
+        }
+        catch (Exception ex)
+        {
+            resumeAssessment = null;
+            resumeStatusText = ex.Message;
+            ApplyResumeAssessment(null);
+        }
+        foreach (var name in new[] { nameof(ResumableRunCount), nameof(RetryableRunCount), nameof(CanResumeStudy),
+                     nameof(CanRetryStudy), nameof(CanRebuildStudy), nameof(ResumeStatusText) }) Notify(name);
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void ApplyResumeAssessment(StudyResumeAssessment? assessment)
+    {
+        var byId = assessment?.Candidates.ToDictionary(item => item.IterationId, StringComparer.Ordinal);
+        foreach (var row in StudyIterations)
+        {
+            if (byId is not null && byId.TryGetValue(row.IterationId, out var item))
+            {
+                row.ResumeDispositionText = item.Disposition.ToString();
+                row.ResumeReason = item.Reason;
+            }
+            else
+            {
+                row.ResumeDispositionText = "Not inspected";
+                row.ResumeReason = resumeStatusText;
+            }
         }
     }
 
@@ -1233,6 +1382,8 @@ public sealed class MainViewModel : Observable
 
     private void ApplyStudyProgress(StudyExecutionProgress progress)
     {
+        if (!string.IsNullOrWhiteSpace(progress.RunId) && !string.IsNullOrWhiteSpace(progress.ManifestPath))
+            SetRunReference(new StudyRunReference(progress.RunId, progress.ManifestPath, "", "", StudyRunState.Running), artifactsVerified: false);
         if (progress.Total > 0)
         {
             studyCompletedCount = progress.Completed;
@@ -1349,6 +1500,8 @@ public sealed class MainViewModel : Observable
         {
             var path = await Task.Run(() => new COT_VCF.Application.Results.DeflectionReportGenerator().RegenerateFromWorkbook(StudyRoot));
             DeflectionReportPath = path;
+            StudyRunJournal.RefreshArtifact(StudyRoot, "DeflectionReport", path);
+            RefreshDeflectionArtifacts();
             Message = $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
         }
         catch (Exception ex) { Message = ex.Message; Warn("Regenerate Deflection Report", ex.Message); }
@@ -1369,6 +1522,11 @@ public sealed class MainViewModel : Observable
         {
             var path = await Task.Run(() => new COT_VCF.Application.Results.CableForceReportGenerator().RegenerateFromWorkbook(StudyRoot));
             CableForceReportPath = File.Exists(path) ? path : null;
+            if (CableForceReportPath is not null)
+            {
+                StudyRunJournal.RefreshArtifact(StudyRoot, "CableForceReport", CableForceReportPath);
+                RefreshDeflectionArtifacts();
+            }
             Message = CableForceReportPath is null
                 ? "No cable-force results in the workbook — configure cables and a cable result case in Output Settings, then re-run."
                 : $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
@@ -1397,18 +1555,49 @@ public sealed class MainViewModel : Observable
         {
             useCurrentRunArtifacts = false;
             currentRunWorkbookPath = null;
-            var report = Directory.Exists(StudyRoot)
-                ? Path.Combine(StudyRoot, COT_VCF.Application.Results.DeflectionReportGenerator.ReportFileName) : null;
-            DeflectionReportPath = report is not null && File.Exists(report) ? report : null;
-            var cfReport = Directory.Exists(StudyRoot)
-                ? Path.Combine(StudyRoot, COT_VCF.Application.Results.CableForceReportGenerator.ReportFileName) : null;
-            CableForceReportPath = cfReport is not null && File.Exists(cfReport) ? cfReport : null;
+            var manifest = Directory.Exists(StudyRoot) ? StudyRunJournal.TryRead(StudyRoot) : null;
+            if (manifest is null || !SamePath(manifest.BaselineModelPath, State.SessionBaselineModel?.Path ?? State.Model?.Path))
+            {
+                discoveredWorkbookPath = null;
+                DeflectionReportPath = null;
+                CableForceReportPath = null;
+                SetRunReference(null, artifactsVerified: false);
+            }
+            else
+            {
+                discoveredWorkbookPath = StudyRunJournal.ValidArtifactPath(manifest, "Workbook");
+                DeflectionReportPath = StudyRunJournal.ValidArtifactPath(manifest, "DeflectionReport");
+                CableForceReportPath = StudyRunJournal.ValidArtifactPath(manifest, "CableForceReport");
+                SetRunReference(new StudyRunReference(manifest.RunId, Path.Combine(StudyRoot, StudyRunJournal.FileName),
+                    manifest.BaselineSha256, manifest.SnapshotSha256, manifest.State), StudyRunJournal.ArtifactsAreIntact(manifest));
+            }
         }
-        catch { DeflectionReportPath = null; CableForceReportPath = null; }
+        catch { discoveredWorkbookPath = null; DeflectionReportPath = null; CableForceReportPath = null; SetRunReference(null, false); }
         Notify(nameof(HasResultsWorkbook));
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(PostProcessStatus));
         CommandManager.InvalidateRequerySuggested();
+    }
+
+    private string? discoveredWorkbookPath;
+
+    private void SetRunReference(StudyRunReference? run, bool artifactsVerified)
+    {
+        currentRunId = run?.RunId;
+        runManifestPath = run?.ManifestPath;
+        currentRunState = run?.State;
+        runArtifactsVerified = artifactsVerified;
+        Notify(nameof(RunManifestPath));
+        Notify(nameof(HasRunManifest));
+        Notify(nameof(RunProvenanceText));
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private static bool SamePath(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
+        try { return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase); }
+        catch { return false; }
     }
 
     private void SelectLoadLocations()
