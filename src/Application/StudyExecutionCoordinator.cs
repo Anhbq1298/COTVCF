@@ -20,6 +20,8 @@ public sealed class StudyExecutionCoordinator
 
     /// <summary>Absolute path of the last <c>Deflection_Report.html</c> written by a run, or null.</summary>
     public string? LastDeflectionReportPath { get; private set; }
+    /// <summary>Absolute path of the last <c>Member_Forces_Report.html</c> written by a run, or null.</summary>
+    public string? LastMemberForceReportPath { get; private set; }
     /// <summary>Absolute path of the last <c>Cable_Forces_Report.html</c> written by a run, or null.</summary>
     public string? LastCableForceReportPath { get; private set; }
     public StudyArtifactOutcome LastArtifactOutcome { get; private set; } = StudyArtifactOutcome.NotProduced;
@@ -33,6 +35,7 @@ public sealed class StudyExecutionCoordinator
     {
         ValidateSnapshot(snapshot);
         LastDeflectionReportPath = null;
+        LastMemberForceReportPath = null;
         LastCableForceReportPath = null;
         LastArtifactOutcome = StudyArtifactOutcome.NotProduced;
         LastRunReference = null;
@@ -76,6 +79,7 @@ public sealed class StudyExecutionCoordinator
                     LastArtifactOutcome = artifactPublisher.Publish(snapshot,
                         candidateResults.OrderBy(item => item.Parameters.RunIndex).ToArray());
                     LastDeflectionReportPath = LastArtifactOutcome.DeflectionReportPath;
+                    LastMemberForceReportPath = LastArtifactOutcome.MemberForceReportPath;
                     LastCableForceReportPath = LastArtifactOutcome.CableForceReportPath;
                 }
                 catch (Exception ex)

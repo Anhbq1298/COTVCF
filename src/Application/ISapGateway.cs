@@ -48,4 +48,10 @@ public interface ISapGateway : IDisposable
     /// a missing result is never reported as 0.</summary>
     Task<IReadOnlyList<CableForceRead>> GetCableForcesAsync(
         IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected);
+
+    /// <summary>Reads signed governing local-axis P/V2/V3/T/M2/M3 values for each requested frame.
+    /// Forces are kN, moments kNm, stations metres. Missing results are never reported as zero.</summary>
+    Task<IReadOnlyList<FrameForceRead>> GetFrameForcesAsync(
+        IReadOnlyList<string> frameNames, string outputCase, bool isCombo, ModelInfo expected) =>
+        throw new NotSupportedException("Frame-force extraction is not implemented by this SAP gateway.");
 }

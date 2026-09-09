@@ -210,12 +210,12 @@ Tab 04 defines study-wide output monitoring only; editing the tab does not write
 - Fixed output units: displacement mm, force kN, moment kNm.
 - Output groups use the reserved `[O]-` namespace: `[O]-DeflectionMonitorPts`, dynamic member-force groups `[O]-{user suffix}`, `[O]-FoundationLeft`, `[O]-FoundationRight`, and `[O]-CableMonitor`.
 - Deflection monitoring selects baseline Point Objects and fixes the future output to Global U3.
-- Member-force groups are user-defined application groups over baseline Frame Objects; one frame belongs to at most one member-force output group. Future components are P/V2/V3 and T/M2/M3.
+- Member-force groups are user-defined application groups over baseline Frame Objects; one frame belongs to at most one member-force output group. A shared result case/combo is required. Extraction retains signed local P/V2/V3 and T/M2/M3 for every SAP analysis element and result station returned for each selected frame object; it must not collapse an auto-meshed frame object to one governing value.
 - Foundations require exactly two baseline points on the Left and exactly two on the Right, with no overlap.
 - Cable output selects baseline Cable Objects plus a SAP analysis load case. This is distinct from Tab 03's target-force load pattern.
 - Configuration is persisted as `Tab05OutputSettings`; opening a project restores definitions only and never mutates SAP.
 - When Tab 05 Run starts, `OutputGroupPreparationService` is the preflight gate: verify the active model is the immutable session parent and unlocked, replace/read-back all requested `[O]-` groups, save the parent .sdb, then freeze the execution snapshot. No worker or child may start before this succeeds.
-- Children inherit the saved parent groups. Actual SAP result extraction remains a future phase.
+- Children inherit the saved parent groups. After analysis, member-force extraction calls `Results.FrameForce` with `ObjectElm`, preserving Object, Element, ObjSta, ElmSta, case, step type/number, and all six components. The consolidated workbook stores one row per SAP station. `Member_Forces_Report.html` uses the same compact multi-select L/H/P dropdown pattern as the deflection report and also filters result step. It defaults to three samples (start, middle, end) for each SAP analysis element, with an `All SAP stations` option for detailed profiles. Hover markers show the exact signed value and SAP identifiers. The report also offers a candidate-by-station matrix and switches to a station-matched envelope above 50 candidates.
 
 ## Iteration Study Tab (06)
 
@@ -271,7 +271,7 @@ Study composition plus isolated child-model building and analysis. Tab 05 does n
   active workers attempt to return to baseline and queued jobs become Cancelled.
 - A candidate-level failure, including a nonzero `Analyze.RunAnalysis` result, may continue on a recovered
   worker. Failure to restore the baseline faults that worker and removes it from scheduling; healthy workers
-  continue. Result extraction is not part of this phase.
+  continue. Successful candidates extract configured deflection, cable-force, and member-force results before artifacts are published.
 
 ## Config Project File (`src/Configuration/`)
 

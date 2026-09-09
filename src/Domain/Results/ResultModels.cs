@@ -12,6 +12,7 @@ public enum ResultValueStatus
     Valid,           // SAP returned a number
     NoResult,        // case selected, point exists, API returned zero rows
     PointNotFound,   // point name not in the model
+    FrameNotFound,   // frame name not in the model
     CaseNotFound,    // output case / combo not in the model
     AnalysisNotRun,  // model not locked / no results available
     ApiError         // nonzero return code or exception
@@ -50,6 +51,30 @@ public sealed record CableForceRead(
     ResultValueStatus Status,
     string? Warning = null);
 
+/// <summary>One unmodified row returned by SAP for a frame object. Object and element stations are
+/// retained because one frame object may be meshed into several analysis elements.</summary>
+public sealed record FrameForceStationRead(
+    string FrameObjectName,
+    string ElementName,
+    double ObjectStationM,
+    double ElementStationM,
+    string OutputCase,
+    string StepType,
+    double StepNumber,
+    double P,
+    double V2,
+    double V3,
+    double T,
+    double M2,
+    double M3);
+
+/// <summary>All SAP frame-force rows for one selected frame object and output case/combo.</summary>
+public sealed record FrameForceRead(
+    string FrameName,
+    IReadOnlyList<FrameForceStationRead> Stations,
+    ResultValueStatus Status,
+    string? Warning = null);
+
 // ============================ extraction-side DTOs ============================
 
 public sealed record MonitoredPointResultDto(
@@ -75,6 +100,31 @@ public sealed record CableForceResultDto(
     double? ForceKN,
     ResultValueStatus Status,
     string? Warning = null);
+
+/// <summary>One SAP result row located along an ordered output group profile.</summary>
+public sealed record MemberForceStationResultDto(
+    string FrameName,
+    int FrameSequence,
+    string ElementName,
+    double ObjectStationM,
+    double ElementStationM,
+    double ProfileCoordinateM,
+    string StepType,
+    double StepNumber,
+    double P,
+    double V2,
+    double V3,
+    double T,
+    double M2,
+    double M3,
+    ResultValueStatus Status,
+    string? Warning = null);
+
+public sealed record MemberForceGroupResultDto(
+    string GroupName,
+    string SapGroupName,
+    string OutputCase,
+    IReadOnlyList<MemberForceStationResultDto> Stations);
 
 /// <summary>Study parameters resolved for one candidate. Fields that a given study mode does not vary are still
 /// populated from the frozen candidate; single-value convenience fields are null when the candidate is mixed.</summary>
@@ -119,7 +169,8 @@ public sealed record CandidateResultDto(
     CandidateExtractionStatus ExtractionStatus,
     IReadOnlyList<MonitoredPointGroupResultDto> Groups,
     IReadOnlyList<ResultWarningDto> Warnings,
-    IReadOnlyList<CableForceResultDto>? CableForces = null)
+    IReadOnlyList<CableForceResultDto>? CableForces = null,
+    IReadOnlyList<MemberForceGroupResultDto>? MemberForceGroups = null)
 {
     public string DiagnosticReportFileName => $"Deflection_Diagnostic_{IterationKey}.html";
     public string DiagnosticReportRelativePath => $"{IterationKey}/{DiagnosticReportFileName}";

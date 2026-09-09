@@ -242,6 +242,12 @@ public sealed class ConfigCompatibilityValidator
                 }
             }
 
+            if ((t5.MemberForceGroups?.Count ?? 0) > 0 && string.IsNullOrWhiteSpace(t5.MemberForceResultLoadCase))
+                tc.Problems.Add("member-force result load case is required.");
+            else if (!string.IsNullOrWhiteSpace(t5.MemberForceResultLoadCase) &&
+                     !modelLoadCases.Contains(t5.MemberForceResultLoadCase, StringComparer.OrdinalIgnoreCase))
+                tc.Problems.Add($"member-force result load case {t5.MemberForceResultLoadCase} does not exist in the connected model.");
+
             foreach (var cableName in (t5.CableNames ?? []).Distinct(StringComparer.Ordinal))
             {
                 if (!currentCables.TryGetValue(cableName, out var currentCable))

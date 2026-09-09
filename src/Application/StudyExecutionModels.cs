@@ -40,6 +40,8 @@ public sealed record StudyExecutionSnapshot(
     // Deflection post-processing (Tab 06): monitored points + the SAP case their Uz is read under.
     public IReadOnlyList<string> DeflectionPoints { get; init; } = [];
     public string DeflectionOutputCase { get; init; } = "";
+    // Frame-force post-processing: all configured frame output groups are read under this case or combo.
+    public string MemberForceResultCase { get; init; } = "";
 }
 
 public sealed record StudyExecutionProgress
@@ -83,9 +85,10 @@ public sealed record StudyArtifactOutcome(
     StudyArtifactState State,
     string? WorkbookPath,
     string? DeflectionReportPath,
+    string? MemberForceReportPath,
     string? CableForceReportPath,
     string? ErrorMessage)
 {
-    public static StudyArtifactOutcome NotProduced { get; } = new(StudyArtifactState.NotProduced, null, null, null, null);
-    public static StudyArtifactOutcome Failed(string message) => new(StudyArtifactState.Failed, null, null, null, message);
+    public static StudyArtifactOutcome NotProduced { get; } = new(StudyArtifactState.NotProduced, null, null, null, null, null);
+    public static StudyArtifactOutcome Failed(string message) => new(StudyArtifactState.Failed, null, null, null, null, message);
 }

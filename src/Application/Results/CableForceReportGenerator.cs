@@ -143,8 +143,8 @@ public sealed class CableForceReportGenerator
   </div>
   <details class="lib" open><summary>Result Library</summary><ul>
     <li>01 · Deflection U<sub>z</sub><span>available</span></li>
-    <li>02 · Top Chords<span>future</span></li>
-    <li>03 · Bottom Chords<span>future</span></li>
+    <li>02 · Top Chords<span>member report</span></li>
+    <li>03 · Bottom Chords<span>member report</span></li>
     <li>04 · Vierendeel Members<span>future</span></li>
     <li class="on">05 · Cable Forces<span>active</span></li>
   </ul></details>

@@ -191,6 +191,7 @@ public sealed class StudyRunJournal
         {
             ("Workbook", outcome.WorkbookPath),
             ("DeflectionReport", outcome.DeflectionReportPath),
+            ("MemberForceReport", outcome.MemberForceReportPath),
             ("CableForceReport", outcome.CableForceReportPath)
         })
         {
@@ -237,6 +238,7 @@ public static class Fingerprints
             OutputGroups = snapshot.OutputGroups.OrderBy(group => group.Name, StringComparer.Ordinal),
             snapshot.DeflectionPoints,
             snapshot.DeflectionOutputCase,
+            snapshot.MemberForceResultCase,
             snapshot.CableResultCables,
             snapshot.CableResultLoadCase,
             Jobs = snapshot.Jobs.OrderBy(job => job.RunIndex).Select(job => new

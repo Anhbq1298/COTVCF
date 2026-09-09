@@ -168,8 +168,8 @@ public sealed class DeflectionReportGenerator
   <details class="lib"><summary>Result Library</summary>
     <ul>
       <li class="on">01 · Deflection · U<sub>z</sub> <span>active</span></li>
-      <li>02 · Top Chords — member forces <span>future</span></li>
-      <li>03 · Bottom Chords — member forces <span>future</span></li>
+      <li>02 · Top Chords — member forces <span>separate report</span></li>
+      <li>03 · Bottom Chords — member forces <span>separate report</span></li>
       <li>04 · Vierendeel Members — member forces <span>future</span></li>
       <li>05 · Cable Forces <span>future</span></li>
     </ul>

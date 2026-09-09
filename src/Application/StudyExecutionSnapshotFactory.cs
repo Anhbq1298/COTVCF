@@ -40,6 +40,7 @@ public sealed class StudyExecutionSnapshotFactory(StudyCandidateResolver? resolv
             CableResultCables = state.OutputSettings.CableNames.ToArray(),
             DeflectionPoints = state.OutputSettings.DeflectionPoints.ToArray(),
             DeflectionOutputCase = state.OutputSettings.DeflectionOutputCaseName,
+            MemberForceResultCase = state.OutputSettings.MemberForceResultLoadCase,
         };
     }
 

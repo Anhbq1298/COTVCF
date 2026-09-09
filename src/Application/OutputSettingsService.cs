@@ -57,6 +57,11 @@ public sealed class OutputSettingsValidator
                 else assignedFrames[member] = group.SapGroupName;
             }
         }
+        if (output.MemberForceGroups.Count > 0 && string.IsNullOrWhiteSpace(output.MemberForceResultLoadCase))
+            issues.Add(new("Output Settings", "Select a member-force result load case."));
+        else if (!string.IsNullOrWhiteSpace(output.MemberForceResultLoadCase) && loadCases is not null &&
+                 !loadCases.Contains(output.MemberForceResultLoadCase, StringComparer.OrdinalIgnoreCase))
+            issues.Add(new("Output Settings", $"Member-force result load case {output.MemberForceResultLoadCase} does not exist in the baseline model."));
 
         if (output.FoundationLeftPoints.Count != 2)
             issues.Add(new("Output Settings", "Foundation Left requires exactly 2 points."));

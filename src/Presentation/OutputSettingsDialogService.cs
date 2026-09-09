@@ -9,7 +9,7 @@ namespace COT_VCF.Presentation;
 public interface IOutputSettingsDialogService
 {
     bool EditDeflection(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
-    bool EditMemberForces(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection);
+    bool EditMemberForces(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
     bool EditFoundations(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection);
     bool EditCables(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
 }
@@ -99,7 +99,7 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         return true;
     }
 
-    public bool EditMemberForces(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection)
+    public bool EditMemberForces(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection)
     {
         var rows = new ObservableCollection<MemberGroupRow>(settings.MemberForceGroups.Select(Clone));
         var owner = System.Windows.Application.Current?.MainWindow;
@@ -110,6 +110,16 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         var heading = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
         heading.Children.Add(new TextBlock { Text = "MEMBER FORCE OUTPUT GROUPS", Style = HeadingStyle });
         heading.Children.Add(new TextBlock { Text = "P / V2 / V3 [kN]   ·   T / M2 / M3 [kNm]", Foreground = MutedBrush });
+        heading.Children.Add(Label("Result load case", "SAP analysis load case used to extract every configured member-force group."));
+        var resultCase = new ComboBox
+        {
+            ItemsSource = loadCases.OrderBy(x => x, StringComparer.Ordinal).ToArray(),
+            IsEditable = false,
+            SelectedItem = loadCases.FirstOrDefault(c => c.Equals(settings.MemberForceResultLoadCase, StringComparison.OrdinalIgnoreCase)),
+            MinWidth = 320,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        heading.Children.Add(resultCase);
         DockPanel.SetDock(heading, Dock.Top); root.Children.Add(heading);
 
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
@@ -119,6 +129,11 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         {
             var problem = ValidateMemberRows(rows, null);
             if (problem is not null) { Info(problem); return; }
+            if (resultCase.SelectedItem is not string selectedCase || string.IsNullOrWhiteSpace(selectedCase))
+            {
+                Info("Select a member-force result load case.");
+                return;
+            }
             dialog.DialogResult = true;
         };
         footer.Children.Add(cancel); footer.Children.Add(save); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
@@ -166,6 +181,7 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
             foreach (var member in row.Members) group.Members.Add(member);
             settings.MemberForceGroups.Add(group);
         }
+        settings.MemberForceResultLoadCase = resultCase.SelectedItem as string ?? "";
         return true;
     }
 

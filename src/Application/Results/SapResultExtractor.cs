@@ -70,6 +70,9 @@ public sealed class SapResultExtractor
 
         // Cable forces (Tab 06.05) — additive: never changes the deflection-driven ExtractionStatus, only warns.
         var cableForces = await ExtractCableForcesAsync(gateway, snapshot, job, analyzedChild, warnings);
+        // Member forces are also additive. Every SAP analysis-element/station row is retained so an
+        // auto-meshed frame object can be plotted as the same detailed profile shown by SAP2000.
+        var memberForces = await ExtractMemberForcesAsync(gateway, snapshot, job, analyzedChild, warnings);
 
         return new CandidateResultDto(
             job.IterationId,
@@ -84,7 +87,82 @@ public sealed class SapResultExtractor
             status,
             groups,
             warnings,
-            cableForces);
+            cableForces,
+            memberForces);
+    }
+
+    private async Task<IReadOnlyList<MemberForceGroupResultDto>> ExtractMemberForcesAsync(
+        ISapGateway gateway, StudyExecutionSnapshot snapshot, StudyIterationExecutionDto job,
+        ModelInfo analyzedChild, List<ResultWarningDto> warnings)
+    {
+        var configured = snapshot.OutputGroups.Where(group => group.ObjectKind == OutputGroupObjectKind.Frame).ToArray();
+        var resultCase = snapshot.MemberForceResultCase ?? "";
+        if (configured.Length == 0) return [];
+        if (string.IsNullOrWhiteSpace(resultCase))
+        {
+            warnings.Add(Warn(job, "MemberForce", ResultWarningSeverity.Warning,
+                "Member-force result load case is not configured in Output Settings — member forces were not extracted."));
+            return [];
+        }
+
+        var members = snapshot.BaselineGeometry.Members.ToDictionary(member => member.Name, StringComparer.Ordinal);
+        var points = snapshot.BaselineGeometry.Points;
+        var output = new List<MemberForceGroupResultDto>(configured.Length);
+        foreach (var group in configured)
+        {
+            var orderedNames = group.ObjectNames
+                .Distinct(StringComparer.Ordinal)
+                .Select(name =>
+                {
+                    if (!members.TryGetValue(name, out var member) ||
+                        !points.TryGetValue(member.Start, out var start) || !points.TryGetValue(member.End, out var end))
+                        return (Name: name, StartX: 0.0, EndX: 0.0, Length: 0.0, Known: false);
+                    var dx = end.Position.X - start.Position.X;
+                    var dy = end.Position.Y - start.Position.Y;
+                    var dz = end.Position.Z - start.Position.Z;
+                    return (Name: name, StartX: start.Position.X, EndX: end.Position.X,
+                        Length: Math.Sqrt(dx * dx + dy * dy + dz * dz), Known: true);
+                })
+                .OrderBy(item => item.Known ? Math.Min(item.StartX, item.EndX) : double.MaxValue)
+                .ThenBy(item => item.Known ? Math.Max(item.StartX, item.EndX) : double.MaxValue)
+                .ThenBy(item => item.Name, StringComparer.Ordinal)
+                .ToArray();
+
+            var reads = await gateway.GetFrameForcesAsync(orderedNames.Select(item => item.Name).ToArray(), resultCase, isCombo: false, analyzedChild);
+            if (reads.Count > 0 && reads.All(read => read.Status == ResultValueStatus.CaseNotFound))
+                reads = await gateway.GetFrameForcesAsync(orderedNames.Select(item => item.Name).ToArray(), resultCase, isCombo: true, analyzedChild);
+            var byId = reads.ToDictionary(read => read.FrameName, StringComparer.Ordinal);
+            var stations = new List<MemberForceStationResultDto>();
+            var profileOffset = 0.0;
+            foreach (var (item, index) in orderedNames.Select((item, index) => (item, index)))
+            {
+                var read = byId.TryGetValue(item.Name, out var found)
+                    ? found
+                    : new FrameForceRead(item.Name, [], ResultValueStatus.NoResult,
+                        $"No frame-force result returned for '{item.Name}'.");
+                if (read.Status != ResultValueStatus.Valid)
+                    warnings.Add(Warn(job, "MemberForce", ResultWarningSeverity.Warning,
+                        $"{group.Name} / {read.FrameName}: {read.Status}{(read.Warning is null ? "" : $" — {read.Warning}")}"));
+                foreach (var row in read.Stations)
+                {
+                    var local = item.StartX <= item.EndX ? row.ObjectStationM : item.Length - row.ObjectStationM;
+                    if (item.Length > 0) local = Math.Clamp(local, 0, item.Length);
+                    stations.Add(new MemberForceStationResultDto(read.FrameName, index + 1, row.ElementName,
+                        row.ObjectStationM, row.ElementStationM, profileOffset + local, row.StepType, row.StepNumber,
+                        row.P, row.V2, row.V3, row.T, row.M2, row.M3, ResultValueStatus.Valid));
+                }
+                profileOffset += item.Length;
+            }
+
+            var displayName = group.Name.StartsWith(OutputGroupNaming.Prefix, StringComparison.OrdinalIgnoreCase)
+                ? group.Name[OutputGroupNaming.Prefix.Length..]
+                : group.Name;
+            output.Add(new MemberForceGroupResultDto(displayName, group.Name, resultCase,
+                stations.OrderBy(row => row.ProfileCoordinateM).ThenBy(row => row.FrameSequence)
+                    .ThenBy(row => row.ElementName, StringComparer.Ordinal).ThenBy(row => row.ElementStationM)
+                    .ThenBy(row => row.StepType, StringComparer.Ordinal).ThenBy(row => row.StepNumber).ToArray()));
+        }
+        return output;
     }
 
     private async Task<IReadOnlyList<CableForceResultDto>> ExtractCableForcesAsync(

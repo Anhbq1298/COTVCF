@@ -20,14 +20,20 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
         var consolidator = new ConsolidatedResultWriter();
         foreach (var result in results) consolidator.Add(result);
         var workbook = consolidator.Write(studyFolder, snapshot.DeflectionPoints, snapshot.DeflectionOutputCase,
-            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode,
+            snapshot.OutputGroups.Where(group => group.ObjectKind == COT_VCF.Domain.OutputGroupObjectKind.Frame).ToArray(),
+            snapshot.MemberForceResultCase);
         var ordered = consolidator.Snapshot();
         var deflection = new DeflectionReportGenerator().Generate(studyFolder, ordered,
             snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+        string? member = null;
+        if (ordered.Any(result => (result.MemberForceGroups?.Count ?? 0) > 0))
+            member = new MemberForceReportGenerator().Generate(studyFolder, ordered,
+                snapshot.BaselineModel.Name, snapshot.StudyMode);
         string? cable = null;
         if (ordered.Any(r => (r.CableForces?.Count ?? 0) > 0))
             cable = new CableForceReportGenerator().Generate(studyFolder, ordered,
                 snapshot.BaselineModel.Name, snapshot.StudyMode, snapshot.CableResultLoadCase);
-        return new(StudyArtifactState.Ready, workbook, deflection, cable, null);
+        return new(StudyArtifactState.Ready, workbook, deflection, member, cable, null);
     }
 }

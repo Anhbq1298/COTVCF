@@ -639,6 +639,28 @@ internal static class StudyExecutionChecks
             }
             return rows;
         });
+        public async Task<IReadOnlyList<COT_VCF.Domain.Results.FrameForceRead>> GetFrameForcesAsync(
+            IReadOnlyList<string> frameNames, string outputCase, bool isCombo, ModelInfo expected) => await Tracked<IReadOnlyList<COT_VCF.Domain.Results.FrameForceRead>>(async () =>
+        {
+            Verify(expected); await Task.Delay(1);
+            var rows = new List<COT_VCF.Domain.Results.FrameForceRead>();
+            foreach (var name in frameNames)
+            {
+                if (!analysisComplete)
+                {
+                    rows.Add(new(name, [], COT_VCF.Domain.Results.ResultValueStatus.AnalysisNotRun));
+                    continue;
+                }
+                var seed = 300.0 + Math.Abs(name.GetHashCode()) % 500;
+                var stations = new[] { 0.0, 0.5, 1.0 }.Select((station, index) =>
+                    new COT_VCF.Domain.Results.FrameForceStationRead(name, $"{name}-{index / 2 + 1}", station,
+                        index % 2 == 0 ? 0 : .5, outputCase, "Step", 1,
+                        Math.Round(-seed - station * 10, 2), Math.Round(seed * .08, 2), Math.Round(seed * .03, 2),
+                        Math.Round(seed * .02, 2), Math.Round(seed * .12, 2), Math.Round(seed * .18, 2))).ToArray();
+                rows.Add(new(name, stations, COT_VCF.Domain.Results.ResultValueStatus.Valid));
+            }
+            return rows;
+        });
         public Task<IReadOnlyList<SapGroupSnapshot>> ReadOutputGroupsAsync(IReadOnlyList<string> groupNames, ModelInfo expected) =>
             Task.FromResult<IReadOnlyList<SapGroupSnapshot>>(groupNames.Select(name => new SapGroupSnapshot(name, false, [], [], [])).ToArray());
         public Task ReplaceOutputGroupsAsync(IReadOnlyList<OutputSapGroupDefinition> groups, ModelInfo expected) => Task.CompletedTask;

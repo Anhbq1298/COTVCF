@@ -140,6 +140,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         foreach (var name in d.CableNames ?? []) output.CableNames.Add(name);
         output.CableResultLoadCase = d.CableResultLoadCase;
         output.DeflectionOutputCaseName = d.DeflectionOutputCaseName ?? "";
+        output.MemberForceResultLoadCase = d.MemberForceResultLoadCase ?? "";
     }
 
     private void ApplyStudy(IterationStudyConfigDto d)

@@ -453,6 +453,20 @@ public sealed class MainViewModel : Observable
     public Uri? DeflectionReportUri => HasDeflectionReport ? new Uri(DeflectionReportPath!) : null;
     public string DeflectionReportName => HasDeflectionReport ? Path.GetFileName(DeflectionReportPath!) : "No report generated yet";
 
+    private string? memberForceReportPath;
+    public string? MemberForceReportPath
+    {
+        get => memberForceReportPath;
+        private set
+        {
+            if (!Set(ref memberForceReportPath, value)) return;
+            Notify(nameof(HasMemberForceReport));
+            Notify(nameof(MemberForceReportName));
+        }
+    }
+    public bool HasMemberForceReport => !string.IsNullOrEmpty(MemberForceReportPath) && File.Exists(MemberForceReportPath);
+    public string MemberForceReportName => HasMemberForceReport ? Path.GetFileName(MemberForceReportPath!) : "No member-force report generated yet";
+
     private string? cableForceReportPath;
     public string? CableForceReportPath
     {
@@ -542,7 +556,7 @@ public sealed class MainViewModel : Observable
         {
             var groups = State.OutputSettings.MemberForceGroups.Count;
             var members = State.OutputSettings.MemberForceGroups.Sum(group => group.Members.Count);
-            return groups == 0 ? "Not configured" : $"{groups} group{(groups == 1 ? "" : "s")} · {members} frame{(members == 1 ? "" : "s")}";
+            return groups == 0 ? "Not configured" : $"{groups} group{(groups == 1 ? "" : "s")} · {members} frame{(members == 1 ? "" : "s")} · {State.OutputSettings.MemberForceResultLoadCase}";
         }
     }
     public string FoundationOutputSummary => $"Left {State.OutputSettings.FoundationLeftPoints.Count}/2 · Right {State.OutputSettings.FoundationRightPoints.Count}/2";
@@ -570,12 +584,13 @@ public sealed class MainViewModel : Observable
             if (groups == 0) return "0 groups";
             var members = Out.MemberForceGroups.Sum(g => g.Members.Count);
             var empty = Out.MemberForceGroups.Count(g => g.Members.Count == 0 || string.IsNullOrWhiteSpace(g.Name));
-            return $"{groups} group{(groups == 1 ? "" : "s")} · {members} member{(members == 1 ? "" : "s")}" +
+            return $"{(string.IsNullOrWhiteSpace(Out.MemberForceResultLoadCase) ? "No output case" : Out.MemberForceResultLoadCase)} · {groups} group{(groups == 1 ? "" : "s")} · {members} member{(members == 1 ? "" : "s")}" +
                    (empty > 0 ? $" · {empty} empty" : "");
         }
     }
     public string MemberForceStatus => Out.MemberForceGroups.Count == 0 ? StatusNotConfigured
-        : Out.MemberForceGroups.Any(g => g.Members.Count == 0 || string.IsNullOrWhiteSpace(g.Name)) ? StatusIncomplete
+        : string.IsNullOrWhiteSpace(Out.MemberForceResultLoadCase) ||
+          Out.MemberForceGroups.Any(g => g.Members.Count == 0 || string.IsNullOrWhiteSpace(g.Name)) ? StatusIncomplete
         : StatusReady;
     public string FoundationSummary => $"Left {Out.FoundationLeftPoints.Count} / 2 · Right {Out.FoundationRightPoints.Count} / 2";
     public string FoundationStatus => Out.FoundationLeftPoints.Count == 0 && Out.FoundationRightPoints.Count == 0 ? StatusNotConfigured
@@ -634,6 +649,8 @@ public sealed class MainViewModel : Observable
     public Command OpenIterationFolder { get; }
     public Command OpenDeflectionReport { get; }
     public Command RegenerateDeflectionReport { get; }
+    public Command OpenMemberForceReport { get; }
+    public Command RegenerateMemberForceReport { get; }
     public Command OpenCableForceReport { get; }
     public Command RegenerateCableForceReport { get; }
     public Command OpenResultsWorkbook { get; }
@@ -744,6 +761,7 @@ public sealed class MainViewModel : Observable
         OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => Directory.Exists(StudyRoot));
         OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
         OpenDeflectionReport = new(_ => TryOpenFile(DeflectionReportPath), () => HasDeflectionReport);
+        OpenMemberForceReport = new(_ => TryOpenFile(MemberForceReportPath), () => HasMemberForceReport);
         OpenCableForceReport = new(_ => TryOpenFile(CableForceReportPath), () => HasCableForceReport);
         OpenResultsWorkbook = new(_ => TryOpenFile(ResultsWorkbookPath), () => HasResultsWorkbook);
         OpenCandidateDiagnostic = new(p =>
@@ -752,6 +770,7 @@ public sealed class MainViewModel : Observable
                 TryOpenFile(Path.Combine(StudyRoot, row.DiagnosticRelPath.Replace('/', Path.DirectorySeparatorChar)));
         });
         RegenerateDeflectionReport = new(_ => RegenerateReport(), () => !IsBusy);
+        RegenerateMemberForceReport = new(_ => RegenerateMemberForceReportAsync(), () => !IsBusy);
         RegenerateCableForceReport = new(_ => RegenerateCableForceReportAsync(), () => !IsBusy);
         ViewIterationError = new(p =>
         {
@@ -879,14 +898,20 @@ public sealed class MainViewModel : Observable
         finally { IsBusy = false; Update(); }
     }
 
-    private void EditMemberForceOutput()
+    private async void EditMemberForceOutput()
     {
-        if (outputDialogs is null) { Message = "Output Settings editor is unavailable."; return; }
-        if (!outputDialogs.EditMemberForces(State.OutputSettings, OutputBaselineGeometry(), selection)) return;
-        config.Session.MarkDirty(ConfigTabs.Output);
-        InvalidateStudyValidation();
-        Message = $"{State.OutputSettings.MemberForceGroups.Count} member-force output groups configured. Groups will be applied to the parent when Tab 05 runs.";
-        Update();
+        if (IsBusy || outputDialogs is null) { if (outputDialogs is null) Message = "Output Settings editor is unavailable."; return; }
+        IsBusy = true;
+        try
+        {
+            var loadCases = await workflow.GetLoadCaseNamesAsync();
+            if (!outputDialogs.EditMemberForces(State.OutputSettings, OutputBaselineGeometry(), loadCases, selection)) return;
+            config.Session.MarkDirty(ConfigTabs.Output);
+            InvalidateStudyValidation();
+            Message = $"{State.OutputSettings.MemberForceGroups.Count} member-force output groups configured for result case {State.OutputSettings.MemberForceResultLoadCase}. Groups will be applied to the parent when Tab 05 runs.";
+        }
+        catch (Exception ex) { Message = ex.Message; Warn("Member Force Output Settings", ex.Message); }
+        finally { IsBusy = false; Update(); }
     }
 
     private void EditFoundationOutput()
@@ -1150,6 +1175,7 @@ public sealed class MainViewModel : Observable
         useCurrentRunArtifacts = true;
         currentRunWorkbookPath = null;
         DeflectionReportPath = null;
+        MemberForceReportPath = null;
         CableForceReportPath = null;
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(HasResultsWorkbook));
@@ -1171,6 +1197,7 @@ public sealed class MainViewModel : Observable
             var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token, AddPostProcessRow);
             currentRunWorkbookPath = result.Artifacts.WorkbookPath;
             DeflectionReportPath = result.Artifacts.DeflectionReportPath;
+            MemberForceReportPath = result.Artifacts.MemberForceReportPath;
             CableForceReportPath = result.Artifacts.CableForceReportPath;
             Notify(nameof(ResultsWorkbookPath));
             Notify(nameof(HasResultsWorkbook));
@@ -1377,6 +1404,28 @@ public sealed class MainViewModel : Observable
         finally { IsBusy = false; }
     }
 
+    private async void RegenerateMemberForceReportAsync()
+    {
+        if (IsBusy) return;
+        if (!HasResultsWorkbook)
+        {
+            MemberForceReportPath = null;
+            Message = $"No {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName} found in {StudyRoot}. Run the study on Tab 05 first.";
+            return;
+        }
+        IsBusy = true;
+        try
+        {
+            var path = await Task.Run(() => new COT_VCF.Application.Results.MemberForceReportGenerator().RegenerateFromWorkbook(StudyRoot));
+            MemberForceReportPath = !string.IsNullOrEmpty(path) && File.Exists(path) ? path : null;
+            Message = MemberForceReportPath is null
+                ? "No member-force results in the workbook — configure member groups and a result case in Output Settings, then re-run."
+                : $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
+        }
+        catch (Exception ex) { Message = ex.Message; Warn("Regenerate Member Force Report", ex.Message); }
+        finally { IsBusy = false; }
+    }
+
     private void AddPostProcessRow(COT_VCF.Domain.Results.CandidateResultDto dto)
     {
         var points = dto.Groups.Sum(g => g.Points.Count);
@@ -1400,11 +1449,14 @@ public sealed class MainViewModel : Observable
             var report = Directory.Exists(StudyRoot)
                 ? Path.Combine(StudyRoot, COT_VCF.Application.Results.DeflectionReportGenerator.ReportFileName) : null;
             DeflectionReportPath = report is not null && File.Exists(report) ? report : null;
+            var mfReport = Directory.Exists(StudyRoot)
+                ? Path.Combine(StudyRoot, COT_VCF.Application.Results.MemberForceReportGenerator.ReportFileName) : null;
+            MemberForceReportPath = mfReport is not null && File.Exists(mfReport) ? mfReport : null;
             var cfReport = Directory.Exists(StudyRoot)
                 ? Path.Combine(StudyRoot, COT_VCF.Application.Results.CableForceReportGenerator.ReportFileName) : null;
             CableForceReportPath = cfReport is not null && File.Exists(cfReport) ? cfReport : null;
         }
-        catch { DeflectionReportPath = null; CableForceReportPath = null; }
+        catch { DeflectionReportPath = null; MemberForceReportPath = null; CableForceReportPath = null; }
         Notify(nameof(HasResultsWorkbook));
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(PostProcessStatus));
@@ -1784,6 +1836,7 @@ public sealed class MainViewModel : Observable
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
             nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount),
             nameof(HasDeflectionReport), nameof(HasNoDeflectionReport), nameof(DeflectionReportUri), nameof(DeflectionReportName),
+            nameof(HasMemberForceReport), nameof(MemberForceReportName),
             nameof(HasCableForceReport), nameof(CableForceReportName),
             nameof(HasResultsWorkbook), nameof(ResultsWorkbookPath), nameof(PostProcessStatus)
         }) Notify(name);
