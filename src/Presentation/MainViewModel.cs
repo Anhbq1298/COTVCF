@@ -202,24 +202,29 @@ public sealed class MainViewModel : Observable
         set { if (State.CableStrengthReductionFactor == value) return; State.CableStrengthReductionFactor = value; Notify(); RecomputeCableCapacities(); Update(); }
     }
 
-    /// <summary>Refresh each cable's <see cref="CablePretensionConfig.DesignCapacityKN"/> from its section area
-    /// and the global strength / φ. Cables with no retrieved area keep whatever capacity was typed in.</summary>
+    /// <summary>Refresh each cable's read-only <see cref="CablePretensionConfig.DesignCapacityKN"/> from its
+    /// section area and the global strength / φ. An unresolved input clears the derived value so an old
+    /// capacity can never survive an fpu / φ change.</summary>
     private void RecomputeCableCapacities()
     {
         foreach (var cable in State.Cables)
-            if (cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor) is { } capacity)
-                cable.DesignCapacityKN = capacity;
+            cable.DesignCapacityKN = cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor);
         ScheduleCableCapacityReportSync();
     }
 
-    /// <summary>Design capacities [kN] as currently configured on the Cable tab — the same shape the study
-    /// snapshot hands to the workbook, so a regenerated report reads exactly what the tab shows.</summary>
+    /// <summary>Resolve design capacities [kN] from the current area / fpu / φ at the instant a report is built.
+    /// This deliberately does not trust a value persisted by an earlier run.</summary>
     private IReadOnlyDictionary<string, double> CurrentCableCapacities() => State.Cables
-        .Where(c => !string.IsNullOrWhiteSpace(c.CableName) && c.DesignCapacityKN is { } cap && double.IsFinite(cap) && cap > 0)
+        .Select(c => new
+        {
+            c.CableName,
+            Capacity = c.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor)
+        })
+        .Where(c => !string.IsNullOrWhiteSpace(c.CableName) && c.Capacity is { } cap && double.IsFinite(cap) && cap > 0)
         .GroupBy(c => c.CableName, StringComparer.Ordinal)
-        .ToDictionary(g => g.Key, g => g.First().DesignCapacityKN!.Value, StringComparer.Ordinal);
+        .ToDictionary(g => g.Key, g => g.First().Capacity!.Value, StringComparer.Ordinal);
 
-    /// <summary>Capacity is a post-processing input, so a change to fpu / φ (or a hand-typed capacity) only has to
+    /// <summary>Capacity is a post-processing input, so a change to fpu / φ only has to
     /// re-run the report — never SAP. Marks the report stale; <see cref="PumpCableCapacityReportSync"/> does the work
     /// once the app is idle again.</summary>
     private void ScheduleCableCapacityReportSync()
@@ -1585,6 +1590,8 @@ public sealed class MainViewModel : Observable
     private async void RegenerateCableForceReportAsync()
     {
         if (IsBusy) return;
+        // A manual Regenerate satisfies any queued automatic refresh for the same capacity change.
+        capacityReportStale = false;
         if (!HasResultsWorkbook)
         {
             CableForceReportPath = null;
@@ -1600,11 +1607,10 @@ public sealed class MainViewModel : Observable
             {
                 // Keep the workbook the single source of truth: store the capacities configured now, then
                 // rebuild the report from it. No SAP2000 involvement on either step.
-                if (capacities.Count > 0)
-                    COT_VCF.Application.Results.ConsolidatedResultWriter.UpdateCableCapacities(
-                        Path.Combine(root, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName), capacities);
+                COT_VCF.Application.Results.ConsolidatedResultWriter.UpdateCableCapacities(
+                    Path.Combine(root, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName), capacities);
                 return new COT_VCF.Application.Results.CableForceReportGenerator()
-                    .RegenerateFromWorkbook(root, capacities.Count > 0 ? capacities : null);
+                    .RegenerateFromWorkbook(root, capacities);
             });
             CableForceReportPath = File.Exists(path) ? path : null;
             if (CableForceReportPath is not null)
@@ -2132,6 +2138,7 @@ public sealed class MainViewModel : Observable
             nameof(CanViewTrussCandidates), nameof(TrussCandidatesHint),
             nameof(IterationSummary), nameof(SapStatus), nameof(StatusLine), nameof(AppliedPointsTitle), nameof(LoadStatus),
             nameof(TrussStatus), nameof(CableStatus), nameof(OutputStatus), nameof(CableCount), nameof(VariableCableCount), nameof(PretensionCandidateCount),
+            nameof(CableStrengthMpa), nameof(CableStrengthReductionFactor),
             nameof(CablePreviewSummary), nameof(DeflectionOutputSummary), nameof(MemberForceOutputSummary),
             nameof(FoundationOutputSummary), nameof(CableOutputSummary),
             nameof(MonitoredPointSummary), nameof(MonitoredPointCaseSummary), nameof(MonitoredPointStatus), nameof(MemberForceSummary), nameof(MemberForceStatus),

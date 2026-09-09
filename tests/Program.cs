@@ -70,6 +70,16 @@ internal static class Program
                        Math.Abs((refreshedCable.SectionAreaM2 ?? 0) - 0.001) < 1e-12 &&
                        Math.Abs((refreshedCable.DesignCapacityKN ?? 0) - 930) < 1e-9,
                     "Cable section refresh reads SAP once and updates section, area, and capacity without writing the model");
+                vm.CableStrengthMpa = 2160;
+                Assert(Math.Abs((refreshedCable.DesignCapacityKN ?? 0) - 1080) < 1e-9,
+                    "Changing fpu immediately recomputes the derived cable design capacity");
+                var cableGrid = FindVisuals<DataGrid>(window).Single(grid => grid.Name == "Cables");
+                var immutableCableColumns = cableGrid.Columns.Where(column =>
+                    column.Header is TextBlock header && header.Text is "Section" or "Area m²" or "Capacity kN").ToArray();
+                Assert(immutableCableColumns.Length == 3 && immutableCableColumns.All(column =>
+                           column is DataGridTextColumn && column.IsReadOnly && column.CellStyle?.Setters
+                               .OfType<Setter>().Any(setter => setter.Property == DataGridCell.BackgroundProperty) == true),
+                    "Section, area, and capacity render as grey read-only text columns");
 
                 vm.SelectedTab = 4;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);

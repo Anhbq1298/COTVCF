@@ -88,6 +88,12 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         {
             // Prefer the current schema; fall back to migrating v1.x SameAs / SameStep fields.
             var (mode, reference) = ResolveSync(row);
+            var area = row.SectionAreaM2 is { } a && double.IsFinite(a) && a > 0 ? a : (double?)null;
+            // Capacity is derived whenever area is available. Keep a positive cached value only as a
+            // compatibility fallback for older project files that did not persist the section area.
+            var capacity = area is { } currentArea
+                ? currentArea * state.CableStrengthMpa * 1000.0 * state.CableStrengthReductionFactor
+                : row.DesignCapacityKN is { } cap && double.IsFinite(cap) && cap > 0 ? cap : (double?)null;
             state.Cables.Add(new CablePretensionConfig
             {
                 CableName = row.CableName,
@@ -101,8 +107,8 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
                 ReferenceCableName = reference,
                 SyncFactor = row.SyncFactor,
                 SectionName = string.IsNullOrWhiteSpace(row.SectionName) ? null : row.SectionName,
-                SectionAreaM2 = row.SectionAreaM2 is { } a && double.IsFinite(a) && a > 0 ? a : null,
-                DesignCapacityKN = row.DesignCapacityKN is { } cap && double.IsFinite(cap) && cap > 0 ? cap : null,
+                SectionAreaM2 = area,
+                DesignCapacityKN = capacity,
             });
         }
     }

@@ -124,6 +124,13 @@ internal static class CableForceReportChecks
                 .RegenerateFromWorkbook(tmp, new Dictionary<string, double> { ["Cable1a-2"] = 999 });
             Check(File.ReadAllText(overridden).Contains("\"Cable1a-2\":999", StringComparison.Ordinal),
                 "a supplied capacity overrides the workbook without rewriting it");
+
+            ConsolidatedResultWriter.UpdateCableCapacities(xlsx, new Dictionary<string, double>());
+            var withoutCapacity = new CableForceReportGenerator()
+                .RegenerateFromWorkbook(tmp, new Dictionary<string, double>());
+            Check(ConsolidatedResultWriter.ReadCableCapacities(xlsx).Count == 0 &&
+                  !File.ReadAllText(withoutCapacity).Contains("\"Cable1a-2\":31106.5", StringComparison.Ordinal),
+                "regeneration clears stale workbook capacities when no current capacity can be derived");
         }
         finally { try { Directory.Delete(tmp, true); } catch { } }
     }

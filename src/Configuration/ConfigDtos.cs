@@ -159,9 +159,9 @@ public sealed class CableForceRowDto
     /// no section was retrieved.</summary>
     public double? SectionAreaM2 { get; set; }
 
-    /// <summary>Resolved cable design capacity [kN] used by the utilisation views in the cable-force report:
-    /// <c>SectionAreaM2 × CableStrengthMpa × 1000 × StrengthReductionFactor</c>, or a hand-entered override.
-    /// Null when no capacity has been resolved for this cable — the report then falls back to "% of study max".</summary>
+    /// <summary>Cached resolved cable design capacity [kN] used by the utilisation views in the cable-force report:
+    /// <c>SectionAreaM2 × CableStrengthMpa × 1000 × StrengthReductionFactor</c>. The UI recalculates this
+    /// read-only value whenever fpu or φ changes.</summary>
     public double? DesignCapacityKN { get; set; }
 
     // ---- legacy (read-only migration) — v1.x wrote these; applicator maps them to SyncMode/ReferenceCableName ----

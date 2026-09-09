@@ -183,6 +183,9 @@ writes SAP2000 — assignment is a later Run-workflow step. No "Current Force" c
   one dict per item). Never materialise the product to count it.
 - Summary strip (top-right): `Cables N · Variable N · Pretension Candidates <BigInteger N0>`
   (`MainViewModel.CableCount` / `VariableCableCount` / `PretensionCandidateCount`), live on every edit.
+- `Section`, `Area m²`, and `Capacity kN` are immutable, grey read-only columns. Section and area come from
+  SAP2000; capacity is always derived as `area × fpu × 1000 × φ`. Changing `fpu` or `φ` refreshes every visible
+  capacity, and Cable Forces `Regenerate` persists and uses those newly derived values without re-running SAP2000.
 - Tab 3 content is params only (left ~40%); the model is the shared preview on the right (see **Shared
   Model Preview**). On the pretension tab the shared viewer receives `SharedViewerCables` (= `State.Cables`),
   highlights configured cable members, always labels them by `CableName`, and synchronizes

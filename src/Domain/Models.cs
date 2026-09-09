@@ -492,9 +492,8 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
     /// <summary>Cross-section area [m²] read straight from the SAP cable section on + Add Cable. Read-only in
     /// the app. Kept so the resolved capacity can be recomputed when the global strength / φ change.</summary>
     public double? SectionAreaM2 { get => sectionAreaM2; set => Set(ref sectionAreaM2, value); }
-    /// <summary>Resolved cable design capacity [kN] — <c>area × strength × 1000 × φ</c>, or a hand-entered
-    /// override. Null when no capacity has been resolved; the cable report then has no utilisation view for
-    /// this cable and falls back to "% of study max".</summary>
+    /// <summary>Read-only UI value for the resolved cable design capacity [kN]:
+    /// <c>area × strength × 1000 × φ</c>. Null when the section area or strength inputs cannot resolve it.</summary>
     public double? DesignCapacityKN { get => designCapacityKn; set => Set(ref designCapacityKn, value); }
     /// <summary>Capacity [kN] implied by this cable's section area and the supplied global strength [MPa] / φ,
     /// or null when the area is unknown or non-positive.</summary>

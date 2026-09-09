@@ -265,7 +265,7 @@
        <TextBlock Text="{Binding SyncGroupSummary}" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center"/>
        <Border Width="1" Background="{StaticResource Border}" Margin="12,1,12,1"/>
        <TextBlock Text="Design capacity =" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center"
-                  ToolTip="Each cable's design capacity = section area × fpu × φ. Retrieved on + Add Cable; type into the Capacity column to override until the next retrieve. Changing fpu or φ recomputes every capacity and regenerates the Tab 06 cable-force report — no SAP2000 re-run."/>
+                  ToolTip="Each cable's read-only design capacity = section area × fpu × 1000 × φ [kN]. Changing fpu or φ recomputes every capacity and regenerates the Tab 06 cable-force report — no SAP2000 re-run."/>
        <TextBlock Text="fpu" FontStyle="Italic" FontSize="11" VerticalAlignment="Center" Margin="4,0,2,0"/>
        <TextBox Width="52" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
                 ToolTip="Cable material strength [MPa] — Grade 1860 strand by default"
@@ -285,6 +285,10 @@
        <Style x:Key="ForceEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
         <Setter Property="MinHeight" Value="0"/><Setter Property="Padding" Value="6,0"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="TextAlignment" Value="Right"/>
         <Style.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Trigger></Style.Triggers>
+       </Style>
+       <Style x:Key="DerivedCableCell" TargetType="DataGridCell" BasedOn="{StaticResource {x:Type DataGridCell}}">
+        <Setter Property="Background" Value="{StaticResource Surface}"/>
+        <Setter Property="Foreground" Value="{StaticResource Muted}"/>
        </Style>
       </DataGrid.Resources>
       <DataGrid.Columns>
@@ -346,16 +350,15 @@
        <DataGridTemplateColumn Header="Step Force" Width=".8*" MinWidth="70">
         <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" IsEnabled="{Binding CanEditStepForce}" Text="{Binding StepForce, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
        </DataGridTemplateColumn>
-       <DataGridTextColumn Binding="{Binding SectionName}" IsReadOnly="True" Width=".9*" MinWidth="76">
+       <DataGridTextColumn Binding="{Binding SectionName, Mode=OneWay}" IsReadOnly="True" Width=".9*" MinWidth="76" CellStyle="{StaticResource DerivedCableCell}">
         <DataGridTextColumn.Header><TextBlock Text="Section" ToolTip="SAP cable-section property assigned to this cable — read straight from the model, not editable"/></DataGridTextColumn.Header>
        </DataGridTextColumn>
-       <DataGridTextColumn Binding="{Binding SectionAreaM2, StringFormat={}{0:0.######}}" IsReadOnly="True" Width=".8*" MinWidth="72" ElementStyle="{StaticResource NumericCell}">
+       <DataGridTextColumn Binding="{Binding SectionAreaM2, Mode=OneWay, StringFormat={}{0:0.######}}" IsReadOnly="True" Width=".8*" MinWidth="72" ElementStyle="{StaticResource NumericCell}" CellStyle="{StaticResource DerivedCableCell}">
         <DataGridTextColumn.Header><TextBlock Text="Area m²" ToolTip="Cross-section area from the SAP cable section — read straight from the model, not editable"/></DataGridTextColumn.Header>
        </DataGridTextColumn>
-       <DataGridTemplateColumn Width=".95*" MinWidth="86">
-        <DataGridTemplateColumn.Header><TextBlock Text="Capacity kN" ToolTip="Design capacity for the utilisation views in the cable-force report. Auto = area × strength × φ; type to override until the next retrieve."/></DataGridTemplateColumn.Header>
-        <DataGridTemplateColumn.CellTemplate><DataTemplate><TextBox Style="{StaticResource ForceEditor}" Text="{Binding DesignCapacityKN, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource NullableDouble}, ValidatesOnExceptions=True, ValidatesOnDataErrors=True}"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
-       </DataGridTemplateColumn>
+       <DataGridTextColumn Binding="{Binding DesignCapacityKN, Mode=OneWay, StringFormat={}{0:0.####}}" IsReadOnly="True" Width=".95*" MinWidth="86" ElementStyle="{StaticResource NumericCell}" CellStyle="{StaticResource DerivedCableCell}">
+        <DataGridTextColumn.Header><TextBlock Text="Capacity kN" ToolTip="Calculated read-only as section area × fpu × 1000 × φ. Changing fpu or φ refreshes this value."/></DataGridTextColumn.Header>
+       </DataGridTextColumn>
        <DataGridTextColumn Header="Candidates" Binding="{Binding CandidateSummary}" IsReadOnly="True" Width=".7*" MinWidth="72" ElementStyle="{StaticResource NumericCell}"/>
        <DataGridTextColumn Header="Status" Binding="{Binding Status}" IsReadOnly="True" Width="1.1*" MinWidth="96"/>
       </DataGrid.Columns>
