@@ -1,4 +1,5 @@
 using COT_VCF.Domain;
+using COT_VCF.Application.Results;
 
 namespace COT_VCF.Application;
 
@@ -37,15 +38,23 @@ public sealed record StudyExecutionSnapshot(
     public string CableResultLoadCase { get; init; } = "";
     // Cable-force post-processing (Tab 06.05): the cables whose axial force is read under CableResultLoadCase.
     public IReadOnlyList<string> CableResultCables { get; init; } = [];
+    // Per-cable design capacity [kN] from the Pretension tab. Drives the utilisation views in the cable report;
+    // empty when no capacity is configured.
+    public IReadOnlyDictionary<string, double> CableDesignCapacities { get; init; } =
+        new Dictionary<string, double>();
     // Deflection post-processing (Tab 06): monitored points + the SAP case their Uz is read under.
     public IReadOnlyList<string> DeflectionPoints { get; init; } = [];
     public string DeflectionOutputCase { get; init; } = "";
     // Frame-force post-processing: all configured frame output groups are read under this case or combo.
     public string MemberForceResultCase { get; init; } = "";
+    // Frozen decision/ranking criteria used to derive the shortlist from this exact execution snapshot.
+    public StudyDecisionCriteria DecisionCriteria { get; init; } = new(50, 75, null, null, 0.9, 0.5, 0.3, 0.2);
 }
 
 public sealed record StudyExecutionProgress
 {
+    public string? RunId { get; init; }
+    public string? ManifestPath { get; init; }
     public int Total { get; init; }
     public int Completed { get; init; }
     public int Reused { get; init; }
@@ -87,7 +96,9 @@ public sealed record StudyArtifactOutcome(
     string? DeflectionReportPath,
     string? MemberForceReportPath,
     string? CableForceReportPath,
-    string? ErrorMessage)
+    string? ErrorMessage,
+    string? ShortlistWorkbookPath = null,
+    string? ShortlistReportPath = null)
 {
     public static StudyArtifactOutcome NotProduced { get; } = new(StudyArtifactState.NotProduced, null, null, null, null, null);
     public static StudyArtifactOutcome Failed(string message) => new(StudyArtifactState.Failed, null, null, null, null, message);

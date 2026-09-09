@@ -54,7 +54,8 @@ internal static class MemberForceReportChecks
             var writer = new ConsolidatedResultWriter();
             foreach (var result in results.Take(2)) writer.Add(result);
             var workbook = writer.Write(folder, [], "", "COT.sdb", @"C:\base.sdb", IterationStudyMode.FixHeight,
-                [new("[O]-TopChords", OutputGroupObjectKind.Frame, ["TC-01", "TC-02"])], "ULS");
+                memberGroups: [new("[O]-TopChords", OutputGroupObjectKind.Frame, ["TC-01", "TC-02"])],
+                memberForceCase: "ULS");
             var roundTrip = ConsolidatedResultWriter.Read(workbook);
             var station = roundTrip[0].MemberForceGroups!.Single(group => group.GroupName == "TopChords").Stations[1];
             Check(station.P == -851 && station.ObjectStationM == .5 && station.ElementName == "TC-01-1",

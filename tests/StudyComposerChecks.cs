@@ -1,6 +1,8 @@
 using COT_VCF.Application;
 using COT_VCF.Configuration;
 using COT_VCF.Domain;
+using System.Numerics;
+using System.Diagnostics;
 
 internal static class StudyComposerChecks
 {
@@ -54,6 +56,75 @@ internal static class StudyComposerChecks
               combined.Iterations[1].IterationKey == "L01_H01_P02" &&
               combined.Iterations[6].IterationKey == "L01_H02_P01" &&
               combined.Iterations[36].IterationKey == "L02_H01_P01", "Cartesian ordering is deterministic");
+
+        var filteredState = CreateState();
+        filteredState.Study.Mode = IterationStudyMode.Combined;
+        filteredState.Study.UseCandidateFilters = true;
+        filteredState.Study.MaxLoadingKpa = 3;
+        filteredState.Study.MinHeightM = 20;
+        filteredState.Study.MaxPretensionKn = 1200;
+        filteredState.Study.MaxLoadingToHeightRatio = 0.12;
+        filteredState.Study.MaxPretensionToHeightRatio = 55;
+        var filtered = composer.Compose(filteredState);
+        Check(filtered.UnfilteredRunCount == 216 && filtered.ExpectedRunCount == 20 &&
+              filtered.Iterations.Count == 20 && filtered.FilterAudit.ExcludedCount == 196,
+            "Persisted axis bounds and cross-dimension L/H + P/H predicates produce an exact audited count");
+        var filteredDto = new ConfigurationExtractor().ExtractStudySection(filteredState);
+        var restoredFilterState = CreateState();
+        var filterCheck = new ConfigValidationResult();
+        filterCheck.Study.Present = true;
+        new ConfigurationApplicator(restoredFilterState, new WorkflowService(new NoOpSap(), restoredFilterState))
+            .Apply(new CotVcfConfigDto { Tab05IterationStudy = filteredDto }, filterCheck);
+        Check(restoredFilterState.Study.UseCandidateFilters &&
+              restoredFilterState.Study.MaxLoadingToHeightRatio == 0.12 &&
+              composer.Compose(restoredFilterState).ExpectedRunCount == 20,
+            "Candidate filters round-trip through the project configuration and reproduce the same study rows");
+
+        var billionState = CreateState();
+        billionState.Study.Mode = IterationStudyMode.Combined;
+        billionState.LoadDefinitions[0].MaxQz = 1000;
+        billionState.Truss.MinimumHeight = 18;
+        billionState.Truss.MaximumHeight = 1017;
+        billionState.Truss.Increment = 1;
+        billionState.Cables[0].MinForce = 1000;
+        billionState.Cables[0].MaxForce = 1999;
+        billionState.Cables[0].StepForce = 1;
+        billionState.Study.UseCandidateFilters = true;
+        billionState.Study.MaxLoadingKpa = 1;
+        billionState.Study.MaxHeightM = 18;
+        billionState.Study.MaxPretensionKn = 1000;
+        var reduced = composer.Compose(billionState);
+        Check(reduced.UnfilteredRunCount == BigInteger.Parse("1000000000") &&
+              reduced.ExpectedRunCount == 1 && reduced.Iterations.Count == 1,
+            "A billion-row Cartesian space is counted exactly and reduced without materializing the product");
+
+        const int sparseAxisSize = 50_000;
+        var sparseLoads = Enumerable.Range(0, sparseAxisSize).Select(i => new LoadingStudyCandidate
+        {
+            Id = $"L{i}",
+            Combination = new LoadingCombination(i, [("LIVE", (double)sparseAxisSize)]),
+            PointLoads = [],
+            Loads = []
+        }).ToArray();
+        var sparseHeights = Enumerable.Range(0, sparseAxisSize)
+            .Select(i => new StudyHeightCandidate($"H{i}", new TrussCandidate(i, i + 1, 0, "", 0, 0, 0), "m"))
+            .ToArray();
+        StudyPretensionCandidate[] sparsePretensions =
+        [
+            new("P0", new PretensionCombination(0, new Dictionary<string, double> { ["Cable-A"] = 1 }),
+                [new PretensionAssignment("Cable-A", CablePretensionConfig.PretensionLoadCase, 1)])
+        ];
+        var sparseEvaluation = new StudyCandidateFilter().Evaluate(new IterationStudyConfig
+        {
+            UseCandidateFilters = true,
+            MaxLoadingToHeightRatio = 1
+        }, IterationStudyMode.Combined, sparseLoads, sparseHeights, sparsePretensions, 0, 0);
+        var sparseTimer = Stopwatch.StartNew();
+        var sparseRows = sparseEvaluation.Enumerate().ToArray();
+        sparseTimer.Stop();
+        Check(sparseEvaluation.Count == sparseAxisSize && sparseRows.Length == sparseAxisSize &&
+              sparseRows.All(row => row.HeightIndex == sparseAxisSize - 1) && sparseTimer.Elapsed < TimeSpan.FromSeconds(5),
+            "Sparse cross-filters enumerate 50,000 surviving rows without scanning the 2.5-billion-pair product");
 
         foreach (var row in combined.Iterations.Take(4)) state.Study.SetRunSelected(row.IterationKey, false);
         var restored = composer.Compose(state);
@@ -256,6 +327,7 @@ internal static class StudyComposerChecks
         public Task<Position> GetPointPositionAsync(string pointName, ModelInfo expected) => Task.FromResult(new Position());
         public Task<IReadOnlyList<PointLoad>> GetPointLoadsAsync(string pointName, ModelInfo expected) => Task.FromResult<IReadOnlyList<PointLoad>>([]);
         public Task<IReadOnlyList<CableTargetForce>> GetCableTargetForcesAsync(string cableName, ModelInfo expected) => Task.FromResult<IReadOnlyList<CableTargetForce>>([]);
+        public Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected) => Task.FromResult<IReadOnlyList<CableSection>>([]);
         public Task<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>> GetJointDisplacementsAsync(IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();
         public Task<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>> GetCableForcesAsync(IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();
         public Task<IReadOnlyList<COT_VCF.Domain.Results.FrameForceRead>> GetFrameForcesAsync(IReadOnlyList<string> frameNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();

@@ -15,6 +15,41 @@ internal static class ReliabilityChecks
         AtomicWritePreservesTheDestinationOnFailure();
         RecoveryUsesPerUserStorage();
         ConfigCompatibilityRejectsBrokenCableSync();
+        CableDesignCapacityRoundTripsThroughConfig();
+    }
+
+    private static void CableDesignCapacityRoundTripsThroughConfig()
+    {
+        var state = StudyComposerChecks.CreateState();
+        state.CableStrengthMpa = 1770;
+        state.CableStrengthReductionFactor = 0.45;
+        var cable = state.Cables[0];
+        cable.SectionAreaM2 = 0.0125;
+        var expected = 0.0125 * 1770 * 1000 * 0.45;
+        Check(cable.ResolveCapacity(1770, 0.45) is { } r && Math.Abs(r - expected) < 1e-6,
+            "ResolveCapacity = area × strength × 1000 × φ");
+        Check(cable.ResolveCapacity(1770, 1.01) is null,
+            "ResolveCapacity rejects a strength-reduction coefficient above one");
+        cable.DesignCapacityKN = cable.ResolveCapacity(1770, 0.45);
+
+        var dto = new ConfigurationExtractor().Extract(state, ["LIVE"], ConfigTabs.Loading | ConfigTabs.Truss | ConfigTabs.Cable);
+        var row = dto.Tab04CableForce!.Cables[0];
+        Check(dto.Tab04CableForce.CableStrengthMpa == 1770 && dto.Tab04CableForce.StrengthReductionFactor == 0.45
+              && row.SectionAreaM2 == 0.0125 && row.DesignCapacityKN is { } dc && Math.Abs(dc - expected) < 1e-6,
+            "cable strength / φ / area / capacity extract into the config DTO");
+
+        dto.Tab04CableForce.Cables[0].DesignCapacityKN = -5;
+        dto.Tab04CableForce.StrengthReductionFactor = 1.4;
+        var badCheck = new ConfigCompatibilityValidator().Validate(dto, state, ["LIVE"]);
+        Check(!badCheck.Cable.Ok
+              && badCheck.Cable.Problems.Any(p => p.Contains("design capacity", StringComparison.OrdinalIgnoreCase))
+              && badCheck.Cable.Problems.Any(p => p.Contains("φ", StringComparison.Ordinal)),
+            "config compatibility rejects a non-positive design capacity and an out-of-range φ");
+        state.CableStrengthReductionFactor = 1.4;
+        var composition = new StudyCompositionService().Compose(state);
+        var studyIssues = new StudyValidationService().Validate(state, composition);
+        Check(studyIssues.Any(issue => issue.Message.Contains("coefficient", StringComparison.OrdinalIgnoreCase)),
+            "study preflight blocks an out-of-range strength-reduction coefficient");
     }
 
     private static void AtomicWritePreservesTheDestinationOnFailure()

@@ -34,7 +34,7 @@ Acceptance criteria:
 
 ## Phase 2 - Run provenance
 
-Status: In progress
+Status: Complete
 
 Deliverables:
 
@@ -51,7 +51,7 @@ Acceptance criteria:
 
 ## Phase 3 - Resume and retry
 
-Status: Planned
+Status: Complete
 
 Deliverables:
 
@@ -68,7 +68,7 @@ Acceptance criteria:
 
 ## Phase 4 - Preflight and candidate filters
 
-Status: Planned
+Status: Complete
 
 Deliverables:
 
@@ -85,7 +85,7 @@ Acceptance criteria:
 
 ## Phase 5 - Decision results
 
-Status: Planned
+Status: In progress
 
 Deliverables:
 

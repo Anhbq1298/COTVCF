@@ -31,7 +31,9 @@ public sealed class StudyExecutionCoordinator
         StudyExecutionSnapshot snapshot,
         IProgress<StudyExecutionProgress> progress,
         CancellationToken token,
-        Action<CandidateResultDto>? onCandidateResult = null)
+        Action<CandidateResultDto>? onCandidateResult = null,
+        StudyRunIntent intent = StudyRunIntent.AllSelected,
+        string? parentRunId = null)
     {
         ValidateSnapshot(snapshot);
         LastDeflectionReportPath = null;
@@ -39,21 +41,27 @@ public sealed class StudyExecutionCoordinator
         LastCableForceReportPath = null;
         LastArtifactOutcome = StudyArtifactOutcome.NotProduced;
         LastRunReference = null;
-        var journal = StudyRunJournal.Start(snapshot);
+        var journal = StudyRunJournal.Start(snapshot, intent, parentRunId);
         LastRunReference = journal.Reference();
         var trackedProgress = new ForwardingProgress<StudyExecutionProgress>(item =>
         {
-            journal.Report(item);
-            progress.Report(item);
+            var tracked = item with { RunId = journal.RunId, ManifestPath = journal.ManifestPath };
+            journal.Report(tracked);
+            progress.Report(tracked);
         });
         var candidateResults = new ConcurrentBag<CandidateResultDto>();
+        var resultStore = new CandidateResultStore(snapshot);
         await using var pool = new SapWorkerPool(hostFactory, onCandidateResult: dto =>
         {
             candidateResults.Add(dto);
+            try { resultStore.Write(dto); }
+            catch { /* The in-memory result can still be consolidated for this run. */ }
             onCandidateResult?.Invoke(dto);
         });
         try
         {
+            if (intent == StudyRunIntent.RebuildSelected)
+                _ = new StudyRebuildArchive().Archive(snapshot);
             Exception? executionError = null;
             StudyExecutionResult result;
             try
@@ -72,12 +80,12 @@ public sealed class StudyExecutionCoordinator
                 catch when (executionError is not null) { }
             }
 
-            if (!candidateResults.IsEmpty)
+            var artifactResults = ResolveArtifactResults(snapshot, candidateResults, resultStore, intent, parentRunId);
+            if (artifactResults.Count > 0)
             {
                 try
                 {
-                    LastArtifactOutcome = artifactPublisher.Publish(snapshot,
-                        candidateResults.OrderBy(item => item.Parameters.RunIndex).ToArray());
+                    LastArtifactOutcome = artifactPublisher.Publish(snapshot, artifactResults);
                     LastDeflectionReportPath = LastArtifactOutcome.DeflectionReportPath;
                     LastMemberForceReportPath = LastArtifactOutcome.MemberForceReportPath;
                     LastCableForceReportPath = LastArtifactOutcome.CableForceReportPath;
@@ -108,6 +116,48 @@ public sealed class StudyExecutionCoordinator
     {
         public void Report(T value) => report(value);
     }
+
+    private static IReadOnlyList<CandidateResultDto> ResolveArtifactResults(
+        StudyExecutionSnapshot snapshot,
+        IEnumerable<CandidateResultDto> currentResults,
+        CandidateResultStore resultStore,
+        StudyRunIntent intent,
+        string? parentRunId)
+    {
+        var current = currentResults.ToArray();
+        if (intent is not (StudyRunIntent.ResumeInterrupted or StudyRunIntent.RetryFailed))
+            return current.OrderBy(item => item.Parameters.RunIndex).ToArray();
+
+        var parent = StudyRunJournal.TryReadCompatibleRun(snapshot, parentRunId);
+        if (parent is null) return current.OrderBy(item => item.Parameters.RunIndex).ToArray();
+        var included = parent.Candidates.Where(candidate => candidate.Selected)
+            .Select(candidate => candidate.IterationId).ToHashSet(StringComparer.Ordinal);
+        var jobs = snapshot.Jobs.ToDictionary(job => job.IterationId, StringComparer.Ordinal);
+        var merged = new Dictionary<string, CandidateResultDto>(StringComparer.Ordinal);
+
+        var workbook = StudyRunJournal.ValidArtifactPath(parent, "Workbook");
+        if (!string.IsNullOrWhiteSpace(workbook))
+        {
+            try
+            {
+                foreach (var result in ConsolidatedResultWriter.Read(workbook))
+                    if (included.Contains(result.IterationKey) && MatchesSnapshot(result, jobs, snapshot.BaselineModelPath))
+                        merged[result.IterationKey] = result;
+            }
+            catch { /* Per-candidate sidecars and current results remain available. */ }
+        }
+        foreach (var result in resultStore.Read(included)) merged[result.IterationKey] = result;
+        foreach (var result in current.Where(result => included.Contains(result.IterationKey))) merged[result.IterationKey] = result;
+        return merged.Values.OrderBy(item => item.Parameters.RunIndex).ToArray();
+    }
+
+    private static bool MatchesSnapshot(
+        CandidateResultDto result,
+        IReadOnlyDictionary<string, StudyIterationExecutionDto> jobs,
+        string baselineModelPath) =>
+        jobs.TryGetValue(result.IterationKey, out var job) &&
+        Path.GetFullPath(result.CandidateModelPath).Equals(Path.GetFullPath(job.ModelFullPath), StringComparison.OrdinalIgnoreCase) &&
+        Path.GetFullPath(result.BaselineModelPath).Equals(Path.GetFullPath(baselineModelPath), StringComparison.OrdinalIgnoreCase);
 
     private void ValidateSnapshot(StudyExecutionSnapshot snapshot)
     {

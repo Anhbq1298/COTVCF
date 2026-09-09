@@ -34,6 +34,9 @@ public record ModelInfo(string Path, string Version, int UnitsCode, string Force
 public record ModelSnapshot(ModelInfo Info, GeometryModel Geometry, IReadOnlyList<string> LoadPatterns);
 public record PointLoad(string PointName, string LoadPattern, double Fx, double Fy, double Fz);
 public record CableTargetForce(string CableName, string LoadPattern, double TargetForce, double RelativeDistance);
+/// <summary>One cable's assigned section property and cross-section area [m²], read from SAP.
+/// <see cref="AreaM2"/> is 0 with a <see cref="Problem"/> when the section could not be read.</summary>
+public record CableSection(string CableName, double AreaM2, string? PropertyName = null, string? Problem = null);
 public record ForceSource(string ObjectName, MemberKind Kind, string Source, double? Force, string? Problem = null);
 public enum ValidationSeverity { Error, Warning, Info }
 public record ValidationIssue(string Section, string Message, ValidationSeverity Severity = ValidationSeverity.Error);
@@ -481,6 +484,25 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         return Enumerable.Range(0, count).Select(i => i == count - 1 ? hi : lo + i * step).ToArray();
     }
 
+    private double? sectionAreaM2, designCapacityKn;
+    private string? sectionName;
+    /// <summary>SAP cable-section property assigned to this cable (e.g. "109T15.7"). Read-only: retrieved
+    /// straight from the model on + Add Cable and never editable in the app.</summary>
+    public string? SectionName { get => sectionName; set => Set(ref sectionName, value); }
+    /// <summary>Cross-section area [m²] read straight from the SAP cable section on + Add Cable. Read-only in
+    /// the app. Kept so the resolved capacity can be recomputed when the global strength / φ change.</summary>
+    public double? SectionAreaM2 { get => sectionAreaM2; set => Set(ref sectionAreaM2, value); }
+    /// <summary>Resolved cable design capacity [kN] — <c>area × strength × 1000 × φ</c>, or a hand-entered
+    /// override. Null when no capacity has been resolved; the cable report then has no utilisation view for
+    /// this cable and falls back to "% of study max".</summary>
+    public double? DesignCapacityKN { get => designCapacityKn; set => Set(ref designCapacityKn, value); }
+    /// <summary>Capacity [kN] implied by this cable's section area and the supplied global strength [MPa] / φ,
+    /// or null when the area is unknown or non-positive.</summary>
+    public double? ResolveCapacity(double strengthMpa, double phi) =>
+        sectionAreaM2 is { } a && double.IsFinite(a) && a > 0 && double.IsFinite(strengthMpa) && strengthMpa > 0 &&
+        double.IsFinite(phi) && phi is > 0 and <= 1
+            ? a * strengthMpa * 1000.0 * phi : null;
+
     string IDataErrorInfo.Error => "";
     public string this[string columnName] => columnName switch
     {
@@ -488,6 +510,7 @@ public sealed class CablePretensionConfig : Observable, IDataErrorInfo
         nameof(MinForce) when ApplyRange && (MinForce is not double v || !double.IsFinite(v)) => "Enter a minimum force.",
         nameof(MaxForce) when ApplyRange && (MaxForce is not double v || !double.IsFinite(v) || MinForce is not double min || v < min) => "Max force must be greater than or equal to Min force.",
         nameof(StepForce) when CanEditStepForce && (StepForce is not double v || !double.IsFinite(v) || v <= 0) => "Step force must be greater than zero.",
+        nameof(DesignCapacityKN) when DesignCapacityKN is double cap && (!double.IsFinite(cap) || cap <= 0) => "Design capacity must be greater than zero.",
         _ => ""
     };
 }
@@ -497,11 +520,37 @@ public sealed class IterationStudyConfig : Observable
 {
     private IterationStudyMode mode = IterationStudyMode.FixPretension;
     private string fixedHeightCandidateId = "H01", fixedPretensionCandidateId = "P01", outputDirectory = "";
+    private bool useCandidateFilters;
+    private double? minLoadingKpa, maxLoadingKpa, minHeightM, maxHeightM, minPretensionKn, maxPretensionKn;
+    private double? maxLoadingToHeightRatio, maxPretensionToHeightRatio;
+    private double? deflectionPassLimitMm = 50, deflectionFailLimitMm = 75;
+    private double? minimumCableForceKn, maximumCableForceKn;
+    private double decisionWarningUtilization = 0.9;
+    private double deflectionRankWeight = 0.5, pretensionRankWeight = 0.3, heightRankWeight = 0.2;
     private readonly HashSet<string> excludedIterationKeys = new(StringComparer.Ordinal);
     public IterationStudyMode Mode { get => mode; set => Set(ref mode, value); }
     public string FixedHeightCandidateId { get => fixedHeightCandidateId; set => Set(ref fixedHeightCandidateId, value ?? ""); }
     public string FixedPretensionCandidateId { get => fixedPretensionCandidateId; set => Set(ref fixedPretensionCandidateId, value ?? ""); }
     public string OutputDirectory { get => outputDirectory; set => Set(ref outputDirectory, value?.Trim() ?? ""); }
+    public bool UseCandidateFilters { get => useCandidateFilters; set => Set(ref useCandidateFilters, value); }
+    public double? MinLoadingKpa { get => minLoadingKpa; set => Set(ref minLoadingKpa, value); }
+    public double? MaxLoadingKpa { get => maxLoadingKpa; set => Set(ref maxLoadingKpa, value); }
+    public double? MinHeightM { get => minHeightM; set => Set(ref minHeightM, value); }
+    public double? MaxHeightM { get => maxHeightM; set => Set(ref maxHeightM, value); }
+    public double? MinPretensionKn { get => minPretensionKn; set => Set(ref minPretensionKn, value); }
+    public double? MaxPretensionKn { get => maxPretensionKn; set => Set(ref maxPretensionKn, value); }
+    /// <summary>Optional cross-dimension predicate: max |qz| / height must not exceed this kPa/m value.</summary>
+    public double? MaxLoadingToHeightRatio { get => maxLoadingToHeightRatio; set => Set(ref maxLoadingToHeightRatio, value); }
+    /// <summary>Optional cross-dimension predicate: max |target force| / height must not exceed this kN/m value.</summary>
+    public double? MaxPretensionToHeightRatio { get => maxPretensionToHeightRatio; set => Set(ref maxPretensionToHeightRatio, value); }
+    public double? DeflectionPassLimitMm { get => deflectionPassLimitMm; set => Set(ref deflectionPassLimitMm, value); }
+    public double? DeflectionFailLimitMm { get => deflectionFailLimitMm; set => Set(ref deflectionFailLimitMm, value); }
+    public double? MinimumCableForceKn { get => minimumCableForceKn; set => Set(ref minimumCableForceKn, value); }
+    public double? MaximumCableForceKn { get => maximumCableForceKn; set => Set(ref maximumCableForceKn, value); }
+    public double DecisionWarningUtilization { get => decisionWarningUtilization; set => Set(ref decisionWarningUtilization, value); }
+    public double DeflectionRankWeight { get => deflectionRankWeight; set => Set(ref deflectionRankWeight, value); }
+    public double PretensionRankWeight { get => pretensionRankWeight; set => Set(ref pretensionRankWeight, value); }
+    public double HeightRankWeight { get => heightRankWeight; set => Set(ref heightRankWeight, value); }
     public IReadOnlyCollection<string> ExcludedIterationKeys => excludedIterationKeys;
 
     public bool IsRunSelected(string iterationKey) => !excludedIterationKeys.Contains(iterationKey);
@@ -530,6 +579,7 @@ public sealed class ApplicationState : Observable
     private IReadOnlyDictionary<string, double> sessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
     private string connection = "Disconnected";
     private double tributaryWidthB = 1, numberOfStories = 1;
+    private double cableStrengthMpa = 1860, cableStrengthReductionFactor = 0.5;
     public ModelInfo? Model { get => model; set { Set(ref model, value); Notify(nameof(Units)); } }
     public string Connection { get => connection; set { Set(ref connection, value); Notify(nameof(IsSapConnected)); } }
     public bool IsSapConnected => Connection == "Connected";
@@ -553,6 +603,11 @@ public sealed class ApplicationState : Observable
     public double TributaryWidthB { get => tributaryWidthB; set => Set(ref tributaryWidthB, value); }
     public double NumberOfStories { get => numberOfStories; set => Set(ref numberOfStories, value); }
     public ObservableCollection<CablePretensionConfig> Cables { get; } = [];
+    /// <summary>Global cable material strength [MPa] (Grade 1860 strand by default) used with
+    /// <see cref="CableStrengthReductionFactor"/> to resolve each cable's design capacity from its section area.</summary>
+    public double CableStrengthMpa { get => cableStrengthMpa; set => Set(ref cableStrengthMpa, value); }
+    /// <summary>Global strength-reduction coefficient φ (default 0.5) applied to <c>area × strength</c>.</summary>
+    public double CableStrengthReductionFactor { get => cableStrengthReductionFactor; set => Set(ref cableStrengthReductionFactor, value); }
     public TrussHeightConfiguration Truss { get; } = new();
     public OutputSettingsConfiguration OutputSettings { get; } = new();
     public IterationStudyConfig Study { get; } = new();

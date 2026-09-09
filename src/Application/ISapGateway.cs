@@ -22,6 +22,10 @@ public interface ISapGateway : IDisposable
     Task<IReadOnlyList<PointLoad>> GetPointLoadsAsync(string pointName, ModelInfo expected);
     /// <summary>Reads all target-force assignments for one cable from the verified active model.</summary>
     Task<IReadOnlyList<CableTargetForce>> GetCableTargetForcesAsync(string cableName, ModelInfo expected);
+    /// <summary>Reads each cable's assigned section property and cross-section area [m²] from the verified
+    /// active model. One row per requested cable, in order; a cable whose section can't be read comes back
+    /// with <c>AreaM2 == 0</c> and a Problem message rather than throwing.</summary>
+    Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected);
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
     Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected);

@@ -76,10 +76,15 @@ public sealed class SapGateway : ISapGateway
         if (string.IsNullOrWhiteSpace(modelPath)) throw new InvalidOperationException("A baseline model path is required.");
         var fullPath = Path.GetFullPath(modelPath);
         if (!File.Exists(fullPath)) throw new FileNotFoundException("The baseline SAP2000 model no longer exists.", fullPath);
-        Check(Model.File.OpenFile(fullPath), "File.OpenFile", fullPath);
+        // SAP2000 26 returns a nonzero code from File.OpenFile whenever it replaces a model that is
+        // already open — the open still succeeds. Only a fresh instance with no model loaded
+        // returns 0. The active model read back below is the authoritative result, so the return
+        // code is kept for diagnostics instead of being treated as a failure.
+        var openCode = Model.File.OpenFile(fullPath);
         var info = ReadInfo();
         if (!SamePath(info.Path, fullPath))
-            throw new InvalidOperationException($"SAP2000 opened a different model than requested. Expected {fullPath}; active {info.Path}.");
+            throw new InvalidOperationException(
+                $"SAP2000 did not open the requested model (File.OpenFile returned {openCode}). Expected {fullPath}; active {info.Path}.");
         return info;
     });
     public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => worker.Run(() =>
@@ -447,6 +452,38 @@ public sealed class SapGateway : ISapGateway
             .ToArray();
         Verify(expected);
         return assignments;
+    });
+    public Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected) =>
+        worker.Run<IReadOnlyList<CableSection>>(() =>
+    {
+        Verify(expected);
+        var results = new List<CableSection>(cableNames.Count);
+        // Cable section area is length²; the study session runs in kN/m/C, so the value is m². Assert it.
+        if (!Model.GetPresentUnits().ToString().StartsWith("kN_m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Cable section retrieval expects kN, m units; the model is in {ReadInfo().Units}.");
+
+        int total = 0; string[] all = [];
+        Check(Model.CableObj.GetNameList(ref total, ref all), "CableObj.GetNameList");
+        var known = all.Take(total).ToArray();
+
+        foreach (var name in cableNames)
+        {
+            var actual = known.FirstOrDefault(n => n.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (actual is null) { results.Add(new(name, 0, Problem: $"Cable '{name}' is not in the model.")); continue; }
+
+            string prop = "";
+            var propRc = Model.CableObj.GetProperty(actual, ref prop);
+            if (propRc != 0 || string.IsNullOrWhiteSpace(prop))
+            { results.Add(new(actual, 0, Problem: $"CableObj.GetProperty returned {propRc} for '{actual}'.")); continue; }
+
+            string mat = "", notes = "", guid = ""; double area = 0; int color = 0;
+            var areaRc = Model.PropCable.GetProp(prop, ref mat, ref area, ref color, ref notes, ref guid);
+            results.Add(areaRc == 0 && double.IsFinite(area) && area > 0
+                ? new(actual, area, prop)
+                : new(actual, 0, prop, $"PropCable.GetProp returned {areaRc} (area {area}) for section '{prop}'."));
+        }
+        Verify(expected);
+        return results;
     });
     public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => worker.Run<IReadOnlyList<ForceSource>>(() =>
     {

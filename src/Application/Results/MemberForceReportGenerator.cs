@@ -14,11 +14,12 @@ public sealed class MemberForceReportGenerator
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
 
     public string Generate(string studyFolder, IReadOnlyList<CandidateResultDto> results,
-        string baselineName, IterationStudyMode studyMode)
+        string baselineName, IterationStudyMode studyMode, IReadOnlyList<string>? siblingReports = null)
     {
         Directory.CreateDirectory(studyFolder);
         var path = Path.Combine(studyFolder, ReportFileName);
-        AtomicFile.WriteAllText(path, BuildHtml(Build(results, baselineName, studyMode)), new System.Text.UTF8Encoding(false));
+        var siblings = siblingReports ?? ReportNav.PresentIn(studyFolder, "member").ToArray();
+        AtomicFile.WriteAllText(path, BuildHtml(Build(results, baselineName, studyMode, siblings)), new System.Text.UTF8Encoding(false));
         return path;
     }
 
@@ -32,7 +33,8 @@ public sealed class MemberForceReportGenerator
             results.FirstOrDefault()?.StudyMode ?? IterationStudyMode.Combined);
     }
 
-    public MemberForceReportDto Build(IReadOnlyList<CandidateResultDto> results, string baselineName, IterationStudyMode studyMode)
+    public MemberForceReportDto Build(IReadOnlyList<CandidateResultDto> results, string baselineName, IterationStudyMode studyMode,
+        IReadOnlyList<string>? siblingReports = null)
     {
         var keys = results.SelectMany(result => result.MemberForceGroups ?? [])
             .Select(group => (group.SapGroupName, group.GroupName, group.OutputCase)).Distinct()
@@ -60,17 +62,18 @@ public sealed class MemberForceReportGenerator
             .Select(warning => new ResultReportWarningDto(warning.IterationKey, warning.Category,
                 warning.Severity.ToString(), warning.Message)).ToArray();
         return new MemberForceReportDto(new MemberForceStudyDto(baselineName, studyMode.ToString(), results.Count,
-            DateTimeOffset.Now.ToString("o"), IndividualProfileLimit), groups, warnings);
+            DateTimeOffset.Now.ToString("o"), IndividualProfileLimit), groups, warnings, siblingReports ?? []);
     }
 
     public string BuildHtml(MemberForceReportDto dto)
     {
         var data = JsonSerializer.Serialize(dto, Json).Replace("</", "<\\/", StringComparison.Ordinal);
+        var library = ReportNav.Library("member", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Member Forces — {{Esc(dto.Study.BaselineModelName)}}</title>
-<style>{{Style}}</style></head><body><header><h1>Member Forces Results Viewer</h1>
+<style>{{Style}}</style></head><body><header><div><h1>Member Forces Results Viewer</h1>
 <div>{{Esc(dto.Study.BaselineModelName)}} · {{dto.Study.CandidateCount}} candidate(s) · {{Esc(dto.Study.StudyMode)}}</div>
-<p>All SAP stations remain stored. The chart defaults to the start, middle and end of every SAP analysis element; choose All SAP stations when the complete station detail is needed. P/V2/V3 are kN; T/M2/M3 are kNm.</p></header>
+<p>All SAP stations remain stored. The chart defaults to the start, middle and end of every SAP analysis element; choose All SAP stations when the complete station detail is needed. P/V2/V3 are kN; T/M2/M3 are kNm.</p></div>{{library}}</header>
 <nav><label>Group <select id="group"><option value="all">All groups</option></select></label>
 <label>Component <select id="component"><option>P</option><option>V2</option><option>V3</option><option>T</option><option>M2</option><option>M3</option></select></label>
 <label>Result step <select id="step"></select></label><label>Positions <select id="sampling"><option value="summary">Start + middle + end per element</option><option value="all">All SAP stations</option></select></label><label>Display <select id="view"><option value="profiles">All profiles</option><option value="envelope">Envelope</option><option value="matrix">Station matrix</option></select></label><button id="reset">Reset filters</button><span id="scope"></span></nav>
@@ -82,7 +85,7 @@ public sealed class MemberForceReportGenerator
     private static string Esc(string? value) => System.Net.WebUtility.HtmlEncode(value ?? "");
 
     private const string Style = """
-*{box-sizing:border-box}body{margin:0;font:13px/1.4 Segoe UI,Arial;color:#1a1a1a}header{padding:10px 14px;border-bottom:2px solid #1f4788}h1{font-size:16px;margin:0}header div,header p{margin:3px 0;color:#666;font-size:11.5px}nav,#filters{display:flex;gap:9px;align-items:center;padding:6px 14px;border-bottom:1px solid #c7ccd2;flex-wrap:wrap}select,button{font:12px Segoe UI,Arial;padding:3px 7px;border:1px solid #bbb;border-radius:3px;background:white;cursor:pointer}button:hover{background:#f3f4f6}#scope{margin-left:auto;color:#666}.ms{position:relative}.ms>button{min-width:100px;text-align:left}.ms.active>button{color:#1f4788;border-color:#1f4788;font-weight:600}.pop{position:absolute;top:100%;left:0;z-index:30;margin-top:2px;min-width:240px;max-height:280px;overflow:auto;padding:4px 0;background:#fff;border:1px solid #c7ccd2;border-radius:3px;box-shadow:0 4px 14px #0002}.pop label{display:flex;align-items:center;gap:7px;padding:3px 10px;white-space:nowrap;font-size:11.5px;cursor:pointer}.pop label:hover{background:#f3f4f6}.pop .all{font-weight:600;border-bottom:1px solid #c7ccd2}#notice{margin:7px 14px;padding:6px;background:#fff8e1;border-left:3px solid #f57c00}.panel{padding:8px 10px;border-bottom:1px solid #ccc}.title{color:#1f4788;font-weight:600}.sub{color:#666;font-size:11px;margin-left:8px}.stage{display:grid;grid-template-columns:minmax(0,1fr) 220px}.chart{width:100%;height:350px}.station-marker{pointer-events:none}.station-hit{cursor:crosshair}.legend{border-left:1px solid #ccc;padding:6px;max-height:350px;overflow:auto}.legend button{display:block;width:100%;text-align:left;border:0;font:11px Consolas}.legend button.on{background:#e8f0fe}.matrix-wrap{overflow:auto;max-height:570px}.matrix{border-collapse:separate;border-spacing:1px;font:10px Consolas;white-space:nowrap}.matrix th{position:sticky;top:0;background:#eee;padding:4px}.matrix th:first-child,.matrix td:first-child{position:sticky;left:0;background:white;z-index:2}.matrix td{padding:3px 5px;text-align:right}.empty{padding:24px;color:#666}#warnings{padding:7px 14px;color:#8a6d00;font-size:11px}#tip{position:fixed;pointer-events:none;z-index:50;max-width:290px;padding:6px 8px;border-radius:2px;background:#212121;color:#fff;font:11px/1.45 Consolas,monospace;white-space:pre-line;box-shadow:0 8px 16px #0003}[hidden]{display:none!important}
+*{box-sizing:border-box}body{margin:0;font:13px/1.4 Segoe UI,Arial;color:#1a1a1a}header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:10px 14px;border-bottom:2px solid #1f4788}h1{font-size:16px;margin:0}header>div>div,header p{margin:3px 0;color:#666;font-size:11.5px}.lib{font-size:12px}.lib summary{cursor:pointer;color:#1f4788;font-weight:600}.lib ul{list-style:none;margin:6px 0 0;padding:0;border:1px solid #c7ccd2;border-radius:3px;min-width:180px}.lib li{padding:4px 8px;border-bottom:1px solid #f3f4f6;color:#666}.lib li.on{color:#1a1a1a}.lib li span{float:right;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#9aa0a6}.lib li.on span{color:#2e7d32}nav,#filters{display:flex;gap:9px;align-items:center;padding:6px 14px;border-bottom:1px solid #c7ccd2;flex-wrap:wrap}select,button{font:12px Segoe UI,Arial;padding:3px 7px;border:1px solid #bbb;border-radius:3px;background:white;cursor:pointer}button:hover{background:#f3f4f6}#scope{margin-left:auto;color:#666}.ms{position:relative}.ms>button{min-width:100px;text-align:left}.ms.active>button{color:#1f4788;border-color:#1f4788;font-weight:600}.pop{position:absolute;top:100%;left:0;z-index:30;margin-top:2px;min-width:240px;max-height:280px;overflow:auto;padding:4px 0;background:#fff;border:1px solid #c7ccd2;border-radius:3px;box-shadow:0 4px 14px #0002}.pop label{display:flex;align-items:center;gap:7px;padding:3px 10px;white-space:nowrap;font-size:11.5px;cursor:pointer}.pop label:hover{background:#f3f4f6}.pop .all{font-weight:600;border-bottom:1px solid #c7ccd2}#notice{margin:7px 14px;padding:6px;background:#fff8e1;border-left:3px solid #f57c00}.panel{padding:8px 10px;border-bottom:1px solid #ccc}.title{color:#1f4788;font-weight:600}.sub{color:#666;font-size:11px;margin-left:8px}.stage{display:grid;grid-template-columns:minmax(0,1fr) 220px}.chart{width:100%;height:350px}.station-marker{pointer-events:none}.station-hit{cursor:crosshair}.legend{border-left:1px solid #ccc;padding:6px;max-height:350px;overflow:auto}.legend button{display:block;width:100%;text-align:left;border:0;font:11px Consolas}.legend button.on{background:#e8f0fe}.matrix-wrap{overflow:auto;max-height:570px}.matrix{border-collapse:separate;border-spacing:1px;font:10px Consolas;white-space:nowrap}.matrix th{position:sticky;top:0;background:#eee;padding:4px}.matrix th:first-child,.matrix td:first-child{position:sticky;left:0;background:white;z-index:2}.matrix td{padding:3px 5px;text-align:right}.empty{padding:24px;color:#666}#warnings{padding:7px 14px;color:#8a6d00;font-size:11px}#tip{position:fixed;pointer-events:none;z-index:50;max-width:290px;padding:6px 8px;border-radius:2px;background:#212121;color:#fff;font:11px/1.45 Consolas,monospace;white-space:pre-line;box-shadow:0 8px 16px #0003}[hidden]{display:none!important}
 """;
 
     private const string Script = """

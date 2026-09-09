@@ -21,19 +21,37 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
         foreach (var result in results) consolidator.Add(result);
         var workbook = consolidator.Write(studyFolder, snapshot.DeflectionPoints, snapshot.DeflectionOutputCase,
             snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode,
-            snapshot.OutputGroups.Where(group => group.ObjectKind == COT_VCF.Domain.OutputGroupObjectKind.Frame).ToArray(),
-            snapshot.MemberForceResultCase);
+            cableCapacities: snapshot.CableDesignCapacities,
+            cableResultCase: snapshot.CableResultLoadCase,
+            memberGroups: snapshot.OutputGroups.Where(group =>
+                group.ObjectKind == COT_VCF.Domain.OutputGroupObjectKind.Frame).ToArray(),
+            memberForceCase: snapshot.MemberForceResultCase);
         var ordered = consolidator.Snapshot();
-        var deflection = new DeflectionReportGenerator().Generate(studyFolder, ordered,
-            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode);
+        var hasCableReport = ordered.Any(r => (r.CableForces?.Count ?? 0) > 0);
+        var hasMemberReport = ordered.Any(r => (r.MemberForceGroups?.Count ?? 0) > 0);
+        var currentReports = new List<string> { "deflection" };
+        if (hasMemberReport) currentReports.Add("member");
+        if (hasCableReport) currentReports.Add("cable");
+        currentReports.Add("shortlist");
+        var decisions = new StudyDecisionService().Evaluate(ordered, snapshot.DecisionCriteria);
+
+        var deflectionGen = new DeflectionReportGenerator();
+        var deflection = deflectionGen.Generate(studyFolder, ordered,
+            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode, currentReports);
         string? member = null;
-        if (ordered.Any(result => (result.MemberForceGroups?.Count ?? 0) > 0))
+        if (hasMemberReport)
             member = new MemberForceReportGenerator().Generate(studyFolder, ordered,
-                snapshot.BaselineModel.Name, snapshot.StudyMode);
+                snapshot.BaselineModel.Name, snapshot.StudyMode, currentReports);
         string? cable = null;
-        if (ordered.Any(r => (r.CableForces?.Count ?? 0) > 0))
+        if (hasCableReport)
+        {
             cable = new CableForceReportGenerator().Generate(studyFolder, ordered,
-                snapshot.BaselineModel.Name, snapshot.StudyMode, snapshot.CableResultLoadCase);
-        return new(StudyArtifactState.Ready, workbook, deflection, member, cable, null);
+                snapshot.BaselineModel.Name, snapshot.StudyMode, snapshot.CableResultLoadCase,
+                snapshot.CableDesignCapacities, currentReports);
+        }
+        var shortlist = new StudyShortlistExporter().Export(studyFolder, decisions,
+            snapshot.DecisionCriteria, siblingReports: currentReports);
+        return new(StudyArtifactState.Ready, workbook, deflection, member, cable, null,
+            shortlist.WorkbookPath, shortlist.HtmlPath);
     }
 }

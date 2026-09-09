@@ -80,6 +80,9 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
 
     private void ApplyCables(CableForceConfigDto d)
     {
+        state.CableStrengthMpa = double.IsFinite(d.CableStrengthMpa) && d.CableStrengthMpa > 0 ? d.CableStrengthMpa : 1860;
+        state.CableStrengthReductionFactor = double.IsFinite(d.StrengthReductionFactor) && d.StrengthReductionFactor > 0 ? d.StrengthReductionFactor : 0.5;
+
         state.Cables.Clear();
         foreach (var row in d.Cables ?? [])
         {
@@ -97,6 +100,9 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
                 SyncMode = mode,
                 ReferenceCableName = reference,
                 SyncFactor = row.SyncFactor,
+                SectionName = string.IsNullOrWhiteSpace(row.SectionName) ? null : row.SectionName,
+                SectionAreaM2 = row.SectionAreaM2 is { } a && double.IsFinite(a) && a > 0 ? a : null,
+                DesignCapacityKN = row.DesignCapacityKN is { } cap && double.IsFinite(cap) && cap > 0 ? cap : null,
             });
         }
     }
@@ -151,5 +157,22 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         try { state.Study.OutputDirectory = new StudyPathService().GetStudyRoot(state.SessionBaselineModel?.Path ?? state.Model?.Path ?? ""); }
         catch { state.Study.OutputDirectory = ""; }
         state.Study.RestoreExcludedIterationKeys(d.ExcludedIterationKeys);
+        state.Study.UseCandidateFilters = d.UseCandidateFilters;
+        state.Study.MinLoadingKpa = d.MinLoadingKpa;
+        state.Study.MaxLoadingKpa = d.MaxLoadingKpa;
+        state.Study.MinHeightM = d.MinHeightM;
+        state.Study.MaxHeightM = d.MaxHeightM;
+        state.Study.MinPretensionKn = d.MinPretensionKn;
+        state.Study.MaxPretensionKn = d.MaxPretensionKn;
+        state.Study.MaxLoadingToHeightRatio = d.MaxLoadingToHeightRatio;
+        state.Study.MaxPretensionToHeightRatio = d.MaxPretensionToHeightRatio;
+        state.Study.DeflectionPassLimitMm = d.DeflectionPassLimitMm;
+        state.Study.DeflectionFailLimitMm = d.DeflectionFailLimitMm;
+        state.Study.MinimumCableForceKn = d.MinimumCableForceKn;
+        state.Study.MaximumCableForceKn = d.MaximumCableForceKn;
+        state.Study.DecisionWarningUtilization = d.DecisionWarningUtilization;
+        state.Study.DeflectionRankWeight = d.DeflectionRankWeight;
+        state.Study.PretensionRankWeight = d.PretensionRankWeight;
+        state.Study.HeightRankWeight = d.HeightRankWeight;
     }
 }

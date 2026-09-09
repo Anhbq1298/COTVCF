@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text.RegularExpressions;
 using COT_VCF.Application.Results;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
@@ -60,6 +61,24 @@ internal static class CableForceReportChecks
               html.Contains("Result Library") && html.Contains("Result unavailable") &&
               !html.Contains("http://") && !html.Contains("https://") && !html.Contains("cdn."),
             "Cable Forces HTML is self-contained, has the Result Library, and shows 'Result unavailable' for gaps");
+        var htmlIds = Regex.Matches(html, "\\bid=\\\"([^\\\"]+)\\\"")
+            .Select(match => match.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+        var scriptIds = Regex.Matches(html, "(?:document\\.getElementById|el)\\(\\\"([^\\\"]+)\\\"\\)")
+            .Select(match => match.Groups[1].Value).ToArray();
+        Check(scriptIds.All(htmlIds.Contains) &&
+              new[] { "tornado", "trellis", "heatmap", "gov", "meters" }.All(htmlIds.Contains),
+            "Cable Forces report script references only DOM elements present in the narrative report markup");
+
+        // capacity → utilisation view + Result-Library cross-link
+        var caps = new Dictionary<string, double> { ["Cable1a-2"] = 2000, ["Cable1b-2"] = 2500 };
+        var capDto = gen.Build(results, "COT Framing_V1.2.sdb", IterationStudyMode.Combined, "CABLE_FORCE",
+            caps, new[] { "cable", "deflection" });
+        Check(capDto.Capacities.Count == 2 && capDto.Capacities["Cable1a-2"] == 2000,
+            "configured cable design capacities flow into the report DTO");
+        var capHtml = gen.BuildHtml(capDto);
+        Check(capHtml.Contains("% of capacity") && capHtml.Contains("Deflection_Report.html") &&
+              !capHtml.Contains("http://") && !capHtml.Contains("https://"),
+            "the report offers the utilisation toggle and links the sibling deflection report when it exists");
 
         // workbook round-trip of the cable-force rows
         var tmp = Path.Combine(Path.GetTempPath(), "cotvcf_cf_" + Guid.NewGuid().ToString("N"));
@@ -68,15 +87,19 @@ internal static class CableForceReportChecks
         {
             var writer = new ConsolidatedResultWriter();
             foreach (var r in results) writer.Add(r);
-            var xlsx = writer.Write(tmp, [], "", "COT Framing_V1.2.sdb", @"C:\base.sdb", IterationStudyMode.Combined);
+            var xlsx = writer.Write(tmp, [], "SERVICE", "COT Framing_V1.2.sdb", @"C:\base.sdb",
+                IterationStudyMode.Combined, caps, "CABLE_FORCE");
             var back = ConsolidatedResultWriter.Read(xlsx);
             var backRow3 = back.Single(r => r.Parameters.RunIndex == 3);
             Check(back.All(r => (r.CableForces?.Count ?? 0) == 2), "workbook round-trips 2 cable-force rows per candidate");
             Check(backRow3.CableForces!.Single(c => c.CableName == "Cable1b-2").ForceKN is null &&
                   backRow3.CableForces!.Single(c => c.CableName == "Cable1b-2").Status == ResultValueStatus.NoResult,
                 "workbook preserves the missing cable force as null + its status");
-            Check(new CableForceReportGenerator().RegenerateFromWorkbook(tmp).EndsWith("Cable_Forces_Report.html"),
-                "Cable_Forces_Report.html regenerates from the workbook alone (no SAP)");
+            var regenerated = new CableForceReportGenerator().RegenerateFromWorkbook(tmp);
+            Check(regenerated.EndsWith("Cable_Forces_Report.html") &&
+                  ConsolidatedResultWriter.ReadCableResultCase(xlsx) == "CABLE_FORCE" &&
+                  File.ReadAllText(regenerated).Contains("cable result case: CABLE_FORCE", StringComparison.Ordinal),
+                "Cable report regenerates with its exact result case from the workbook alone (no SAP)");
         }
         finally { try { Directory.Delete(tmp, true); } catch { } }
     }

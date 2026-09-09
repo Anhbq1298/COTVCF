@@ -14,6 +14,9 @@ internal static class StudyExecutionChecks
         SnapshotResolvesCompleteCandidates();
         OneWorkerPersistsAndVerifiesOneCandidate();
         ArtifactFailureIsReportedWithoutStalePaths();
+        ResumeAndRetryUseLatestCompatibleRun();
+        ResumePublishesTheCompleteParentSelection();
+        ExplicitRebuildArchivesInsteadOfOverwriting();
         OneWorkerDoesNotAccumulateOrLeakCandidateState();
         FixedModesAndCombinedPhysicallyApplyResolvedCandidates();
         ConnectedBaselineCountsAsWorkerOne();
@@ -56,6 +59,9 @@ internal static class StudyExecutionChecks
             var factory = new FakeHostFactory();
             var stages = new ConcurrentBag<StudyIterationStatus?>();
             var candidateResults = new ConcurrentBag<COT_VCF.Domain.Results.CandidateResultDto>();
+            var expectedStudyFolder = Path.GetDirectoryName(snapshot.Jobs.Single(candidate => candidate.RunIterate).IterationDirectory)!;
+            Directory.CreateDirectory(expectedStudyFolder);
+            File.WriteAllText(Path.Combine(expectedStudyFolder, CableForceReportGenerator.ReportFileName), "stale prior-run cable report");
             var result = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
                 new InlineProgress<StudyExecutionProgress>(progress => stages.Add(progress.IterationStatus)),
                 CancellationToken.None, candidateResults.Add).GetAwaiter().GetResult();
@@ -79,6 +85,8 @@ internal static class StudyExecutionChecks
 
             var diagHtmlPath = Path.Combine(job.IterationDirectory, $"Deflection_Diagnostic_{job.IterationId}.html");
             Check(File.Exists(diagHtmlPath), "A candidate diagnostic HTML is written into the candidate folder");
+            Check(File.Exists(Path.Combine(job.IterationDirectory, CandidateResultStore.FileName)),
+                "A successful candidate persists a durable result payload for interrupted-run recovery");
             var diagHtml = File.ReadAllText(diagHtmlPath);
             Check(diagHtml.Contains("Candidate Diagnostic Report") && diagHtml.Contains("QA/QC") &&
                   diagHtml.Contains("Monitored Deflection") && diagHtml.Contains(">top<"),
@@ -89,6 +97,21 @@ internal static class StudyExecutionChecks
             var reportHtml = Path.Combine(studyFolder, "Deflection_Report.html");
             Check(File.Exists(xlsx) && File.Exists(reportHtml),
                 "Study run writes the consolidated Deflection workbook and the final HTML report to the Study folder");
+            Check(File.Exists(result.Artifacts.ShortlistReportPath) && File.Exists(result.Artifacts.ShortlistWorkbookPath),
+                "Study run publishes the ranked shortlist HTML and workbook as first-class artifacts");
+            var shortlistHtml = File.ReadAllText(result.Artifacts.ShortlistReportPath!);
+            Check(shortlistHtml.Contains("Result Library", StringComparison.Ordinal) &&
+                  shortlistHtml.Contains(DeflectionReportGenerator.ReportFileName, StringComparison.Ordinal) &&
+                  shortlistHtml.Contains(job.IterationId, StringComparison.Ordinal),
+                "Shortlist report links the current result library and includes the ranked candidate");
+            var manifest = StudyRunJournal.TryRead(studyFolder);
+            Check(result.Run is not null && File.Exists(result.Run.ManifestPath) && manifest is not null &&
+                  manifest.RunId == result.Run.RunId && manifest.State == StudyRunState.Completed &&
+                  manifest.Candidates.Single(candidate => candidate.Selected).Status == StudyIterationStatus.Ready &&
+                  manifest.Artifacts.Any(artifact => artifact.Kind == "ShortlistReport") &&
+                  manifest.Artifacts.Any(artifact => artifact.Kind == "ShortlistWorkbook") &&
+                  StudyRunJournal.ArtifactsAreIntact(manifest),
+                "Study run atomically records candidate status, provenance hashes, and verifiable artifacts");
             var readBack = COT_VCF.Application.Results.ConsolidatedResultWriter.Read(xlsx);
             Check(readBack.Count == 1 && readBack[0].IterationKey == job.IterationId &&
                   readBack[0].Groups.Single().Points.Count == 3 &&
@@ -96,9 +119,11 @@ internal static class StudyExecutionChecks
                 "Consolidated workbook round-trips the candidate and its monitored-point Uz rows");
             var finalHtml = File.ReadAllText(reportHtml);
             Check(finalHtml.Contains("id=\"report-data\"") && finalHtml.Contains("Deflection Results Viewer") &&
-                  finalHtml.Contains(job.IterationId) && finalHtml.Contains("Result Library") &&
-                  !finalHtml.Contains("http://") && !finalHtml.Contains("https://") && !finalHtml.Contains("cdn."),
-                "Final HTML embeds the report JSON, has the Result Library, and references nothing external");
+                   finalHtml.Contains(job.IterationId) && finalHtml.Contains("Result Library") &&
+                   finalHtml.Contains(StudyShortlistExporter.HtmlFileName, StringComparison.Ordinal) &&
+                   !finalHtml.Contains(CableForceReportGenerator.ReportFileName, StringComparison.Ordinal) &&
+                   !finalHtml.Contains("http://") && !finalHtml.Contains("https://") && !finalHtml.Contains("cdn."),
+                "Final HTML embeds current-run data, excludes stale sibling reports, and references nothing external");
             Check(gateway.AnalysisAttempts.Contains(Path.GetFullPath(job.ModelFullPath)) &&
                   gateway.SavedAfterAnalysis.Contains(Path.GetFullPath(job.ModelFullPath)),
                 "RunAnalysis persists the analyzed child; the worker never re-saves or reopens it");
@@ -124,6 +149,98 @@ internal static class StudyExecutionChecks
                   result.Artifacts.ErrorMessage!.Contains("simulated artifact failure", StringComparison.Ordinal) &&
                   coordinator.LastDeflectionReportPath is null && coordinator.LastCableForceReportPath is null,
                 "artifact failure is explicit and never reuses a prior report path");
+            var studyFolder = Path.GetDirectoryName(snapshot.Jobs.Single(job => job.RunIterate).IterationDirectory)!;
+            var manifest = StudyRunJournal.TryRead(studyFolder);
+            Check(result.Run is not null && manifest?.State == StudyRunState.CompletedWithErrors &&
+                  manifest.Artifacts.Count == 0,
+                "artifact failure is preserved in the run manifest without publishing stale artifact entries");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void ResumeAndRetryUseLatestCompatibleRun()
+    {
+        var (root, _, snapshot) = CreateSnapshot(3, 1);
+        try
+        {
+            var jobs = snapshot.Jobs.Where(job => job.RunIterate).ToArray();
+            var original = StudyRunJournal.Start(snapshot);
+            original.Report(new StudyExecutionProgress { IterationId = jobs[0].IterationId,
+                Stage = StudyWorkerStage.ApplyingGeometry, IterationStatus = StudyIterationStatus.ApplyingGeometry });
+            original.Report(new StudyExecutionProgress { IterationId = jobs[1].IterationId,
+                Stage = StudyWorkerStage.Waiting, IterationStatus = StudyIterationStatus.Failed, Message = "test failure" });
+            original.Report(new StudyExecutionProgress { IterationId = jobs[2].IterationId,
+                Stage = StudyWorkerStage.Completed, IterationStatus = StudyIterationStatus.Ready });
+
+            // A newer, incompatible latest manifest must not hide the compatible run retained in RunHistory.
+            _ = StudyRunJournal.Start(snapshot with { DeflectionOutputCase = "A_DIFFERENT_CASE" });
+            var assessment = new StudyResumeService().Assess(snapshot);
+            var resumed = new StudyResumeService().Select(snapshot, assessment, StudyRunIntent.ResumeInterrupted);
+            var retried = new StudyResumeService().Select(snapshot, assessment, StudyRunIntent.RetryFailed);
+            Check(assessment.Compatible && assessment.Manifest?.RunId == original.RunId &&
+                  assessment.ResumeIds.SetEquals([jobs[0].IterationId]) &&
+                  assessment.RetryIds.SetEquals([jobs[1].IterationId]),
+                "Resume discovery finds the latest compatible history and classifies unfinished, failed, and verified candidates");
+            Check(resumed.Jobs.Count(job => job.RunIterate) == 1 &&
+                  resumed.Jobs.Single(job => job.RunIterate).IterationId == jobs[0].IterationId &&
+                  retried.Jobs.Count(job => job.RunIterate) == 1 &&
+                  retried.Jobs.Single(job => job.RunIterate).IterationId == jobs[1].IterationId,
+                "Resume and Retry dispatch only their eligible candidate subsets");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void ResumePublishesTheCompleteParentSelection()
+    {
+        var (root, _, snapshot) = CreateSnapshot(3, 1);
+        try
+        {
+            var factory = new FakeHostFactory(reuseHosts: true);
+            var first = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+            Check(first.Completed == 3, "Resume fixture first publishes all selected candidates");
+
+            var jobs = snapshot.Jobs.Where(job => job.RunIterate).OrderBy(job => job.RunIndex).ToArray();
+            var parent = StudyRunJournal.Start(snapshot);
+            foreach (var job in jobs.Take(2))
+                parent.Report(new StudyExecutionProgress { IterationId = job.IterationId,
+                    Stage = StudyWorkerStage.Completed, IterationStatus = StudyIterationStatus.Ready });
+            parent.Report(new StudyExecutionProgress { IterationId = jobs[2].IterationId,
+                Stage = StudyWorkerStage.ApplyingGeometry, IterationStatus = StudyIterationStatus.ApplyingGeometry });
+
+            File.Delete(Path.Combine(jobs[2].IterationDirectory, CandidateResultStore.FileName));
+            var resume = new StudyResumeService();
+            var resumed = resume.Select(snapshot, resume.Assess(snapshot), StudyRunIntent.ResumeInterrupted);
+            var result = new StudyExecutionCoordinator(factory).BuildAsync(resumed,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None, null,
+                StudyRunIntent.ResumeInterrupted, parent.RunId).GetAwaiter().GetResult();
+            var consolidated = ConsolidatedResultWriter.Read(result.Artifacts.WorkbookPath!);
+            Check(consolidated.Count == 3 && consolidated.Select(row => row.IterationKey)
+                    .ToHashSet(StringComparer.Ordinal).SetEquals(jobs.Select(job => job.IterationId)),
+                "Resume merges verified parent results with newly resumed candidates in the authoritative workbook");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void ExplicitRebuildArchivesInsteadOfOverwriting()
+    {
+        var (root, _, snapshot) = CreateSnapshot(1, 1);
+        try
+        {
+            var selected = snapshot.Jobs.Single(job => job.RunIterate);
+            var excluded = snapshot.Jobs.First(job => !job.RunIterate);
+            Directory.CreateDirectory(selected.IterationDirectory);
+            Directory.CreateDirectory(excluded.IterationDirectory);
+            File.WriteAllText(selected.ModelFullPath, "selected child bytes");
+            File.WriteAllText(Path.Combine(excluded.IterationDirectory, "keep.txt"), "excluded");
+            var archived = new StudyRebuildArchive().Archive(snapshot);
+            var archivedModel = Path.Combine(archived.ArchiveRoot, selected.IterationId, selected.ModelName);
+            Check(!Directory.Exists(selected.IterationDirectory) && File.Exists(archivedModel) &&
+                  File.ReadAllText(archivedModel) == "selected child bytes" &&
+                  File.Exists(Path.Combine(archived.ArchiveRoot, "RebuildArchive.json")),
+                "Explicit rebuild moves selected candidate data into a recoverable archive before rebuilding");
+            Check(File.Exists(Path.Combine(excluded.IterationDirectory, "keep.txt")),
+                "Explicit rebuild never moves or overwrites an excluded candidate folder");
         }
         finally { DeleteRoot(root); }
     }
@@ -281,6 +398,19 @@ internal static class StudyExecutionChecks
             Check(snapshot.BaselineGeometry.Points["top"].Position.Z == 15 &&
                   !ReferenceEquals(snapshot.BaselineGeometry.Points, state.Baseline.Points),
                 "Execution snapshot owns an immutable baseline geometry copy");
+            var fingerprint = Fingerprints.SnapshotSha256(snapshot);
+            var capacityChanged = snapshot with
+            {
+                CableDesignCapacities = new Dictionary<string, double>(StringComparer.Ordinal) { ["Cable-A"] = 1234 }
+            };
+            Check(fingerprint != Fingerprints.SnapshotSha256(capacityChanged),
+                "Study provenance fingerprint changes when a report-affecting cable capacity changes");
+            var criteriaChanged = snapshot with
+            {
+                DecisionCriteria = snapshot.DecisionCriteria with { DeflectionPassLimitMm = snapshot.DecisionCriteria.DeflectionPassLimitMm + 1 }
+            };
+            Check(fingerprint != Fingerprints.SnapshotSha256(criteriaChanged),
+                "Study provenance fingerprint changes when shortlist decision criteria change");
             state.LoadDefinitions[0].MinQz = 999;
             state.Truss.MinimumHeight = 999;
             state.Cables[0].MinForce = 999;
@@ -605,6 +735,7 @@ internal static class StudyExecutionChecks
             Verify(expected); await Task.Delay(1);
             return currentTargets.Values.Where(force => force.CableName.Equals(cableName, StringComparison.OrdinalIgnoreCase)).ToArray();
         });
+        public Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected) => Task.FromResult<IReadOnlyList<CableSection>>([]);
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => Task.FromResult<IReadOnlyList<ForceSource>>([]);
         public Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected) => Task.FromResult<IReadOnlyList<string>>(["DEAD", "SERVICE", "PRETENSION"]);
         public async Task<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>> GetJointDisplacementsAsync(

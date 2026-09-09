@@ -30,10 +30,11 @@ public sealed class DeflectionReportGenerator
     public string Generate(
         string studyFolder,
         IReadOnlyList<CandidateResultDto> results,
-        string baselineName, string baselinePath, IterationStudyMode studyMode)
+        string baselineName, string baselinePath, IterationStudyMode studyMode,
+        IReadOnlyList<string>? siblingReports = null)
     {
         Directory.CreateDirectory(studyFolder);
-        var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode);
+        var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode, siblingReports);
         var path = Path.Combine(studyFolder, ReportFileName);
         AtomicFile.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
         return path;
@@ -55,7 +56,8 @@ public sealed class DeflectionReportGenerator
 
     public DeflectionReportDto Build(
         IReadOnlyList<CandidateResultDto> results,
-        string studyFolder, string baselineName, string baselinePath, IterationStudyMode studyMode)
+        string studyFolder, string baselineName, string baselinePath, IterationStudyMode studyMode,
+        IReadOnlyList<string>? siblingReports = null)
     {
         // One report group per (monitored point group × result load case) — so a study that extracts Uz
         // under several cases yields one selectable chart source per case.
@@ -135,7 +137,8 @@ public sealed class DeflectionReportGenerator
             baselineName, baselinePath, studyFolder, studyMode.ToString(),
             results.Count, DateTimeOffset.Now.ToString("o"), "Uz", "m", "mm");
 
-        return new DeflectionReportDto(study, groups, views, warnings);
+        var siblings = siblingReports?.ToArray() ?? ReportNav.PresentIn(studyFolder, "deflection").ToArray();
+        return new DeflectionReportDto(study, groups, views, warnings, siblings);
     }
 
     private sealed record Dim(string Name, Func<CandidateParametersDto, string> Key, Func<string, string> Label);
@@ -151,6 +154,7 @@ public sealed class DeflectionReportGenerator
     {
         var json = JsonSerializer.Serialize(dto, Json);
         var s = dto.Study;
+        var library = ReportNav.Library("deflection", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Deflection Report — {{Esc(s.BaselineModelName)}}</title>
@@ -165,15 +169,7 @@ public sealed class DeflectionReportGenerator
       <b>Colour</b> = load candidate · <b>line style</b> = truss height · <b>marker</b> = pretension candidate.
       See <i>Candidate definitions</i> below for what each L## / H## / P## is.</p>
   </div>
-  <details class="lib"><summary>Result Library</summary>
-    <ul>
-      <li class="on">01 · Deflection · U<sub>z</sub> <span>active</span></li>
-      <li>02 · Top Chords — member forces <span>separate report</span></li>
-      <li>03 · Bottom Chords — member forces <span>separate report</span></li>
-      <li>04 · Vierendeel Members — member forces <span>future</span></li>
-      <li>05 · Cable Forces <span>future</span></li>
-    </ul>
-  </details>
+  {{library}}
 </header>
 <div id="toolbar">
   <label>Group <select id="group"></select></label>

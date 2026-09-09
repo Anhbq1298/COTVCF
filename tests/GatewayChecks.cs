@@ -71,6 +71,19 @@ internal static class GatewayChecks
             Throws(() => gateway.RunAnalysisAsync(child).GetAwaiter().GetResult());
             Check(fake.AnalysisRuns == 3 && !fake.Locked,
                 "RunAnalysis that executes no load cases leaves the model unlocked and is rejected");
+            // SAP2000 26 returns a nonzero code from File.OpenFile whenever it replaces an
+            // already-open model, even though the open succeeds. The active model decides.
+            fake.OpenFileCode = 1;
+            var rebaselined = gateway.OpenModelAsync(baselinePath).GetAwaiter().GetResult();
+            Check(rebaselined.Path == baselinePath,
+                "OpenModel accepts SAP2000's nonzero File.OpenFile code when the requested model did become active");
+            var otherPath = Path.Combine(lifecycleRoot, "other.sdb");
+            File.WriteAllText(otherPath, "other");
+            fake.OpenFileIgnoresRequest = true;
+            Throws(() => gateway.OpenModelAsync(otherPath).GetAwaiter().GetResult());
+            Check(fake.CurrentPath == baselinePath,
+                "OpenModel still fails when SAP2000 does not actually activate the requested model");
+            fake.OpenFileCode = 0; fake.OpenFileIgnoresRequest = false;
         }
         finally { Directory.Delete(lifecycleRoot, true); }
     }
@@ -81,6 +94,8 @@ internal static class GatewayChecks
         public bool Locked;
         public bool FailAnalysis;
         public bool NoRunCases;
+        public int OpenFileCode;
+        public bool OpenFileIgnoresRequest;
         public eUnits Units = eUnits.kN_m_C;
         public string? FailLoadName, FailMoveName;
         public int WriteCount;
@@ -168,7 +183,7 @@ internal static class GatewayChecks
             {
                 switch (name)
                 {
-                    case "OpenFile": CurrentPath = (string)a[0]!; return 0;
+                    case "OpenFile": if (!OpenFileIgnoresRequest) CurrentPath = (string)a[0]!; return OpenFileCode;
                     case "Save": SaveCalls++; CurrentPath = (string)a[0]!; return 0;
                     default: throw new NotSupportedException(name);
                 }

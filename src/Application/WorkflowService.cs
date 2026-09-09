@@ -141,6 +141,19 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         return result;
     }
 
+    /// <summary>Reads each cable's assigned section property + cross-section area [m²] straight from the
+    /// connected model. Empty when offline; every requested cable that resolved is keyed by its name.</summary>
+    public async Task<IReadOnlyDictionary<string, CableSection>> ReadCableSectionsAsync(IEnumerable<string> cableNames)
+    {
+        var result = new Dictionary<string, CableSection>(StringComparer.OrdinalIgnoreCase);
+        if (state.Model is null) return result;
+        var names = cableNames.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (names.Length == 0) return result;
+        foreach (var section in await sap.GetCableSectionsAsync(names, state.Model))
+            result[section.CableName] = section;
+        return result;
+    }
+
     public async Task ApplyLoadsAsync()
     {
         var issues = new ConfigurationValidator().ValidateLoads(state);

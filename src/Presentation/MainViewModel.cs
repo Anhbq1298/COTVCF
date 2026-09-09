@@ -20,6 +20,8 @@ public sealed class MainViewModel : Observable
     private readonly ConfigService config;
     private readonly StudyExecutionCoordinator? studyExecution;
     private readonly StudyExecutionSnapshotFactory studySnapshotFactory;
+    private readonly StudyResumeService studyResume = new();
+    private readonly StudyPreflightService studyPreflight = new();
     private readonly IOutputSettingsDialogService? outputDialogs;
     private readonly OutputGroupPreparationService? outputGroupPreparation;
     private bool busy;
@@ -40,6 +42,9 @@ public sealed class MainViewModel : Observable
     private int studyPeakConcurrent;
     private StudyBuildState studyBuildState = StudyBuildState.ReadyToBuild;
     private CancellationTokenSource? studyCancellation;
+    private StudyResumeAssessment? resumeAssessment;
+    private string resumeStatusText = "No compatible interrupted run inspected.";
+    private StudyPreflightReport preflightReport = StudyPreflightReport.Empty;
 
     public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); } }
     public bool IsIdle => !IsBusy;
@@ -182,6 +187,29 @@ public sealed class MainViewModel : Observable
             return f == 0 ? "no synced cables" : $"{g} sync group{(g == 1 ? "" : "s")} · {f} follower{(f == 1 ? "" : "s")}";
         }
     }
+    /// <summary>Global cable material strength [MPa] (Grade 1860 strand by default). Editing it recomputes the
+    /// Capacity column for every cable that has a retrieved section area.</summary>
+    public double CableStrengthMpa
+    {
+        get => State.CableStrengthMpa;
+        set { if (State.CableStrengthMpa == value) return; State.CableStrengthMpa = value; Notify(); RecomputeCableCapacities(); Update(); }
+    }
+    /// <summary>Global strength-reduction coefficient φ (default 0.5). Editing it recomputes the Capacity column.</summary>
+    public double CableStrengthReductionFactor
+    {
+        get => State.CableStrengthReductionFactor;
+        set { if (State.CableStrengthReductionFactor == value) return; State.CableStrengthReductionFactor = value; Notify(); RecomputeCableCapacities(); Update(); }
+    }
+
+    /// <summary>Refresh each cable's <see cref="CablePretensionConfig.DesignCapacityKN"/> from its section area
+    /// and the global strength / φ. Cables with no retrieved area keep whatever capacity was typed in.</summary>
+    private void RecomputeCableCapacities()
+    {
+        foreach (var cable in State.Cables)
+            if (cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor) is { } capacity)
+                cable.DesignCapacityKN = capacity;
+    }
+
     // Bulk "apply Sync to selected rows" editor state.
     public CableSyncMode BulkSyncMode { get; set; } = CableSyncMode.SameValues;
     private string? bulkSyncReference;
@@ -305,6 +333,7 @@ public sealed class MainViewModel : Observable
             if (!Set(ref requestedWorkerCount, next)) return;
             Notify(nameof(RunStudyLabel));
             Notify(nameof(RunStudyToolTip));
+            InvalidateStudyValidation();
             SyncWorkerMonitorSlots();
         }
     }
@@ -397,13 +426,14 @@ public sealed class MainViewModel : Observable
         {
             var h = StudyNeedsFixedHeight ? "1" : HeightCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
             var p = StudyNeedsFixedPretension ? "1" : PretensionRuns.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
-            return $"{LoadingCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} \\times {h} \\times {p} = {StudyTotalRuns}";
+            var factors = $"{LoadingCandidateCount.ToString(System.Globalization.CultureInfo.InvariantCulture)} \\times {h} \\times {p}";
+            var raw = studyComposition.UnfilteredRunCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+            return State.Study.UseCandidateFilters ? $"{factors} = {raw} \\rightarrow {StudyTotalRuns}" : $"{factors} = {StudyTotalRuns}";
         }
     }
     /// <summary>Symbolic + numeric total, e.g. "N_L \times N_H \times N_P = 4 \times 5 \times 2 = 40".</summary>
     public string StudySpaceHeadlineFormula => $"N_L \\times N_H \\times N_P = {StudySpaceFormula}";
-    public string StudyTotalRuns => StudyPlan.TotalRuns(State.Study.Mode, LoadingCandidateCount, HeightCandidateCount, PretensionRuns)
-        .ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+    public string StudyTotalRuns => studyComposition.ExpectedRunCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
     public string BaselineModelName => State.SessionBaselineModel?.Name ?? "Baseline unavailable";
     public string BaselineModelPath => State.SessionBaselineModel?.Path ?? "";
     public string StudyRoot
@@ -480,12 +510,46 @@ public sealed class MainViewModel : Observable
     }
     public bool HasCableForceReport => !string.IsNullOrEmpty(CableForceReportPath) && File.Exists(CableForceReportPath);
     public string CableForceReportName => HasCableForceReport ? Path.GetFileName(CableForceReportPath!) : "No cable-force report generated yet";
+    private string? shortlistReportPath;
+    public string? ShortlistReportPath
+    {
+        get => shortlistReportPath;
+        private set
+        {
+            if (!Set(ref shortlistReportPath, value)) return;
+            Notify(nameof(HasShortlistReport));
+            Notify(nameof(ShortlistReportName));
+        }
+    }
+    public bool HasShortlistReport => !string.IsNullOrEmpty(ShortlistReportPath) && File.Exists(ShortlistReportPath);
+    public string ShortlistReportName => HasShortlistReport ? Path.GetFileName(ShortlistReportPath!) : "No shortlist generated yet";
+    private string? shortlistWorkbookPath;
+    public string? ShortlistWorkbookPath
+    {
+        get => shortlistWorkbookPath;
+        private set
+        {
+            if (!Set(ref shortlistWorkbookPath, value)) return;
+            Notify(nameof(HasShortlistWorkbook));
+        }
+    }
+    public bool HasShortlistWorkbook => !string.IsNullOrEmpty(ShortlistWorkbookPath) && File.Exists(ShortlistWorkbookPath);
     private bool useCurrentRunArtifacts;
     private string? currentRunWorkbookPath;
     public string ResultsWorkbookPath => useCurrentRunArtifacts
         ? currentRunWorkbookPath ?? ""
-        : Directory.Exists(StudyRoot) ? Path.Combine(StudyRoot, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName) : "";
+        : discoveredWorkbookPath ?? "";
     public bool HasResultsWorkbook => !string.IsNullOrEmpty(ResultsWorkbookPath) && File.Exists(ResultsWorkbookPath);
+    private string? runManifestPath;
+    private string? currentRunId;
+    private StudyRunState? currentRunState;
+    private bool runArtifactsVerified;
+    public string? RunManifestPath => runManifestPath;
+    public bool HasRunManifest => !string.IsNullOrWhiteSpace(runManifestPath) && File.Exists(runManifestPath);
+    public string RunProvenanceText => currentRunId is null
+        ? "No study run manifest yet."
+        : $"Run {currentRunId[..Math.Min(8, currentRunId.Length)]} · {currentRunState} · " +
+          (currentRunState == StudyRunState.Running ? "recording provenance" : runArtifactsVerified ? "artifacts verified" : "artifact check required");
     public string PostProcessStatus
     {
         get
@@ -520,10 +584,22 @@ public sealed class MainViewModel : Observable
     public string ToolbarStudySummary => SelectedRunCount == 0
         ? "Study · nothing selected"
         : $"Study · {SelectedRunCount:N0} run{(SelectedRunCount == 1 ? "" : "s")} selected";
-    public bool CanRunStudy => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0;
+    public bool CanRunStudy => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0 && preflightReport.Ready;
     public string RunStudyToolTip => RequestedWorkerCount == 1
         ? "Uses the connected SAP2000 instance as worker 1 to build, analyze, save, and verify each child; no additional process is started."
         : $"Uses the connected SAP2000 instance as worker 1 and starts {RequestedWorkerCount - 1} additional processes. Up to {RequestedWorkerCount} child models build and analyze concurrently.";
+    public int ResumableRunCount => resumeAssessment?.ResumeIds.Count ?? 0;
+    public int RetryableRunCount => resumeAssessment?.RetryIds.Count ?? 0;
+    public bool CanResumeStudy => CanRunStudy && ResumableRunCount > 0;
+    public bool CanRetryStudy => CanRunStudy && RetryableRunCount > 0;
+    public bool CanRebuildStudy => CanRunStudy;
+    public string ResumeStatusText => resumeStatusText;
+    public IReadOnlyList<StudyPreflightMetric> PreflightMetrics => preflightReport.Metrics;
+    public string PreflightSummary => preflightReport.Summary;
+    public bool PreflightReady => preflightReport.Ready;
+    public string FilterAuditText => !State.Study.UseCandidateFilters
+        ? "Filters off · all generated combinations retained."
+        : $"{studyComposition.UnfilteredRunCount:N0} → {studyComposition.ExpectedRunCount:N0} rows · {studyComposition.FilterAudit.ExcludedCount:N0} filtered out.";
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
     public string StatusLine => State.IsSapConnected
         ? $"{ModelName}  ·  {State.Units}  ·  {(State.Model?.IsLocked == true ? "Locked" : "Unlocked")}"
@@ -631,6 +707,7 @@ public sealed class MainViewModel : Observable
     public Command ApplyGeometry { get; }
     public Command ApplyLoads { get; }
     public Command AddCables { get; }
+    public Command RefreshCableSections { get; }
     public Command BulkSetCableSync { get; }
     public Command RemoveLoads { get; }
     public Command RemoveCables { get; }
@@ -640,9 +717,14 @@ public sealed class MainViewModel : Observable
     public Command ConfigureCableOutput { get; }
     public Command ValidateOutputSettings { get; }
     public Command Validate { get; }
+    public Command NavigateToIssue { get; }
     public Command SelectAllStudyRuns { get; }
     public Command ClearAllStudyRuns { get; }
     public Command BuildSelectedModels { get; }
+    public Command InspectPreviousRun { get; }
+    public Command ResumeInterruptedStudy { get; }
+    public Command RetryFailedStudy { get; }
+    public Command RebuildSelectedModels { get; }
     public Command RunStudyFromToolbar { get; }
     public Command CancelStudy { get; }
     public Command OpenStudyFolder { get; }
@@ -653,7 +735,10 @@ public sealed class MainViewModel : Observable
     public Command RegenerateMemberForceReport { get; }
     public Command OpenCableForceReport { get; }
     public Command RegenerateCableForceReport { get; }
+    public Command OpenShortlistReport { get; }
+    public Command OpenShortlistWorkbook { get; }
     public Command OpenResultsWorkbook { get; }
+    public Command OpenRunManifest { get; }
     public Command OpenCandidateDiagnostic { get; }
     public Command ViewIterationError { get; }
     public Command SaveTabConfig { get; }
@@ -711,6 +796,8 @@ public sealed class MainViewModel : Observable
         ApplyGeometry = new(_ => Run("Applying geometry to SAP2000...", workflow.ApplyGeometryAsync, "Geometry applied. The original baseline is retained."), () => GeometryReady() && State.BaselineCaptured);
         ApplyLoads = new(_ => Run("Applying point loads to SAP2000...", workflow.ApplyLoadsAsync, "Point loads applied. Existing moments preserved."), () => GeometryReady() && State.PointLoads.Count > 0);
         AddCables = new(_ => AddCablesFromSelection(), GeometryReady);
+        RefreshCableSections = new(_ => RefreshCableSectionsFromSap(),
+            () => Ready() && State.Model is not null && State.Cables.Count > 0);
         RemoveLoads = new(p => { if (p is IList list) foreach (var row in list.Cast<PointLoadConfiguration>().ToArray()) State.PointLoads.Remove(row); Update(); }, () => !IsBusy);
         RemoveCables = new(p =>
         {
@@ -749,21 +836,40 @@ public sealed class MainViewModel : Observable
         {
             if (CommitEditors?.Invoke() == false) return;
             RegenerateStudyPreview();
-            ValidateStudy(showMessage: true);
+            if (ValidateStudy(showMessage: true)) InspectResumeState();
         }, () => !IsBusy);
+        NavigateToIssue = new(p =>
+        {
+            if (p is not ValidationIssue issue) return;
+            SelectedTab = issue.Section switch
+            {
+                "Loading Setup" => TabLoading,
+                "Truss Height" => TabTruss,
+                "Pretension Setup" => TabPretension,
+                "Output Settings" or "Monitored Deflection" or "Member Forces" or "Foundation Reactions" or "Cable Forces" => TabOutput,
+                _ => TabIteration
+            };
+            Message = $"Review {issue.Section}: {issue.Message}";
+        });
         SelectAllStudyRuns = new(_ => SetAllStudyRuns(true), () => !IsBusy && StudyIterations.Count > 0);
         ClearAllStudyRuns = new(_ => SetAllStudyRuns(false), () => !IsBusy && StudyIterations.Count > 0);
         BuildSelectedModels = new(_ => RunStudy(), () => CanRunStudy);
+        InspectPreviousRun = new(_ => InspectResumeState(), () => !IsBusy && State.IsSapConnected && StudyIterations.Count > 0);
+        ResumeInterruptedStudy = new(_ => RunStudy(StudyRunIntent.ResumeInterrupted), () => CanResumeStudy);
+        RetryFailedStudy = new(_ => RunStudy(StudyRunIntent.RetryFailed), () => CanRetryStudy);
+        RebuildSelectedModels = new(_ => RunStudy(StudyRunIntent.RebuildSelected), () => CanRebuildStudy);
         // Run the study from anywhere: jump to the Iteration tab (worker monitor + validation live there) then build.
-        RunStudyFromToolbar = new(_ => { SelectedTab = TabIteration; RunStudy(); },
-            () => !IsBusy && studyExecution is not null && State.IsSapConnected && SelectedRunCount > 0);
+        RunStudyFromToolbar = new(_ => { SelectedTab = TabIteration; RunStudy(); }, () => CanRunStudy);
         CancelStudy = new(_ => CancelStudyExecution(), () => CanCancelStudy);
         OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => Directory.Exists(StudyRoot));
         OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
         OpenDeflectionReport = new(_ => TryOpenFile(DeflectionReportPath), () => HasDeflectionReport);
         OpenMemberForceReport = new(_ => TryOpenFile(MemberForceReportPath), () => HasMemberForceReport);
         OpenCableForceReport = new(_ => TryOpenFile(CableForceReportPath), () => HasCableForceReport);
+        OpenShortlistReport = new(_ => TryOpenFile(ShortlistReportPath), () => HasShortlistReport);
+        OpenShortlistWorkbook = new(_ => TryOpenFile(ShortlistWorkbookPath), () => HasShortlistWorkbook);
         OpenResultsWorkbook = new(_ => TryOpenFile(ResultsWorkbookPath), () => HasResultsWorkbook);
+        OpenRunManifest = new(_ => TryOpenFile(RunManifestPath), () => HasRunManifest);
         OpenCandidateDiagnostic = new(p =>
         {
             if (p is PostProcessRow row && Directory.Exists(StudyRoot))
@@ -1077,6 +1183,10 @@ public sealed class MainViewModel : Observable
     {
         studyValidationState = StudyValidationState.NotValidated;
         Issues.Clear();
+        preflightReport = StudyPreflightReport.Empty;
+        resumeAssessment = null;
+        resumeStatusText = "Study definition or selection changed; inspect provenance again before Resume/Retry.";
+        ApplyResumeAssessment(null);
     }
 
     private void NotifyStudyPresentation(bool heightCandidatesChanged = false, bool pretensionCandidatesChanged = false)
@@ -1095,7 +1205,10 @@ public sealed class MainViewModel : Observable
             nameof(BaselineModelName), nameof(BaselineModelPath), nameof(StudyRoot), nameof(GeneratedRunCount), nameof(SelectedRunCount),
             nameof(StudySelectionSummary), nameof(HasStudyIterations), nameof(ShowStudyEmptyState), nameof(StudyPreviewEmptyText),
             nameof(StudyValidationState), nameof(HasValidationIssues), nameof(ShowValidationStatus), nameof(ValidationStatusText),
-            nameof(RunStudyLabel), nameof(CanRunStudy), nameof(RunStudyToolTip), nameof(ToolbarStudySummary)
+            nameof(RunStudyLabel), nameof(CanRunStudy), nameof(RunStudyToolTip), nameof(ToolbarStudySummary),
+            nameof(ResumableRunCount), nameof(RetryableRunCount), nameof(CanResumeStudy), nameof(CanRetryStudy),
+            nameof(CanRebuildStudy), nameof(ResumeStatusText)
+            , nameof(PreflightMetrics), nameof(PreflightSummary), nameof(PreflightReady), nameof(FilterAuditText)
         }) Notify(name);
         CommandManager.InvalidateRequerySuggested();
     }
@@ -1109,19 +1222,47 @@ public sealed class MainViewModel : Observable
             : Issues.Any(issue => issue.Severity == ValidationSeverity.Warning)
                 ? StudyValidationState.ValidWithWarnings
                 : StudyValidationState.Valid;
+        preflightReport = studyPreflight.Inspect(State, studyComposition, Issues.ToArray(), RequestedWorkerCount);
         if (showMessage)
             Message = studyValidationState is StudyValidationState.Valid or StudyValidationState.ValidWithWarnings
                 ? $"Study is valid - {SelectedRunCount:N0} iterations are ready to build and analyze."
                 : $"{Issues.Count} study validation issue{(Issues.Count == 1 ? "" : "s")} need review.";
         NotifyStudyPresentation();
-        return studyValidationState is StudyValidationState.Valid or StudyValidationState.ValidWithWarnings;
+        return preflightReport.Ready;
     }
 
-    private async void RunStudy()
+    private async void RunStudy(StudyRunIntent intent = StudyRunIntent.AllSelected)
     {
         if (IsBusy || studyExecution is null) return;
         if (CommitEditors?.Invoke() == false) return;
         RegenerateStudyPreview();
+        StudyRunManifest? parentManifest = null;
+        if (intent is StudyRunIntent.ResumeInterrupted or StudyRunIntent.RetryFailed)
+        {
+            try
+            {
+                var provisional = studySnapshotFactory.Create(State, studyComposition, RequestedWorkerCount);
+                resumeAssessment = studyResume.Assess(provisional);
+                resumeStatusText = resumeAssessment.Message;
+                ApplyResumeAssessment(resumeAssessment);
+                var selected = studyResume.Select(provisional, resumeAssessment, intent);
+                ApplyExecutionSelection(selected.Jobs.Where(job => job.RunIterate).Select(job => job.IterationId));
+                parentManifest = resumeAssessment.Manifest;
+                RegenerateStudyPreview();
+            }
+            catch (Exception ex)
+            {
+                Message = ex.Message;
+                Warn(intent == StudyRunIntent.ResumeInterrupted ? "Unable to Resume Study" : "Unable to Retry Study", ex.Message);
+                NotifyStudyPresentation();
+                return;
+            }
+        }
+        if (intent == StudyRunIntent.RebuildSelected && MessageBox.Show(
+                $"Rebuild {SelectedRunCount:N0} selected candidate folder{(SelectedRunCount == 1 ? "" : "s")}?\n\nExisting folders will be moved to Study\\RebuildArchive before new child models are created. Nothing is deleted.",
+                "Archive and Rebuild Selected Candidates", System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes)
+            return;
         if (!ValidateStudy(showMessage: true)) return;
 
         if (outputGroupPreparation is null)
@@ -1177,6 +1318,9 @@ public sealed class MainViewModel : Observable
         DeflectionReportPath = null;
         MemberForceReportPath = null;
         CableForceReportPath = null;
+        ShortlistReportPath = null;
+        ShortlistWorkbookPath = null;
+        SetRunReference(null, artifactsVerified: false);
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(HasResultsWorkbook));
         for (int id = 1; id <= RequestedWorkerCount; id++)
@@ -1194,11 +1338,15 @@ public sealed class MainViewModel : Observable
         var progress = new Progress<StudyExecutionProgress>(ApplyStudyProgress);
         try
         {
-            var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token, AddPostProcessRow);
+            var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token, AddPostProcessRow,
+                intent, parentManifest?.RunId);
             currentRunWorkbookPath = result.Artifacts.WorkbookPath;
             DeflectionReportPath = result.Artifacts.DeflectionReportPath;
             MemberForceReportPath = result.Artifacts.MemberForceReportPath;
             CableForceReportPath = result.Artifacts.CableForceReportPath;
+            ShortlistReportPath = result.Artifacts.ShortlistReportPath;
+            ShortlistWorkbookPath = result.Artifacts.ShortlistWorkbookPath;
+            SetRunReference(result.Run, result.Artifacts.State == StudyArtifactState.Ready);
             Notify(nameof(ResultsWorkbookPath));
             Notify(nameof(HasResultsWorkbook));
             studyCompletedCount = result.Completed;
@@ -1227,12 +1375,14 @@ public sealed class MainViewModel : Observable
         }
         catch (OperationCanceledException)
         {
+            SetRunReference(studyExecution.LastRunReference, artifactsVerified: false);
             studyBuildState = StudyBuildState.Cancelled;
             MarkUnfinishedIterations(StudyIterationStatus.Cancelled, "Cancelled before worker assignment.");
             Message = "Study build and analysis cancelled at a safe SAP2000 stage boundary.";
         }
         catch (Exception ex)
         {
+            SetRunReference(studyExecution.LastRunReference, artifactsVerified: false);
             studyBuildState = StudyBuildState.Failed;
             MarkUnfinishedIterations(StudyIterationStatus.Failed, ex.Message, leaveUnassignedPlanned: true);
             Message = ex.Message;
@@ -1245,8 +1395,65 @@ public sealed class MainViewModel : Observable
             studyCancellation = null;
             IsStudyRunning = false;
             IsBusy = false;
+            InspectResumeState();
             NotifyStudyExecution();
             Update();
+        }
+    }
+
+    private void ApplyExecutionSelection(IEnumerable<string> iterationIds)
+    {
+        var selected = iterationIds.ToHashSet(StringComparer.Ordinal);
+        suppressStudySelectionEvents = true;
+        try
+        {
+            foreach (var row in StudyIterations)
+            {
+                row.RunIterate = selected.Contains(row.IterationId);
+                State.Study.SetRunSelected(row.IterationId, row.RunIterate);
+            }
+        }
+        finally { suppressStudySelectionEvents = false; }
+        config.Session.MarkDirty(ConfigTabs.Study);
+    }
+
+    private void InspectResumeState()
+    {
+        try
+        {
+            if (!State.IsSapConnected || StudyIterations.Count == 0)
+                throw new InvalidOperationException("Connect and generate the study to inspect Resume/Retry eligibility.");
+            var snapshot = studySnapshotFactory.Create(State, studyComposition, RequestedWorkerCount);
+            resumeAssessment = studyResume.Assess(snapshot);
+            resumeStatusText = resumeAssessment.Message;
+            ApplyResumeAssessment(resumeAssessment);
+        }
+        catch (Exception ex)
+        {
+            resumeAssessment = null;
+            resumeStatusText = ex.Message;
+            ApplyResumeAssessment(null);
+        }
+        foreach (var name in new[] { nameof(ResumableRunCount), nameof(RetryableRunCount), nameof(CanResumeStudy),
+                     nameof(CanRetryStudy), nameof(CanRebuildStudy), nameof(ResumeStatusText) }) Notify(name);
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void ApplyResumeAssessment(StudyResumeAssessment? assessment)
+    {
+        var byId = assessment?.Candidates.ToDictionary(item => item.IterationId, StringComparer.Ordinal);
+        foreach (var row in StudyIterations)
+        {
+            if (byId is not null && byId.TryGetValue(row.IterationId, out var item))
+            {
+                row.ResumeDispositionText = item.Disposition.ToString();
+                row.ResumeReason = item.Reason;
+            }
+            else
+            {
+                row.ResumeDispositionText = "Not inspected";
+                row.ResumeReason = resumeStatusText;
+            }
         }
     }
 
@@ -1260,6 +1467,8 @@ public sealed class MainViewModel : Observable
 
     private void ApplyStudyProgress(StudyExecutionProgress progress)
     {
+        if (!string.IsNullOrWhiteSpace(progress.RunId) && !string.IsNullOrWhiteSpace(progress.ManifestPath))
+            SetRunReference(new StudyRunReference(progress.RunId, progress.ManifestPath, "", "", StudyRunState.Running), artifactsVerified: false);
         if (progress.Total > 0)
         {
             studyCompletedCount = progress.Completed;
@@ -1376,6 +1585,8 @@ public sealed class MainViewModel : Observable
         {
             var path = await Task.Run(() => new COT_VCF.Application.Results.DeflectionReportGenerator().RegenerateFromWorkbook(StudyRoot));
             DeflectionReportPath = path;
+            StudyRunJournal.RefreshArtifact(StudyRoot, "DeflectionReport", path);
+            RefreshDeflectionArtifacts();
             Message = $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
         }
         catch (Exception ex) { Message = ex.Message; Warn("Regenerate Deflection Report", ex.Message); }
@@ -1396,6 +1607,11 @@ public sealed class MainViewModel : Observable
         {
             var path = await Task.Run(() => new COT_VCF.Application.Results.CableForceReportGenerator().RegenerateFromWorkbook(StudyRoot));
             CableForceReportPath = File.Exists(path) ? path : null;
+            if (CableForceReportPath is not null)
+            {
+                StudyRunJournal.RefreshArtifact(StudyRoot, "CableForceReport", CableForceReportPath);
+                RefreshDeflectionArtifacts();
+            }
             Message = CableForceReportPath is null
                 ? "No cable-force results in the workbook — configure cables and a cable result case in Output Settings, then re-run."
                 : $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
@@ -1446,21 +1662,64 @@ public sealed class MainViewModel : Observable
         {
             useCurrentRunArtifacts = false;
             currentRunWorkbookPath = null;
-            var report = Directory.Exists(StudyRoot)
-                ? Path.Combine(StudyRoot, COT_VCF.Application.Results.DeflectionReportGenerator.ReportFileName) : null;
-            DeflectionReportPath = report is not null && File.Exists(report) ? report : null;
-            var mfReport = Directory.Exists(StudyRoot)
-                ? Path.Combine(StudyRoot, COT_VCF.Application.Results.MemberForceReportGenerator.ReportFileName) : null;
-            MemberForceReportPath = mfReport is not null && File.Exists(mfReport) ? mfReport : null;
-            var cfReport = Directory.Exists(StudyRoot)
-                ? Path.Combine(StudyRoot, COT_VCF.Application.Results.CableForceReportGenerator.ReportFileName) : null;
-            CableForceReportPath = cfReport is not null && File.Exists(cfReport) ? cfReport : null;
+            var manifest = Directory.Exists(StudyRoot) ? StudyRunJournal.TryRead(StudyRoot) : null;
+            if (manifest is null || !SamePath(manifest.BaselineModelPath, State.SessionBaselineModel?.Path ?? State.Model?.Path))
+            {
+                discoveredWorkbookPath = null;
+                DeflectionReportPath = null;
+                MemberForceReportPath = null;
+                CableForceReportPath = null;
+                ShortlistReportPath = null;
+                ShortlistWorkbookPath = null;
+                SetRunReference(null, artifactsVerified: false);
+            }
+            else
+            {
+                discoveredWorkbookPath = StudyRunJournal.ValidArtifactPath(manifest, "Workbook");
+                DeflectionReportPath = StudyRunJournal.ValidArtifactPath(manifest, "DeflectionReport");
+                MemberForceReportPath = StudyRunJournal.ValidArtifactPath(manifest, "MemberForceReport");
+                CableForceReportPath = StudyRunJournal.ValidArtifactPath(manifest, "CableForceReport");
+                ShortlistReportPath = StudyRunJournal.ValidArtifactPath(manifest, "ShortlistReport");
+                ShortlistWorkbookPath = StudyRunJournal.ValidArtifactPath(manifest, "ShortlistWorkbook");
+                SetRunReference(new StudyRunReference(manifest.RunId, Path.Combine(StudyRoot, StudyRunJournal.FileName),
+                    manifest.BaselineSha256, manifest.SnapshotSha256, manifest.State), StudyRunJournal.ArtifactsAreIntact(manifest));
+            }
         }
-        catch { DeflectionReportPath = null; MemberForceReportPath = null; CableForceReportPath = null; }
+        catch
+        {
+            discoveredWorkbookPath = null;
+            DeflectionReportPath = null;
+            MemberForceReportPath = null;
+            CableForceReportPath = null;
+            ShortlistReportPath = null;
+            ShortlistWorkbookPath = null;
+            SetRunReference(null, false);
+        }
         Notify(nameof(HasResultsWorkbook));
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(PostProcessStatus));
         CommandManager.InvalidateRequerySuggested();
+    }
+
+    private string? discoveredWorkbookPath;
+
+    private void SetRunReference(StudyRunReference? run, bool artifactsVerified)
+    {
+        currentRunId = run?.RunId;
+        runManifestPath = run?.ManifestPath;
+        currentRunState = run?.State;
+        runArtifactsVerified = artifactsVerified;
+        Notify(nameof(RunManifestPath));
+        Notify(nameof(HasRunManifest));
+        Notify(nameof(RunProvenanceText));
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private static bool SamePath(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right)) return false;
+        try { return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase); }
+        catch { return false; }
     }
 
     private void SelectLoadLocations()
@@ -1612,8 +1871,9 @@ public sealed class MainViewModel : Observable
         if (added.Count == 0) { Message = "Cable selection unchanged."; Update(); return; }
         SelectedCable = added[0];
 
-        // Pre-fill each new row from the target force already assigned in the connected SAP2000 model.
-        int prefilled = 0;
+        // Pre-fill each new row from the connected SAP2000 model: its existing target force, and its section
+        // area (→ resolved design capacity for the utilisation views in the cable-force report).
+        int prefilled = 0, sized = 0;
         if (State.Model is not null)
         {
             IsBusy = true;
@@ -1629,13 +1889,84 @@ public sealed class MainViewModel : Observable
                     }
             }
             catch (Exception ex) { Warn("Add Cable", $"Could not read existing target forces: {ex.Message}"); }
+
+            try
+            {
+                var sections = await workflow.ReadCableSectionsAsync(added.Select(c => c.CableName));
+                foreach (var cable in added)
+                    if (sections.TryGetValue(cable.CableName, out var section) && section.AreaM2 > 0)
+                    {
+                        cable.SectionName = section.PropertyName;
+                        cable.SectionAreaM2 = section.AreaM2;
+                        if (cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor) is { } capacity)
+                            cable.DesignCapacityKN = capacity;
+                        sized++;
+                    }
+            }
+            catch (Exception ex) { Warn("Add Cable", $"Could not read cable sections: {ex.Message}"); }
             finally { IsBusy = false; }
         }
 
-        Message = prefilled > 0
-            ? $"Added {added.Count} cable{(added.Count == 1 ? "" : "s")} · {prefilled} pre-filled from SAP2000. Remove with − Remove."
+        Message = prefilled > 0 || sized > 0
+            ? $"Added {added.Count} cable{(added.Count == 1 ? "" : "s")} · {prefilled} pre-filled, {sized} sized from SAP2000. Remove with − Remove."
             : $"Added {added.Count} cable{(added.Count == 1 ? "" : "s")}. Remove with − Remove.";
         Update();
+    }
+
+    private async void RefreshCableSectionsFromSap()
+    {
+        if (IsBusy || !State.IsSapConnected || State.Model is null || State.Cables.Count == 0) return;
+        var cables = State.Cables.ToArray();
+        IsBusy = true;
+        Message = $"Refreshing section and area for {cables.Length} cable{(cables.Length == 1 ? "" : "s")} from SAP2000...";
+        try
+        {
+            var sections = await workflow.ReadCableSectionsAsync(cables.Select(cable => cable.CableName));
+            var problems = new List<string>();
+            var refreshed = 0;
+            foreach (var cable in cables)
+            {
+                if (!sections.TryGetValue(cable.CableName, out var section))
+                {
+                    cable.SectionName = null;
+                    cable.SectionAreaM2 = null;
+                    cable.DesignCapacityKN = null;
+                    problems.Add($"{cable.CableName}: SAP2000 returned no section row.");
+                    continue;
+                }
+
+                cable.SectionName = string.IsNullOrWhiteSpace(section.PropertyName) ? null : section.PropertyName;
+                if (section.AreaM2 > 0 && double.IsFinite(section.AreaM2))
+                {
+                    cable.SectionAreaM2 = section.AreaM2;
+                    cable.DesignCapacityKN = cable.ResolveCapacity(
+                        State.CableStrengthMpa, State.CableStrengthReductionFactor);
+                    refreshed++;
+                }
+                else
+                {
+                    cable.SectionAreaM2 = null;
+                    cable.DesignCapacityKN = null;
+                    problems.Add(section.Problem ?? $"{cable.CableName}: section area is unavailable.");
+                }
+            }
+
+            Message = problems.Count == 0
+                ? $"Refreshed section, area, and design capacity for {refreshed} cable{(refreshed == 1 ? "" : "s")}."
+                : $"Refreshed {refreshed} of {cables.Length} cable sections; {problems.Count} could not be read.";
+            if (problems.Count > 0)
+                Warn("Refresh Cable Sections", string.Join("\n", problems.Select(problem => "• " + problem)), warning: true);
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+            Warn("Refresh Cable Sections", ex.Message, warning: true);
+        }
+        finally
+        {
+            IsBusy = false;
+            Update();
+        }
     }
 
     private const string ConfigFilter = "COT VCF Configuration (*.json)|*.json|JSON Files (*.json)|*.json";
