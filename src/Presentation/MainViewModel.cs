@@ -1,4 +1,5 @@
 using COT_VCF.Application;
+using COT_VCF.Application.Results;
 using COT_VCF.Configuration;
 using COT_VCF.Domain;
 using Microsoft.Win32;
@@ -36,7 +37,6 @@ public sealed class MainViewModel : Observable
     private bool suppressStudySelectionEvents;
     private bool normalizingStudyCandidateIds;
     private bool studyRefreshPending;
-    private bool capacityReportSyncPending, capacityReportStale;
     private bool isStudyRunning;
     private int requestedWorkerCount = 2;
     private int studyCompletedCount, studyReusedCount, studyFailedCount, studyRunningCount, studyQueuedCount, studySkippedCount, studyCancelledCount;
@@ -47,7 +47,7 @@ public sealed class MainViewModel : Observable
     private string resumeStatusText = "No compatible interrupted run inspected.";
     private StudyPreflightReport preflightReport = StudyPreflightReport.Empty;
 
-    public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); if (!value) PumpCableCapacityReportSync(); } }
+    public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); } }
     public bool IsIdle => !IsBusy;
     public bool IsStudyRunning
     {
@@ -209,7 +209,6 @@ public sealed class MainViewModel : Observable
     {
         foreach (var cable in State.Cables)
             cable.DesignCapacityKN = cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor);
-        ScheduleCableCapacityReportSync();
     }
 
     /// <summary>Resolve design capacities [kN] from the current area / fpu / φ at the instant a report is built.
@@ -223,35 +222,6 @@ public sealed class MainViewModel : Observable
         .Where(c => !string.IsNullOrWhiteSpace(c.CableName) && c.Capacity is { } cap && double.IsFinite(cap) && cap > 0)
         .GroupBy(c => c.CableName, StringComparer.Ordinal)
         .ToDictionary(g => g.Key, g => g.First().Capacity!.Value, StringComparer.Ordinal);
-
-    /// <summary>Capacity is a post-processing input, so a change to fpu / φ only has to
-    /// re-run the report — never SAP. Marks the report stale; <see cref="PumpCableCapacityReportSync"/> does the work
-    /// once the app is idle again.</summary>
-    private void ScheduleCableCapacityReportSync()
-    {
-        if (!HasCableForceReport || !HasResultsWorkbook) return;   // nothing generated yet — Run/Regenerate will pick it up
-        capacityReportStale = true;
-        PumpCableCapacityReportSync();
-    }
-
-    /// <summary>Regenerate the Tab 06 cable-force report once, on the dispatcher, after the capacities changed.
-    /// Coalesces a burst of edits (fpu is retyped digit by digit) into a single rebuild, and defers past any
-    /// operation still in flight — the IsBusy release pumps again.</summary>
-    private void PumpCableCapacityReportSync()
-    {
-        if (!capacityReportStale || capacityReportSyncPending) return;
-        if (IsStudyRunning || IsBusy) return;
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is null) return;                            // headless (checks): the explicit command still works
-        capacityReportSyncPending = true;
-        dispatcher.BeginInvoke(() =>
-        {
-            capacityReportSyncPending = false;
-            if (!capacityReportStale || IsStudyRunning || IsBusy) return;
-            capacityReportStale = false;
-            if (HasCableForceReport && HasResultsWorkbook) RegenerateCableForceReportAsync();
-        }, System.Windows.Threading.DispatcherPriority.Background);
-    }
 
     public string CablePreviewSummary => SelectedCable is null
         ? $"{CableCount} cable{(CableCount == 1 ? "" : "s")} configured — select a row or cable in the view"
@@ -503,6 +473,32 @@ public sealed class MainViewModel : Observable
     }
 
     public ObservableCollection<PostProcessRow> PostProcessRows { get; } = [];
+    private string? rawJsonPath, rawCsvPath;
+    public string? RawJsonPath
+    {
+        get => rawJsonPath;
+        private set
+        {
+            if (!Set(ref rawJsonPath, value)) return;
+            Notify(nameof(HasRawData));
+            Notify(nameof(RawDataSummary));
+            Notify(nameof(PostProcessStatus));
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+    public string? RawCsvPath
+    {
+        get => rawCsvPath;
+        private set
+        {
+            if (!Set(ref rawCsvPath, value)) return;
+            Notify(nameof(RawDataSummary));
+        }
+    }
+    public bool HasRawData => !string.IsNullOrWhiteSpace(RawJsonPath) && File.Exists(RawJsonPath);
+    public string RawDataSummary => HasRawData
+        ? $"Source: {Path.GetFileName(RawJsonPath)} · CSV: {(File.Exists(RawCsvPath) ? Path.GetFileName(RawCsvPath) : "not available")}"
+        : "No raw study data yet.";
     private string? deflectionReportPath;
     public string? DeflectionReportPath
     {
@@ -578,8 +574,8 @@ public sealed class MainViewModel : Observable
         {
             var ok = PostProcessRows.Count(r => r.ExtractionStatus == "ExtractedOk");
             var total = PostProcessRows.Count;
-            if (!HasDeflectionReport && !HasResultsWorkbook) return "○ No deflection results — run the study on Tab 05.";
-            if (!HasDeflectionReport) return "▲ Results present but no report — press Regenerate.";
+            if (!HasRawData) return "○ No raw data — run the study on Tab 05.";
+            if (!HasDeflectionReport) return "▲ Raw data ready — generate outputs on Tab 06.";
             return total == 0 ? "● Report ready (from a previous run)." : $"● Report ready · {ok}/{total} candidates clean.";
         }
     }
@@ -750,6 +746,8 @@ public sealed class MainViewModel : Observable
     public Command OpenStudyFolder { get; }
     public Command OpenIterationFolder { get; }
     public Command OpenDeflectionReport { get; }
+    public Command GeneratePostProcessOutputs { get; }
+    public Command OpenRawDataFolder { get; }
     public Command RegenerateDeflectionReport { get; }
     public Command OpenCableForceReport { get; }
     public Command RegenerateCableForceReport { get; }
@@ -867,6 +865,10 @@ public sealed class MainViewModel : Observable
         CancelStudy = new(_ => CancelStudyExecution(), () => CanCancelStudy);
         OpenStudyFolder = new(_ => TryOpenFolder(StudyRoot), () => Directory.Exists(StudyRoot));
         OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
+        OpenRawDataFolder = new(_ =>
+        {
+            if (Path.GetDirectoryName(RawJsonPath) is { } folder) TryOpenFolder(folder);
+        }, () => HasRawData);
         OpenDeflectionReport = new(_ => TryOpenFile(DeflectionReportPath), () => HasDeflectionReport);
         OpenCableForceReport = new(_ => TryOpenFile(CableForceReportPath), () => HasCableForceReport);
         OpenShortlistReport = new(_ => TryOpenFile(ShortlistReportPath), () => HasShortlistReport);
@@ -877,8 +879,9 @@ public sealed class MainViewModel : Observable
             if (p is PostProcessRow row && Directory.Exists(StudyRoot))
                 TryOpenFile(Path.Combine(StudyRoot, row.DiagnosticRelPath.Replace('/', Path.DirectorySeparatorChar)));
         });
-        RegenerateDeflectionReport = new(_ => RegenerateReport(), () => !IsBusy);
-        RegenerateCableForceReport = new(_ => RegenerateCableForceReportAsync(), () => !IsBusy);
+        GeneratePostProcessOutputs = new(_ => GenerateStudyOutputs(), () => !IsBusy);
+        RegenerateDeflectionReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
+        RegenerateCableForceReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
         ViewIterationError = new(p =>
         {
             if (p is StudyIteration { ErrorMessage.Length: > 0 } row)
@@ -939,7 +942,6 @@ public sealed class MainViewModel : Observable
             row.PropertyChanged += (_, ev) =>
             {
                 Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update();
-                if (ev.PropertyName is nameof(CablePretensionConfig.DesignCapacityKN)) ScheduleCableCapacityReportSync();
                 if (ev.PropertyName is nameof(CablePretensionConfig.SyncMode) or nameof(CablePretensionConfig.CableName)
                     or nameof(CablePretensionConfig.ReferenceCableName) or nameof(CablePretensionConfig.SyncFactor)
                     or nameof(CablePretensionConfig.MinForce) or nameof(CablePretensionConfig.MaxForce)
@@ -1309,6 +1311,8 @@ public sealed class MainViewModel : Observable
         studySkippedCount = snapshot.Jobs.Count - studyQueuedCount;
         StudyWorkers.Clear();
         PostProcessRows.Clear();
+        RawJsonPath = null;
+        RawCsvPath = null;
         useCurrentRunArtifacts = true;
         currentRunWorkbookPath = null;
         DeflectionReportPath = null;
@@ -1335,6 +1339,8 @@ public sealed class MainViewModel : Observable
         {
             var result = await studyExecution.BuildAsync(snapshot, progress, studyCancellation.Token, AddPostProcessRow,
                 intent, parentManifest?.RunId);
+            RawJsonPath = result.Artifacts.RawJsonPath;
+            RawCsvPath = result.Artifacts.RawCsvPath;
             currentRunWorkbookPath = result.Artifacts.WorkbookPath;
             DeflectionReportPath = result.Artifacts.DeflectionReportPath;
             CableForceReportPath = result.Artifacts.CableForceReportPath;
@@ -1359,9 +1365,9 @@ public sealed class MainViewModel : Observable
                         ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
             Message = studyBuildState switch
             {
-                StudyBuildState.Completed => $"Build and analysis complete - {result.Completed:N0} verified child models are ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused existing)" : "")}.",
+                StudyBuildState.Completed => $"Build and analysis complete - {result.Completed:N0} verified child models and raw JSON/CSV are ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused existing)" : "")}. Use Tab 06 to generate reports.",
                 StudyBuildState.CompletedWithErrors => result.Artifacts.State == StudyArtifactState.Failed
-                    ? $"Child analysis finished, but result artifacts failed: {result.Artifacts.ErrorMessage}"
+                    ? $"Child analysis finished, but raw-data publication failed: {result.Artifacts.ErrorMessage}"
                     : $"Build and analysis completed with errors - {result.Completed:N0} ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused)" : "")}, {result.Failed:N0} failed.",
                 StudyBuildState.Cancelled => $"Build and analysis cancelled - {result.Completed:N0} ready, {result.Cancelled:N0} cancelled.",
                 _ => $"Build and analysis failed - all SAP2000 workers faulted; {result.Completed:N0} models are ready and {result.Failed:N0} failed."
@@ -1563,69 +1569,52 @@ public sealed class MainViewModel : Observable
         catch (Exception ex) { Message = ex.Message; }
     }
 
-    private async void RegenerateReport()
+    private async void GenerateStudyOutputs()
     {
         if (IsBusy) return;
-        if (!HasResultsWorkbook)
+        if (!HasRawData)
         {
-            // Nothing to regenerate from: clear the stale report + status and white out the preview.
             PostProcessRows.Clear();
+            currentRunWorkbookPath = null;
+            discoveredWorkbookPath = null;
             DeflectionReportPath = null;
-            Message = $"No {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName} found in {StudyRoot}. Run the study on Tab 05 to produce deflection results.";
-            return;
-        }
-        IsBusy = true;
-        try
-        {
-            var path = await Task.Run(() => new COT_VCF.Application.Results.DeflectionReportGenerator().RegenerateFromWorkbook(StudyRoot));
-            DeflectionReportPath = path;
-            StudyRunJournal.RefreshArtifact(StudyRoot, "DeflectionReport", path);
-            RefreshDeflectionArtifacts();
-            Message = $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
-        }
-        catch (Exception ex) { Message = ex.Message; Warn("Regenerate Deflection Report", ex.Message); }
-        finally { IsBusy = false; }
-    }
-
-    private async void RegenerateCableForceReportAsync()
-    {
-        if (IsBusy) return;
-        // A manual Regenerate satisfies any queued automatic refresh for the same capacity change.
-        capacityReportStale = false;
-        if (!HasResultsWorkbook)
-        {
             CableForceReportPath = null;
-            Message = $"No {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName} found in {StudyRoot}. Run the study on Tab 05 first.";
+            ShortlistReportPath = null;
+            ShortlistWorkbookPath = null;
+            Message = $"No {StudyRawDataStore.JsonFileName} found under {StudyRawDataStore.DirectoryName}. Run the study on Tab 05 to extract raw data first.";
             return;
         }
         IsBusy = true;
         try
         {
-            var capacities = CurrentCableCapacities();
             var root = StudyRoot;
-            var path = await Task.Run(() =>
-            {
-                // Keep the workbook the single source of truth: store the capacities configured now, then
-                // rebuild the report from it. No SAP2000 involvement on either step.
-                COT_VCF.Application.Results.ConsolidatedResultWriter.UpdateCableCapacities(
-                    Path.Combine(root, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName), capacities);
-                return new COT_VCF.Application.Results.CableForceReportGenerator()
-                    .RegenerateFromWorkbook(root, capacities);
-            });
-            CableForceReportPath = File.Exists(path) ? path : null;
-            if (CableForceReportPath is not null)
-            {
-                StudyRunJournal.RefreshArtifact(StudyRoot, "CableForceReport", CableForceReportPath);
-                RefreshDeflectionArtifacts();
-            }
-            Message = CableForceReportPath is null
-                ? "No cable-force results in the workbook — configure cables and a cable result case in Output Settings, then re-run."
-                : $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}" +
-                  (capacities.Count > 0
-                      ? $" · capacity from fpu {State.CableStrengthMpa:0.###} MPa · φ {State.CableStrengthReductionFactor:0.###} — no SAP2000 re-run."
-                      : ".");
+            var capacities = State.Cables.Count > 0 ? CurrentCableCapacities() : null;
+            var criteria = StudyDecisionCriteria.From(State.Study);
+            var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, criteria));
+            currentRunWorkbookPath = artifacts.WorkbookPath;
+            useCurrentRunArtifacts = true;
+            DeflectionReportPath = artifacts.DeflectionReportPath;
+            CableForceReportPath = artifacts.CableForceReportPath;
+            ShortlistWorkbookPath = artifacts.ShortlistWorkbookPath;
+            ShortlistReportPath = artifacts.ShortlistReportPath;
+            StudyRunJournal.ReplaceArtifacts(root, artifacts);
+            RefreshDeflectionArtifacts();
+            Message = $"Tab 06 outputs generated from {StudyRawDataStore.JsonFileName}" +
+                      (capacities?.Count > 0
+                          ? $" · capacity from fpu {State.CableStrengthMpa:0.###} MPa · φ {State.CableStrengthReductionFactor:0.###}."
+                          : ".") + " No SAP2000 run was performed.";
         }
-        catch (Exception ex) { Message = ex.Message; Warn("Regenerate Cable Force Report", ex.Message); }
+        catch (Exception ex)
+        {
+            currentRunWorkbookPath = null;
+            discoveredWorkbookPath = null;
+            DeflectionReportPath = null;
+            CableForceReportPath = null;
+            ShortlistReportPath = null;
+            ShortlistWorkbookPath = null;
+            Message = ex.Message;
+            Warn("Generate Post-Processing Outputs", ex.Message);
+        }
         finally { IsBusy = false; }
     }
 
@@ -1649,6 +1638,21 @@ public sealed class MainViewModel : Observable
         {
             useCurrentRunArtifacts = false;
             currentRunWorkbookPath = null;
+            PostProcessRows.Clear();
+            RawJsonPath = null;
+            RawCsvPath = null;
+            var rawJson = Path.Combine(StudyRoot, StudyRawDataStore.DirectoryName, StudyRawDataStore.JsonFileName);
+            var rawCsv = Path.Combine(StudyRoot, StudyRawDataStore.DirectoryName, StudyRawDataStore.CsvFileName);
+            if (File.Exists(rawJson))
+            {
+                var raw = new StudyRawDataStore().Read(rawJson);
+                if (SamePath(raw.BaselineModelPath, State.SessionBaselineModel?.Path ?? State.Model?.Path))
+                {
+                    RawJsonPath = rawJson;
+                    RawCsvPath = File.Exists(rawCsv) ? rawCsv : null;
+                    foreach (var result in raw.Results) AddPostProcessRow(result);
+                }
+            }
             var manifest = Directory.Exists(StudyRoot) ? StudyRunJournal.TryRead(StudyRoot) : null;
             if (manifest is null || !SamePath(manifest.BaselineModelPath, State.SessionBaselineModel?.Path ?? State.Model?.Path))
             {
@@ -1661,17 +1665,24 @@ public sealed class MainViewModel : Observable
             }
             else
             {
-                discoveredWorkbookPath = StudyRunJournal.ValidArtifactPath(manifest, "Workbook");
-                DeflectionReportPath = StudyRunJournal.ValidArtifactPath(manifest, "DeflectionReport");
-                CableForceReportPath = StudyRunJournal.ValidArtifactPath(manifest, "CableForceReport");
-                ShortlistReportPath = StudyRunJournal.ValidArtifactPath(manifest, "ShortlistReport");
-                ShortlistWorkbookPath = StudyRunJournal.ValidArtifactPath(manifest, "ShortlistWorkbook");
+                // If a user edits the raw JSON, derived outputs are intentionally considered stale until
+                // Tab 06 is generated again. The raw file itself remains available as the flexible input.
+                var recordedRaw = StudyRunJournal.ValidArtifactPath(manifest, "RawJson");
+                var derivedAreCurrent = HasRawData && SamePath(recordedRaw, RawJsonPath);
+                discoveredWorkbookPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "Workbook") : null;
+                DeflectionReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "DeflectionReport") : null;
+                CableForceReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "CableForceReport") : null;
+                ShortlistReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "ShortlistReport") : null;
+                ShortlistWorkbookPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "ShortlistWorkbook") : null;
                 SetRunReference(new StudyRunReference(manifest.RunId, Path.Combine(StudyRoot, StudyRunJournal.FileName),
                     manifest.BaselineSha256, manifest.SnapshotSha256, manifest.State), StudyRunJournal.ArtifactsAreIntact(manifest));
             }
         }
         catch
         {
+            PostProcessRows.Clear();
+            RawJsonPath = null;
+            RawCsvPath = null;
             discoveredWorkbookPath = null;
             DeflectionReportPath = null;
             CableForceReportPath = null;
@@ -2148,6 +2159,7 @@ public sealed class MainViewModel : Observable
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
             nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount),
+            nameof(HasRawData), nameof(RawDataSummary), nameof(RawJsonPath), nameof(RawCsvPath),
             nameof(HasDeflectionReport), nameof(HasNoDeflectionReport), nameof(DeflectionReportUri), nameof(DeflectionReportName),
             nameof(HasCableForceReport), nameof(CableForceReportName),
             nameof(HasResultsWorkbook), nameof(ResultsWorkbookPath), nameof(PostProcessStatus)

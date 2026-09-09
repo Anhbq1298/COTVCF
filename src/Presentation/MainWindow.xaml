@@ -265,7 +265,7 @@
        <TextBlock Text="{Binding SyncGroupSummary}" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center"/>
        <Border Width="1" Background="{StaticResource Border}" Margin="12,1,12,1"/>
        <TextBlock Text="Design capacity =" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center"
-                  ToolTip="Each cable's read-only design capacity = section area × fpu × 1000 × φ [kN]. Changing fpu or φ recomputes every capacity and regenerates the Tab 06 cable-force report — no SAP2000 re-run."/>
+                  ToolTip="Each cable's read-only design capacity = section area × fpu × 1000 × φ [kN]. After changing fpu or φ, press Generate Outputs / Regenerate on Tab 06 to use the new capacity — no SAP2000 re-run."/>
        <TextBlock Text="fpu" FontStyle="Italic" FontSize="11" VerticalAlignment="Center" Margin="4,0,2,0"/>
        <TextBox Width="52" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
                 ToolTip="Cable material strength [MPa] — Grade 1860 strand by default"
@@ -894,8 +894,8 @@
       </StackPanel>
       <StackPanel Grid.Column="5" Orientation="Horizontal">
        <Button Content="{Binding RunStudyLabel}" Command="{Binding BuildSelectedModels}" Style="{StaticResource Primary}" ToolTip="{Binding RunStudyToolTip}" Margin="0"/>
-       <TextBlock Style="{StaticResource InlineHelpIcon}" Margin="3,0,0,0" ToolTip="Builds selected candidates in isolated child models, runs SAP2000 analysis, verifies results, and generates reports. Existing verified children are reused."
-                  AutomationProperties.Name="Build and Analyze help" AutomationProperties.HelpText="Builds selected child models, runs SAP2000 analysis, verifies results, and generates reports."/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" Margin="3,0,0,0" ToolTip="Builds selected candidates in isolated child models, runs SAP2000 analysis, verifies results, and writes raw JSON/CSV. Reports are generated separately on Tab 06. Existing verified children are reused."
+                  AutomationProperties.Name="Build and Analyze help" AutomationProperties.HelpText="Builds selected child models, runs SAP2000 analysis, verifies results, and writes raw JSON and CSV for Tab 06."/>
       </StackPanel>
      </Grid>
     </Grid>
@@ -906,7 +906,7 @@
     <TabItem.Header>
      <StackPanel Width="124">
       <TextBlock Text="06  POST-PROCESSING" Style="{StaticResource TabHeaderTitle}"/>
-      <TextBlock Text="Deflection · Uz" Style="{StaticResource TabHeaderStatus}"/>
+      <TextBlock Text="Raw data → reports" Style="{StaticResource TabHeaderStatus}"/>
      </StackPanel>
     </TabItem.Header>
     <Grid Margin="2,2,6,2">
@@ -919,9 +919,21 @@
 
      <StackPanel Grid.Row="0" Margin="0,0,0,4">
       <TextBlock Text="POST-PROCESSING · RESULT LIBRARY" Style="{StaticResource Subheading}" Margin="0"/>
-      <TextBlock FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding BaselineModelPath}">
-       <Run Text="Study: " Foreground="{StaticResource Muted}"/><Run Text="{Binding BaselineModelName, Mode=OneWay}" FontWeight="SemiBold"/>
-      </TextBlock>
+      <DockPanel Margin="0,3,0,4">
+       <WrapPanel DockPanel.Dock="Right" Margin="12,0,0,0">
+        <Button Content="Generate Outputs" Command="{Binding GeneratePostProcessOutputs}" Style="{StaticResource Primary}"
+                ToolTip="Read RawData/Study_Raw_Results.json and generate Excel plus all implemented HTML reports — no SAP2000"/>
+        <Button Content="Open Raw Data" Command="{Binding OpenRawDataFolder}" Margin="0"
+                ToolTip="Open the JSON/CSV source folder used by Tab 06"/>
+       </WrapPanel>
+       <StackPanel>
+        <TextBlock FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding BaselineModelPath}">
+         <Run Text="Study: " Foreground="{StaticResource Muted}"/><Run Text="{Binding BaselineModelName, Mode=OneWay}" FontWeight="SemiBold"/>
+        </TextBlock>
+        <TextBlock Text="{Binding RawDataSummary}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}"
+                   TextTrimming="CharacterEllipsis" ToolTip="{Binding RawJsonPath}"/>
+       </StackPanel>
+      </DockPanel>
      </StackPanel>
 
      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
@@ -968,7 +980,7 @@
          <TextBlock Text="{Binding DeflectionReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Rebuild Deflection_Report.html from Deflection_Results_Source.xlsx — no SAP"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Regenerate Tab 06 outputs from RawData/Study_Raw_Results.json — no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1007,7 +1019,7 @@
          <TextBlock Text="{Binding CableForceReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding CableForceReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenCableForceReport}" Style="{StaticResource Primary}" ToolTip="Open Cable_Forces_Report.html in your web browser"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Rebuild Cable_Forces_Report.html from Deflection_Results_Source.xlsx using the fpu / &#966; set on the Cable tab — no SAP"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Regenerate Tab 06 outputs from raw JSON using the current fpu / &#966; capacities — no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1022,6 +1034,7 @@
           <TextBlock Text="{Binding ShortlistReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ShortlistReportPath}"/>
           <WrapPanel Margin="0,4,0,0">
            <Button Content="View Report" Command="{Binding OpenShortlistReport}" Style="{StaticResource Primary}" ToolTip="Open Study_Shortlist.html in your web browser"/>
+           <Button Content="Regenerate" Command="{Binding GeneratePostProcessOutputs}" ToolTip="Regenerate the shortlist and other Tab 06 outputs from raw JSON — no SAP"/>
            <Button Content="Open Excel" Command="{Binding OpenShortlistWorkbook}" ToolTip="Open Study_Shortlist.xlsx"/>
            <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
           </WrapPanel>

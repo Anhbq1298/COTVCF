@@ -38,14 +38,14 @@ public sealed record StudyExecutionSnapshot(
     public string CableResultLoadCase { get; init; } = "";
     // Cable-force post-processing (Tab 06.05): the cables whose axial force is read under CableResultLoadCase.
     public IReadOnlyList<string> CableResultCables { get; init; } = [];
-    // Per-cable design capacity [kN] from the Pretension tab. Drives the utilisation views in the cable report;
-    // empty when no capacity is configured.
+    // Post-processing defaults captured in raw JSON for portability. They do not affect model execution or its
+    // provenance fingerprint; Tab 06 may replace them with the user's current values.
     public IReadOnlyDictionary<string, double> CableDesignCapacities { get; init; } =
         new Dictionary<string, double>();
     // Deflection post-processing (Tab 06): monitored points + the SAP case their Uz is read under.
     public IReadOnlyList<string> DeflectionPoints { get; init; } = [];
     public string DeflectionOutputCase { get; init; } = "";
-    // Frozen decision/ranking criteria used to derive the shortlist from this exact execution snapshot.
+    // Default decision/ranking criteria written into raw JSON; Tab 06 may apply current criteria later.
     public StudyDecisionCriteria DecisionCriteria { get; init; } = new(50, 75, null, null, 0.9, 0.5, 0.3, 0.2);
 }
 
@@ -95,7 +95,9 @@ public sealed record StudyArtifactOutcome(
     string? CableForceReportPath,
     string? ErrorMessage,
     string? ShortlistWorkbookPath = null,
-    string? ShortlistReportPath = null)
+    string? ShortlistReportPath = null,
+    string? RawJsonPath = null,
+    string? RawCsvPath = null)
 {
     public static StudyArtifactOutcome NotProduced { get; } = new(StudyArtifactState.NotProduced, null, null, null, null);
     public static StudyArtifactOutcome Failed(string message) => new(StudyArtifactState.Failed, null, null, null, message);

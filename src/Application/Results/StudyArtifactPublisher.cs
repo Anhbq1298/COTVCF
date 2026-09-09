@@ -8,7 +8,10 @@ public interface IStudyArtifactPublisher
     StudyArtifactOutcome Publish(StudyExecutionSnapshot snapshot, IReadOnlyList<CandidateResultDto> results);
 }
 
-/// <summary>Creates the authoritative source workbook first, then derives the self-contained HTML reports from it.</summary>
+/// <summary>
+/// Publishes raw, SAP-independent JSON/CSV only. Excel workbooks and HTML reports belong to the explicit
+/// Tab 06 post-processing step and are never generated as a side effect of running models.
+/// </summary>
 public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
 {
     private readonly StudyPathService paths = new();
@@ -17,32 +20,8 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
     {
         if (results.Count == 0) return StudyArtifactOutcome.NotProduced;
         var studyFolder = Path.GetFullPath(paths.GetStudyRoot(snapshot.BaselineModelPath));
-        var consolidator = new ConsolidatedResultWriter();
-        foreach (var result in results) consolidator.Add(result);
-        var workbook = consolidator.Write(studyFolder, snapshot.DeflectionPoints, snapshot.DeflectionOutputCase,
-            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode, snapshot.CableDesignCapacities,
-            snapshot.CableResultLoadCase);
-        var ordered = consolidator.Snapshot();
-        var hasCableReport = ordered.Any(r => (r.CableForces?.Count ?? 0) > 0);
-        IReadOnlyList<string> currentReports = hasCableReport
-            ? ["deflection", "cable", "shortlist"]
-            : ["deflection", "shortlist"];
-        var decisions = new StudyDecisionService().Evaluate(ordered, snapshot.DecisionCriteria);
-
-        var deflectionGen = new DeflectionReportGenerator();
-        var deflection = deflectionGen.Generate(studyFolder, ordered,
-            snapshot.BaselineModel.Name, snapshot.BaselineModelPath, snapshot.StudyMode, currentReports);
-
-        string? cable = null;
-        if (hasCableReport)
-        {
-            cable = new CableForceReportGenerator().Generate(studyFolder, ordered,
-                snapshot.BaselineModel.Name, snapshot.StudyMode, snapshot.CableResultLoadCase,
-                snapshot.CableDesignCapacities, currentReports);
-        }
-        var shortlist = new StudyShortlistExporter().Export(studyFolder, decisions,
-            snapshot.DecisionCriteria, siblingReports: currentReports);
-        return new(StudyArtifactState.Ready, workbook, deflection, cable, null,
-            shortlist.WorkbookPath, shortlist.HtmlPath);
+        var raw = new StudyRawDataStore().Write(studyFolder, snapshot, results);
+        return new(StudyArtifactState.Ready, null, null, null, null,
+            RawJsonPath: raw.JsonPath, RawCsvPath: raw.CsvPath);
     }
 }

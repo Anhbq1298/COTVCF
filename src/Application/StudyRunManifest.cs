@@ -248,6 +248,21 @@ public sealed class StudyRunJournal
         catch { return false; }
     }
 
+    /// <summary>Atomically replaces the manifest's complete raw + derived artifact set after Tab 06 runs.</summary>
+    public static bool ReplaceArtifacts(string studyRoot, StudyArtifactOutcome outcome)
+    {
+        try
+        {
+            var root = Path.GetFullPath(studyRoot);
+            var manifest = TryRead(root);
+            if (manifest is null) return false;
+            manifest.Artifacts = ArtifactEntries(outcome).ToList();
+            AtomicFile.WriteAllText(Path.Combine(root, FileName), JsonSerializer.Serialize(manifest, Json));
+            return true;
+        }
+        catch { return false; }
+    }
+
     private static bool ArtifactIsIntact(StudyRunArtifactManifest entry)
     {
         try
@@ -263,6 +278,8 @@ public sealed class StudyRunJournal
     {
         foreach (var (kind, path) in new[]
         {
+            ("RawJson", outcome.RawJsonPath),
+            ("RawCsv", outcome.RawCsvPath),
             ("Workbook", outcome.WorkbookPath),
             ("DeflectionReport", outcome.DeflectionReportPath),
             ("CableForceReport", outcome.CableForceReportPath),
@@ -334,9 +351,6 @@ public static class Fingerprints
             snapshot.DeflectionOutputCase,
             snapshot.CableResultCables,
             snapshot.CableResultLoadCase,
-            snapshot.DecisionCriteria,
-            CableDesignCapacities = snapshot.CableDesignCapacities.OrderBy(item => item.Key, StringComparer.Ordinal)
-                .Select(item => new { Cable = item.Key, CapacityKN = item.Value }),
             FilteredCandidateKeys = snapshot.Jobs.OrderBy(job => job.RunIndex).Select(job => job.IterationId),
             Jobs = snapshot.Jobs.OrderBy(job => job.RunIndex).Select(job => new
             {

@@ -6,21 +6,19 @@ using System.IO;
 
 namespace COT_VCF.Application.Workers;
 
-/// <summary>The analyzed child plus its extracted deflection result (for consolidation) — the diagnostic
-/// HTML is already written into the candidate folder by the time this is returned. <see cref="Reused"/> is
-/// true when an already-built child model on disk was opened and re-extracted instead of rebuilt.</summary>
+/// <summary>The analyzed child plus its extracted raw result. User-facing diagnostic HTML is deliberately
+/// deferred to Tab 06 post-processing. <see cref="Reused"/> is true when an already-built child model on disk
+/// was opened and re-extracted instead of rebuilt.</summary>
 public sealed record CandidateBuildResult(ModelInfo Child, CandidateResultDto Result, bool Reused = false);
 
 public sealed class IterationModelBuilder(
     TrussGeometryService? geometryService = null,
     IterationCandidateVerifier? verifier = null,
-    SapResultExtractor? resultExtractor = null,
-    CandidateDiagnosticReportGenerator? diagnosticGenerator = null)
+    SapResultExtractor? resultExtractor = null)
 {
     private readonly TrussGeometryService geometryService = geometryService ?? new();
     private readonly IterationCandidateVerifier verifier = verifier ?? new();
     private readonly SapResultExtractor resultExtractor = resultExtractor ?? new();
-    private readonly CandidateDiagnosticReportGenerator diagnosticGenerator = diagnosticGenerator ?? new();
 
     public async Task<CandidateBuildResult> BuildAsync(
         ISapGateway gateway,
@@ -133,12 +131,6 @@ public sealed class IterationModelBuilder(
                 $"EXTRACTED status={result.ExtractionStatus} groups={result.Groups.Count} " +
                 $"points={result.Groups.Sum(g => g.Points.Count)} warnings={result.Warnings.Count}");
 
-            token.ThrowIfCancellationRequested();
-            stage = StudyWorkerStage.GeneratingDiagnostic;
-            Report(stage, StudyIterationStatus.GeneratingDiagnostic, "Writing candidate diagnostic report.", analyzedChild.Path);
-            var diagnosticPath = diagnosticGenerator.Write(result, job.IterationDirectory);
-            AppendDiagnostic(job, workerId, $"DIAGNOSTIC {diagnosticPath}");
-
             return new CandidateBuildResult(analyzedChild, result);
 
             void Report(StudyWorkerStage nextStage, StudyIterationStatus status, string message, string? path)
@@ -158,16 +150,7 @@ public sealed class IterationModelBuilder(
             var detail = $"Iteration {job.IterationId} failed on Worker {workerId} during {stage}. " +
                 $"Candidates L={job.LoadingCandidateId}, H={job.HeightCandidateId}, P={job.PretensionCandidateId}. {ex.Message}";
             if (Directory.Exists(job.IterationDirectory))
-            {
                 AppendDiagnostic(job, workerId, $"FAILED stage={stage}: {ex}");
-                try
-                {
-                    diagnosticGenerator.Write(
-                        resultExtractor.FailureResult(snapshot, job, $"Failed during {stage}: {ex.Message}", DateTimeOffset.Now),
-                        job.IterationDirectory);
-                }
-                catch { /* the failure diagnostic is best-effort */ }
-            }
             throw new InvalidOperationException(detail, ex);
         }
     }
@@ -236,12 +219,6 @@ public sealed class IterationModelBuilder(
                 $"REUSE EXTRACTED status={result.ExtractionStatus} groups={result.Groups.Count} " +
                 $"points={result.Groups.Sum(g => g.Points.Count)} warnings={result.Warnings.Count}");
 
-            token.ThrowIfCancellationRequested();
-            stage = StudyWorkerStage.GeneratingDiagnostic;
-            report(stage, StudyIterationStatus.GeneratingDiagnostic, "Writing candidate diagnostic report.", analyzedChild.Path);
-            var diagnosticPath = diagnosticGenerator.Write(result, job.IterationDirectory);
-            AppendDiagnostic(job, workerId, $"REUSE DIAGNOSTIC {diagnosticPath}");
-
             return new CandidateBuildResult(analyzedChild, result, Reused: true);
         }
         catch (OperationCanceledException)
@@ -256,16 +233,7 @@ public sealed class IterationModelBuilder(
                 $"Candidates L={job.LoadingCandidateId}, H={job.HeightCandidateId}, P={job.PretensionCandidateId}. {ex.Message} " +
                 "Delete its iteration folder to have the study rebuild it.";
             if (Directory.Exists(job.IterationDirectory))
-            {
                 AppendDiagnostic(job, workerId, $"REUSE FAILED stage={stage}: {ex}");
-                try
-                {
-                    diagnosticGenerator.Write(
-                        resultExtractor.FailureResult(snapshot, job, $"Reuse failed during {stage}: {ex.Message}", DateTimeOffset.Now),
-                        job.IterationDirectory);
-                }
-                catch { /* the failure diagnostic is best-effort */ }
-            }
             throw new InvalidOperationException(detail, ex);
         }
     }

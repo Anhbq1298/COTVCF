@@ -13,6 +13,7 @@ internal static class StudyExecutionChecks
         PathServiceIsPureAndDeterministic();
         SnapshotResolvesCompleteCandidates();
         OneWorkerPersistsAndVerifiesOneCandidate();
+        RawPostProcessingUsesCurrentCapacityWithoutRerunningSap();
         ArtifactFailureIsReportedWithoutStalePaths();
         ResumeAndRetryUseLatestCompatibleRun();
         ResumePublishesTheCompleteParentSelection();
@@ -69,7 +70,8 @@ internal static class StudyExecutionChecks
             var gateway = factory.Gateways.Single();
             Check(result.Completed == 1 && result.Failed == 0 &&
                   result.Artifacts.State == StudyArtifactState.Ready &&
-                  File.Exists(result.Artifacts.WorkbookPath) &&
+                  File.Exists(result.Artifacts.RawJsonPath) && File.Exists(result.Artifacts.RawCsvPath) &&
+                  result.Artifacts.WorkbookPath is null && result.Artifacts.DeflectionReportPath is null &&
                   stages.Contains(StudyIterationStatus.RunningAnalysis) &&
                   stages.Contains(StudyIterationStatus.Verifying) &&
                   stages.Contains(StudyIterationStatus.ExtractingResults) && File.Exists(job.ModelFullPath),
@@ -84,39 +86,47 @@ internal static class StudyExecutionChecks
                 "Deflection extraction produces one sorted group of Valid monitored-point Uz per candidate");
 
             var diagHtmlPath = Path.Combine(job.IterationDirectory, $"Deflection_Diagnostic_{job.IterationId}.html");
-            Check(File.Exists(diagHtmlPath), "A candidate diagnostic HTML is written into the candidate folder");
+            Check(!File.Exists(diagHtmlPath), "The SAP/model run does not generate candidate diagnostic HTML");
             Check(File.Exists(Path.Combine(job.IterationDirectory, CandidateResultStore.FileName)),
                 "A successful candidate persists a durable result payload for interrupted-run recovery");
-            var diagHtml = File.ReadAllText(diagHtmlPath);
-            Check(diagHtml.Contains("Candidate Diagnostic Report") && diagHtml.Contains("QA/QC") &&
-                  diagHtml.Contains("Monitored Deflection") && diagHtml.Contains(">top<"),
-                "Diagnostic HTML states its QA/QC purpose and lists the extracted monitored points");
 
             var studyFolder = Path.GetDirectoryName(job.IterationDirectory)!;
             var xlsx = Path.Combine(studyFolder, "Deflection_Results_Source.xlsx");
             var reportHtml = Path.Combine(studyFolder, "Deflection_Report.html");
-            Check(File.Exists(xlsx) && File.Exists(reportHtml),
-                "Study run writes the consolidated Deflection workbook and the final HTML report to the Study folder");
-            Check(File.Exists(result.Artifacts.ShortlistReportPath) && File.Exists(result.Artifacts.ShortlistWorkbookPath),
-                "Study run publishes the ranked shortlist HTML and workbook as first-class artifacts");
-            var shortlistHtml = File.ReadAllText(result.Artifacts.ShortlistReportPath!);
-            Check(shortlistHtml.Contains("Result Library", StringComparison.Ordinal) &&
-                  shortlistHtml.Contains(DeflectionReportGenerator.ReportFileName, StringComparison.Ordinal) &&
-                  shortlistHtml.Contains(job.IterationId, StringComparison.Ordinal),
-                "Shortlist report links the current result library and includes the ranked candidate");
+            var raw = new StudyRawDataStore().Read(result.Artifacts.RawJsonPath!);
+            Check(raw.Results.Count == 1 && raw.Results[0].IterationKey == job.IterationId &&
+                  File.ReadLines(result.Artifacts.RawCsvPath!).First().Contains("RecordType", StringComparison.Ordinal) &&
+                  !File.Exists(xlsx) && !File.Exists(reportHtml),
+                "Study run publishes lossless JSON plus flat CSV raw data and does not generate reports");
             var manifest = StudyRunJournal.TryRead(studyFolder);
             Check(result.Run is not null && File.Exists(result.Run.ManifestPath) && manifest is not null &&
                   manifest.RunId == result.Run.RunId && manifest.State == StudyRunState.Completed &&
                   manifest.Candidates.Single(candidate => candidate.Selected).Status == StudyIterationStatus.Ready &&
-                  manifest.Artifacts.Any(artifact => artifact.Kind == "ShortlistReport") &&
-                  manifest.Artifacts.Any(artifact => artifact.Kind == "ShortlistWorkbook") &&
-                  StudyRunJournal.ArtifactsAreIntact(manifest),
-                "Study run atomically records candidate status, provenance hashes, and verifiable artifacts");
+                  manifest.Artifacts.Select(artifact => artifact.Kind).ToHashSet(StringComparer.Ordinal)
+                      .SetEquals(["RawJson", "RawCsv"]) && StudyRunJournal.ArtifactsAreIntact(manifest),
+                "Study run manifest records only verifiable raw JSON/CSV artifacts");
+
+            var derived = new StudyPostProcessor().Generate(studyFolder,
+                snapshot.CableDesignCapacities, snapshot.DecisionCriteria);
+            Check(StudyRunJournal.ReplaceArtifacts(studyFolder, derived) &&
+                  File.Exists(derived.WorkbookPath) && File.Exists(derived.DeflectionReportPath),
+                "Tab 06 explicitly derives the workbook and reports from raw JSON without SAP2000");
+            var diagHtml = File.ReadAllText(diagHtmlPath);
+            Check(diagHtml.Contains("Candidate Diagnostic Report") && diagHtml.Contains("QA/QC") &&
+                  diagHtml.Contains("Monitored Deflection") && diagHtml.Contains(">top<"),
+                "Tab 06 generates candidate diagnostic HTML from raw data");
+            Check(File.Exists(derived.ShortlistReportPath) && File.Exists(derived.ShortlistWorkbookPath),
+                "Tab 06 publishes the ranked shortlist HTML and workbook");
+            var shortlistHtml = File.ReadAllText(derived.ShortlistReportPath!);
+            Check(shortlistHtml.Contains("Result Library", StringComparison.Ordinal) &&
+                  shortlistHtml.Contains(DeflectionReportGenerator.ReportFileName, StringComparison.Ordinal) &&
+                  shortlistHtml.Contains(job.IterationId, StringComparison.Ordinal),
+                "Shortlist report links the current result library and includes the ranked candidate");
             var readBack = COT_VCF.Application.Results.ConsolidatedResultWriter.Read(xlsx);
             Check(readBack.Count == 1 && readBack[0].IterationKey == job.IterationId &&
                   readBack[0].Groups.Single().Points.Count == 3 &&
                   readBack[0].Groups[0].Points.All(pt => pt.UzMm.HasValue),
-                "Consolidated workbook round-trips the candidate and its monitored-point Uz rows");
+                "Tab 06 workbook round-trips the candidate and its monitored-point Uz rows");
             var finalHtml = File.ReadAllText(reportHtml);
             Check(finalHtml.Contains("id=\"report-data\"") && finalHtml.Contains("Deflection Results Viewer") &&
                    finalHtml.Contains(job.IterationId) && finalHtml.Contains("Result Library") &&
@@ -148,12 +158,12 @@ internal static class StudyExecutionChecks
             Check(result.Completed == 1 && result.Artifacts.State == StudyArtifactState.Failed &&
                   result.Artifacts.ErrorMessage!.Contains("simulated artifact failure", StringComparison.Ordinal) &&
                   coordinator.LastDeflectionReportPath is null && coordinator.LastCableForceReportPath is null,
-                "artifact failure is explicit and never reuses a prior report path");
+                "raw-data publication failure is explicit and never reuses a prior report path");
             var studyFolder = Path.GetDirectoryName(snapshot.Jobs.Single(job => job.RunIterate).IterationDirectory)!;
             var manifest = StudyRunJournal.TryRead(studyFolder);
             Check(result.Run is not null && manifest?.State == StudyRunState.CompletedWithErrors &&
                   manifest.Artifacts.Count == 0,
-                "artifact failure is preserved in the run manifest without publishing stale artifact entries");
+                "raw-data publication failure is preserved without publishing stale artifact entries");
         }
         finally { DeleteRoot(root); }
     }
@@ -214,10 +224,39 @@ internal static class StudyExecutionChecks
             var result = new StudyExecutionCoordinator(factory).BuildAsync(resumed,
                 new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None, null,
                 StudyRunIntent.ResumeInterrupted, parent.RunId).GetAwaiter().GetResult();
-            var consolidated = ConsolidatedResultWriter.Read(result.Artifacts.WorkbookPath!);
+            var consolidated = new StudyRawDataStore().Read(result.Artifacts.RawJsonPath!).Results;
             Check(consolidated.Count == 3 && consolidated.Select(row => row.IterationKey)
                     .ToHashSet(StringComparer.Ordinal).SetEquals(jobs.Select(job => job.IterationId)),
-                "Resume merges verified parent results with newly resumed candidates in the authoritative workbook");
+                "Resume merges verified parent results with newly resumed candidates in authoritative raw JSON");
+        }
+        finally { DeleteRoot(root); }
+    }
+
+    private static void RawPostProcessingUsesCurrentCapacityWithoutRerunningSap()
+    {
+        var (root, _, original) = CreateSnapshot(1, 1);
+        try
+        {
+            var snapshot = original with
+            {
+                CableResultLoadCase = "SERVICE",
+                CableResultCables = ["Cable-A"],
+                CableDesignCapacities = new Dictionary<string, double>(StringComparer.Ordinal) { ["Cable-A"] = 2000 }
+            };
+            var factory = new FakeHostFactory();
+            var run = new StudyExecutionCoordinator(factory).BuildAsync(snapshot,
+                new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
+            var studyFolder = Path.GetDirectoryName(snapshot.Jobs.Single(job => job.RunIterate).IterationDirectory)!;
+            var analysisCount = factory.Gateways.Sum(gateway => gateway.AnalysisAttempts.Count);
+            var outputs = new StudyPostProcessor().Generate(studyFolder,
+                new Dictionary<string, double>(StringComparer.Ordinal) { ["Cable-A"] = 999 },
+                snapshot.DecisionCriteria);
+            var cableHtml = File.ReadAllText(outputs.CableForceReportPath!);
+            Check(run.Artifacts.WorkbookPath is null && File.Exists(run.Artifacts.RawJsonPath) &&
+                  cableHtml.Contains("\"Cable-A\":999", StringComparison.Ordinal) &&
+                  !cableHtml.Contains("\"Cable-A\":2000", StringComparison.Ordinal) &&
+                  factory.Gateways.Sum(gateway => gateway.AnalysisAttempts.Count) == analysisCount,
+                "Tab 06 uses the current capacity override from raw data without rerunning SAP2000");
         }
         finally { DeleteRoot(root); }
     }
@@ -403,14 +442,14 @@ internal static class StudyExecutionChecks
             {
                 CableDesignCapacities = new Dictionary<string, double>(StringComparer.Ordinal) { ["Cable-A"] = 1234 }
             };
-            Check(fingerprint != Fingerprints.SnapshotSha256(capacityChanged),
-                "Study provenance fingerprint changes when a report-affecting cable capacity changes");
+            Check(fingerprint == Fingerprints.SnapshotSha256(capacityChanged),
+                "Post-processing cable capacity does not invalidate reusable model raw data");
             var criteriaChanged = snapshot with
             {
                 DecisionCriteria = snapshot.DecisionCriteria with { DeflectionPassLimitMm = snapshot.DecisionCriteria.DeflectionPassLimitMm + 1 }
             };
-            Check(fingerprint != Fingerprints.SnapshotSha256(criteriaChanged),
-                "Study provenance fingerprint changes when shortlist decision criteria change");
+            Check(fingerprint == Fingerprints.SnapshotSha256(criteriaChanged),
+                "Post-processing shortlist criteria do not invalidate reusable model raw data");
             state.LoadDefinitions[0].MinQz = 999;
             state.Truss.MinimumHeight = 999;
             state.Cables[0].MinForce = 999;
@@ -505,9 +544,10 @@ internal static class StudyExecutionChecks
             Check(File.ReadAllBytes(job.ModelFullPath).SequenceEqual(childBytes),
                 "The existing child .sdb is never overwritten by a reuse");
             var studyFolder = Path.GetDirectoryName(job.IterationDirectory)!;
-            Check(File.Exists(Path.Combine(studyFolder, "Deflection_Results_Source.xlsx")) &&
-                  File.Exists(Path.Combine(studyFolder, "Deflection_Report.html")),
-                "Reused candidates are still consolidated into the deflection source workbook and report");
+            Check(File.Exists(second.Artifacts.RawJsonPath) && File.Exists(second.Artifacts.RawCsvPath) &&
+                  !File.Exists(Path.Combine(studyFolder, "Deflection_Results_Source.xlsx")) &&
+                  !File.Exists(Path.Combine(studyFolder, "Deflection_Report.html")),
+                "Reused candidates are consolidated into raw JSON/CSV without implicit reports");
         }
         finally { DeleteRoot(root); }
     }

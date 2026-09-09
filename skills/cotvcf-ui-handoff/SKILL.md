@@ -218,11 +218,12 @@ Tab 04 defines study-wide output monitoring only; editing the tab does not write
 - Cable output selects baseline Cable Objects plus a SAP analysis load case. This is distinct from Tab 03's target-force load pattern.
 - Configuration is persisted as `Tab05OutputSettings`; opening a project restores definitions only and never mutates SAP.
 - When Tab 05 Run starts, `OutputGroupPreparationService` is the preflight gate: verify the active model is the immutable session parent and unlocked, replace/read-back all requested `[O]-` groups, save the parent .sdb, then freeze the execution snapshot. No worker or child may start before this succeeds.
-- Children inherit the saved parent groups. Actual SAP result extraction remains a future phase.
+- Children inherit the saved parent groups. The run extracts the configured results as raw candidate data;
+  it does not create Excel workbooks or HTML reports.
 
 ## Iteration Study Tab (06)
 
-Study composition plus isolated child-model building and analysis. Tab 05 does not extract results.
+Study composition plus isolated child-model building, analysis, raw-result extraction, and file-based post-processing.
 
 - `IterationStudyConfig` (Domain, `ApplicationState.Study`): `Mode` (`IterationStudyMode` enum
   `FixPretension` / `FixHeight` / `Combined`), `FixedHeightIndex`, `FixedPretensionIndex` (0-based).
@@ -274,7 +275,16 @@ Study composition plus isolated child-model building and analysis. Tab 05 does n
   active workers attempt to return to baseline and queued jobs become Cancelled.
 - A candidate-level failure, including a nonzero `Analyze.RunAnalysis` result, may continue on a recovered
   worker. Failure to restore the baseline faults that worker and removes it from scheduling; healthy workers
-  continue. Result extraction is not part of this phase.
+  continue.
+- The SAP/model-run boundary ends with raw files: each successful candidate persists `Candidate_Result.json`,
+  then the study publishes canonical lossless `Study/RawData/Study_Raw_Results.json` plus a flat
+  `Study_Raw_Results.csv` companion. It does not generate `.xlsx` or `.html`, including candidate diagnostics.
+- Tab 06 is the only report-generation boundary. `Generate Outputs` / `Regenerate` reads the raw JSON and creates
+  the candidate diagnostics, consolidated workbook, deflection/cable HTML, and shortlist outputs without a SAP
+  gateway. The CSV is a spreadsheet-friendly raw view; JSON is the canonical complete post-processing input.
+- Capacity and decision criteria are post-processing inputs. Changing `fpu`, `φ`, or criteria must not invalidate
+  reusable analyzed children; the next explicit Tab 06 generation uses the current derived capacities and criteria.
+  Users may edit the raw JSON in place and regenerate; derived artifacts are considered stale until then.
 
 ## Config Project File (`src/Configuration/`)
 

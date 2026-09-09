@@ -18,7 +18,7 @@ public sealed class StudyExecutionCoordinator
         this.artifactPublisher = artifactPublisher ?? new StudyArtifactPublisher();
     }
 
-    /// <summary>Absolute path of the last <c>Deflection_Report.html</c> written by a run, or null.</summary>
+    /// <summary>Legacy compatibility property. Model execution no longer writes presentation reports.</summary>
     public string? LastDeflectionReportPath { get; private set; }
     /// <summary>Absolute path of the last <c>Cable_Forces_Report.html</c> written by a run, or null.</summary>
     public string? LastCableForceReportPath { get; private set; }
@@ -89,7 +89,7 @@ public sealed class StudyExecutionCoordinator
                 catch (Exception ex)
                 {
                     LastArtifactOutcome = StudyArtifactOutcome.Failed(ex.Message);
-                    trackedProgress.Report(new StudyExecutionProgress { WorkerId = 0, Message = $"Result consolidation failed: {ex.Message}" });
+                    trackedProgress.Report(new StudyExecutionProgress { WorkerId = 0, Message = $"Raw-data publication failed: {ex.Message}" });
                 }
             }
             else if (result.Completed > 0)
@@ -131,16 +131,16 @@ public sealed class StudyExecutionCoordinator
         var jobs = snapshot.Jobs.ToDictionary(job => job.IterationId, StringComparer.Ordinal);
         var merged = new Dictionary<string, CandidateResultDto>(StringComparer.Ordinal);
 
-        var workbook = StudyRunJournal.ValidArtifactPath(parent, "Workbook");
-        if (!string.IsNullOrWhiteSpace(workbook))
+        var rawJson = StudyRunJournal.ValidArtifactPath(parent, "RawJson");
+        if (!string.IsNullOrWhiteSpace(rawJson))
         {
             try
             {
-                foreach (var result in ConsolidatedResultWriter.Read(workbook))
+                foreach (var result in new StudyRawDataStore().Read(rawJson).Results)
                     if (included.Contains(result.IterationKey) && MatchesSnapshot(result, jobs, snapshot.BaselineModelPath))
                         merged[result.IterationKey] = result;
             }
-            catch { /* Per-candidate sidecars and current results remain available. */ }
+            catch { /* Per-candidate JSON sidecars and current results remain available. */ }
         }
         foreach (var result in resultStore.Read(included)) merged[result.IterationKey] = result;
         foreach (var result in current.Where(result => included.Contains(result.IterationKey))) merged[result.IterationKey] = result;

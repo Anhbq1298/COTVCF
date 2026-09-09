@@ -53,7 +53,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Deflection post-processing: consolidated .xlsx source data. The HTML report opens in the default browser. -->
+    <!-- Tab 06 only: derive consolidated .xlsx and HTML reports from the study's raw JSON package. -->
     <PackageReference Include="ClosedXML" Version="0.104.2" />
   </ItemGroup>
 </Project>
