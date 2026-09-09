@@ -155,6 +155,25 @@
   <Setter Property="Padding" Value="0"/>
   <Setter Property="Margin" Value="0,0,4,0"/>
  </Style>
+ <!-- Faded, independently focusable help target placed beside compact actions. -->
+ <Style x:Key="InlineHelpIcon" TargetType="TextBlock">
+  <Setter Property="Text" Value="&#9432;"/>
+  <Setter Property="FontFamily" Value="Segoe UI Symbol"/>
+  <Setter Property="FontSize" Value="12"/>
+  <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+  <Setter Property="Opacity" Value="0.55"/>
+  <Setter Property="Margin" Value="3,0,6,0"/>
+  <Setter Property="VerticalAlignment" Value="Center"/>
+  <Setter Property="Cursor" Value="Help"/>
+  <Setter Property="Focusable" Value="True"/>
+  <Setter Property="ToolTipService.InitialShowDelay" Value="180"/>
+  <Setter Property="ToolTipService.ShowDuration" Value="30000"/>
+  <Setter Property="ToolTipService.ShowsToolTipOnKeyboardFocus" Value="True"/>
+  <Style.Triggers>
+   <Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.9"/></Trigger>
+   <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="Opacity" Value="0.9"/></Trigger>
+  </Style.Triggers>
+ </Style>
 
  <!-- ===================== INPUTS / COMBOS ======================== -->
  <Style TargetType="TextBox">

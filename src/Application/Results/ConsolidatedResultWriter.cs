@@ -211,6 +211,34 @@ public sealed class ConsolidatedResultWriter
 
     // ---------- read-back for report regeneration ----------
 
+    /// <summary>Replace the CableProperties sheet of an existing workbook with the capacities configured now,
+    /// so a SAP-free report regeneration reads the current fpu / φ instead of the values frozen at run time.
+    /// Returns what was actually stored (non-finite and non-positive capacities are dropped).</summary>
+    public static IReadOnlyDictionary<string, double> UpdateCableCapacities(
+        string workbookPath, IReadOnlyDictionary<string, double> capacities)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(workbookPath);
+        ArgumentNullException.ThrowIfNull(capacities);
+        if (!File.Exists(workbookPath))
+            throw new FileNotFoundException($"No {WorkbookFileName} to update.", workbookPath);
+
+        var stored = capacities
+            .Where(kv => !string.IsNullOrWhiteSpace(kv.Key) && double.IsFinite(kv.Value) && kv.Value > 0)
+            .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+
+        var wb = new XLWorkbook(workbookPath);
+        try
+        {
+            // Keep the sheet where it was so the workbook layout does not shuffle on every capacity edit.
+            var position = wb.Worksheets.Contains("CableProperties") ? wb.Worksheet("CableProperties").Position : wb.Worksheets.Count + 1;
+            if (wb.Worksheets.Contains("CableProperties")) wb.Worksheet("CableProperties").Delete();
+            CableProperties(wb.Worksheets.Add("CableProperties", position), stored);
+            AtomicFile.Write(workbookPath, wb.SaveAs);
+        }
+        finally { wb.Dispose(); }
+        return stored;
+    }
+
     /// <summary>The per-cable design capacities [kN] stored by <see cref="Write"/>. Empty when the workbook
     /// predates the CableProperties sheet or no capacity was configured.</summary>
     public static IReadOnlyDictionary<string, double> ReadCableCapacities(string workbookPath)

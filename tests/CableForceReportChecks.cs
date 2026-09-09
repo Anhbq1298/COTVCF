@@ -100,6 +100,30 @@ internal static class CableForceReportChecks
                   ConsolidatedResultWriter.ReadCableResultCase(xlsx) == "CABLE_FORCE" &&
                   File.ReadAllText(regenerated).Contains("cable result case: CABLE_FORCE", StringComparison.Ordinal),
                 "Cable report regenerates with its exact result case from the workbook alone (no SAP)");
+
+            // fpu / φ are post-processing inputs: changing them must reach the report without touching SAP.
+            var cable = new CablePretensionConfig { CableName = "Cable1a-2", SectionAreaM2 = 0.0288023 };
+            Check(Math.Abs(cable.ResolveCapacity(1860, 0.5)!.Value - 0.0288023 * 1860 * 1000 * 0.5) < 1e-6 &&
+                  Math.Abs(cable.ResolveCapacity(2160, 0.5)!.Value - 0.0288023 * 2160 * 1000 * 0.5) < 1e-6,
+                "raising fpu raises the resolved design capacity (area × fpu × 1000 × φ)");
+
+            var raised = new Dictionary<string, double> { ["Cable1a-2"] = 31106.5, ["Cable1b-2"] = 31106.5 };
+            var stored = ConsolidatedResultWriter.UpdateCableCapacities(xlsx, raised);
+            Check(stored.Count == 2 && ConsolidatedResultWriter.ReadCableCapacities(xlsx)["Cable1a-2"] == 31106.5,
+                "new capacities are written back into the workbook's CableProperties sheet");
+            Check(ConsolidatedResultWriter.Read(xlsx).Count == back.Count &&
+                  ConsolidatedResultWriter.ReadCableResultCase(xlsx) == "CABLE_FORCE",
+                "rewriting capacities leaves the rest of the workbook intact");
+
+            var afterFpu = new CableForceReportGenerator().RegenerateFromWorkbook(tmp);
+            var afterHtml = File.ReadAllText(afterFpu);
+            Check(afterHtml.Contains("31106.5", StringComparison.Ordinal) && !afterHtml.Contains("\"Cable1a-2\":2000", StringComparison.Ordinal),
+                "regenerating after an fpu change reports the new capacity, not the one frozen at run time");
+
+            var overridden = new CableForceReportGenerator()
+                .RegenerateFromWorkbook(tmp, new Dictionary<string, double> { ["Cable1a-2"] = 999 });
+            Check(File.ReadAllText(overridden).Contains("\"Cable1a-2\":999", StringComparison.Ordinal),
+                "a supplied capacity overrides the workbook without rewriting it");
         }
         finally { try { Directory.Delete(tmp, true); } catch { } }
     }

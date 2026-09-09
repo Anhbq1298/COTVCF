@@ -248,19 +248,9 @@
        <StackPanel Orientation="Horizontal">
         <Button Content="+ Add Cable" Command="{Binding AddCables}" ToolTip="Pick cable objects from the loaded SAP2000 model"/>
         <Button Content="&#8722; Remove" Command="{Binding RemoveCables}" CommandParameter="{Binding SelectedItems, ElementName=Cables}"/>
-        <Border Width="1" Background="{StaticResource Border}" Margin="8,3,8,3"/>
-        <TextBlock Text="Sync selected →" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontSize="11" Margin="0,0,5,0"/>
-        <ComboBox MinWidth="102" MinHeight="0" VerticalContentAlignment="Center"
-                  ItemsSource="{Binding CableSyncModes}" SelectedItem="{Binding BulkSyncMode, Mode=TwoWay}">
-         <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Converter={StaticResource SyncModeLabel}}"/></DataTemplate></ComboBox.ItemTemplate>
-        </ComboBox>
-        <ComboBox MinWidth="96" MinHeight="0" Margin="4,0,0,0" VerticalContentAlignment="Center"
-                  ItemsSource="{Binding CableSyncReferenceOptions}" SelectedItem="{Binding BulkSyncReference, Mode=TwoWay}"/>
-         <Button Content="Apply" Margin="4,0,0,0" Command="{Binding BulkSetCableSync}" CommandParameter="{Binding SelectedItems, ElementName=Cables}"
-                 ToolTip="Set the Sync mode + reference on every selected cable row"/>
-         <Button x:Name="RefreshCableSectionsButton" Command="{Binding RefreshCableSections}" Style="{StaticResource IconButton}"
-                 Margin="8,0,0,0" ToolTip="Refresh cable sections, areas, and design capacities from SAP2000"
-                 AutomationProperties.Name="Refresh cable sections and areas">
+        <Button x:Name="RefreshCableSectionsButton" Command="{Binding RefreshCableSections}" Style="{StaticResource IconButton}"
+                Margin="8,0,0,0" ToolTip="Refresh cable sections, areas, and design capacities from SAP2000"
+                AutomationProperties.Name="Refresh cable sections and areas">
           <Viewbox Width="15" Height="15"><Path Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Data="M14,5 A6,6 0 1 0 16,11 M16,11 L16,6 M16,11 L11,11"/></Viewbox>
          </Button>
         </StackPanel>
@@ -275,7 +265,7 @@
        <TextBlock Text="{Binding SyncGroupSummary}" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center"/>
        <Border Width="1" Background="{StaticResource Border}" Margin="12,1,12,1"/>
        <TextBlock Text="Design capacity =" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center"
-                  ToolTip="Each cable's design capacity = section area × strength × φ. Retrieved on + Add Cable; type into the Capacity column to override until the next retrieve."/>
+                  ToolTip="Each cable's design capacity = section area × fpu × φ. Retrieved on + Add Cable; type into the Capacity column to override until the next retrieve. Changing fpu or φ recomputes every capacity and regenerates the Tab 06 cable-force report — no SAP2000 re-run."/>
        <TextBlock Text="fpu" FontStyle="Italic" FontSize="11" VerticalAlignment="Center" Margin="4,0,2,0"/>
        <TextBox Width="52" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
                 ToolTip="Cable material strength [MPa] — Grade 1860 strand by default"
@@ -778,10 +768,7 @@
           <StackPanel>
            <TextBlock Text="Total SAP2000 Instances" Style="{StaticResource Subheading}" Margin="0"/>
            <TextBlock Text="SAP2000 instances — defaults to 2. Worker 1 is the connected instance; 2 and 3 start in the background. Sequential per worker · parallel across workers." Style="{StaticResource Hint}" Margin="0"/>
-           <DockPanel Margin="0,3,0,0">
-            <Button DockPanel.Dock="Right" Content="Open Manifest" Command="{Binding OpenRunManifest}" Padding="8,1" MinHeight="22" Margin="8,0,0,0"/>
-           <TextBlock Text="{Binding RunProvenanceText}" Style="{StaticResource MonoSmall}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-          </DockPanel>
+            <TextBlock Text="{Binding RunProvenanceText}" Style="{StaticResource MonoSmall}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,3,0,0"/>
           <TextBlock Text="{Binding ResumeStatusText}" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ResumeStatusText}" Margin="0,2,0,0"/>
           </StackPanel>
          </DockPanel>
@@ -868,17 +855,45 @@
 
      <Grid Grid.Row="1" Margin="0,10,0,0">
       <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-      <Button Content="Validate Study" Command="{Binding Validate}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors"/>
-      <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0">
-       <Button Content="Inspect Run" Command="{Binding InspectPreviousRun}" ToolTip="Check the latest manifest against this baseline and study definition"/>
-       <Button Content="Resume" Command="{Binding ResumeInterruptedStudy}" ToolTip="Continue only unfinished candidates from the latest compatible run"/>
-       <Button Content="Retry Failed" Command="{Binding RetryFailedStudy}" ToolTip="Dispatch only failed or cancelled candidates from the latest compatible run"/>
-       <Button Content="Rebuild Selected" Command="{Binding RebuildSelectedModels}" ToolTip="Archive selected candidate folders, then rebuild them without overwriting"/>
+      <StackPanel Orientation="Horizontal">
+       <Button Content="Validate Study" Command="{Binding Validate}" Style="{StaticResource Primary}" PreviewMouseDown="ValidateEditors" Margin="0"/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" ToolTip="Checks the study inputs, paths, filters, outputs, and selected candidates. It does not start SAP2000 workers."
+                  AutomationProperties.Name="Validate Study help" AutomationProperties.HelpText="Checks the study inputs, paths, filters, outputs, and selected candidates without starting SAP2000 workers."/>
       </StackPanel>
-      <Button Grid.Column="2" Content="Open Study Folder" Command="{Binding OpenStudyFolder}"/>
-      <Button Grid.Column="3" Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 05 into the active project"/>
-      <Button Grid.Column="4" Content="Cancel Remaining" Command="{Binding CancelStudy}"/>
-      <Button Grid.Column="5" Content="{Binding RunStudyLabel}" Command="{Binding BuildSelectedModels}" Style="{StaticResource Primary}" ToolTip="{Binding RunStudyToolTip}" Margin="0"/>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="8,0">
+       <Button Content="Inspect Run" Command="{Binding InspectPreviousRun}" ToolTip="Check the latest manifest against this baseline and study definition" Margin="0"/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" ToolTip="Compares the latest saved run with the current baseline and study settings, then identifies reusable, resumable, and retryable candidates."
+                  AutomationProperties.Name="Inspect Run help" AutomationProperties.HelpText="Compares the latest saved run with the current baseline and study settings."/>
+       <Button Content="Resume" Command="{Binding ResumeInterruptedStudy}" ToolTip="Continue only unfinished candidates from the latest compatible run" Margin="0"/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" ToolTip="Runs only unfinished candidates from the latest compatible run. Verified candidates are reused."
+                  AutomationProperties.Name="Resume help" AutomationProperties.HelpText="Runs only unfinished candidates from the latest compatible run."/>
+       <Button Content="Retry Failed" Command="{Binding RetryFailedStudy}" ToolTip="Dispatch only failed or cancelled candidates from the latest compatible run" Margin="0"/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" ToolTip="Runs only candidates that previously failed or were cancelled."
+                  AutomationProperties.Name="Retry Failed help" AutomationProperties.HelpText="Runs only candidates that previously failed or were cancelled."/>
+       <Button Content="Rebuild Selected" Command="{Binding RebuildSelectedModels}" ToolTip="Archive selected candidate folders, then rebuild them without overwriting" Margin="0"/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" ToolTip="Archives existing folders for selected rows, then rebuilds those candidates without overwriting prior files."
+                  AutomationProperties.Name="Rebuild Selected help" AutomationProperties.HelpText="Archives existing folders for selected rows, then rebuilds those candidates."/>
+      </StackPanel>
+      <StackPanel Grid.Column="2" Orientation="Horizontal">
+       <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" ToolTip="Opens the current baseline model's Study folder in File Explorer."
+                  AutomationProperties.Name="Open Study Folder help" AutomationProperties.HelpText="Opens the current baseline model's Study folder in File Explorer."/>
+      </StackPanel>
+      <StackPanel Grid.Column="3" Orientation="Horizontal">
+       <Button Content="Save Study" Command="{Binding SaveTabConfig}" CommandParameter="Study" ToolTip="Save Tab 05 into the active project" Margin="0"/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" ToolTip="Saves the study mode, filters, worker count, and run selections into the active COT VCF project."
+                  AutomationProperties.Name="Save Study help" AutomationProperties.HelpText="Saves the study settings into the active COT VCF project."/>
+      </StackPanel>
+      <StackPanel Grid.Column="4" Orientation="Horizontal">
+       <Button Content="Cancel Remaining" Command="{Binding CancelStudy}" Margin="0"/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" ToolTip="Stops queued work at safe boundaries. Active workers finish the current SAP2000 call and return to the baseline model."
+                  AutomationProperties.Name="Cancel Remaining help" AutomationProperties.HelpText="Stops queued work at safe boundaries and returns workers to the baseline model."/>
+      </StackPanel>
+      <StackPanel Grid.Column="5" Orientation="Horizontal">
+       <Button Content="{Binding RunStudyLabel}" Command="{Binding BuildSelectedModels}" Style="{StaticResource Primary}" ToolTip="{Binding RunStudyToolTip}" Margin="0"/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" Margin="3,0,0,0" ToolTip="Builds selected candidates in isolated child models, runs SAP2000 analysis, verifies results, and generates reports. Existing verified children are reused."
+                  AutomationProperties.Name="Build and Analyze help" AutomationProperties.HelpText="Builds selected child models, runs SAP2000 analysis, verifies results, and generates reports."/>
+      </StackPanel>
      </Grid>
     </Grid>
    </TabItem>
@@ -989,7 +1004,7 @@
          <TextBlock Text="{Binding CableForceReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding CableForceReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenCableForceReport}" Style="{StaticResource Primary}" ToolTip="Open Cable_Forces_Report.html in your web browser"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Rebuild Cable_Forces_Report.html from Deflection_Results_Source.xlsx — no SAP"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Rebuild Cable_Forces_Report.html from Deflection_Results_Source.xlsx using the fpu / &#966; set on the Cable tab — no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>

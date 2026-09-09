@@ -1,4 +1,3 @@
-using System.Numerics;
 using System.IO;
 using COT_VCF.Domain;
 
@@ -27,8 +26,6 @@ public sealed class StudyPreflightService
         var existing = composition.Iterations.Count(item => item.RunIterate && File.Exists(item.ModelFullPath));
         var baselinePath = state.SessionBaselineModel?.Path ?? state.Model?.Path ?? "";
         var baselineHash = TryFingerprint(baselinePath);
-        var baselineBytes = TryLength(baselinePath);
-        var estimatedBytes = new BigInteger(baselineBytes) * Math.Max(0, selected - existing);
         var outputCoverage = OutputCoverage(state);
         var blocking = issues.Count(issue => issue.Severity == ValidationSeverity.Error);
         var metrics = new[]
@@ -41,7 +38,6 @@ public sealed class StudyPreflightService
             new StudyPreflightMetric("Units", state.Model?.Units ?? "Unavailable", "Study writes use m / kN and report displacement in mm."),
             new StudyPreflightMetric("Output coverage", outputCoverage, "Deflection, member, foundation, and cable selections."),
             new StudyPreflightMetric("Existing children", existing.ToString("N0"), "Existing children are opened, verified, and re-extracted; never overwritten."),
-            new StudyPreflightMetric("Estimated new disk", FormatBytes(estimatedBytes), $"Baseline-size estimate for {Math.Max(0, selected - existing):N0} new child models; SAP result files may add more."),
             new StudyPreflightMetric("Blocking issues", blocking.ToString("N0"), blocking == 0 ? "Preflight passed." : "Resolve errors before any worker starts.")
         };
         var ready = blocking == 0 && selected > 0 && !composition.PreviewLimitExceeded;
@@ -60,12 +56,6 @@ public sealed class StudyPreflightService
         catch { return "Unavailable"; }
     }
 
-    private static long TryLength(string path)
-    {
-        try { return File.Exists(path) ? new FileInfo(path).Length : 0; }
-        catch { return 0; }
-    }
-
     private static string OutputCoverage(ApplicationState state)
     {
         var configured = 0;
@@ -74,15 +64,5 @@ public sealed class StudyPreflightService
         if (state.OutputSettings.FoundationLeftPoints.Count == 2 && state.OutputSettings.FoundationRightPoints.Count == 2) configured++;
         if (state.OutputSettings.CableNames.Count > 0 && !string.IsNullOrWhiteSpace(state.OutputSettings.CableResultLoadCase)) configured++;
         return $"{configured} / 4 modules";
-    }
-
-    private static string FormatBytes(BigInteger bytes)
-    {
-        if (bytes <= 0) return "0 B";
-        var value = (double)bytes;
-        string[] units = ["B", "KB", "MB", "GB", "TB"];
-        var unit = 0;
-        while (value >= 1024 && unit < units.Length - 1) { value /= 1024; unit++; }
-        return $"{value:0.##} {units[unit]}";
     }
 }

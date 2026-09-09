@@ -36,6 +36,7 @@ public sealed class MainViewModel : Observable
     private bool suppressStudySelectionEvents;
     private bool normalizingStudyCandidateIds;
     private bool studyRefreshPending;
+    private bool capacityReportSyncPending, capacityReportStale;
     private bool isStudyRunning;
     private int requestedWorkerCount = 2;
     private int studyCompletedCount, studyReusedCount, studyFailedCount, studyRunningCount, studyQueuedCount, studySkippedCount, studyCancelledCount;
@@ -46,7 +47,7 @@ public sealed class MainViewModel : Observable
     private string resumeStatusText = "No compatible interrupted run inspected.";
     private StudyPreflightReport preflightReport = StudyPreflightReport.Empty;
 
-    public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); } }
+    public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); if (!value) PumpCableCapacityReportSync(); } }
     public bool IsIdle => !IsBusy;
     public bool IsStudyRunning
     {
@@ -208,12 +209,45 @@ public sealed class MainViewModel : Observable
         foreach (var cable in State.Cables)
             if (cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor) is { } capacity)
                 cable.DesignCapacityKN = capacity;
+        ScheduleCableCapacityReportSync();
     }
 
-    // Bulk "apply Sync to selected rows" editor state.
-    public CableSyncMode BulkSyncMode { get; set; } = CableSyncMode.SameValues;
-    private string? bulkSyncReference;
-    public string? BulkSyncReference { get => bulkSyncReference; set => Set(ref bulkSyncReference, value); }
+    /// <summary>Design capacities [kN] as currently configured on the Cable tab — the same shape the study
+    /// snapshot hands to the workbook, so a regenerated report reads exactly what the tab shows.</summary>
+    private IReadOnlyDictionary<string, double> CurrentCableCapacities() => State.Cables
+        .Where(c => !string.IsNullOrWhiteSpace(c.CableName) && c.DesignCapacityKN is { } cap && double.IsFinite(cap) && cap > 0)
+        .GroupBy(c => c.CableName, StringComparer.Ordinal)
+        .ToDictionary(g => g.Key, g => g.First().DesignCapacityKN!.Value, StringComparer.Ordinal);
+
+    /// <summary>Capacity is a post-processing input, so a change to fpu / φ (or a hand-typed capacity) only has to
+    /// re-run the report — never SAP. Marks the report stale; <see cref="PumpCableCapacityReportSync"/> does the work
+    /// once the app is idle again.</summary>
+    private void ScheduleCableCapacityReportSync()
+    {
+        if (!HasCableForceReport || !HasResultsWorkbook) return;   // nothing generated yet — Run/Regenerate will pick it up
+        capacityReportStale = true;
+        PumpCableCapacityReportSync();
+    }
+
+    /// <summary>Regenerate the Tab 06 cable-force report once, on the dispatcher, after the capacities changed.
+    /// Coalesces a burst of edits (fpu is retyped digit by digit) into a single rebuild, and defers past any
+    /// operation still in flight — the IsBusy release pumps again.</summary>
+    private void PumpCableCapacityReportSync()
+    {
+        if (!capacityReportStale || capacityReportSyncPending) return;
+        if (IsStudyRunning || IsBusy) return;
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null) return;                            // headless (checks): the explicit command still works
+        capacityReportSyncPending = true;
+        dispatcher.BeginInvoke(() =>
+        {
+            capacityReportSyncPending = false;
+            if (!capacityReportStale || IsStudyRunning || IsBusy) return;
+            capacityReportStale = false;
+            if (HasCableForceReport && HasResultsWorkbook) RegenerateCableForceReportAsync();
+        }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
     public string CablePreviewSummary => SelectedCable is null
         ? $"{CableCount} cable{(CableCount == 1 ? "" : "s")} configured — select a row or cable in the view"
         : $"Selected  ·  {SelectedCable.CableName}  ·  {SelectedCable.Status}";
@@ -526,12 +560,9 @@ public sealed class MainViewModel : Observable
         ? currentRunWorkbookPath ?? ""
         : discoveredWorkbookPath ?? "";
     public bool HasResultsWorkbook => !string.IsNullOrEmpty(ResultsWorkbookPath) && File.Exists(ResultsWorkbookPath);
-    private string? runManifestPath;
     private string? currentRunId;
     private StudyRunState? currentRunState;
     private bool runArtifactsVerified;
-    public string? RunManifestPath => runManifestPath;
-    public bool HasRunManifest => !string.IsNullOrWhiteSpace(runManifestPath) && File.Exists(runManifestPath);
     public string RunProvenanceText => currentRunId is null
         ? "No study run manifest yet."
         : $"Run {currentRunId[..Math.Min(8, currentRunId.Length)]} · {currentRunState} · " +
@@ -693,7 +724,6 @@ public sealed class MainViewModel : Observable
     public Command ApplyLoads { get; }
     public Command AddCables { get; }
     public Command RefreshCableSections { get; }
-    public Command BulkSetCableSync { get; }
     public Command RemoveLoads { get; }
     public Command RemoveCables { get; }
     public Command ConfigureDeflectionOutput { get; }
@@ -721,7 +751,6 @@ public sealed class MainViewModel : Observable
     public Command OpenShortlistReport { get; }
     public Command OpenShortlistWorkbook { get; }
     public Command OpenResultsWorkbook { get; }
-    public Command OpenRunManifest { get; }
     public Command OpenCandidateDiagnostic { get; }
     public Command ViewIterationError { get; }
     public Command SaveTabConfig { get; }
@@ -790,19 +819,6 @@ public sealed class MainViewModel : Observable
             if (SelectedCable is not null && removed.Contains(SelectedCable)) SelectedCable = null;
             Update();
         }, () => !IsBusy);
-        BulkSetCableSync = new(p =>
-        {
-            if (p is not IList list) return;
-            var rows = list.Cast<CablePretensionConfig>().ToArray();
-            var indep = BulkSyncMode == CableSyncMode.Independent;
-            foreach (var row in rows)
-            {
-                if (string.Equals(row.CableName, BulkSyncReference, StringComparison.OrdinalIgnoreCase)) continue; // never self
-                row.SyncMode = BulkSyncMode;
-                row.ReferenceCableName = indep ? null : BulkSyncReference;
-            }
-            Update();
-        }, () => !IsBusy);
         ConfigureDeflectionOutput = new(_ => EditDeflectionOutput(), GeometryReady);
         ConfigureMemberForceOutput = new(_ => EditMemberForceOutput(), GeometryReady);
         ConfigureFoundationOutput = new(_ => EditFoundationOutput(), GeometryReady);
@@ -851,7 +867,6 @@ public sealed class MainViewModel : Observable
         OpenShortlistReport = new(_ => TryOpenFile(ShortlistReportPath), () => HasShortlistReport);
         OpenShortlistWorkbook = new(_ => TryOpenFile(ShortlistWorkbookPath), () => HasShortlistWorkbook);
         OpenResultsWorkbook = new(_ => TryOpenFile(ResultsWorkbookPath), () => HasResultsWorkbook);
-        OpenRunManifest = new(_ => TryOpenFile(RunManifestPath), () => HasRunManifest);
         OpenCandidateDiagnostic = new(p =>
         {
             if (p is PostProcessRow row && Directory.Exists(StudyRoot))
@@ -919,6 +934,7 @@ public sealed class MainViewModel : Observable
             row.PropertyChanged += (_, ev) =>
             {
                 Dirty(ConfigTabs.Cable); ScheduleStudyRegeneration(); Update();
+                if (ev.PropertyName is nameof(CablePretensionConfig.DesignCapacityKN)) ScheduleCableCapacityReportSync();
                 if (ev.PropertyName is nameof(CablePretensionConfig.SyncMode) or nameof(CablePretensionConfig.CableName)
                     or nameof(CablePretensionConfig.ReferenceCableName) or nameof(CablePretensionConfig.SyncFactor)
                     or nameof(CablePretensionConfig.MinForce) or nameof(CablePretensionConfig.MaxForce)
@@ -1578,7 +1594,18 @@ public sealed class MainViewModel : Observable
         IsBusy = true;
         try
         {
-            var path = await Task.Run(() => new COT_VCF.Application.Results.CableForceReportGenerator().RegenerateFromWorkbook(StudyRoot));
+            var capacities = CurrentCableCapacities();
+            var root = StudyRoot;
+            var path = await Task.Run(() =>
+            {
+                // Keep the workbook the single source of truth: store the capacities configured now, then
+                // rebuild the report from it. No SAP2000 involvement on either step.
+                if (capacities.Count > 0)
+                    COT_VCF.Application.Results.ConsolidatedResultWriter.UpdateCableCapacities(
+                        Path.Combine(root, COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName), capacities);
+                return new COT_VCF.Application.Results.CableForceReportGenerator()
+                    .RegenerateFromWorkbook(root, capacities.Count > 0 ? capacities : null);
+            });
             CableForceReportPath = File.Exists(path) ? path : null;
             if (CableForceReportPath is not null)
             {
@@ -1587,7 +1614,10 @@ public sealed class MainViewModel : Observable
             }
             Message = CableForceReportPath is null
                 ? "No cable-force results in the workbook — configure cables and a cable result case in Output Settings, then re-run."
-                : $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
+                : $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}" +
+                  (capacities.Count > 0
+                      ? $" · capacity from fpu {State.CableStrengthMpa:0.###} MPa · φ {State.CableStrengthReductionFactor:0.###} — no SAP2000 re-run."
+                      : ".");
         }
         catch (Exception ex) { Message = ex.Message; Warn("Regenerate Cable Force Report", ex.Message); }
         finally { IsBusy = false; }
@@ -1654,11 +1684,8 @@ public sealed class MainViewModel : Observable
     private void SetRunReference(StudyRunReference? run, bool artifactsVerified)
     {
         currentRunId = run?.RunId;
-        runManifestPath = run?.ManifestPath;
         currentRunState = run?.State;
         runArtifactsVerified = artifactsVerified;
-        Notify(nameof(RunManifestPath));
-        Notify(nameof(HasRunManifest));
         Notify(nameof(RunProvenanceText));
         CommandManager.InvalidateRequerySuggested();
     }

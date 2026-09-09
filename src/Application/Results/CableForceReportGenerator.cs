@@ -38,7 +38,10 @@ public sealed class CableForceReportGenerator
         return path;
     }
 
-    public string RegenerateFromWorkbook(string studyFolder)
+    /// <summary>Rebuild the report from the workbook alone — no SAP. <paramref name="capacities"/> overrides the
+    /// capacities stored in the workbook, so changing fpu / φ on the Cable tab re-reads utilisation without a re-run;
+    /// pass null to keep whatever the workbook holds.</summary>
+    public string RegenerateFromWorkbook(string studyFolder, IReadOnlyDictionary<string, double>? capacities = null)
     {
         var wbPath = Path.Combine(studyFolder, ConsolidatedResultWriter.WorkbookFileName);
         if (!File.Exists(wbPath))
@@ -47,8 +50,8 @@ public sealed class CableForceReportGenerator
         var mode = results.Count > 0 ? results[0].StudyMode : IterationStudyMode.Combined;
         var name = results.Count > 0 ? results[0].BaselineModelName : "";
         var resultCase = ConsolidatedResultWriter.ReadCableResultCase(wbPath);
-        var capacities = ConsolidatedResultWriter.ReadCableCapacities(wbPath);
-        return Generate(studyFolder, results, name, mode, resultCase, capacities);
+        return Generate(studyFolder, results, name, mode, resultCase,
+            capacities ?? ConsolidatedResultWriter.ReadCableCapacities(wbPath));
     }
 
     // ---------- DTO assembly ----------
@@ -178,7 +181,7 @@ public sealed class CableForceReportGenerator
     candidates are drawn as a band (min–max) with the median as the line; a hairline band means pretension
     changed nothing. One shared vertical scale.</p>
   <div id="trlegend" class="tleg"></div>
-  <div id="trellis" class="trellis"></div>
+  <div class="trwrap"><div id="trellis" class="trellis"></div></div>
 </section>
 
 <section class="blk">
@@ -249,25 +252,27 @@ svg{display:block}
 .tleg{display:flex;gap:16px;align-items:center;font-size:11px;color:#586173;margin-bottom:6px}
 .tleg .ln{width:18px;height:0;border-top:2px solid var(--acc)}
 .tleg .bd{width:18px;height:11px;background:rgba(31,71,136,.14);border:1px solid rgba(31,71,136,.3);border-radius:2px}
-.trellis{display:grid;border:1px solid var(--bd);border-radius:3px;overflow:hidden;max-width:1100px}
+.trwrap{overflow-x:auto;border:1px solid var(--bd);border-radius:3px;max-width:100%}
+.trellis{display:grid}
 .trellis>div{border-right:1px solid #eee;border-bottom:1px solid #eee}
-.trellis .thc{background:var(--su)}
+.trellis .thc{background:var(--su);position:sticky;left:0;z-index:3}
 .trellis .th{background:var(--su);font-weight:600;color:var(--acc);text-align:center;padding:6px 3px;font-size:11px}
 .trellis .th:last-child{border-right:0}
-.trellis .rl{background:var(--su);display:flex;flex-direction:column;justify-content:center;padding:5px 8px;gap:1px}
+.trellis .rl{background:var(--su);display:flex;flex-direction:column;justify-content:center;padding:5px 8px;gap:1px;position:sticky;left:0;z-index:2;box-shadow:1px 0 0 var(--bd)}
 .trellis .rl b{font-size:11.5px}.trellis .rl span{font-size:9.5px;color:var(--mu)}
-.trellis .pan{min-width:220px;padding:3px;background:#fff}.trellis .empty{display:flex;align-items:center;justify-content:center;min-height:112px;color:var(--mu);font-size:10.5px}
+.trellis .pan{min-width:148px;padding:3px;background:#fff}.trellis .empty{display:flex;align-items:center;justify-content:center;min-height:112px;color:var(--mu);font-size:10.5px}
 .trellis .pan:last-child{border-right:0}
 .trellis-lastrow>div{border-bottom:0}
 .pan svg{width:100%;height:auto}
+.pan .tick{font-size:13px}
 /* 03 heatmap */
 .hmwrap{overflow-x:auto}
-.hm{border-collapse:separate;border-spacing:0;font-size:11px;min-width:560px}
-.hm th{font-weight:500;color:var(--mu);font-size:10px;padding:5px 4px;text-align:center;white-space:nowrap}
-.hm th.cap{text-align:right;color:#586173;font-weight:600;padding-right:10px}
+.hm{border-collapse:separate;border-spacing:0;font-size:11px;width:auto;min-width:0}
+.hm th{font-weight:500;color:var(--mu);font-size:10px;padding:3px 8px;text-align:center;white-space:nowrap;min-width:66px}
+.hm th.cap{text-align:left;color:#586173;font-weight:600;padding:3px 10px 3px 6px;min-width:0;position:sticky;top:auto;left:0;z-index:2;background:#eef1f4}
 .hm th.lg{color:#586173;font-weight:600;font-size:10.5px;padding-top:10px}
 .hm td{padding:0;text-align:center}
-.hm td i{display:block;padding:9px 6px;font-style:normal;font-weight:500}
+.hm td i{display:block;padding:3px 8px;font-style:normal;font-weight:500;font-variant-numeric:tabular-nums}
 .hm .h0{background:var(--h0)}.hm .h1{background:var(--h1)}.hm .h2{background:var(--h2)}
 .hm .h3{background:var(--h3);color:#fff}.hm .h4{background:var(--h4);color:#fff}
 .hm td.gov i{box-shadow:inset 0 0 0 2px #C62828}
@@ -564,32 +569,32 @@ function series(cable,loadId){
     return xs.length?{x:+h.value,label:h.id,lo:Math.min(...xs),mid:median(xs),hi:Math.max(...xs)}:null;
   }).filter(Boolean);
 }
-function drawPanel(panel,cable,loadId){
+function drawPanel(panel,cable,loadId,showY){
   const points=series(cable,loadId),svg=panel.querySelector("svg");
   if (!points.length){ panel.classList.add("empty"); panel.textContent=utOn()&&!CAP[cable]?"No design capacity":"No valid results"; return; }
-  const W=260,H=132,m={l:39,r:8,t:8,b:25},pw=W-m.l-m.r,ph=H-m.t-m.b;
+  const W=260,H=132,m={l:showY?47:16,r:16,t:8,b:27},pw=W-m.l-m.r,ph=H-m.t-m.b;
   const xmin=Math.min(...points.map(p=>p.x)),xmax=Math.max(...points.map(p=>p.x)),[ylo,yhi]=yDom();
   const X=x=>m.l+(xmax===xmin ? .5 : (x-xmin)/(xmax-xmin))*pw,Y=y=>m.t+(yhi-y)/(yhi-ylo)*ph,p=[];
-  for(let i=0;i<=3;i++){const y=m.t+i/3*ph,v=yhi-i/3*(yhi-ylo);p.push(`<line x1="${m.l}" y1="${y}" x2="${W-m.r}" y2="${y}" class="grid"/><text x="${m.l-5}" y="${y+3}" text-anchor="end" class="tick">${Math.round(v)}</text>`);}
+  for(let i=0;i<=3;i++){const y=m.t+i/3*ph,v=yhi-i/3*(yhi-ylo);p.push(`<line x1="${m.l}" y1="${y}" x2="${W-m.r}" y2="${y}" class="grid"/>`);if(showY)p.push(`<text x="${m.l-5}" y="${y+4.5}" text-anchor="end" class="tick">${Math.round(v)}</text>`);}
   if(utOn()&&ylo<=100&&yhi>=100)p.push(`<line x1="${m.l}" y1="${Y(100)}" x2="${W-m.r}" y2="${Y(100)}" class="ref100"/>`);
   if(points.length>1){
     const band=points.map(q=>`${X(q.x)},${Y(q.hi)}`).concat([...points].reverse().map(q=>`${X(q.x)},${Y(q.lo)}`)).join(" ");
     p.push(`<polygon points="${band}" class="sband"/><path d="${points.map((q,i)=>`${i?"L":"M"} ${X(q.x)} ${Y(q.mid)}`).join(" ")}" class="sline"/>`);
   }
-  points.forEach(q=>{p.push(`<line x1="${X(q.x)}" y1="${Y(q.lo)}" x2="${X(q.x)}" y2="${Y(q.hi)}" stroke="#8fbce9"/><circle cx="${X(q.x)}" cy="${Y(q.mid)}" r="2.5" class="sdot"/><text x="${X(q.x)}" y="${H-8}" text-anchor="middle" class="tick">${esc(q.label)}</text>`);});
+  points.forEach(q=>{p.push(`<line x1="${X(q.x)}" y1="${Y(q.lo)}" x2="${X(q.x)}" y2="${Y(q.hi)}" stroke="#8fbce9"/><circle cx="${X(q.x)}" cy="${Y(q.mid)}" r="2.5" class="sdot"/><text x="${X(q.x)}" y="${H-7}" text-anchor="middle" class="tick">${esc(q.label)}</text>`);});
   svg.setAttribute("viewBox",`0 0 ${W} ${H}`);svg.setAttribute("role","img");svg.setAttribute("aria-label",`${cable}, ${loadId}: force by truss height`);svg.innerHTML=p.join("");
 }
 function drawTrellis(){
   const grid=el("trellis");
   if(!D.rows.length||!D.cables.length||!D.loads.length){grid.innerHTML='<p class="lead" style="padding:10px">No cable-force results are available.</p>';return;}
-  grid.style.gridTemplateColumns=`84px repeat(${D.cables.length},minmax(220px,1fr))`;
+  grid.style.gridTemplateColumns=`84px repeat(${D.cables.length},minmax(148px,1fr))`;
   grid.innerHTML='<div class="thc"></div>'+D.cables.map(c=>`<div class="th">${esc(c)}</div>`).join("");
   D.loads.forEach((load,li)=>{
     const last=li===D.loads.length-1?" trellis-lastrow":"";
     grid.insertAdjacentHTML("beforeend",`<div class="rl${last}"><b>${esc(load.id)}</b><span>${esc(load.label.replace(load.id+" · ",""))}</span></div>`);
-    D.cables.forEach(c=>{const panel=document.createElement("div");panel.className="pan"+last;panel.innerHTML="<svg></svg>";grid.appendChild(panel);drawPanel(panel,c,load.id);});
+    D.cables.forEach((c,ci)=>{const panel=document.createElement("div");panel.className="pan"+last;panel.innerHTML="<svg></svg>";grid.appendChild(panel);drawPanel(panel,c,load.id,ci===0);});
   });
-  el("trlegend").innerHTML='<span class="ln"></span> median across pretension candidates <span class="bd"></span> min–max band <span>· X = truss-height candidate</span>'+(utOn()?'<span>· red dashed = 100% capacity</span>':'');
+  el("trlegend").innerHTML='<span class="ln"></span> median across pretension candidates <span class="bd"></span> min–max band <span>· X = truss-height candidate</span>'+(utOn()?'<span>· red dashed = 100% capacity</span>':'')+`<span>· all ${D.cables.length} cable(s); scroll sideways if they do not fit</span>`;
 }
 
 function governingRows(){
