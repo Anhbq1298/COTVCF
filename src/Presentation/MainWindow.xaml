@@ -987,12 +987,28 @@
         <Expander.Header><TextBlock Text="04  VIERENDEEL MEMBERS" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
          <TextBlock Text="Member forces — P / V2 / V3 [kN] · T / M2 / M3 [kNm]" Style="{StaticResource PpDesc}"/>
-         <TextBlock Text="○ Not implemented yet" Style="{StaticResource PpTodo}"/>
+         <TextBlock Text="Uses the same member-force report; choose the Vierendeel Members group in the report toolbar." Style="{StaticResource PpDesc}"/>
+         <WrapPanel Margin="0,4,0,0">
+          <Button Content="View Report" Command="{Binding OpenMemberForceReport}" Style="{StaticResource Primary}"/>
+          <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
+         </WrapPanel>
         </StackPanel>
        </Expander>
 
        <Expander Style="{StaticResource PpModule}">
-        <Expander.Header><TextBlock Text="05  CABLE FORCES · kN" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <Expander.Header><TextBlock Text="05  MEGA COLUMNS" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <StackPanel>
+         <TextBlock Text="Member forces — P / V2 / V3 [kN] · T / M2 / M3 [kNm]" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Uses the same member-force report; choose the Mega Columns group in the report toolbar." Style="{StaticResource PpDesc}"/>
+         <WrapPanel Margin="0,4,0,0">
+          <Button Content="View Report" Command="{Binding OpenMemberForceReport}" Style="{StaticResource Primary}"/>
+          <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
+         </WrapPanel>
+        </StackPanel>
+       </Expander>
+
+       <Expander Style="{StaticResource PpModule}">
+        <Expander.Header><TextBlock Text="06  CABLE FORCES · kN" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
          <TextBlock Text="Analysed cable axial force per configured cable · read under the Output Settings cable result case · one chart per cable · shared Y-scale" Style="{StaticResource PpDesc}"/>
          <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>
@@ -1007,7 +1023,7 @@
         </Expander>
 
         <Expander Style="{StaticResource PpModule}">
-         <Expander.Header><TextBlock Text="06  STUDY SHORTLIST" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+         <Expander.Header><TextBlock Text="07  STUDY SHORTLIST" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
          <StackPanel>
           <TextBlock Text="Ranked Pass and Warning candidates from the frozen study decision criteria · lower score is preferred" Style="{StaticResource PpDesc}"/>
           <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>

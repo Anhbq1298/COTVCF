@@ -20,17 +20,25 @@ internal static class MemberForceReportChecks
             var bottom = new MemberForceGroupResultDto("BottomChords", "[O]-BottomChords", "ULS",
                 [Station("BC-01", 1, "BC-01-1", 0, 700 + i), Station("BC-01", 1, "BC-01-1", .5, 750 + i),
                  Station("BC-02", 2, "BC-02-1", 0, 900 + i), Station("BC-02", 2, "BC-02-1", .5, 950 + i)]);
+            var vierendeel = new MemberForceGroupResultDto("VierendeelMembers", "[O]-VierendeelMembers", "ULS",
+                [Station("VT-01", 1, "VT-01-1", 0, -120 - i), Station("VT-01", 1, "VT-01-1", .5, -100 - i),
+                 Station("VT-02", 2, "VT-02-1", 0, 140 + i), Station("VT-02", 2, "VT-02-1", .5, 160 + i)]);
+            var mega = new MemberForceGroupResultDto("MegaColumns", "[O]-MegaColumns", "ULS",
+                [Station("MC-01", 1, "MC-01-1", 0, -2400 - i), Station("MC-01", 1, "MC-01-1", .5, -2450 - i),
+                 Station("MC-02", 2, "MC-02-1", 0, -2300 - i), Station("MC-02", 2, "MC-02-1", .5, -2350 - i)]);
             var parameters = new CandidateParametersDto(i, key, key[..3], "H01", key[^3..],
                 2.5, "DL 1.0 + LL 2.5 kPa", 20, 0, 500, "pretension");
             results.Add(new CandidateResultDto(key, $@"C:\Study\{key}.sdb", @"C:\base.sdb", "COT.sdb",
                 IterationStudyMode.FixHeight, parameters, DateTimeOffset.Now, DateTimeOffset.Now, DateTimeOffset.Now,
-                CandidateExtractionStatus.ExtractedOk, [], [], [], [top, bottom]));
+                CandidateExtractionStatus.ExtractedOk, [], [], [], [top, bottom, vierendeel, mega]));
         }
 
         var generator = new MemberForceReportGenerator();
         var dto = generator.Build(results, "COT.sdb", IterationStudyMode.FixHeight);
-        Check(dto.Groups.Count == 2 && dto.Groups.All(group => group.Series.Count == 60),
-            "member-force report retains every candidate in both chord groups");
+        Check(dto.Groups.Count == 4 && dto.Groups.All(group => group.Series.Count == 60) &&
+              dto.Groups.Select(group => group.GroupName).ToHashSet(StringComparer.Ordinal)
+                  .SetEquals(["TopChords", "BottomChords", "VierendeelMembers", "MegaColumns"]),
+            "member-force report retains every candidate in chord, Vierendeel, and mega-column groups");
         Check(dto.Groups.Single(group => group.GroupName == "TopChords").Series[0].Stations[0].P < 0 &&
               dto.Groups.Single(group => group.GroupName == "BottomChords").Series[0].Stations[0].P > 0,
             "member-force report preserves signed compression and tension");
@@ -46,6 +54,8 @@ internal static class MemberForceReportChecks
         Check(html.Contains("Start + middle + end per element") && html.Contains("All SAP stations") &&
               html.Contains("elements.flatMap") && html.Contains("sampleLabel:label"),
             "member-force chart defaults to three positions per SAP analysis element without discarding detailed stations");
+        Check(html.Contains("VierendeelMembers") && html.Contains("MegaColumns"),
+            "member-force HTML exposes Vierendeel and mega-column groups in the shared group selector");
 
         var folder = Path.Combine(Path.GetTempPath(), "cotvcf_mf_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);

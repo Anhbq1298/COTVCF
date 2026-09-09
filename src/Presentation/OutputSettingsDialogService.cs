@@ -110,6 +110,12 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         var heading = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
         heading.Children.Add(new TextBlock { Text = "MEMBER FORCE OUTPUT GROUPS", Style = HeadingStyle });
         heading.Children.Add(new TextBlock { Text = "P / V2 / V3 [kN]   ·   T / M2 / M3 [kNm]", Foreground = MutedBrush });
+        heading.Children.Add(new TextBlock
+        {
+            Text = "Create separate groups for Top Chords, Bottom Chords, Vierendeel Members and Mega Columns.",
+            Foreground = MutedBrush,
+            Margin = new Thickness(0, 2, 0, 0)
+        });
         heading.Children.Add(Label("Result load case", "SAP analysis load case used to extract every configured member-force group."));
         var resultCase = new ComboBox
         {
