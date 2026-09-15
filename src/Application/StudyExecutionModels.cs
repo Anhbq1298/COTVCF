@@ -47,6 +47,10 @@ public sealed record StudyExecutionSnapshot(
     public string DeflectionOutputCase { get; init; } = "";
     // Frame-force post-processing: all configured frame output groups are read under this case or combo.
     public string MemberForceResultCase { get; init; } = "";
+    // Support-reaction post-processing: exactly two points per Left/Right foundation, in global axes.
+    public IReadOnlyList<string> FoundationLeftPoints { get; init; } = [];
+    public IReadOnlyList<string> FoundationRightPoints { get; init; } = [];
+    public string FoundationReactionResultCase { get; init; } = "";
     // Frozen decision/ranking criteria used to derive the shortlist from this exact execution snapshot.
     public StudyDecisionCriteria DecisionCriteria { get; init; } = new(50, 75, null, null, 0.9, 0.5, 0.3, 0.2);
 }
@@ -95,11 +99,12 @@ public sealed record StudyArtifactOutcome(
     string? WorkbookPath,
     string? DeflectionReportPath,
     string? MemberForceReportPath,
+    string? SupportReactionReportPath,
     string? CableForceReportPath,
     string? ErrorMessage,
     string? ShortlistWorkbookPath = null,
     string? ShortlistReportPath = null)
 {
-    public static StudyArtifactOutcome NotProduced { get; } = new(StudyArtifactState.NotProduced, null, null, null, null, null);
-    public static StudyArtifactOutcome Failed(string message) => new(StudyArtifactState.Failed, null, null, null, null, message);
+    public static StudyArtifactOutcome NotProduced { get; } = new(StudyArtifactState.NotProduced, null, null, null, null, null, null);
+    public static StudyArtifactOutcome Failed(string message) => new(StudyArtifactState.Failed, null, null, null, null, null, message);
 }

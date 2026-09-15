@@ -141,7 +141,8 @@ internal static class Program
                 vm.SelectedTab = 5;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
-                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "06  STUDY SHORTLIST"),
+                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "08  STUDY SHORTLIST") &&
+                       FindVisuals<TextBlock>(window).Any(text => text.Text == "06  SUPPORT REACTIONS"),
                     "Post-processing UI exposes the ranked shortlist report and workbook module");
                 window.Close(); bindingListener.Flush();
                 if (bindingLog.ToString().Length > 0) throw new Exception("WPF binding errors: " + bindingLog);
@@ -258,6 +259,7 @@ internal static class Program
             StudyDecisionChecks.Run();
             CableForceReportChecks.Run();
             MemberForceReportChecks.Run();
+            SupportReactionReportChecks.Run();
             GatewayChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }

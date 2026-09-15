@@ -46,6 +46,9 @@ public sealed class StudyExecutionSnapshotFactory(StudyCandidateResolver? resolv
             DeflectionPoints = state.OutputSettings.DeflectionPoints.ToArray(),
             DeflectionOutputCase = state.OutputSettings.DeflectionOutputCaseName,
             MemberForceResultCase = state.OutputSettings.MemberForceResultLoadCase,
+            FoundationLeftPoints = state.OutputSettings.FoundationLeftPoints.ToArray(),
+            FoundationRightPoints = state.OutputSettings.FoundationRightPoints.ToArray(),
+            FoundationReactionResultCase = state.OutputSettings.FoundationReactionResultLoadCase,
             DecisionCriteria = StudyDecisionCriteria.From(state.Study),
         };
     }

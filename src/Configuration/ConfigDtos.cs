@@ -180,6 +180,7 @@ public sealed class OutputSettingsConfigDto
     public string CableResultLoadCase { get; set; } = "";
     public string DeflectionOutputCaseName { get; set; } = "";
     public string MemberForceResultLoadCase { get; set; } = "";
+    public string FoundationReactionResultLoadCase { get; set; } = "";
 }
 
 public sealed class MemberForceGroupConfigDto

@@ -10,7 +10,7 @@ public interface IOutputSettingsDialogService
 {
     bool EditDeflection(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
     bool EditMemberForces(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
-    bool EditFoundations(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection);
+    bool EditFoundations(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
     bool EditCables(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
 }
 
@@ -45,7 +45,7 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         return true;
     }
 
-    public bool EditFoundations(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection)
+    public bool EditFoundations(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection)
     {
         var available = baseline.Points.Keys.OrderBy(x => x, StringComparer.Ordinal).ToArray();
         var left = selection.Select("Foundation Left — select exactly 2 points", available, settings.FoundationLeftPoints.ToArray());
@@ -61,8 +61,36 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
             return false;
         }
 
+        var owner = System.Windows.Application.Current?.MainWindow;
+        var dialog = BasicDialog("Foundation Reaction Result Case", 480, 230);
+        if (owner is not null) dialog.Owner = owner;
+        var panel = new StackPanel { Margin = new Thickness(18) };
+        panel.Children.Add(Label("Result case / combination", "SAP analysis load case or response combination used to extract global support reactions."));
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Fx / Fy / Fz [kN]   ·   Mx / My / Mz [kNm]   ·   Global axes",
+            Foreground = MutedBrush,
+            Margin = new Thickness(0, 0, 0, 8)
+        });
+        var combo = new ComboBox
+        {
+            ItemsSource = loadCases.OrderBy(x => x, StringComparer.Ordinal).ToArray(),
+            IsEditable = false,
+            SelectedItem = loadCases.FirstOrDefault(c => c.Equals(settings.FoundationReactionResultLoadCase, StringComparison.OrdinalIgnoreCase)),
+        };
+        panel.Children.Add(combo);
+        panel.Children.Add(Footer(dialog, "Save", () =>
+        {
+            if (combo.SelectedItem is string selectedCase && !string.IsNullOrWhiteSpace(selectedCase)) return true;
+            Info("Select a foundation reaction result case or combination.");
+            return false;
+        }));
+        dialog.Content = panel;
+        if (dialog.ShowDialog() != true) return false;
+
         Replace(settings.FoundationLeftPoints, left);
         Replace(settings.FoundationRightPoints, right);
+        settings.FoundationReactionResultLoadCase = combo.SelectedItem as string ?? "";
         return true;
     }
 

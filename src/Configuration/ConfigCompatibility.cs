@@ -213,6 +213,10 @@ public sealed class ConfigCompatibilityValidator
             if ((t5.FoundationRightPointNames?.Count ?? 0) != 2) tc.Problems.Add("Foundation Right requires exactly 2 points.");
             if ((t5.FoundationLeftPointNames ?? []).Intersect(t5.FoundationRightPointNames ?? [], StringComparer.Ordinal).Any())
                 tc.Problems.Add("foundation Left and Right groups cannot share a point.");
+            if (string.IsNullOrWhiteSpace(t5.FoundationReactionResultLoadCase))
+                tc.Problems.Add("foundation reaction result load case is required.");
+            else if (!modelLoadCases.Contains(t5.FoundationReactionResultLoadCase, StringComparer.OrdinalIgnoreCase))
+                tc.Problems.Add($"foundation reaction result load case {t5.FoundationReactionResultLoadCase} does not exist in the connected model.");
 
             var sapGroupNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var assignedFrames = new Dictionary<string, string>(StringComparer.Ordinal);

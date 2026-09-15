@@ -76,6 +76,7 @@ public sealed class OutputSettingsConfiguration : Observable
     private string cableResultLoadCase = "";
     private string deflectionOutputCaseName = "";
     private string memberForceResultLoadCase = "";
+    private string foundationReactionResultLoadCase = "";
     public ObservableCollection<string> DeflectionPoints { get; } = [];
     public ObservableCollection<MemberForceOutputGroup> MemberForceGroups { get; } = [];
     public ObservableCollection<string> FoundationLeftPoints { get; } = [];
@@ -87,11 +88,13 @@ public sealed class OutputSettingsConfiguration : Observable
     public string DeflectionOutputCaseName { get => deflectionOutputCaseName; set => Set(ref deflectionOutputCaseName, (value ?? "").Trim()); }
     /// <summary>SAP analysis load case or combo used for all configured frame-force groups.</summary>
     public string MemberForceResultLoadCase { get => memberForceResultLoadCase; set => Set(ref memberForceResultLoadCase, (value ?? "").Trim()); }
+    /// <summary>SAP analysis load case or combo used for global support reactions at the selected foundations.</summary>
+    public string FoundationReactionResultLoadCase { get => foundationReactionResultLoadCase; set => Set(ref foundationReactionResultLoadCase, (value ?? "").Trim()); }
 
     public bool IsConfigured => DeflectionPoints.Count > 0 || MemberForceGroups.Count > 0 ||
         FoundationLeftPoints.Count > 0 || FoundationRightPoints.Count > 0 || CableNames.Count > 0 ||
         !string.IsNullOrWhiteSpace(CableResultLoadCase) || !string.IsNullOrWhiteSpace(DeflectionOutputCaseName) ||
-        !string.IsNullOrWhiteSpace(MemberForceResultLoadCase);
+        !string.IsNullOrWhiteSpace(MemberForceResultLoadCase) || !string.IsNullOrWhiteSpace(FoundationReactionResultLoadCase);
 
     public IReadOnlyList<OutputSapGroupDefinition> ToSapGroups()
     {

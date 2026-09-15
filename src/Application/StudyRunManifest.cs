@@ -266,6 +266,7 @@ public sealed class StudyRunJournal
             ("Workbook", outcome.WorkbookPath),
             ("DeflectionReport", outcome.DeflectionReportPath),
             ("MemberForceReport", outcome.MemberForceReportPath),
+            ("SupportReactionReport", outcome.SupportReactionReportPath),
             ("CableForceReport", outcome.CableForceReportPath),
             ("ShortlistWorkbook", outcome.ShortlistWorkbookPath),
             ("ShortlistReport", outcome.ShortlistReportPath)
@@ -334,6 +335,9 @@ public static class Fingerprints
             snapshot.DeflectionPoints,
             snapshot.DeflectionOutputCase,
             snapshot.MemberForceResultCase,
+            snapshot.FoundationLeftPoints,
+            snapshot.FoundationRightPoints,
+            snapshot.FoundationReactionResultCase,
             snapshot.CableResultCables,
             snapshot.CableResultLoadCase,
             snapshot.DecisionCriteria,

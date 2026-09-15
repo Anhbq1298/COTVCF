@@ -82,6 +82,11 @@ internal static class StudyExecutionChecks
                   cr.Groups[0].Points.All(pt => pt.Status == COT_VCF.Domain.Results.ResultValueStatus.Valid) &&
                   cr.Groups[0].Points.Select(pt => pt.Sequence).SequenceEqual([1, 2, 3]),
                 "Deflection extraction produces one sorted group of Valid monitored-point Uz per candidate");
+            Check(cr.SupportReactionGroups is { Count: 2 } &&
+                  cr.SupportReactionGroups.All(group => group.Points.Count == 2) &&
+                  cr.SupportReactionGroups.SelectMany(group => group.Points)
+                      .All(point => point.Status == ResultValueStatus.Valid && point.Fz.HasValue),
+                "Support-reaction extraction retains two Left and two Right foundation points with global reactions");
 
             var diagHtmlPath = Path.Combine(job.IterationDirectory, $"Deflection_Diagnostic_{job.IterationId}.html");
             Check(File.Exists(diagHtmlPath), "A candidate diagnostic HTML is written into the candidate folder");
@@ -97,6 +102,8 @@ internal static class StudyExecutionChecks
             var reportHtml = Path.Combine(studyFolder, "Deflection_Report.html");
             Check(File.Exists(xlsx) && File.Exists(reportHtml),
                 "Study run writes the consolidated Deflection workbook and the final HTML report to the Study folder");
+            Check(File.Exists(result.Artifacts.SupportReactionReportPath),
+                "Study run publishes the support-reaction HTML report from the configured foundation points");
             Check(File.Exists(result.Artifacts.ShortlistReportPath) && File.Exists(result.Artifacts.ShortlistWorkbookPath),
                 "Study run publishes the ranked shortlist HTML and workbook as first-class artifacts");
             var shortlistHtml = File.ReadAllText(result.Artifacts.ShortlistReportPath!);
@@ -110,17 +117,20 @@ internal static class StudyExecutionChecks
                   manifest.Candidates.Single(candidate => candidate.Selected).Status == StudyIterationStatus.Ready &&
                   manifest.Artifacts.Any(artifact => artifact.Kind == "ShortlistReport") &&
                   manifest.Artifacts.Any(artifact => artifact.Kind == "ShortlistWorkbook") &&
+                  manifest.Artifacts.Any(artifact => artifact.Kind == "SupportReactionReport") &&
                   StudyRunJournal.ArtifactsAreIntact(manifest),
                 "Study run atomically records candidate status, provenance hashes, and verifiable artifacts");
             var readBack = COT_VCF.Application.Results.ConsolidatedResultWriter.Read(xlsx);
             Check(readBack.Count == 1 && readBack[0].IterationKey == job.IterationId &&
                   readBack[0].Groups.Single().Points.Count == 3 &&
-                  readBack[0].Groups[0].Points.All(pt => pt.UzMm.HasValue),
-                "Consolidated workbook round-trips the candidate and its monitored-point Uz rows");
+                  readBack[0].Groups[0].Points.All(pt => pt.UzMm.HasValue) &&
+                  readBack[0].SupportReactionGroups is { Count: 2 },
+                "Consolidated workbook round-trips monitored deflections and foundation reactions");
             var finalHtml = File.ReadAllText(reportHtml);
             Check(finalHtml.Contains("id=\"report-data\"") && finalHtml.Contains("Deflection Results Viewer") &&
                    finalHtml.Contains(job.IterationId) && finalHtml.Contains("Result Library") &&
                    finalHtml.Contains(StudyShortlistExporter.HtmlFileName, StringComparison.Ordinal) &&
+                   finalHtml.Contains(SupportReactionReportGenerator.ReportFileName, StringComparison.Ordinal) &&
                    !finalHtml.Contains(CableForceReportGenerator.ReportFileName, StringComparison.Ordinal) &&
                    !finalHtml.Contains("http://") && !finalHtml.Contains("https://") && !finalHtml.Contains("cdn."),
                 "Final HTML embeds current-run data, excludes stale sibling reports, and references nothing external");
@@ -147,7 +157,8 @@ internal static class StudyExecutionChecks
                 new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
             Check(result.Completed == 1 && result.Artifacts.State == StudyArtifactState.Failed &&
                   result.Artifacts.ErrorMessage!.Contains("simulated artifact failure", StringComparison.Ordinal) &&
-                  coordinator.LastDeflectionReportPath is null && coordinator.LastCableForceReportPath is null,
+                  coordinator.LastDeflectionReportPath is null && coordinator.LastSupportReactionReportPath is null &&
+                  coordinator.LastCableForceReportPath is null,
                 "artifact failure is explicit and never reuses a prior report path");
             var studyFolder = Path.GetDirectoryName(snapshot.Jobs.Single(job => job.RunIterate).IterationDirectory)!;
             var manifest = StudyRunJournal.TryRead(studyFolder);
@@ -596,6 +607,11 @@ internal static class StudyExecutionChecks
     {
         foreach (var name in new[] { "bot", "mid", "top" }) state.OutputSettings.DeflectionPoints.Add(name);
         state.OutputSettings.DeflectionOutputCaseName = "SERVICE";
+        state.OutputSettings.FoundationLeftPoints.Add("bot");
+        state.OutputSettings.FoundationLeftPoints.Add("mid");
+        state.OutputSettings.FoundationRightPoints.Add("top");
+        state.OutputSettings.FoundationRightPoints.Add("load2");
+        state.OutputSettings.FoundationReactionResultLoadCase = "SERVICE";
     }
 
     private static bool SavedCandidateMatches(
@@ -755,6 +771,33 @@ internal static class StudyExecutionChecks
             }
             return rows;
         });
+        public async Task<IReadOnlyList<JointReactionRead>> GetJointReactionsAsync(
+            IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) =>
+            await Tracked<IReadOnlyList<JointReactionRead>>(async () =>
+        {
+            Verify(expected); await Task.Delay(1);
+            var rows = new List<JointReactionRead>();
+            foreach (var name in pointNames)
+            {
+                if (!currentGeometry.Points.TryGetValue(name, out var point))
+                {
+                    rows.Add(new(name, 0, 0, 0, [], ResultValueStatus.PointNotFound));
+                    continue;
+                }
+                if (!analysisComplete)
+                {
+                    rows.Add(new(name, point.Position.X, point.Position.Y, point.Position.Z, [],
+                        ResultValueStatus.AnalysisNotRun));
+                    continue;
+                }
+                var seed = 100.0 + Math.Abs(name.GetHashCode()) % 100;
+                rows.Add(new(name, point.Position.X, point.Position.Y, point.Position.Z,
+                    [new JointReactionRowRead(outputCase, "Step", 1,
+                        seed * .05, seed * .03, seed, seed * .01, seed * .02, seed * .015)],
+                    ResultValueStatus.Valid));
+            }
+            return rows;
+        });
         public async Task<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>> GetCableForcesAsync(
             IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) => await Tracked<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>>(async () =>
         {
@@ -835,7 +878,9 @@ internal static class StudyExecutionChecks
                 Crashed = true;
                 throw new InvalidOperationException("SAP2000 process crashed.");
             }
-            await Task.Delay(Current.Path.Contains("_P01.sdb", StringComparison.Ordinal) ? 100 : 5);
+            // Keep P01 decisively slower than the complete verification + extraction pipeline so this
+            // scheduling check remains deterministic as new result modules are added.
+            await Task.Delay(Current.Path.Contains("_P01.sdb", StringComparison.Ordinal) ? 250 : 5);
             currentGeometry = CloneGeometry(proposed);
             analysisComplete = false;
         });

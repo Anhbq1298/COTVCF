@@ -75,6 +75,28 @@ public sealed record FrameForceRead(
     ResultValueStatus Status,
     string? Warning = null);
 
+/// <summary>One unmodified global-axis support-reaction row returned by SAP for a selected point.</summary>
+public sealed record JointReactionRowRead(
+    string OutputCase,
+    string StepType,
+    double StepNumber,
+    double Fx,
+    double Fy,
+    double Fz,
+    double Mx,
+    double My,
+    double Mz);
+
+/// <summary>All SAP support-reaction rows for one selected point and output case/combo.</summary>
+public sealed record JointReactionRead(
+    string PointName,
+    double X,
+    double Y,
+    double Z,
+    IReadOnlyList<JointReactionRowRead> Rows,
+    ResultValueStatus Status,
+    string? Warning = null);
+
 // ============================ extraction-side DTOs ============================
 
 public sealed record MonitoredPointResultDto(
@@ -126,6 +148,30 @@ public sealed record MemberForceGroupResultDto(
     string OutputCase,
     IReadOnlyList<MemberForceStationResultDto> Stations);
 
+/// <summary>One selected foundation point at one SAP result step. Components are global-axis reactions.</summary>
+public sealed record SupportReactionPointResultDto(
+    string PointName,
+    int PointSequence,
+    double X,
+    double Y,
+    double Z,
+    string StepType,
+    double StepNumber,
+    double? Fx,
+    double? Fy,
+    double? Fz,
+    double? Mx,
+    double? My,
+    double? Mz,
+    ResultValueStatus Status,
+    string? Warning = null);
+
+public sealed record SupportReactionGroupResultDto(
+    string FoundationSide,
+    string SapGroupName,
+    string OutputCase,
+    IReadOnlyList<SupportReactionPointResultDto> Points);
+
 /// <summary>Study parameters resolved for one candidate. Fields that a given study mode does not vary are still
 /// populated from the frozen candidate; single-value convenience fields are null when the candidate is mixed.</summary>
 public sealed record CandidateParametersDto(
@@ -170,7 +216,8 @@ public sealed record CandidateResultDto(
     IReadOnlyList<MonitoredPointGroupResultDto> Groups,
     IReadOnlyList<ResultWarningDto> Warnings,
     IReadOnlyList<CableForceResultDto>? CableForces = null,
-    IReadOnlyList<MemberForceGroupResultDto>? MemberForceGroups = null)
+    IReadOnlyList<MemberForceGroupResultDto>? MemberForceGroups = null,
+    IReadOnlyList<SupportReactionGroupResultDto>? SupportReactionGroups = null)
 {
     public string DiagnosticReportFileName => $"Deflection_Diagnostic_{IterationKey}.html";
     public string DiagnosticReportRelativePath => $"{IterationKey}/{DiagnosticReportFileName}";

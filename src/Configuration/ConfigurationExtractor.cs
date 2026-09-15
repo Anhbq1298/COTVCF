@@ -113,6 +113,7 @@ public sealed class ConfigurationExtractor
         CableResultLoadCase = s.OutputSettings.CableResultLoadCase,
         DeflectionOutputCaseName = s.OutputSettings.DeflectionOutputCaseName,
         MemberForceResultLoadCase = s.OutputSettings.MemberForceResultLoadCase,
+        FoundationReactionResultLoadCase = s.OutputSettings.FoundationReactionResultLoadCase,
     };
 
     private static IterationStudyConfigDto ExtractStudy(ApplicationState s) => new()

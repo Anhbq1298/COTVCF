@@ -888,7 +888,7 @@
     <TabItem.Header>
      <StackPanel Width="124">
       <TextBlock Text="06  POST-PROCESSING" Style="{StaticResource TabHeaderTitle}"/>
-      <TextBlock Text="Deflection · Forces" Style="{StaticResource TabHeaderStatus}"/>
+      <TextBlock Text="Deflection · Forces · Reactions" Style="{StaticResource TabHeaderStatus}"/>
      </StackPanel>
     </TabItem.Header>
     <Grid Margin="2,2,6,2">
@@ -1008,7 +1008,22 @@
        </Expander>
 
        <Expander Style="{StaticResource PpModule}">
-        <Expander.Header><TextBlock Text="06  CABLE FORCES · kN" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <Expander.Header><TextBlock Text="06  SUPPORT REACTIONS" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <StackPanel>
+         <TextBlock Text="Global Fx / Fy / Fz [kN] · Mx / My / Mz [kNm] at the two Left and two Right foundation points" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Individual supports or foundation totals · result-step and L / H / P filters · automatic envelope above 50 candidates" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="{Binding SupportReactionReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding SupportReactionReportPath}"/>
+         <WrapPanel Margin="0,4,0,0">
+          <Button Content="View Report" Command="{Binding OpenSupportReactionReport}" Style="{StaticResource Primary}" ToolTip="Open Support_Reactions_Report.html in your web browser"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateSupportReactionReport}" ToolTip="Rebuild Support_Reactions_Report.html from Deflection_Results_Source.xlsx — no SAP"/>
+          <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
+          <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
+         </WrapPanel>
+        </StackPanel>
+       </Expander>
+
+       <Expander Style="{StaticResource PpModule}">
+        <Expander.Header><TextBlock Text="07  CABLE FORCES · kN" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
          <TextBlock Text="Analysed cable axial force per configured cable · read under the Output Settings cable result case · one chart per cable · shared Y-scale" Style="{StaticResource PpDesc}"/>
          <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>
@@ -1023,7 +1038,7 @@
         </Expander>
 
         <Expander Style="{StaticResource PpModule}">
-         <Expander.Header><TextBlock Text="07  STUDY SHORTLIST" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+         <Expander.Header><TextBlock Text="08  STUDY SHORTLIST" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
          <StackPanel>
           <TextBlock Text="Ranked Pass and Warning candidates from the frozen study decision criteria · lower score is preferred" Style="{StaticResource PpDesc}"/>
           <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>

@@ -71,6 +71,12 @@ public sealed class OutputSettingsValidator
             if (!geometry.Points.ContainsKey(name)) issues.Add(new("Output Settings", $"Foundation point {name} is missing from the baseline model."));
         if (output.FoundationLeftPoints.Intersect(output.FoundationRightPoints, StringComparer.Ordinal).Any())
             issues.Add(new("Output Settings", "A foundation point cannot belong to both Left and Right groups."));
+        if ((output.FoundationLeftPoints.Count > 0 || output.FoundationRightPoints.Count > 0) &&
+            string.IsNullOrWhiteSpace(output.FoundationReactionResultLoadCase))
+            issues.Add(new("Output Settings", "Select a foundation reaction result load case."));
+        else if (!string.IsNullOrWhiteSpace(output.FoundationReactionResultLoadCase) && loadCases is not null &&
+                 !loadCases.Contains(output.FoundationReactionResultLoadCase, StringComparer.OrdinalIgnoreCase))
+            issues.Add(new("Output Settings", $"Foundation reaction result load case {output.FoundationReactionResultLoadCase} does not exist in the baseline model."));
 
         if (output.CableNames.Count == 0)
             issues.Add(new("Output Settings", "Select at least one cable to monitor."));

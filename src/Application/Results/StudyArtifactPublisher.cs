@@ -25,12 +25,17 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
             cableResultCase: snapshot.CableResultLoadCase,
             memberGroups: snapshot.OutputGroups.Where(group =>
                 group.ObjectKind == COT_VCF.Domain.OutputGroupObjectKind.Frame).ToArray(),
-            memberForceCase: snapshot.MemberForceResultCase);
+            memberForceCase: snapshot.MemberForceResultCase,
+            foundationLeftPoints: snapshot.FoundationLeftPoints,
+            foundationRightPoints: snapshot.FoundationRightPoints,
+            foundationReactionCase: snapshot.FoundationReactionResultCase);
         var ordered = consolidator.Snapshot();
         var hasCableReport = ordered.Any(r => (r.CableForces?.Count ?? 0) > 0);
         var hasMemberReport = ordered.Any(r => (r.MemberForceGroups?.Count ?? 0) > 0);
+        var hasSupportReport = ordered.Any(r => (r.SupportReactionGroups?.Count ?? 0) > 0);
         var currentReports = new List<string> { "deflection" };
         if (hasMemberReport) currentReports.Add("member");
+        if (hasSupportReport) currentReports.Add("support");
         if (hasCableReport) currentReports.Add("cable");
         currentReports.Add("shortlist");
         var decisions = new StudyDecisionService().Evaluate(ordered, snapshot.DecisionCriteria);
@@ -42,6 +47,10 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
         if (hasMemberReport)
             member = new MemberForceReportGenerator().Generate(studyFolder, ordered,
                 snapshot.BaselineModel.Name, snapshot.StudyMode, currentReports);
+        string? support = null;
+        if (hasSupportReport)
+            support = new SupportReactionReportGenerator().Generate(studyFolder, ordered,
+                snapshot.BaselineModel.Name, snapshot.StudyMode, currentReports);
         string? cable = null;
         if (hasCableReport)
         {
@@ -51,7 +60,7 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
         }
         var shortlist = new StudyShortlistExporter().Export(studyFolder, decisions,
             snapshot.DecisionCriteria, siblingReports: currentReports);
-        return new(StudyArtifactState.Ready, workbook, deflection, member, cable, null,
+        return new(StudyArtifactState.Ready, workbook, deflection, member, support, cable, null,
             shortlist.WorkbookPath, shortlist.HtmlPath);
     }
 }

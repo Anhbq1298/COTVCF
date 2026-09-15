@@ -497,6 +497,20 @@ public sealed class MainViewModel : Observable
     public bool HasMemberForceReport => !string.IsNullOrEmpty(MemberForceReportPath) && File.Exists(MemberForceReportPath);
     public string MemberForceReportName => HasMemberForceReport ? Path.GetFileName(MemberForceReportPath!) : "No member-force report generated yet";
 
+    private string? supportReactionReportPath;
+    public string? SupportReactionReportPath
+    {
+        get => supportReactionReportPath;
+        private set
+        {
+            if (!Set(ref supportReactionReportPath, value)) return;
+            Notify(nameof(HasSupportReactionReport));
+            Notify(nameof(SupportReactionReportName));
+        }
+    }
+    public bool HasSupportReactionReport => !string.IsNullOrEmpty(SupportReactionReportPath) && File.Exists(SupportReactionReportPath);
+    public string SupportReactionReportName => HasSupportReactionReport ? Path.GetFileName(SupportReactionReportPath!) : "No support-reaction report generated yet";
+
     private string? cableForceReportPath;
     public string? CableForceReportPath
     {
@@ -635,7 +649,7 @@ public sealed class MainViewModel : Observable
             return groups == 0 ? "Not configured" : $"{groups} group{(groups == 1 ? "" : "s")} · {members} frame{(members == 1 ? "" : "s")} · {State.OutputSettings.MemberForceResultLoadCase}";
         }
     }
-    public string FoundationOutputSummary => $"Left {State.OutputSettings.FoundationLeftPoints.Count}/2 · Right {State.OutputSettings.FoundationRightPoints.Count}/2";
+    public string FoundationOutputSummary => $"Left {State.OutputSettings.FoundationLeftPoints.Count}/2 · Right {State.OutputSettings.FoundationRightPoints.Count}/2 · {(string.IsNullOrWhiteSpace(State.OutputSettings.FoundationReactionResultLoadCase) ? "No result case" : State.OutputSettings.FoundationReactionResultLoadCase)}";
     public string CableOutputSummary => State.OutputSettings.CableNames.Count == 0
         ? "Not configured"
         : $"{State.OutputSettings.CableNames.Count} cable{(State.OutputSettings.CableNames.Count == 1 ? "" : "s")} · {State.OutputSettings.CableResultLoadCase}";
@@ -668,9 +682,10 @@ public sealed class MainViewModel : Observable
         : string.IsNullOrWhiteSpace(Out.MemberForceResultLoadCase) ||
           Out.MemberForceGroups.Any(g => g.Members.Count == 0 || string.IsNullOrWhiteSpace(g.Name)) ? StatusIncomplete
         : StatusReady;
-    public string FoundationSummary => $"Left {Out.FoundationLeftPoints.Count} / 2 · Right {Out.FoundationRightPoints.Count} / 2";
+    public string FoundationSummary => $"{(string.IsNullOrWhiteSpace(Out.FoundationReactionResultLoadCase) ? "No output case" : Out.FoundationReactionResultLoadCase)} · Left {Out.FoundationLeftPoints.Count} / 2 · Right {Out.FoundationRightPoints.Count} / 2";
     public string FoundationStatus => Out.FoundationLeftPoints.Count == 0 && Out.FoundationRightPoints.Count == 0 ? StatusNotConfigured
-        : Out.FoundationLeftPoints.Count == 2 && Out.FoundationRightPoints.Count == 2 ? StatusReady
+        : Out.FoundationLeftPoints.Count == 2 && Out.FoundationRightPoints.Count == 2 &&
+          !string.IsNullOrWhiteSpace(Out.FoundationReactionResultLoadCase) ? StatusReady
         : StatusIncomplete;
     public string CableForceSummary => Out.CableNames.Count == 0
         ? "0 cables"
@@ -733,6 +748,8 @@ public sealed class MainViewModel : Observable
     public Command RegenerateDeflectionReport { get; }
     public Command OpenMemberForceReport { get; }
     public Command RegenerateMemberForceReport { get; }
+    public Command OpenSupportReactionReport { get; }
+    public Command RegenerateSupportReactionReport { get; }
     public Command OpenCableForceReport { get; }
     public Command RegenerateCableForceReport { get; }
     public Command OpenShortlistReport { get; }
@@ -865,6 +882,7 @@ public sealed class MainViewModel : Observable
         OpenIterationFolder = new(p => { if (p is StudyIteration row) TryOpenFolder(row.IterationDirectory); });
         OpenDeflectionReport = new(_ => TryOpenFile(DeflectionReportPath), () => HasDeflectionReport);
         OpenMemberForceReport = new(_ => TryOpenFile(MemberForceReportPath), () => HasMemberForceReport);
+        OpenSupportReactionReport = new(_ => TryOpenFile(SupportReactionReportPath), () => HasSupportReactionReport);
         OpenCableForceReport = new(_ => TryOpenFile(CableForceReportPath), () => HasCableForceReport);
         OpenShortlistReport = new(_ => TryOpenFile(ShortlistReportPath), () => HasShortlistReport);
         OpenShortlistWorkbook = new(_ => TryOpenFile(ShortlistWorkbookPath), () => HasShortlistWorkbook);
@@ -877,6 +895,7 @@ public sealed class MainViewModel : Observable
         });
         RegenerateDeflectionReport = new(_ => RegenerateReport(), () => !IsBusy);
         RegenerateMemberForceReport = new(_ => RegenerateMemberForceReportAsync(), () => !IsBusy);
+        RegenerateSupportReactionReport = new(_ => RegenerateSupportReactionReportAsync(), () => !IsBusy);
         RegenerateCableForceReport = new(_ => RegenerateCableForceReportAsync(), () => !IsBusy);
         ViewIterationError = new(p =>
         {
@@ -1020,14 +1039,20 @@ public sealed class MainViewModel : Observable
         finally { IsBusy = false; Update(); }
     }
 
-    private void EditFoundationOutput()
+    private async void EditFoundationOutput()
     {
-        if (outputDialogs is null) { Message = "Output Settings editor is unavailable."; return; }
-        if (!outputDialogs.EditFoundations(State.OutputSettings, OutputBaselineGeometry(), selection)) return;
-        config.Session.MarkDirty(ConfigTabs.Output);
-        InvalidateStudyValidation();
-        Message = "Foundation reaction points configured. Groups will be applied to the parent when Tab 05 runs.";
-        Update();
+        if (IsBusy || outputDialogs is null) { if (outputDialogs is null) Message = "Output Settings editor is unavailable."; return; }
+        IsBusy = true;
+        try
+        {
+            var loadCases = await workflow.GetLoadCaseNamesAsync();
+            if (!outputDialogs.EditFoundations(State.OutputSettings, OutputBaselineGeometry(), loadCases, selection)) return;
+            config.Session.MarkDirty(ConfigTabs.Output);
+            InvalidateStudyValidation();
+            Message = $"Foundation reaction points configured for result case {State.OutputSettings.FoundationReactionResultLoadCase}. Groups will be applied to the parent when Tab 05 runs.";
+        }
+        catch (Exception ex) { Message = ex.Message; Warn("Foundation Reaction Output Settings", ex.Message); }
+        finally { IsBusy = false; Update(); }
     }
 
     private async void EditCableOutput()
@@ -1317,6 +1342,7 @@ public sealed class MainViewModel : Observable
         currentRunWorkbookPath = null;
         DeflectionReportPath = null;
         MemberForceReportPath = null;
+        SupportReactionReportPath = null;
         CableForceReportPath = null;
         ShortlistReportPath = null;
         ShortlistWorkbookPath = null;
@@ -1343,6 +1369,7 @@ public sealed class MainViewModel : Observable
             currentRunWorkbookPath = result.Artifacts.WorkbookPath;
             DeflectionReportPath = result.Artifacts.DeflectionReportPath;
             MemberForceReportPath = result.Artifacts.MemberForceReportPath;
+            SupportReactionReportPath = result.Artifacts.SupportReactionReportPath;
             CableForceReportPath = result.Artifacts.CableForceReportPath;
             ShortlistReportPath = result.Artifacts.ShortlistReportPath;
             ShortlistWorkbookPath = result.Artifacts.ShortlistWorkbookPath;
@@ -1642,6 +1669,33 @@ public sealed class MainViewModel : Observable
         finally { IsBusy = false; }
     }
 
+    private async void RegenerateSupportReactionReportAsync()
+    {
+        if (IsBusy) return;
+        if (!HasResultsWorkbook)
+        {
+            SupportReactionReportPath = null;
+            Message = $"No {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName} found in {StudyRoot}. Run the study on Tab 05 first.";
+            return;
+        }
+        IsBusy = true;
+        try
+        {
+            var path = await Task.Run(() => new COT_VCF.Application.Results.SupportReactionReportGenerator().RegenerateFromWorkbook(StudyRoot));
+            SupportReactionReportPath = !string.IsNullOrEmpty(path) && File.Exists(path) ? path : null;
+            if (SupportReactionReportPath is not null)
+            {
+                StudyRunJournal.RefreshArtifact(StudyRoot, "SupportReactionReport", SupportReactionReportPath);
+                RefreshDeflectionArtifacts();
+            }
+            Message = SupportReactionReportPath is null
+                ? "No support-reaction results in the workbook — configure both foundation point groups and a result case in Output Settings, then re-run."
+                : $"Regenerated {Path.GetFileName(path)} from {COT_VCF.Application.Results.ConsolidatedResultWriter.WorkbookFileName}.";
+        }
+        catch (Exception ex) { Message = ex.Message; Warn("Regenerate Support Reaction Report", ex.Message); }
+        finally { IsBusy = false; }
+    }
+
     private void AddPostProcessRow(COT_VCF.Domain.Results.CandidateResultDto dto)
     {
         var points = dto.Groups.Sum(g => g.Points.Count);
@@ -1668,6 +1722,7 @@ public sealed class MainViewModel : Observable
                 discoveredWorkbookPath = null;
                 DeflectionReportPath = null;
                 MemberForceReportPath = null;
+                SupportReactionReportPath = null;
                 CableForceReportPath = null;
                 ShortlistReportPath = null;
                 ShortlistWorkbookPath = null;
@@ -1678,6 +1733,7 @@ public sealed class MainViewModel : Observable
                 discoveredWorkbookPath = StudyRunJournal.ValidArtifactPath(manifest, "Workbook");
                 DeflectionReportPath = StudyRunJournal.ValidArtifactPath(manifest, "DeflectionReport");
                 MemberForceReportPath = StudyRunJournal.ValidArtifactPath(manifest, "MemberForceReport");
+                SupportReactionReportPath = StudyRunJournal.ValidArtifactPath(manifest, "SupportReactionReport");
                 CableForceReportPath = StudyRunJournal.ValidArtifactPath(manifest, "CableForceReport");
                 ShortlistReportPath = StudyRunJournal.ValidArtifactPath(manifest, "ShortlistReport");
                 ShortlistWorkbookPath = StudyRunJournal.ValidArtifactPath(manifest, "ShortlistWorkbook");
@@ -1690,6 +1746,7 @@ public sealed class MainViewModel : Observable
             discoveredWorkbookPath = null;
             DeflectionReportPath = null;
             MemberForceReportPath = null;
+            SupportReactionReportPath = null;
             CableForceReportPath = null;
             ShortlistReportPath = null;
             ShortlistWorkbookPath = null;
@@ -2168,6 +2225,7 @@ public sealed class MainViewModel : Observable
             nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount),
             nameof(HasDeflectionReport), nameof(HasNoDeflectionReport), nameof(DeflectionReportUri), nameof(DeflectionReportName),
             nameof(HasMemberForceReport), nameof(MemberForceReportName),
+            nameof(HasSupportReactionReport), nameof(SupportReactionReportName),
             nameof(HasCableForceReport), nameof(CableForceReportName),
             nameof(HasResultsWorkbook), nameof(ResultsWorkbookPath), nameof(PostProcessStatus)
         }) Notify(name);

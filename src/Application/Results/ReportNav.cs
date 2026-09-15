@@ -15,6 +15,7 @@ public static class ReportNav
     [
         new("deflection", "Deflection · Uz", DeflectionReportGenerator.ReportFileName),
         new("member",     "Member Forces",   MemberForceReportGenerator.ReportFileName),
+        new("support",    "Support Reactions", SupportReactionReportGenerator.ReportFileName),
         new("cable",      "Cable Forces",   CableForceReportGenerator.ReportFileName),
         new("shortlist",  "Study Shortlist", StudyShortlistExporter.HtmlFileName),
     ];

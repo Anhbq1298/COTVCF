@@ -41,6 +41,7 @@ internal static class OutputSettingsChecks
         state.OutputSettings.CableResultLoadCase = "CASE1";
         state.OutputSettings.DeflectionOutputCaseName = "CASE1";
         state.OutputSettings.MemberForceResultLoadCase = "CASE1";
+        state.OutputSettings.FoundationReactionResultLoadCase = "CASE1";
         var top = new MemberForceOutputGroup { Name = "TopChords" };
         top.Members.Add("F1");
         state.OutputSettings.MemberForceGroups.Add(top);
@@ -67,7 +68,8 @@ internal static class OutputSettingsChecks
         var dto = new ConfigurationExtractor().ExtractOutputSection(state);
         Check(dto.MemberForceGroups.Single().SapGroupName == "[O]-TopChords" &&
               dto.FoundationLeftPointNames.Count == 2 && dto.CableResultLoadCase == "CASE1" &&
-              dto.DeflectionOutputCaseName == "CASE1" && dto.MemberForceResultLoadCase == "CASE1",
+              dto.DeflectionOutputCaseName == "CASE1" && dto.MemberForceResultLoadCase == "CASE1" &&
+              dto.FoundationReactionResultLoadCase == "CASE1",
             "Output settings extract to project DTO");
 
         var target = new ApplicationState { Geometry = geometry, SessionBaseline = geometry, Model = model, SessionBaselineModel = model, Connection = "Connected" };
@@ -78,7 +80,8 @@ internal static class OutputSettingsChecks
         Check(target.OutputSettings.MemberForceGroups.Single().SapGroupName == "[O]-TopChords" &&
               target.OutputSettings.CableResultLoadCase == "CASE1" &&
               target.OutputSettings.DeflectionOutputCaseName == "CASE1" &&
-              target.OutputSettings.MemberForceResultLoadCase == "CASE1",
+              target.OutputSettings.MemberForceResultLoadCase == "CASE1" &&
+              target.OutputSettings.FoundationReactionResultLoadCase == "CASE1",
             "Output settings restore without writing SAP");
 
         var fake = new FakeSap(model);
