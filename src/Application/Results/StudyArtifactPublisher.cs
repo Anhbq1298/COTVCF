@@ -21,7 +21,7 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
         if (results.Count == 0) return StudyArtifactOutcome.NotProduced;
         var studyFolder = Path.GetFullPath(paths.GetStudyRoot(snapshot.BaselineModelPath));
         var raw = new StudyRawDataStore().Write(studyFolder, snapshot, results);
-        return new(StudyArtifactState.Ready, null, null, null, null,
+        return new(StudyArtifactState.Ready, null, null, null, null, null, null,
             RawJsonPath: raw.JsonPath, RawCsvPath: raw.CsvPath);
     }
 }

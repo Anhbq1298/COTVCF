@@ -12,6 +12,7 @@ public enum ResultValueStatus
     Valid,           // SAP returned a number
     NoResult,        // case selected, point exists, API returned zero rows
     PointNotFound,   // point name not in the model
+    FrameNotFound,   // frame name not in the model
     CaseNotFound,    // output case / combo not in the model
     AnalysisNotRun,  // model not locked / no results available
     ApiError         // nonzero return code or exception
@@ -50,6 +51,52 @@ public sealed record CableForceRead(
     ResultValueStatus Status,
     string? Warning = null);
 
+/// <summary>One unmodified row returned by SAP for a frame object. Object and element stations are
+/// retained because one frame object may be meshed into several analysis elements.</summary>
+public sealed record FrameForceStationRead(
+    string FrameObjectName,
+    string ElementName,
+    double ObjectStationM,
+    double ElementStationM,
+    string OutputCase,
+    string StepType,
+    double StepNumber,
+    double P,
+    double V2,
+    double V3,
+    double T,
+    double M2,
+    double M3);
+
+/// <summary>All SAP frame-force rows for one selected frame object and output case/combo.</summary>
+public sealed record FrameForceRead(
+    string FrameName,
+    IReadOnlyList<FrameForceStationRead> Stations,
+    ResultValueStatus Status,
+    string? Warning = null);
+
+/// <summary>One unmodified global-axis support-reaction row returned by SAP for a selected point.</summary>
+public sealed record JointReactionRowRead(
+    string OutputCase,
+    string StepType,
+    double StepNumber,
+    double Fx,
+    double Fy,
+    double Fz,
+    double Mx,
+    double My,
+    double Mz);
+
+/// <summary>All SAP support-reaction rows for one selected point and output case/combo.</summary>
+public sealed record JointReactionRead(
+    string PointName,
+    double X,
+    double Y,
+    double Z,
+    IReadOnlyList<JointReactionRowRead> Rows,
+    ResultValueStatus Status,
+    string? Warning = null);
+
 // ============================ extraction-side DTOs ============================
 
 public sealed record MonitoredPointResultDto(
@@ -75,6 +122,55 @@ public sealed record CableForceResultDto(
     double? ForceKN,
     ResultValueStatus Status,
     string? Warning = null);
+
+/// <summary>One SAP result row located along an ordered output group profile.</summary>
+public sealed record MemberForceStationResultDto(
+    string FrameName,
+    int FrameSequence,
+    string ElementName,
+    double ObjectStationM,
+    double ElementStationM,
+    double ProfileCoordinateM,
+    string StepType,
+    double StepNumber,
+    double P,
+    double V2,
+    double V3,
+    double T,
+    double M2,
+    double M3,
+    ResultValueStatus Status,
+    string? Warning = null);
+
+public sealed record MemberForceGroupResultDto(
+    string GroupName,
+    string SapGroupName,
+    string OutputCase,
+    IReadOnlyList<MemberForceStationResultDto> Stations);
+
+/// <summary>One selected foundation point at one SAP result step. Components are global-axis reactions.</summary>
+public sealed record SupportReactionPointResultDto(
+    string PointName,
+    int PointSequence,
+    double X,
+    double Y,
+    double Z,
+    string StepType,
+    double StepNumber,
+    double? Fx,
+    double? Fy,
+    double? Fz,
+    double? Mx,
+    double? My,
+    double? Mz,
+    ResultValueStatus Status,
+    string? Warning = null);
+
+public sealed record SupportReactionGroupResultDto(
+    string FoundationSide,
+    string SapGroupName,
+    string OutputCase,
+    IReadOnlyList<SupportReactionPointResultDto> Points);
 
 /// <summary>Study parameters resolved for one candidate. Fields that a given study mode does not vary are still
 /// populated from the frozen candidate; single-value convenience fields are null when the candidate is mixed.</summary>
@@ -119,7 +215,9 @@ public sealed record CandidateResultDto(
     CandidateExtractionStatus ExtractionStatus,
     IReadOnlyList<MonitoredPointGroupResultDto> Groups,
     IReadOnlyList<ResultWarningDto> Warnings,
-    IReadOnlyList<CableForceResultDto>? CableForces = null)
+    IReadOnlyList<CableForceResultDto>? CableForces = null,
+    IReadOnlyList<MemberForceGroupResultDto>? MemberForceGroups = null,
+    IReadOnlyList<SupportReactionGroupResultDto>? SupportReactionGroups = null)
 {
     public string DiagnosticReportFileName => $"Deflection_Diagnostic_{IterationKey}.html";
     public string DiagnosticReportRelativePath => $"{IterationKey}/{DiagnosticReportFileName}";

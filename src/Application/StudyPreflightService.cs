@@ -61,7 +61,8 @@ public sealed class StudyPreflightService
         var configured = 0;
         if (state.OutputSettings.DeflectionPoints.Count > 0 && !string.IsNullOrWhiteSpace(state.OutputSettings.DeflectionOutputCaseName)) configured++;
         if (state.OutputSettings.MemberForceGroups.Count > 0) configured++;
-        if (state.OutputSettings.FoundationLeftPoints.Count == 2 && state.OutputSettings.FoundationRightPoints.Count == 2) configured++;
+        if (state.OutputSettings.FoundationLeftPoints.Count == 2 && state.OutputSettings.FoundationRightPoints.Count == 2 &&
+            !string.IsNullOrWhiteSpace(state.OutputSettings.FoundationReactionResultLoadCase)) configured++;
         if (state.OutputSettings.CableNames.Count > 0 && !string.IsNullOrWhiteSpace(state.OutputSettings.CableResultLoadCase)) configured++;
         return $"{configured} / 4 modules";
     }

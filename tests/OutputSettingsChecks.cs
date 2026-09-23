@@ -40,6 +40,8 @@ internal static class OutputSettingsChecks
         state.OutputSettings.CableNames.Add("C1");
         state.OutputSettings.CableResultLoadCase = "CASE1";
         state.OutputSettings.DeflectionOutputCaseName = "CASE1";
+        state.OutputSettings.MemberForceResultLoadCase = "CASE1";
+        state.OutputSettings.FoundationReactionResultLoadCase = "CASE1";
         var top = new MemberForceOutputGroup { Name = "TopChords" };
         top.Members.Add("F1");
         state.OutputSettings.MemberForceGroups.Add(top);
@@ -66,7 +68,8 @@ internal static class OutputSettingsChecks
         var dto = new ConfigurationExtractor().ExtractOutputSection(state);
         Check(dto.MemberForceGroups.Single().SapGroupName == "[O]-TopChords" &&
               dto.FoundationLeftPointNames.Count == 2 && dto.CableResultLoadCase == "CASE1" &&
-              dto.DeflectionOutputCaseName == "CASE1",
+              dto.DeflectionOutputCaseName == "CASE1" && dto.MemberForceResultLoadCase == "CASE1" &&
+              dto.FoundationReactionResultLoadCase == "CASE1",
             "Output settings extract to project DTO");
 
         var target = new ApplicationState { Geometry = geometry, SessionBaseline = geometry, Model = model, SessionBaselineModel = model, Connection = "Connected" };
@@ -76,7 +79,9 @@ internal static class OutputSettingsChecks
         new ConfigurationApplicator(target, new WorkflowService(new FakeSap(model), target)).Apply(project, check);
         Check(target.OutputSettings.MemberForceGroups.Single().SapGroupName == "[O]-TopChords" &&
               target.OutputSettings.CableResultLoadCase == "CASE1" &&
-              target.OutputSettings.DeflectionOutputCaseName == "CASE1",
+              target.OutputSettings.DeflectionOutputCaseName == "CASE1" &&
+              target.OutputSettings.MemberForceResultLoadCase == "CASE1" &&
+              target.OutputSettings.FoundationReactionResultLoadCase == "CASE1",
             "Output settings restore without writing SAP");
 
         var fake = new FakeSap(model);
@@ -126,6 +131,7 @@ internal static class OutputSettingsChecks
         public Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected) => Task.FromResult<IReadOnlyList<CableSection>>([]);
         public Task<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>> GetJointDisplacementsAsync(IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();
         public Task<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>> GetCableForcesAsync(IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();
+        public Task<IReadOnlyList<COT_VCF.Domain.Results.FrameForceRead>> GetFrameForcesAsync(IReadOnlyList<string> frameNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => Task.FromResult<IReadOnlyList<ForceSource>>([]);
         public Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected) => throw new NotSupportedException();
         public Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected) => throw new NotSupportedException();

@@ -350,6 +350,159 @@ public sealed class SapGateway : ISapGateway
         Verify(expected);
         return results;
     });
+    public Task<IReadOnlyList<FrameForceRead>> GetFrameForcesAsync(
+        IReadOnlyList<string> frameNames, string outputCase, bool isCombo, ModelInfo expected) =>
+        worker.Run<IReadOnlyList<FrameForceRead>>(() =>
+    {
+        Verify(expected);
+        var results = new List<FrameForceRead>(frameNames.Count);
+        FrameForceRead Failed(string name, ResultValueStatus status, string warning) =>
+            new(name, [], status, warning);
+
+        if (!ReadInfo().IsLocked)
+        {
+            foreach (var name in frameNames)
+                results.Add(Failed(name, ResultValueStatus.AnalysisNotRun, "The model holds no analysis results."));
+            return results;
+        }
+        if (!Model.GetPresentUnits().ToString().StartsWith("kN_m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Frame-force extraction expects kN, m units; the model is in {ReadInfo().Units}.");
+
+        Check(Model.Results.Setup.DeselectAllCasesAndCombosForOutput(), "Results.Setup.DeselectAllCasesAndCombosForOutput");
+        var select = isCombo
+            ? Model.Results.Setup.SetComboSelectedForOutput(outputCase)
+            : Model.Results.Setup.SetCaseSelectedForOutput(outputCase);
+        if (select != 0)
+        {
+            foreach (var name in frameNames)
+                results.Add(Failed(name, ResultValueStatus.CaseNotFound,
+                    $"Output {(isCombo ? "combo" : "case")} '{outputCase}' is not in the model."));
+            return results;
+        }
+
+        foreach (var name in frameNames)
+        {
+            string pointI = "", pointJ = "";
+            if (Model.FrameObj.GetPoints(name, ref pointI, ref pointJ) != 0)
+            {
+                results.Add(Failed(name, ResultValueStatus.FrameNotFound, $"Frame '{name}' is not in the model."));
+                continue;
+            }
+
+            int n = 0;
+            string[] obj = [], elm = [], caseNames = [], stepType = [];
+            double[] objSt = [], elmSt = [], stepNum = [], p = [], v2 = [], v3 = [], tq = [], m2 = [], m3 = [];
+            var rc = Model.Results.FrameForce(name, eItemTypeElm.ObjectElm, ref n, ref obj, ref objSt,
+                ref elm, ref elmSt, ref caseNames, ref stepType, ref stepNum, ref p, ref v2, ref v3, ref tq, ref m2, ref m3);
+            if (rc != 0)
+            {
+                results.Add(Failed(name, ResultValueStatus.ApiError, $"Results.FrameForce returned {rc} for frame '{name}'."));
+                continue;
+            }
+            if (n <= 0)
+            {
+                results.Add(Failed(name, ResultValueStatus.NoResult, $"No frame-force rows for '{name}' under '{outputCase}'."));
+                continue;
+            }
+
+            var limit = new[] { n, obj.Length, objSt.Length, elm.Length, elmSt.Length, caseNames.Length,
+                stepType.Length, stepNum.Length, p.Length, v2.Length, v3.Length, tq.Length, m2.Length, m3.Length }.Min();
+            var stations = Enumerable.Range(0, Math.Max(0, limit))
+                .Where(i => double.IsFinite(objSt[i]) && double.IsFinite(elmSt[i]) &&
+                    double.IsFinite(stepNum[i]) && double.IsFinite(p[i]) && double.IsFinite(v2[i]) &&
+                    double.IsFinite(v3[i]) && double.IsFinite(tq[i]) && double.IsFinite(m2[i]) && double.IsFinite(m3[i]))
+                .Select(i => new FrameForceStationRead(
+                    string.IsNullOrWhiteSpace(obj[i]) ? name : obj[i], elm[i], objSt[i], elmSt[i],
+                    string.IsNullOrWhiteSpace(caseNames[i]) ? outputCase : caseNames[i], stepType[i], stepNum[i],
+                    p[i], v2[i], v3[i], tq[i], m2[i], m3[i]))
+                .OrderBy(row => row.ObjectStationM)
+                .ThenBy(row => row.ElementName, StringComparer.Ordinal)
+                .ThenBy(row => row.ElementStationM)
+                .ThenBy(row => row.StepType, StringComparer.Ordinal)
+                .ThenBy(row => row.StepNumber)
+                .ToArray();
+            results.Add(stations.Length == 0
+                ? Failed(name, ResultValueStatus.NoResult, $"No finite frame-force rows for '{name}' under '{outputCase}'.")
+                : new FrameForceRead(name, stations, ResultValueStatus.Valid));
+        }
+
+        Verify(expected);
+        return results;
+    });
+    public Task<IReadOnlyList<JointReactionRead>> GetJointReactionsAsync(
+        IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) =>
+        worker.Run<IReadOnlyList<JointReactionRead>>(() =>
+    {
+        Verify(expected);
+        var results = new List<JointReactionRead>(pointNames.Count);
+        JointReactionRead Failed(string name, double x, double y, double z, ResultValueStatus status, string warning) =>
+            new(name, x, y, z, [], status, warning);
+
+        if (!ReadInfo().IsLocked)
+        {
+            foreach (var name in pointNames)
+                results.Add(Failed(name, 0, 0, 0, ResultValueStatus.AnalysisNotRun, "The model holds no analysis results."));
+            return results;
+        }
+        if (!Model.GetPresentUnits().ToString().StartsWith("kN_m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Support-reaction extraction expects kN, m units; the model is in {ReadInfo().Units}.");
+
+        Check(Model.Results.Setup.DeselectAllCasesAndCombosForOutput(), "Results.Setup.DeselectAllCasesAndCombosForOutput");
+        var select = isCombo
+            ? Model.Results.Setup.SetComboSelectedForOutput(outputCase)
+            : Model.Results.Setup.SetCaseSelectedForOutput(outputCase);
+        if (select != 0)
+        {
+            foreach (var name in pointNames)
+                results.Add(Failed(name, 0, 0, 0, ResultValueStatus.CaseNotFound,
+                    $"Output {(isCombo ? "combo" : "case")} '{outputCase}' is not in the model."));
+            return results;
+        }
+
+        foreach (var name in pointNames)
+        {
+            double x = 0, y = 0, z = 0;
+            if (Model.PointObj.GetCoordCartesian(name, ref x, ref y, ref z, "Global") != 0)
+            {
+                results.Add(Failed(name, 0, 0, 0, ResultValueStatus.PointNotFound, $"Point '{name}' is not in the model."));
+                continue;
+            }
+
+            int n = 0;
+            string[] obj = [], elm = [], caseNames = [], stepType = [];
+            double[] stepNum = [], f1 = [], f2 = [], f3 = [], m1 = [], m2 = [], m3 = [];
+            var rc = Model.Results.JointReact(name, eItemTypeElm.ObjectElm, ref n, ref obj, ref elm,
+                ref caseNames, ref stepType, ref stepNum, ref f1, ref f2, ref f3, ref m1, ref m2, ref m3);
+            if (rc != 0)
+            {
+                results.Add(Failed(name, x, y, z, ResultValueStatus.ApiError, $"Results.JointReact returned {rc} for point '{name}'."));
+                continue;
+            }
+            if (n <= 0)
+            {
+                results.Add(Failed(name, x, y, z, ResultValueStatus.NoResult, $"No support-reaction rows for '{name}' under '{outputCase}'."));
+                continue;
+            }
+
+            var limit = new[] { n, caseNames.Length, stepType.Length, stepNum.Length,
+                f1.Length, f2.Length, f3.Length, m1.Length, m2.Length, m3.Length }.Min();
+            var rows = Enumerable.Range(0, Math.Max(0, limit))
+                .Where(i => double.IsFinite(stepNum[i]) && double.IsFinite(f1[i]) && double.IsFinite(f2[i]) &&
+                    double.IsFinite(f3[i]) && double.IsFinite(m1[i]) && double.IsFinite(m2[i]) && double.IsFinite(m3[i]))
+                .Select(i => new JointReactionRowRead(
+                    string.IsNullOrWhiteSpace(caseNames[i]) ? outputCase : caseNames[i], stepType[i], stepNum[i],
+                    f1[i], f2[i], f3[i], m1[i], m2[i], m3[i]))
+                .OrderBy(row => row.StepType, StringComparer.Ordinal)
+                .ThenBy(row => row.StepNumber)
+                .ToArray();
+            results.Add(rows.Length == 0
+                ? Failed(name, x, y, z, ResultValueStatus.NoResult, $"No finite support-reaction rows for '{name}' under '{outputCase}'.")
+                : new JointReactionRead(name, x, y, z, rows, ResultValueStatus.Valid));
+        }
+
+        Verify(expected);
+        return results;
+    });
     public Task<IReadOnlyList<PointLoad>> GetPointLoadsAsync(string pointName, ModelInfo expected) => worker.Run<IReadOnlyList<PointLoad>>(() =>
     {
         Verify(expected);
@@ -682,9 +835,15 @@ public sealed class SapGateway : ISapGateway
     public Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected) => worker.Run<IReadOnlyList<string>>(() =>
     {
         Verify(expected);
-        int n = 0; string[] names = [];
-        Check(Model.LoadCases.GetNameList(ref n, ref names), "LoadCases.GetNameList");
-        return names.Take(n).ToArray();
+        int caseCount = 0; string[] cases = [];
+        Check(Model.LoadCases.GetNameList(ref caseCount, ref cases), "LoadCases.GetNameList");
+        int comboCount = 0; string[] combos = [];
+        Check(Model.RespCombo.GetNameList(ref comboCount, ref combos), "RespCombo.GetNameList");
+        return cases.Take(caseCount).Concat(combos.Take(comboCount))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
     });
 
     public Task<IReadOnlyList<SapGroupSnapshot>> ReadOutputGroupsAsync(IReadOnlyList<string> groupNames, ModelInfo expected) =>

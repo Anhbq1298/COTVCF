@@ -151,7 +151,8 @@ internal static class Program
                 vm.SelectedTab = 5;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
-                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "06  STUDY SHORTLIST"),
+                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "08  STUDY SHORTLIST") &&
+                       FindVisuals<TextBlock>(window).Any(text => text.Text == "06  SUPPORT REACTIONS"),
                     "Post-processing UI exposes the ranked shortlist report and workbook module");
                 window.Close(); bindingListener.Flush();
                 if (bindingLog.ToString().Length > 0) throw new Exception("WPF binding errors: " + bindingLog);
@@ -260,13 +261,16 @@ internal static class Program
             Assert(state.Preview.Points["bot"].Position.Z == -1, "Apply followed by preview has no drift");
             try { workflow.RefreshAsync().GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
             Assert(!state.BaselineCaptured && state.Truss.TopPoints.Contains("top") && state.PointLoads.Count == 2, "External geometry changes invalidate baseline but preserve setup");
+            NumericInputChecks.Run();
             OutputSettingsChecks.Run();
             ReliabilityChecks.Run();
             StudyComposerChecks.Run();
             StudyExecutionChecks.Run();
             StudyDecisionChecks.Run();
-            GatewayChecks.Run();
             CableForceReportChecks.Run();
+            MemberForceReportChecks.Run();
+            SupportReactionReportChecks.Run();
+            GatewayChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
@@ -313,6 +317,7 @@ internal static class Program
         }
         public Task<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>> GetJointDisplacementsAsync(IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) => Task.FromResult<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>>([]);
         public Task<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>> GetCableForcesAsync(IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) => Task.FromResult<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>>([]);
+        public Task<IReadOnlyList<COT_VCF.Domain.Results.FrameForceRead>> GetFrameForcesAsync(IReadOnlyList<string> frameNames, string outputCase, bool isCombo, ModelInfo expected) => Task.FromResult<IReadOnlyList<COT_VCF.Domain.Results.FrameForceRead>>([]);
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> m, ModelInfo e) => Task.FromResult<IReadOnlyList<ForceSource>>([]);
         public Task ApplyLoadsAsync(IReadOnlyList<PointLoad> l, ModelInfo e) { Writes++; return Task.CompletedTask; }
         public Task MovePointsAsync(GeometryModel a, GeometryModel b, ModelInfo e) { Writes++; return Task.CompletedTask; }

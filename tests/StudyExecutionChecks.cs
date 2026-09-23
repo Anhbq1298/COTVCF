@@ -84,6 +84,11 @@ internal static class StudyExecutionChecks
                   cr.Groups[0].Points.All(pt => pt.Status == COT_VCF.Domain.Results.ResultValueStatus.Valid) &&
                   cr.Groups[0].Points.Select(pt => pt.Sequence).SequenceEqual([1, 2, 3]),
                 "Deflection extraction produces one sorted group of Valid monitored-point Uz per candidate");
+            Check(cr.SupportReactionGroups is { Count: 2 } &&
+                  cr.SupportReactionGroups.All(group => group.Points.Count == 2) &&
+                  cr.SupportReactionGroups.SelectMany(group => group.Points)
+                      .All(point => point.Status == ResultValueStatus.Valid && point.Fz.HasValue),
+                "Support-reaction extraction retains two Left and two Right foundation points with global reactions");
 
             var diagHtmlPath = Path.Combine(job.IterationDirectory, $"Deflection_Diagnostic_{job.IterationId}.html");
             Check(!File.Exists(diagHtmlPath), "The SAP/model run does not generate candidate diagnostic HTML");
@@ -109,7 +114,8 @@ internal static class StudyExecutionChecks
             var derived = new StudyPostProcessor().Generate(studyFolder,
                 snapshot.CableDesignCapacities, snapshot.DecisionCriteria);
             Check(StudyRunJournal.ReplaceArtifacts(studyFolder, derived) &&
-                  File.Exists(derived.WorkbookPath) && File.Exists(derived.DeflectionReportPath),
+                  File.Exists(derived.WorkbookPath) && File.Exists(derived.DeflectionReportPath) &&
+                  File.Exists(derived.SupportReactionReportPath),
                 "Tab 06 explicitly derives the workbook and reports from raw JSON without SAP2000");
             var diagHtml = File.ReadAllText(diagHtmlPath);
             Check(diagHtml.Contains("Candidate Diagnostic Report") && diagHtml.Contains("QA/QC") &&
@@ -125,12 +131,14 @@ internal static class StudyExecutionChecks
             var readBack = COT_VCF.Application.Results.ConsolidatedResultWriter.Read(xlsx);
             Check(readBack.Count == 1 && readBack[0].IterationKey == job.IterationId &&
                   readBack[0].Groups.Single().Points.Count == 3 &&
-                  readBack[0].Groups[0].Points.All(pt => pt.UzMm.HasValue),
+                  readBack[0].Groups[0].Points.All(pt => pt.UzMm.HasValue) &&
+                  readBack[0].SupportReactionGroups is { Count: 2 },
                 "Tab 06 workbook round-trips the candidate and its monitored-point Uz rows");
             var finalHtml = File.ReadAllText(reportHtml);
             Check(finalHtml.Contains("id=\"report-data\"") && finalHtml.Contains("Deflection Results Viewer") &&
                    finalHtml.Contains(job.IterationId) && finalHtml.Contains("Result Library") &&
                    finalHtml.Contains(StudyShortlistExporter.HtmlFileName, StringComparison.Ordinal) &&
+                   finalHtml.Contains(SupportReactionReportGenerator.ReportFileName, StringComparison.Ordinal) &&
                    !finalHtml.Contains(CableForceReportGenerator.ReportFileName, StringComparison.Ordinal) &&
                    !finalHtml.Contains("http://") && !finalHtml.Contains("https://") && !finalHtml.Contains("cdn."),
                 "Final HTML embeds current-run data, excludes stale sibling reports, and references nothing external");
@@ -636,6 +644,11 @@ internal static class StudyExecutionChecks
     {
         foreach (var name in new[] { "bot", "mid", "top" }) state.OutputSettings.DeflectionPoints.Add(name);
         state.OutputSettings.DeflectionOutputCaseName = "SERVICE";
+        state.OutputSettings.FoundationLeftPoints.Add("bot");
+        state.OutputSettings.FoundationLeftPoints.Add("mid");
+        state.OutputSettings.FoundationRightPoints.Add("top");
+        state.OutputSettings.FoundationRightPoints.Add("load2");
+        state.OutputSettings.FoundationReactionResultLoadCase = "SERVICE";
     }
 
     private static bool SavedCandidateMatches(
@@ -795,6 +808,33 @@ internal static class StudyExecutionChecks
             }
             return rows;
         });
+        public async Task<IReadOnlyList<JointReactionRead>> GetJointReactionsAsync(
+            IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) =>
+            await Tracked<IReadOnlyList<JointReactionRead>>(async () =>
+        {
+            Verify(expected); await Task.Delay(1);
+            var rows = new List<JointReactionRead>();
+            foreach (var name in pointNames)
+            {
+                if (!currentGeometry.Points.TryGetValue(name, out var point))
+                {
+                    rows.Add(new(name, 0, 0, 0, [], ResultValueStatus.PointNotFound));
+                    continue;
+                }
+                if (!analysisComplete)
+                {
+                    rows.Add(new(name, point.Position.X, point.Position.Y, point.Position.Z, [],
+                        ResultValueStatus.AnalysisNotRun));
+                    continue;
+                }
+                var seed = 100.0 + Math.Abs(name.GetHashCode()) % 100;
+                rows.Add(new(name, point.Position.X, point.Position.Y, point.Position.Z,
+                    [new JointReactionRowRead(outputCase, "Step", 1,
+                        seed * .05, seed * .03, seed, seed * .01, seed * .02, seed * .015)],
+                    ResultValueStatus.Valid));
+            }
+            return rows;
+        });
         public async Task<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>> GetCableForcesAsync(
             IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) => await Tracked<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>>(async () =>
         {
@@ -807,6 +847,28 @@ internal static class StudyExecutionChecks
                 // deterministic synthetic axial force in kN, keyed off the cable name so it is stable
                 var force = 900.0 + (Math.Abs(name.GetHashCode()) % 400);
                 rows.Add(new(name, Math.Round(force, 1), COT_VCF.Domain.Results.ResultValueStatus.Valid));
+            }
+            return rows;
+        });
+        public async Task<IReadOnlyList<COT_VCF.Domain.Results.FrameForceRead>> GetFrameForcesAsync(
+            IReadOnlyList<string> frameNames, string outputCase, bool isCombo, ModelInfo expected) => await Tracked<IReadOnlyList<COT_VCF.Domain.Results.FrameForceRead>>(async () =>
+        {
+            Verify(expected); await Task.Delay(1);
+            var rows = new List<COT_VCF.Domain.Results.FrameForceRead>();
+            foreach (var name in frameNames)
+            {
+                if (!analysisComplete)
+                {
+                    rows.Add(new(name, [], COT_VCF.Domain.Results.ResultValueStatus.AnalysisNotRun));
+                    continue;
+                }
+                var seed = 300.0 + Math.Abs(name.GetHashCode()) % 500;
+                var stations = new[] { 0.0, 0.5, 1.0 }.Select((station, index) =>
+                    new COT_VCF.Domain.Results.FrameForceStationRead(name, $"{name}-{index / 2 + 1}", station,
+                        index % 2 == 0 ? 0 : .5, outputCase, "Step", 1,
+                        Math.Round(-seed - station * 10, 2), Math.Round(seed * .08, 2), Math.Round(seed * .03, 2),
+                        Math.Round(seed * .02, 2), Math.Round(seed * .12, 2), Math.Round(seed * .18, 2))).ToArray();
+                rows.Add(new(name, stations, COT_VCF.Domain.Results.ResultValueStatus.Valid));
             }
             return rows;
         });
@@ -853,7 +915,9 @@ internal static class StudyExecutionChecks
                 Crashed = true;
                 throw new InvalidOperationException("SAP2000 process crashed.");
             }
-            await Task.Delay(Current.Path.Contains("_P01.sdb", StringComparison.Ordinal) ? 100 : 5);
+            // Keep P01 decisively slower than the complete verification + extraction pipeline so this
+            // scheduling check remains deterministic as new result modules are added.
+            await Task.Delay(Current.Path.Contains("_P01.sdb", StringComparison.Ordinal) ? 250 : 5);
             currentGeometry = CloneGeometry(proposed);
             analysisComplete = false;
         });

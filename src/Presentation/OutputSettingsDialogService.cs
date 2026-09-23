@@ -9,8 +9,8 @@ namespace COT_VCF.Presentation;
 public interface IOutputSettingsDialogService
 {
     bool EditDeflection(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
-    bool EditMemberForces(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection);
-    bool EditFoundations(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection);
+    bool EditMemberForces(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
+    bool EditFoundations(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
     bool EditCables(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection);
 }
 
@@ -45,7 +45,7 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         return true;
     }
 
-    public bool EditFoundations(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection)
+    public bool EditFoundations(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection)
     {
         var available = baseline.Points.Keys.OrderBy(x => x, StringComparer.Ordinal).ToArray();
         var left = selection.Select("Foundation Left — select exactly 2 points", available, settings.FoundationLeftPoints.ToArray());
@@ -61,8 +61,36 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
             return false;
         }
 
+        var owner = System.Windows.Application.Current?.MainWindow;
+        var dialog = BasicDialog("Foundation Reaction Result Case", 480, 230);
+        if (owner is not null) dialog.Owner = owner;
+        var panel = new StackPanel { Margin = new Thickness(18) };
+        panel.Children.Add(Label("Result case / combination", "SAP analysis load case or response combination used to extract global support reactions."));
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Fx / Fy / Fz [kN]   ·   Mx / My / Mz [kNm]   ·   Global axes",
+            Foreground = MutedBrush,
+            Margin = new Thickness(0, 0, 0, 8)
+        });
+        var combo = new ComboBox
+        {
+            ItemsSource = loadCases.OrderBy(x => x, StringComparer.Ordinal).ToArray(),
+            IsEditable = false,
+            SelectedItem = loadCases.FirstOrDefault(c => c.Equals(settings.FoundationReactionResultLoadCase, StringComparison.OrdinalIgnoreCase)),
+        };
+        panel.Children.Add(combo);
+        panel.Children.Add(Footer(dialog, "Save", () =>
+        {
+            if (combo.SelectedItem is string selectedCase && !string.IsNullOrWhiteSpace(selectedCase)) return true;
+            Info("Select a foundation reaction result case or combination.");
+            return false;
+        }));
+        dialog.Content = panel;
+        if (dialog.ShowDialog() != true) return false;
+
         Replace(settings.FoundationLeftPoints, left);
         Replace(settings.FoundationRightPoints, right);
+        settings.FoundationReactionResultLoadCase = combo.SelectedItem as string ?? "";
         return true;
     }
 
@@ -99,7 +127,7 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         return true;
     }
 
-    public bool EditMemberForces(OutputSettingsConfiguration settings, GeometryModel baseline, ISelectionService selection)
+    public bool EditMemberForces(OutputSettingsConfiguration settings, GeometryModel baseline, IReadOnlyList<string> loadCases, ISelectionService selection)
     {
         var rows = new ObservableCollection<MemberGroupRow>(settings.MemberForceGroups.Select(Clone));
         var owner = System.Windows.Application.Current?.MainWindow;
@@ -110,6 +138,22 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         var heading = new StackPanel { Margin = new Thickness(0, 0, 0, 10) };
         heading.Children.Add(new TextBlock { Text = "MEMBER FORCE OUTPUT GROUPS", Style = HeadingStyle });
         heading.Children.Add(new TextBlock { Text = "P / V2 / V3 [kN]   ·   T / M2 / M3 [kNm]", Foreground = MutedBrush });
+        heading.Children.Add(new TextBlock
+        {
+            Text = "Create separate groups for Top Chords, Bottom Chords, Vierendeel Members and Mega Columns.",
+            Foreground = MutedBrush,
+            Margin = new Thickness(0, 2, 0, 0)
+        });
+        heading.Children.Add(Label("Result load case", "SAP analysis load case used to extract every configured member-force group."));
+        var resultCase = new ComboBox
+        {
+            ItemsSource = loadCases.OrderBy(x => x, StringComparer.Ordinal).ToArray(),
+            IsEditable = false,
+            SelectedItem = loadCases.FirstOrDefault(c => c.Equals(settings.MemberForceResultLoadCase, StringComparison.OrdinalIgnoreCase)),
+            MinWidth = 320,
+            HorizontalAlignment = HorizontalAlignment.Left,
+        };
+        heading.Children.Add(resultCase);
         DockPanel.SetDock(heading, Dock.Top); root.Children.Add(heading);
 
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
@@ -119,6 +163,11 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
         {
             var problem = ValidateMemberRows(rows, null);
             if (problem is not null) { Info(problem); return; }
+            if (resultCase.SelectedItem is not string selectedCase || string.IsNullOrWhiteSpace(selectedCase))
+            {
+                Info("Select a member-force result load case.");
+                return;
+            }
             dialog.DialogResult = true;
         };
         footer.Children.Add(cancel); footer.Children.Add(save); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
@@ -166,6 +215,7 @@ public sealed class OutputSettingsDialogService : IOutputSettingsDialogService
             foreach (var member in row.Members) group.Members.Add(member);
             settings.MemberForceGroups.Add(group);
         }
+        settings.MemberForceResultLoadCase = resultCase.SelectedItem as string ?? "";
         return true;
     }
 

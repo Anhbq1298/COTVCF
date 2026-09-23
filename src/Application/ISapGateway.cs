@@ -32,7 +32,8 @@ public interface ISapGateway : IDisposable
     /// <summary>Assigns a Cable Loads / Target Force value on an existing load pattern.
     /// Reserved for execution and never called while editing Tab 3.</summary>
     Task SetCableTargetForceAsync(string cableName, string loadPattern, double targetForce, ModelInfo expected);
-    /// <summary>Every load case name in the model. Read-only; used by config compatibility validation.</summary>
+    /// <summary>Every load case and response-combination name in the model. Read-only; used by
+    /// result-output selection and config compatibility validation.</summary>
     Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected);
     /// <summary>Reads only the requested SAP groups and their point/frame/cable assignments.</summary>
     Task<IReadOnlyList<SapGroupSnapshot>> ReadOutputGroupsAsync(IReadOnlyList<string> groupNames, ModelInfo expected);
@@ -52,4 +53,16 @@ public interface ISapGateway : IDisposable
     /// a missing result is never reported as 0.</summary>
     Task<IReadOnlyList<CableForceRead>> GetCableForcesAsync(
         IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected);
+
+    /// <summary>Reads signed governing local-axis P/V2/V3/T/M2/M3 values for each requested frame.
+    /// Forces are kN, moments kNm, stations metres. Missing results are never reported as zero.</summary>
+    Task<IReadOnlyList<FrameForceRead>> GetFrameForcesAsync(
+        IReadOnlyList<string> frameNames, string outputCase, bool isCombo, ModelInfo expected) =>
+        throw new NotSupportedException("Frame-force extraction is not implemented by this SAP gateway.");
+
+    /// <summary>Reads every global-axis Fx/Fy/Fz/Mx/My/Mz support-reaction row for the requested points.
+    /// The selected case/combo and SAP step identity are retained; missing results are never reported as zero.</summary>
+    Task<IReadOnlyList<JointReactionRead>> GetJointReactionsAsync(
+        IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) =>
+        throw new NotSupportedException("Support-reaction extraction is not implemented by this SAP gateway.");
 }

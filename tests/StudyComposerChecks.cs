@@ -330,6 +330,7 @@ internal static class StudyComposerChecks
         public Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected) => Task.FromResult<IReadOnlyList<CableSection>>([]);
         public Task<IReadOnlyList<COT_VCF.Domain.Results.JointDisplacement>> GetJointDisplacementsAsync(IReadOnlyList<string> pointNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();
         public Task<IReadOnlyList<COT_VCF.Domain.Results.CableForceRead>> GetCableForcesAsync(IReadOnlyList<string> cableNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();
+        public Task<IReadOnlyList<COT_VCF.Domain.Results.FrameForceRead>> GetFrameForcesAsync(IReadOnlyList<string> frameNames, string outputCase, bool isCombo, ModelInfo expected) => throw new NotSupportedException();
         public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) =>
             Task.FromResult<IReadOnlyList<ForceSource>>([]);
         public Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected) => Task.CompletedTask;

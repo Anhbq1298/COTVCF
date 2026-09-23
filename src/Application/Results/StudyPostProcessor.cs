@@ -32,15 +32,29 @@ public sealed class StudyPostProcessor
         var consolidator = new ConsolidatedResultWriter();
         foreach (var result in results) consolidator.Add(result);
         var workbook = consolidator.Write(root, raw.DeflectionPoints, raw.DeflectionOutputCase,
-            raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, validCapacities, raw.CableResultCase);
+            raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, validCapacities, raw.CableResultCase,
+            raw.MemberGroups, raw.MemberForceResultCase, raw.FoundationLeftPoints,
+            raw.FoundationRightPoints, raw.FoundationReactionResultCase);
 
         var hasCableReport = results.Any(result => (result.CableForces?.Count ?? 0) > 0);
-        IReadOnlyList<string> currentReports = hasCableReport
-            ? ["deflection", "cable", "shortlist"]
-            : ["deflection", "shortlist"];
+        var hasMemberReport = results.Any(result => (result.MemberForceGroups?.Count ?? 0) > 0);
+        var hasSupportReport = results.Any(result => (result.SupportReactionGroups?.Count ?? 0) > 0);
+        var currentReports = new List<string> { "deflection" };
+        if (hasMemberReport) currentReports.Add("member");
+        if (hasSupportReport) currentReports.Add("support");
+        if (hasCableReport) currentReports.Add("cable");
+        currentReports.Add("shortlist");
         var deflection = new DeflectionReportGenerator().Generate(root, results,
             raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, currentReports);
 
+        string? member = null;
+        if (hasMemberReport)
+            member = new MemberForceReportGenerator().Generate(root, results,
+                raw.BaselineModelName, raw.StudyMode, currentReports);
+        string? support = null;
+        if (hasSupportReport)
+            support = new SupportReactionReportGenerator().Generate(root, results,
+                raw.BaselineModelName, raw.StudyMode, currentReports);
         string? cable = null;
         if (hasCableReport)
             cable = new CableForceReportGenerator().Generate(root, results,
@@ -50,7 +64,7 @@ public sealed class StudyPostProcessor
         var shortlist = new StudyShortlistExporter().Export(root, decisions, decisionCriteria,
             siblingReports: currentReports);
         var rawFolder = Path.Combine(root, StudyRawDataStore.DirectoryName);
-        return new(StudyArtifactState.Ready, workbook, deflection, cable, null,
+        return new(StudyArtifactState.Ready, workbook, deflection, member, support, cable, null,
             shortlist.WorkbookPath, shortlist.HtmlPath,
             Path.Combine(rawFolder, StudyRawDataStore.JsonFileName),
             Path.Combine(rawFolder, StudyRawDataStore.CsvFileName));

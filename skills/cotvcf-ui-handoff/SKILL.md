@@ -213,11 +213,12 @@ Tab 04 defines study-wide output monitoring only; editing the tab does not write
 - Fixed output units: displacement mm, force kN, moment kNm.
 - Output groups use the reserved `[O]-` namespace: `[O]-DeflectionMonitorPts`, dynamic member-force groups `[O]-{user suffix}`, `[O]-FoundationLeft`, `[O]-FoundationRight`, and `[O]-CableMonitor`.
 - Deflection monitoring selects baseline Point Objects and fixes the future output to Global U3.
-- Member-force groups are user-defined application groups over baseline Frame Objects; one frame belongs to at most one member-force output group. Future components are P/V2/V3 and T/M2/M3.
+- Member-force groups are user-defined application groups over baseline Frame Objects; one frame belongs to at most one member-force output group. A shared result case/combo is required. Extraction retains signed local P/V2/V3 and T/M2/M3 for every SAP analysis element and result station returned for each selected frame object; it must not collapse an auto-meshed frame object to one governing value.
 - Foundations require exactly two baseline points on the Left and exactly two on the Right, with no overlap.
 - Cable output selects baseline Cable Objects plus a SAP analysis load case. This is distinct from Tab 03's target-force load pattern.
 - Configuration is persisted as `Tab05OutputSettings`; opening a project restores definitions only and never mutates SAP.
 - When Tab 05 Run starts, `OutputGroupPreparationService` is the preflight gate: verify the active model is the immutable session parent and unlocked, replace/read-back all requested `[O]-` groups, save the parent .sdb, then freeze the execution snapshot. No worker or child may start before this succeeds.
+- Member-force extraction retains every SAP station and result step; support reactions retain the configured Left/Right foundation points and global force/moment components. Tab 06 generates their reports from the raw JSON package.
 - Children inherit the saved parent groups. The run extracts the configured results as raw candidate data;
   it does not create Excel workbooks or HTML reports.
 
@@ -280,7 +281,7 @@ Study composition plus isolated child-model building, analysis, raw-result extra
   then the study publishes canonical lossless `Study/RawData/Study_Raw_Results.json` plus a flat
   `Study_Raw_Results.csv` companion. It does not generate `.xlsx` or `.html`, including candidate diagnostics.
 - Tab 06 is the only report-generation boundary. `Generate Outputs` / `Regenerate` reads the raw JSON and creates
-  the candidate diagnostics, consolidated workbook, deflection/cable HTML, and shortlist outputs without a SAP
+  the candidate diagnostics, consolidated workbook, deflection/cable/member-force/support-reaction HTML, and shortlist outputs without a SAP
   gateway. The CSV is a spreadsheet-friendly raw view; JSON is the canonical complete post-processing input.
 - Capacity and decision criteria are post-processing inputs. Changing `fpu`, `φ`, or criteria must not invalidate
   reusable analyzed children; the next explicit Tab 06 generation uses the current derived capacities and criteria.

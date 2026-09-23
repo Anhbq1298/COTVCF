@@ -15,7 +15,7 @@ namespace COT_VCF.Application.Results;
 public sealed class ConsolidatedResultWriter
 {
     public const string WorkbookFileName = "Deflection_Results_Source.xlsx";
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
 
     private readonly ConcurrentBag<CandidateResultDto> results = [];
 
@@ -27,7 +27,12 @@ public sealed class ConsolidatedResultWriter
     public string Write(string studyFolder, IReadOnlyList<string> deflectionPoints, string deflectionCase,
         string baselineName, string baselinePath, IterationStudyMode studyMode,
         IReadOnlyDictionary<string, double>? cableCapacities = null,
-        string cableResultCase = "")
+        string cableResultCase = "",
+        IReadOnlyList<OutputSapGroupDefinition>? memberGroups = null,
+        string memberForceCase = "",
+        IReadOnlyList<string>? foundationLeftPoints = null,
+        IReadOnlyList<string>? foundationRightPoints = null,
+        string foundationReactionCase = "")
     {
         Directory.CreateDirectory(studyFolder);
         var path = Path.Combine(studyFolder, WorkbookFileName);
@@ -37,11 +42,16 @@ public sealed class ConsolidatedResultWriter
         Candidates(wb.Worksheets.Add("Candidates"), ordered);
         MonitoredPointResults(wb.Worksheets.Add("MonitoredPointResults"), ordered);
         CableForceResults(wb.Worksheets.Add("CableForceResults"), ordered);
+        MemberForceResults(wb.Worksheets.Add("MemberForceResults"), ordered);
+        SupportReactionResults(wb.Worksheets.Add("SupportReactionResults"), ordered);
         CableProperties(wb.Worksheets.Add("CableProperties"), cableCapacities);
         OutputConfiguration(wb.Worksheets.Add("OutputConfiguration"), deflectionPoints, deflectionCase);
+        MemberForceConfiguration(wb.Worksheets.Add("MemberForceConfiguration"), memberGroups ?? [], memberForceCase);
+        FoundationReactionConfiguration(wb.Worksheets.Add("FoundationReactionConfiguration"),
+            foundationLeftPoints ?? [], foundationRightPoints ?? [], foundationReactionCase);
         Warnings(wb.Worksheets.Add("Warnings"), ordered);
         Meta(wb.Worksheets.Add("Meta"), baselineName, baselinePath, studyFolder, studyMode, ordered.Count,
-            deflectionCase, cableResultCase);
+            deflectionCase, cableResultCase, memberForceCase, foundationReactionCase);
 
         AtomicFile.Write(path, wb.SaveAs);
         return path;
@@ -138,6 +148,80 @@ public sealed class ConsolidatedResultWriter
         Finish(ws);
     }
 
+    private static void MemberForceResults(IXLWorksheet ws, IReadOnlyList<CandidateResultDto> rows)
+    {
+        Header(ws, "IterationKey", "RunIndex", "GroupName", "SapGroupName", "OutputCase",
+            "FrameObject", "FrameSequence", "ElementName", "ObjectStation_m", "ElementStation_m",
+            "ProfileCoordinate_m", "StepType", "StepNumber", "P_kN", "V2_kN", "V3_kN",
+            "T_kNm", "M2_kNm", "M3_kNm", "ResultStatus", "Warning");
+        var r = 2;
+        foreach (var candidate in rows)
+            foreach (var group in candidate.MemberForceGroups ?? [])
+                foreach (var station in group.Stations)
+                {
+                    var col = 1;
+                    ws.Cell(r, col++).Value = candidate.IterationKey;
+                    ws.Cell(r, col++).Value = candidate.Parameters.RunIndex;
+                    ws.Cell(r, col++).Value = group.GroupName;
+                    ws.Cell(r, col++).Value = group.SapGroupName;
+                    ws.Cell(r, col++).Value = group.OutputCase;
+                    ws.Cell(r, col++).Value = station.FrameName;
+                    ws.Cell(r, col++).Value = station.FrameSequence;
+                    ws.Cell(r, col++).Value = station.ElementName;
+                    ws.Cell(r, col++).Value = station.ObjectStationM;
+                    ws.Cell(r, col++).Value = station.ElementStationM;
+                    ws.Cell(r, col++).Value = station.ProfileCoordinateM;
+                    ws.Cell(r, col++).Value = station.StepType;
+                    ws.Cell(r, col++).Value = station.StepNumber;
+                    ws.Cell(r, col++).Value = station.P;
+                    ws.Cell(r, col++).Value = station.V2;
+                    ws.Cell(r, col++).Value = station.V3;
+                    ws.Cell(r, col++).Value = station.T;
+                    ws.Cell(r, col++).Value = station.M2;
+                    ws.Cell(r, col++).Value = station.M3;
+                    ws.Cell(r, col++).Value = station.Status.ToString();
+                    ws.Cell(r, col++).Value = station.Warning ?? "";
+                    r++;
+                }
+        Finish(ws);
+    }
+
+    private static void SupportReactionResults(IXLWorksheet ws, IReadOnlyList<CandidateResultDto> rows)
+    {
+        Header(ws, "IterationKey", "RunIndex", "FoundationSide", "SapGroupName", "OutputCase",
+            "PointName", "PointSequence", "X_m", "Y_m", "Z_m", "StepType", "StepNumber",
+            "Fx_kN", "Fy_kN", "Fz_kN", "Mx_kNm", "My_kNm", "Mz_kNm", "ResultStatus", "Warning");
+        var r = 2;
+        foreach (var candidate in rows)
+            foreach (var group in candidate.SupportReactionGroups ?? [])
+                foreach (var point in group.Points)
+                {
+                    var col = 1;
+                    ws.Cell(r, col++).Value = candidate.IterationKey;
+                    ws.Cell(r, col++).Value = candidate.Parameters.RunIndex;
+                    ws.Cell(r, col++).Value = group.FoundationSide;
+                    ws.Cell(r, col++).Value = group.SapGroupName;
+                    ws.Cell(r, col++).Value = group.OutputCase;
+                    ws.Cell(r, col++).Value = point.PointName;
+                    ws.Cell(r, col++).Value = point.PointSequence;
+                    ws.Cell(r, col++).Value = point.X;
+                    ws.Cell(r, col++).Value = point.Y;
+                    ws.Cell(r, col++).Value = point.Z;
+                    ws.Cell(r, col++).Value = point.StepType;
+                    ws.Cell(r, col++).Value = point.StepNumber;
+                    SetNum(ws.Cell(r, col++), point.Fx);
+                    SetNum(ws.Cell(r, col++), point.Fy);
+                    SetNum(ws.Cell(r, col++), point.Fz);
+                    SetNum(ws.Cell(r, col++), point.Mx);
+                    SetNum(ws.Cell(r, col++), point.My);
+                    SetNum(ws.Cell(r, col++), point.Mz);
+                    ws.Cell(r, col++).Value = point.Status.ToString();
+                    ws.Cell(r, col++).Value = point.Warning ?? "";
+                    r++;
+                }
+        Finish(ws);
+    }
+
     /// <summary>Per-cable design capacity [kN] — study-global post-processing input, so the utilisation views
     /// in Cable_Forces_Report.html survive a SAP-free regeneration from this workbook alone.</summary>
     private static void CableProperties(IXLWorksheet ws, IReadOnlyDictionary<string, double>? capacities)
@@ -171,6 +255,46 @@ public sealed class ConsolidatedResultWriter
         Finish(ws);
     }
 
+    private static void MemberForceConfiguration(IXLWorksheet ws, IReadOnlyList<OutputSapGroupDefinition> groups, string outputCase)
+    {
+        Header(ws, "SapGroupName", "FrameName", "OutputCase", "Components", "Reduction");
+        var r = 2;
+        foreach (var group in groups.Where(group => group.ObjectKind == OutputGroupObjectKind.Frame))
+            foreach (var name in group.ObjectNames)
+            {
+                ws.Cell(r, 1).Value = group.Name;
+                ws.Cell(r, 2).Value = name;
+                ws.Cell(r, 3).Value = outputCase;
+                ws.Cell(r, 4).Value = "P,V2,V3,T,M2,M3";
+                ws.Cell(r, 5).Value = "All SAP object/analysis-element result stations; signed local components retained";
+                r++;
+            }
+        Finish(ws);
+    }
+
+    private static void FoundationReactionConfiguration(IXLWorksheet ws, IReadOnlyList<string> left,
+        IReadOnlyList<string> right, string outputCase)
+    {
+        Header(ws, "FoundationSide", "SapGroupName", "PointName", "OutputCase", "Components", "CoordinateSystem");
+        var r = 2;
+        void Add(string side, string sapGroup, IReadOnlyList<string> names)
+        {
+            foreach (var name in names)
+            {
+                ws.Cell(r, 1).Value = side;
+                ws.Cell(r, 2).Value = sapGroup;
+                ws.Cell(r, 3).Value = name;
+                ws.Cell(r, 4).Value = outputCase;
+                ws.Cell(r, 5).Value = "Fx,Fy,Fz,Mx,My,Mz";
+                ws.Cell(r, 6).Value = "Global";
+                r++;
+            }
+        }
+        Add("Left", OutputGroupNaming.FoundationLeft, left);
+        Add("Right", OutputGroupNaming.FoundationRight, right);
+        Finish(ws);
+    }
+
     private static void Warnings(IXLWorksheet ws, IReadOnlyList<CandidateResultDto> rows)
     {
         Header(ws, "IterationKey", "Category", "Severity", "Message", "Timestamp");
@@ -189,7 +313,8 @@ public sealed class ConsolidatedResultWriter
     }
 
     private static void Meta(IXLWorksheet ws, string baselineName, string baselinePath, string studyFolder,
-        IterationStudyMode mode, int candidateCount, string deflectionOutputCase, string cableResultCase)
+        IterationStudyMode mode, int candidateCount, string deflectionOutputCase, string cableResultCase,
+        string memberForceCase, string foundationReactionCase)
     {
         Header(ws, "Key", "Value");
         var kv = new (string, string)[]
@@ -203,6 +328,8 @@ public sealed class ConsolidatedResultWriter
             ("CandidateCount", candidateCount.ToString()),
             ("DeflectionOutputCase", deflectionOutputCase),
             ("CableResultCase", cableResultCase),
+            ("MemberForceResultCase", memberForceCase),
+            ("FoundationReactionResultCase", foundationReactionCase),
             ("GeneratedAt", Iso(DateTimeOffset.Now)),
         };
         for (var i = 0; i < kv.Length; i++) { ws.Cell(i + 2, 1).Value = kv[i].Item1; ws.Cell(i + 2, 2).Value = kv[i].Item2; }
@@ -280,6 +407,51 @@ public sealed class ConsolidatedResultWriter
                     StringComparer.Ordinal)
             : null;
 
+        var memberForceByKey = wb.Worksheets.Contains("MemberForceResults")
+            ? wb.Worksheet("MemberForceResults").RowsUsed().Skip(1)
+                .Select(row => new
+                {
+                    Key = row.Cell(1).GetString(),
+                    Group = row.Cell(3).GetString(),
+                    SapGroup = row.Cell(4).GetString(),
+                    Case = row.Cell(5).GetString(),
+                    Frame = row.Cell(6).GetString(),
+                    Sequence = (int)row.Cell(7).GetDouble(),
+                    Element = row.Cell(8).GetString(),
+                    ObjectStation = row.Cell(9).GetDouble(),
+                    ElementStation = row.Cell(10).GetDouble(),
+                    ProfileCoordinate = row.Cell(11).GetDouble(),
+                    StepType = row.Cell(12).GetString(),
+                    StepNumber = row.Cell(13).GetDouble(),
+                    P = row.Cell(14).GetDouble(), V2 = row.Cell(15).GetDouble(), V3 = row.Cell(16).GetDouble(),
+                    T = row.Cell(17).GetDouble(), M2 = row.Cell(18).GetDouble(), M3 = row.Cell(19).GetDouble(),
+                    Status = Enum.TryParse<ResultValueStatus>(row.Cell(20).GetString(), out var status) ? status : ResultValueStatus.ApiError,
+                    Warning = row.Cell(21).GetString(),
+                })
+                .ToLookup(row => row.Key, StringComparer.Ordinal)
+            : null;
+
+        var supportReactionByKey = wb.Worksheets.Contains("SupportReactionResults")
+            ? wb.Worksheet("SupportReactionResults").RowsUsed().Skip(1)
+                .Select(row => new
+                {
+                    Key = row.Cell(1).GetString(),
+                    Side = row.Cell(3).GetString(),
+                    SapGroup = row.Cell(4).GetString(),
+                    Case = row.Cell(5).GetString(),
+                    Point = row.Cell(6).GetString(),
+                    Sequence = (int)row.Cell(7).GetDouble(),
+                    X = row.Cell(8).GetDouble(), Y = row.Cell(9).GetDouble(), Z = row.Cell(10).GetDouble(),
+                    StepType = row.Cell(11).GetString(), StepNumber = row.Cell(12).GetDouble(),
+                    Fx = Num(row.Cell(13)), Fy = Num(row.Cell(14)), Fz = Num(row.Cell(15)),
+                    Mx = Num(row.Cell(16)), My = Num(row.Cell(17)), Mz = Num(row.Cell(18)),
+                    Status = Enum.TryParse<ResultValueStatus>(row.Cell(19).GetString(), out var status)
+                        ? status : ResultValueStatus.ApiError,
+                    Warning = row.Cell(20).GetString(),
+                })
+                .ToLookup(row => row.Key, StringComparer.Ordinal)
+            : null;
+
         var pointRows = wb.Worksheet("MonitoredPointResults").RowsUsed().Skip(1)
             .Select(row => new
             {
@@ -344,12 +516,35 @@ public sealed class ConsolidatedResultWriter
                         x.Status, string.IsNullOrEmpty(x.Warning) ? null : x.Warning)).ToArray()))
                 .ToArray();
 
+            var memberGroups = (memberForceByKey?[key] ?? [])
+                .GroupBy(x => (x.Group, x.SapGroup, x.Case))
+                .Select(group => new MemberForceGroupResultDto(
+                    group.Key.Group, group.Key.SapGroup, group.Key.Case,
+                    group.OrderBy(x => x.ProfileCoordinate).ThenBy(x => x.Sequence).ThenBy(x => x.Element, StringComparer.Ordinal)
+                        .ThenBy(x => x.ElementStation).ThenBy(x => x.StepType, StringComparer.Ordinal).ThenBy(x => x.StepNumber)
+                        .Select(x => new MemberForceStationResultDto(x.Frame, x.Sequence, x.Element,
+                            x.ObjectStation, x.ElementStation, x.ProfileCoordinate, x.StepType, x.StepNumber,
+                            x.P, x.V2, x.V3, x.T, x.M2, x.M3, x.Status,
+                            string.IsNullOrEmpty(x.Warning) ? null : x.Warning)).ToArray()))
+                .ToArray();
+
+            var supportGroups = (supportReactionByKey?[key] ?? [])
+                .GroupBy(x => (x.Side, x.SapGroup, x.Case))
+                .Select(group => new SupportReactionGroupResultDto(
+                    group.Key.Side, group.Key.SapGroup, group.Key.Case,
+                    group.OrderBy(x => x.Sequence).ThenBy(x => x.Point, StringComparer.Ordinal)
+                        .ThenBy(x => x.StepType, StringComparer.Ordinal).ThenBy(x => x.StepNumber)
+                        .Select(x => new SupportReactionPointResultDto(x.Point, x.Sequence, x.X, x.Y, x.Z,
+                            x.StepType, x.StepNumber, x.Fx, x.Fy, x.Fz, x.Mx, x.My, x.Mz, x.Status,
+                            string.IsNullOrEmpty(x.Warning) ? null : x.Warning)).ToArray()))
+                .ToArray();
+
             candidates.Add(new CandidateResultDto(
                 key, row.Cell(4).GetString(), baselinePath, baselineName, studyMode, parameters,
                 ParseIso(row.Cell(15).GetString()), ParseIso(row.Cell(16).GetString()), ParseIso(row.Cell(17).GetString()),
                 Enum.TryParse<CandidateExtractionStatus>(row.Cell(14).GetString(), out var es) ? es : CandidateExtractionStatus.ExtractedOk,
                 groups, warnRows[key].ToArray(),
-                cableForceByKey?[key].ToArray() ?? []));
+                cableForceByKey?[key].ToArray() ?? [], memberGroups, supportGroups));
         }
         return candidates.OrderBy(c => c.Parameters.RunIndex).ToArray();
     }
@@ -370,6 +565,7 @@ public sealed class ConsolidatedResultWriter
     private static void Finish(IXLWorksheet ws) => ws.Columns().AdjustToContents();
 
     private static void SetNum(IXLCell cell, double? value) { if (value is { } v) cell.Value = v; }
+    private static double? Num(IXLCell cell) => cell.TryGetValue<double>(out var value) ? value : null;
     private static string Iso(DateTimeOffset t) => t.ToString("o", CultureInfo.InvariantCulture);
     private static DateTimeOffset ParseIso(string s) =>
         DateTimeOffset.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var t) ? t : default;

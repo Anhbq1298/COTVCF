@@ -33,13 +33,27 @@ public sealed class NullableDoubleConverter : IValueConverter
     {
         var text = value?.ToString()?.Trim();
         if (string.IsNullOrWhiteSpace(text)) return null;
-        // Accept common engineering-number formats, but never retain a hidden previous value when the
-        // visible editor text is malformed. ValidatesOnExceptions surfaces this as an inline WPF error.
-        const NumberStyles styles = NumberStyles.Float | NumberStyles.AllowThousands | NumberStyles.AllowParentheses;
-        if (double.TryParse(text, styles, culture, out var n) && double.IsFinite(n)) return n;
-        if (double.TryParse(text, styles, CultureInfo.InvariantCulture, out n) && double.IsFinite(n)) return n;
-        if (double.TryParse(text.Replace(',', '.'), styles, CultureInfo.InvariantCulture, out n) && double.IsFinite(n)) return n;
+        if (TryParseEngineeringNumber(text, out var number)) return number;
         throw new FormatException("Enter a finite number.");
+    }
+
+    private static bool TryParseEngineeringNumber(string text, out double number)
+    {
+        var normalized = text.Trim();
+        var hasDot = normalized.Contains('.');
+        var hasComma = normalized.Contains(',');
+
+        // Engineering inputs do not use digit grouping. Accept either common decimal separator so
+        // values copied from regional spreadsheets/keyboards behave consistently on every machine.
+        if (hasDot && hasComma)
+        {
+            number = default;
+            return false;
+        }
+        if (hasComma) normalized = normalized.Replace(',', '.');
+
+        return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out number)
+            && double.IsFinite(number);
     }
 }
 

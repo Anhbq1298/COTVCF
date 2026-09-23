@@ -19,6 +19,11 @@ public sealed class StudyRawDataPackage
     public IterationStudyMode StudyMode { get; set; }
     public List<string> DeflectionPoints { get; set; } = [];
     public string DeflectionOutputCase { get; set; } = "";
+    public List<OutputSapGroupDefinition> MemberGroups { get; set; } = [];
+    public string MemberForceResultCase { get; set; } = "";
+    public List<string> FoundationLeftPoints { get; set; } = [];
+    public List<string> FoundationRightPoints { get; set; } = [];
+    public string FoundationReactionResultCase { get; set; } = "";
     public string CableResultCase { get; set; } = "";
     public Dictionary<string, double> CableDesignCapacities { get; set; } = new(StringComparer.Ordinal);
     public StudyDecisionCriteria DecisionCriteria { get; set; } = new(50, 75, null, null, 0.9, 0.5, 0.3, 0.2);
@@ -68,6 +73,11 @@ public sealed class StudyRawDataStore
             DeflectionPoints = snapshot.DeflectionPoints.ToList(),
             DeflectionOutputCase = snapshot.DeflectionOutputCase,
             CableResultCase = snapshot.CableResultLoadCase,
+            MemberGroups = snapshot.OutputGroups.Where(group => group.ObjectKind == OutputGroupObjectKind.Frame).ToList(),
+            MemberForceResultCase = snapshot.MemberForceResultCase,
+            FoundationLeftPoints = snapshot.FoundationLeftPoints.ToList(),
+            FoundationRightPoints = snapshot.FoundationRightPoints.ToList(),
+            FoundationReactionResultCase = snapshot.FoundationReactionResultCase,
             CableDesignCapacities = snapshot.CableDesignCapacities
                 .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && double.IsFinite(pair.Value) && pair.Value > 0)
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
