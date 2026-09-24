@@ -625,13 +625,28 @@ public sealed class SapGateway : ISapGateway
         {
             foreach (var item in assignments)
             {
-                Verify(expected, true); attempted.Add(item);
+                Verify(expected, true);
                 double[] values = [item.Load.Fx, item.Load.Fy, item.Load.Fz, item.Original[3], item.Original[4], item.Original[5]];
-                Check(Model.PointObj.SetLoadForce(item.Load.PointName, item.Load.LoadPattern, ref values, true, "Global", eItemType.Objects),
-                    "PointObj.SetLoadForce", $"{item.Load.PointName} / {item.Load.LoadPattern} / Fz={item.Load.Fz:0.###}");
+                // SAP2000 rejects an all-zero SetLoadForce (return code 1), so a zero target removes the
+                // pattern's assignment instead; with no prior assignment there is nothing to write.
+                var clear = values.All(value => Close(value, 0));
+                if (clear && !item.Existed) continue;
+                attempted.Add(item);
+                if (clear)
+                    Check(Model.PointObj.DeleteLoadForce(item.Load.PointName, item.Load.LoadPattern, eItemType.Objects),
+                        "PointObj.DeleteLoadForce", $"{item.Load.PointName} / {item.Load.LoadPattern}");
+                else
+                    Check(Model.PointObj.SetLoadForce(item.Load.PointName, item.Load.LoadPattern, ref values, true, "Global", eItemType.Objects),
+                        "PointObj.SetLoadForce", $"{item.Load.PointName} / {item.Load.LoadPattern} / Fz={item.Load.Fz:0.###}");
                 var written = ReadPointForceAssignments(item.Load.PointName)
                     .Where(candidate => candidate.LoadPattern.Equals(item.Load.LoadPattern, StringComparison.OrdinalIgnoreCase))
                     .ToArray();
+                if (clear)
+                {
+                    if (written.Length != 0)
+                        throw new InvalidOperationException($"SAP2000 did not remove the zero joint load: {item.Load.PointName} / {item.Load.LoadPattern}.");
+                    continue;
+                }
                 if (written.Length != 1 || written[0].Step != 0 ||
                     !written[0].CoordinateSystem.Equals("Global", StringComparison.OrdinalIgnoreCase) ||
                     !SameValues(written[0].Values, values))

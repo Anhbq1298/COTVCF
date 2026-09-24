@@ -35,6 +35,14 @@ internal static class GatewayChecks
         fake.Locked = false; fake.Units = eUnits.N_mm_C;
         Throws(() => gateway.ApplyLoadsAsync([new("p1", "LIVE", 1, 0, 0)], expected).GetAwaiter().GetResult());
         Check(fake.WriteCount == calls, "Changed SAP units reject writes"); fake.Units = eUnits.kN_m_C;
+        fake.Loads["p1"] = [0, 0, -12000, 0, 0, 0];
+        gateway.ApplyLoadsAsync([new("p1", "LIVE", 0, 0, -0.0)], expected).GetAwaiter().GetResult();
+        Check(!fake.Loads.ContainsKey("p1") && gateway.GetPointLoadsAsync("p1", expected).GetAwaiter().GetResult().Count == 0,
+            "A zero target joint load removes the assignment instead of the all-zero SetLoadForce SAP2000 rejects");
+        calls = fake.WriteCount;
+        gateway.ApplyLoadsAsync([new("p1", "LIVE", 0, 0, 0)], expected).GetAwaiter().GetResult();
+        Check(fake.WriteCount == calls && !fake.Loads.ContainsKey("p1"), "A zero target joint load with no existing assignment writes nothing");
+        fake.Loads["p1"] = [1, 2, 3, 40, 50, 60];
         var geometry = new GeometryModel(fake.Points.ToDictionary(p => p.Key, p => new StructuralPoint(p.Key, p.Value)),
             [new StructuralMember("Cable-A", "p1", "p2", MemberKind.Cable)]);
         fake.PresentCoordSystem = "Local-CSys";
@@ -119,11 +127,21 @@ internal static class GatewayChecks
                     case "GetNameList": a[0] = Points.Count; a[1] = Points.Keys.ToArray(); return 0;
                     case "GetCoordCartesian": var pos = Points[(string)a[0]!]; a[1] = pos.X; a[2] = pos.Y; a[3] = pos.Z; return 0;
                     case "GetLoadForce":
-                        string key = (string)a[0]!; a[1] = 1; a[2] = new[] { key }; a[3] = new[] { "LIVE" }; a[4] = new[] { 0 }; a[5] = new[] { "Global" };
+                        string key = (string)a[0]!;
+                        if (!Loads.ContainsKey(key))
+                        {
+                            a[1] = 0; a[2] = Array.Empty<string>(); a[3] = Array.Empty<string>(); a[4] = Array.Empty<int>(); a[5] = Array.Empty<string>();
+                            for (int i = 0; i < 6; i++) a[6 + i] = Array.Empty<double>(); return 0;
+                        }
+                        a[1] = 1; a[2] = new[] { key }; a[3] = new[] { "LIVE" }; a[4] = new[] { 0 }; a[5] = new[] { "Global" };
                         for (int i = 0; i < 6; i++) a[6 + i] = new[] { Loads[key][i] }; return 0;
                     case "SetLoadForce":
-                        WriteCount++; string p = (string)a[0]!; Loads[p] = ((double[])a[2]!).ToArray();
+                        WriteCount++; string p = (string)a[0]!;
+                        if (((double[])a[2]!).All(value => value == 0)) return 1; // SAP2000 rejects all-zero joint loads.
+                        Loads[p] = ((double[])a[2]!).ToArray();
                         if (FailLoadName == p) { FailLoadName = null; return 9; } return 0;
+                    case "DeleteLoadForce":
+                        WriteCount++; Loads.Remove((string)a[0]!); return 0;
                     default: throw new NotSupportedException(name);
                 }
             });

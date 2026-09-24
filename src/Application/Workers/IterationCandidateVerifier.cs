@@ -48,6 +48,9 @@ public sealed class IterationCandidateVerifier
             {
                 var matches = actual.Where(load =>
                     load.LoadPattern.Equals(expected.LoadPattern, StringComparison.OrdinalIgnoreCase)).ToArray();
+                // A zero target force is written as "no assignment" because SAP2000 rejects all-zero joint loads.
+                if (matches.Length == 0 && Close(expected.Fx, 0) && Close(expected.Fy, 0) && Close(expected.Fz, 0))
+                    continue;
                 if (matches.Length != 1 || !Close(matches[0].Fx, expected.Fx) ||
                     !Close(matches[0].Fy, expected.Fy) || !Close(matches[0].Fz, expected.Fz))
                     throw new InvalidOperationException(
