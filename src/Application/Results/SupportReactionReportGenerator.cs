@@ -63,7 +63,7 @@ public sealed class SupportReactionReportGenerator
             .Select(warning => new ResultReportWarningDto(warning.IterationKey, warning.Category,
                 warning.Severity.ToString(), warning.Message)).ToArray();
         return new(new(baselineName, studyMode.ToString(), results.Count, DateTimeOffset.Now.ToString("o"),
-            IndividualProfileLimit), groups, warnings, siblingReports ?? []);
+            IndividualProfileLimit), groups, ReportCandidateDefinitions.Build(results), warnings, siblingReports ?? []);
     }
 
     public string BuildHtml(SupportReactionReportDto dto)
@@ -72,15 +72,15 @@ public sealed class SupportReactionReportGenerator
         var library = ReportNav.Library("support", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Support Reactions — {{Esc(dto.Study.BaselineModelName)}}</title>
-<style>{{Style}}</style></head><body><header><div><h1>Support Reactions Results Viewer</h1>
+<style>{{Style}}{{ReportCandidateDefinitions.Style}}</style></head><body><header><div><h1>Support Reactions Results Viewer</h1>
 <div>{{Esc(dto.Study.BaselineModelName)}} · {{dto.Study.CandidateCount}} candidate(s) · {{Esc(dto.Study.StudyMode)}}</div>
 <p>Global support reactions at the two Left and two Right foundation points selected in Output Settings. Forces are kN and moments are kNm. Points are discrete supports; chart markers are not joined into a structural curve.</p></div>{{library}}</header>
 <nav><label>Foundation <select id="group"><option value="all">Left + Right</option></select></label>
 <label>Component <select id="component"><option>Fx</option><option>Fy</option><option selected>Fz</option><option>Mx</option><option>My</option><option>Mz</option></select></label>
 <label>Result step <select id="step"></select></label><label>View <select id="view"><option value="supports">Individual supports</option><option value="totals">Foundation totals</option><option value="matrix">Candidate matrix</option></select></label>
 <button id="reset">Reset filters</button><span id="scope"></span></nav><div id="filters"></div><div id="notice" hidden></div>
-<main id="panels"></main><div id="warnings"></div><div id="tip" hidden></div>
-<script type="application/json" id="data">{{data}}</script><script>{{Script}}</script></body></html>
+<main id="panels"></main>{{ReportCandidateDefinitions.Markup}}<div id="warnings"></div><div id="tip" hidden></div>
+<script type="application/json" id="report-data">{{data}}</script><script>{{ReportCandidateDefinitions.Script}}</script><script>{{Script}}</script></body></html>
 """;
     }
 
@@ -91,7 +91,7 @@ public sealed class SupportReactionReportGenerator
 """;
 
     private const string Script = """
-(()=>{const D=JSON.parse(document.getElementById('data').textContent),G=document.getElementById('group'),C=document.getElementById('component'),S=document.getElementById('step'),V=document.getElementById('view'),P=document.getElementById('panels'),N=document.getElementById('notice'),Q=document.getElementById('scope'),TIP=document.getElementById('tip');
+(()=>{const D=JSON.parse(document.getElementById('report-data').textContent),G=document.getElementById('group'),C=document.getElementById('component'),S=document.getElementById('step'),V=document.getElementById('view'),P=document.getElementById('panels'),N=document.getElementById('notice'),Q=document.getElementById('scope'),TIP=document.getElementById('tip');
 const chosen={loadId:new Set(),heightId:new Set(),pretensionId:new Set()},colors=['#1f77b4','#d62728','#2ca02c','#ff7f0e','#9467bd','#17becf'];let hi=null;
 const esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])),fmt=x=>Math.abs(x)>=100?x.toFixed(0):Math.abs(x)>=1?x.toFixed(2):x.toFixed(3),prop=()=>C.value[0].toLowerCase()+C.value.slice(1),unit=()=>C.value[0]==='M'?'kNm':'kN',step=r=>`${r.stepType||'Static'} · ${Number(r.stepNumber).toLocaleString()}`;
 D.groups.forEach((g,i)=>G.add(new Option(`${g.foundationSide} · ${g.outputCase}`,i)));const gs=()=>G.value==='all'?D.groups:[D.groups[+G.value]],scope=g=>g.series.filter(x=>Object.keys(chosen).every(k=>!chosen[k].size||chosen[k].has(x[k]))),rows=x=>x.rows.filter(r=>r.status==='Valid'&&step(r)===S.value&&Number.isFinite(r[prop()]));

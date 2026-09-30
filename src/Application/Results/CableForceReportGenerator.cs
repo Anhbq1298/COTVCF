@@ -132,8 +132,9 @@ public sealed class CableForceReportGenerator
             .Where(kv => cableSet.Contains(kv.Key) && double.IsFinite(kv.Value) && kv.Value > 0)
             .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
 
-        return new CableForceReportDto(study, cables, loads, heights, pretensions, rows, yMin, yMax, warnings,
-            caps, (siblingReports ?? ["cable"]).ToArray());
+        return new CableForceReportDto(study, cables, loads, heights, pretensions, rows, yMin, yMax,
+            ReportCandidateDefinitions.Build(results), warnings, caps,
+            (siblingReports ?? ["cable"]).ToArray());
     }
 
     private static string Num(double? v) => v is { } d ? d.ToString("0.###", CultureInfo.InvariantCulture) : "n/a";
@@ -148,7 +149,7 @@ public sealed class CableForceReportGenerator
         var library = ReportNav.Library("cable", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Cable Forces — {{Esc(s.BaselineModelName)}}</title>
-<style>{{Style}}</style></head>
+<style>{{Style}}{{ReportCandidateDefinitions.Style}}</style></head>
 <body>
 <header>
   <div>
@@ -193,6 +194,8 @@ public sealed class CableForceReportGenerator
   <div id="meters" class="meters"></div>
 </section>
 
+{{ReportCandidateDefinitions.Markup}}
+
 <details class="block"><summary>Source Data</summary><div class="body"><div class="tablewrap"><table><thead><tr>
   <th>Run</th><th>Candidate</th><th>Iteration Key</th><th>Load</th><th>Height</th><th>Pretension</th><th>Cable</th>
   <th class="num">Target PT</th><th class="num">Force</th><th class="num">% cap</th>
@@ -201,6 +204,7 @@ public sealed class CableForceReportGenerator
 <div id="warns"></div>
 
 <script id="report-data" type="application/json">{{json}}</script>
+<script>{{ReportCandidateDefinitions.Script}}</script>
 <script>{{ScriptV2}}</script>
 </body></html>
 """;

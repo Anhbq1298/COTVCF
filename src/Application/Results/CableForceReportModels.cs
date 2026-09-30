@@ -11,6 +11,7 @@ public sealed record CableForceReportDto(
     IReadOnlyList<CableForceAxisDto> Pretensions, // "Pretension on X" (categorical when any is mixed)
     IReadOnlyList<CableForceCandidateDto> Rows,
     double YMin, double YMax,
+    ReportCandidateDefinitionsDto CandidateDefinitions,
     IReadOnlyList<CableForceWarningDto> Warnings,
     // cable -> design capacity [kN]. Empty when no capacity was configured; a cable absent from the map
     // has no utilisation view and falls back to "% of the largest force in this study".

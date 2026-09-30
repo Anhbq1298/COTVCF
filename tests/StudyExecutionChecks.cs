@@ -71,11 +71,12 @@ internal static class StudyExecutionChecks
             Check(result.Completed == 1 && result.Failed == 0 &&
                   result.Artifacts.State == StudyArtifactState.Ready &&
                   File.Exists(result.Artifacts.RawJsonPath) && File.Exists(result.Artifacts.RawCsvPath) &&
-                  result.Artifacts.WorkbookPath is null && result.Artifacts.DeflectionReportPath is null &&
+                  File.Exists(result.Artifacts.WorkbookPath) && File.Exists(result.Artifacts.DeflectionReportPath) &&
+                  File.Exists(result.Artifacts.SupportReactionReportPath) &&
                   stages.Contains(StudyIterationStatus.RunningAnalysis) &&
                   stages.Contains(StudyIterationStatus.Verifying) &&
                   stages.Contains(StudyIterationStatus.ExtractingResults) && File.Exists(job.ModelFullPath),
-                "One worker marks one child Ready only after analysis, verification and result extraction");
+                "One worker marks one child Ready only after analysis, verification, extraction, and automatic report publication");
 
             var cr = candidateResults.Single();
             Check(cr.IterationKey == job.IterationId &&
@@ -91,7 +92,7 @@ internal static class StudyExecutionChecks
                 "Support-reaction extraction retains two Left and two Right foundation points with global reactions");
 
             var diagHtmlPath = Path.Combine(job.IterationDirectory, $"Deflection_Diagnostic_{job.IterationId}.html");
-            Check(!File.Exists(diagHtmlPath), "The SAP/model run does not generate candidate diagnostic HTML");
+            Check(File.Exists(diagHtmlPath), "The completed study automatically generates candidate diagnostic HTML");
             Check(File.Exists(Path.Combine(job.IterationDirectory, CandidateResultStore.FileName)),
                 "A successful candidate persists a durable result payload for interrupted-run recovery");
 
@@ -101,28 +102,32 @@ internal static class StudyExecutionChecks
             var raw = new StudyRawDataStore().Read(result.Artifacts.RawJsonPath!);
             Check(raw.Results.Count == 1 && raw.Results[0].IterationKey == job.IterationId &&
                   File.ReadLines(result.Artifacts.RawCsvPath!).First().Contains("RecordType", StringComparison.Ordinal) &&
-                  !File.Exists(xlsx) && !File.Exists(reportHtml),
-                "Study run publishes lossless JSON plus flat CSV raw data and does not generate reports");
+                  File.Exists(xlsx) && File.Exists(reportHtml),
+                "Study run publishes lossless JSON and flat CSV before automatically generating reports");
             var manifest = StudyRunJournal.TryRead(studyFolder);
             Check(result.Run is not null && File.Exists(result.Run.ManifestPath) && manifest is not null &&
                   manifest.RunId == result.Run.RunId && manifest.State == StudyRunState.Completed &&
                   manifest.Candidates.Single(candidate => candidate.Selected).Status == StudyIterationStatus.Ready &&
                   manifest.Artifacts.Select(artifact => artifact.Kind).ToHashSet(StringComparer.Ordinal)
-                      .SetEquals(["RawJson", "RawCsv"]) && StudyRunJournal.ArtifactsAreIntact(manifest),
-                "Study run manifest records only verifiable raw JSON/CSV artifacts");
+                      .IsSupersetOf(["RawJson", "RawCsv", "Workbook", "DeflectionReport",
+                          "SupportReactionReport", "ShortlistWorkbook", "ShortlistReport"]) &&
+                  StudyRunJournal.ArtifactsAreIntact(manifest),
+                "Study run manifest records the verifiable raw and automatically generated report artifacts");
 
-            var derived = new StudyPostProcessor().Generate(studyFolder,
-                snapshot.CableDesignCapacities, snapshot.DecisionCriteria);
-            Check(StudyRunJournal.ReplaceArtifacts(studyFolder, derived) &&
-                  File.Exists(derived.WorkbookPath) && File.Exists(derived.DeflectionReportPath) &&
+            var derived = result.Artifacts;
+            Check(File.Exists(derived.WorkbookPath) && File.Exists(derived.DeflectionReportPath) &&
                   File.Exists(derived.SupportReactionReportPath),
-                "Tab 06 explicitly derives the workbook and reports from raw JSON without SAP2000");
+                "Automatic post-processing derives the workbook and reports from raw JSON without SAP2000");
             var diagHtml = File.ReadAllText(diagHtmlPath);
             Check(diagHtml.Contains("Candidate Diagnostic Report") && diagHtml.Contains("QA/QC") &&
                   diagHtml.Contains("Monitored Deflection") && diagHtml.Contains(">top<"),
-                "Tab 06 generates candidate diagnostic HTML from raw data");
+                "Automatic post-processing generates candidate diagnostic HTML from raw data");
+            var deflectionHtml = File.ReadAllText(derived.DeflectionReportPath!);
+            Check(deflectionHtml.Contains("candidate-pretension-matrix", StringComparison.Ordinal) &&
+                  deflectionHtml.Contains("Cables are rows and pretension candidates are columns", StringComparison.Ordinal),
+                "Deflection report uses a compact printable pretension matrix instead of repeated cable lists");
             Check(File.Exists(derived.ShortlistReportPath) && File.Exists(derived.ShortlistWorkbookPath),
-                "Tab 06 publishes the ranked shortlist HTML and workbook");
+                "Automatic post-processing publishes the ranked shortlist HTML and workbook");
             var shortlistHtml = File.ReadAllText(derived.ShortlistReportPath!);
             Check(shortlistHtml.Contains("Result Library", StringComparison.Ordinal) &&
                   shortlistHtml.Contains(DeflectionReportGenerator.ReportFileName, StringComparison.Ordinal) &&
@@ -133,7 +138,7 @@ internal static class StudyExecutionChecks
                   readBack[0].Groups.Single().Points.Count == 3 &&
                   readBack[0].Groups[0].Points.All(pt => pt.UzMm.HasValue) &&
                   readBack[0].SupportReactionGroups is { Count: 2 },
-                "Tab 06 workbook round-trips the candidate and its monitored-point Uz rows");
+                "Automatically generated workbook round-trips the candidate and its monitored-point Uz rows");
             var finalHtml = File.ReadAllText(reportHtml);
             Check(finalHtml.Contains("id=\"report-data\"") && finalHtml.Contains("Deflection Results Viewer") &&
                    finalHtml.Contains(job.IterationId) && finalHtml.Contains("Result Library") &&
@@ -256,15 +261,17 @@ internal static class StudyExecutionChecks
                 new InlineProgress<StudyExecutionProgress>(_ => { }), CancellationToken.None).GetAwaiter().GetResult();
             var studyFolder = Path.GetDirectoryName(snapshot.Jobs.Single(job => job.RunIterate).IterationDirectory)!;
             var analysisCount = factory.Gateways.Sum(gateway => gateway.AnalysisAttempts.Count);
+            var automaticCableHtml = File.ReadAllText(run.Artifacts.CableForceReportPath!);
             var outputs = new StudyPostProcessor().Generate(studyFolder,
                 new Dictionary<string, double>(StringComparer.Ordinal) { ["Cable-A"] = 999 },
                 snapshot.DecisionCriteria);
             var cableHtml = File.ReadAllText(outputs.CableForceReportPath!);
-            Check(run.Artifacts.WorkbookPath is null && File.Exists(run.Artifacts.RawJsonPath) &&
+            Check(File.Exists(run.Artifacts.WorkbookPath) && File.Exists(run.Artifacts.RawJsonPath) &&
+                  automaticCableHtml.Contains("\"Cable-A\":2000", StringComparison.Ordinal) &&
                   cableHtml.Contains("\"Cable-A\":999", StringComparison.Ordinal) &&
                   !cableHtml.Contains("\"Cable-A\":2000", StringComparison.Ordinal) &&
                   factory.Gateways.Sum(gateway => gateway.AnalysisAttempts.Count) == analysisCount,
-                "Tab 06 uses the current capacity override from raw data without rerunning SAP2000");
+                "Automatic output uses the frozen capacity and Tab 06 can override it from raw data without rerunning SAP2000");
         }
         finally { DeleteRoot(root); }
     }
@@ -423,10 +430,13 @@ internal static class StudyExecutionChecks
             File.WriteAllText(baseline, "baseline");
             var paths = new StudyPathService();
             var id = "L02_H03_P04";
-            Check(paths.GetStudyRoot(baseline) == Path.Combine(root, "Study") &&
-                  paths.GetIterationDirectory(baseline, id) == Path.Combine(root, "Study", id) &&
-                  paths.GetIterationModelPath(baseline, id) == Path.Combine(root, "Study", id, $"COT_VCF_{id}.sdb"),
-                "Study path service derives root, isolated folder, and child model name");
+            Check(paths.GetStudyRoot(baseline) == Path.Combine(root, "Study", "COT_VCF") &&
+                  paths.GetIterationDirectory(baseline, id) == Path.Combine(root, "Study", "COT_VCF", id) &&
+                  paths.GetIterationModelPath(baseline, id) == Path.Combine(root, "Study", "COT_VCF", id, $"COT_VCF_{id}.sdb"),
+                "Study path service derives a model-specific root, isolated folder, and child model name");
+            Check(paths.GetStudyRoot(Path.Combine(root, "Alternate_Model.sdb")) ==
+                  Path.Combine(root, "Study", "Alternate_Model"),
+                "Different baseline models receive different result roots");
             Check(!Directory.Exists(Path.Combine(root, "Study")), "Study path preview does not create folders");
         }
         finally { DeleteRoot(root); }
@@ -553,9 +563,9 @@ internal static class StudyExecutionChecks
                 "The existing child .sdb is never overwritten by a reuse");
             var studyFolder = Path.GetDirectoryName(job.IterationDirectory)!;
             Check(File.Exists(second.Artifacts.RawJsonPath) && File.Exists(second.Artifacts.RawCsvPath) &&
-                  !File.Exists(Path.Combine(studyFolder, "Deflection_Results_Source.xlsx")) &&
-                  !File.Exists(Path.Combine(studyFolder, "Deflection_Report.html")),
-                "Reused candidates are consolidated into raw JSON/CSV without implicit reports");
+                  File.Exists(Path.Combine(studyFolder, "Deflection_Results_Source.xlsx")) &&
+                  File.Exists(Path.Combine(studyFolder, "Deflection_Report.html")),
+                "Reused candidates are consolidated into raw JSON/CSV and their reports are regenerated automatically");
         }
         finally { DeleteRoot(root); }
     }

@@ -717,7 +717,7 @@
        <Grid Grid.Row="1" Margin="0,0,0,7">
         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <TextBlock Text="Study Root" VerticalAlignment="Center" Margin="0,0,8,0"/>
-        <TextBox Grid.Column="1" Text="{Binding StudyRoot, Mode=OneWay}" IsReadOnly="True" ToolTip="Derived automatically from the immutable baseline model path"/>
+        <TextBox Grid.Column="1" Text="{Binding StudyRoot, Mode=OneWay}" IsReadOnly="True" ToolTip="Model-specific result root: Study/&lt;baseline model name&gt;"/>
        </Grid>
 
        <Grid Grid.Row="2">
@@ -894,8 +894,8 @@
       </StackPanel>
       <StackPanel Grid.Column="5" Orientation="Horizontal">
        <Button Content="{Binding RunStudyLabel}" Command="{Binding BuildSelectedModels}" Style="{StaticResource Primary}" ToolTip="{Binding RunStudyToolTip}" Margin="0"/>
-       <TextBlock Style="{StaticResource InlineHelpIcon}" Margin="3,0,0,0" ToolTip="Builds selected candidates in isolated child models, runs SAP2000 analysis, verifies results, and writes raw JSON/CSV. Reports are generated separately on Tab 06. Existing verified children are reused."
-                  AutomationProperties.Name="Build and Analyze help" AutomationProperties.HelpText="Builds selected child models, runs SAP2000 analysis, verifies results, and writes raw JSON and CSV for Tab 06."/>
+       <TextBlock Style="{StaticResource InlineHelpIcon}" Margin="3,0,0,0" ToolTip="Builds selected candidates in isolated child models, runs SAP2000 analysis, verifies results, and automatically writes raw JSON/CSV, Excel, and HTML reports. Existing verified children are reused."
+                  AutomationProperties.Name="Build and Analyze help" AutomationProperties.HelpText="Builds and analyzes selected child models, then automatically generates raw data, Excel, and HTML reports."/>
       </StackPanel>
      </Grid>
     </Grid>

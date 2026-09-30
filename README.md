@@ -74,7 +74,7 @@ Each preview row shows its complete joint/load-pattern/Fz assignments and cable/
 For every selected candidate, one worker performs this complete sequence:
 
 1. Reopen the immutable baseline.
-2. Create `<baseline folder>/Study/<iteration id>/<baseline>_<iteration id>.sdb` using **Save As**.
+2. Create `<baseline folder>/Study/<baseline name>/<iteration id>/<baseline>_<iteration id>.sdb` using **Save As**. The model-name folder keeps results from different baseline models separate.
 3. Apply the candidate height geometry.
 4. Replace the candidate point-load assignments.
 5. Replace the candidate cable target-force assignments.
@@ -83,7 +83,7 @@ For every selected candidate, one worker performs this complete sequence:
 8. Verify the analyzed child in place: it must be locked and still hold the resolved geometry, loading, and pretension.
 9. Return the worker to the baseline before accepting another candidate.
 
-A child becomes **Ready** only after analysis and in-place verification succeed. Existing child files or non-empty candidate folders are never overwritten. Candidate failure is isolated where possible; a worker that cannot recover the baseline is removed. Tab 5 does not extract results yet.
+A child becomes **Ready** only after analysis, in-place verification, and result extraction succeed. Existing child files or non-empty candidate folders are never overwritten. Candidate failure is isolated where possible; a worker that cannot recover the baseline is removed. When the study finishes, raw JSON/CSV, Excel, and the configured HTML reports are generated automatically.
 
 ### SAP2000 instance count
 

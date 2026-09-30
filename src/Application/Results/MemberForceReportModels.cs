@@ -44,5 +44,6 @@ public sealed record MemberForceGroupReportDto(
 public sealed record MemberForceReportDto(
     MemberForceStudyDto Study,
     IReadOnlyList<MemberForceGroupReportDto> Groups,
+    ReportCandidateDefinitionsDto CandidateDefinitions,
     IReadOnlyList<ResultReportWarningDto> Warnings,
     IReadOnlyList<string> SiblingReports);

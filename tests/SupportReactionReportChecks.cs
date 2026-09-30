@@ -49,6 +49,8 @@ internal static class SupportReactionReportChecks
         Check(html.Contains("Point:") && html.Contains("Global:") && html.Contains("Points are discrete supports") &&
               !html.Contains("http://") && !html.Contains("https://") && !html.Contains("cdn."),
             "support-reaction HTML has exact hover provenance, explains discrete supports, and is self-contained");
+        Check(html.Contains("Candidate definitions") && html.Contains("Truss-height candidates"),
+            "support-reaction HTML includes the shared L/H/P candidate definitions");
 
         var folder = Path.Combine(Path.GetTempPath(), "cotvcf_sr_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);

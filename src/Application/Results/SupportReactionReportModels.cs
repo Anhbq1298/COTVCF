@@ -43,5 +43,6 @@ public sealed record SupportReactionGroupReportDto(
 public sealed record SupportReactionReportDto(
     SupportReactionStudyDto Study,
     IReadOnlyList<SupportReactionGroupReportDto> Groups,
+    ReportCandidateDefinitionsDto CandidateDefinitions,
     IReadOnlyList<ResultReportWarningDto> Warnings,
     IReadOnlyList<string> SiblingReports);

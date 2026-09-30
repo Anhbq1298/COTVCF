@@ -61,6 +61,8 @@ internal static class CableForceReportChecks
               html.Contains("Result Library") && html.Contains("Result unavailable") &&
               !html.Contains("http://") && !html.Contains("https://") && !html.Contains("cdn."),
             "Cable Forces HTML is self-contained, has the Result Library, and shows 'Result unavailable' for gaps");
+        Check(html.Contains("Candidate definitions") && html.Contains("candidate-pretension-matrix"),
+            "Cable Forces HTML includes the shared compact L/H/P candidate definitions");
         var htmlIds = Regex.Matches(html, "\\bid=\\\"([^\\\"]+)\\\"")
             .Select(match => match.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
         var scriptIds = Regex.Matches(html, "(?:document\\.getElementById|el)\\(\\\"([^\\\"]+)\\\"\\)")
