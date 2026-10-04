@@ -213,12 +213,24 @@ Tab 04 defines study-wide output monitoring only; editing the tab does not write
 - Fixed output units: displacement mm, force kN, moment kNm.
 - Output groups use the reserved `[O]-` namespace: `[O]-DeflectionMonitorPts`, dynamic member-force groups `[O]-{user suffix}`, `[O]-FoundationLeft`, `[O]-FoundationRight`, and `[O]-CableMonitor`.
 - Deflection monitoring selects baseline Point Objects and fixes the future output to Global U3.
+- The monitored-points card carries an inline `Limit band ↓U3 [min] – [max] mm` row (nullable TextBoxes with
+  `NullableDouble`; blank = open bound) persisted as `DeflectionLimitMinMm` / `DeflectionLimitMaxMm` in
+  `Tab05OutputSettings`. It is the **single** deflection criterion (`DeflectionLimitBand`): a candidate passes when
+  Min ≤ peak downward deflection δ = −min(Uz) ≤ Max. The Tab 06 Shortlist gates on it (outside = Fail) and
+  `Deflection_Report.html` draws it as a green wash between two dashed limit lines with a per-chart
+  `✓ n / N in limit band` count and ✓/✗ per candidate. It is a post-processing input: excluded from the run
+  fingerprint, applied on the next Generate/Regenerate. The former hidden study Pass/Fail limits (50/75 mm) are gone.
 - Member-force groups are user-defined application groups over baseline Frame Objects; one frame belongs to at most one member-force output group. A shared result case/combo is required. Extraction retains signed local P/V2/V3 and T/M2/M3 for every SAP analysis element and result station returned for each selected frame object; it must not collapse an auto-meshed frame object to one governing value.
 - Foundations require exactly two baseline points on the Left and exactly two on the Right, with no overlap.
 - Cable output selects baseline Cable Objects plus a SAP analysis load case. This is distinct from Tab 03's target-force load pattern.
 - Configuration is persisted as `Tab05OutputSettings`; opening a project restores definitions only and never mutates SAP.
 - When Tab 05 Run starts, `OutputGroupPreparationService` is the preflight gate: verify the active model is the immutable session parent and unlocked, replace/read-back all requested `[O]-` groups, save the parent .sdb, then freeze the execution snapshot. No worker or child may start before this succeeds.
 - Member-force extraction retains every SAP station and result step; support reactions retain the configured Left/Right foundation points and global force/moment components. Tab 06 generates their reports from the raw JSON package.
+- `Support_Reactions_Report.html` draws, per support point (or foundation total), a range band among the in-scope
+  candidates: min–max wash, darker P25–P75 core, median line, labelled extremes, and candidate dots on top (dots hidden
+  above `IndividualProfileLimit`). `Band by` splits it per L / H / P id using the Deflection report's palette order
+  keyed by study-wide id (colour follows the id, never the filter); dimensions with more ids than colours are disabled.
+  The matrix view ends with Min / Max / Range rows.
 - Children inherit the saved parent groups. The run extracts the configured results as raw candidate data;
   it does not create Excel workbooks or HTML reports.
 

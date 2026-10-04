@@ -45,7 +45,7 @@ public sealed class StudyPostProcessor
         if (hasCableReport) currentReports.Add("cable");
         currentReports.Add("shortlist");
         var deflection = new DeflectionReportGenerator().Generate(root, results,
-            raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, currentReports);
+            raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, currentReports, decisionCriteria.DeflectionBand);
 
         string? member = null;
         if (hasMemberReport)

@@ -181,6 +181,9 @@ public sealed class OutputSettingsConfigDto
     public string DeflectionOutputCaseName { get; set; } = "";
     public string MemberForceResultLoadCase { get; set; } = "";
     public string FoundationReactionResultLoadCase { get; set; } = "";
+    // Deflection limit band on the peak downward U3 [mm]; null = open bound (post-processing only).
+    public double? DeflectionLimitMinMm { get; set; }
+    public double? DeflectionLimitMaxMm { get; set; }
 }
 
 public sealed class MemberForceGroupConfigDto
@@ -208,8 +211,6 @@ public sealed class IterationStudyConfigDto
     public double? MaxPretensionKn { get; set; }
     public double? MaxLoadingToHeightRatio { get; set; }
     public double? MaxPretensionToHeightRatio { get; set; }
-    public double? DeflectionPassLimitMm { get; set; } = 50;
-    public double? DeflectionFailLimitMm { get; set; } = 75;
     public double? MinimumCableForceKn { get; set; }
     public double? MaximumCableForceKn { get; set; }
     public double DecisionWarningUtilization { get; set; } = 0.9;

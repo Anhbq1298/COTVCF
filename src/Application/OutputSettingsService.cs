@@ -26,6 +26,8 @@ public sealed class OutputSettingsValidator
                 output.DeflectionPoints.Count > 0 ? ValidationSeverity.Warning : ValidationSeverity.Error));
         else if (loadCases is not null && !loadCases.Contains(output.DeflectionOutputCaseName, StringComparer.OrdinalIgnoreCase))
             issues.Add(new("Output Settings", $"Deflection output case {output.DeflectionOutputCaseName} does not exist in the baseline model."));
+        if (output.DeflectionLimitBand.Problem() is { } bandProblem)
+            issues.Add(new("Output Settings", bandProblem));
 
         if (output.MemberForceGroups.Count == 0)
             issues.Add(new("Output Settings", "Add at least one member-force output group."));

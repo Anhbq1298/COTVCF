@@ -522,7 +522,6 @@ public sealed class IterationStudyConfig : Observable
     private bool useCandidateFilters;
     private double? minLoadingKpa, maxLoadingKpa, minHeightM, maxHeightM, minPretensionKn, maxPretensionKn;
     private double? maxLoadingToHeightRatio, maxPretensionToHeightRatio;
-    private double? deflectionPassLimitMm = 50, deflectionFailLimitMm = 75;
     private double? minimumCableForceKn, maximumCableForceKn;
     private double decisionWarningUtilization = 0.9;
     private double deflectionRankWeight = 0.5, pretensionRankWeight = 0.3, heightRankWeight = 0.2;
@@ -542,8 +541,6 @@ public sealed class IterationStudyConfig : Observable
     public double? MaxLoadingToHeightRatio { get => maxLoadingToHeightRatio; set => Set(ref maxLoadingToHeightRatio, value); }
     /// <summary>Optional cross-dimension predicate: max |target force| / height must not exceed this kN/m value.</summary>
     public double? MaxPretensionToHeightRatio { get => maxPretensionToHeightRatio; set => Set(ref maxPretensionToHeightRatio, value); }
-    public double? DeflectionPassLimitMm { get => deflectionPassLimitMm; set => Set(ref deflectionPassLimitMm, value); }
-    public double? DeflectionFailLimitMm { get => deflectionFailLimitMm; set => Set(ref deflectionFailLimitMm, value); }
     public double? MinimumCableForceKn { get => minimumCableForceKn; set => Set(ref minimumCableForceKn, value); }
     public double? MaximumCableForceKn { get => maximumCableForceKn; set => Set(ref maximumCableForceKn, value); }
     public double DecisionWarningUtilization { get => decisionWarningUtilization; set => Set(ref decisionWarningUtilization, value); }

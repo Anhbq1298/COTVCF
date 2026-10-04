@@ -114,6 +114,8 @@ public sealed class ConfigurationExtractor
         DeflectionOutputCaseName = s.OutputSettings.DeflectionOutputCaseName,
         MemberForceResultLoadCase = s.OutputSettings.MemberForceResultLoadCase,
         FoundationReactionResultLoadCase = s.OutputSettings.FoundationReactionResultLoadCase,
+        DeflectionLimitMinMm = s.OutputSettings.DeflectionLimitMinMm,
+        DeflectionLimitMaxMm = s.OutputSettings.DeflectionLimitMaxMm,
     };
 
     private static IterationStudyConfigDto ExtractStudy(ApplicationState s) => new()
@@ -132,8 +134,6 @@ public sealed class ConfigurationExtractor
         MaxPretensionKn = s.Study.MaxPretensionKn,
         MaxLoadingToHeightRatio = s.Study.MaxLoadingToHeightRatio,
         MaxPretensionToHeightRatio = s.Study.MaxPretensionToHeightRatio,
-        DeflectionPassLimitMm = s.Study.DeflectionPassLimitMm,
-        DeflectionFailLimitMm = s.Study.DeflectionFailLimitMm,
         MinimumCableForceKn = s.Study.MinimumCableForceKn,
         MaximumCableForceKn = s.Study.MaximumCableForceKn,
         DecisionWarningUtilization = s.Study.DecisionWarningUtilization,

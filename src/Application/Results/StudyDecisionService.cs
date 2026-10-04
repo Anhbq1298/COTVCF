@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.IO;
+using System.Text.Json.Serialization;
 using ClosedXML.Excel;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
@@ -11,8 +12,8 @@ namespace COT_VCF.Application.Results;
 public enum CandidateDecisionStatus { Pass, Warning, Fail, Incomplete }
 
 public sealed record StudyDecisionCriteria(
-    double DeflectionPassLimitMm,
-    double DeflectionFailLimitMm,
+    double? DeflectionLimitMinMm,
+    double? DeflectionLimitMaxMm,
     double? MinimumCableForceKn,
     double? MaximumCableForceKn,
     double WarningUtilization,
@@ -20,15 +21,20 @@ public sealed record StudyDecisionCriteria(
     double PretensionWeight,
     double HeightWeight)
 {
-    public static StudyDecisionCriteria From(IterationStudyConfig config) => new(
-        config.DeflectionPassLimitMm ?? double.NaN,
-        config.DeflectionFailLimitMm ?? double.NaN,
-        config.MinimumCableForceKn,
-        config.MaximumCableForceKn,
-        config.DecisionWarningUtilization,
-        config.DeflectionRankWeight,
-        config.PretensionRankWeight,
-        config.HeightRankWeight);
+    public static readonly StudyDecisionCriteria Default = new(null, null, null, null, 0.9, 0.5, 0.3, 0.2);
+
+    /// <summary>Deflection limit band from Tab 04 Output Settings; cable bounds and ranking from the study.</summary>
+    public static StudyDecisionCriteria From(ApplicationState state) => new(
+        state.OutputSettings.DeflectionLimitMinMm,
+        state.OutputSettings.DeflectionLimitMaxMm,
+        state.Study.MinimumCableForceKn,
+        state.Study.MaximumCableForceKn,
+        state.Study.DecisionWarningUtilization,
+        state.Study.DeflectionRankWeight,
+        state.Study.PretensionRankWeight,
+        state.Study.HeightRankWeight);
+
+    [JsonIgnore] public DeflectionLimitBand DeflectionBand => new(DeflectionLimitMinMm, DeflectionLimitMaxMm);
 }
 
 public sealed record CandidateDecisionResult(
@@ -38,6 +44,7 @@ public sealed record CandidateDecisionResult(
     CandidateDecisionStatus Status,
     double? Score,
     double? MaxAbsUzMm,
+    double? PeakDownUzMm,
     double? MinimumCableForceKn,
     double? MaximumCableForceKn,
     double PretensionMetricKn,
@@ -46,7 +53,7 @@ public sealed record CandidateDecisionResult(
     string CandidateModelPath)
 {
     public string ScoreText => Score is double value ? value.ToString("0.0000", CultureInfo.InvariantCulture) : "—";
-    public string DeflectionText => MaxAbsUzMm is double value ? $"{value:0.###} mm" : "Result unavailable";
+    public string DeflectionText => PeakDownUzMm is double value ? $"{value:0.###} mm" : "Result unavailable";
     public string CableForceText => MinimumCableForceKn is double lo && MaximumCableForceKn is double hi
         ? $"{lo:0.###}..{hi:0.###} kN" : "Not configured / unavailable";
     public string GoverningReason => string.Join(" · ", Reasons);
@@ -80,9 +87,8 @@ public sealed class StudyDecisionService
 
     public static void Validate(StudyDecisionCriteria criteria)
     {
-        if (!double.IsFinite(criteria.DeflectionPassLimitMm) || criteria.DeflectionPassLimitMm < 0 ||
-            !double.IsFinite(criteria.DeflectionFailLimitMm) || criteria.DeflectionFailLimitMm < criteria.DeflectionPassLimitMm)
-            throw new InvalidOperationException("Deflection criteria require finite 0 ≤ Pass limit ≤ Fail limit values in mm.");
+        if (criteria.DeflectionBand.Problem() is { } bandProblem)
+            throw new InvalidOperationException(bandProblem);
         if (criteria.MinimumCableForceKn is double min && !double.IsFinite(min) ||
             criteria.MaximumCableForceKn is double max && !double.IsFinite(max) ||
             criteria.MinimumCableForceKn is double lo && criteria.MaximumCableForceKn is double hi && hi < lo)
@@ -99,9 +105,10 @@ public sealed class StudyDecisionService
         var reasons = new List<string>();
         var points = candidate.Groups.SelectMany(group => group.Points).ToArray();
         var invalidPoint = points.FirstOrDefault(point => point.Status != ResultValueStatus.Valid || point.UzMm is null);
-        var validDeflections = points.Where(point => point.Status == ResultValueStatus.Valid && point.UzMm.HasValue)
-            .Select(point => Math.Abs(point.UzMm!.Value)).ToArray();
-        var maxDeflection = validDeflections.Length > 0 ? validDeflections.Max() : (double?)null;
+        var validUz = points.Where(point => point.Status == ResultValueStatus.Valid && point.UzMm.HasValue)
+            .Select(point => point.UzMm!.Value).ToArray();
+        var maxDeflection = validUz.Length > 0 ? validUz.Max(Math.Abs) : (double?)null;
+        var peakDown = DeflectionLimitBand.PeakDownMm(validUz);
         var cableRows = candidate.CableForces ?? [];
         var invalidCable = cableRows.FirstOrDefault(row => row.Status != ResultValueStatus.Valid || row.ForceKN is null);
         var validCableForces = cableRows.Where(row => row.Status == ResultValueStatus.Valid && row.ForceKN.HasValue)
@@ -123,18 +130,24 @@ public sealed class StudyDecisionService
             return Create(CandidateDecisionStatus.Incomplete, reasons);
         }
 
+        // Deflection gate: the peak downward U3 must sit inside the Tab 04 limit band (the shaded band of the
+        // Deflection report). Complete candidates always have at least one valid point here.
         var status = CandidateDecisionStatus.Pass;
-        if (maxDeflection > criteria.DeflectionFailLimitMm)
+        var band = criteria.DeflectionBand;
+        var down = peakDown ?? 0;
+        if (!band.IsActive)
+            reasons.Add($"Peak ↓U3 {down:0.###} mm · no deflection limit band set.");
+        else if (band.MaxMm is double hi && down > hi)
         {
             status = CandidateDecisionStatus.Fail;
-            reasons.Add($"|U3|max {maxDeflection:0.###} mm exceeds Fail limit {criteria.DeflectionFailLimitMm:0.###} mm.");
+            reasons.Add($"Peak ↓U3 {down:0.###} mm exceeds limit band Max {hi:0.###} mm.");
         }
-        else if (maxDeflection > criteria.DeflectionPassLimitMm)
+        else if (band.MinMm is double lo && down < lo)
         {
-            status = CandidateDecisionStatus.Warning;
-            reasons.Add($"|U3|max {maxDeflection:0.###} mm exceeds Pass limit {criteria.DeflectionPassLimitMm:0.###} mm.");
+            status = CandidateDecisionStatus.Fail;
+            reasons.Add($"Peak ↓U3 {down:0.###} mm is below limit band Min {lo:0.###} mm.");
         }
-        else reasons.Add($"|U3|max {maxDeflection:0.###} mm ≤ {criteria.DeflectionPassLimitMm:0.###} mm.");
+        else reasons.Add($"Peak ↓U3 {down:0.###} mm within limit band {band.Label}.");
 
         foreach (var force in validCableForces)
         {
@@ -157,7 +170,7 @@ public sealed class StudyDecisionService
         return Create(status, reasons);
 
         CandidateDecisionResult Create(CandidateDecisionStatus resultStatus, IReadOnlyList<string> resultReasons) => new(
-            0, candidate.IterationKey, candidate.Parameters.RunIndex, resultStatus, null, maxDeflection,
+            0, candidate.IterationKey, candidate.Parameters.RunIndex, resultStatus, null, maxDeflection, peakDown,
             validCableForces.Length > 0 ? validCableForces.Min() : null,
             validCableForces.Length > 0 ? validCableForces.Max() : null,
             pretensionMetric, candidate.Parameters.TrussHeightM, resultReasons, candidate.CandidateModelPath);
@@ -209,20 +222,20 @@ public sealed class StudyShortlistExporter
     {
         using var wb = new XLWorkbook();
         var ws = wb.Worksheets.Add("Shortlist");
-        string[] headers = ["Rank", "IterationKey", "Decision", "Score", "MaxAbsU3_mm", "MinCableForce_kN", "MaxCableForce_kN", "PretensionMetric_kN", "Height_m", "GoverningReasons", "CandidateModelPath"];
+        string[] headers = ["Rank", "IterationKey", "Decision", "Score", "PeakDownU3_mm", "MaxAbsU3_mm", "MinCableForce_kN", "MaxCableForce_kN", "PretensionMetric_kN", "Height_m", "GoverningReasons", "CandidateModelPath"];
         for (var c = 0; c < headers.Length; c++) { ws.Cell(1, c + 1).Value = headers[c]; ws.Cell(1, c + 1).Style.Font.Bold = true; }
         for (var r = 0; r < rows.Count; r++)
         {
             var item = rows[r];
-            object?[] values = [item.Rank, item.IterationKey, item.Status.ToString(), item.Score, item.MaxAbsUzMm,
+            object?[] values = [item.Rank, item.IterationKey, item.Status.ToString(), item.Score, item.PeakDownUzMm, item.MaxAbsUzMm,
                 item.MinimumCableForceKn, item.MaximumCableForceKn, item.PretensionMetricKn, item.HeightM,
                 item.GoverningReason, item.CandidateModelPath];
             for (var c = 0; c < values.Length; c++)
                 if (values[c] is not null) ws.Cell(r + 2, c + 1).Value = XLCellValue.FromObject(values[c]);
         }
         var criteriaSheet = wb.Worksheets.Add("Criteria");
-        var criteriaRows = new (string, object?)[] { ("DeflectionPassLimit_mm", criteria.DeflectionPassLimitMm),
-            ("DeflectionFailLimit_mm", criteria.DeflectionFailLimitMm), ("MinimumCableForce_kN", criteria.MinimumCableForceKn),
+        var criteriaRows = new (string, object?)[] { ("DeflectionLimitMin_PeakDownU3_mm", criteria.DeflectionLimitMinMm),
+            ("DeflectionLimitMax_PeakDownU3_mm", criteria.DeflectionLimitMaxMm), ("MinimumCableForce_kN", criteria.MinimumCableForceKn),
             ("MaximumCableForce_kN", criteria.MaximumCableForceKn), ("WarningUtilization", criteria.WarningUtilization),
             ("DeflectionWeight", criteria.DeflectionWeight), ("PretensionWeight", criteria.PretensionWeight), ("HeightWeight", criteria.HeightWeight) };
         for (var r = 0; r < criteriaRows.Length; r++) { criteriaSheet.Cell(r + 1, 1).Value = criteriaRows[r].Item1; if (criteriaRows[r].Item2 is not null) criteriaSheet.Cell(r + 1, 2).Value = XLCellValue.FromObject(criteriaRows[r].Item2); }
@@ -238,7 +251,7 @@ public sealed class StudyShortlistExporter
         return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>COTVCF Study Shortlist</title>" +
                "<style>body{font:14px system-ui;margin:24px;color:#202124}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d4d7dc;padding:7px;text-align:left}th{background:#eef2f5}small{color:#5f6368}.lib{margin:0 0 18px;border:1px solid #d4d7dc;border-radius:6px;padding:8px 12px}.lib summary{font-weight:700;cursor:pointer}.lib ul{display:flex;gap:8px;flex-wrap:wrap;list-style:none;padding:8px 0 0;margin:0}.lib li{display:flex;gap:7px;align-items:center;border:1px solid #d4d7dc;border-radius:4px;padding:6px 9px}.lib li.on{background:#eef2f5;font-weight:700}.lib span{color:#5f6368;font-size:11px}.lib a{color:#175ea8;text-decoration:none}</style></head><body>" +
                library +
-               $"<h1>Study Shortlist</h1><p><small>|U3| Pass ≤ {criteria.DeflectionPassLimitMm:0.###} mm · Fail &gt; {criteria.DeflectionFailLimitMm:0.###} mm · Ranking weights D/P/H = {criteria.DeflectionWeight:0.###}/{criteria.PretensionWeight:0.###}/{criteria.HeightWeight:0.###}</small></p>" +
-               "<table><thead><tr><th>Rank</th><th>Candidate</th><th>Decision</th><th>Score</th><th>Max |U3|</th><th>Cable force</th><th>Height</th><th>Governing reason</th></tr></thead><tbody>" + body + "</tbody></table></body></html>";
+               $"<h1>Study Shortlist</h1><p><small>Deflection limit band (peak ↓U3) {E(criteria.DeflectionBand.Label)} · Ranking weights D/P/H = {criteria.DeflectionWeight:0.###}/{criteria.PretensionWeight:0.###}/{criteria.HeightWeight:0.###}</small></p>" +
+               "<table><thead><tr><th>Rank</th><th>Candidate</th><th>Decision</th><th>Score</th><th>Peak ↓U3</th><th>Cable force</th><th>Height</th><th>Governing reason</th></tr></thead><tbody>" + body + "</tbody></table></body></html>";
     }
 }

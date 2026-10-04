@@ -695,9 +695,26 @@ public sealed class MainViewModel : Observable
         : $"U3 · {Out.DeflectionOutputCaseName}";
     public string MonitoredPointSummary =>
         $"{Out.DeflectionPoints.Count} point{(Out.DeflectionPoints.Count == 1 ? "" : "s")}";
-    public string MonitoredPointStatus => Out.DeflectionPoints.Count == 0 ? StatusNotConfigured
+    public string MonitoredPointStatus => Out.DeflectionLimitBand.Problem() is not null ? StatusInvalid
+        : Out.DeflectionPoints.Count == 0 ? StatusNotConfigured
         : string.IsNullOrWhiteSpace(Out.DeflectionOutputCaseName) ? StatusIncomplete
         : StatusReady;
+    /// <summary>One-line reading of the Tab 04 deflection limit band (peak downward U3).</summary>
+    public string DeflectionLimitSummary
+    {
+        get
+        {
+            var band = Out.DeflectionLimitBand;
+            if (band.Problem() is { } problem) return problem;
+            return band switch
+            {
+                { MinMm: double lo, MaxMm: double hi } => $"Pass when {lo:0.###} ≤ peak ↓U3 ≤ {hi:0.###} mm",
+                { MaxMm: double hi } => $"Pass when peak ↓U3 ≤ {hi:0.###} mm",
+                { MinMm: double lo } => $"Pass when peak ↓U3 ≥ {lo:0.###} mm",
+                _ => "No limit band · deflection is not a pass/fail criterion",
+            };
+        }
+    }
     public string MemberForceSummary
     {
         get
@@ -1645,7 +1662,7 @@ public sealed class MainViewModel : Observable
         {
             var root = StudyRoot;
             var capacities = State.Cables.Count > 0 ? CurrentCableCapacities() : null;
-            var criteria = StudyDecisionCriteria.From(State.Study);
+            var criteria = StudyDecisionCriteria.From(State);
             var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, criteria));
             currentRunWorkbookPath = artifacts.WorkbookPath;
             useCurrentRunArtifacts = true;
@@ -2218,7 +2235,7 @@ public sealed class MainViewModel : Observable
             nameof(CableStrengthMpa), nameof(CableStrengthReductionFactor),
             nameof(CablePreviewSummary), nameof(DeflectionOutputSummary), nameof(MemberForceOutputSummary),
             nameof(FoundationOutputSummary), nameof(CableOutputSummary),
-            nameof(MonitoredPointSummary), nameof(MonitoredPointCaseSummary), nameof(MonitoredPointStatus), nameof(MemberForceSummary), nameof(MemberForceStatus),
+            nameof(MonitoredPointSummary), nameof(MonitoredPointCaseSummary), nameof(MonitoredPointStatus), nameof(DeflectionLimitSummary), nameof(MemberForceSummary), nameof(MemberForceStatus),
             nameof(FoundationSummary), nameof(FoundationStatus), nameof(CableForceSummary), nameof(CableForceStatus),
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
             nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName),

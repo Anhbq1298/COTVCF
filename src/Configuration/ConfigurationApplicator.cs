@@ -154,6 +154,8 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         output.DeflectionOutputCaseName = d.DeflectionOutputCaseName ?? "";
         output.MemberForceResultLoadCase = d.MemberForceResultLoadCase ?? "";
         output.FoundationReactionResultLoadCase = d.FoundationReactionResultLoadCase ?? "";
+        output.DeflectionLimitMinMm = d.DeflectionLimitMinMm;
+        output.DeflectionLimitMaxMm = d.DeflectionLimitMaxMm;
     }
 
     private void ApplyStudy(IterationStudyConfigDto d)
@@ -173,8 +175,6 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         state.Study.MaxPretensionKn = d.MaxPretensionKn;
         state.Study.MaxLoadingToHeightRatio = d.MaxLoadingToHeightRatio;
         state.Study.MaxPretensionToHeightRatio = d.MaxPretensionToHeightRatio;
-        state.Study.DeflectionPassLimitMm = d.DeflectionPassLimitMm;
-        state.Study.DeflectionFailLimitMm = d.DeflectionFailLimitMm;
         state.Study.MinimumCableForceKn = d.MinimumCableForceKn;
         state.Study.MaximumCableForceKn = d.MaximumCableForceKn;
         state.Study.DecisionWarningUtilization = d.DecisionWarningUtilization;

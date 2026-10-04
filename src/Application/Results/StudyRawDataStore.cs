@@ -26,7 +26,7 @@ public sealed class StudyRawDataPackage
     public string FoundationReactionResultCase { get; set; } = "";
     public string CableResultCase { get; set; } = "";
     public Dictionary<string, double> CableDesignCapacities { get; set; } = new(StringComparer.Ordinal);
-    public StudyDecisionCriteria DecisionCriteria { get; set; } = new(50, 75, null, null, 0.9, 0.5, 0.3, 0.2);
+    public StudyDecisionCriteria DecisionCriteria { get; set; } = StudyDecisionCriteria.Default;
     public List<CandidateResultDto> Results { get; set; } = [];
 }
 

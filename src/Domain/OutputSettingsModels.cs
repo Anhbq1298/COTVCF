@@ -29,6 +29,42 @@ public static class OutputGroupNaming
     }
 }
 
+/// <summary>Deflection acceptance window on a candidate's peak downward deflection δ = −min(Uz) [mm, + = sag].
+/// A candidate passes when Min ≤ δ ≤ Max. A blank bound is open (Max only = the usual serviceability cap);
+/// both blank = no deflection criterion. Post-processing only — never part of the run fingerprint.</summary>
+public sealed record DeflectionLimitBand(double? MinMm, double? MaxMm)
+{
+    public bool IsActive => MinMm.HasValue || MaxMm.HasValue;
+
+    public bool Contains(double peakDownMm) =>
+        (MinMm is not double lo || peakDownMm >= lo) && (MaxMm is not double hi || peakDownMm <= hi);
+
+    /// <summary>First problem with the bounds, or null when they are usable.</summary>
+    public string? Problem() =>
+        MinMm is double lo && (!double.IsFinite(lo) || lo < 0) ? "Deflection limit band Min must be a finite value ≥ 0 mm." :
+        MaxMm is double hi && (!double.IsFinite(hi) || hi < 0) ? "Deflection limit band Max must be a finite value ≥ 0 mm." :
+        MinMm is double min && MaxMm is double max && max < min ? "Deflection limit band Max must be greater than or equal to Min." :
+        null;
+
+    public string Label => (MinMm, MaxMm) switch
+    {
+        (double lo, double hi) => $"{Mm(lo)}–{Mm(hi)} mm",
+        (null, double hi) => $"≤ {Mm(hi)} mm",
+        (double lo, null) => $"≥ {Mm(lo)} mm",
+        _ => "none",
+    };
+
+    /// <summary>Peak downward deflection δ = −min(Uz) over <paramref name="uzMm"/>, or null when empty.</summary>
+    public static double? PeakDownMm(IEnumerable<double> uzMm)
+    {
+        double? lowest = null;
+        foreach (var uz in uzMm) if (lowest is null || uz < lowest) lowest = uz;
+        return lowest is double value ? (value == 0 ? 0 : -value) : null;
+    }
+
+    private static string Mm(double value) => value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+}
+
 public enum OutputGroupObjectKind { Point, Frame, Cable }
 
 public sealed record OutputSapGroupDefinition(
@@ -77,6 +113,7 @@ public sealed class OutputSettingsConfiguration : Observable
     private string deflectionOutputCaseName = "";
     private string memberForceResultLoadCase = "";
     private string foundationReactionResultLoadCase = "";
+    private double? deflectionLimitMinMm, deflectionLimitMaxMm;
     public ObservableCollection<string> DeflectionPoints { get; } = [];
     public ObservableCollection<MemberForceOutputGroup> MemberForceGroups { get; } = [];
     public ObservableCollection<string> FoundationLeftPoints { get; } = [];
@@ -90,11 +127,17 @@ public sealed class OutputSettingsConfiguration : Observable
     public string MemberForceResultLoadCase { get => memberForceResultLoadCase; set => Set(ref memberForceResultLoadCase, (value ?? "").Trim()); }
     /// <summary>SAP analysis load case or combo used for global support reactions at the selected foundations.</summary>
     public string FoundationReactionResultLoadCase { get => foundationReactionResultLoadCase; set => Set(ref foundationReactionResultLoadCase, (value ?? "").Trim()); }
+    /// <summary>Deflection limit band on the peak downward U3 [mm] — drives the Deflection report band and the
+    /// Shortlist deflection gate. Post-processing only: editing it never invalidates analysed candidates.</summary>
+    public double? DeflectionLimitMinMm { get => deflectionLimitMinMm; set => Set(ref deflectionLimitMinMm, value); }
+    public double? DeflectionLimitMaxMm { get => deflectionLimitMaxMm; set => Set(ref deflectionLimitMaxMm, value); }
+    public DeflectionLimitBand DeflectionLimitBand => new(DeflectionLimitMinMm, DeflectionLimitMaxMm);
 
     public bool IsConfigured => DeflectionPoints.Count > 0 || MemberForceGroups.Count > 0 ||
         FoundationLeftPoints.Count > 0 || FoundationRightPoints.Count > 0 || CableNames.Count > 0 ||
         !string.IsNullOrWhiteSpace(CableResultLoadCase) || !string.IsNullOrWhiteSpace(DeflectionOutputCaseName) ||
-        !string.IsNullOrWhiteSpace(MemberForceResultLoadCase) || !string.IsNullOrWhiteSpace(FoundationReactionResultLoadCase);
+        !string.IsNullOrWhiteSpace(MemberForceResultLoadCase) || !string.IsNullOrWhiteSpace(FoundationReactionResultLoadCase) ||
+        DeflectionLimitBand.IsActive;
 
     public IReadOnlyList<OutputSapGroupDefinition> ToSapGroups()
     {

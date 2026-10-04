@@ -382,6 +382,7 @@
       <Style x:Key="OutSummary" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Margin" Value="0,2,0,0"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style>
       <Style x:Key="OutStatus" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
       <Style x:Key="OutEdit" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinHeight" Value="24"/><Setter Property="Padding" Value="12,2"/><Setter Property="Margin" Value="0"/></Style>
+      <Style x:Key="BandEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="Height" Value="24"/><Setter Property="MinHeight" Value="24"/><Setter Property="Padding" Value="6,1"/><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="FontSize" Value="12"/><Setter Property="TextAlignment" Value="Right"/></Style>
      </Grid.Resources>
 
      <StackPanel Grid.Row="0" Margin="0,0,0,6">
@@ -399,6 +400,21 @@
        <TextBlock Text="01  MONITORED POINTS" Style="{StaticResource Subheading}" Margin="0"/>
        <TextBlock Text="{Binding MonitoredPointCaseSummary}" Style="{StaticResource OutSummary}" ToolTip="{Binding MonitoredPointCaseSummary}"/>
        <TextBlock Text="{Binding MonitoredPointSummary}" Style="{StaticResource OutSummary}" Margin="0,1,0,0"/>
+       <!-- Deflection limit band: post-processing only (Deflection report band + Shortlist gate). Blank = open bound. -->
+       <Grid Margin="0,6,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <TextBlock Text="Limit band ↓U3" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                   ToolTip="Acceptance window on each candidate's peak downward deflection. A candidate passes when Min ≤ peak ↓U3 ≤ Max. Leave a bound blank to keep it open."/>
+        <TextBox Grid.Column="1" Style="{StaticResource BandEditor}" AutomationProperties.Name="Deflection limit band minimum [mm]"
+                 ToolTip="Min peak downward deflection [mm] — blank = no lower limit"
+                 Text="{Binding State.OutputSettings.DeflectionLimitMinMm, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+        <TextBlock Grid.Column="2" Text="–" FontSize="11" VerticalAlignment="Center" Margin="6,0"/>
+        <TextBox Grid.Column="3" Style="{StaticResource BandEditor}" AutomationProperties.Name="Deflection limit band maximum [mm]"
+                 ToolTip="Max peak downward deflection [mm] — blank = no upper limit"
+                 Text="{Binding State.OutputSettings.DeflectionLimitMaxMm, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+        <TextBlock Grid.Column="4" Text="mm" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+       </Grid>
+       <TextBlock Text="{Binding DeflectionLimitSummary}" Style="{StaticResource OutStatus}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionLimitSummary}"/>
        <Grid Margin="0,4,0,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <TextBlock Text="{Binding MonitoredPointStatus}" Style="{StaticResource OutStatus}"/>

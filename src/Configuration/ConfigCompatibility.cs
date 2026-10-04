@@ -282,6 +282,8 @@ public sealed class ConfigCompatibilityValidator
                 tc.Problems.Add("deflection output case is required.");
             else if (!modelLoadCases.Contains(t5.DeflectionOutputCaseName, StringComparer.OrdinalIgnoreCase))
                 tc.Problems.Add($"deflection output case {t5.DeflectionOutputCaseName} does not exist in the connected model.");
+            if (new DeflectionLimitBand(t5.DeflectionLimitMinMm, t5.DeflectionLimitMaxMm).Problem() is { } bandProblem)
+                tc.Problems.Add(bandProblem);
         }
 
         // ---- Legacy Tab 05 JSON key / UI Tab 05 Iteration Study ----
@@ -307,10 +309,7 @@ public sealed class ConfigCompatibilityValidator
                 ValidatePositive(t6.MaxLoadingToHeightRatio, "maximum loading/height ratio", tc.Problems);
                 ValidatePositive(t6.MaxPretensionToHeightRatio, "maximum pretension/height ratio", tc.Problems);
             }
-            ValidateBounds(t6.DeflectionPassLimitMm, t6.DeflectionFailLimitMm, "absolute deflection", tc.Problems);
             ValidateBounds(t6.MinimumCableForceKn, t6.MaximumCableForceKn, "cable force", tc.Problems);
-            if (t6.DeflectionPassLimitMm is double pass && pass < 0) tc.Problems.Add("deflection Pass limit cannot be negative.");
-            if (t6.DeflectionFailLimitMm is double fail && fail < 0) tc.Problems.Add("deflection Fail limit cannot be negative.");
             if (!double.IsFinite(t6.DecisionWarningUtilization) || t6.DecisionWarningUtilization <= 0 || t6.DecisionWarningUtilization >= 1)
                 tc.Problems.Add("decision warning utilization must be between zero and one.");
             var weights = new[] { t6.DeflectionRankWeight, t6.PretensionRankWeight, t6.HeightRankWeight };

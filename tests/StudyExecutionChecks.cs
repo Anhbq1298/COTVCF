@@ -454,7 +454,7 @@ internal static class StudyExecutionChecks
                 "Post-processing cable capacity does not invalidate reusable model raw data");
             var criteriaChanged = snapshot with
             {
-                DecisionCriteria = snapshot.DecisionCriteria with { DeflectionPassLimitMm = snapshot.DecisionCriteria.DeflectionPassLimitMm + 1 }
+                DecisionCriteria = snapshot.DecisionCriteria with { DeflectionLimitMinMm = 100, DeflectionLimitMaxMm = 150 }
             };
             Check(fingerprint == Fingerprints.SnapshotSha256(criteriaChanged),
                 "Post-processing shortlist criteria do not invalidate reusable model raw data");

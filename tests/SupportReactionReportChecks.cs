@@ -49,6 +49,9 @@ internal static class SupportReactionReportChecks
         Check(html.Contains("Point:") && html.Contains("Global:") && html.Contains("Points are discrete supports") &&
               !html.Contains("http://") && !html.Contains("https://") && !html.Contains("cdn."),
             "support-reaction HTML has exact hover provenance, explains discrete supports, and is self-contained");
+        Check(html.Contains("id=\"band\"") && html.Contains("Band by") && html.Contains("range among candidates") &&
+              html.Contains("middle half (P25–P75)") && html.Contains("agg('Range'"),
+            "support-reaction HTML draws a min–max / P25–P75 / median range band per column, optionally per L/H/P candidate, and matrix range rows");
 
         var folder = Path.Combine(Path.GetTempPath(), "cotvcf_sr_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);
