@@ -1661,9 +1661,13 @@ public sealed class MainViewModel : Observable
         try
         {
             var root = StudyRoot;
-            var capacities = State.Cables.Count > 0 ? CurrentCableCapacities() : null;
+            // Current Tab 03 capacity wins per cable; a Tab 03 cable that cannot resolve one is reported as
+            // unavailable, and only a cable Tab 03 does not know falls back to the capacity stored with the results.
+            var capacities = CurrentCableCapacities();
+            var configuredCables = State.Cables.Select(cable => cable.CableName)
+                .Where(name => !string.IsNullOrWhiteSpace(name)).ToArray();
             var criteria = StudyDecisionCriteria.From(State);
-            var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, criteria));
+            var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, criteria, configuredCables));
             currentRunWorkbookPath = artifacts.WorkbookPath;
             useCurrentRunArtifacts = true;
             DeflectionReportPath = artifacts.DeflectionReportPath;
@@ -1675,7 +1679,7 @@ public sealed class MainViewModel : Observable
             StudyRunJournal.ReplaceArtifacts(root, artifacts);
             RefreshDeflectionArtifacts();
             Message = $"Tab 06 outputs generated from {StudyRawDataStore.JsonFileName}" +
-                      (capacities?.Count > 0
+                      (capacities.Count > 0
                           ? $" · capacity from fpu {State.CableStrengthMpa:0.###} MPa · φ {State.CableStrengthReductionFactor:0.###}."
                           : ".") + " No SAP2000 run was performed.";
         }

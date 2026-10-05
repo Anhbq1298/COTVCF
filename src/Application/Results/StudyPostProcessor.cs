@@ -9,10 +9,16 @@ namespace COT_VCF.Application.Results;
 /// </summary>
 public sealed class StudyPostProcessor
 {
+    /// <param name="cableCapacities">Capacities resolved now from Tab 03 (area × fpu × 1000 × φ). They win over
+    /// the capacities stored with the raw results; null keeps the stored ones.</param>
+    /// <param name="configuredCables">Every cable currently on Tab 03. One that is listed here without a current
+    /// capacity is reported as unavailable; a cable Tab 03 does not know keeps the capacity stored for that same
+    /// cable name. No capacity is ever inferred, borrowed from another cable, or defaulted.</param>
     public StudyArtifactOutcome Generate(
         string studyFolder,
         IReadOnlyDictionary<string, double>? cableCapacities,
-        StudyDecisionCriteria decisionCriteria)
+        StudyDecisionCriteria decisionCriteria,
+        IReadOnlyCollection<string>? configuredCables = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(studyFolder);
         ArgumentNullException.ThrowIfNull(decisionCriteria);
@@ -21,9 +27,8 @@ public sealed class StudyPostProcessor
         var raw = new StudyRawDataStore().ReadFromStudyFolder(root);
         var results = raw.Results.OrderBy(result => result.Parameters.RunIndex)
             .ThenBy(result => result.IterationKey, StringComparer.Ordinal).ToArray();
-        var validCapacities = (cableCapacities ?? raw.CableDesignCapacities)
-            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && double.IsFinite(pair.Value) && pair.Value > 0)
-            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        var capacitySet = CableCapacityResolver.Resolve(cableCapacities, configuredCables, raw.CableDesignCapacities);
+        var validCapacities = capacitySet.Capacities;
 
         var diagnosticGenerator = new CandidateDiagnosticReportGenerator();
         foreach (var result in results)
@@ -58,7 +63,8 @@ public sealed class StudyPostProcessor
         string? cable = null;
         if (hasCableReport)
             cable = new CableForceReportGenerator().Generate(root, results,
-                raw.BaselineModelName, raw.StudyMode, raw.CableResultCase, validCapacities, currentReports);
+                raw.BaselineModelName, raw.StudyMode, raw.CableResultCase, validCapacities, currentReports,
+                capacitySet.Sources);
 
         var decisions = new StudyDecisionService().Evaluate(results, decisionCriteria);
         var shortlist = new StudyShortlistExporter().Export(root, decisions, decisionCriteria,

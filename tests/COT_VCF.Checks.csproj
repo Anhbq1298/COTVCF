@@ -4,4 +4,8 @@
   <ProjectReference Include="..\COTVCF.csproj" />
   <Reference Include="CSiAPIv1"><HintPath>C:\Program Files\Computers and Structures\SAP2000 26\CSiAPIv1.dll</HintPath></Reference>
  </ItemGroup>
+ <ItemGroup>
+  <!-- Checks only: runs the self-contained HTML reports' own script against their embedded data (no browser). -->
+  <PackageReference Include="Jint" Version="4.16.4" />
+ </ItemGroup>
 </Project>

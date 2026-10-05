@@ -299,6 +299,68 @@ Study composition plus isolated child-model building, analysis, raw-result extra
   reusable analyzed children; the next explicit Tab 06 generation uses the current derived capacities and criteria.
   Users may edit the raw JSON in place and regenerate; derived artifacts are considered stale until then.
 
+## Tab 06 Post-Processing · Module 07 Cable Forces (`Cable_Forces_Report.html`)
+
+Prestress target vs final analysed cable force. The file name, the report shell (header, metadata line, Result
+Library, sticky `#bar`, `Force (kN)` / `% of capacity` toggle, `section.blk`, `details.block` Source Data, `#warns`)
+and the Module 07 buttons / bindings (`View Report`, `Regenerate`, `Open Excel`, `Open Study Folder`) are fixed —
+change the engineering content, not the identity.
+
+- **Self-contained HTML**: inline CSS / SVG / JavaScript only. No CDN, chart library, server or external resource.
+  Everything renders client-side from the embedded `#report-data` JSON (`CableForceReportDto`).
+- **SAP-free and backward compatible**: `Regenerate` reads `Study_Raw_Results.json` through `StudyPostProcessor`
+  (workbook regeneration via `CableForceReportGenerator.RegenerateFromWorkbook` stays supported). Only values that
+  were already extracted are read (`TargetForceKN`, `ForceKN`, status, L / H / P ids, `TrussHeightM`, result case);
+  a missing per-row target falls back to the candidate's own `PretensionCables` entry for the same cable. Side,
+  delta force / %, ranges, governing rows and chart order are **derived at report time** and never written back
+  to the raw JSON, the workbook result sheets, SAP2000 or the project. Raw schema stays `SchemaVersion = 1`.
+  A format change to this report must never require a SAP2000 run or a study re-run.
+- **Force development** (`CableForceMath`): `DeltaForce = Final − Target`; `DeltaPercent = (Final − Target) / Target × 100`
+  (> 0 pickup, < 0 loss). Delta % is N/A when the target is 0 or missing or the final force is missing. A missing
+  result stays `null` → an `n/a` gap / `Result unavailable`, never 0.
+- **Capacity source of truth = current Tab 03** (`CablePretensionConfig.ResolveCapacity(fpu, φ)` = area × fpu × 1000 × φ).
+  `MainViewModel.GenerateStudyOutputs` passes `CurrentCableCapacities()` plus the names of every cable on Tab 03;
+  `CableCapacityResolver.Resolve` decides per **exact cable object name**: current Tab 03 value → else, only for a
+  cable Tab 03 does not know, the capacity stored with the results for that same name → else unavailable. A Tab 03
+  cable whose capacity cannot be resolved is unavailable (`Capacity unavailable from current Tab 3 configuration`),
+  not a fallback. Never infer a capacity from forces, the chart maximum, another cable, a side, or a constant.
+  Changing fpu / φ then `Regenerate` moves the limit and utilisation without touching target / final / H / P.
+- **Result case wording**: charts say `Final analysed force`; the actual case comes from `CableForceStudyDto.ResultCase`
+  (metadata line and tooltips). Do not hardcode `ULS`.
+- **Cable Grouping** (toolbar panel): every cable gets `Side A` / `Side B` / `Unassigned`, with `Apply Grouping`,
+  `Auto Detect`, `Reset`. It is presentation state only and re-renders client-side; it never changes a force,
+  delta, capacity, utilisation or governing candidate. `CableGroupDetector.Suggest` embeds the Auto Detect
+  suggestion (`autoGroups`): a side is suggested only when exactly one marker in the name (a/b, A/B, L/R,
+  Left/Right at a word edge) has a counterpart cable differing by that marker alone; anything else — lone
+  markers, two competing markers, an a/b/c series, arbitrary names — stays `Unassigned`. The report opens on that
+  suggestion, states `N cables currently unassigned.`, and charts unassigned cables separately (one
+  `All cables · Unassigned` chart per P while nothing is assigned). The applied grouping is kept in `localStorage`
+  per baseline model; `Reset` clears it.
+- **Cable order** is natural-name order (`NaturalNameComparer`: Cable1, Cable2, Cable10) — never a hard-coded list.
+- **01 · Cable Force Overview**: one chart per truss height actually present in the results. Per cable, a yellow
+  target range and a blue final-force range across the pretension candidates with a result there (pale below the
+  minimum, solid min → max, from 0; identical targets draw one target level). The header note names what is missing
+  (`Range based on 8 available pretension candidates; P08-H30 unavailable.`).
+- **02 · Force Development by Pretension Candidate**: for every P candidate one chart per populated group
+  (`Pxx — Side A`, `Pxx — Side B`; an empty side shows `No cables assigned to Side A.`). Two-level category axis:
+  bars clustered per cable, one bar per truss height labelled with the real height (`H20` = 20 m). Yellow = target
+  from 0; solid blue stacked on top = pickup (top = final); hatched blue band from final up to target = loss (lower
+  edge = final); a dark cap marks the final force. Final force is labelled first, Δ% only where it fits; label
+  format is decided per chart so neighbours never collide.
+- **Limit**: red `#C62828` dashed `6 4`. Force mode: one continuous `Cable Force Limit` line when every displayed
+  cable has an equal capacity (within tolerance), otherwise one segment per cable cluster that has a capacity, and
+  nothing for a cable without one. `% of capacity` mode: one `Design Limit · 100%` line with headroom above it.
+  Exceedance turns only the final-force value and cap red; bars keep yellow / blue. Draw order: grid, bars, limit,
+  final-force markers and labels.
+- **03 · Governing / Capacity Review**: per cable the largest final force, its candidate / height / P, current
+  capacity, utilisation and a within / exceeds / N/A verdict, for the selected load (study-wide line when the
+  study has several loads).
+- A **Load** selector appears only when the study has more than one loading candidate; loads are never mixed
+  inside a chart. One shared Y-scale from 0 per load and value mode.
+- Checks: `tests/CableForceReportChecks.cs` covers the derivations in C# and runs the report's own script against
+  its embedded data with Jint (test-only package) through the `window.cableReport` handle
+  (`setMode`, `setLoad`, `applyGroups`, `autoDetect`, `resetGroups`), including the DOM-id regression check.
+
 ## Config Project File (`src/Configuration/`)
 
 The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 01–05,

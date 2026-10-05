@@ -1071,7 +1071,7 @@
        <Expander Style="{StaticResource PpModule}">
         <Expander.Header><TextBlock Text="07  CABLE FORCES · kN" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="Analysed cable axial force per configured cable · read under the Output Settings cable result case · one chart per cable · shared Y-scale" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Prestress target vs final analysed cable force · grouped by pretension candidate, truss height and user-defined cable side · force pickup/loss and design limit" Style="{StaticResource PpDesc}"/>
          <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>
          <TextBlock Text="{Binding CableForceReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding CableForceReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
