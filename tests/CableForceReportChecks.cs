@@ -359,6 +359,11 @@ internal static class CableForceReportChecks
             Check(html.Contains("\"project\":\"Legacy Tower\"") && html.Contains("\"jobNumber\":\"J-77\"") &&
                   html.Contains("\"company\":\"Legacy Engineers\"") && html.Contains("\"title\":\"Cable Forces\""),
                 "Regenerate embeds the current Print Setup — header and footer need no SAP either");
+            var siblingsOnEngine = new[] { outcome.DeflectionReportPath!, outcome.ShortlistReportPath!,
+                    Directory.EnumerateFiles(root, "Deflection_Diagnostic_*.html", SearchOption.AllDirectories).First() }
+                .Select(File.ReadAllText).ToArray();
+            Check(siblingsOnEngine.All(text => text.Contains("\"project\":\"Legacy Tower\"") && text.Contains("id=\"pr-page\"")),
+                "the same Regenerate puts the Print Setup into the deflection report, the shortlist and the candidate diagnostics");
 
             var raw = new StudyRawDataStore().ReadFromStudyFolder(root);
             var gen = new CableForceReportGenerator();

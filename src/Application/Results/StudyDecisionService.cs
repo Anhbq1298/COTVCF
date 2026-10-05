@@ -201,9 +201,12 @@ public sealed class StudyShortlistExporter
 {
     public const string HtmlFileName = "Study_Shortlist.html";
     public const string WorkbookFileName = "Study_Shortlist.xlsx";
+    /// <summary>Report name printed in the page header.</summary>
+    public const string ReportTitle = "Study Shortlist";
 
     public StudyShortlistArtifacts Export(string studyRoot, IReadOnlyList<CandidateDecisionResult> decisions,
-        StudyDecisionCriteria criteria, int count = 10, IReadOnlyList<string>? siblingReports = null)
+        StudyDecisionCriteria criteria, int count = 10, IReadOnlyList<string>? siblingReports = null,
+        ReportPrintSettings? print = null, string baselineName = "")
     {
         Directory.CreateDirectory(studyRoot);
         var rows = decisions.Where(item => item.Status is CandidateDecisionStatus.Pass or CandidateDecisionStatus.Warning)
@@ -214,7 +217,8 @@ public sealed class StudyShortlistExporter
         var workbook = Path.Combine(studyRoot, WorkbookFileName);
         AtomicFile.Write(workbook, path => WriteWorkbook(path, rows, criteria));
         var html = Path.Combine(studyRoot, HtmlFileName);
-        AtomicFile.WriteAllText(html, Html(rows, criteria, siblings));
+        AtomicFile.WriteAllText(html, Html(rows, criteria, siblings,
+            ReportPrintEngine.Describe(print, ReportTitle, baselineName, DateTimeOffset.Now)));
         return new(html, workbook);
     }
 
@@ -243,15 +247,19 @@ public sealed class StudyShortlistExporter
     }
 
     private static string Html(IReadOnlyList<CandidateDecisionResult> rows, StudyDecisionCriteria criteria,
-        IReadOnlySet<string> siblingReports)
+        IReadOnlySet<string> siblingReports, ReportPrintDto print)
     {
         static string E(object? value) => WebUtility.HtmlEncode(Convert.ToString(value, CultureInfo.InvariantCulture) ?? "");
         var body = string.Join("", rows.Select(item => $"<tr><td>{item.Rank}</td><td>{E(item.IterationKey)}</td><td>{item.Status}</td><td>{E(item.ScoreText)}</td><td>{E(item.DeflectionText)}</td><td>{E(item.CableForceText)}</td><td>{item.HeightM:0.###} m</td><td>{E(item.GoverningReason)}</td></tr>"));
         var library = ReportNav.Library("shortlist", siblingReports);
         return "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>COTVCF Study Shortlist</title>" +
-               "<style>body{font:14px system-ui;margin:24px;color:#202124}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d4d7dc;padding:7px;text-align:left}th{background:#eef2f5}small{color:#5f6368}.lib{margin:0 0 18px;border:1px solid #d4d7dc;border-radius:6px;padding:8px 12px}.lib summary{font-weight:700;cursor:pointer}.lib ul{display:flex;gap:8px;flex-wrap:wrap;list-style:none;padding:8px 0 0;margin:0}.lib li{display:flex;gap:7px;align-items:center;border:1px solid #d4d7dc;border-radius:4px;padding:6px 9px}.lib li.on{background:#eef2f5;font-weight:700}.lib span{color:#5f6368;font-size:11px}.lib a{color:#175ea8;text-decoration:none}</style></head><body>" +
-               library +
+               "<style>" + ReportPrintEngine.Css + "body{font:14px system-ui;margin:24px;color:#202124}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d4d7dc;padding:7px;text-align:left}th{background:#eef2f5}small{color:#5f6368}.lib{margin:0 0 18px;border:1px solid #d4d7dc;border-radius:6px;padding:8px 12px}.lib summary{font-weight:700;cursor:pointer}.lib ul{display:flex;gap:8px;flex-wrap:wrap;list-style:none;padding:8px 0 0;margin:0}.lib li{display:flex;gap:7px;align-items:center;border:1px solid #d4d7dc;border-radius:4px;padding:6px 9px}.lib li.on{background:#eef2f5;font-weight:700}.lib span{color:#5f6368;font-size:11px}.lib a{color:#175ea8;text-decoration:none}" +
+               // paper: the sheet, margins, header and footer come from the shared print engine
+               "@media print{body{margin:0;font-size:12px}.lib{display:none}h1{font-size:16px;margin:0 0 4px}th,td{padding:5px 7px}}</style>" +
+               ReportPrintEngine.PageStyle + "</head><body>" +
+               library + ReportPrintEngine.Bar +
                $"<h1>Study Shortlist</h1><p><small>Deflection limit band (peak ↓U3) {E(criteria.DeflectionBand.Label)} · Ranking weights D/P/H = {criteria.DeflectionWeight:0.###}/{criteria.PretensionWeight:0.###}/{criteria.HeightWeight:0.###}</small></p>" +
-               "<table><thead><tr><th>Rank</th><th>Candidate</th><th>Decision</th><th>Score</th><th>Peak ↓U3</th><th>Cable force</th><th>Height</th><th>Governing reason</th></tr></thead><tbody>" + body + "</tbody></table></body></html>";
+               "<table><thead><tr><th>Rank</th><th>Candidate</th><th>Decision</th><th>Score</th><th>Peak ↓U3</th><th>Cable force</th><th>Height</th><th>Governing reason</th></tr></thead><tbody>" + body + "</tbody></table>" +
+               ReportPrintEngine.Scripts(print) + "</body></html>";
     }
 }

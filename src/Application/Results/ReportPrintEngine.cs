@@ -29,9 +29,12 @@ public sealed record ReportPrintDto(
 /// it (browser Print, or <c>ReportPdfExporter</c>) lays it out with CSS Paged Media: the sheet and its margins
 /// come from an <c>@page</c> rule, the header and footer live in the page-margin boxes (logo top-left, page
 /// numbers bottom-right) on every page, and charts stay inline SVG so they print as vectors at any resolution.
-/// A report plugs in by emitting <see cref="Css"/>, <see cref="PageStyle"/>, <see cref="ToolbarButton"/>,
-/// <see cref="Panel"/> and <see cref="Scripts"/>, and by registering a before / after hook to re-lay-out its
-/// charts for the sheet.</summary>
+/// A report plugs in by emitting <see cref="Css"/>, <see cref="PageStyle"/>, <see cref="ToolbarButton"/> and
+/// <see cref="Panel"/> (or <see cref="Bar"/> when it has no toolbar) and <see cref="Scripts"/>. Optional hooks:
+/// <c>data-print-controls</c> on its toolbar plus a <c>data-print-view</c> element (the engine prints what the
+/// hidden filters were set to), <c>data-print-fit</c> on a wide table (scaled to the sheet),
+/// <c>data-print="source"</c> on an optional data table, and <c>window.reportPrint.register({ before, after })</c>
+/// to re-lay-out charts that are drawn against the window width.</summary>
 public static class ReportPrintEngine
 {
     /// <summary>Largest logo file that is embedded. Each report carries its own copy.</summary>
@@ -52,13 +55,15 @@ public static class ReportPrintEngine
 
     /// <summary>Resolve the settings for one report. Null settings still give a usable printout: report title,
     /// model and page numbers.</summary>
+    /// <param name="embedLogo">False for documents written once per candidate: they print the company name
+    /// top-left instead, so a study with hundreds of candidates does not carry hundreds of logo copies.</param>
     public static ReportPrintDto Describe(ReportPrintSettings? settings, string reportTitle, string modelName,
-        DateTimeOffset generatedAt)
+        DateTimeOffset generatedAt, bool embedLogo = true)
     {
         settings ??= new ReportPrintSettings();
         return new ReportPrintDto(
-            reportTitle.Trim(), modelName.Trim(), generatedAt.ToString("dd MMM yyyy", CultureInfo.InvariantCulture),
-            settings.CompanyName.Trim(), LogoDataUri(settings.LogoPath, out _) ?? "", settings.ProjectName.Trim(),
+            reportTitle.Trim(), (modelName ?? "").Trim(), generatedAt.ToString("dd MMM yyyy", CultureInfo.InvariantCulture),
+            settings.CompanyName.Trim(), embedLogo ? LogoDataUri(settings.LogoPath, out _) ?? "" : "", settings.ProjectName.Trim(),
             settings.JobNumber.Trim(), settings.PreparedBy.Trim(), settings.CheckedBy.Trim(), settings.Revision.Trim(),
             settings.FooterNote.Trim(), settings.PaperSize.ToString(),
             settings.Orientation == ReportPageOrientation.Portrait ? "portrait" : "landscape",
@@ -127,19 +132,30 @@ public static class ReportPrintEngine
   </div>
 """;
 
-    /// <summary>Shared print stylesheet. Report-specific print rules stay with the report.</summary>
+    /// <summary>Print button and options for a report that has no toolbar of its own.</summary>
+    public const string Bar = """<div class="prbar no-print">""" + ToolbarButton + Panel + "</div>";
+
+    /// <summary>Shared print stylesheet — self-contained, so it looks the same in every report. Report-specific
+    /// print rules stay with the report.</summary>
     public const string Css = """
 /* print engine */
 .print-only{display:none}
-.prpanel{flex-basis:100%;display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;border-top:1px solid var(--bd,#C7CCD2);margin-top:2px;padding:8px 0 4px}
+.prpanel{flex-basis:100%;display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;border-top:1px solid #C7CCD2;margin-top:2px;padding:8px 0 4px;font-size:11px;color:#666}
 .prpanel label{display:inline-flex;align-items:center;gap:6px}
 .prpanel #pr-info{flex-basis:100%;line-height:1.45;max-width:120ch}
+#pr-go{background:#1F4788;border-color:#1F4788;color:#fff;font-weight:600}#pr-go:hover{background:#17376b}
+.prbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}
+.prbar button,.prbar select{font:12px "Segoe UI",system-ui,sans-serif;padding:3px 8px;border:1px solid #C7CCD2;border-radius:3px;background:#fff;cursor:pointer}
+.prbar .prpanel{border-top:0;padding:0;margin:0}
 @media print{
   html,body{background:#fff!important}
   body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .no-print,.prpanel,#pr-btn{display:none!important}
   .print-only{display:block}
   body.pr-nosrc [data-print="source"]{display:none!important}
+  /* content wider than the sheet makes the browser shrink the whole page: a wide table is scaled inside its own
+     box instead (see fit() in the script) and, past the limit, cut at the box edge rather than shrinking the page */
+  [data-print-fit]{overflow:hidden!important;max-height:none!important}
   svg{max-width:100%;height:auto}
   h1,h2,h3{break-after:avoid}
   thead{display:table-header-group}tr{break-inside:avoid}
@@ -176,7 +192,7 @@ window.reportPrint = (function(){
     active: false,
     auto: options.print != null        // opened for printing: lay the page out for paper as soon as it has loaded
   };
-  const hooks = [], opened = [];
+  const hooks = [], opened = [], fitted = [];
 
   // sheet geometry; the content width in CSS px is what a report lays its charts out against
   function page(){
@@ -229,20 +245,57 @@ window.reportPrint = (function(){
   }
   function apply(){ const style = byId("pr-page"); if (style) style.textContent = css(); }
 
+  // One line recording what the (hidden) toolbar was set to: "Group: Top · Component: Fz · Loading: all".
+  function viewSummary(){
+    const parts = [];
+    Array.prototype.forEach.call(document.querySelectorAll("[data-print-controls] select, [data-print-controls] .ms > button"), control => {
+      if (control.offsetParent === null || (control.closest && control.closest(".prpanel"))) return;   // not shown, or a print option
+      if (control.tagName === "SELECT"){
+        const label = control.closest ? control.closest("label") : null, option = control.options[control.selectedIndex];
+        const name = label ? Array.prototype.filter.call(label.childNodes, node => node.nodeType === 3).map(node => node.textContent).join(" ").trim() : "";
+        if (option) parts.push((name ? name + ": " : "") + option.textContent.trim());
+      } else parts.push(control.textContent.trim());
+    });
+    return parts.join(" · ");
+  }
+  // A table wider than the sheet is scaled down inside its own box to fit the sheet width — down to 35 %, below
+  // which it would be unreadable (the workbook is the place for a matrix that large).
+  function fit(pg){
+    Array.prototype.forEach.call(document.querySelectorAll("[data-print-fit]"), box => {
+      // Re-measured after each step: hairline cell borders do not shrink with the rest, so a scaled table
+      // comes out slightly wider than its unscaled width predicts.
+      let zoom = 1;
+      for (let pass = 0; pass < 5 && zoom > .35; pass++){
+        const shown = (box.scrollWidth || 0) * zoom;            // scrollWidth is in the box's own, scaled pixels
+        if (shown <= pg.contentPx) break;
+        zoom = Math.max(.35, Math.floor(zoom * pg.contentPx / shown * 1000) / 1000 - .002);
+        box.style.zoom = String(zoom);
+      }
+      if (zoom < 1) fitted.push(box);
+    });
+  }
+
   // print layout on: reports re-lay-out their charts for the sheet width; off: back to the screen layout
   function enter(){
     if (S.active) return;
     S.active = true; apply();
-    if (document.body && document.body.classList) document.body.classList.toggle("pr-nosrc", !S.includeSource);
+    // "pr-on" lets a report apply layout rules that must already hold while tables are measured for fitting
+    if (document.body && document.body.classList){ document.body.classList.add("pr-on"); document.body.classList.toggle("pr-nosrc", !S.includeSource); }
     if (S.includeSource && document.querySelectorAll)
       Array.prototype.forEach.call(document.querySelectorAll('details[data-print="source"]'), d => { if (!d.open){ d.open = true; opened.push(d); } });
     const pg = page();
     hooks.forEach(hook => { if (hook.before) hook.before(pg); });
+    if (!document.querySelectorAll || !document.querySelector) return;
+    const view = document.querySelector("[data-print-view]");
+    if (view){ const text = viewSummary(); view.textContent = text ? "Printed view: " + text : ""; }
+    fit(pg);
   }
   function leave(){
     if (!S.active || S.auto) return;
     S.active = false;
+    if (document.body && document.body.classList) document.body.classList.remove("pr-on");
     opened.splice(0).forEach(d => { d.open = false; });
+    fitted.splice(0).forEach(box => { box.style.zoom = ""; });
     hooks.forEach(hook => { if (hook.after) hook.after(); });
   }
   function print(){ enter(); window.print(); }

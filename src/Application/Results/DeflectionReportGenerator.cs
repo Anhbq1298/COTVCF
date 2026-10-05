@@ -31,12 +31,14 @@ public sealed class DeflectionReportGenerator
         string studyFolder,
         IReadOnlyList<CandidateResultDto> results,
         string baselineName, string baselinePath, IterationStudyMode studyMode,
-        IReadOnlyList<string>? siblingReports = null, DeflectionLimitBand? limitBand = null)
+        IReadOnlyList<string>? siblingReports = null, DeflectionLimitBand? limitBand = null,
+        ReportPrintSettings? print = null)
     {
         Directory.CreateDirectory(studyFolder);
         var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode, siblingReports, limitBand);
         var path = Path.Combine(studyFolder, ReportFileName);
-        AtomicFile.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
+        AtomicFile.WriteAllText(path, BuildHtml(dto, ReportPrintEngine.Describe(print, ReportTitle, baselineName, DateTimeOffset.Now)),
+            new System.Text.UTF8Encoding(false));
         return path;
     }
 
@@ -153,10 +155,14 @@ public sealed class DeflectionReportGenerator
 
     // ---------- HTML ----------
 
-    public string BuildHtml(DeflectionReportDto dto)
+    /// <summary>Report name printed in the page header.</summary>
+    public const string ReportTitle = "Deflection · Uz";
+
+    public string BuildHtml(DeflectionReportDto dto, ReportPrintDto? print = null)
     {
         var json = JsonSerializer.Serialize(dto, Json);
         var s = dto.Study;
+        print ??= ReportPrintEngine.Describe(null, ReportTitle, s.BaselineModelName, DateTimeOffset.Now);
         var library = ReportNav.Library("deflection", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         var bandNote = dto.LimitBand is { } b
             ? $"<br>Shaded strip = deflection <b>limit band</b> {Esc(new DeflectionLimitBand(b.MinMm, b.MaxMm).Label)} on the peak " +
@@ -165,12 +171,13 @@ public sealed class DeflectionReportGenerator
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Deflection Report — {{Esc(s.BaselineModelName)}}</title>
-<style>{{Style}}</style></head><body>
+<style>{{ReportPrintEngine.Css}}{{Style}}</style>{{ReportPrintEngine.PageStyle}}</head><body>
 <header>
   <div>
     <h1>Deflection Results Viewer</h1>
     <p class="meta">{{Esc(s.BaselineModelName)}} · mode {{Esc(s.StudyMode)}} · {{s.CandidateCount}} candidate(s) ·
       generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
+    <p class="meta print-only" data-print-view></p>
     <p class="intro">Each line is one study candidate: the vertical deflection U<sub>z</sub> [mm] of every monitored
       point plotted against its position X [m] along the truss span, under the selected result load case.
       <b>Colour</b> = load candidate · <b>line style</b> = truss height · <b>marker</b> = pretension candidate.
@@ -178,7 +185,7 @@ public sealed class DeflectionReportGenerator
   </div>
   {{library}}
 </header>
-<div id="toolbar">
+<div id="toolbar" data-print-controls>
   <label>Group <select id="group"></select></label>
   <span class="sep"></span>
   <label><input type="checkbox" id="legendToggle" checked> Plot legend</label>
@@ -187,7 +194,8 @@ public sealed class DeflectionReportGenerator
   <button id="srcBtn">View source data</button>
   <span class="sep"></span>
   <span class="hint">each chart has its own name + L / H / P filter · click a legend row = highlight · wheel = zoom X · drag = pan · dbl-click = reset · Duplicate clones the chart</span>
-</div>
+  {{ReportPrintEngine.ToolbarButton}}
+{{ReportPrintEngine.Panel}}</div>
 <div id="panels"></div>
 <template id="panelTpl">
   <section class="panel">
@@ -204,12 +212,13 @@ public sealed class DeflectionReportGenerator
 </template>
 <div id="tip" hidden></div>
 <details id="candKey" open><summary>Candidate definitions — what each L## / H## / P## is</summary><div id="candKeyBody"></div></details>
-<div id="matrixWrap" hidden>
+<div id="matrixWrap" data-print="source" hidden>
   <div class="mhdr"><strong>Source Data Matrix</strong><button id="mClose">Close</button></div>
-  <div id="matrix"></div>
+  <div id="matrix" data-print-fit></div>
 </div>
 <div id="warns"></div>
 <script type="application/json" id="report-data">{{json}}</script>
+{{ReportPrintEngine.Scripts(print)}}
 <script>{{Script}}</script>
 </body></html>
 """;
@@ -326,6 +335,31 @@ button{cursor:pointer}button:hover{background:var(--su)}
 #warns{padding:6px 14px;font-size:11px;color:#8a6d00}
 #warns .e{color:#C62828}
 a{color:var(--acc)}
+/* paper: the sheet, margins, header and footer come from the shared print engine. Each chart is redrawn at the
+   full sheet width with its legend underneath in columns (a side column would run off the page), and keeps its
+   own case / view / filter controls as a record of what is shown. */
+@media print{
+  header{display:block;padding:0 0 5px}
+  /* the intro repeats what the printed legend headings and the limit-band labels already say */
+  .lib,.intro,#toolbar,#tip,.pv-dup,.pv-rm,.mhdr button,.legend .lcb,.legend .hint2{display:none!important}
+  .panel{border-bottom:0}.panel.copy{background:none}
+  .pbar{padding:6px 0 2px;break-after:avoid}
+  .stage{display:block;height:auto;padding:4px 0 8px}
+  .chart{display:block;width:100%}
+  .legend{width:auto;border-left:0;border-top:1px solid var(--bd);overflow:visible;padding:6px 0 0;font-size:10px;columns:7;column-gap:14px;break-inside:avoid}
+  .legend h4{margin:0 0 3px;break-after:avoid}.legend .row{padding:1px 0;break-inside:avoid}
+  #candKey{border-top:0;margin-top:6px}#candKey>summary{list-style:none;padding:5px 0;background:none}
+  #candKey>summary::-webkit-details-marker{display:none}
+  #candKeyBody{padding:6px 0 10px;gap:24px}#candKeyBody .grp,#candKeyBody .pblk{break-inside:avoid}
+  #matrixWrap{border:0}.mhdr{padding:5px 0;background:none}
+  #matrix thead th,#matrix th:first-child,#matrix th:nth-child(2),#matrix td:nth-child(2){position:static}
+  #warns{padding:6px 0}
+}
+/* laid out for paper: a matrix column is as wide as its values, headed by the candidate id alone (what each id
+   is, is printed under Candidate definitions) — so the table needs far less scaling to fit the sheet */
+body.pr-on #matrix thead th span{display:none}
+body.pr-on #matrix th,body.pr-on #matrix td{padding:2px 4px}
+body.pr-on #matrix thead th{white-space:normal;overflow-wrap:anywhere}
 """;
 
     private const string Script = """
@@ -356,6 +390,8 @@ a{color:var(--acc)}
   // colour/line relationship, load case and zoom. Duplicate clones the whole config; one chart by default.
   // `hidden` = per-candidate show/hide (shared), `hi` = matrix-highlighted candidate (shared).
   let gi = 0, showLegend = true, hidden = new Set(), hi = null;
+  let printW = 0, printH = 0;      // > 0 while laid out for paper: the chart size on the sheet, not in the window
+  const PRINT = window.reportPrint || null, OPT = PRINT ? PRINT.options : {};
   const panels = [];
   const tpl = document.getElementById('panelTpl'), panelsEl = document.getElementById('panels');
   const mw = document.getElementById('matrixWrap'), srcBtn = document.getElementById('srcBtn');
@@ -585,7 +621,8 @@ a{color:var(--acc)}
     function render(){
       const g = grp(), V = view(); if(!g){ chart.innerHTML=''; legendEl.innerHTML=''; return; }
       legendEl.hidden = !showLegend;
-      const W = chart.clientWidth||900, H = chart.clientHeight||360, m={l:58,r:14,t:34,b:40};
+      chart.style.height = printW ? printH + 'px' : '';
+      const W = printW || chart.clientWidth||900, H = printW ? printH : (chart.clientHeight||360), m={l:58,r:14,t:34,b:40};
       const all = g.series.flatMap(s=>s.points.filter(p=>p.uzMm!=null));
       const [dx0,dx1] = xExtent();
       let x0=dx0, x1=dx1;
@@ -764,6 +801,8 @@ a{color:var(--acc)}
 
   function renderAll(){ panels.forEach(p=>p.render()); if(!mw.hidden) drawMatrix(); drawWarnings(); }
 
+  // "#print&group=1" from the PDF exporter chooses the monitored group / result case to print
+  if(OPT.group != null && D.groups[+OPT.group]){ gi = +OPT.group; sel.value = gi; }
   if(!D.groups.length){
     panelsEl.innerHTML='<p style="padding:20px;color:#666">No deflection results in this study.</p>';
     srcBtn.hidden = true;
@@ -782,6 +821,12 @@ a{color:var(--acc)}
   srcBtn.onclick=()=>toggleSrc(mw.hidden);
   document.getElementById('mClose').onclick=()=>toggleSrc(false);
   window.addEventListener('resize',()=>renderAll());
+  // paper: every chart is redrawn against the sheet — full width, and short enough that the title block, the chart
+  // and its legend share one landscape page — and the Source Data Matrix follows the print option
+  if(PRINT){ let opened = false; PRINT.register({
+    before: pg => { printW = Math.max(400, pg.contentPx); printH = Math.max(280, Math.min(430, pg.contentHeightPx - 320));
+      opened = PRINT.state.includeSource && mw.hidden && D.groups.length > 0; if(opened) toggleSrc(true); renderAll(); },
+    after: () => { printW = 0; if(opened) toggleSrc(false); opened = false; renderAll(); } }); }
   renderAll();
 })();
 """;

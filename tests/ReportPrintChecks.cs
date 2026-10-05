@@ -24,6 +24,7 @@ internal static class ReportPrintChecks
             Logo(folder);
             PageRules(folder);
             CableReportOnPaper(folder);
+            EveryReportPrints(folder);
             Exporter(folder);
         }
         finally { try { Directory.Delete(folder, true); } catch { } }
@@ -231,6 +232,92 @@ internal static class ReportPrintChecks
             "unknown or malformed URL options fall back to the report defaults");
     }
 
+    // ---------- every report and diagnostic is on the engine ----------
+
+    private static void EveryReportPrints(string folder)
+    {
+        var logo = Path.Combine(folder, "logo.png");
+        var print = new ReportPrintSettings { CompanyName = "ACME", LogoPath = logo, ProjectName = "Tower", JobNumber = "24-0187" };
+        foreach (var (name, title, path) in GenerateAll(Path.Combine(folder, "all"), print))
+        {
+            var html = File.ReadAllText(path);
+            var perCandidate = name == "diagnostic";
+            Check(html.Contains("<style id=\"pr-page\" media=\"print\">") && html.Contains("id=\"print-data\"") && html.Contains("@media print") &&
+                  html.Contains("id=\"pr-btn\"") && html.Contains("Print / Save as PDF") &&
+                  !html.Contains("http://") && !html.Contains("https://") && !html.Contains("cdn."),
+                $"{name}: carries the print engine (page rule, print stylesheet, Print button) and stays self-contained");
+            Check(html.Contains("\"project\":\"Tower\"") && html.Contains("\"jobNumber\":\"24-0187\"") &&
+                  html.Contains("data:image/png;base64,") == !perCandidate && (!perCandidate || html.Contains("\"logo\":\"\"")),
+                perCandidate ? $"{name}: embeds the Print Setup without a logo copy in every candidate file (company name top-left)"
+                             : $"{name}: embeds the Print Setup and the logo");
+
+            // the engine alone: these reports' own scripts need a real browser, which the opt-in --report-pdf check uses
+            var page = new ReportPage(html, scripts: 1);
+            var css = page.Eval("window.reportPrint.css()");
+            Check(css.StartsWith("@page{size:A4 landscape;", StringComparison.Ordinal) && css.Contains($"\"{title} · Model.sdb\"") &&
+                  css.Contains("\"Tower\"") && css.Contains("counter(pages)") && css.Contains("url(\"data:image/png") == !perCandidate &&
+                  page.RequestedIds.All(page.StaticIds.Contains),
+                $"{name}: prints \"{title}\" with the project, logo and page numbers in the page margins");
+            page.Fire("beforeprint");
+            var onPaper = page.BodyHasClass("pr-on") && page.BodyHasClass("pr-nosrc");
+            page.Fire("afterprint");
+            Check(onPaper && !page.BodyHasClass("pr-on"), $"{name}: switches to the paper layout for printing and back afterwards");
+        }
+
+        var files = GenerateAll(Path.Combine(folder, "hooks"), print).ToDictionary(item => item.Name, item => File.ReadAllText(item.Path));
+        Check(new[] { "deflection", "member", "support" }.All(name => files[name].Contains("data-print-controls") && files[name].Contains("data-print-view")),
+            "chart reports hand their toolbar to the engine, which prints what the hidden filters were set to");
+        Check(files["deflection"].Contains("id=\"matrixWrap\" data-print=\"source\"") && files["deflection"].Contains("id=\"matrix\" data-print-fit") &&
+              files["member"].Contains("class=\"matrix-wrap\" data-print-fit") && files["support"].Contains("class=\"matrix-wrap\" data-print-fit") &&
+              files["cable"].Contains("data-print=\"source\""),
+            "source tables are optional on paper, and wide matrices are scaled to the sheet instead of being cut off");
+        Check(files["deflection"].Contains("PRINT.register(") && files["deflection"].Contains("printW || chart.clientWidth") &&
+              files["member"].Contains("OPT.group") && files["support"].Contains("OPT.group") && files["deflection"].Contains("OPT.group"),
+            "Deflection redraws its charts for the sheet, and each chart report accepts its view from the export URL");
+    }
+
+    /// <summary>One of every report on the engine, generated the way Tab 06 does.</summary>
+    private static IEnumerable<(string Name, string Title, string Path)> GenerateAll(string folder, ReportPrintSettings print)
+    {
+        var results = FullStudy();
+        string[] siblings = ["deflection", "member", "support", "cable", "shortlist"];
+        yield return ("deflection", DeflectionReportGenerator.ReportTitle, new DeflectionReportGenerator().Generate(folder, results,
+            "Model.sdb", @"C:\base.sdb", IterationStudyMode.Combined, siblings, new DeflectionLimitBand(10, 200), print));
+        yield return ("member", MemberForceReportGenerator.ReportTitle, new MemberForceReportGenerator().Generate(folder, results,
+            "Model.sdb", IterationStudyMode.Combined, siblings, print));
+        yield return ("support", SupportReactionReportGenerator.ReportTitle, new SupportReactionReportGenerator().Generate(folder, results,
+            "Model.sdb", IterationStudyMode.Combined, siblings, print));
+        yield return ("cable", CableForceReportGenerator.ReportTitle, new CableForceReportGenerator().Generate(folder, results,
+            "Model.sdb", IterationStudyMode.Combined, "CASE-1", Capacities(), siblings, print: print));
+        var criteria = StudyDecisionCriteria.Default;
+        yield return ("shortlist", StudyShortlistExporter.ReportTitle, new StudyShortlistExporter().Export(folder,
+            new StudyDecisionService().Evaluate(results, criteria), criteria, siblingReports: siblings, print: print, baselineName: "Model.sdb").HtmlPath);
+        yield return ("diagnostic", $"{CandidateDiagnosticReportGenerator.ReportTitle} · {results[0].IterationKey}",
+            new CandidateDiagnosticReportGenerator().Write(results[0], Path.Combine(folder, results[0].IterationKey), print));
+    }
+
+    /// <summary>The cable study with deflection, member-force and support-reaction results on every candidate.</summary>
+    private static List<CandidateResultDto> FullStudy() => Study(loads: 1).Select((result, i) =>
+    {
+        var points = Enumerable.Range(0, 5).Select(n => new MonitoredPointResultDto($"P{n + 1}", n * 10.0, 0, 0, n + 1,
+            -(20 + 15 * i) * Math.Sin((n + .5) / 5 * Math.PI), ResultValueStatus.Valid, null)).ToArray();
+        MemberForceStationResultDto Station(string frame, int sequence, double station, double p) => new(
+            frame, sequence, frame + "-1", station, station, sequence - 1 + station, "Step", 1, p, p * .1, 0, 0, 0, p * .3, ResultValueStatus.Valid);
+        SupportReactionPointResultDto Support(string point, int sequence, double fz) => new(
+            point, sequence, sequence * 10, 0, 0, "Step", 1, fz * .05, 0, fz, 0, 0, 0, ResultValueStatus.Valid);
+        return result with
+        {
+            Groups = [new MonitoredPointGroupResultDto("Monitored Deflection", "SERVICE", ProfileCoordinateAxis.X, points)],
+            MemberForceGroups = [new MemberForceGroupResultDto("TopChord", "[O]-TopChord", "CASE-1",
+                [Station("TC-01", 1, 0, -900 - 20 * i), Station("TC-01", 1, .5, -950 - 20 * i), Station("TC-02", 2, 0, -700 - 20 * i), Station("TC-02", 2, .5, -720 - 20 * i)])],
+            SupportReactionGroups =
+            [
+                new SupportReactionGroupResultDto("Left", "[O]-FoundationLeft", "CASE-1", [Support("200", 1, 5000 + 100 * i), Support("198", 2, -400 - 10 * i)]),
+                new SupportReactionGroupResultDto("Right", "[O]-FoundationRight", "CASE-1", [Support("199", 1, 5100 + 100 * i), Support("205", 2, -380 - 10 * i)]),
+            ],
+        };
+    }).ToList();
+
     // ---------- PDF exporter ----------
 
     private static void Exporter(string folder)
@@ -252,8 +339,8 @@ internal static class ReportPrintChecks
         Check(threw && !File.Exists(Path.Combine(folder, "nothing.pdf")), "exporting a report that was never generated fails clearly and writes nothing");
     }
 
-    /// <summary>Opt-in (<c>--report-pdf</c>): prints a generated report to a real PDF with the installed browser.
-    /// Needs Microsoft Edge or Google Chrome; never touches SAP2000.</summary>
+    /// <summary>Opt-in (<c>--report-pdf</c>): prints every report to a real PDF with the installed browser — the
+    /// one place the chart reports' own scripts run. Needs Microsoft Edge or Google Chrome; never touches SAP2000.</summary>
     public static void RunPdfExport()
     {
         var folder = Path.Combine(Path.GetTempPath(), "cotvcf_pdf_" + Guid.NewGuid().ToString("N"));
@@ -272,6 +359,15 @@ internal static class ReportPrintChecks
             Check(Directory.GetFiles(folder, "*.tmp.pdf").Length == 0, "no temporary file is left beside the PDF");
             var again = ReportPdfExporter.Export(html, options: "paper=A3&mode=ut");
             Check(File.Exists(again.PdfPath) && new FileInfo(again.PdfPath).Length > 20_000, "exporting again replaces the PDF (A3, % of capacity)");
+
+            var all = Path.Combine(folder, "all");
+            foreach (var (name, _, path) in GenerateAll(all, new ReportPrintSettings { CompanyName = "ACME", LogoPath = logo, ProjectName = "Tower" }))
+            {
+                var printed = ReportPdfExporter.Export(path, options: name is "deflection" ? "source=1" : name is "member" or "support" ? "view=matrix" : null);
+                var pdf = File.ReadAllBytes(printed.PdfPath);
+                Check(pdf.Length > 15_000 && System.Text.Encoding.ASCII.GetString(pdf, 0, 5) == "%PDF-",
+                    $"{name}: {Path.GetFileName(path)} printed to a {pdf.Length / 1024} KB PDF in {printed.Elapsed.TotalSeconds:0.0} s");
+            }
         }
         finally { try { Directory.Delete(folder, true); } catch { } }
     }

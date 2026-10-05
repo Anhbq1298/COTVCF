@@ -181,6 +181,14 @@ internal static class Program
                 Assert(FindVisuals<Button>(cableModule).Any(button => Equals(button.Content, "Export PDF") && !button.IsEnabled) &&
                        !vm.ExportCableForcePdf.CanExecute(null),
                     "Module 07 offers Export PDF, disabled until the cable report exists");
+                foreach (var module in FindVisuals<Expander>(window).ToArray()) module.IsExpanded = true;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                var exportButtons = FindVisuals<Button>(window).Where(button => Equals(button.Content, "Export PDF")).ToArray();
+                Assert(exportButtons.Length == 8 && exportButtons.All(button => !button.IsEnabled) &&
+                       !vm.ExportDeflectionPdf.CanExecute(null) && !vm.ExportMemberForcePdf.CanExecute(null) &&
+                       !vm.ExportSupportReactionPdf.CanExecute(null) && !vm.ExportShortlistPdf.CanExecute(null),
+                    "every post-processing module (01–08) offers Export PDF, disabled until its report exists");
                 var postBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                 postBitmap.Render(window);
                 var postEncoder = new PngBitmapEncoder(); postEncoder.Frames.Add(BitmapFrame.Create(postBitmap));

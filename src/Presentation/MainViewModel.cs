@@ -812,6 +812,10 @@ public sealed class MainViewModel : Observable
     public Command OpenCableForceReport { get; }
     public Command RegenerateCableForceReport { get; }
     public Command ExportCableForcePdf { get; }
+    public Command ExportDeflectionPdf { get; }
+    public Command ExportMemberForcePdf { get; }
+    public Command ExportSupportReactionPdf { get; }
+    public Command ExportShortlistPdf { get; }
     public Command BrowsePrintLogo { get; }
     public Command ClearPrintLogo { get; }
     public Command OpenShortlistReport { get; }
@@ -960,6 +964,10 @@ public sealed class MainViewModel : Observable
         RegenerateDeflectionReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
         RegenerateCableForceReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
         ExportCableForcePdf = new(_ => ExportReportPdf(CableForceReportPath), () => !IsBusy && HasCableForceReport);
+        ExportDeflectionPdf = new(_ => ExportReportPdf(DeflectionReportPath), () => !IsBusy && HasDeflectionReport);
+        ExportMemberForcePdf = new(_ => ExportReportPdf(MemberForceReportPath), () => !IsBusy && HasMemberForceReport);
+        ExportSupportReactionPdf = new(_ => ExportReportPdf(SupportReactionReportPath), () => !IsBusy && HasSupportReactionReport);
+        ExportShortlistPdf = new(_ => ExportReportPdf(ShortlistReportPath), () => !IsBusy && HasShortlistReport);
         BrowsePrintLogo = new(_ =>
         {
             var dialog = new OpenFileDialog { Filter = ReportPrintEngine.LogoFileFilter, CheckFileExists = true, Title = "Company logo for report printouts" };

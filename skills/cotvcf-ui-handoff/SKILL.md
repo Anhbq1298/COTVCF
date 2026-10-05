@@ -369,8 +369,9 @@ change the engineering content, not the identity.
 ## Report Print Engine (`ReportPrintEngine`, Tab 06 Print Setup, Export PDF)
 
 Reports stay one self-contained HTML file; paper output is produced by the report itself with CSS Paged Media, so
-the browser's Print and the app's PDF export give the same pages. Cable Forces is the first report on the engine;
-the other reports plug in the same way.
+the browser's Print and the app's PDF export give the same pages. **Every HTML view is on the engine**: Deflection,
+Member Forces, Support Reactions, Cable Forces, the Study Shortlist and the per-candidate diagnostics. A new report
+must plug in the same way — do not give a report its own print header / footer.
 
 - **Print Setup** (`ReportPrintSettings`, Tab 06 card `PRINT SETUP · HEADER / FOOTER`, above module 01): company,
   logo file, project, job no., revision, prepared by, checked by, footer note, default paper (A4 / A3 / Letter),
@@ -382,6 +383,8 @@ the other reports plug in the same way.
 - **Logo**: `ReportPrintEngine.LogoDataUri` embeds the file as a data URI (PNG / JPG / SVG / GIF / WEBP / BMP, at
   most `MaxLogoBytes`), so the report needs no external resource. A missing / unsupported / oversized logo is
   reported on the card (`DescribeLogo`) and the company name is printed top-left instead. SVG prints as vector.
+  Candidate diagnostics are written once per candidate, so they are described with `embedLogo: false` and print
+  the company name top-left — a study with hundreds of candidates must not carry hundreds of logo copies.
 - **Page layout**: the engine script (`window.reportPrint`) builds one `@page` rule into `<style id="pr-page">`:
   sheet size and orientation, margins (24 mm top, 16 mm bottom, 38 px sides), and the header / footer in the
   **page-margin boxes** on every page — top-left logo (or company), top-centre project over report name · model,
@@ -399,16 +402,32 @@ the other reports plug in the same way.
   plain Ctrl+P (`beforeprint` / `afterprint`), and the URL fragment `#print[&paper=A3&orientation=portrait&source=1]`
   which lays the page out for paper on load. Report-specific options ride on the same fragment (Cable Forces:
   `mode=ut`, `load=L02`).
-- **Export PDF** (`ReportPdfExporter`, Module 07 button): runs the installed Edge (else Chrome) headless with a
-  private profile on `report.html#print` and writes `<report>.pdf` beside the report, then opens it. No SAP2000, no
-  network. It prints the report as last generated — change Print Setup, Regenerate, then export.
+- **Export PDF** (`ReportPdfExporter`; an `Export PDF` button on every module 01–08, modules 02–05 sharing the
+  member-force report): runs the installed Edge (else Chrome) headless with a private profile on
+  `report.html#print` and writes `<report>.pdf` beside the report, then opens it. No SAP2000, no network. It prints
+  the report as last generated — change Print Setup, Regenerate, then export.
 - Engine pieces a report emits: `ReportPrintEngine.Css` (inside its `<style>`), `PageStyle` (in `<head>`),
-  `ToolbarButton` and `Panel` (inside its toolbar), `Scripts(dto)` before its own script, `class="print-only"` /
-  `class="no-print"` helpers, and `data-print="source"` on the optional data table. Report-specific `@media print`
-  rules (what to hide, `break-inside: avoid`, wrapping wide tables) stay with the report.
+  `ToolbarButton` and `Panel` inside its toolbar (or `Bar` when it has none), and `Scripts(dto)` before its own
+  script. Optional hooks the engine acts on while laid out for paper (`body.pr-on`):
+  - `data-print-controls` on the toolbar(s) + one `data-print-view` element → the engine prints a
+    `Printed view: Group: … · Component: … · Loading: all` line from the hidden selects and filter buttons;
+  - `data-print="source"` on an optional data table (hidden unless *Include Source Data* — `body.pr-nosrc`);
+  - `data-print-fit` on a wide table's wrapper → scaled inside its own box to the sheet width (re-measured, floor
+    35 %). Never let content overflow the sheet: Chromium then shrinks the **whole page**. Use `body.pr-on` rules
+    (not only `@media print`) for anything that changes a table's width, so it is measured as it will print;
+  - `class="print-only"` / `class="no-print"`;
+  - `window.reportPrint.register({ before(page), after() })` for charts drawn against the window width.
+  Report-specific `@media print` rules (what to hide, `break-inside: avoid`, legend placement) stay with the report.
+- Per report: **Deflection** redraws each chart at the full sheet width (`preserveAspectRatio="none"`, so it must
+  be redrawn, not stretched), moves the legend under the chart in columns, keeps the per-chart case / view / filter
+  controls as a record, and prints the Source Data Matrix only when asked (`#print&group=N`). **Member Forces** and
+  **Support Reactions** print the current toolbar view — one chart block per page-fit, matrix views paginate with
+  repeating headings (`#print&group=…&component=…&view=…`, plus `sampling` / `band`). **Shortlist** and
+  **diagnostics** are plain documents with the `Bar`.
 - Checks: `tests/ReportPrintChecks.cs` (settings store, logo embedding, generated page rule and escaping, screen ⇄
-  paper re-layout, `#print` options, exporter command line). `--report-pdf` is an opt-in check that prints a real
-  PDF with the installed browser; `--study-ui` renders the Print Setup card with fakes.
+  paper re-layout, `#print` options, every report carries the engine, exporter command line). The chart reports'
+  own scripts need a real browser, so `--report-pdf` (opt-in) prints every report to a real PDF with the installed
+  browser; `--study-ui` renders the Print Setup card and the eight Export PDF buttons with fakes.
 
 ## Config Project File (`src/Configuration/`)
 

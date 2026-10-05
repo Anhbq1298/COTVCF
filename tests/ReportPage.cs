@@ -20,7 +20,7 @@ internal sealed class ReportPage
         var document = {
           getElementById: function(id){ __ids.push(id); return __els[id] || (__els[id] = __el(id)); },
           addEventListener: function(){}, createElement: function(){ return __el(""); },
-          querySelectorAll: function(){ return []; },
+          querySelectorAll: function(){ return []; }, querySelector: function(){ return null; },
           body: __el("body"), documentElement: { clientWidth: 1400, setAttribute: function(){} }
         };
         var window = {
@@ -34,7 +34,9 @@ internal sealed class ReportPage
     public IReadOnlySet<string> StaticIds { get; }
 
     /// <param name="hash">URL fragment the page is opened with, e.g. "#print&amp;paper=A3".</param>
-    public ReportPage(string html, string hash = "")
+    /// <param name="scripts">How many of the page's scripts to run. 1 = the print engine alone, for a report
+    /// whose own script needs a real browser DOM.</param>
+    public ReportPage(string html, string hash = "", int scripts = int.MaxValue)
     {
         var markup = Regex.Replace(html, "(<script[^>]*>).*?</script>", "$1</script>", RegexOptions.Singleline);   // tags, not script text
         StaticIds = Regex.Matches(markup, "\\bid=\"([^\"]+)\"").Select(match => match.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
@@ -42,13 +44,14 @@ internal sealed class ReportPage
         engine.SetValue("__hash", hash);
         engine.Execute(Dom);
         // embedded data blocks first, then every script in document order — as a browser would
-        foreach (Match data in Regex.Matches(html, "<script id=\"([^\"]+)\" type=\"application/json\">(.*?)</script>", RegexOptions.Singleline))
+        foreach (Match data in Regex.Matches(html,
+                     "<script (?:id=\"([^\"]+)\" type=\"application/json\"|type=\"application/json\" id=\"([^\"]+)\")>(.*?)</script>", RegexOptions.Singleline))
         {
-            engine.SetValue("__data", data.Groups[2].Value);
-            engine.Execute($"document.getElementById('{data.Groups[1].Value}').textContent = __data;");
+            engine.SetValue("__data", data.Groups[3].Value);
+            engine.Execute($"document.getElementById('{data.Groups[1].Value}{data.Groups[2].Value}').textContent = __data;");
         }
         engine.Execute("__ids.length = 0;");
-        foreach (Match script in Regex.Matches(html, "<script>(.*?)</script>", RegexOptions.Singleline))
+        foreach (var script in Regex.Matches(html, "<script>(.*?)</script>", RegexOptions.Singleline).Take(scripts))
             engine.Execute(script.Groups[1].Value);
         Fire("load");
     }

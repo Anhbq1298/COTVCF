@@ -15,8 +15,8 @@ public sealed class StudyPostProcessor
     /// <param name="configuredCables">Every cable currently on Tab 03. One that is listed here without a current
     /// capacity is reported as unavailable; a cable Tab 03 does not know keeps the capacity stored for that same
     /// cable name. No capacity is ever inferred, borrowed from another cable, or defaulted.</param>
-    /// <param name="printSettings">Print Setup (header / footer, logo, sheet) embedded into the reports that use
-    /// the shared print engine. A presentation input only.</param>
+    /// <param name="printSettings">Print Setup (header / footer, logo, sheet) embedded into every report and
+    /// candidate diagnostic through the shared print engine. A presentation input only.</param>
     public StudyArtifactOutcome Generate(
         string studyFolder,
         IReadOnlyDictionary<string, double>? cableCapacities,
@@ -36,7 +36,7 @@ public sealed class StudyPostProcessor
 
         var diagnosticGenerator = new CandidateDiagnosticReportGenerator();
         foreach (var result in results)
-            diagnosticGenerator.Write(result, CandidateDirectory(root, result.IterationKey));
+            diagnosticGenerator.Write(result, CandidateDirectory(root, result.IterationKey), printSettings);
 
         var consolidator = new ConsolidatedResultWriter();
         foreach (var result in results) consolidator.Add(result);
@@ -54,16 +54,17 @@ public sealed class StudyPostProcessor
         if (hasCableReport) currentReports.Add("cable");
         currentReports.Add("shortlist");
         var deflection = new DeflectionReportGenerator().Generate(root, results,
-            raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, currentReports, decisionCriteria.DeflectionBand);
+            raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, currentReports, decisionCriteria.DeflectionBand,
+            printSettings);
 
         string? member = null;
         if (hasMemberReport)
             member = new MemberForceReportGenerator().Generate(root, results,
-                raw.BaselineModelName, raw.StudyMode, currentReports);
+                raw.BaselineModelName, raw.StudyMode, currentReports, printSettings);
         string? support = null;
         if (hasSupportReport)
             support = new SupportReactionReportGenerator().Generate(root, results,
-                raw.BaselineModelName, raw.StudyMode, currentReports);
+                raw.BaselineModelName, raw.StudyMode, currentReports, printSettings);
         string? cable = null;
         if (hasCableReport)
             cable = new CableForceReportGenerator().Generate(root, results,
@@ -72,7 +73,7 @@ public sealed class StudyPostProcessor
 
         var decisions = new StudyDecisionService().Evaluate(results, decisionCriteria);
         var shortlist = new StudyShortlistExporter().Export(root, decisions, decisionCriteria,
-            siblingReports: currentReports);
+            siblingReports: currentReports, print: printSettings, baselineName: raw.BaselineModelName);
         var rawFolder = Path.Combine(root, StudyRawDataStore.DirectoryName);
         return new(StudyArtifactState.Ready, workbook, deflection, member, support, cable, null,
             shortlist.WorkbookPath, shortlist.HtmlPath,
