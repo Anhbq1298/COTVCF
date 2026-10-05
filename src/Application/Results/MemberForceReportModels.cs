@@ -39,7 +39,26 @@ public sealed record MemberForceGroupReportDto(
     string GroupName,
     string SapGroupName,
     string OutputCase,
-    IReadOnlyList<MemberForceCandidateDto> Series);
+    IReadOnlyList<MemberForceCandidateDto> Series,
+    // Set for a Top Chord, Bottom Chord or Mega Column group: drives its Summary view (and, for a chord, By Station).
+    // Null = generic views only.
+    MemberGroupSummaryDto? Summary = null);
+
+/// <summary>Governing-force reading of a member-force group, derived at report time (see <c>MemberGroupSummary</c>).</summary>
+public sealed record MemberGroupSummaryDto(
+    string Kind,                                        // "top" | "bottom" | "mega"
+    string Title,                                       // "Top Chord" | "Bottom Chord" | "Mega Column"
+    bool ByStation,                                     // chords: a By Station drill-down exists. Mega columns: no station anywhere
+    IReadOnlyList<MemberGroupSummaryCandidateDto> Candidates); // one per series, same order
+
+public sealed record MemberGroupSummaryCandidateDto(
+    string IterationKey,
+    double? GoverningKN,        // signed source P [kN] where the chord governs; null = no valid station (never 0)
+    string? FrameName,
+    string? ElementName,
+    double? StationM,           // physical station (profile coordinate) of the governing value; null for mega columns
+    string? Step,               // result step of the governing value
+    IReadOnlyList<double[]> Profile);   // [station m, signed source P kN] — one governing point per physical station; empty for mega columns
 
 public sealed record MemberForceReportDto(
     MemberForceStudyDto Study,

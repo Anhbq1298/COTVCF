@@ -366,6 +366,64 @@ change the engineering content, not the identity.
   it fits, prints a `Printed view:` line (value mode · load · grouping) and leaves the Source Data table out unless
   asked for.
 
+## Tab 06 Post-Processing · Modules 02 / 03 / 05 Top Chord, Bottom Chord and Mega Column (`Member_Forces_Report.html`)
+
+A visualization layer inside the existing member-force report — no SAP2000, extraction, candidate or raw-data
+change. `MemberGroupSummary.Kind` reads the member-force group name: `chord` plus `top` / `upper` → `top`,
+`chord` plus `bottom` / `btm` / `lower` → `bottom` (e.g. `TopChord`, `[O]-BottomChord`), `mega` plus `col` →
+`mega` (e.g. `MegaColumns`). Such a group gets a `Summary` section in the report DTO
+(`MemberGroupSummaryDto`: `Kind`, `Title`, `ByStation`, `Candidates`); any other group (Vierendeel …) keeps only
+the generic views.
+
+- **Derived at report time, in C#** (`MemberGroupSummary.Summarise`, tested): per iteration the governing axial
+  force over **every valid station and result step** — Top Chord and Mega Column = max |P| (compression
+  magnitude), Bottom Chord = max P (tension as stored) — with the signed source P, frame, analysis element,
+  physical station and result step it comes from; plus, for a chord, a profile with **one governing point per
+  physical station** (profile coordinate rounded to 0.1 mm, so two elements meeting at a node do not plot
+  twice). Nothing is smoothed, interpolated or defaulted: an iteration without a valid station has no value,
+  never 0.
+- **Mega Column is Summary only — never indicate a station for it** (`MemberGroupSummary.HasStations` = false,
+  `ByStation` = false). A mega-column group is a set of separate columns, so a position along "the group" means
+  nothing: no `View by Station`, no station in the tooltip, no `Station [m]` column in the values table,
+  `StationM` = null and an empty `Profile` in the data, and `summary(i, 'station')` / `&detail=station` stay on
+  the Summary. The frame object and analysis element stay — they say which column governs. Title
+  `Mega Column – Governing Axial Compression`, axis `Governing Compression |P| (MN)`, trace line
+  `governing over the whole group and every result step`.
+- **Summary is the default** (`Display = Summary`, value `summary`): heading `Top Chord` + `Summary` tag, then one
+  card per loading candidate in scope — never mixed. Grouped columns: pretension candidates in natural order
+  (P01 → P09), within each one bar per truss height (`H` + the real height), a small gap between candidates,
+  value above each bar in MN to one decimal, and one trend line per height through the bar-top centres with a
+  small circular marker, on the same Y-axis (from 0, shared by the group's cards). A missing iteration
+  (e.g. P08-H30) has no bar and no marker, shows a muted `n/a`, and **breaks** its trend line. Titles:
+  `Top Chord – Governing Axial Compression` / `Governing Compression |P| (MN)`; `Bottom Chord – Governing Axial
+  Tension` / `Governing Tension P (MN)`. A `Governing values` table (optional on paper) lists every bar's source.
+- **By Station is a chord drill-down, not a tab**: `View by Station` on a chord Summary opens it; it shows `By Station`,
+  `← Summary` and a `Pretension Candidate` selector (actual candidates, default the first), and one line per
+  truss height along the physical chord (left support → midspan → right support): `Compression |P| (MN)` for the
+  top chord, `Tension P (MN)` for the bottom chord with the stored sign kept (compression near the supports
+  plots below 0). Do not add `By Station` to the Display select or as a permanent tab.
+- **Height styling is global**: colour by study-wide height id in the shared palette order (the Support Reactions
+  height bands) and line style by height in the Deflection order (solid, dash, dot …). Same in Summary and By
+  Station; a filter never repaints a height. The palette's green / orange pair is weak for red-green colour
+  blindness, which is why every bar also carries its `H` label and every line its dash style.
+- Choosing a chord or the mega columns in **Group** always lands on the Summary; with `All groups` those groups
+  show their Summary and the other groups their profile chart. Component / Result step / Positions hide while
+  only summaries are shown (they read P over every station and step). `All profiles` / `Envelope` /
+  `Station matrix` remain under Display for every group, chords and mega columns included. The L / H / P filters
+  apply to the summaries too.
+- **Tooltips / traceability**: Summary — `P03 · H25`, governing force in MN, source P [kN] and step, frame /
+  element (and, for a chord, station), iteration key and loading, group and output case; By Station — candidate,
+  height, station, force, source P. The output case is the group's own (`OutputCase`), never a hardcoded name.
+- **Deep links**: `#summary=top|bottom|mega` opens on that group's Summary; `&detail=station&pretension=P03`
+  drills into a chord. A URL fragment cannot be passed through the Windows shell, so generation writes tiny
+  launcher pages, `Top_Chord_Report.html` / `Bottom_Chord_Report.html` / `Mega_Column_Report.html` (removed when
+  the study has no such group). Modules 02 / 03 / 05 `View Report` open the launcher (`OpenTopChordReport` /
+  `OpenBottomChordReport` / `OpenMegaColumnReport`), and their `Export PDF` print that Summary to
+  `Top_Chord_Report.pdf` / `Bottom_Chord_Report.pdf` / `Mega_Column_Report.pdf`; without the group they fall
+  back to the whole member-force report. Module 04 (Vierendeel) is unchanged.
+- Checks: `tests/MemberForceReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
+  `tests/ReportPage.cs`) through `window.memberReport.summary(groupIndex, 'summary' | 'station', pretensionId)`.
+
 ## Report Print Engine (`ReportPrintEngine`, Tab 06 Print Setup, Export PDF)
 
 Reports stay one self-contained HTML file; paper output is produced by the report itself with CSS Paged Media, so

@@ -10,16 +10,21 @@ internal sealed class ReportPage
         function __el(id){
           var classes = {};
           return { id: id, innerHTML: "", textContent: "", hidden: false, disabled: false, checked: false, open: false,
-            title: "", value: "", style: {},
+            title: "", value: "", style: {}, dataset: {}, options: [], firstChild: {}, parentElement: { hidden: false },
             classList: { toggle: function(name, on){ classes[name] = on === undefined ? !classes[name] : !!on; },
                          add: function(name){ classes[name] = true; }, remove: function(name){ classes[name] = false; },
                          contains: function(name){ return !!classes[name]; } },
-            setAttribute: function(){}, addEventListener: function(){}, appendChild: function(){},
+            // a <select>: add(new Option(text, value)) / remove(index)
+            add: function(option){ this.options.push(option); },
+            remove: function(index){ if (typeof index === "number") this.options.splice(index, 1); },
+            setAttribute: function(){}, addEventListener: function(){}, appendChild: function(){}, append: function(){},
+            querySelectorAll: function(){ return []; }, querySelector: function(){ return null; },
             getBoundingClientRect: function(){ return { width: 0, height: 0, left: 0, top: 0 }; } };
         }
+        function Option(text, value){ return { textContent: String(text), text: String(text), value: String(value === undefined ? text : value), disabled: false }; }
         var document = {
           getElementById: function(id){ __ids.push(id); return __els[id] || (__els[id] = __el(id)); },
-          addEventListener: function(){}, createElement: function(){ return __el(""); },
+          addEventListener: function(){}, createElement: function(){ return __el(""); }, createTextNode: function(text){ return { textContent: text }; },
           querySelectorAll: function(){ return []; }, querySelector: function(){ return null; },
           body: __el("body"), documentElement: { clientWidth: 1400, setAttribute: function(){} }
         };
@@ -49,6 +54,17 @@ internal sealed class ReportPage
         {
             engine.SetValue("__data", data.Groups[3].Value);
             engine.Execute($"document.getElementById('{data.Groups[1].Value}{data.Groups[2].Value}').textContent = __data;");
+        }
+        // static <select> controls start on their markup: the options, and the selected (else first) value
+        foreach (Match select in Regex.Matches(markup, "<select id=\"([^\"]+)\"[^>]*>(.*?)</select>", RegexOptions.Singleline))
+        {
+            var options = Regex.Matches(select.Groups[2].Value, "<option(?: value=\"([^\"]*)\")?( selected)?[^>]*>([^<]*)</option>")
+                .Select(option => (Value: option.Groups[1].Success ? option.Groups[1].Value : option.Groups[3].Value,
+                    Text: option.Groups[3].Value, Selected: option.Groups[2].Success)).ToArray();
+            if (options.Length == 0) continue;
+            engine.SetValue("__options", System.Text.Json.JsonSerializer.Serialize(options.Select(option => new[] { option.Text, option.Value })));
+            engine.SetValue("__selected", options.FirstOrDefault(option => option.Selected, options[0]).Value);
+            engine.Execute($"(function(){{ var s = document.getElementById('{select.Groups[1].Value}'); JSON.parse(__options).forEach(function(o){{ s.add(new Option(o[0], o[1])); }}); s.value = __selected; }})();");
         }
         engine.Execute("__ids.length = 0;");
         foreach (var script in Regex.Matches(html, "<script>(.*?)</script>", RegexOptions.Singleline).Take(scripts))
