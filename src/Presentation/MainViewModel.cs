@@ -2,6 +2,7 @@ using COT_VCF.Application;
 using COT_VCF.Application.Results;
 using COT_VCF.Configuration;
 using COT_VCF.Domain;
+using COT_VCF.Infrastructure;
 using Microsoft.Win32;
 using System.Collections;
 using System.Collections.ObjectModel;
@@ -25,6 +26,7 @@ public sealed class MainViewModel : Observable
     private readonly StudyPreflightService studyPreflight = new();
     private readonly IOutputSettingsDialogService? outputDialogs;
     private readonly OutputGroupPreparationService? outputGroupPreparation;
+    private readonly ReportPrintSettingsStore? printStore;
     private bool busy;
     private int selectedTab;
     private AppliedPoint? selectedAppliedPoint;
@@ -559,6 +561,13 @@ public sealed class MainViewModel : Observable
     }
     public bool HasCableForceReport => !string.IsNullOrEmpty(CableForceReportPath) && File.Exists(CableForceReportPath);
     public string CableForceReportName => HasCableForceReport ? Path.GetFileName(CableForceReportPath!) : "No cable-force report generated yet";
+
+    /// <summary>Header / footer, logo and default sheet printed by the reports. A presentation input: it is
+    /// embedded on the next Generate / Regenerate and never invalidates results.</summary>
+    public ReportPrintSettings PrintSettings { get; }
+    public IReadOnlyList<ReportPaperSize> PrintPaperSizes { get; } = Enum.GetValues<ReportPaperSize>();
+    public IReadOnlyList<ReportPageOrientation> PrintOrientations { get; } = Enum.GetValues<ReportPageOrientation>();
+    public string PrintLogoStatus => ReportPrintEngine.DescribeLogo(PrintSettings.LogoPath);
     private string? shortlistReportPath;
     public string? ShortlistReportPath
     {
@@ -802,6 +811,9 @@ public sealed class MainViewModel : Observable
     public Command RegenerateSupportReactionReport { get; }
     public Command OpenCableForceReport { get; }
     public Command RegenerateCableForceReport { get; }
+    public Command ExportCableForcePdf { get; }
+    public Command BrowsePrintLogo { get; }
+    public Command ClearPrintLogo { get; }
     public Command OpenShortlistReport { get; }
     public Command OpenShortlistWorkbook { get; }
     public Command OpenResultsWorkbook { get; }
@@ -822,7 +834,8 @@ public sealed class MainViewModel : Observable
         StudyExecutionCoordinator? studyExecution = null,
         StudyExecutionSnapshotFactory? studySnapshotFactory = null,
         IOutputSettingsDialogService? outputDialogs = null,
-        OutputGroupPreparationService? outputGroupPreparation = null)
+        OutputGroupPreparationService? outputGroupPreparation = null,
+        ReportPrintSettingsStore? printStore = null)
     {
         State = state;
         this.workflow = workflow;
@@ -832,6 +845,15 @@ public sealed class MainViewModel : Observable
         this.studySnapshotFactory = studySnapshotFactory ?? new();
         this.outputDialogs = outputDialogs;
         this.outputGroupPreparation = outputGroupPreparation;
+        this.printStore = printStore;
+        // Print Setup is a per-user preference: loaded once, saved on every edit. Without a store (checks) it is
+        // simply held in memory.
+        PrintSettings = printStore?.Load() ?? new();
+        PrintSettings.PropertyChanged += (_, e) =>
+        {
+            this.printStore?.TrySave(PrintSettings);
+            if (e.PropertyName == nameof(ReportPrintSettings.LogoPath)) Notify(nameof(PrintLogoStatus));
+        };
         StudyWorkers.CollectionChanged += (_, _) =>
         {
             Notify(nameof(HasStudyWorkers));
@@ -937,6 +959,13 @@ public sealed class MainViewModel : Observable
         GeneratePostProcessOutputs = new(_ => GenerateStudyOutputs(), () => !IsBusy);
         RegenerateDeflectionReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
         RegenerateCableForceReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
+        ExportCableForcePdf = new(_ => ExportReportPdf(CableForceReportPath), () => !IsBusy && HasCableForceReport);
+        BrowsePrintLogo = new(_ =>
+        {
+            var dialog = new OpenFileDialog { Filter = ReportPrintEngine.LogoFileFilter, CheckFileExists = true, Title = "Company logo for report printouts" };
+            if (dialog.ShowDialog() == true) PrintSettings.LogoPath = dialog.FileName;
+        });
+        ClearPrintLogo = new(_ => PrintSettings.LogoPath = "", () => PrintSettings.LogoPath.Length > 0);
         ViewIterationError = new(p =>
         {
             if (p is StudyIteration { ErrorMessage.Length: > 0 } row)
@@ -1667,7 +1696,8 @@ public sealed class MainViewModel : Observable
             var configuredCables = State.Cables.Select(cable => cable.CableName)
                 .Where(name => !string.IsNullOrWhiteSpace(name)).ToArray();
             var criteria = StudyDecisionCriteria.From(State);
-            var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, criteria, configuredCables));
+            var print = PrintSettings.Clone();
+            var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, criteria, configuredCables, print));
             currentRunWorkbookPath = artifacts.WorkbookPath;
             useCurrentRunArtifacts = true;
             DeflectionReportPath = artifacts.DeflectionReportPath;
@@ -1695,6 +1725,33 @@ public sealed class MainViewModel : Observable
             ShortlistWorkbookPath = null;
             Message = ex.Message;
             Warn("Generate Post-Processing Outputs", ex.Message);
+        }
+        finally { IsBusy = false; }
+    }
+
+    /// <summary>Print a generated report to a vector PDF beside it, with the header / footer embedded when the
+    /// report was generated, then open it. Runs a headless browser in the background — no SAP2000.</summary>
+    private async void ExportReportPdf(string? reportPath)
+    {
+        if (IsBusy) return;
+        if (string.IsNullOrEmpty(reportPath) || !File.Exists(reportPath))
+        {
+            Message = "Generate the report before exporting it to PDF.";
+            return;
+        }
+        IsBusy = true;
+        Message = $"Printing {Path.GetFileName(reportPath)} to PDF...";
+        try
+        {
+            var result = await Task.Run(() => ReportPdfExporter.Export(reportPath));
+            Message = $"{Path.GetFileName(result.PdfPath)} written in {result.Elapsed.TotalSeconds:0.0} s with the Print Setup " +
+                      "from the last Generate / Regenerate. Charts are vector graphics.";
+            TryOpenFile(result.PdfPath);
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+            Warn("Export PDF", ex.Message, warning: true);
         }
         finally { IsBusy = false; }
     }

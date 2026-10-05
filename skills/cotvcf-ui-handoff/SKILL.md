@@ -358,8 +358,57 @@ change the engineering content, not the identity.
 - A **Load** selector appears only when the study has more than one loading candidate; loads are never mixed
   inside a chart. One shared Y-scale from 0 per load and value mode.
 - Checks: `tests/CableForceReportChecks.cs` covers the derivations in C# and runs the report's own script against
-  its embedded data with Jint (test-only package) through the `window.cableReport` handle
-  (`setMode`, `setLoad`, `applyGroups`, `autoDetect`, `resetGroups`), including the DOM-id regression check.
+  its embedded data with Jint (test-only package, shared harness `tests/ReportPage.cs`) through the
+  `window.cableReport` handle (`setMode`, `setLoad`, `applyGroups`, `autoDetect`, `resetGroups`), including the
+  DOM-id regression check.
+- Printing: the report uses the shared print engine below (toolbar `Print ▾`, Module 07 `Export PDF`). On paper it
+  re-lays its charts out against the sheet, keeps one pretension candidate (Side A + Side B) together per page where
+  it fits, prints a `Printed view:` line (value mode · load · grouping) and leaves the Source Data table out unless
+  asked for.
+
+## Report Print Engine (`ReportPrintEngine`, Tab 06 Print Setup, Export PDF)
+
+Reports stay one self-contained HTML file; paper output is produced by the report itself with CSS Paged Media, so
+the browser's Print and the app's PDF export give the same pages. Cable Forces is the first report on the engine;
+the other reports plug in the same way.
+
+- **Print Setup** (`ReportPrintSettings`, Tab 06 card `PRINT SETUP · HEADER / FOOTER`, above module 01): company,
+  logo file, project, job no., revision, prepared by, checked by, footer note, default paper (A4 / A3 / Letter),
+  orientation, page numbers, date, include Source Data. It is a **per-user preference**
+  (`ReportPrintSettingsStore` → `%LocalAppData%\COTVCF\ReportPrintSettings.json`), saved on every edit — not part of
+  the COT VCF project file, the study folder or the run fingerprint. Like capacities and criteria it is a
+  post-processing input: applied on the next Generate / Regenerate (`StudyPostProcessor.Generate(…, printSettings)`).
+  `MainViewModel` takes the store as an optional constructor argument; without one (checks) settings stay in memory.
+- **Logo**: `ReportPrintEngine.LogoDataUri` embeds the file as a data URI (PNG / JPG / SVG / GIF / WEBP / BMP, at
+  most `MaxLogoBytes`), so the report needs no external resource. A missing / unsupported / oversized logo is
+  reported on the card (`DescribeLogo`) and the company name is printed top-left instead. SVG prints as vector.
+- **Page layout**: the engine script (`window.reportPrint`) builds one `@page` rule into `<style id="pr-page">`:
+  sheet size and orientation, margins (24 mm top, 16 mm bottom, 38 px sides), and the header / footer in the
+  **page-margin boxes** on every page — top-left logo (or company), top-centre project over report name · model,
+  top-right job no. · revision and date, bottom-left company and signatories, bottom-centre note, bottom-right
+  `Page N of M` (`counter(page)` / `counter(pages)`). Side boxes are whole pixels and the centre is a `calc()` of
+  the rest so the three borders print as one unbroken rule. User text goes through a CSS-string escaper; a logo
+  value that is not an embedded image is ignored. Needs Chromium 131+ (Edge / Chrome); the browser's own header and
+  footer are suppressed automatically. Firefox prints the content without the margin header / footer.
+- **Chart quality**: charts are inline SVG and are never rasterised — text stays text, bars and hatches stay
+  vector, colours print exactly (`print-color-adjust: exact`). A report registers
+  `window.reportPrint.register({ before(page), after() })` and re-lays its charts out for `page.contentPx` (the
+  sheet's content width) instead of the window; if the sheet is narrower than a comfortable design width the SVG is
+  laid out wider and scaled down by CSS (`max-width:100%`), never below 80 %.
+- **Triggers**: the report's `Print ▾` panel (paper, orientation, include Source Data, `Print / Save as PDF`),
+  plain Ctrl+P (`beforeprint` / `afterprint`), and the URL fragment `#print[&paper=A3&orientation=portrait&source=1]`
+  which lays the page out for paper on load. Report-specific options ride on the same fragment (Cable Forces:
+  `mode=ut`, `load=L02`).
+- **Export PDF** (`ReportPdfExporter`, Module 07 button): runs the installed Edge (else Chrome) headless with a
+  private profile on `report.html#print` and writes `<report>.pdf` beside the report, then opens it. No SAP2000, no
+  network. It prints the report as last generated — change Print Setup, Regenerate, then export.
+- Engine pieces a report emits: `ReportPrintEngine.Css` (inside its `<style>`), `PageStyle` (in `<head>`),
+  `ToolbarButton` and `Panel` (inside its toolbar), `Scripts(dto)` before its own script, `class="print-only"` /
+  `class="no-print"` helpers, and `data-print="source"` on the optional data table. Report-specific `@media print`
+  rules (what to hide, `break-inside: avoid`, wrapping wide tables) stay with the report.
+- Checks: `tests/ReportPrintChecks.cs` (settings store, logo embedding, generated page rule and escaping, screen ⇄
+  paper re-layout, `#print` options, exporter command line). `--report-pdf` is an opt-in check that prints a real
+  PDF with the installed browser; `--study-ui` renders the Print Setup card with fakes.
 
 ## Config Project File (`src/Configuration/`)
 

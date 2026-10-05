@@ -154,6 +154,37 @@ internal static class Program
                 Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "08  STUDY SHORTLIST") &&
                        FindVisuals<TextBlock>(window).Any(text => text.Text == "06  SUPPORT REACTIONS"),
                     "Post-processing UI exposes the ranked shortlist report and workbook module");
+
+                // Tab 06 Print Setup: header / footer of the printed reports, and the Module 07 PDF export
+                var printSetup = FindVisuals<Expander>(window).Single(expander =>
+                    expander.Header is TextBlock { Text: "PRINT SETUP · HEADER / FOOTER" });
+                var cableModule = FindVisuals<Expander>(window).Single(expander =>
+                    expander.Header is TextBlock { Text: "07  CABLE FORCES · kN" });
+                printSetup.IsExpanded = true; cableModule.IsExpanded = true;
+                vm.PrintSettings.CompanyName = "ACME Structures";
+                vm.PrintSettings.ProjectName = "COT Transfer Truss";
+                vm.PrintSettings.PaperSize = ReportPaperSize.A3;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(FindVisuals<TextBox>(printSetup).Any(box => box.Text == "ACME Structures" &&
+                           System.Windows.Automation.AutomationProperties.GetName(box) == "Company name") &&
+                       FindVisuals<TextBox>(printSetup).Count(box => !box.IsReadOnly) == 7 &&
+                       FindVisuals<ComboBox>(printSetup).Any(combo => Equals(combo.SelectedItem, ReportPaperSize.A3)) &&
+                       FindVisuals<ComboBox>(printSetup).Any(combo => Equals(combo.SelectedItem, ReportPageOrientation.Landscape)) &&
+                       FindVisuals<TextBlock>(printSetup).Any(text => text.Text.StartsWith("No logo", StringComparison.Ordinal)),
+                    "Print Setup card binds the header / footer fields, the default sheet and the logo status");
+                var companyBox = FindVisuals<TextBox>(printSetup).First(box =>
+                    System.Windows.Automation.AutomationProperties.GetName(box) == "Company name");
+                companyBox.Text = "ACME Structures Pte Ltd";
+                Assert(vm.PrintSettings.CompanyName == "ACME Structures Pte Ltd" && !vm.ClearPrintLogo.CanExecute(null),
+                    "typing in the Print Setup card updates the settings immediately");
+                Assert(FindVisuals<Button>(cableModule).Any(button => Equals(button.Content, "Export PDF") && !button.IsEnabled) &&
+                       !vm.ExportCableForcePdf.CanExecute(null),
+                    "Module 07 offers Export PDF, disabled until the cable report exists");
+                var postBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                postBitmap.Render(window);
+                var postEncoder = new PngBitmapEncoder(); postEncoder.Frames.Add(BitmapFrame.Create(postBitmap));
+                using (var stream = File.Create(".work/post-processing-tab.png")) postEncoder.Save(stream);
                 window.Close(); bindingListener.Flush();
                 if (bindingLog.ToString().Length > 0) throw new Exception("WPF binding errors: " + bindingLog);
                 Console.WriteLine("PASS: Tab 5 rendered with no WPF binding errors.");
@@ -215,6 +246,12 @@ internal static class Program
                 Assert(result!.SequenceEqual(["B", "C"]), "Blue-highlighted rows are returned as the selection");
                 return 0;
             }
+            if (args.Contains("--report-pdf"))
+            {
+                // Opt-in: prints a generated report to a real PDF with the installed Edge / Chrome. No SAP2000.
+                ReportPrintChecks.RunPdfExport();
+                return 0;
+            }
             if (args.Contains("--sap-read"))
             {
                 using var sap = new SapGateway();
@@ -268,6 +305,7 @@ internal static class Program
             StudyExecutionChecks.Run();
             StudyDecisionChecks.Run();
             CableForceReportChecks.Run();
+            ReportPrintChecks.Run();
             MemberForceReportChecks.Run();
             SupportReactionReportChecks.Run();
             GatewayChecks.Run();

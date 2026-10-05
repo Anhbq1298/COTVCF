@@ -6,7 +6,6 @@ using System.Text.RegularExpressions;
 using COT_VCF.Application.Results;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
-using Jint;
 
 internal static class CableForceReportChecks
 {
@@ -348,7 +347,8 @@ internal static class CableForceReportChecks
                 .ToDictionary(c => c.CableName, c => c.ResolveCapacity(fpu, 0.5)!.Value, StringComparer.Ordinal);
             var configured = tab3.Select(c => c.CableName).ToArray();
 
-            var outcome = new StudyPostProcessor().Generate(root, Tab3Capacities(2160), StudyDecisionCriteria.Default, configured);
+            var outcome = new StudyPostProcessor().Generate(root, Tab3Capacities(2160), StudyDecisionCriteria.Default, configured,
+                new ReportPrintSettings { CompanyName = "Legacy Engineers", ProjectName = "Legacy Tower", JobNumber = "J-77" });
             var reportPath = outcome.CableForceReportPath!;
             var html = File.ReadAllText(reportPath);
             Check(Path.GetFileName(reportPath) == "Cable_Forces_Report.html" && File.ReadAllText(rawPath) == rawText,
@@ -356,6 +356,9 @@ internal static class CableForceReportChecks
             Check(html.Contains("cable result case: " + LegacyCase, StringComparison.Ordinal) && !html.Contains("ULS") &&
                   !html.Contains("http://") && !html.Contains("https://") && !html.Contains("cdn."),
                 "the regenerated report is self-contained and names the configured result case");
+            Check(html.Contains("\"project\":\"Legacy Tower\"") && html.Contains("\"jobNumber\":\"J-77\"") &&
+                  html.Contains("\"company\":\"Legacy Engineers\"") && html.Contains("\"title\":\"Cable Forces\""),
+                "Regenerate embeds the current Print Setup — header and footer need no SAP either");
 
             var raw = new StudyRawDataStore().ReadFromStudyFolder(root);
             var gen = new CableForceReportGenerator();
@@ -607,55 +610,5 @@ internal static class CableForceReportChecks
     {
         if (!ok) throw new Exception("FAIL: " + name);
         Console.WriteLine("PASS: " + name);
-    }
-
-    /// <summary>Runs the report's own script against its embedded data with a minimal DOM, so the checks see
-    /// what a browser would render — without a browser, a server or SAP2000.</summary>
-    private sealed class ReportPage
-    {
-        private const string Dom = """
-            var __ids = [], __els = {};
-            function __el(id){
-              return { id: id, innerHTML: "", textContent: "", hidden: false, disabled: false, title: "", value: "", style: {},
-                classList: { toggle: function(){}, add: function(){}, remove: function(){} },
-                setAttribute: function(){}, addEventListener: function(){}, appendChild: function(){},
-                getBoundingClientRect: function(){ return { width: 0, height: 0, left: 0, top: 0 }; } };
-            }
-            var document = {
-              getElementById: function(id){ __ids.push(id); return __els[id] || (__els[id] = __el(id)); },
-              addEventListener: function(){}, createElement: function(){ return __el(""); },
-              documentElement: { clientWidth: 1400 }
-            };
-            var window = { addEventListener: function(){}, innerWidth: 1400, innerHeight: 900 };
-            document.getElementById("report-data").textContent = __json;
-            __ids.length = 0;
-            """;
-
-        private readonly Engine engine = new();
-        public IReadOnlySet<string> StaticIds { get; }
-
-        public ReportPage(string html)
-        {
-            var json = Regex.Match(html, "<script id=\"report-data\" type=\"application/json\">(.*?)</script>", RegexOptions.Singleline).Groups[1].Value;
-            var script = Regex.Matches(html, "<script>(.*?)</script>", RegexOptions.Singleline).Last().Groups[1].Value;
-            var markup = Regex.Replace(html, "(<script[^>]*>).*?</script>", "$1</script>", RegexOptions.Singleline);   // tags, not script text
-            StaticIds = Regex.Matches(markup, "\\bid=\"([^\"]+)\"").Select(match => match.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
-            engine.SetValue("__json", json);
-            engine.Execute(Dom);
-            engine.Execute(script);
-        }
-
-        public string[] RequestedIds => engine.Evaluate("__ids.join('\\n')").AsString()
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal).ToArray();
-        public string Html(string id) => engine.Evaluate($"String(__els['{id}'].innerHTML)").AsString();
-        public string Text(string id) => engine.Evaluate($"String(__els['{id}'].textContent)").AsString();
-        public bool Hidden(string id) => engine.Evaluate($"!!__els['{id}'].hidden").AsBoolean();
-        public bool Disabled(string id) => engine.Evaluate($"!!__els['{id}'].disabled").AsBoolean();
-        public void Run(string js) => engine.Execute(js);
-
-        /// <summary>The rendered charts of one kind ("overview" / "detail"), in page order.</summary>
-        public IReadOnlyList<string> Charts(string kind) =>
-            Regex.Matches(Html(kind), "<svg [^>]*data-chart=\"" + kind + "\".*?</svg>", RegexOptions.Singleline)
-                .Select(match => match.Value).ToArray();
     }
 }

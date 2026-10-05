@@ -18,6 +18,9 @@ public sealed class CableForceReportGenerator
 {
     public const string ReportFileName = "Cable_Forces_Report.html";
 
+    /// <summary>Report name printed in the page header.</summary>
+    public const string ReportTitle = "Cable Forces";
+
     /// <summary>Scope key of the study-wide rows in <see cref="CableForceReportDto.Governing"/>.</summary>
     public const string StudyScope = "*";
 
@@ -33,7 +36,8 @@ public sealed class CableForceReportGenerator
         string baselineName, IterationStudyMode studyMode, string cableResultCase,
         IReadOnlyDictionary<string, double>? capacities = null,
         IReadOnlyList<string>? siblingReports = null,
-        IReadOnlyDictionary<string, string>? capacitySources = null)
+        IReadOnlyDictionary<string, string>? capacitySources = null,
+        ReportPrintSettings? print = null)
     {
         Directory.CreateDirectory(studyFolder);
         var siblings = siblingReports is null
@@ -41,7 +45,8 @@ public sealed class CableForceReportGenerator
             : new HashSet<string>(siblingReports, StringComparer.Ordinal);
         var dto = Build(results, baselineName, studyMode, cableResultCase, capacities, siblings.ToArray(), capacitySources);
         var path = Path.Combine(studyFolder, ReportFileName);
-        AtomicFile.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
+        var printDto = ReportPrintEngine.Describe(print, ReportTitle, baselineName, DateTimeOffset.Now);
+        AtomicFile.WriteAllText(path, BuildHtml(dto, printDto), new System.Text.UTF8Encoding(false));
         return path;
     }
 
@@ -52,7 +57,8 @@ public sealed class CableForceReportGenerator
     /// stored for that same cable name. Pass null to keep whatever the workbook holds.</summary>
     public string RegenerateFromWorkbook(string studyFolder,
         IReadOnlyDictionary<string, double>? capacities = null,
-        IReadOnlyCollection<string>? configuredCables = null)
+        IReadOnlyCollection<string>? configuredCables = null,
+        ReportPrintSettings? print = null)
     {
         var wbPath = Path.Combine(studyFolder, ConsolidatedResultWriter.WorkbookFileName);
         if (!File.Exists(wbPath))
@@ -64,7 +70,7 @@ public sealed class CableForceReportGenerator
         var capacitySet = CableCapacityResolver.Resolve(capacities, configuredCables,
             ConsolidatedResultWriter.ReadCableCapacities(wbPath));
         return Generate(studyFolder, results, name, mode, resultCase,
-            capacitySet.Capacities, capacitySources: capacitySet.Sources);
+            capacitySet.Capacities, capacitySources: capacitySet.Sources, print: print);
     }
 
     // ---------- DTO assembly ----------
@@ -268,14 +274,19 @@ public sealed class CableForceReportGenerator
 
     // ---------- HTML ----------
 
-    public string BuildHtml(CableForceReportDto dto)
+    /// <param name="print">Header / footer and sheet for printing; null prints the report title, model and page
+    /// numbers only.</param>
+    public string BuildHtml(CableForceReportDto dto, ReportPrintDto? print = null)
     {
         var s = dto.Study;
         var json = JsonSerializer.Serialize(dto, Json);
+        print ??= ReportPrintEngine.Describe(null, ReportTitle, s.BaselineModelName,
+            DateTimeOffset.TryParse(s.GeneratedAtIso, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var generated)
+                ? generated : DateTimeOffset.Now);
         var library = ReportNav.Library("cable", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Cable Forces — {{Esc(s.BaselineModelName)}}</title>
-<style>{{Style}}</style></head>
+<style>{{ReportPrintEngine.Css}}{{Style}}</style>{{ReportPrintEngine.PageStyle}}</head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <pattern id="cf-loss" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="#2A78D6"/></pattern>
@@ -285,6 +296,7 @@ public sealed class CableForceReportGenerator
     <h1>Cable Forces Viewer</h1>
     <p class="meta">{{Esc(s.BaselineModelName)}} · {{Esc(s.StudyMode)}} · {{s.CandidateCount}} candidate(s) ·
       cable result case: {{Esc(s.ResultCase)}} · generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
+    <p class="meta print-only" id="pview"></p>
     <p class="intro"><b>Yellow</b> is the prestress target, <b>blue</b> is the change from that target to the
       final analysed force under the cable result case, and the <b>red dashed</b> line is the cable-force limit
       from the current Tab 03 Pretension capacity (area × fpu × φ), matched by exact cable name. A missing result
@@ -302,6 +314,7 @@ public sealed class CableForceReportGenerator
   <button id="gbtn" aria-expanded="false" aria-controls="gpanel">Cable Grouping ▾</button>
   <span class="small" id="ginfo" aria-live="polite"></span>
   <span class="small" id="yinfo" aria-live="polite"></span>
+  {{ReportPrintEngine.ToolbarButton}}
   <div id="gpanel" class="gpanel" hidden>
     <p class="small">Assign each cable to a group. Report-side only: forces, capacities, the study files, SAP2000
       and Tab 03 are never changed. Auto Detect only suggests a side where a cable name has an unambiguous
@@ -315,7 +328,7 @@ public sealed class CableForceReportGenerator
       <span class="small" id="gstate" aria-live="polite"></span>
     </div>
   </div>
-</div>
+{{ReportPrintEngine.Panel}}</div>
 
 <div class="leg" id="legend">
   <span><svg width="14" height="10"><rect width="14" height="10" fill="#EDA100"/></svg>Prestress target</span>
@@ -348,7 +361,7 @@ public sealed class CableForceReportGenerator
   <div id="capnotes" class="capnotes"></div>
 </section>
 
-<details class="block"><summary>Source Data</summary><div class="body"><div class="tablewrap"><table><thead><tr>
+<details class="block" data-print="source"><summary>Source Data</summary><div class="body"><div class="tablewrap"><table><thead><tr>
   <th>Run</th><th>Candidate</th><th>Iteration Key</th><th>Load</th><th>Height</th><th>Pretension Candidate</th><th>Cable</th>
   <th>Current Group</th><th class="num">Target Prestress [kN]</th><th class="num">Final Analysed Force [kN]</th>
   <th class="num">Delta Force [kN]</th><th class="num">Delta [%]</th><th class="num">Current Capacity [kN]</th>
@@ -359,6 +372,7 @@ public sealed class CableForceReportGenerator
 <div id="tip" class="tip" hidden></div>
 
 <script id="report-data" type="application/json">{{json}}</script>
+{{ReportPrintEngine.Scripts(print)}}
 <script>{{Script}}</script>
 </body></html>
 """;
@@ -460,7 +474,29 @@ td{padding:5px 6px;border-bottom:1px solid #eee;white-space:nowrap}
 .num{text-align:right;font-variant-numeric:tabular-nums}.missing{color:#b42318;font-weight:600}
 #warns{padding:6px 14px;font-size:11px;color:#8a6d00}#warns .e{color:#C62828}
 a{color:var(--acc)}
-@media print{#bar{position:static}.gpanel,.tip{display:none!important}.card,.pblk{break-inside:avoid}}
+/* paper: the sheet, margins, header and footer come from the shared print engine */
+@media print{
+  header{display:block;padding:0 0 5px;border-bottom:1px solid var(--bd)}
+  .intro,.lib,#bar,.pnav,.tip{display:none!important}
+  .leg{padding:5px 0;gap:3px 14px;font-size:10px}
+  section.blk{border-bottom:0;padding:8px 0 0}
+  .lead{max-width:none;margin:0 0 6px;font-size:10.5px;break-inside:avoid;break-after:avoid}
+  .card,.pblk,.gov{break-inside:avoid}
+  .card,.pblk{margin:0 0 8px}
+  .ph{break-after:avoid}
+  .cwrap{overflow:visible;padding:3px 4px 0}
+  .gov,.gvwrap,.capnotes{max-width:none}
+  .gvwrap{overflow:visible}
+  details.block{margin:10px 0 0;border:0}
+  details.block>summary{list-style:none;padding:0 0 4px;background:none}
+  details.block>summary::-webkit-details-marker{display:none}
+  .body{border-top:0;padding:0}
+  .tablewrap{max-height:none;overflow:visible}
+  /* a table wider than the sheet would be cut off at the paper edge: let cells wrap instead */
+  th{position:static}th,td{white-space:normal}
+  .tablewrap table{font-size:8.5px}.tablewrap th,.tablewrap td{padding:2px 4px}
+  #warns{padding:8px 0 0}
+}
 """;
 
     // Self-contained report script: everything is rendered client-side from the embedded #report-data, so the
@@ -474,7 +510,10 @@ const CAP = D.capacities || {}, CAPSRC = D.capacitySources || {};
 const CAPS_ANY = Object.keys(CAP).length > 0;
 const SIDE = { A: "Side A", B: "Side B", "": "Unassigned" };
 const SIDE_KEYS = ["A", "B", ""];
-const S = { mode: "kn", load: D.loads.length ? D.loads[0].id : "", groups: {}, draft: {}, saved: false };
+const PRINT = window.reportPrint || null;                 // shared print engine (sheet, header / footer)
+const OPT = PRINT ? PRINT.options : {};                   // "#print&mode=ut&load=L02" from the PDF exporter
+const S = { mode: "kn", load: D.loads.some(l => l.id === OPT.load) ? OPT.load : D.loads.length ? D.loads[0].id : "",
+            groups: {}, draft: {}, saved: false };
 const TIPS = [];
 
 // ---------- formatting ----------
@@ -865,7 +904,11 @@ function renderWarnings(){
 }
 
 // ---------- render ----------
+// On paper the charts are laid out against the sheet instead of the window: at the sheet width when that is
+// roomy, otherwise at a comfortable design width that the SVG scales down from — as vector, never below 80 %.
+let printWidth = 0;
 function chartWidth(){
+  if (printWidth) return printWidth;
   const w = el("detail").clientWidth || (document.documentElement.clientWidth || 0) - 28;
   return Math.max(760, w > 0 ? w - 16 : 1180);
 }
@@ -875,6 +918,9 @@ function renderCharts(){
   el("yinfo").textContent = !D.rows.length ? "No cable-force results"
     : "Shared Y-scale: 0 → " + fnum(sc.max, 0) + (utOn() ? " % of capacity" : " kN");
   el("leglim").textContent = utOn() ? "Design limit · 100% of capacity" : "Cable force limit · capacity";
+  const n = counts(S.groups);
+  el("pview").textContent = "Printed view: " + (utOn() ? "% of capacity" : "Force (kN)") + (S.load ? " · load " + loadLabel() : "")
+    + " · grouping: Side A " + n.a + " · Side B " + n.b + (n.u ? " · Unassigned " + n.u : "");
   renderOverview(width, sc, bl);
   renderDetail(width, sc, bl);
 }
@@ -919,6 +965,7 @@ function setLoad(id){ if (!D.loads.some(l => l.id === id)) return; S.load = id; 
 
 el("load").innerHTML = D.loads.map(l => `<option value="${esc(l.id)}">${esc(l.label)}</option>`).join("");
 el("loadwrap").hidden = D.loads.length < 2; el("loadsep").hidden = D.loads.length < 2;   // one load: nothing to choose
+el("load").value = S.load;
 el("load").onchange = e => setLoad(e.target.value);
 el("vk").onclick = () => setMode("kn");
 el("vu").onclick = () => setMode("ut");
@@ -962,6 +1009,11 @@ const savedGroups = loadSaved();
 S.groups = savedGroups || defaultGroups(); S.saved = !!savedGroups; S.draft = Object.assign({}, S.groups);
 el("legnt").hidden = !D.rows.some(r => D.cables.some(c => finite(r.forces[c]) && !finite(r.targets[c])));
 renderEditor(); renderWarnings(); renderAll();
+if (OPT.mode === "ut") setMode("ut");
+if (PRINT) PRINT.register({
+  before: pg => { printWidth = Math.max(pg.contentPx, Math.min(1210, Math.round(pg.contentPx / 0.8))) - 10; renderCharts(); },
+  after: () => { printWidth = 0; renderCharts(); }
+});
 // handle for scripted checks; the report itself needs nothing from outside this file
 window.cableReport = { state: S, setMode, setLoad, applyGroups, autoDetect, resetGroups, limitPlan, blocks, scale };
 """;

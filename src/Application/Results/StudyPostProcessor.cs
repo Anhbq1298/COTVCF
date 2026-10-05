@@ -1,4 +1,5 @@
 using System.IO;
+using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
 
 namespace COT_VCF.Application.Results;
@@ -14,11 +15,14 @@ public sealed class StudyPostProcessor
     /// <param name="configuredCables">Every cable currently on Tab 03. One that is listed here without a current
     /// capacity is reported as unavailable; a cable Tab 03 does not know keeps the capacity stored for that same
     /// cable name. No capacity is ever inferred, borrowed from another cable, or defaulted.</param>
+    /// <param name="printSettings">Print Setup (header / footer, logo, sheet) embedded into the reports that use
+    /// the shared print engine. A presentation input only.</param>
     public StudyArtifactOutcome Generate(
         string studyFolder,
         IReadOnlyDictionary<string, double>? cableCapacities,
         StudyDecisionCriteria decisionCriteria,
-        IReadOnlyCollection<string>? configuredCables = null)
+        IReadOnlyCollection<string>? configuredCables = null,
+        ReportPrintSettings? printSettings = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(studyFolder);
         ArgumentNullException.ThrowIfNull(decisionCriteria);
@@ -64,7 +68,7 @@ public sealed class StudyPostProcessor
         if (hasCableReport)
             cable = new CableForceReportGenerator().Generate(root, results,
                 raw.BaselineModelName, raw.StudyMode, raw.CableResultCase, validCapacities, currentReports,
-                capacitySet.Sources);
+                capacitySet.Sources, printSettings);
 
         var decisions = new StudyDecisionService().Evaluate(results, decisionCriteria);
         var shortlist = new StudyShortlistExporter().Export(root, decisions, decisionCriteria,

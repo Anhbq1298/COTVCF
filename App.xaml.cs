@@ -2,6 +2,7 @@ using System.Windows;
 using COT_VCF.Application;
 using COT_VCF.Application.Workers;
 using COT_VCF.Domain;
+using COT_VCF.Infrastructure;
 using COT_VCF.Presentation;
 using COT_VCF.SAP2000;
 
@@ -21,7 +22,8 @@ public partial class App : System.Windows.Application
         var outputDialogs = new OutputSettingsDialogService();
         var outputPreparation = new OutputGroupPreparationService(gateway);
         var viewModel = new MainViewModel(state, workflow, new SelectionService(), config, studyExecution,
-            outputDialogs: outputDialogs, outputGroupPreparation: outputPreparation);
+            outputDialogs: outputDialogs, outputGroupPreparation: outputPreparation,
+            printStore: new ReportPrintSettingsStore());
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
     }
