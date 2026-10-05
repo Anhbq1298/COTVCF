@@ -85,7 +85,7 @@ public sealed class SupportReactionReportGenerator
 <label>Component <select id="component"><option>Fx</option><option>Fy</option><option selected>Fz</option><option>Mx</option><option>My</option><option>Mz</option></select></label>
 <label>Result step <select id="step"></select></label><label>View <select id="view"><option value="supports">Individual supports</option><option value="totals">Foundation totals</option><option value="matrix">Candidate matrix</option></select></label>
 <label>Band by <select id="band"><option value="">All candidates</option><option value="loadId">Load candidate</option><option value="heightId">Truss height</option><option value="pretensionId">Pretension</option></select></label>
-<button id="reset">Reset filters</button><span id="scope"></span>{{ReportPrintEngine.ToolbarButton}}
+<button id="reset">Reset filters</button>{{ReportPrintEngine.ToolbarButton}}<span id="scope"></span>
 {{ReportPrintEngine.Panel}}</nav><div id="filters" data-print-controls></div><div id="notice" hidden></div>
 <main id="panels"></main><div id="warnings"></div><div id="tip" hidden></div>
 <script type="application/json" id="data">{{data}}</script>

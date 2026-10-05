@@ -117,9 +117,10 @@ public static class ReportPrintEngine
     /// <summary>Holds the generated <c>@page</c> rule. Emit once, in the document head.</summary>
     public const string PageStyle = """<style id="pr-page" media="print"></style>""";
 
-    /// <summary>Toolbar button that opens <see cref="Panel"/>.</summary>
+    /// <summary>Toolbar button that opens <see cref="Panel"/>. Place it directly after the report's main
+    /// controls — never behind trailing hint or status text, where it is easy to miss.</summary>
     public const string ToolbarButton =
-        """<button id="pr-btn" aria-expanded="false" aria-controls="pr-panel" title="Print, or save as PDF, with the report header and footer">Print ▾</button>""";
+        """<button id="pr-btn" aria-expanded="false" aria-controls="pr-panel" title="Print this report, or save it as PDF, with the header and footer from Print Setup">Print report ▾</button>""";
 
     /// <summary>Print options. Place inside the report toolbar; it takes a full row when opened.</summary>
     public const string Panel = """
@@ -143,6 +144,7 @@ public static class ReportPrintEngine
 .prpanel{flex-basis:100%;display:flex;align-items:center;gap:8px 14px;flex-wrap:wrap;border-top:1px solid #C7CCD2;margin-top:2px;padding:8px 0 4px;font-size:11px;color:#666}
 .prpanel label{display:inline-flex;align-items:center;gap:6px}
 .prpanel #pr-info{flex-basis:100%;line-height:1.45;max-width:120ch}
+#pr-btn{border-color:#1F4788;color:#1F4788;font-weight:600}
 #pr-go{background:#1F4788;border-color:#1F4788;color:#fff;font-weight:600}#pr-go:hover{background:#17376b}
 .prbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}
 .prbar button,.prbar select{font:12px "Segoe UI",system-ui,sans-serif;padding:3px 8px;border:1px solid #C7CCD2;border-radius:3px;background:#fff;cursor:pointer}

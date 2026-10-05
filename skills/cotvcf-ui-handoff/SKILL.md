@@ -361,7 +361,7 @@ change the engineering content, not the identity.
   its embedded data with Jint (test-only package, shared harness `tests/ReportPage.cs`) through the
   `window.cableReport` handle (`setMode`, `setLoad`, `applyGroups`, `autoDetect`, `resetGroups`), including the
   DOM-id regression check.
-- Printing: the report uses the shared print engine below (toolbar `Print ▾`, Module 07 `Export PDF`). On paper it
+- Printing: the report uses the shared print engine below (toolbar `Print report ▾`, Module 07 `Export PDF`). On paper it
   re-lays its charts out against the sheet, keeps one pretension candidate (Side A + Side B) together per page where
   it fits, prints a `Printed view:` line (value mode · load · grouping) and leaves the Source Data table out unless
   asked for.
@@ -398,7 +398,9 @@ must plug in the same way — do not give a report its own print header / footer
   `window.reportPrint.register({ before(page), after() })` and re-lays its charts out for `page.contentPx` (the
   sheet's content width) instead of the window; if the sheet is narrower than a comfortable design width the SVG is
   laid out wider and scaled down by CSS (`max-width:100%`), never below 80 %.
-- **Triggers**: the report's `Print ▾` panel (paper, orientation, include Source Data, `Print / Save as PDF`),
+- **Triggers**: the report's `Print report ▾` button — accent-outlined, placed straight after the main toolbar
+  controls in every report, never behind hint or status text — opening the panel (paper, orientation, include
+  Source Data, `Print / Save as PDF`),
   plain Ctrl+P (`beforeprint` / `afterprint`), and the URL fragment `#print[&paper=A3&orientation=portrait&source=1]`
   which lays the page out for paper on load. Report-specific options ride on the same fragment (Cable Forces:
   `mode=ut`, `load=L02`).

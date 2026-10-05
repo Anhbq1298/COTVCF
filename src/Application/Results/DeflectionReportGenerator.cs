@@ -192,9 +192,9 @@ public sealed class DeflectionReportGenerator
   <label id="bandToggleWrap" title="Show the deflection limit band and the pass count"><input type="checkbox" id="bandToggle" checked> Limit band</label>
   <button id="reset">Reset zoom</button>
   <button id="srcBtn">View source data</button>
+  {{ReportPrintEngine.ToolbarButton}}
   <span class="sep"></span>
   <span class="hint">each chart has its own name + L / H / P filter · click a legend row = highlight · wheel = zoom X · drag = pan · dbl-click = reset · Duplicate clones the chart</span>
-  {{ReportPrintEngine.ToolbarButton}}
 {{ReportPrintEngine.Panel}}</div>
 <div id="panels"></div>
 <template id="panelTpl">
@@ -358,8 +358,10 @@ a{color:var(--acc)}
 /* laid out for paper: a matrix column is as wide as its values, headed by the candidate id alone (what each id
    is, is printed under Candidate definitions) — so the table needs far less scaling to fit the sheet */
 body.pr-on #matrix thead th span{display:none}
-body.pr-on #matrix th,body.pr-on #matrix td{padding:2px 4px}
+body.pr-on #matrix th,body.pr-on #matrix td{padding:1px 4px}
 body.pr-on #matrix thead th{white-space:normal;overflow-wrap:anywhere}
+body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
+.mpart{font-size:10.5px;color:var(--mu);padding:4px 0 3px;break-after:avoid}
 """;
 
     private const string Script = """
@@ -785,10 +787,19 @@ body.pr-on #matrix thead th{white-space:normal;overflow-wrap:anywhere}
     vis.forEach(s=>s.points.forEach(p=>{ const key=p.pointName+'|'+p.coord; if(!rowsMap.has(key)) rowsMap.set(key,{pt:p.pointName,x:p.coord,vals:{}}); }));
     vis.forEach(s=>s.points.forEach(p=>{ const r=rowsMap.get(p.pointName+'|'+p.coord); if(r) r.vals[s.iterationKey]=p.uzMm; }));
     const rows=[...rowsMap.values()].sort((a,b)=>a.x-b.x);
-    const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${esc(s.iterationKey)}" title="click to highlight this candidate in every chart">${esc(s.iterationKey)}<br><span style="font-weight:400;color:#666">${esc(s.loadingLabel)} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
-    const body = rows.map(r=>`<tr><th class="k">${esc(r.pt)}</th><td>${fmt(r.x)}</td>${vis.map(s=>{const v=r.vals[s.iterationKey];return `<td${s.iterationKey===hi?' class="hi"':''}>${v==null?'—':(+v).toFixed(3)}</td>`;}).join('')}</tr>`).join('');
-    const foot = `<tr><th class="k">Peak ↓Uz</th><td>[mm]</td>${vis.map(s=>`<td${s.iterationKey===hi?' class="hi"':''}>${s.peakDownMm==null?'—':(+s.peakDownMm).toFixed(3)}${bandOn()?(inBand(s)?' ✓':' ✗'):''}</td>`).join('')}</tr>`;
-    document.getElementById('matrix').innerHTML = `<table><thead><tr><th class="k">Point</th><th>X [m]</th>${th}</tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+    // On paper the matrix is split into tables of as many candidate columns as fit the sheet, so every value prints
+    // at full size however many candidates the study has; on screen it stays one scrolling table.
+    const per = printW ? Math.max(6, Math.floor((printW - 160) / 62)) : Math.max(1, vis.length);
+    const tableFor = vis => {
+      const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${esc(s.iterationKey)}" title="click to highlight this candidate in every chart">${esc(s.iterationKey)}<br><span style="font-weight:400;color:#666">${esc(s.loadingLabel)} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
+      const body = rows.map(r=>`<tr><th class="k">${esc(r.pt)}</th><td>${fmt(r.x)}</td>${vis.map(s=>{const v=r.vals[s.iterationKey];return `<td${s.iterationKey===hi?' class="hi"':''}>${v==null?'—':(+v).toFixed(3)}</td>`;}).join('')}</tr>`).join('');
+      const foot = `<tr><th class="k">Peak ↓Uz</th><td>[mm]</td>${vis.map(s=>`<td${s.iterationKey===hi?' class="hi"':''}>${s.peakDownMm==null?'—':(+s.peakDownMm).toFixed(3)}${bandOn()?(inBand(s)?' ✓':' ✗'):''}</td>`).join('')}</tr>`;
+      return `<table><thead><tr><th class="k">Point</th><th>X [m]</th>${th}</tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+    };
+    let html = '';
+    for(let i=0; i<Math.max(1,vis.length); i+=per)
+      html += (printW && vis.length>per ? `<div class="mpart">Candidates ${i+1}–${Math.min(vis.length,i+per)} of ${vis.length}</div>` : '') + tableFor(vis.slice(i,i+per));
+    document.getElementById('matrix').innerHTML = html;
     document.querySelectorAll('#matrix thead th.ch').forEach(el=>el.onclick=()=>{ hi = (hi===el.dataset.k? null : el.dataset.k); renderAll(); });
   }
 

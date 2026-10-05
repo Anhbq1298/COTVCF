@@ -312,9 +312,9 @@ public sealed class CableForceReportGenerator
   <label class="small" id="loadwrap">Load <select id="load" aria-label="Loading candidate shown in every chart"></select></label>
   <span class="sep" id="loadsep"></span>
   <button id="gbtn" aria-expanded="false" aria-controls="gpanel">Cable Grouping ▾</button>
+  {{ReportPrintEngine.ToolbarButton}}
   <span class="small" id="ginfo" aria-live="polite"></span>
   <span class="small" id="yinfo" aria-live="polite"></span>
-  {{ReportPrintEngine.ToolbarButton}}
   <div id="gpanel" class="gpanel" hidden>
     <p class="small">Assign each cable to a group. Report-side only: forces, capacities, the study files, SAP2000
       and Tab 03 are never changed. Auto Detect only suggests a side where a cable name has an unambiguous
