@@ -303,8 +303,8 @@ internal static class ReportPrintChecks
             -(20 + 15 * i) * Math.Sin((n + .5) / 5 * Math.PI), ResultValueStatus.Valid, null)).ToArray();
         MemberForceStationResultDto Station(string frame, int sequence, double station, double p) => new(
             frame, sequence, frame + "-1", station, station, sequence - 1 + station, "Step", 1, p, p * .1, 0, 0, 0, p * .3, ResultValueStatus.Valid);
-        SupportReactionPointResultDto Support(string point, int sequence, double fz) => new(
-            point, sequence, sequence * 10, 0, 0, "Step", 1, fz * .05, 0, fz, 0, 0, 0, ResultValueStatus.Valid);
+        SupportReactionPointResultDto Support(string point, int sequence, double x, double fz) => new(
+            point, sequence, x, 0, 0, "Step", 1, fz * .05, 0, fz, 0, 0, 0, ResultValueStatus.Valid);
         return result with
         {
             Groups = [new MonitoredPointGroupResultDto("Monitored Deflection", "SERVICE", ProfileCoordinateAxis.X, points)],
@@ -312,8 +312,8 @@ internal static class ReportPrintChecks
                 [Station("TC-01", 1, 0, -900 - 20 * i), Station("TC-01", 1, .5, -950 - 20 * i), Station("TC-02", 2, 0, -700 - 20 * i), Station("TC-02", 2, .5, -720 - 20 * i)])],
             SupportReactionGroups =
             [
-                new SupportReactionGroupResultDto("Left", "[O]-FoundationLeft", "CASE-1", [Support("200", 1, 5000 + 100 * i), Support("198", 2, -400 - 10 * i)]),
-                new SupportReactionGroupResultDto("Right", "[O]-FoundationRight", "CASE-1", [Support("199", 1, 5100 + 100 * i), Support("205", 2, -380 - 10 * i)]),
+                new SupportReactionGroupResultDto("Left", "[O]-FoundationLeft", "CASE-1", [Support("200", 1, -60, -400 - 10 * i), Support("198", 2, -50, 5000 + 100 * i)]),
+                new SupportReactionGroupResultDto("Right", "[O]-FoundationRight", "CASE-1", [Support("199", 1, 50, 5100 + 100 * i), Support("205", 2, 60, -380 - 10 * i)]),
             ],
         };
     }).ToList();
@@ -367,6 +367,13 @@ internal static class ReportPrintChecks
                 var pdf = File.ReadAllBytes(printed.PdfPath);
                 Check(pdf.Length > 15_000 && System.Text.Encoding.ASCII.GetString(pdf, 0, 5) == "%PDF-",
                     $"{name}: {Path.GetFileName(path)} printed to a {pdf.Length / 1024} KB PDF in {printed.Elapsed.TotalSeconds:0.0} s");
+                if (name != "support") continue;
+                // its default view (Summary, Left foundation) and the By Candidate drill-down
+                foreach (var (label, options) in new[] { ("summary", "source=1"), ("by candidate", "detail=candidate&pretension=P02&height=H03") })
+                {
+                    var view = ReportPdfExporter.Export(path, Path.Combine(all, $"support {label}.pdf"), options);
+                    Check(new FileInfo(view.PdfPath).Length > 15_000, $"support: the {label} view printed to a {new FileInfo(view.PdfPath).Length / 1024} KB PDF");
+                }
             }
         }
         finally { try { Directory.Delete(folder, true); } catch { } }

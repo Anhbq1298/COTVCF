@@ -226,7 +226,8 @@ Tab 04 defines study-wide output monitoring only; editing the tab does not write
 - Configuration is persisted as `Tab05OutputSettings`; opening a project restores definitions only and never mutates SAP.
 - When Tab 05 Run starts, `OutputGroupPreparationService` is the preflight gate: verify the active model is the immutable session parent and unlocked, replace/read-back all requested `[O]-` groups, save the parent .sdb, then freeze the execution snapshot. No worker or child may start before this succeeds.
 - Member-force extraction retains every SAP station and result step; support reactions retain the configured Left/Right foundation points and global force/moment components. Tab 06 generates their reports from the raw JSON package.
-- `Support_Reactions_Report.html` draws, per support point (or foundation total), a range band among the in-scope
+- `Support_Reactions_Report.html` opens on its **Summary** (see "Module 06 Support Reactions" below). Its generic
+  views stay under `View`: per support point (or foundation total), a range band among the in-scope
   candidates: min–max wash, darker P25–P75 core, median line, labelled extremes, and candidate dots on top (dots hidden
   above `IndividualProfileLimit`). `Band by` splits it per L / H / P id using the Deflection report's palette order
   keyed by study-wide id (colour follows the id, never the filter); dimensions with more ids than colours are disabled.
@@ -423,6 +424,64 @@ the generic views.
   back to the whole member-force report. Module 04 (Vierendeel) is unchanged.
 - Checks: `tests/MemberForceReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
   `tests/ReportPage.cs`) through `window.memberReport.summary(groupIndex, 'summary' | 'station', pretensionId)`.
+
+## Tab 06 Post-Processing · Module 06 Support Reactions (`Support_Reactions_Report.html`)
+
+A visualization layer inside the existing support-reaction report — no SAP2000, extraction, candidate or raw-data
+change. It shares the Summary look of the member-force report (`ReportSummaryTheme.Css`: heading + view tag, cards,
+legend, chart text, values table); do not fork that CSS per report.
+
+- **Inner / outer is derived, not hardcoded** (`SupportReactionSummary.ResolveRoles`): per foundation side, the
+  inner support is the point nearer in plan to the centre of all foundation points (towards the other foundation),
+  the outer one the farther. Current model: Left inner Pt 198 / outer Pt 200, Right inner Pt 199 / outer Pt 205.
+  A side without exactly two located points at different distances gets no role and no Summary — the report then
+  opens on `Individual supports` as before. Never guess a role, never assume Left = Right.
+- **Derived at report time, in C#** (`SupportReactionSummary.Summarise`, tested): per iteration and result step a
+  `SupportReactionPairDto(Inner, Outer, Net)` for `Fx` and for `Fz`, in stored kN with the SAP sign.
+  `Net = Inner + Outer` is the **algebraic** sum (+24.3 + (−14.9) = +9.4, never 39.2). A component is null unless
+  both supports have a valid value in that step: no sum over one joint, no zero, no estimate. `Fy` and the moments
+  are not part of the Summary (they stay in the generic views).
+- **Summary is the default** (`View = Summary`): heading `Support Reactions` + `Summary` tag, a one-line reading
+  guide, then (1) four KPI cards, (2) `Vertical Reaction Fz`, (3) `Horizontal Reaction Fx`, one card per loading
+  candidate in scope — never mixed. It reads the selected **Result step**; `Component` and `Band by` hide.
+- **KPI cards** cover both foundation sides and every iteration in scope: `Max Inner Compression` (max Fz inner),
+  `Max Outer Uplift` (max |Fz outer| where it is negative; `No uplift` otherwise), `Max Individual Horizontal
+  Reaction` (max of |Fx inner|, |Fx outer|), `Max Net Horizontal Reaction per Side` (max |Fx inner + Fx outer|).
+  Each shows the value in MN, `L · P · H · side` (the load only when the study has several; `Left/Right` when both
+  sides read the same to the shown decimal) and the role with its joint(s). Clicking one opens that iteration by
+  candidate.
+- **Chart grammar** (both charts identical): pretension candidates in natural order; within each, one slot per
+  truss height; within each height **three adjacent bars — Inner | Outer | Σ Net** — about a visible zero line,
+  half a bar of air after each height and a wider gap before the next candidate. Signs are kept (Fz: + compression,
+  − uplift; Fx: global X direction). Σ Net is its own bar from zero, never stacked. Colour is the **role**, not the
+  height: inner `#1f4788` solid, outer `#ff7f0e` solid, Σ Net hatched + outlined slate (a resultant, not a
+  support). Values are signed MN to one decimal, above a positive bar / below a negative one, the net in bold.
+- **Joint identification is mandatory on every bar**: two-level label `Inner` / `Pt 198`, `Outer` / `Pt 200`,
+  `Σ Net` / `198+200` — on two lines when the bars are wide enough, otherwise one upright line
+  (`Inner Pt 198`). The legend only names the three categories; it never replaces the bar labels.
+- **Density**: when a row cannot give each bar a labelled 9.5 px, the candidates wrap to further rows (5 heights →
+  P01–P05 / P06–P09), each row captioned `Fz · L01 · Left Foundation · P01 – P05`. Do not shrink the labels or drop
+  the joints instead.
+- **Missing iteration** (e.g. P08-H30): its height slot stays blank with a muted `n/a` — no bars, no bar labels, no
+  zero, nothing interpolated — and the values table says `Result unavailable`.
+- **Foundation side**: the toolbar `Foundation Side` select is the side selector — the Summary opens on the first
+  (Left) side; `Right` and `Left + Right` (separate charts per side, never one bar for two sides' joints) are one
+  click away. One signed axis per component is shared by every card shown.
+- **By Candidate is a drill-down, not a tab**: `View by Candidate` (or a click on a bar / KPI card) opens it with
+  `← Summary`, `Pretension Candidate` and `Truss Height` selectors (plus `Loading Candidate` when the study has
+  several). It shows both sides of one iteration: a schematic left to right — Left outer, Left inner | Right inner,
+  Right outer — with an Fz and an Fx arrow per support in its actual direction, the signed value, `Compression` /
+  `Uplift`, and `Net Left` / `Net Right` (ΣFz, ΣFx) below; then a table `Foundation | Role | Point | Fx | Fz` with
+  the two resultant rows. A missing iteration says so and draws nothing. Do not add `By Candidate` to the View
+  select.
+- **Tooltips / traceability**: candidate · height · side, role · joint, signed MN, behaviour (Fz), source kN and
+  result step, iteration key and loading, output case; the net shows `Σ Fx = Fx198 + Fx200 = …`. A collapsed
+  `Reaction values` table (optional on paper) lists the kN source of every bar.
+- **Paper**: the Summary re-lays its charts at the sheet width (`reportPrint.register`), two chart rows per sheet;
+  `Export PDF` prints the report as it opens (Summary, Left foundation).
+- **Deep links**: `#group=Right|all`, `#view=supports|totals|matrix`, `#detail=candidate&load=L01&pretension=P03&height=H02`.
+- Checks: `tests/SupportReactionReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
+  `tests/ReportPage.cs`) through `window.reactionReport.summary('summary' | 'candidate', { loadId, pretensionId, heightId })`.
 
 ## Report Print Engine (`ReportPrintEngine`, Tab 06 Print Setup, Export PDF)
 
