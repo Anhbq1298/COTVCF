@@ -798,6 +798,7 @@ public sealed partial class MainViewModel : Observable
     public Command OpenMegaColumnReport { get; }
     public Command BrowsePrintLogo { get; }
     public Command ClearPrintLogo { get; }
+    public Command PrintAllReports { get; }
     public Command OpenResultsWorkbook { get; }
     public Command OpenCandidateDiagnostic { get; }
     public Command ViewIterationError { get; }
@@ -934,11 +935,12 @@ public sealed partial class MainViewModel : Observable
             if (p is PostProcessRow row && Directory.Exists(StudyRoot))
                 TryOpenFile(Path.Combine(StudyRoot, row.DiagnosticRelPath.Replace('/', Path.DirectorySeparatorChar)));
         });
-        RegenerateMemberForceReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
-        RegenerateSupportReactionReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
+        // Generate Outputs writes everything; a module's Regenerate rebuilds its own report only
         GeneratePostProcessOutputs = new(_ => GenerateStudyOutputs(), () => !IsBusy);
-        RegenerateDeflectionReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
-        RegenerateCableForceReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
+        RegenerateDeflectionReport = new(_ => GenerateStudyOutputs(StudyOutputs.DeflectionReport), () => !IsBusy);
+        RegenerateMemberForceReport = new(_ => GenerateStudyOutputs(StudyOutputs.MemberForceReport), () => !IsBusy);
+        RegenerateSupportReactionReport = new(_ => GenerateStudyOutputs(StudyOutputs.SupportReactionReport), () => !IsBusy);
+        RegenerateCableForceReport = new(_ => GenerateStudyOutputs(StudyOutputs.CableForceReport), () => !IsBusy);
         // Modules 02 / 03 / 05 open the member-force report straight on their own Summary.
         OpenTopChordReport = new(_ => TryOpenFile(SummaryReportPath(MemberForceReportGenerator.TopChordFileName) ?? MemberForceReportPath),
             () => HasMemberForceReport);
@@ -952,6 +954,8 @@ public sealed partial class MainViewModel : Observable
             if (dialog.ShowDialog() == true) PrintSettings.LogoPath = dialog.FileName;
         });
         ClearPrintLogo = new(_ => PrintSettings.LogoPath = "", () => PrintSettings.LogoPath.Length > 0);
+        PrintAllReports = new(_ => PrintAll(StudyRoot, "Study Reports"),
+            () => !IsBusy && (HasDeflectionReport || HasMemberForceReport || HasSupportReactionReport || HasCableForceReport));
         ViewIterationError = new(p =>
         {
             if (p is StudyIteration { ErrorMessage.Length: > 0 } row)
@@ -1655,7 +1659,7 @@ public sealed partial class MainViewModel : Observable
         catch (Exception ex) { Message = ex.Message; }
     }
 
-    private async void GenerateStudyOutputs()
+    private async void GenerateStudyOutputs(StudyOutputs outputs = StudyOutputs.All)
     {
         if (IsBusy) return;
         if (!HasRawData)
@@ -1681,6 +1685,15 @@ public sealed partial class MainViewModel : Observable
                 .Where(name => !string.IsNullOrWhiteSpace(name)).ToArray();
             var band = State.OutputSettings.DeflectionLimitBand;
             var print = PrintSettings.Clone();
+            // One report can be rebuilt alone only while the other outputs still belong to the same raw data;
+            // after the raw package changed they are all stale, so everything is generated.
+            var rawChanged = outputs != StudyOutputs.All && !await Task.Run(() => DerivedOutputsFollowRawData(root));
+            if (rawChanged) outputs = StudyOutputs.All;
+            if (outputs != StudyOutputs.All)
+            {
+                await RegenerateOneReport(root, capacities, band, configuredCables, print, outputs);
+                return;
+            }
             var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, band, configuredCables, print));
             currentRunWorkbookPath = artifacts.WorkbookPath;
             useCurrentRunArtifacts = true;
@@ -1690,21 +1703,125 @@ public sealed partial class MainViewModel : Observable
             CableForceReportPath = artifacts.CableForceReportPath;
             StudyRunJournal.ReplaceArtifacts(root, artifacts);
             RefreshDeflectionArtifacts();
-            Message = $"Tab 06 outputs generated from {StudyRawDataStore.JsonFileName}" +
+            Message = (rawChanged ? "The raw data changed since the outputs were generated, so every Tab 06 output was regenerated" : "Tab 06 outputs generated") +
+                      $" from {StudyRawDataStore.JsonFileName}" +
                       (capacities.Count > 0
                           ? $" · capacity from fpu {State.CableStrengthMpa:0.###} MPa · φ {State.CableStrengthReductionFactor:0.###}."
                           : ".") + " No SAP2000 run was performed.";
         }
         catch (Exception ex)
         {
-            currentRunWorkbookPath = null;
-            discoveredWorkbookPath = null;
-            DeflectionReportPath = null;
-            MemberForceReportPath = null;
-            SupportReactionReportPath = null;
-            CableForceReportPath = null;
+            if (outputs == StudyOutputs.All)
+            {
+                currentRunWorkbookPath = null;
+                discoveredWorkbookPath = null;
+                DeflectionReportPath = null;
+                MemberForceReportPath = null;
+                SupportReactionReportPath = null;
+                CableForceReportPath = null;
+            }
             Message = ex.Message;
             Warn("Generate Post-Processing Outputs", ex.Message);
+        }
+        finally { IsBusy = false; }
+    }
+
+    /// <summary>A module's own Regenerate: that one report from the raw data, with the current capacities, limit
+    /// band and Print Setup. The Excel workbook, the candidate diagnostics and the other reports are left exactly
+    /// as they are — <c>Generate Outputs</c> rebuilds everything.</summary>
+    private async Task RegenerateOneReport(string root, IReadOnlyDictionary<string, double> capacities, DeflectionLimitBand band,
+        IReadOnlyCollection<string> configuredCables, ReportPrintSettings print, StudyOutputs output)
+    {
+        var clock = Stopwatch.StartNew();
+        var (kind, path) = await Task.Run(() =>
+        {
+            var artifacts = new StudyPostProcessor().Generate(root, capacities, band, configuredCables, print, output);
+            var written = output switch
+            {
+                StudyOutputs.DeflectionReport => ("DeflectionReport", artifacts.DeflectionReportPath),
+                StudyOutputs.MemberForceReport => ("MemberForceReport", artifacts.MemberForceReportPath),
+                StudyOutputs.SupportReactionReport => ("SupportReactionReport", artifacts.SupportReactionReportPath),
+                StudyOutputs.CableForceReport => ("CableForceReport", artifacts.CableForceReportPath),
+                _ => throw new ArgumentOutOfRangeException(nameof(output), output, "Not a single report."),
+            };
+            // the run journal records this report's new content; every other entry stays as it is
+            if (written.Item2 is { } file) StudyRunJournal.RefreshArtifact(root, written.Item1, file);
+            return written;
+        });
+        switch (output)
+        {
+            case StudyOutputs.DeflectionReport: DeflectionReportPath = path; break;
+            case StudyOutputs.MemberForceReport: MemberForceReportPath = path; break;
+            case StudyOutputs.SupportReactionReport: SupportReactionReportPath = path; break;
+            case StudyOutputs.CableForceReport: CableForceReportPath = path; break;
+        }
+        CommandManager.InvalidateRequerySuggested();
+        Message = path is null
+            ? $"The raw data holds no results for this report ({kind}) — nothing was regenerated."
+            : $"{Path.GetFileName(path)} regenerated in {clock.Elapsed.TotalSeconds:0.0} s from {StudyRawDataStore.JsonFileName} — this report only. " +
+              "Generate Outputs rebuilds the Excel workbook and every other output. No SAP2000 run was performed.";
+    }
+
+    /// <summary>Whether the outputs on disk were generated from the raw package as it is now — the run journal
+    /// recorded that file's content. Without a journal there is nothing to keep consistent.</summary>
+    private static bool DerivedOutputsFollowRawData(string root)
+    {
+        var manifest = StudyRunJournal.TryRead(root);
+        if (manifest is null) return true;
+        var rawJson = Path.Combine(root, StudyRawDataStore.DirectoryName, StudyRawDataStore.JsonFileName);
+        return SamePath(StudyRunJournal.ValidArtifactPath(manifest, "RawJson"), rawJson);
+    }
+
+    /// <summary>Asks where to save a PDF — suggested folder, suggested file name — and returns the chosen path, or
+    /// null when the user cancels. A Windows Save dialog; the checks replace it.</summary>
+    internal Func<string, string, string?> AskPdfPath { get; set; } = (folder, fileName) =>
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save all reports as one PDF", Filter = "PDF document (*.pdf)|*.pdf", DefaultExt = ".pdf", AddExtension = true,
+            OverwritePrompt = true, FileName = fileName, InitialDirectory = Directory.Exists(folder) ? folder : "",
+        };
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    };
+
+    /// <summary>Writes every report of a folder into one PDF: folder, PDF path, Print Setup, document title. The
+    /// headless browser of <see cref="ReportPdfExporter"/>; the checks replace it.</summary>
+    internal Func<string, string, ReportPrintSettings, string, ReportPdfResult> PrintPackage { get; set; } =
+        (folder, pdfPath, settings, title) => ReportPdfExporter.ExportPackage(folder, pdfPath, settings, title);
+
+    private string? lastPdfFolder;
+
+    /// <summary>Print All Reports: every report generated in <paramref name="folder"/> (the study, or its Optimized
+    /// set) as one PDF with the current Print Setup, numbered through. Asks only where to save — no print dialog —
+    /// then opens the PDF. Runs a headless browser in the background; no SAP2000.</summary>
+    private async void PrintAll(string folder, string what)
+    {
+        if (IsBusy) return;
+        if (StudyReportPackage.Items(folder).Count == 0)
+        {
+            Message = "There is no report to print yet. Generate the outputs first.";
+            return;
+        }
+        var title = $"{BaselineModelName} - {what}";
+        var fileName = string.Concat(title.Select(c => Array.IndexOf(Path.GetInvalidFileNameChars(), c) < 0 ? c : '_')) + ".pdf";
+        var pdfPath = AskPdfPath(lastPdfFolder is { } last && Directory.Exists(last) ? last : folder, fileName);
+        if (string.IsNullOrWhiteSpace(pdfPath)) return;
+        lastPdfFolder = Path.GetDirectoryName(pdfPath);
+
+        IsBusy = true;
+        Message = $"Printing all reports to {Path.GetFileName(pdfPath)}…";
+        try
+        {
+            var settings = PrintSettings.Clone();
+            var result = await Task.Run(() => PrintPackage(folder, pdfPath, settings, title));
+            Message = $"{Path.GetFileName(result.PdfPath)} written" + (result.PageCount > 0 ? $" — {result.PageCount:N0} pages" : "") +
+                      $" in {result.Elapsed.TotalSeconds:0.0} s with the current Print Setup. Charts are vector graphics.";
+            if (File.Exists(result.PdfPath)) TryOpenFile(result.PdfPath);
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+            Warn("Print All Reports", ex.Message, warning: true);
         }
         finally { IsBusy = false; }
     }

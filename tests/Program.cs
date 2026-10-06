@@ -188,8 +188,11 @@ internal static class Program
                 Assert(!FindVisuals<Button>(window).Any(button => button.Content is string label && label.Contains("PDF", StringComparison.OrdinalIgnoreCase)) &&
                        FindVisuals<Button>(window).Count(button => Equals(button.Content, "View Report")) == 7 &&
                        typeof(MainViewModel).GetProperties().All(property => !property.Name.Contains("Pdf", StringComparison.OrdinalIgnoreCase)) &&
-                       FindVisuals<TextBlock>(printSetup).Any(text => text.Text.Contains("View Report → Print Report")),
-                    "no post-processing module exports PDF any more: each one opens its report, and Print Setup says where printing now happens");
+                       FindVisuals<TextBlock>(printSetup).Any(text => text.Text.Contains("View Report → Print Report") && text.Text.Contains("Print All Reports")),
+                    "no post-processing module has a PDF button of its own: each one opens its report, and Print Setup says where printing happens");
+                var printAll = FindVisuals<Button>(window).Where(button => Equals(button.Content, "Print All Reports…")).ToArray();
+                Assert(printAll.Length == 1 && !printAll[0].IsEnabled && !vm.PrintAllReports.CanExecute(null) && !vm.PrintAllOptimizedReports.CanExecute(null),
+                    "Tab 06 offers Print All Reports beside Generate Outputs; there is nothing to print before the reports exist");
                 var postBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                 postBitmap.Render(window);
                 var postEncoder = new PngBitmapEncoder(); postEncoder.Frames.Add(BitmapFrame.Create(postBitmap));
@@ -229,6 +232,8 @@ internal static class Program
                            .SequenceEqual(["Iteration", "Load", "Height", "Pretension", "δ [mm]", "Cable util. [%]", "Governing cable", "Status", "Reason"]) &&
                        vm.OptimizedReportsStatus == "No optimized reports generated yet." && vm.OptimizationFilters.Count == 4,
                     "Tab 06A offers Generate Optimized Reports, the report buttons and the candidate table; nothing can be generated without raw data");
+                Assert(FindVisuals<Button>(window).Count(button => Equals(button.Content, "Print All Reports…") && !button.IsEnabled) == 1,
+                    "Tab 06A offers Print All Reports for the optimized set");
                 var optimizationBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                 optimizationBitmap.Render(window);
                 var optimizationEncoder = new PngBitmapEncoder(); optimizationEncoder.Frames.Add(BitmapFrame.Create(optimizationBitmap));
@@ -288,6 +293,33 @@ internal static class Program
                            vm.OptimizedReportsStatus.StartsWith($"Optimized reports are up to date · {expected.Qualified} of 27 candidates") && !vm.OptimizedReportsStale &&
                            vm.Message.Contains($"{expected.Qualified} of 27 candidates qualify"),
                         "Generate Optimized Reports writes the set into Study/Optimized, enables its View buttons and reports it up to date");
+
+                    // Print All Reports: asks where to save, then prints the whole folder as one PDF — no print dialog
+                    string? askedFolder = null, askedName = null, printedFolder = null, printedPdf = null, printedTitle = null, printedCompany = null;
+                    var chosenPdf = Path.Combine(optimizationRoot, "out", "Optimized.pdf");
+                    Directory.CreateDirectory(Path.GetDirectoryName(chosenPdf)!);
+                    vm.AskPdfPath = (folder, name) => { askedFolder = folder; askedName = name; return chosenPdf; };
+                    vm.PrintPackage = (folder, pdf, settings, title) =>
+                    {
+                        printedFolder = folder; printedPdf = pdf; printedTitle = title; printedCompany = settings.CompanyName;
+                        return new COT_VCF.Infrastructure.ReportPdfResult(pdf, "browser", TimeSpan.FromSeconds(1.5), 12);
+                    };
+                    vm.PrintSettings.CompanyName = "Print All & Co";
+                    Assert(vm.PrintAllOptimizedReports.CanExecute(null) && !vm.PrintAllReports.CanExecute(null),
+                        "Print All Reports is available for the optimized set once it exists — and not for a study folder without reports");
+                    vm.PrintAllOptimizedReports.Execute(null);
+                    Pump(() => !vm.IsBusy && printedPdf is not null);
+                    Assert(askedFolder == optimizedFolder && askedName is not null && askedName.EndsWith(" - Optimized Reports.pdf", StringComparison.Ordinal) &&
+                           askedName.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && printedFolder == optimizedFolder && printedPdf == chosenPdf &&
+                           printedTitle is not null && printedTitle.EndsWith(" - Optimized Reports", StringComparison.Ordinal) && printedCompany == "Print All & Co" &&
+                           vm.Message.Contains("Optimized.pdf written — 12 pages", StringComparison.Ordinal),
+                        "Print All Reports asks only where to save, prints the optimized folder with the current Print Setup and reports the pages written");
+                    printedPdf = null; askedFolder = null;
+                    vm.AskPdfPath = (folder, _) => { askedFolder = folder; return null; };
+                    vm.PrintAllOptimizedReports.Execute(null);
+                    Pump(() => true);
+                    Assert(printedPdf is null && !vm.IsBusy && askedFolder == Path.GetDirectoryName(chosenPdf),
+                        "cancelling the Save dialog prints nothing; the dialog reopens in the folder used last");
                     output.MaxCableUtilization = 0.9;
                     Assert(vm.OptimizedReportsStatus.Contains("out of date") && vm.OptimizedReportsStale, "after a criterion changes the optimized reports are flagged out of date");
                     output.MaxCableUtilization = 0.8;

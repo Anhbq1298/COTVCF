@@ -465,6 +465,26 @@ internal static class CableForceReportChecks
                   File.ReadAllText(rawPath) == rawText,
                 "Regenerate after an fpu change writes the new capacity into the report from the same raw file");
 
+            // A module's own Regenerate asks for its report alone: the workbook, the diagnostics and the other
+            // reports are neither rewritten nor lost
+            var untouched = Directory.GetFiles(root, "*", SearchOption.AllDirectories)
+                .Where(path => !string.Equals(path, reDone.CableForceReportPath, StringComparison.OrdinalIgnoreCase))
+                .ToDictionary(path => path, path => (File.GetLastWriteTimeUtc(path), new FileInfo(path).Length));
+            File.SetLastWriteTimeUtc(reDone.CableForceReportPath!, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+            var only = new StudyPostProcessor().Generate(root, Tab3Capacities(2160), new DeflectionLimitBand(null, null), configured,
+                outputs: StudyOutputs.CableForceReport);
+            Check(File.ReadAllText(only.CableForceReportPath!).Contains("\"Cable1a-2\":" + (0.0288023 * 2160 * 1000 * 0.5).ToString("R", CultureInfo.InvariantCulture), StringComparison.Ordinal) &&
+                  File.GetLastWriteTimeUtc(only.CableForceReportPath!).Year > 2020 && untouched.Count > 3 &&
+                  untouched.All(file => File.Exists(file.Key) && File.GetLastWriteTimeUtc(file.Key) == file.Value.Item1 && new FileInfo(file.Key).Length == file.Value.Length),
+                $"regenerating the cable report alone rewrites that report and leaves the other {untouched.Count} files of the study as they are");
+            Check(only.WorkbookPath == reDone.WorkbookPath && only.DeflectionReportPath == reDone.DeflectionReportPath && File.Exists(only.WorkbookPath!) &&
+                  only.MemberForceReportPath == reDone.MemberForceReportPath && only.SupportReactionReportPath == reDone.SupportReactionReportPath,
+                "…and still reports the workbook and the other reports that are on disk");
+            var none = new StudyPostProcessor().Generate(root, Tab3Capacities(2160), new DeflectionLimitBand(null, null), configured, outputs: StudyOutputs.DeflectionReport);
+            Check(none.CableForceReportPath == only.CableForceReportPath && File.GetLastWriteTimeUtc(none.DeflectionReportPath!) > untouched[none.DeflectionReportPath!].Item1 &&
+                  File.GetLastWriteTimeUtc(none.WorkbookPath!) == untouched[none.WorkbookPath!].Item1,
+                "regenerating the deflection report alone does not rebuild the Excel workbook");
+
             ClientRendering(gen, dto, raw);
         }
         finally { try { Directory.Delete(root, true); } catch { } }

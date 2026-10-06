@@ -26,6 +26,7 @@ internal static class ReportPrintChecks
             SavedSetup();
             CableReportOnPaper(folder);
             EveryReportPrints(folder);
+            Package(folder);
             Exporter(folder);
         }
         finally { try { Directory.Delete(folder, true); } catch { } }
@@ -125,7 +126,7 @@ internal static class ReportPrintChecks
         Check(css == "@page{size:297mm 210mm;margin:0}" && page.Text("pr-page") == css,
             "a sheet is the whole page: the page rule gives the paper size and no margins — header and footer are part of each sheet");
         Check(page.Eval("window.reportPrint.page().sheetWidthPx") == "1122" && page.Eval("window.reportPrint.page().sheetHeightPx") == "793" &&
-              page.Eval("window.reportPrint.page().contentPx") == "1046" && page.Eval("window.reportPrint.page().contentHeightPx") == "642",
+              page.Eval("window.reportPrint.page().contentPx") == "1046" && page.Eval("window.reportPrint.page().contentHeightPx") == "684",
             "A4 landscape: the sheet, and inside its header band, footer band and side margins the area charts are laid out against");
 
         var head = page.Eval("window.reportPrint.headHtml()");
@@ -396,7 +397,7 @@ internal static class ReportPrintChecks
         var print = new ReportPrintSettings { CompanyName = "ACME", LogoPath = logo, ProjectName = "Tower", JobNumber = "24-0187", Revision = "B", FooterNote = "Preliminary" };
         foreach (var (name, title, path) in GenerateAll(folder, print))
         {
-            var r = ReportPdfExporter.RunScript(path, ScreenScript);
+            var r = ReportBrowser.RunScript(path, ScreenScript);
             var tagged = name != "diagnostic";
             if (r.TryGetValue("ERROR", out var error)) throw new Exception($"FAIL: {name}: the Print Report check script stopped — {error} (after: {string.Join(", ", r.Keys)})");
             Check(r["opened"] == "true" && r["printedOnOpen"] == "0" && r["layout"] == "true",
@@ -477,6 +478,61 @@ internal static class ReportPrintChecks
         };
     }).ToList();
 
+    // ---------- Print All Reports: the package ----------
+
+    private static void Package(string folder)
+    {
+        var root = Path.Combine(folder, "package");
+        var print = new ReportPrintSettings { CompanyName = "ACME </script> & Co", ProjectName = "Tower", PaperSize = ReportPaperSize.A3 };
+        foreach (var _ in GenerateAll(root, print)) { }
+        var items = StudyReportPackage.Items(root);
+        var summaries = new[]
+        {
+            (Title: "Top Chord", Launcher: MemberForceReportGenerator.TopChordFileName, Options: "summary=top"),
+            (Title: "Bottom Chord", Launcher: MemberForceReportGenerator.BottomChordFileName, Options: "summary=bottom"),
+            (Title: "Mega Column", Launcher: MemberForceReportGenerator.MegaColumnFileName, Options: "summary=mega"),
+        }.Where(summary => File.Exists(Path.Combine(root, summary.Launcher))).ToArray();
+        string[] expected = ["Optimization Summary", "Deflection", .. summaries.Length > 0 ? summaries.Select(summary => summary.Title) : ["Member Forces"],
+            "Support Reactions", "Cable Forces"];
+        Check(items.Select(item => item.Title).SequenceEqual(expected) && items.All(item => File.Exists(Path.Combine(root, item.FileName))) &&
+              summaries.All(summary => items.Any(item => item.Title == summary.Title && item.FileName == MemberForceReportGenerator.ReportFileName && item.Options == summary.Options)) &&
+              items.Where(item => item.FileName != MemberForceReportGenerator.ReportFileName).All(item => item.Options is null),
+            $"Print All Reports takes the reports of a folder in module order — {string.Join(", ", expected)}");
+        foreach (var summary in summaries) File.Delete(Path.Combine(root, summary.Launcher));
+        Check(StudyReportPackage.Items(root).Count(item => item.FileName == MemberForceReportGenerator.ReportFileName && item.Options is null && item.Title == "Member Forces") == 1 &&
+              StudyReportPackage.Items(Path.Combine(root, "nowhere")).Count == 0,
+            "without a group Summary the member-force report is printed as it opens; a folder without reports gives nothing to print");
+
+        var html = StudyReportPackage.Html(root, items, print, "Model.sdb - Study Reports");
+        Check(System.Text.RegularExpressions.Regex.Matches(html, "<iframe ").Count == items.Count &&
+              html.Contains(new Uri(Path.Combine(root, DeflectionReportGenerator.ReportFileName)).AbsoluteUri + "#print=package\"", StringComparison.Ordinal) &&
+              summaries.All(summary => html.Contains(MemberForceReportGenerator.ReportFileName + "#print=package&amp;" + summary.Options + "\"", StringComparison.Ordinal)) &&
+              html.IndexOf("Optimization_Summary.html", StringComparison.Ordinal) < html.IndexOf("Cable_Forces_Report.html", StringComparison.Ordinal),
+            "the package page loads every report in its own frame, opened as one report of a package, in order");
+        Check(!html.Contains("ACME </script>", StringComparison.Ordinal) && html.Contains("ACME \\u003C/script\\u003E \\u0026 Co", StringComparison.Ordinal) &&
+              html.Contains("\"paper\":\"A3\"", StringComparison.Ordinal) && html.Contains("\"project\":\"Tower\"", StringComparison.Ordinal) &&
+              html.Contains("<title>Model.sdb - Study Reports</title>", StringComparison.Ordinal),
+            "the package hands every report the current Print Setup, embedded safely");
+
+        var old = Path.Combine(root, "Old_Report.html");
+        File.WriteAllText(old, new string('x', 2_500_000) + "<script>const auto = options.print != null;</script>");
+        var cut = Path.Combine(root, "Cut_Report.html");
+        File.WriteAllText(cut, new string('x', (1 << 20) - 10) + "const packaged = options.print === \"package\" && true;");
+        Check(items.All(item => ReportPrintEngine.SupportsPackage(Path.Combine(root, item.FileName))) && ReportPrintEngine.SupportsPackage(cut) &&
+              !ReportPrintEngine.SupportsPackage(old) && !ReportPrintEngine.SupportsPackage(Path.Combine(root, "missing.html")),
+            "a report generated by this version can join a package; one from an earlier version is recognised");
+
+        var earlier = Path.Combine(folder, "earlier");
+        Directory.CreateDirectory(earlier);
+        File.Copy(old, Path.Combine(earlier, DeflectionReportGenerator.ReportFileName));
+        string? refused = null, nothing = null;
+        try { ReportPdfExporter.ExportPackage(earlier, Path.Combine(earlier, "all.pdf"), print, "t"); } catch (InvalidOperationException ex) { refused = ex.Message; }
+        try { ReportPdfExporter.ExportPackage(Path.Combine(folder, "nowhere"), Path.Combine(earlier, "all.pdf"), print, "t"); } catch (InvalidOperationException ex) { nothing = ex.Message; }
+        Check(refused is not null && refused.Contains(DeflectionReportGenerator.ReportFileName, StringComparison.Ordinal) && refused.Contains("Regenerate", StringComparison.Ordinal) &&
+              nothing is not null && nothing.Contains("no report to print", StringComparison.Ordinal) && !File.Exists(Path.Combine(earlier, "all.pdf")),
+            "Print All Reports refuses reports from an earlier version — regenerate first — and an empty folder, and writes nothing");
+    }
+
     // ---------- PDF exporter ----------
 
     private static void Exporter(string folder)
@@ -487,8 +543,13 @@ internal static class ReportPrintChecks
         Check(arguments.Contains("--headless=new") && arguments.Contains("--no-pdf-header-footer") &&
               arguments.Contains("--print-to-pdf=" + pdf) && arguments.Contains("--user-data-dir=" + Path.Combine(folder, "profile")),
             "the checks' browser prints headless, with its own profile and without the browser's own header and footer");
-        Check(!typeof(ReportPrintEngine).Assembly.GetTypes().Any(type => type.Name.Contains("Pdf", StringComparison.OrdinalIgnoreCase)),
-            "the application has no PDF exporter of its own: a report is printed, or saved as PDF, from its Print Report screen");
+        Check(arguments.Contains("--virtual-time-budget=10000") &&
+              ReportPdfExporter.BuildArguments(html, pdf, "p", virtualTimeBudgetMs: 30000).Contains("--virtual-time-budget=30000"),
+            "a package of reports is given more time to lay itself out than a single report");
+        var counted = Path.Combine(folder, "counted.pdf");
+        File.WriteAllText(counted, "%PDF-1.4\n1 0 obj <</Type /Pages /Count 3>>\n2 0 obj <</Type /Page /Parent 1 0 R>>\n3 0 obj <</Type/Page>>\n4 0 obj <</Type /Page\n>>\n");
+        Check(ReportPdfExporter.CountPages(counted) == 3 && ReportPdfExporter.CountPages(Path.Combine(folder, "no.pdf")) == 0,
+            "the pages of a written PDF are counted for the status line");
         Check(arguments[^1].StartsWith("file:///", StringComparison.Ordinal) && arguments[^1].Contains("My%20Study/Cable%20Forces.html") &&
               arguments[^1].EndsWith("#print&paper=A3&mode=ut", StringComparison.Ordinal) &&
               ReportPdfExporter.BuildArguments(html, pdf, "p")[^1].EndsWith("Cable%20Forces.html#print", StringComparison.Ordinal),
@@ -537,6 +598,20 @@ internal static class ReportPrintChecks
                     Check(new FileInfo(view.PdfPath).Length > 15_000, $"support: the {label} view printed to a {new FileInfo(view.PdfPath).Length / 1024} KB PDF");
                 }
             }
+            // Print All Reports: one PDF of the whole folder — as many pages as the reports printed one by one
+            var items = StudyReportPackage.Items(all);
+            var single = items.Sum(item => ReportPdfExporter.Export(Path.Combine(all, item.FileName), Path.Combine(all, "one.pdf"), item.Options).PageCount);
+            var package = ReportPdfExporter.ExportPackage(all, Path.Combine(folder, "out", "All Reports.pdf"),
+                new ReportPrintSettings { CompanyName = "ACME", LogoPath = logo, ProjectName = "Tower" }, "Model.sdb - Study Reports");
+            Check(single >= items.Count && package.PageCount == single && new FileInfo(package.PdfPath).Length > 50_000,
+                $"Print All Reports wrote {items.Count} reports as one {package.PageCount}-page PDF in {package.Elapsed.TotalSeconds:0.0} s — the pages of the reports printed one by one ({single})");
+            var portrait = ReportPdfExporter.ExportPackage(all, Path.Combine(folder, "out", "All Reports A3.pdf"),
+                new ReportPrintSettings { CompanyName = "ACME", PaperSize = ReportPaperSize.A3, Orientation = ReportPageOrientation.Portrait }, "Model.sdb - Study Reports");
+            var box = System.Text.RegularExpressions.Regex.Match(System.Text.Encoding.Latin1.GetString(File.ReadAllBytes(portrait.PdfPath)),
+                @"/MediaBox\s*\[\s*0\s+0\s+([\d.]+)\s+([\d.]+)");
+            Check(box.Success && Math.Abs(double.Parse(box.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) - 841.9) < 1.5 &&
+                  Math.Abs(double.Parse(box.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture) - 1190.6) < 1.5 && portrait.PageCount >= items.Count,
+                $"the package prints with the Print Setup handed to it, not the one a report was generated with: A3 portrait, {portrait.PageCount} pages");
             PrintReportScreen(Path.Combine(folder, "screen"), logo);
         }
         finally { try { Directory.Delete(folder, true); } catch { } }

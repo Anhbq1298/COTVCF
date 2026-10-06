@@ -137,7 +137,7 @@ public sealed partial class MainViewModel
 
     private Command? generateOptimizedReports, openOptimizationSummary, openOptimizedDeflection, openOptimizedTopChord,
         openOptimizedBottomChord, openOptimizedMegaColumn, openOptimizedMemberForces, openOptimizedSupportReactions,
-        openOptimizedCableForces, openOptimizedFolder;
+        openOptimizedCableForces, openOptimizedFolder, printAllOptimizedReports;
 
     public Command GenerateOptimizedReports => generateOptimizedReports ??= new(_ => GenerateOptimized(),
         () => !IsBusy && HasRawData && optimization is not null && !HasOptimizationProblem);
@@ -151,6 +151,9 @@ public sealed partial class MainViewModel
     public Command OpenOptimizedMemberForces => OpenOptimized(ref openOptimizedMemberForces, MemberForceReportGenerator.ReportFileName);
     public Command OpenOptimizedSupportReactions => OpenOptimized(ref openOptimizedSupportReactions, SupportReactionReportGenerator.ReportFileName);
     public Command OpenOptimizedCableForces => OpenOptimized(ref openOptimizedCableForces, CableForceReportGenerator.ReportFileName);
+    /// <summary>The optimized set as one PDF — the summary first, then the reports of the qualified candidates.</summary>
+    public Command PrintAllOptimizedReports => printAllOptimizedReports ??= new(_ => PrintAll(OptimizedFolder, "Optimized Reports"),
+        () => !IsBusy && OptimizedFile(OptimizationSummaryReport.FileName) is not null);
     public Command OpenOptimizedFolder => openOptimizedFolder ??= new(_ => TryOpenFolder(OptimizedFolder), () => Directory.Exists(OptimizedFolder));
 
     // ---------- metrics once, criteria as often as they change ----------

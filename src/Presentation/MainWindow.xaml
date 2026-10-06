@@ -938,7 +938,9 @@
       <DockPanel Margin="0,3,0,4">
        <WrapPanel DockPanel.Dock="Right" Margin="12,0,0,0">
         <Button Content="Generate Outputs" Command="{Binding GeneratePostProcessOutputs}" Style="{StaticResource Primary}"
-                ToolTip="Read RawData/Study_Raw_Results.json and generate Excel plus all implemented HTML reports — no SAP2000"/>
+                ToolTip="Read RawData/Study_Raw_Results.json and generate everything: the Excel workbook (the slow part), the candidate diagnostics and every HTML report — no SAP2000. To refresh one report only, use its own Regenerate."/>
+        <Button Content="Print All Reports…" Command="{Binding PrintAllReports}"
+                ToolTip="Save every report below as one PDF, pages numbered through — asks only where to save, no print dialog · uses the Print Setup as it is now · runs Microsoft Edge in the background, no SAP2000"/>
         <Button Content="Open Raw Data" Command="{Binding OpenRawDataFolder}" Margin="0"
                 ToolTip="Open the JSON/CSV source folder used by Tab 06"/>
        </WrapPanel>
@@ -959,7 +961,7 @@
        <Expander Style="{StaticResource PpModule}">
         <Expander.Header><TextBlock Text="PRINT SETUP · HEADER / FOOTER" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="The starting values of each report's own Print Report screen: logo top-left, project and job number in the header, company, note and page numbers in the footer. Saved for this Windows user · embedded on the next Generate / Regenerate. Printing and saving as PDF happen in the report: View Report → Print Report, where every value can still be changed beside a live preview." Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="The starting values of each report's own Print Report screen: logo top-left, project and job number in the header, company, note and page numbers in the footer. Saved for this Windows user · embedded on the next Generate / Regenerate. One report: View Report → Print Report, where every value can still be changed beside a live preview. Everything at once: Print All Reports, which uses the values below as they are now." Style="{StaticResource PpDesc}"/>
          <Grid Margin="0,8,0,0">
           <Grid.Resources>
            <Style x:Key="PrLabel" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,0,8,0"/></Style>
@@ -1057,7 +1059,7 @@
          <TextBlock Text="{Binding DeflectionReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser — print or save it as PDF there with Print Report"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Regenerate Tab 06 outputs from RawData/Study_Raw_Results.json — no SAP"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Rebuild Deflection_Report.html alone from Study_Raw_Results.json, with the current limit band and Print Setup — the Excel workbook and the other reports are not touched (Generate Outputs rebuilds everything) · no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1072,7 +1074,7 @@
          <TextBlock Text="{Binding MemberForceReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding MemberForceReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenTopChordReport}" Style="{StaticResource Primary}" ToolTip="Open the Top Chord summary of Member_Forces_Report.html in your web browser"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateMemberForceReport}" ToolTip="Rebuild Member_Forces_Report.html from Study_Raw_Results.json — no SAP"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateMemberForceReport}" ToolTip="Rebuild Member_Forces_Report.html alone (Top Chord, Bottom Chord, Vierendeel, Mega Column) from Study_Raw_Results.json — the other outputs are not touched · no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1122,7 +1124,7 @@
          <TextBlock Text="{Binding SupportReactionReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding SupportReactionReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenSupportReactionReport}" Style="{StaticResource Primary}" ToolTip="Open Support_Reactions_Report.html in your web browser"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateSupportReactionReport}" ToolTip="Rebuild Support_Reactions_Report.html from Study_Raw_Results.json — no SAP"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateSupportReactionReport}" ToolTip="Rebuild Support_Reactions_Report.html alone from Study_Raw_Results.json — the other outputs are not touched · no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1137,7 +1139,7 @@
          <TextBlock Text="{Binding CableForceReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding CableForceReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenCableForceReport}" Style="{StaticResource Primary}" ToolTip="Open Cable_Forces_Report.html in your web browser"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Regenerate Tab 06 outputs from raw JSON using the current fpu / &#966; capacities — no SAP"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Rebuild Cable_Forces_Report.html alone from the raw JSON using the current fpu / &#966; capacities — the Excel workbook keeps its capacities until Generate Outputs · no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1173,6 +1175,8 @@
        <WrapPanel DockPanel.Dock="Right" Margin="12,0,0,0">
         <Button Content="Generate Optimized Reports" Command="{Binding GenerateOptimizedReports}" Style="{StaticResource Primary}"
                 ToolTip="Write the reports for the qualified candidates only into Study/Optimized — the full Tab 06 reports are not touched · no SAP2000"/>
+        <Button Content="Print All Reports…" Command="{Binding PrintAllOptimizedReports}"
+                ToolTip="Save the optimization summary and every optimized report as one PDF, pages numbered through — asks only where to save, no print dialog · uses the Tab 06 Print Setup as it is now"/>
         <Button Content="Open Optimized Folder" Command="{Binding OpenOptimizedFolder}" Margin="0"
                 ToolTip="Open Study/Optimized in File Explorer"/>
        </WrapPanel>

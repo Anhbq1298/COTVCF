@@ -31,8 +31,9 @@ public sealed record ReportPrintDto(
 /// revision, prepared / checked by, footer note, logo, paper, orientation, page numbers, date, source data — beside
 /// a live preview. The preview is the printout: the engine composes the report into sheets (header band, body,
 /// footer band, "Page n of N") and the browser prints exactly those sheets, so nothing has to be checked in the
-/// native print dialog. Charts stay inline SVG and print as vectors. PDF is "Save as PDF" in that dialog — the
-/// application itself exports nothing.
+/// native print dialog. Charts stay inline SVG and print as vectors. PDF is "Save as PDF" in that dialog; the
+/// application's <b>Print All Reports</b> writes the same sheets of every report into one PDF
+/// (<see cref="StudyReportPackage"/>, <c>#print=package</c>).
 /// <para>The sheets are composed from the report's blocks in a fixed order, whatever their order on screen:
 /// information, legends, general notes, summary, charts, source tables. A report plugs in by emitting
 /// <see cref="Css"/>, <see cref="PageStyle"/>, <see cref="ToolbarButton"/> (or <see cref="Bar"/>) and
@@ -127,7 +128,35 @@ public static class ReportPrintEngine
     /// <summary>The <c>#print-data</c> block followed by the engine script. Emit before the report's own script
     /// so that script can register its hooks on <c>window.reportPrint</c>.</summary>
     public static string Scripts(ReportPrintDto print) =>
-        $"<script id=\"print-data\" type=\"application/json\">{JsonSerializer.Serialize(print, Json)}</script>\n<script>{Script}</script>";
+        $"<script id=\"print-data\" type=\"application/json\">{SetupJson(print)}</script>\n<script>{Script}</script>";
+
+    /// <summary>A setup as the engine script reads it — safe inside a <c>&lt;script&gt;</c> element.</summary>
+    public static string SetupJson(ReportPrintDto print) => JsonSerializer.Serialize(print, Json);
+
+    // how the engine script reads "#print=package" — what tells a report that can join a package from an older one
+    private const string PackageMarker = "options.print === \"package\"";
+
+    /// <summary>Whether a generated report can be printed as one of several in a package
+    /// (<see cref="StudyReportPackage"/>). A report written before that existed cannot: it has to be regenerated.</summary>
+    public static bool SupportsPackage(string reportPath)
+    {
+        try
+        {
+            var marker = System.Text.Encoding.ASCII.GetBytes(PackageMarker);
+            using var stream = new FileStream(reportPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, 1 << 16, FileOptions.SequentialScan);
+            var buffer = new byte[1 << 20];
+            int kept = 0, read;
+            while ((read = stream.Read(buffer, kept, buffer.Length - kept)) > 0)
+            {
+                var length = kept + read;
+                if (buffer.AsSpan(0, length).IndexOf(marker) >= 0) return true;
+                kept = Math.Min(marker.Length - 1, length);       // a marker cut by the end of the block
+                buffer.AsSpan(length - kept, kept).CopyTo(buffer);
+            }
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
 
     /// <summary>Holds the generated <c>@page</c> rule (the sheet size). Emit once, in the document head.</summary>
     public const string PageStyle = """<style id="pr-page" media="print"></style>""";
@@ -177,14 +206,14 @@ body.pr-open{overflow:hidden}
 .pr-view{flex:1;min-width:0;overflow:auto;padding:18px 18px 6px}
 .pr-wrap{margin:0 auto}
 .pr-pages{transform-origin:0 0}
-.pr-sheet{box-sizing:border-box;position:relative;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#1A1A1A;padding:7mm 10mm 5mm;margin:0 0 16px;box-shadow:0 1px 3px #0003,0 8px 22px #0002}
-.pr-head{flex:none;box-sizing:border-box;height:14mm;display:grid;grid-template-columns:27fr 46fr 27fr;column-gap:4mm;align-items:end;padding:0 0 1.6mm;border-bottom:.75pt solid #1F4788;margin:0 0 3mm;line-height:1.3;white-space:nowrap}
+.pr-sheet{box-sizing:border-box;position:relative;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#1A1A1A;padding:5mm 10mm 4mm;margin:0 0 16px;box-shadow:0 1px 3px #0003,0 8px 22px #0002}
+.pr-head{flex:none;box-sizing:border-box;height:9mm;display:grid;grid-template-columns:27fr 46fr 27fr;column-gap:4mm;align-items:end;padding:0 0 1mm;border-bottom:.75pt solid #1F4788;margin:0 0 2mm;white-space:nowrap}
 .pr-head>div{overflow:hidden;text-overflow:ellipsis}
-.pr-head .l{font:600 10pt "Segoe UI",system-ui,Arial,sans-serif}.pr-head .l img{display:block;max-width:100%;max-height:11.6mm}
-.pr-head .c{text-align:center;font:600 9pt "Segoe UI",system-ui,Arial,sans-serif}.pr-head .c span{display:block;font-weight:400;color:#444}
-.pr-head .r{text-align:right;font:8pt "Segoe UI",system-ui,Arial,sans-serif;color:#444}.pr-head .r b{display:block;color:#1A1A1A;font-weight:600}
+.pr-head .l{font:600 9.5pt/1.25 "Segoe UI",system-ui,Arial,sans-serif}.pr-head .l img{display:block;max-width:100%;max-height:7mm}
+.pr-head .c{text-align:center;font:600 8.5pt/1.25 "Segoe UI",system-ui,Arial,sans-serif}.pr-head .c span{display:block;font-weight:400;color:#444}
+.pr-head .r{text-align:right;font:7.5pt/1.25 "Segoe UI",system-ui,Arial,sans-serif;color:#444}.pr-head .r b{display:block;color:#1A1A1A;font-weight:600}
 .pr-body{flex:1 1 0;min-height:0;overflow:hidden}
-.pr-foot{flex:none;box-sizing:border-box;height:8mm;margin:3mm 0 0;padding:1.2mm 0 0;border-top:.5pt solid #9AA0A6;display:grid;grid-template-columns:36fr 28fr 36fr;column-gap:4mm;font:7.5pt/1.35 "Segoe UI",system-ui,Arial,sans-serif;color:#555;white-space:nowrap}
+.pr-foot{flex:none;box-sizing:border-box;height:7mm;margin:2mm 0 0;padding:.8mm 0 0;border-top:.5pt solid #9AA0A6;display:grid;grid-template-columns:36fr 28fr 36fr;column-gap:4mm;font:7pt/1.2 "Segoe UI",system-ui,Arial,sans-serif;color:#555;white-space:nowrap}
 .pr-foot>div{overflow:hidden;text-overflow:ellipsis}.pr-foot .c{text-align:center}.pr-foot .r{text-align:right}
 /* an ancestor of a block, repeated around its copy so the report's own rules still match — it draws nothing */
 .pr-shell{display:contents!important}
@@ -220,28 +249,31 @@ window.reportPrint = (function(){
   const dataNode = byId("print-data");
   const P = dataNode && dataNode.textContent ? JSON.parse(dataNode.textContent) : {};
   const PAPERS = { A4: [210, 297], A3: [297, 420], Letter: [215.9, 279.4] };     // mm, portrait
-  const BAND = { top: 24, bottom: 16, side: 10 };     // mm of a sheet taken by the header band, the footer band, each side margin
+  const BAND = { top: 16, bottom: 13, side: 10 };     // mm of a sheet taken by the header band, the footer band, each side margin
   const PX = 96 / 25.4;                               // CSS px per mm
   const KEY = "cotvcf.printSetup.v1";                 // the user's latest setup, kept by this browser
   const TEXTS = ["company", "project", "jobNumber", "revision", "preparedBy", "checkedBy", "footerNote"];
   const ORDER = [["info", "info"], ["legend", "legends"], ["note", "generalAnnotations"], ["summary", "summary"], ["chart", "charts"], ["source", "sourceTables"]];
 
   // "#print&paper=A3&orientation=portrait&source=1" opens the page laid out for printing; "#print=screen" opens
-  // the Print Report screen; other keys belong to the report
+  // the Print Report screen; "#print=package" is one report of several printed as one document; other keys
+  // belong to the report
   const options = {};
   ((window.location && window.location.hash) || "").replace(/^#/, "").split("&").forEach(part => {
     if (!part) return;
     const i = part.indexOf("=");
     try { options[decodeURIComponent(i < 0 ? part : part.slice(0, i))] = i < 0 ? "1" : decodeURIComponent(part.slice(i + 1)); } catch (e) { }
   });
+  const packaged = options.print === "package" && !!window.parent && window.parent !== window;
   const logoOk = v => typeof v === "string" && /^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+\/=]+$/.test(v);
 
   // ---- setup: this report's defaults (Tab 06 Print Setup at generation), then what this browser last used
-  function defaults(){
-    const d = { logo: logoOk(P.logo) ? P.logo : "", paper: PAPERS[P.paper] ? P.paper : "A4",
-      orientation: P.orientation === "portrait" ? "portrait" : "landscape",
-      showPageNumbers: P.showPageNumbers !== false, showDate: P.showDate !== false, includeSource: !!P.includeSourceData };
-    TEXTS.forEach(k => { d[k] = typeof P[k] === "string" ? P[k] : ""; });
+  function defaults(source){
+    const p = source || P;
+    const d = { logo: logoOk(p.logo) ? p.logo : "", paper: PAPERS[p.paper] ? p.paper : "A4",
+      orientation: p.orientation === "portrait" ? "portrait" : "landscape",
+      showPageNumbers: p.showPageNumbers !== false, showDate: p.showDate !== false, includeSource: !!p.includeSourceData };
+    TEXTS.forEach(k => { d[k] = typeof p[k] === "string" ? p[k] : ""; });
     return d;
   }
   function stored(){
@@ -276,7 +308,9 @@ window.reportPrint = (function(){
       sheetWidthPx: Math.floor(w * PX), sheetHeightPx: Math.floor(h * PX),
       contentPx: Math.floor((w - 2 * BAND.side) * PX), contentHeightPx: Math.floor((h - BAND.top - BAND.bottom) * PX) };
   }
-  const css = () => { const pg = page(); return "@page{size:" + pg.widthMm + "mm " + pg.heightMm + "mm;margin:0}"; };
+  // in a package the sheets are exactly the paper, to the fraction of a pixel: they are cut into pages by position
+  const css = () => { const pg = page(); return "@page{size:" + pg.widthMm + "mm " + pg.heightMm + "mm;margin:0}"
+    + (packaged ? ".pr-sheet{width:" + pg.widthMm + "mm!important;height:" + pg.heightMm + "mm!important}" : ""); };
   function apply(){ const style = byId("pr-page"); if (style) style.textContent = css(); }
 
   // ---- header and footer of a sheet. User text is escaped, so it cannot leave its cell.
@@ -486,7 +520,7 @@ window.reportPrint = (function(){
   // the header and footer of every sheet — all a text field of the setup changes
   function chrome(){
     const head = headHtml();
-    sheets.forEach((s, i) => { s.el.children[0].innerHTML = head; s.el.children[2].innerHTML = footHtml(i + 1, sheets.length); });
+    sheets.forEach((s, i) => { s.el.children[0].innerHTML = head; s.el.children[2].innerHTML = footHtml((S.pageOffset || 0) + i + 1, S.pageTotal || sheets.length); });
     const count = byId("pr-count"); if (count) count.textContent = sheets.length + (sheets.length === 1 ? " page · " : " pages · ") + S.paper + " " + S.orientation;
   }
   // the preview is the sheets at a scale that suits the window; paper prints them at full size
@@ -608,6 +642,20 @@ window.reportPrint = (function(){
   function close(){ S.auto = false; leave(); }
   function print(){ enter(); window.print(); }
 
+  // ---- one report of a package: a page that prints several reports as one document loads each in a frame
+  // ("#print=package"). It hands over the setup to print with, is told how many sheets this report makes, and
+  // answers with this report's place in the page numbers of the whole document.
+  const tell = message => { try { window.parent.postMessage(Object.assign({ cotvcf: "print" }, message), "*"); } catch (e) { } };
+  if (packaged) window.addEventListener("message", e => {
+    const m = e.data;
+    if (!m || m.cotvcf !== "print" || e.source !== window.parent) return;
+    if (m.type === "setup"){
+      if (m.setup && typeof m.setup === "object"){ const d = defaults(m.setup); Object.keys(d).forEach(k => { S[k] = d[k]; }); }
+      if (S.active) relay(); else enter();
+      const pg = page(); tell({ type: "sheets", count: sheets.length, widthMm: pg.widthMm, heightMm: pg.heightMm });
+    } else if (m.type === "number"){ S.pageOffset = m.offset | 0; S.pageTotal = m.total | 0; chrome(); }
+  });
+
   const button = byId("pr-btn");
   if (button) button.onclick = open;
   window.addEventListener("beforeprint", enter);       // Ctrl+P and the browser menu print the same sheets
@@ -615,7 +663,8 @@ window.reportPrint = (function(){
   window.addEventListener("resize", () => { if (S.open) scale(); });
   window.addEventListener("keydown", e => { if (S.open && e.key === "Escape") close(); });
   window.addEventListener("load", () => {
-    if (options.print === "screen") open();
+    if (packaged) tell({ type: "ready" });               // the package answers with the setup; then the sheets are composed
+    else if (options.print === "screen") open();
     else if (S.auto) enter();
     if ((S.auto || options.print === "screen") && document.documentElement) document.documentElement.setAttribute("data-print-ready", "1");
   });

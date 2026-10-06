@@ -496,7 +496,8 @@ Qualifies the stored candidates against acceptance criteria and writes the exist
 
 - **Tab**: `06A  OPTIMIZATION`, index 6, after `06 POST-PROCESSING`. `IsEnabled` is bound to `HasRawData`; the
   header status reads `Needs raw data` / `Reading raw data…` / `Qualified n / N`. Layout: raw-data strip with
-  `Generate Optimized Reports` and `Open Optimized Folder`; a CRITERIA card and a RESULT card side by side; the
+  `Generate Optimized Reports`, `Print All Reports…` (the optimized set as one PDF — see the print engine) and
+  `Open Optimized Folder`; a CRITERIA card and a RESULT card side by side; the
   CANDIDATES table (virtualised `DataGrid`, status filter) filling the rest.
 - **Metrics once, criteria as often as they change**: `StudyMetricsStore.Load` derives one `CandidateMetrics` row
   per candidate (δ = `DeflectionLimitBand.PeakDownMm` over every monitored point; the final force of every cable)
@@ -540,13 +541,30 @@ Qualifies the stored candidates against acceptance criteria and writes the exist
 
 ## Report Print Engine (`ReportPrintEngine`, Print Report screen, Tab 06 Print Setup)
 
-Reports stay one self-contained HTML file and **the application exports no PDF**. Printing and saving as PDF happen
-in the report: its `Print Report` button opens a composition screen — setup on the left, a live preview of the
-sheets on the right — and what the preview shows is what the browser prints. **Every HTML view is on the engine**:
-Deflection, Member Forces, Support Reactions, Cable Forces, the Tab 06A Optimization Summary and the per-candidate
-diagnostics. A new report must plug in the same way — do not give a report its own print header / footer, and do
-not put an export button back in the app (`Export PDF`, the `Export*Pdf` commands and `ReportPdfExporter` under
-`src/` are gone on purpose).
+Reports stay one self-contained HTML file. **One report** is printed from the report: its `Print Report` button
+opens a composition screen — setup on the left, a live preview of the sheets on the right — and what the preview
+shows is what the browser prints. **Everything at once** is printed by the application: `Print All Reports…` writes
+every report as one PDF. **Every HTML view is on the engine**: Deflection, Member Forces, Support Reactions, Cable
+Forces, the Tab 06A Optimization Summary and the per-candidate diagnostics. A new report must plug in the same way —
+do not give a report its own print header / footer, and do not put a per-module PDF button back (`Export PDF` and
+the `Export*Pdf` commands were removed on purpose).
+
+- **Print All Reports…** (Tab 06 beside `Generate Outputs`: `PrintAllReports`; Tab 06A beside
+  `Generate Optimized Reports`: `PrintAllOptimizedReports`): a Windows Save dialog asks only where to save — no
+  print dialog — then `ReportPdfExporter.ExportPackage` (headless Edge, else Chrome, private profile) writes one
+  PDF and the app opens it. Content, in module order (`StudyReportPackage.Items`): Optimization Summary
+  (optimized set), Deflection, the member-force report once per group Summary it has (Top Chord, Bottom Chord,
+  Mega Column — else once as it opens), Support Reactions, Cable Forces. Module 04 Vierendeel has no view of its
+  own and is not in the package. It prints with the **Print Setup card as it is now** (not the values embedded
+  at generation, and not what a browser remembers), pages numbered through (`Page 12 of 31`).
+  **How**: `StudyReportPackage.Html` is a small page with one frame per report, opened as `#print=package`. Each
+  report composes its own sheets — the same ones its Print Report screen shows — so nothing is drawn twice or
+  differently. Frames talk by `postMessage` (`{ cotvcf: "print", type }`): report `ready` → package `setup` →
+  report `sheets` (count, paper) → package `number` (offset, total). The frame is made exactly count × sheet
+  height tall; in a package a sheet is sized in mm, not px, so the page cuts fall on the sheet edges. Reports
+  generated before this existed are refused with "Regenerate" (`ReportPrintEngine.SupportsPackage`); a report
+  that never answers is named on a first page of the PDF. The 135-candidate study (56 MB member-force report,
+  loaded three times) prints 31 pages in about 10 s.
 
 - **Print Report screen** (`window.reportPrint`, `#pr-screen`): the `Print Report` button — accent-outlined,
   placed straight after the main toolbar controls in every report, never behind hint or status text — opens the
@@ -559,9 +577,10 @@ not put an export button back in the app (`Export PDF`, the `Export*Pdf` command
 - **Sheets, not paged media**: the preview's `.pr-sheet` elements (`.pr-head` / `.pr-body` / `.pr-foot`, sized
   from the paper in mm) *are* the printout — `@page{size:W H;margin:0}`, one sheet per page. While printing the
   live report is clipped to zero height, not `display:none`, so SVG pattern definitions still resolve. Bands:
-  24 mm header, 16 mm footer, 10 mm sides. Header: logo (or company) left, report name · model centre, project over
-  `Job No. … · Rev …` right. Footer: company over `Prepared by … · Checked by …` left, note centre, date over
-  `Page N of M` right. Ctrl+P prints the same sheets (`beforeprint` / `afterprint`).
+  16 mm header (logo at most 7 mm tall), 13 mm footer, 10 mm sides — keep them this slim, the sheet is for the
+  charts. Header: logo (or company) left, report name · model centre, project over `Job No. … · Rev …` right.
+  Footer: company over `Prepared by … · Checked by …` left, note centre, date over `Page N of M` right. Ctrl+P
+  prints the same sheets (`beforeprint` / `afterprint`).
 - **Fixed content order**, whatever the order on screen: information → legends → general notes → summary →
   charts → source tables. Legends and general notes are stated once, under one `Legend · general notes` heading
   before the first chart — the same legend under several charts collapses to one (same content = same legend).
@@ -605,9 +624,10 @@ not put an export button back in the app (`Export PDF`, the `Export*Pdf` command
   Candidate diagnostics are written once per candidate, so they are described with `embedLogo: false` and print
   the company name top-left — a study with hundreds of candidates must not carry hundreds of logo copies.
 - **URL fragment**: `#print[&paper=A3&orientation=portrait&source=1]` composes the sheets on load (what the checks'
-  headless browser prints); `#print=screen` opens the Print Report screen. Report-specific options ride on the
-  same fragment (Cable Forces: `mode=ut`, `load=L02`; Member Forces / Support Reactions: `group`, `component`,
-  `view`, `sampling`, `band`).
+  headless browser prints); `#print=screen` opens the Print Report screen; `#print=package` is one report of
+  Print All Reports (waits for the package's setup). Report-specific options ride on the same fragment (Cable
+  Forces: `mode=ut`, `load=L02`; Member Forces: `summary=top|bottom|mega`, `group`, `component`, `view`,
+  `sampling`, `band`; Support Reactions: `group`, `view`).
 - Engine pieces a report emits: `ReportPrintEngine.Css` (inside its `<style>`), `PageStyle` (in `<head>`),
   `ToolbarButton` inside its toolbar (or `Bar` when it has none), and `Scripts(dto)` before its own script.
 - Per report:
@@ -628,12 +648,13 @@ not put an export button back in the app (`Export PDF`, the `Export*Pdf` command
     qualified-candidates table as charts, the all-candidates table as source.
     **Diagnostics** — unmarked, printed in document order with the `Bar`.
 - Checks: `tests/ReportPrintChecks.cs` (settings store, logo embedding, sheet composition and order, saved setup,
-  `#print` options, every report carries the engine) through the Jint page in `tests/ReportPage.cs`. Real layout
-  needs a real browser: `tests/ReportPdfExporter.cs` is the checks' own headless Edge / Chrome (print to PDF,
-  `RunScript` to drive a report and read values back) — it is test tooling, not an application feature.
-  `--report-pdf` (opt-in) prints every report and drives the Print Report screen of each (order, no overflowing
-  sheet, live edits, A3 / portrait, source toggle, saved setup, print called once, clean close); `--study-ui`
-  checks the Print Setup card, the seven `View Report` buttons and that no PDF button or command is left.
+  `#print` options, every report carries the engine, the package's items / page / refusal of older reports)
+  through the Jint page in `tests/ReportPage.cs`. Real layout needs a real browser: `--report-pdf` (opt-in) prints
+  every report with `ReportPdfExporter`, prints the package (as many pages as the reports one by one; the setup
+  handed over wins) and drives the Print Report screen of each report through `tests/ReportBrowser.cs` (order, no
+  overflowing sheet, live edits, A3 / portrait, source toggle, saved setup, print called once, clean close).
+  `--study-ui` checks the Print Setup card, the seven `View Report` buttons, that no module has a PDF button, and
+  Print All Reports on both tabs with a fake Save dialog and a fake printer (`AskPdfPath`, `PrintPackage`).
 
 ## Config Project File (`src/Configuration/`)
 
