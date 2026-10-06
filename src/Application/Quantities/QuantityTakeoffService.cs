@@ -126,6 +126,7 @@ public sealed class IsolatedSapTableReader(ISapInstanceHostFactory hosts, string
         var folder = Path.Combine(workRoot, Guid.NewGuid().ToString("N"));
         try
         {
+            RemoveLeftovers();
             Directory.CreateDirectory(folder);
             var copy = Path.Combine(folder, Path.GetFileName(source));
             await Task.Run(() => File.Copy(source, copy), token);
@@ -140,8 +141,21 @@ public sealed class IsolatedSapTableReader(ISapInstanceHostFactory hosts, string
         finally
         {
             try { if (Directory.Exists(folder)) Directory.Delete(folder, true); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* a leftover private copy is harmless */ }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* removed by a later read */ }
             OneAtATime.Release();
         }
+    }
+
+    // A SAP2000 that held on to its files can leave a private copy behind. A copy a day old belongs to no read.
+    private void RemoveLeftovers()
+    {
+        try
+        {
+            if (!Directory.Exists(workRoot)) return;
+            foreach (var old in Directory.GetDirectories(workRoot).Where(old => Directory.GetCreationTimeUtc(old) < DateTime.UtcNow.AddDays(-1)))
+                try { Directory.Delete(old, true); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 }

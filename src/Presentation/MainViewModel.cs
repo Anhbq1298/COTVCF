@@ -1,4 +1,5 @@
 using COT_VCF.Application;
+using COT_VCF.Application.Quantities;
 using COT_VCF.Application.Results;
 using COT_VCF.Configuration;
 using COT_VCF.Domain;
@@ -71,6 +72,7 @@ public sealed partial class MainViewModel : Observable
             if (!Set(ref selectedTab, value)) return;
             NotifySharedViewer();
             if (value == TabOptimization) RefreshOptimization();     // also picks up Tab 03 capacity edits made meanwhile
+            if (value == TabQuantities) RefreshQuantityCandidates();  // candidates built since the tab was last shown
         }
     }
     public string Message { get => message; private set => Set(ref message, value); }
@@ -140,7 +142,7 @@ public sealed partial class MainViewModel : Observable
     public IReadOnlyList<string> TrussBottomPoints => State.Truss.BottomPoints;
 
     // ---- Hoisted model preview: shared by tabs 01-04 and 07 FEM ----
-    private const int TabLoading = 0, TabTruss = 1, TabPretension = 2, TabOutput = 3, TabIteration = 4, TabFem = 7;     // 5 = Post-Processing, 6 = 06A Optimization (MainViewModel.Optimization.cs)
+    private const int TabLoading = 0, TabTruss = 1, TabPretension = 2, TabOutput = 3, TabIteration = 4, TabFem = 7;     // 5 = Post-Processing, 6 = 06A Optimization (MainViewModel.Optimization.cs), 8 = Quantity Take-off (MainViewModel.Quantities.cs)
     public bool ShowSharedViewer => selectedTab is >= TabLoading and <= TabOutput || selectedTab == TabFem;
     public bool ShowTrussLegend => selectedTab == TabTruss;
     public GeometryModel SharedViewerModel =>
@@ -1180,9 +1182,12 @@ public sealed partial class MainViewModel : Observable
         StudyExecutionSnapshotFactory? studySnapshotFactory = null,
         IOutputSettingsDialogService? outputDialogs = null,
         OutputGroupPreparationService? outputGroupPreparation = null,
-        ReportPrintSettingsStore? printStore = null)
+        ReportPrintSettingsStore? printStore = null,
+        QuantityTakeoffService? quantityTakeoff = null)
     {
         State = state;
+        // Without a service (checks) Tab 08 reads candidate text exports only; it can never start SAP2000.
+        this.quantityTakeoff = quantityTakeoff ?? new();
         this.workflow = workflow;
         this.selection = selection;
         this.config = config;
@@ -1351,6 +1356,8 @@ public sealed partial class MainViewModel : Observable
                 nameof(ApplicationState.SessionBaselineModel) or nameof(ApplicationState.SessionBaseline) or
                 nameof(ApplicationState.TributaryWidthB) or nameof(ApplicationState.NumberOfStories)) ScheduleStudyRegeneration();
             Update();
+            if (e.PropertyName is nameof(ApplicationState.Model) or nameof(ApplicationState.Connection) or nameof(ApplicationState.SessionBaselineModel))
+                OnSapSessionChangedForQuantities();
         };
         State.Truss.PropertyChanged += (_, e) =>
         {

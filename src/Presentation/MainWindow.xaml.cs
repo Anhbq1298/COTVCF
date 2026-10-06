@@ -37,7 +37,7 @@ public partial class MainWindow : Window
     }
 
     // The model preview is one shared viewer hoisted out of the TabControl. Tabs 01-04 (Loading, Truss,
-        // The shared preview appears on tabs 01-04 and 07 FEM; tabs 05-06 use full width.
+        // The shared preview appears on tabs 01-04 and 07 FEM; tabs 05-06A and 08 Quantities use full width.
     private void WorkflowTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (ReferenceEquals(e.OriginalSource, WorkflowTabs)) ApplyViewerLayout();

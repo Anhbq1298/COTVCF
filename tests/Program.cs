@@ -505,6 +505,55 @@ internal static class Program
                     Assert(vm.PrintSettings.ProjectName == "Kept" && vm.PrintSettings.JobNumber == "J-200" && !vm.Message.Contains("Print Setup", StringComparison.Ordinal) &&
                            vm.PrintSetupProjectStatus.StartsWith("Not in Older.json yet", StringComparison.Ordinal),
                         "a project saved before the Print Setup was stored opens as before and leaves the card as it is");
+
+                    // Tab 08 Quantity Take-off: after 07 FEM, on the full width; the candidates of the connected baseline's study
+                    QuantityTakeoffChecks.WriteCandidates(vm.BaselineModelPath);
+                    vm.SelectedTab = 8;
+                    Pump(() => vm.QuantityCandidates.Count == 2);
+                    var workflowTabs = FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs");
+                    var quantityPicker = window.QuantityCandidatePicker;
+                    var quantityGrid = window.QuantityGrid;
+                    Assert(workflowTabs.Items.Count == 9 && workflowTabs.Items.IndexOf(window.QuantitiesTab) == 8 && ReferenceEquals(workflowTabs.SelectedItem, window.QuantitiesTab) &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text == "08  QUANTITIES") && window.SharedViewerPane.Visibility == Visibility.Collapsed &&
+                           quantityPicker.IsEnabled && quantityPicker.SelectedItem is null && quantityGrid.Items.Count == 0 &&
+                           quantityPicker.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(["L01_H01_P01", "L01_H02_P01"]) &&
+                           quantityGrid.Columns.Select(column => column.Header as string).SequenceEqual(["Section", "Member count", "Total length m", "Concrete volume m³", "Steel mass t"]) &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text == "Select a candidate model."),
+                        "Tab 08 Quantities follows Tab 07 FEM on the full width: a dropdown of the Lxx_Hxx_Pxx candidate models and the agreed five-column table");
+                    quantityPicker.SelectedIndex = 0;
+                    Pump(() => vm.QuantityState == QuantityViewState.Ready && quantityGrid.Items.Count == 6);
+                    var quantityCells = FindVisuals<TextBlock>(quantityGrid).Select(text => text.Text).ToArray();
+                    Assert(vm.SelectedQuantityCandidate?.Id == "L01_H01_P01" && quantityGrid.Items.Count == 6 && quantityGrid.Items[5] is QuantityRow { IsTotal: true, Section: "Total" } &&
+                           new[] { "Total", "54", "1,090.361", "795.000", "2,862.104", "306.000", "1,365.734", "0.000" }.All(quantityCells.Contains) && !quantityCells.Contains("n/a") &&
+                           window.QuantityProblemText.Visibility == Visibility.Collapsed && window.QuantityNotesList.Items.Count == 0 &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text.StartsWith("L01_H01_P01 · SAP2000 text export", StringComparison.Ordinal)),
+                        "choosing a candidate in the dropdown shows its section breakdown, the total row and where the data came from");
+                    var quantityBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                    quantityBitmap.Render(window);
+                    var quantityEncoder = new PngBitmapEncoder(); quantityEncoder.Frames.Add(BitmapFrame.Create(quantityBitmap));
+                    using (var stream = File.Create(".work/quantities-tab.png")) quantityEncoder.Save(stream);
+                    quantityPicker.SelectedIndex = 1;
+                    Pump(() => vm.QuantityState == QuantityViewState.Ready && vm.SelectedQuantityCandidate?.Id == "L01_H02_P01" && quantityGrid.Items.Count == 7);
+                    var unavailableCells = FindVisuals<TextBlock>(quantityGrid).Where(text => text.Text == "n/a").ToArray();
+                    Assert(unavailableCells.Length == 4 && unavailableCells.All(cell => ReferenceEquals(cell.Foreground, window.FindResource("Warning")) &&
+                               cell.ToolTip is string reason && reason.Length > 0) &&
+                           unavailableCells.Count(cell => ((string)cell.ToolTip).Contains("MTrPt005")) == 2 && unavailableCells.Count(cell => ((string)cell.ToolTip).StartsWith("Not a complete total")) == 2 &&
+                           FindVisuals<TextBlock>(quantityGrid).Any(text => text.Text == "FSEC1") && window.QuantityNotesList.Items.Count == 4 &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text == "L01_H02_P01 · incomplete"),
+                        "switching the candidate replaces the table; a quantity that cannot be established reads n/a with its reason, in its row and in the total");
+                    var gapBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                    gapBitmap.Render(window);
+                    var gapEncoder = new PngBitmapEncoder(); gapEncoder.Frames.Add(BitmapFrame.Create(gapBitmap));
+                    using (var stream = File.Create(".work/quantities-tab-unavailable.png")) gapEncoder.Save(stream);
+                    uiState.Connection = "Connection Lost";
+                    Pump(() => vm.QuantityCandidates.Count == 0);
+                    Assert(!workflowTabs.IsEnabled && !quantityPicker.IsEnabled && quantityPicker.Items.Count == 0 && quantityGrid.Items.Count == 0 &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text == "Connect SAP") && !vm.ReloadQuantities.CanExecute(null),
+                        "without a SAP connection Tab 08 is disabled and holds no candidate and no numbers");
+                    uiState.Connection = "Connected";
+                    Pump(() => vm.QuantityCandidates.Count == 2);
+                    Assert(workflowTabs.IsEnabled && quantityPicker.IsEnabled && quantityPicker.Items.Count == 2 && quantityPicker.SelectedItem is null && vm.ReloadQuantities.CanExecute(null),
+                        "a successful SAP connection enables Tab 08 again");
                 }
                 finally { try { Directory.Delete(optimizationRoot, true); } catch { } }
                 window.Close(); bindingListener.Flush();
@@ -523,6 +572,22 @@ internal static class Program
             {
                 if (cableLengthLive + 2 >= args.Length) throw new ArgumentException("--cable-length-live needs: <baseline .sdb> <project .json> [--analyse].");
                 CableLengthLiveCheck.RunAsync(args[cableLengthLive + 1], args[cableLengthLive + 2], args.Contains("--analyse")).GetAwaiter().GetResult();
+                return 0;
+            }
+            // Tab 08 quantity take-off of every candidate of a study on disk, from the candidates' own text exports. Offline; reads only.
+            var quantityStudy = Array.IndexOf(args, "--quantity-study");
+            if (quantityStudy >= 0)
+            {
+                if (quantityStudy + 1 >= args.Length) throw new ArgumentException("--quantity-study needs: <baseline .sdb>.");
+                QuantityTakeoffChecks.PrintStudy(args[quantityStudy + 1]);
+                return 0;
+            }
+            // Live: the isolated SAP2000 read of one candidate model — a SAP2000 of its own on a private copy; never attaches to the user's.
+            var quantityLive = Array.IndexOf(args, "--quantity-live");
+            if (quantityLive >= 0)
+            {
+                if (quantityLive + 1 >= args.Length) throw new ArgumentException("--quantity-live needs: <candidate .sdb>.");
+                QuantityTakeoffChecks.RunLiveAsync(args[quantityLive + 1]).GetAwaiter().GetResult();
                 return 0;
             }
             // Internal FEM against SAP2000 on a real study, like for like. Offline: reads the fixture only.
@@ -666,6 +731,7 @@ internal static class Program
             MemberForceReportChecks.Run();
             SupportReactionReportChecks.Run();
             GatewayChecks.Run();
+            QuantityTakeoffChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }

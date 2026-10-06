@@ -1,5 +1,6 @@
 using System.Windows;
 using COT_VCF.Application;
+using COT_VCF.Application.Quantities;
 using COT_VCF.Application.Workers;
 using COT_VCF.Domain;
 using COT_VCF.Infrastructure;
@@ -34,11 +35,15 @@ public partial class App : System.Windows.Application
         var config = new Configuration.ConfigService(gateway, state, workflow);
         var studyExecution = new StudyExecutionCoordinator(
             new ConnectedSapInstanceHostFactory(gateway, new SapInstanceHostFactory()));
+        // Tab 08 reads a candidate's own text export; where that cannot be used, a private copy of the model in a
+        // SAP2000 instance of its own — never the connected one.
+        var quantityTakeoff = new QuantityTakeoffService(
+            new IsolatedSapTableReader(new SapInstanceHostFactory()));
         var outputDialogs = new OutputSettingsDialogService();
         var outputPreparation = new OutputGroupPreparationService(gateway);
         var viewModel = new MainViewModel(state, workflow, new SelectionService(), config, studyExecution,
             outputDialogs: outputDialogs, outputGroupPreparation: outputPreparation,
-            printStore: new ReportPrintSettingsStore());
+            printStore: new ReportPrintSettingsStore(), quantityTakeoff: quantityTakeoff);
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
     }

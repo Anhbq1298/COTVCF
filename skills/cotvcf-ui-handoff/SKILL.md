@@ -93,9 +93,9 @@ earlier tall-header / large-button / blue-block look.
 ## Workflow tabs & shared model preview
 
 - There is **no** standalone "SAP Model" tab. The left rail is **01 Loading, 02 Truss Height, 03 Pretension,
-  04 Output Settings, 05 Iteration, 06 Post-Processing, 06A Optimization, 07 FEM** (`SelectedIndex` 0-7:
-  Optimization is index 6 — `TabOptimization` — and FEM is index 7 — `TabFem`). Connecting is the
-  top-bar `Connect SAP` button only. Project JSON stores the Tabs 01-05 inputs and the Print Setup; nothing of
+  04 Output Settings, 05 Iteration, 06 Post-Processing, 06A Optimization, 07 FEM, 08 Quantities** (`SelectedIndex`
+  0-8: Optimization is index 6 — `TabOptimization` — FEM is index 7 — `TabFem` — and Quantity Take-off is index 8 —
+  `TabQuantities`). Connecting is the top-bar `Connect SAP` button only. Project JSON stores the Tabs 01-05 inputs and the Print Setup; nothing of
   the FEM tab is saved in it. DTO property names (`Tab02Loading` … `Tab05IterationStudy`) and JSON keys are
   unchanged legacy v1 identifiers.
 - There is **one** `Structural2DViewer` (`x:Name="SharedViewer"`), hoisted out of the `TabControl` into a
@@ -103,8 +103,8 @@ earlier tall-header / large-button / blue-block look.
   `ViewerColumn` (the `SharedViewerPane` `DockPanel`). Switching tabs never rebuilds the viewer.
 - `MainWindow.xaml.cs` `ApplyViewerLayout()` (called from `Loaded` and `WorkflowTabs_SelectionChanged`): tabs
   01-04 (index 0-3) and 07 FEM (index 7) get the resizable ~40/60 params/preview split; tabs 05 Iteration,
-  06 Post-Processing and 06A Optimization (indices 4-6) hide the viewer + splitter and the `TabControl` takes the
-  full width. The user's dragged split is remembered in
+  06 Post-Processing, 06A Optimization (indices 4-6) and 08 Quantities (index 8) hide the viewer + splitter and the
+  `TabControl` takes the full width. The user's dragged split is remembered in
   `paramsColumnWidth` / `viewerColumnWidth`.
 - The viewer's `Model` and every overlay come from `MainViewModel` `SharedViewer*` computed properties gated on
   `selectedTab` (`SharedViewerModel`, `SharedViewerAppliedPoints`, `SharedViewerTopPoints/Middle/Bottom`,
@@ -166,7 +166,9 @@ earlier tall-header / large-button / blue-block look.
   the ⓘ next to Monitor opens the FEM procedure directly. Keep the FEM procedure text in sync with the solver. Frame moments use one sign
   convention at both ends (I-end = -f2), so diagrams are continuous across joints. A case whose targets cannot be met
   is not an error: it keeps the closest pretension, is marked "Not fitted" (reason in the Status tooltip), and the
-  run continues. A case whose equilibrium solve fails gets one "Failed" row with the reason; the run continues. Pins are auto-detected at the lowest joints connected to near-vertical frame
+  run continues. A case whose equilibrium solve fails gets one "Failed" row with the reason; the run continues.
+  That row has a **blank Cable cell** (`FemCableFitRow.FailedCase`) — no "(all cables)" or other placeholder; the
+  candidate ID, the Failed status, the reason in the Status tooltip and the `FAILED` line in the run log identify it. Pins are auto-detected at the lowest joints connected to near-vertical frame
   members, drawn at the base joints in the shared viewer; they restrain X/Z translations and leave rotation free.
 - Tension-only cable equilibrium uses damped Newton iterations with a potential-energy line search, not a Boolean
   active-set toggle. Failure reports include the final free-DOF residual and active cable count.
@@ -235,6 +237,90 @@ earlier tall-header / large-button / blue-block look.
 - The global `Load Config` picker starts in the repository `tests` folder when that folder is available.
 - The connection gateway attaches to SAP2000 only. An ETABS-originated model must be open/exported into SAP2000;
   direct ETABS process attachment is not part of this FEM workflow.
+
+## Tab 08 Quantity Take-off (`MainViewModel.Quantities.cs`, `src/Application/Quantities/`)
+
+Concrete volume and steel mass of **one study candidate** by assigned section, from that candidate's own SAP2000
+model data. Reads only: never the connected model, never a write, nothing saved in the project JSON.
+
+- **Tab**: `08  QUANTITIES`, index 8, after `07 FEM`, full width (no shared viewer). It sits inside the workflow grid
+  gated by `HasSapConnection`, and the view model gates too: without a connection the candidate list is empty and a
+  selection loads nothing; losing the connection clears the tab and cancels a read in flight. Header status:
+  `Connect SAP` / `No candidate models` / `N candidates` / `Reading…` / `<id>` (+ ` · incomplete`) / `▲ Unavailable` /
+  `× Read failed`.
+- **Layout**: heading `QUANTITY TAKE-OFF · BY ASSIGNED SECTION`; one line with `CANDIDATE` + the dropdown
+  (`QuantityCandidatePicker`, items shown by `Id`), an icon-only `Reload`, a `Cancel` that is visible only while a
+  separate SAP2000 instance is reading, and the status text; a monospace source line; a 2 px progress bar while
+  loading; the problem text (warning colour for unavailable, error colour for a failed read); then the table, a
+  fixed method caption and the notes — all in a 900 px left-aligned column.
+- **The agreed table** — exactly `Section | Member count | Total length m | Concrete volume m³ | Steel mass t`, one
+  row per assigned section (frames, then cables, natural name order) plus a bold `Total` row (it is the last item of
+  `QuantityRows`, so sorting is off). No portion, grade or height-variation column: choosing another candidate is the
+  comparison between models. Do not add charts, exports or further tables here without being asked.
+- **Unavailable is never zero**: `QuantityRow` quantities are `double?`; null renders `n/a` in the warning colour
+  with the reason as the cell tooltip, a column total with a null in it is null, and the Total tooltip states the sum
+  of the sections that could be taken off. `0.000` means the section really has none of that material. Do not turn a
+  missing value into 0, and do not show a partial sum as the total.
+- **Candidates** (`QuantityCandidateCatalog.Discover(BaselineModelPath)`): every `Lxx_Hxx_Pxx` named by the run
+  journal (`StudyRunJournal.ReadAll`: `StudyRun.json` + `RunHistory`) or by a folder under `<baseline folder>/Study`,
+  whose model or text export is on disk. The model path is `StudyPathService.GetIterationModelPath`, else the path the
+  journal recorded inside that candidate's folder, else the one `.sdb` in it (a study keeps its children when the
+  baseline is renamed). The record that counts is the latest run that worked on the candidate; a Failed / unfinished
+  one adds a warning note. The list is rescanned when the tab is shown, on Reload and on a session change while the
+  tab is shown; the list object is kept while its contents are equal (`QuantityCandidate` has value equality), so
+  the dropdown keeps its selection. Nothing is selected automatically.
+- **Loading** (`LoadQuantities`): every selection takes a new request number and cancels the previous token; only
+  the latest request may publish (`request != quantityRequest` → drop), so an earlier, slower read can never replace
+  a newer selection. States: `NoCandidate`, `Loading`, `Ready`, `Unavailable` (reason shown, table empty), `Error`.
+- **Data source** (`QuantityTakeoffService`), always the selected candidate's own data:
+  1. `TryTextExportAsync` — SAP2000's text copy `<model>.$2k` (written beside the `.sdb` at every save; read by
+     `SapTableSet.ReadText`). Used when its first line names this file, it ends with `END TABLE DATA`,
+     `QuantityTakeoffCalculator.MissingInputs` is empty, and it is not outdated. **Outdated is not "older than the
+     .sdb"**: the study saves the child (export written) and the analysis then writes the `.sdb` again 5–30 s later
+     on the real study, so a model newer than its export is accepted when a run window of the journal covers both
+     writes, or — with no record — within `UnrecordedAnalysisAllowance` (15 min). Never starts SAP2000.
+  2. `ReadWithSapAsync` → `IsolatedSapTableReader` — the isolated read-only workflow: copy the `.sdb` to
+     `%LocalAppData%\COTVCF\QuantityRead\<guid>`, start a `SapInstanceHost` of its own (id 90) on the copy,
+     `ISapGateway.ReadDatabaseTablesAsync` (`DatabaseTables.GetAvailableTables` + `GetTableForDisplayArray`, group
+     `All`, present units — no unit change, no unlock, no edit, no save), `ApplicationExit(false)`, delete the copy.
+     One at a time (static semaphore); results are kept per model file stamp. The view model runs it under `IsBusy`
+     (so Connect / Refresh / a study run cannot start meanwhile and attach to that instance), chains reads through
+     `quantitySapRead`, and refuses while another operation is busy. Without a reader (checks) the state is
+     `Unavailable`. Signatures verified against CSiAPIv1 2.15 (SAP2000 27); **not yet run against a live SAP2000** —
+     `--quantity-live <candidate.sdb>` does that (opt-in, starts its own SAP2000, never attaches).
+- **Calculation** (`QuantityTakeoffCalculator.Calculate(SapTableSet)` — one calculation for both sources; table and
+  field names are matched case-insensitively because the API uses title case):
+  - length = distance between the end joints in `JOINT COORDINATES` (frames and cables; cable sag / `UnDefLength`
+    not applied); section = `AnalSect` / `CableSect` of the assignment tables;
+  - Section Designer sections (`Shape="SD Section"`): physical area per shape from `SECTION DESIGNER PROPERTIES`
+    04 I/wide flange, 09 box/tube, 12 solid rectangle, 16 polygon (01 general, 21 reference line, 30 fiber carry no
+    area). **A shape with a higher `ZOrder` replaces what it covers** (`SectionDesignerGeometry.VisibleAreas`: shapes
+    as convex pieces, exact convex-minus-convex cuts); a tube's interior is empty unless another shape fills it.
+    Established on the stored model: the mega column reports 5.3656 m² = (4.5 − 0.21) + 0.21 × E_s/E_c, i.e. the
+    embedded I-shapes displace concrete. No stored shape has `Reinforcing=Yes`;
+  - any other frame section and a cable section: the section's `Area` with its `Material` (a member's `MatProp`
+    overwrite replaces the material; `Default` / `None` mean none);
+  - material class from `MATERIAL PROPERTIES 01` `Type`: Concrete → volume; Steel, Rebar, Tendon → mass with that
+    material's `UnitMass` from table 02; units from `PROGRAM CONTROL` `CurrUnits` / the model's present units
+    (`SapTableUnits`: force·s²/length⁴ → t/m³);
+  - the transformed `Area` SAP2000 reports for an SD section is **only a check** (Σ A·E/E_base within 0.1 %, else
+    the section is withheld) — never a quantity. Do not substitute it, the baseline's properties, the FEM
+    properties (`FemSectionProperties` areas are transformed), an equivalent shape or a height-derived length;
+  - each object once: a name listed twice is counted once (note); a member assigned to two sections goes to
+    `(no section assigned)`; twin objects on the same joints are both counted and noted.
+- **Withheld with a reason** (row n/a, reason in tooltip and notes): reinforcement (SD shape, or a concrete section
+  with data in another `FRAME SECTION PROPERTIES` table — then concrete is given and steel is n/a), any other SD
+  shape table, rounded polygon corners, shapes overlapping at one Z-order, non user-defined shapes, non-prismatic /
+  auto-select sections, curved members, a material overwrite on an SD section, a material type that is neither
+  concrete nor steel, a steel without `UnitMass`, missing section / joint / coordinates. To support a new shape:
+  add its pieces in `QuantityTakeoff.cs`, a stored example to the checks, and keep the area check.
+- **Checks**: `tests/QuantityTakeoffChecks.cs` in the default run — expected values worked out independently by
+  hand from `tests/fem-sap-benchmark/model.s2k` and derived candidates (joints moved, a section reassigned): units,
+  geometry, composite separation, overlap, grouping, totals, duplicates, every withheld case, the catalog, source
+  selection and freshness, the isolated read against `ApiDouble` API doubles (private copy, candidate folder
+  byte-identical, only read calls), and the view model (gating, switching, stale requests, cancel, failure,
+  connection loss). `--study-ui` checks the tab, the five headers, `n/a` cells and gating. `--quantity-study
+  <baseline.sdb>` prints every candidate of a real study from its exports (offline).
 
 ## Loading Criteria Tab
 
@@ -851,6 +937,7 @@ ViewModels; project save/load never mutates SAP.
 - `src/Presentation/Theme.xaml`: density tokens, palette (chrome + `Viewport*`), button / grid / tab
   styles, and the `AppLogo` Vierendeel-truss `DrawingImage` (window icon + top-bar mark).
 - `src/Presentation/MainViewModel.cs`: command wiring; `StatusLine` for the top-bar status text.
+- `src/Presentation/MainViewModel.Quantities.cs` + `src/Application/Quantities/`: Tab 08 Quantity Take-off.
 - `src/Presentation/Controls/Structural2DViewer.xaml`: dark viewport shell + floating overlay controls.
 - `src/Presentation/Controls/Structural2DViewer.xaml.cs`: canvas drawing (viewport brushes), fit/pan/zoom,
   reset-to-XZ, axis colors, point labels.

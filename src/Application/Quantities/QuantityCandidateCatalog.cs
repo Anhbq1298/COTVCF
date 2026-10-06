@@ -74,7 +74,14 @@ public sealed class QuantityCandidateCatalog
             else if (only.Length == 1) model = only[0];
         }
         var export = Path.ChangeExtension(model, TextExportExtension);
-        if (!File.Exists(model) && !File.Exists(export)) return null;
+        if (!File.Exists(model) && !File.Exists(export))
+        {
+            // No model at all: the folder may still hold SAP2000's text copy of it.
+            var exports = Directory.Exists(folder) ? Directory.GetFiles(folder, "*" + TextExportExtension) : [];
+            if (exports.Length != 1) return null;
+            export = exports[0];
+            model = Path.ChangeExtension(export, ".sdb");
+        }
 
         // Records are newest first. The one that counts is the latest run that worked on the candidate, not a later
         // run that left it out.
