@@ -168,7 +168,7 @@ The benchmark found two things that affect a comparison of the FEM tab with a SA
 
 ## Project configuration
 
-The COT VCF project JSON stores the configuration for Tabs 1–5 and their study selections; loading a project never writes to SAP2000. **Save Config** updates the current tab section, while **Save All** validates and saves all sections atomically. Saved configuration is checked against the connected model before it is applied.
+The COT VCF project JSON stores the configuration for Tabs 1–5 and their study selections; loading a project never writes to SAP2000. **New Config** clears the current configuration and active file identity while retaining the connected SAP model and session baseline; the next save asks for a new file. Existing files and Print Setup preferences are retained. **Save Config** updates the current tab section, while **Save All** validates and saves all sections atomically. Saved configuration is checked against the connected model before it is applied. Configuration and workflow controls are enabled only after SAP connects successfully, and disable again if the connection is lost.
 
 ## Build and run
 

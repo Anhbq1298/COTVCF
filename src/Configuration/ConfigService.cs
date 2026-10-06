@@ -33,6 +33,14 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
 
     public bool CanUse => state.IsSapConnected && state.Model is not null;
 
+    public bool NewProject()
+    {
+        if (!CanUse) return false;
+        new ConfigurationApplicator(state, workflow).Reset();
+        Session.Close();
+        return true;
+    }
+
     public string SuggestFileName(ConfigTabs tabs)
     {
         var stem = state.Model is { } m && !string.IsNullOrWhiteSpace(m.Path) ? Path.GetFileNameWithoutExtension(m.Path) : "COTVCF";

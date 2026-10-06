@@ -18,6 +18,13 @@ public sealed class ConfigProjectSession
     public bool HasActiveProject => Project is not null && !string.IsNullOrWhiteSpace(FilePath);
     public string? FileName => FilePath is null ? null : System.IO.Path.GetFileName(FilePath);
 
+    public void Close()
+    {
+        FilePath = null;
+        Project = null;
+        ClearDirty();
+    }
+
     /// <summary>Open a freshly loaded project — everything starts clean.</summary>
     public void Open(string path, CotVcfConfigDto project)
     {

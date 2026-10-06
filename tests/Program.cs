@@ -1,4 +1,5 @@
 using COT_VCF.Application;
+using COT_VCF.Configuration;
 using COT_VCF.Domain;
 using COT_VCF.Geometry;
 using COT_VCF.SAP2000;
@@ -66,6 +67,26 @@ internal static class Program
                 var window = new COT_VCF.Presentation.MainWindow { DataContext = vm, Width = 1400, Height = 810 };
                 window.Show();
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                uiState.Connection = "Disconnected";
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(!FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
+                       !FindVisuals<Button>(window).First(button => ReferenceEquals(button.Command, vm.NewConfig)).IsEnabled,
+                    "Workflow pages and New Config are disabled before SAP connection");
+                uiState.Connection = "Connected";
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
+                       FindVisuals<Button>(window).First(button => ReferenceEquals(button.Command, vm.NewConfig)).IsEnabled,
+                    "Successful SAP connection enables workflow pages and New Config");
+                window.Width = window.MinWidth;
+                window.UpdateLayout();
+                var toolbarCommands = new[] { vm.NewConfig, vm.SaveAllConfig, vm.LoadConfig, vm.RunStudyFromToolbar, vm.Connect, vm.Refresh };
+                Assert(FindVisuals<Button>(window).Where(button => toolbarCommands.Contains(button.Command)).All(button =>
+                {
+                    var position = button.TransformToAncestor(window).Transform(new Point());
+                    return position.X >= 0 && position.X + button.ActualWidth <= window.ActualWidth;
+                }), "Configuration and study toolbar buttons fit the minimum window width");
+                window.Width = 1400;
                 window.UpdateLayout();
                 var loadPatternPickers = FindVisuals<ComboBox>(window)
                     .Where(combo => combo.Items.Cast<object>().OfType<string>().Contains("LIVE"))
@@ -633,6 +654,7 @@ internal static class Program
             try { workflow.RefreshAsync().GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
             Assert(!state.BaselineCaptured && state.Truss.TopPoints.Contains("top") && state.PointLoads.Count == 2, "External geometry changes invalidate baseline but preserve setup");
             NumericInputChecks.Run();
+            CheckNewConfiguration();
             OutputSettingsChecks.Run();
             ReliabilityChecks.Run();
             StudyComposerChecks.Run();
@@ -648,6 +670,50 @@ internal static class Program
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
     }
+    private static void CheckNewConfiguration()
+    {
+        var state = StudyComposerChecks.CreateState();
+        var sap = new FakeSap { Snapshot = new(state.Model!, state.Geometry, state.LoadPatterns.ToArray()) };
+        var workflow = new WorkflowService(sap, state);
+        var config = new ConfigService(sap, state, workflow);
+        var vm = new MainViewModel(state, workflow, new NoSelection(), config);
+        var model = state.Model;
+        var geometry = state.Geometry;
+        var baseline = state.SessionBaseline;
+        state.OutputSettings.DeflectionPoints.Add("top");
+        state.OutputSettings.DeflectionOutputCaseName = "SLS";
+        state.Study.UseCandidateFilters = true;
+        state.Study.MinHeightM = 20;
+        state.Study.SetRunSelected("L01_H01_P01", false);
+        config.SetActiveProject("old-config.json", new CotVcfConfigDto());
+        config.Session.MarkDirty(ConfigTabs.All);
+        foreach (var status in new[] { "Disconnected", "Connecting", "Error", "Connection Lost" })
+        {
+            state.Connection = status;
+            Assert(!vm.HasSapConnection && !vm.NewConfig.CanExecute(null) && !vm.AddLoadDefinition.CanExecute(null) &&
+                   !vm.GeneratePostProcessOutputs.CanExecute(null) && !vm.GenerateOptimizedReports.CanExecute(null),
+                $"Workflow commands are unavailable while SAP is {status}");
+            var count = state.LoadDefinitions.Count;
+            vm.AddLoadDefinition.Execute(null);
+            vm.NewConfig.Execute(null);
+            Assert(state.LoadDefinitions.Count == count && config.Session.HasActiveProject,
+                "Disconnected command execution cannot change configuration");
+            Assert(vm.Connect.CanExecute(null) && vm.Refresh.CanExecute(null), "Reconnect remains available");
+        }
+        state.Connection = "Connected";
+        Assert(vm.NewConfig.CanExecute(null) && vm.AddLoadDefinition.CanExecute(null), "Workflow commands enable after connection");
+        vm.NewConfig.Execute(null);
+        Assert(!config.Session.HasActiveProject && !config.Session.IsDirty(ConfigTabs.All) &&
+               state.AppliedPoints.Count == 0 && state.Cables.Count == 0 && !state.BaselineCaptured &&
+               state.Truss.TopPoints.Count == 0 && !state.OutputSettings.IsConfigured &&
+               !state.Study.UseCandidateFilters && state.Study.MinHeightM is null && state.Study.ExcludedIterationKeys.Count == 0,
+            "New Config clears tab configuration, project file identity, filters and dirty flags");
+        Assert(state.LoadDefinitions.Select(row => row.LoadName).SequenceEqual(new[] { "DL_Above", "LL_Above" }) &&
+               ReferenceEquals(model, state.Model) && ReferenceEquals(geometry, state.Geometry) &&
+               ReferenceEquals(baseline, state.SessionBaseline) && state.IsSapConnected && sap.Writes == 0,
+            "New Config restores loading defaults and preserves SAP connection and baseline without writes");
+    }
+
     private static void Assert(bool condition, string name) { if (!condition) throw new Exception("FAIL: " + name); Console.WriteLine("PASS: " + name); }
     private static T? FindVisual<T>(DependencyObject root) where T : DependencyObject
     {

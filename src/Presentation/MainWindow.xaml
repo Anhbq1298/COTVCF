@@ -22,13 +22,26 @@
      </Button>
      <Button Content="Help" Click="ShowHelp" Margin="0"/>
     </StackPanel>
-    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-     <Image Source="{StaticResource AppLogo}" Width="20" Height="20" Margin="0,0,8,0"/>
-     <TextBlock Text="COT VCF Parametric Automation" Style="{StaticResource BannerTitle}"/>
-     <TextBlock Text="PARAMETRIC STRUCTURAL WORKFLOW" Style="{StaticResource BannerEyebrow}" Margin="12,1,0,0"/>
-     <Border Width="1" Background="{StaticResource Border}" Margin="16,3,14,3"/>
-     <TextBlock Text="{Binding ProjectName}" Style="{StaticResource FieldLabel}" Margin="0,0,12,0"
+    <Grid VerticalAlignment="Center">
+     <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="1.2*"/><ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+     </Grid.ColumnDefinitions>
+     <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Image Grid.Column="0" Source="{StaticResource AppLogo}" Width="20" Height="20" Margin="0,0,8,0"/>
+      <TextBlock Grid.Column="1" Text="COT VCF Parametric Automation" ToolTip="COT VCF Parametric Automation" Style="{StaticResource BannerTitle}" TextTrimming="CharacterEllipsis"/>
+     </Grid>
+     <TextBlock Grid.Column="1" Text="{Binding ProjectName}" ToolTip="{Binding ProjectName}" Style="{StaticResource FieldLabel}" Margin="0,0,12,0"
                MaxWidth="260" TextTrimming="CharacterEllipsis"/>
+     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+     <Button Command="{Binding NewConfig}" AutomationProperties.Name="New configuration"
+             ToolTip="Clear the current configuration and start a new file, keeping the connected SAP model" Margin="0,0,6,0">
+      <StackPanel Orientation="Horizontal">
+       <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M3,1 L10,1 L14,5 L14,15 L3,15 Z M10,1 L10,5 L14,5 M6,9 L11,9 M8.5,6.5 L8.5,11.5"/></Viewbox>
+       <TextBlock Text="New Config"/>
+      </StackPanel>
+     </Button>
      <Button Command="{Binding SaveAllConfig}" ToolTip="Save every tab into the active project file (creates it the first time)" Margin="0,0,6,0">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M2,2 L11,2 L14,5 L14,14 L2,14 Z M5,2 L5,6 L11,6 M4.5,14 L4.5,9.5 L11.5,9.5 L11.5,14"/></Viewbox>
@@ -41,16 +54,16 @@
        <TextBlock Text="Load Config"/>
       </StackPanel>
      </Button>
-     <Border Width="1" Background="{StaticResource Border}" Margin="16,3,12,3"/>
-     <TextBlock Text="{Binding ToolbarStudySummary}" Style="{StaticResource FieldLabel}" Margin="0,0,8,0"/>
-     <Button Command="{Binding RunStudyFromToolbar}" Style="{StaticResource Primary}" Margin="0"
+     </StackPanel>
+     <TextBlock Grid.Column="3" Text="{Binding ToolbarStudySummary}" ToolTip="{Binding ToolbarStudySummary}" Style="{StaticResource FieldLabel}" Margin="12,0,8,0" TextTrimming="CharacterEllipsis"/>
+     <Button Grid.Column="4" Command="{Binding RunStudyFromToolbar}" Style="{StaticResource Primary}" Margin="0"
              ToolTip="Validate and run the study from anywhere — jumps to the Iteration tab for the worker monitor and any validation issues">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="11" Height="11" Margin="0,0,5,0"><Path Fill="White" Data="M2,1 L13,7 L2,13 Z"/></Viewbox>
        <TextBlock Text="Run study"/>
       </StackPanel>
      </Button>
-    </StackPanel>
+    </Grid>
    </DockPanel>
   </Border>
 
@@ -66,7 +79,7 @@
   </Border>
 
   <!-- ============ WORKFLOW TABS (params) + SHARED MODEL PREVIEW ============ -->
-  <Grid>
+  <Grid IsEnabled="{Binding HasSapConnection}">
    <Grid.ColumnDefinitions>
     <ColumnDefinition x:Name="ParamsColumn" Width="2*" MinWidth="150"/>
     <ColumnDefinition x:Name="ViewerSplitterColumn" Width="Auto"/>

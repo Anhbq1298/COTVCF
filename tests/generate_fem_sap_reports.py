@@ -1,4 +1,4 @@
-"""Self-contained SAP/FEM axial and cable comparison reports from offline benchmark outputs.
+"""Self-contained SAP/FEM force, deflection and reaction comparison reports from offline outputs.
 
 python tests/generate_fem_sap_reports.py --current <report-folder> --legacy <report-folder>
     --current-fixture <fixture-folder> --legacy-fixture <fixture-folder> --output <folder>
@@ -45,8 +45,10 @@ details summary{cursor:pointer;color:#1f4788;font-weight:600}.pr-sheet .charts{d
 SCRIPT = r"""
 (()=>{'use strict';
 const D=JSON.parse(document.getElementById('comparison-data').textContent),$=id=>document.getElementById(id);
+const unit=D.unit,axis=D.axis;
 const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const num=x=>Number.isFinite(x)?x.toLocaleString('en-US',{maximumFractionDigits:1}):'n/a';
+const pct=x=>Number.isFinite(x)?x.toLocaleString('en-US',{maximumFractionDigits:4}):'n/a';
 const pc=(s,f)=>Math.abs(s)>1e-9?100*(f-s)/Math.abs(s):null;
 const colors=['#1f4788','#d97706'];
 let rows=D.rows;
@@ -68,31 +70,31 @@ function svg(series,xlabel,ylabel,scatter=false){
  for(let i=0;i<=4;i++){let x=xmin+(xmax-xmin)*i/4,y=ymin+(ymax-ymin)*i/4;s+=`<path d="M${X(x)} ${t}V${h-b}M${l} ${Y(y)}H${w-r}" stroke="#e4e7ec" fill="none"/><text x="${X(x)}" y="${h-b+18}" text-anchor="middle" font-size="10">${num(x)}</text><text x="${l-7}" y="${Y(y)+4}" text-anchor="end" font-size="10">${num(y)}</text>`;}
  if(scatter)s+=`<path d="M${X(xmin)} ${Y(xmin)}L${X(xmax)} ${Y(xmax)}" stroke="#667085" stroke-dasharray="5 4"/>`;
  series.forEach((ser,i)=>{if(!scatter)s+=`<polyline points="${ser.points.map(p=>X(p.x)+','+Y(p.y)).join(' ')}" fill="none" stroke="${colors[i%2]}" stroke-width="1.8" ${i===1?'stroke-dasharray="6 3"':''}/>`;
- ser.points.forEach(p=>{s+=`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${scatter?2:2.8}" fill="${colors[i%2]}" fill-opacity=".65"><title>${esc(p.label)}: ${num(p.y)} kN</title></circle>`;});});
+ ser.points.forEach(p=>{s+=`<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="${scatter?2:2.8}" fill="${colors[i%2]}" fill-opacity=".65"><title>${esc(p.label)}: ${num(p.y)} ${unit}</title></circle>`;});});
  return s+`<text x="${(l+w-r)/2}" y="${h-8}" text-anchor="middle" font-size="12">${esc(xlabel)}</text><text transform="translate(14 ${(t+h-b)/2}) rotate(-90)" text-anchor="middle" font-size="12">${esc(ylabel)}</text></svg>`;
 }
 function render(){
  const selected=chosen(),member=selected.filter(r=>r.name===$('member').value),scale=Math.max(0,...selected.map(r=>Math.abs(r.sap))),errors=selected.map(r=>Math.abs(r.fem-r.sap)),worst=Math.max(0,...errors);
- $('view').textContent=`Loading: ${$('loading').value||'all'} · Height: ${$('height').value||'all'} · Pretension: ${$('pretension').value||'all'} · Member: ${$('member').value}`;
- $('kpis').innerHTML=[['Candidates',new Set(selected.map(r=>r.candidate)).size],['Compared values',selected.length],['Mean |FEM − SAP|',num(errors.length?errors.reduce((a,b)=>a+b,0)/errors.length:0)+' kN'],['Worst / largest |SAP|',num(scale?100*worst/scale:0)+' %']].map(([a,b])=>`<div class="card kpi"><span>${esc(a)}</span><b>${b}</b></div>`).join('');
- $('scatter').innerHTML=svg([{points:selected.map(r=>({x:r.sap,y:r.fem,label:r.candidate+' · '+r.name+(r.station===null?'':' · '+r.station+' m')}))}],'SAP2000 [kN]','In-house FEM [kN]',true);
+ $('view').textContent=`Loading: ${$('loading').value||'all'} · Height: ${$('height').value||'all'} · Pretension: ${$('pretension').value||'all'} · Location: ${$('member').value}`;
+ $('kpis').innerHTML=[['Candidates',new Set(selected.map(r=>r.candidate)).size],['Compared values',selected.length],['Mean |FEM − SAP|',num(errors.length?errors.reduce((a,b)=>a+b,0)/errors.length:0)+' '+unit],['Worst / largest |SAP|',pct(scale?100*worst/scale:0)+' %']].map(([a,b])=>`<div class="card kpi"><span>${esc(a)}</span><b>${b}</b></div>`).join('');
+ $('scatter').innerHTML=svg([{points:selected.map(r=>({x:r.sap,y:r.fem,label:r.candidate+' · '+r.name+(r.station===null?'':' · '+r.station+' m')}))}],`SAP2000 [${unit}]`,`In-house FEM [${unit}]`,true);
  const byCandidate=new Map();member.forEach(r=>{let old=byCandidate.get(r.candidate);if(!old||Math.abs(r.sap)>Math.abs(old.sap))byCandidate.set(r.candidate,r);});
  const governing=[...byCandidate.values()].sort((a,b)=>a.candidate.localeCompare(b.candidate));
- $('progress').innerHTML=svg(['sap','fem'].map(key=>({points:governing.map((r,i)=>({x:i+1,y:r[key],label:r.candidate+' · '+r.name+(r.station===null?'':' · SAP governing station '+r.station+' m')}))})),'Candidate sequence (L → H → P)','Axial force [kN]');
- $('progress-note').textContent=D.kind==='cable'?'One cable force per candidate, in the selected loading/height/pretension range.':'Per candidate: the station with largest |SAP axial force|; FEM is sampled at that same station. Station-level data remain in the source table.';
+ $('progress').innerHTML=svg(['sap','fem'].map(key=>({points:governing.map((r,i)=>({x:i+1,y:r[key],label:r.candidate+' · '+r.name+(r.station===null?'':' · SAP governing station '+r.station+' m')}))})),'Candidate sequence (L → H → P)',axis);
+ $('progress-note').textContent=D.kind==='frame'?'Per candidate: the station with largest |SAP axial force|; FEM is sampled at that same station. Station-level data remain in the source table.':'One selected result per candidate, in the selected loading/height/pretension range. Peak downward deflections are calculated independently from each solver’s monitored points.';
  options('candidate',governing.map(r=>r.candidate),false);
  drawProfile(member);
  const worstRows=[...selected].sort((a,b)=>Math.abs(b.fem-b.sap)-Math.abs(a.fem-a.sap)).slice(0,20);
  $('worst').innerHTML=table(worstRows);
  $('source').innerHTML=table(selected);
- $('coverage').textContent=`${new Set(selected.map(r=>r.candidate)).size} candidates · ${new Set(selected.map(r=>r.name)).size} members · ${selected.length} paired values. Δ = FEM − SAP. Percent uses |SAP|; zero SAP values are n/a. Frame values are rounded to 1 kN in the benchmark output.`;
+ $('coverage').textContent=`${new Set(selected.map(r=>r.candidate)).size} candidates · ${new Set(selected.map(r=>r.name)).size} result locations · ${selected.length} paired values. Δ = FEM − SAP. Percent uses |SAP|; zero SAP values are n/a.`+(D.kind==='frame'?' Frame values are rounded to 1 kN in the benchmark output.':'');
 }
-function table(data){return '<table><thead><tr><th>Candidate / member</th><th>Station m</th><th>SAP kN</th><th>FEM kN</th><th>Δ kN</th><th>Δ %</th></tr></thead><tbody>'+data.map(r=>`<tr><td>${esc(r.candidate+' / '+r.name)}</td><td>${r.station===null?'—':num(r.station)}</td><td>${num(r.sap)}</td><td>${num(r.fem)}</td><td>${num(r.fem-r.sap)}</td><td>${num(pc(r.sap,r.fem))}</td></tr>`).join('')+'</tbody></table>';}
+function table(data){return `<table><thead><tr><th>Candidate / location</th><th>Station m</th><th>SAP ${unit}</th><th>FEM ${unit}</th><th>Δ ${unit}</th><th>Δ %</th></tr></thead><tbody>`+data.map(r=>`<tr><td>${esc(r.candidate+' / '+r.name)}</td><td>${r.station===null?'—':num(r.station)}</td><td>${num(r.sap)}</td><td>${num(r.fem)}</td><td>${num(r.fem-r.sap)}</td><td>${pct(pc(r.sap,r.fem))}</td></tr>`).join('')+'</tbody></table>';}
 function drawProfile(member){const p=(member||chosen().filter(r=>r.name===$('member').value)).filter(r=>r.candidate===$('candidate').value);
- $('profile-title').textContent=D.kind==='cable'?'Cable forces in selected candidate':'Axial force along selected member';
- if(D.kind==='cable'){const p=chosen().filter(r=>r.candidate===$('candidate').value);$('profile').innerHTML=svg(['sap','fem'].map(key=>({points:p.map((r,i)=>({x:i+1,y:r[key],label:r.name}))})),'Cable index (source table lists names)','Tension [kN]');}
+ $('profile-title').textContent=D.kind==='frame'?'Axial force along selected member':D.profileTitle;
+ if(D.kind!=='frame'){const p=chosen().filter(r=>r.candidate===$('candidate').value);$('profile').innerHTML=svg(['sap','fem'].map(key=>({points:p.map((r,i)=>({x:i+1,y:r[key],label:r.name}))})),D.profileAxis,axis);}
  else $('profile').innerHTML=svg(['sap','fem'].map(key=>({points:p.map(r=>({x:r.station,y:r[key],label:r.name+' · '+r.station+' m'}))})),'Station from I-end [m]','Axial P [kN]');
- $('profile-view').textContent=$('candidate').value+' · '+(D.kind==='cable'?'all monitored cables':$('member').value);
+ $('profile-view').textContent=$('candidate').value+' · '+(D.kind==='frame'?$('member').value:'all result locations (names in source table)');
 }
 ['loading','height','pretension','member'].forEach(id=>$(id).addEventListener('change',render));$('candidate').addEventListener('change',()=>drawProfile());
 window.comparisonReport={data:D,render,selected:chosen};render();
@@ -117,17 +119,24 @@ def member_rows(folder, group):
     return rows, data['case']
 
 
-def cable_rows(folder):
+def value_rows(folder, quantity):
     with (folder / 'fem-vs-sap.csv').open(encoding='utf-8-sig', newline='') as stream:
         return [dict(candidate=r['candidate'], height=r['height'], name=r['name'], station=None,
                      sap=float(r['sap']), fem=float(r['fem_sap_cable_lengths']))
-                for r in csv.DictReader(stream) if r['quantity'] == 'Cable force [kN]']
+                for r in csv.DictReader(stream) if r['quantity'] == quantity]
 
 
-def page(title, rows, case, reference, legacy, kind):
+def page(title, rows, case, reference, legacy, kind, quantity):
     if not rows:
         raise ValueError('No comparison values for ' + title)
-    payload = dict(kind=kind, rows=rows, case=case)
+    unit = 'mm' if kind == 'deflection' else 'kN'
+    axis = quantity if quantity else 'Axial P [kN]'
+    payload = dict(kind=kind, rows=rows, case=case, unit=unit, axis=axis,
+                   profileTitle=title + ' in selected candidate',
+                   profileAxis='Location index (source table lists names)')
+    convention = ('Uz: negative downward. Peak downward deflection: positive magnitude, maximum −Uz over monitored points.' if kind == 'deflection' else
+                  'Reactions: global Fx / Fz; positive in the +X / +Z direction. Total vertical reaction: signed sum of all monitored supports.' if kind == 'reaction' else
+                  'Frame P: positive tension / negative compression. Cables: positive tension.')
     basis = ('Older study: 5 Oct 2026. Megacolumn results are absent from the newer saved study. '
              'FEM reproduces the undeformed cable lengths recorded in the old SAP child models. '
              'This comparison does not validate the corrected study’s megacolumn forces.' if legacy else
@@ -141,15 +150,15 @@ def page(title, rows, case, reference, legacy, kind):
 <title>{html.escape(title)} — SAP2000 vs FEM</title><style>{literal('Css')}\n{CSS}</style>{literal('PageStyle')}</head><body><main>
 <nav class="nav no-print"><a href="index.html">Comparison reports</a></nav>
 <section class="card" data-pr="info"><h1>{html.escape(title)} — SAP2000 vs in-house FEM</h1>
-<div class="sub">{html.escape(reference['modelName'])} · {len(reference['candidates'])} candidates · Force units: kN</div>
+<div class="sub">{html.escape(reference['modelName'])} · {len(reference['candidates'])} candidates · Units: {unit}</div>
 <p>{html.escape(basis)}</p><p>Result case: <b>{html.escape(case)}</b>. Same candidate geometry, loads, supports and pretension stage; pretension fitted under the Pretension case loads.</p></section>
 <div class="toolbar no-print" data-print-controls><label>Loading <select id="loading"></select></label><label>Height <select id="height"></select></label>
-<label>Pretension <select id="pretension"></select></label><label>Member <select id="member"></select></label>{literal('ToolbarButton')}</div>
+<label>Pretension <select id="pretension"></select></label><label>Location <select id="member"></select></label>{literal('ToolbarButton')}</div>
 <p id="view" data-print-view></p><div id="kpis" class="kpis" data-pr="summary"></div>
-<div class="card legend" data-pr="legend"><span class="sap">● SAP2000 — solid blue</span><span class="fem">● In-house FEM — dashed orange</span><span>Frame P: positive tension / negative compression. Cables: positive tension.</span></div>
-<div class="card" data-pr="note"><p id="coverage"></p><p class="note">SAP2000 uses P-Delta / large-displacement geometry, catenary cables and shear-deformable frames; FEM uses small displacements, parabolic cable sag and Euler–Bernoulli frames. SAP cable force is the maximum along the cable; FEM reports chord tension. Repeated frame stations preserve the two sides of an element boundary.</p><p class="note">These reports compare axial and cable forces only. The broader newer-study benchmark passed its axial and cable bands, but its shear check exceeded the 5% regression band (11.07% of the largest SAP shear); the overall benchmark is not a pass.</p></div>
+<div class="card legend" data-pr="legend"><span class="sap">● SAP2000 — solid blue</span><span class="fem">● In-house FEM — dashed orange</span><span>{convention}</span></div>
+<div class="card" data-pr="note"><p id="coverage"></p><p class="note">SAP2000 uses P-Delta / large-displacement geometry, catenary cables and shear-deformable frames; FEM uses small displacements, parabolic cable sag and Euler–Bernoulli frames. SAP cable force is the maximum along the cable; FEM reports chord tension. Repeated frame stations preserve the two sides of an element boundary.</p><p class="note">The broader newer-study benchmark passed its axial, cable, deflection and reaction bands, but its shear check exceeded the 5% regression band (11.07% of the largest SAP shear); the overall benchmark is not a pass.</p></div>
 <div class="charts"><section class="card" data-pr="chart" data-pr-id="agreement"><h2>Value-by-value agreement</h2><div id="scatter"></div><p class="note">Dashed grey line = exact equality.</p></section>
-<section class="card" data-pr="chart" data-pr-id="progress"><h2>Force progression across candidates</h2><div id="progress"></div><p id="progress-note" class="note"></p></section></div>
+<section class="card" data-pr="chart" data-pr-id="progress"><h2>Result progression across candidates</h2><div id="progress"></div><p id="progress-note" class="note"></p></section></div>
 <section class="card" data-pr="chart" data-pr-id="profile"><h2 id="profile-title"></h2><label class="no-print">Candidate <select id="candidate"></select></label><p id="profile-view"></p><div id="profile"></div></section>
 <section class="card" data-pr="chart" data-pr-id="worst"><h2>20 largest absolute differences — current filters</h2><div id="worst" class="wrap" data-print-fit></div></section>
 <details class="card" data-pr="source"><summary>Paired source data — current filters</summary><div id="source" class="wrap" data-print-fit></div></details>
@@ -165,22 +174,27 @@ def main():
     current = read_json(args.current_fixture / 'sap-results.json')
     legacy = read_json(args.legacy_fixture / 'sap-results.json')
     args.output.mkdir(parents=True, exist_ok=True)
-    specs = [('Top_Chord_Comparison.html', 'Top chord axial loads', 'TopChord', False),
-             ('Bottom_Chord_Comparison.html', 'Bottom chord axial loads', 'BottomChord', False),
-             ('Mega_Column_Comparison.html', 'Megacolumn axial loads', 'MegaColumns', True),
-             ('Cable_Forces_Comparison.html', 'Cable forces', None, False)]
+    specs = [('Top_Chord_Comparison.html', 'Top chord axial loads', 'TopChord', False, 'frame', None, None),
+             ('Bottom_Chord_Comparison.html', 'Bottom chord axial loads', 'BottomChord', False, 'frame', None, None),
+             ('Mega_Column_Comparison.html', 'Megacolumn axial loads', 'MegaColumns', True, 'frame', None, None),
+             ('Cable_Forces_Comparison.html', 'Cable forces', None, False, 'cable', 'Cable force [kN]', 'cableCase'),
+             ('Deflection_Comparison.html', 'Monitored-point vertical deflection', None, False, 'deflection', 'Deflection Uz [mm]', 'deflectionCase'),
+             ('Peak_Deflection_Comparison.html', 'Peak downward deflection', None, False, 'deflection', 'Peak downward deflection δ [mm]', 'deflectionCase'),
+             ('Reaction_X_Comparison.html', 'Support horizontal reactions Fx', None, False, 'reaction', 'Reaction Fx [kN]', 'reactionCase'),
+             ('Reaction_Z_Comparison.html', 'Support vertical reactions Fz', None, False, 'reaction', 'Reaction Fz [kN]', 'reactionCase'),
+             ('Total_Reaction_Comparison.html', 'Total vertical reaction', None, False, 'reaction', 'Total vertical reaction [kN]', 'reactionCase')]
     links = []
-    for filename, title, group, old in specs:
+    for filename, title, group, old, kind, quantity, case_key in specs:
         ref = legacy if old else current
         folder = args.legacy if old else args.current
         if group:
             rows, case = member_rows(folder, group)
         else:
-            rows, case = cable_rows(folder), ref['cableCase']
+            rows, case = value_rows(folder, quantity), ref[case_key]
         expected = {c['key'] for c in ref['candidates']}
         if {r['candidate'] for r in rows} != expected:
             raise ValueError(title + ': missing or unexpected candidates')
-        (args.output / filename).write_text(page(title, rows, case, ref, old, 'frame' if group else 'cable'), encoding='utf-8')
+        (args.output / filename).write_text(page(title, rows, case, ref, old, kind, quantity), encoding='utf-8')
         with (args.output / filename.replace('.html', '.csv')).open('w', newline='', encoding='utf-8') as stream:
             writer = csv.DictWriter(stream, fieldnames=['candidate', 'height', 'name', 'station', 'sap', 'fem'])
             writer.writeheader()

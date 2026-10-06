@@ -7,7 +7,7 @@
   },
   "model": {
     "originalFileName": "COT Framing_V1.2.sdb",
-    "fileName": "COT Framing_V1.2_100m.sdb",
+    "fileName": "COT Framing_V1.2.sdb",
     "points": [
       {
         "name": "198",
@@ -1057,7 +1057,7 @@
         "syncMode": "Independent",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable1b-2",
@@ -1068,7 +1068,7 @@
         "referenceCableName": "Cable1a-2",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable2a-2",
@@ -1078,7 +1078,7 @@
         "syncMode": "Independent",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable2b-2",
@@ -1089,7 +1089,7 @@
         "referenceCableName": "Cable2a-2",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable3a-2",
@@ -1099,7 +1099,7 @@
         "syncMode": "Independent",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable3b-2",
@@ -1110,7 +1110,7 @@
         "referenceCableName": "Cable3a-2",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable4a-2",
@@ -1122,7 +1122,7 @@
         "referenceCableName": "Cable6a-2",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable4b-2",
@@ -1134,7 +1134,7 @@
         "referenceCableName": "Cable6a-2",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable5a-2",
@@ -1144,7 +1144,7 @@
         "syncMode": "Independent",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable5b-2",
@@ -1155,7 +1155,7 @@
         "referenceCableName": "Cable5a-2",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable6a-2",
@@ -1167,7 +1167,7 @@
         "syncMode": "Independent",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable6b-2",
@@ -1178,7 +1178,7 @@
         "referenceCableName": "Cable6a-2",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable7a-2",
@@ -1188,7 +1188,7 @@
         "syncMode": "Independent",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable7b-2",
@@ -1199,7 +1199,7 @@
         "referenceCableName": "Cable7a-2",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable8a-2",
@@ -1209,7 +1209,7 @@
         "syncMode": "Independent",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       },
       {
         "cableName": "Cable8b-2",
@@ -1220,11 +1220,11 @@
         "referenceCableName": "Cable8a-2",
         "sectionName": "192T15.7",
         "sectionAreaM2": 0.028802317797652074,
-        "designCapacityKN": 31106.50322146424
+        "designCapacityKN": 55991.70579863564
       }
     ],
     "cableStrengthMpa": 2160,
-    "strengthReductionFactor": 0.5
+    "strengthReductionFactor": 0.9
   },
   "tab05OutputSettings": {
     "outputGroupPrefix": "[O]-",
@@ -1325,19 +1325,33 @@
     "memberForceResultLoadCase": "NL ULS001: 1.35DL\u002B1.5LL-staged",
     "foundationReactionResultLoadCase": "NL ULS001: 1.35DL\u002B1.5LL-staged",
     "deflectionLimitMinMm": 100,
-    "deflectionLimitMaxMm": 200
+    "deflectionLimitMaxMm": 200,
+    "deflectionCriterionEnabled": true,
+    "cableCriterionEnabled": true,
+    "maxCableUtilization": 1
   },
   "tab05IterationStudy": {
     "studyMode": "FixPretension",
     "fixedHeightCandidateId": "H01",
     "fixedPretensionCandidateId": "P01",
-    "outputDirectory": "C:\\Projects\\CoT\\VCF\\Model 1\\Study",
+    "outputDirectory": "C:\\Users\\Mark\\Desktop\\COT-Presentation\\BaseLine\\Study",
     "excludedIterationKeys": [],
-    "useCandidateFilters": false,
-    "decisionWarningUtilization": 0.9,
-    "deflectionRankWeight": 0.5,
-    "pretensionRankWeight": 0.3,
-    "heightRankWeight": 0.2
+    "useCandidateFilters": false
+  },
+  "printSetup": {
+    "companyName": "Meinhardt Singapore",
+    "logoPath": "C:\\Users\\Mark\\OneDrive - Meinhardt Singapore Pte Ltd\\C\u0026S - CoT Working\\_CompanyLogo\\MHT Logo.png",
+    "projectName": "",
+    "jobNumber": "",
+    "revision": "",
+    "preparedBy": "AB/PP",
+    "checkedBy": "",
+    "footerNote": "",
+    "paperSize": "A4",
+    "orientation": "Landscape",
+    "showPageNumbers": true,
+    "showDate": true,
+    "includeSourceData": false
   },
   "presentTabs": "All"
 }

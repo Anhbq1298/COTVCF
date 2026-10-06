@@ -52,6 +52,7 @@ public sealed partial class MainViewModel : Observable
 
     public bool IsBusy { get => busy; private set { Set(ref busy, value); Notify(nameof(IsIdle)); Notify(nameof(CanUseConfig)); CommandManager.InvalidateRequerySuggested(); } }
     public bool IsIdle => !IsBusy;
+    public bool HasSapConnection => State.IsSapConnected && State.Model is not null;
     public bool IsStudyRunning
     {
         get => isStudyRunning;
@@ -848,6 +849,7 @@ public sealed partial class MainViewModel : Observable
     public Command ViewIterationError { get; }
     public Command SaveTabConfig { get; }
     public Command SaveAllConfig { get; }
+    public Command NewConfig { get; }
     public Command LoadConfig { get; }
     public Command ReadFemProperties { get; }
     public Command RunFemAnalysis { get; }
@@ -1334,6 +1336,7 @@ public sealed partial class MainViewModel : Observable
             _ => ConfigTabs.All,
         }), () => CanUseConfig);
         SaveAllConfig = new(_ => SaveAll(), () => CanUseConfig);
+        NewConfig = new(_ => StartNewConfiguration(), () => CanUseConfig);
         LoadConfig = new(_ => OpenProject(), () => CanUseConfig);
         ReadFemProperties = new(_ => ReadFemModelProperties(), () => CanReadFemProperties);
         RunFemAnalysis = new(_ => AnalyzeFem(), () => CanRunFemAnalysis);
@@ -1430,6 +1433,14 @@ public sealed partial class MainViewModel : Observable
             else InvalidateStudyValidation();
             Update();
         };
+        // Apply one connection policy to every workflow command, including lazy commands
+        // from the optimization/FEM partials. Reconnect and active-run cancellation stay usable.
+        foreach (var property in GetType().GetProperties().Where(property => property.PropertyType == typeof(Command)))
+        {
+            if (property.GetValue(this) is not Command command ||
+                command == Connect || command == Refresh || command == CancelStudy || command == CancelFemAnalysis) continue;
+            command.Availability = () => HasSapConnection;
+        }
         RegenerateStudyPreview();
     }
 
@@ -2802,6 +2813,29 @@ public sealed partial class MainViewModel : Observable
     // Save All: extracts every tab from the UI — and the Print Setup — and rewrites the whole project atomically.
     private void SaveAll() => RunSave(ConfigTabs.All, printSetup: true);
 
+    private void StartNewConfiguration()
+    {
+        if (!CanUseConfig) return;
+        applyingProject = true;
+        try { config.NewProject(); }
+        finally { applyingProject = false; }
+        SelectedAppliedPoint = null;
+        SelectedCable = null;
+        SelectedFemRun = null;
+        FemRuns.Clear();
+        FemCableFitRows.Clear();
+        FemLog.Clear();
+        FemProgressText = "";
+        FemMonitorRun = null;
+        FemMonitorTotal = 0;
+        FemMonitorCompleted = 0;
+        PreviewMessage = "New configuration — select loading points, truss groups and cables.";
+        SelectedTab = TabLoading;
+        RegenerateStudyPreview();
+        Message = "New configuration started. Save Config or Save All to choose a new file.";
+        Update();
+    }
+
     /// <param name="printSetup">Write the Print Setup card into the project too. With no tab at all
     /// (<see cref="ConfigTabs.None"/>) that is the only thing the save changes.</param>
     private async void RunSave(ConfigTabs uiTabs, bool printSetup = false)
@@ -3008,7 +3042,7 @@ public sealed partial class MainViewModel : Observable
             nameof(MonitoredPointSummary), nameof(MonitoredPointCaseSummary), nameof(MonitoredPointStatus), nameof(DeflectionLimitSummary), nameof(MemberForceSummary), nameof(MemberForceStatus),
             nameof(FoundationSummary), nameof(FoundationStatus), nameof(CableForceSummary), nameof(CableForceStatus),
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
-            nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
+            nameof(HasSapConnection), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
             nameof(FemCandidateSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus),
             nameof(CanRunFemAnalysis), nameof(CanCancelFemAnalysis),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
@@ -3023,5 +3057,6 @@ public sealed partial class MainViewModel : Observable
         }) Notify(name);
         NotifySharedViewer();
         NotifyStudyPresentation();
+        CommandManager.InvalidateRequerySuggested();
     }
 }

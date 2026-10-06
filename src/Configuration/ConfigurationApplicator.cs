@@ -10,6 +10,31 @@ namespace COT_VCF.Configuration;
 /// </summary>
 public sealed class ConfigurationApplicator(ApplicationState state, WorkflowService workflow)
 {
+    /// <summary>Reset configuration in place so bindings and event subscriptions remain intact.
+    /// The connected model and immutable session baseline are retained; no SAP calls are made.</summary>
+    public void Reset()
+    {
+        var defaults = new ApplicationState();
+        var extractor = new ConfigurationExtractor();
+        state.BaselineCaptured = false;
+        state.CommittedHeight = 0;
+        state.PointLoads.Clear();
+        ApplyLoading(extractor.ExtractLoadingSection(defaults));
+        ApplyCables(extractor.ExtractCableSection(defaults));
+        state.Truss.TopPoints = [];
+        state.Truss.MiddlePoints = [];
+        state.Truss.BottomPoints = [];
+        state.Truss.Reference = defaults.Truss.Reference;
+        state.Truss.BaselineHeight = defaults.Truss.BaselineHeight;
+        state.Truss.CurrentHeight = defaults.Truss.CurrentHeight;
+        state.Truss.MinimumHeight = defaults.Truss.MinimumHeight;
+        state.Truss.MaximumHeight = defaults.Truss.MaximumHeight;
+        state.Truss.Increment = defaults.Truss.Increment;
+        ApplyOutput(extractor.ExtractOutputSection(defaults));
+        ApplyStudy(extractor.ExtractStudySection(defaults));
+        state.Preview = state.SessionBaselineCaptured ? state.SessionBaseline : state.Geometry;
+    }
+
     /// <summary>Apply only the tabs whose checks passed; skip the rest so a partial file still loads.</summary>
     public void Apply(CotVcfConfigDto cfg, ConfigValidationResult check)
     {

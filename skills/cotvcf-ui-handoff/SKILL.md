@@ -64,6 +64,10 @@ earlier tall-header / large-button / blue-block look.
   geometry / load patterns / force sources for the current session.
 - `MainViewModel.StatusLine` feeds the top-bar status text; keep it in the `Update()` notify list.
 - Do not move connection controls into the viewer.
+- Configuration and workflow controls require a successful SAP connection and disable again on connection loss.
+  Connect, Refresh, Help and active-run cancellation remain available. The top-bar **New Config** clears Tabs 01–05
+  and the active file identity in memory, retains the SAP connection and immutable baseline, and makes the next
+  save choose a new file. Saved files and per-user Print Setup are retained.
 
 ## Viewer Behavior
 
