@@ -116,6 +116,9 @@ public sealed class ConfigurationExtractor
         FoundationReactionResultLoadCase = s.OutputSettings.FoundationReactionResultLoadCase,
         DeflectionLimitMinMm = s.OutputSettings.DeflectionLimitMinMm,
         DeflectionLimitMaxMm = s.OutputSettings.DeflectionLimitMaxMm,
+        DeflectionCriterionEnabled = s.OutputSettings.DeflectionCriterionEnabled,
+        CableCriterionEnabled = s.OutputSettings.CableCriterionEnabled,
+        MaxCableUtilization = s.OutputSettings.MaxCableUtilization,
     };
 
     private static IterationStudyConfigDto ExtractStudy(ApplicationState s) => new()
@@ -134,12 +137,6 @@ public sealed class ConfigurationExtractor
         MaxPretensionKn = s.Study.MaxPretensionKn,
         MaxLoadingToHeightRatio = s.Study.MaxLoadingToHeightRatio,
         MaxPretensionToHeightRatio = s.Study.MaxPretensionToHeightRatio,
-        MinimumCableForceKn = s.Study.MinimumCableForceKn,
-        MaximumCableForceKn = s.Study.MaximumCableForceKn,
-        DecisionWarningUtilization = s.Study.DecisionWarningUtilization,
-        DeflectionRankWeight = s.Study.DeflectionRankWeight,
-        PretensionRankWeight = s.Study.PretensionRankWeight,
-        HeightRankWeight = s.Study.HeightRankWeight,
     };
 
     private static string DerivedStudyRoot(ApplicationState state)

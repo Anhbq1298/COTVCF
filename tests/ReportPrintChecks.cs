@@ -280,7 +280,7 @@ internal static class ReportPrintChecks
     private static IEnumerable<(string Name, string Title, string Path)> GenerateAll(string folder, ReportPrintSettings print)
     {
         var results = FullStudy();
-        string[] siblings = ["deflection", "member", "support", "cable", "shortlist"];
+        string[] siblings = ["deflection", "member", "support", "cable"];
         yield return ("deflection", DeflectionReportGenerator.ReportTitle, new DeflectionReportGenerator().Generate(folder, results,
             "Model.sdb", @"C:\base.sdb", IterationStudyMode.Combined, siblings, new DeflectionLimitBand(10, 200), print));
         yield return ("member", MemberForceReportGenerator.ReportTitle, new MemberForceReportGenerator().Generate(folder, results,
@@ -289,9 +289,10 @@ internal static class ReportPrintChecks
             "Model.sdb", IterationStudyMode.Combined, siblings, print));
         yield return ("cable", CableForceReportGenerator.ReportTitle, new CableForceReportGenerator().Generate(folder, results,
             "Model.sdb", IterationStudyMode.Combined, "CASE-1", Capacities(), siblings, print: print));
-        var criteria = StudyDecisionCriteria.Default;
-        yield return ("shortlist", StudyShortlistExporter.ReportTitle, new StudyShortlistExporter().Export(folder,
-            new StudyDecisionService().Evaluate(results, criteria), criteria, siblingReports: siblings, print: print, baselineName: "Model.sdb").HtmlPath);
+        var qualification = StudyQualifier.Evaluate(results.Select(CandidateMetrics.From).ToArray(),
+            new QualificationCriteria(true, new DeflectionLimitBand(null, 60), true, 1.0), Capacities());
+        yield return ("optimization", OptimizationSummaryReport.ReportTitle, new OptimizationSummaryReport().Generate(folder,
+            qualification, "Model.sdb", IterationStudyMode.Combined, ["optimization", .. siblings], print));
         yield return ("diagnostic", $"{CandidateDiagnosticReportGenerator.ReportTitle} · {results[0].IterationKey}",
             new CandidateDiagnosticReportGenerator().Write(results[0], Path.Combine(folder, results[0].IterationKey), print));
     }

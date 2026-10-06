@@ -49,7 +49,6 @@ public sealed class StudyExecutionSnapshotFactory(StudyCandidateResolver? resolv
             FoundationLeftPoints = state.OutputSettings.FoundationLeftPoints.ToArray(),
             FoundationRightPoints = state.OutputSettings.FoundationRightPoints.ToArray(),
             FoundationReactionResultCase = state.OutputSettings.FoundationReactionResultLoadCase,
-            DecisionCriteria = StudyDecisionCriteria.From(state),
         };
     }
 

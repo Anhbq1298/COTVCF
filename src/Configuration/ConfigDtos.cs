@@ -184,6 +184,10 @@ public sealed class OutputSettingsConfigDto
     // Deflection limit band on the peak downward U3 [mm]; null = open bound (post-processing only).
     public double? DeflectionLimitMinMm { get; set; }
     public double? DeflectionLimitMaxMm { get; set; }
+    // Tab 06A qualification criteria (post-processing only). Absent in older projects: both on, limit 1.00.
+    public bool DeflectionCriterionEnabled { get; set; } = true;
+    public bool CableCriterionEnabled { get; set; } = true;
+    public double MaxCableUtilization { get; set; } = 1.0;
 }
 
 public sealed class MemberForceGroupConfigDto
@@ -211,10 +215,4 @@ public sealed class IterationStudyConfigDto
     public double? MaxPretensionKn { get; set; }
     public double? MaxLoadingToHeightRatio { get; set; }
     public double? MaxPretensionToHeightRatio { get; set; }
-    public double? MinimumCableForceKn { get; set; }
-    public double? MaximumCableForceKn { get; set; }
-    public double DecisionWarningUtilization { get; set; } = 0.9;
-    public double DeflectionRankWeight { get; set; } = 0.5;
-    public double PretensionRankWeight { get; set; } = 0.3;
-    public double HeightRankWeight { get; set; } = 0.2;
 }

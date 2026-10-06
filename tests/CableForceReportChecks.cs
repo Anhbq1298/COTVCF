@@ -347,7 +347,7 @@ internal static class CableForceReportChecks
                 .ToDictionary(c => c.CableName, c => c.ResolveCapacity(fpu, 0.5)!.Value, StringComparer.Ordinal);
             var configured = tab3.Select(c => c.CableName).ToArray();
 
-            var outcome = new StudyPostProcessor().Generate(root, Tab3Capacities(2160), StudyDecisionCriteria.Default, configured,
+            var outcome = new StudyPostProcessor().Generate(root, Tab3Capacities(2160), new DeflectionLimitBand(null, null), configured,
                 new ReportPrintSettings { CompanyName = "Legacy Engineers", ProjectName = "Legacy Tower", JobNumber = "J-77" });
             var reportPath = outcome.CableForceReportPath!;
             var html = File.ReadAllText(reportPath);
@@ -359,11 +359,11 @@ internal static class CableForceReportChecks
             Check(html.Contains("\"project\":\"Legacy Tower\"") && html.Contains("\"jobNumber\":\"J-77\"") &&
                   html.Contains("\"company\":\"Legacy Engineers\"") && html.Contains("\"title\":\"Cable Forces\""),
                 "Regenerate embeds the current Print Setup — header and footer need no SAP either");
-            var siblingsOnEngine = new[] { outcome.DeflectionReportPath!, outcome.ShortlistReportPath!,
+            var siblingsOnEngine = new[] { outcome.DeflectionReportPath!,
                     Directory.EnumerateFiles(root, "Deflection_Diagnostic_*.html", SearchOption.AllDirectories).First() }
                 .Select(File.ReadAllText).ToArray();
             Check(siblingsOnEngine.All(text => text.Contains("\"project\":\"Legacy Tower\"") && text.Contains("id=\"pr-page\"")),
-                "the same Regenerate puts the Print Setup into the deflection report, the shortlist and the candidate diagnostics");
+                "the same Regenerate puts the Print Setup into the deflection report and the candidate diagnostics");
 
             var raw = new StudyRawDataStore().ReadFromStudyFolder(root);
             var gen = new CableForceReportGenerator();
@@ -459,7 +459,7 @@ internal static class CableForceReportChecks
                   lowGov.UtilisationPct > gov["Cable1a-2"].UtilisationPct && lowGov.FinalForceKN == gov["Cable1a-2"].FinalForceKN &&
                   low.Capacities["Tendon-X"] == 15000,
                 "changing fpu changes the capacity, the limit and the utilisation of the Tab 03 cables only");
-            var reDone = new StudyPostProcessor().Generate(root, Tab3Capacities(1860), StudyDecisionCriteria.Default, configured);
+            var reDone = new StudyPostProcessor().Generate(root, Tab3Capacities(1860), new DeflectionLimitBand(null, null), configured);
             var reHtml = File.ReadAllText(reDone.CableForceReportPath!);
             Check(reHtml.Contains("\"Cable1a-2\":" + (0.0288023 * 1860 * 1000 * 0.5).ToString("R", CultureInfo.InvariantCulture), StringComparison.Ordinal) &&
                   File.ReadAllText(rawPath) == rawText,

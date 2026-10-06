@@ -156,6 +156,9 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         output.FoundationReactionResultLoadCase = d.FoundationReactionResultLoadCase ?? "";
         output.DeflectionLimitMinMm = d.DeflectionLimitMinMm;
         output.DeflectionLimitMaxMm = d.DeflectionLimitMaxMm;
+        output.DeflectionCriterionEnabled = d.DeflectionCriterionEnabled;
+        output.CableCriterionEnabled = d.CableCriterionEnabled;
+        output.MaxCableUtilization = d.MaxCableUtilization;
     }
 
     private void ApplyStudy(IterationStudyConfigDto d)
@@ -175,11 +178,5 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         state.Study.MaxPretensionKn = d.MaxPretensionKn;
         state.Study.MaxLoadingToHeightRatio = d.MaxLoadingToHeightRatio;
         state.Study.MaxPretensionToHeightRatio = d.MaxPretensionToHeightRatio;
-        state.Study.MinimumCableForceKn = d.MinimumCableForceKn;
-        state.Study.MaximumCableForceKn = d.MaximumCableForceKn;
-        state.Study.DecisionWarningUtilization = d.DecisionWarningUtilization;
-        state.Study.DeflectionRankWeight = d.DeflectionRankWeight;
-        state.Study.PretensionRankWeight = d.PretensionRankWeight;
-        state.Study.HeightRankWeight = d.HeightRankWeight;
     }
 }

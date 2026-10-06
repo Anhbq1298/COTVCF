@@ -5,7 +5,8 @@ public sealed record SupportReactionStudyDto(
     string StudyMode,
     int CandidateCount,
     string GeneratedAtIso,
-    int IndividualProfileLimit);
+    int IndividualProfileLimit,
+    ReportScopeDto? Scope = null);      // set when the report covers a subset of the study (Tab 06A)
 
 public sealed record SupportReactionRowDto(
     string PointName,

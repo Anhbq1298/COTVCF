@@ -32,12 +32,12 @@ public sealed class DeflectionReportGenerator
         IReadOnlyList<CandidateResultDto> results,
         string baselineName, string baselinePath, IterationStudyMode studyMode,
         IReadOnlyList<string>? siblingReports = null, DeflectionLimitBand? limitBand = null,
-        ReportPrintSettings? print = null)
+        ReportPrintSettings? print = null, ReportScope? scope = null)
     {
         Directory.CreateDirectory(studyFolder);
-        var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode, siblingReports, limitBand);
+        var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode, siblingReports, limitBand, scope);
         var path = Path.Combine(studyFolder, ReportFileName);
-        AtomicFile.WriteAllText(path, BuildHtml(dto, ReportPrintEngine.Describe(print, ReportTitle, baselineName, DateTimeOffset.Now)),
+        AtomicFile.WriteAllText(path, BuildHtml(dto, ReportPrintEngine.Describe(print, scope?.Title(ReportTitle) ?? ReportTitle, baselineName, DateTimeOffset.Now)),
             new System.Text.UTF8Encoding(false));
         return path;
     }
@@ -59,7 +59,7 @@ public sealed class DeflectionReportGenerator
     public DeflectionReportDto Build(
         IReadOnlyList<CandidateResultDto> results,
         string studyFolder, string baselineName, string baselinePath, IterationStudyMode studyMode,
-        IReadOnlyList<string>? siblingReports = null, DeflectionLimitBand? limitBand = null)
+        IReadOnlyList<string>? siblingReports = null, DeflectionLimitBand? limitBand = null, ReportScope? scope = null)
     {
         // One report group per (monitored point group × result load case) — so a study that extracts Uz
         // under several cases yields one selectable chart source per case.
@@ -86,17 +86,24 @@ public sealed class DeflectionReportGenerator
             (loadDim, preDim, heightDim),
         };
 
-        List<LegendEntryDto> ColorLegendFor(Dim d) => flat.Select(d.Key).Distinct()
-            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
-            .Select((k, i) => new LegendEntryDto(k, d.Label(k), k == "" ? "#9aa0a6" : Palette[i % Palette.Length]))
+        // The ids a dimension shows, each with the index that picks its colour / line style. A report on a subset
+        // of the study (Tab 06A) takes that index from the full study, so an id looks the same as in the full report.
+        List<(string Key, int Index)> Present(Dim d)
+        {
+            var present = flat.Select(d.Key).Distinct().OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal).ToList();
+            var full = scope is null ? null : ReferenceEquals(d, heightDim) ? scope.HeightIds : ReferenceEquals(d, loadDim) ? scope.LoadIds : scope.PretensionIds;
+            if (full is null) return present.Select((k, i) => (k, i)).ToList();
+            int Position(string k) { var i = full.ToList().IndexOf(k); return i < 0 ? full.Count + present.IndexOf(k) : i; }
+            return present.OrderBy(Position).Select(k => (k, Position(k))).ToList();
+        }
+        List<LegendEntryDto> ColorLegendFor(Dim d) => Present(d)
+            .Select(e => new LegendEntryDto(e.Key, d.Label(e.Key), e.Key == "" ? "#9aa0a6" : Palette[e.Index % Palette.Length]))
             .ToList();
-        List<LegendEntryDto> DashLegendFor(Dim d) => flat.Select(d.Key).Distinct()
-            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
-            .Select((k, i) => new LegendEntryDto(k, d.Label(k), Dashes[i % Dashes.Length]))
+        List<LegendEntryDto> DashLegendFor(Dim d) => Present(d)
+            .Select(e => new LegendEntryDto(e.Key, d.Label(e.Key), Dashes[e.Index % Dashes.Length]))
             .ToList();
-        List<LegendEntryDto> FilterLegendFor(Dim? d) => d is null ? [] : flat.Select(d.Key).Distinct()
-            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
-            .Select(k => new LegendEntryDto(k, d.Label(k), "")).ToList();
+        List<LegendEntryDto> FilterLegendFor(Dim? d) => d is null ? [] : Present(d)
+            .Select(e => new LegendEntryDto(e.Key, d.Label(e.Key), "")).ToList();
 
         var views = viewSpecs.Select(vs => new ChartViewDto(
             vs.Color.Name, ColorLegendFor(vs.Color),
@@ -118,7 +125,7 @@ public sealed class DeflectionReportGenerator
                     r.Parameters.LoadingCandidateId, r.Parameters.HeightCandidateId, r.Parameters.PretensionCandidateId,
                     r.Parameters.LoadLevelKPa, r.Parameters.LoadingLabel,
                     r.Parameters.TrussHeightM, r.Parameters.DeltaHM, r.Parameters.PretensionKN, r.Parameters.PretensionLabel,
-                    r.ExtractionStatus.ToString(), r.DiagnosticReportRelativePath,
+                    r.ExtractionStatus.ToString(), (scope?.StudyFolderPath ?? "") + r.DiagnosticReportRelativePath,
                     viewSpecs.Select(vs => vs.Color.Key(r.Parameters)).ToArray(),
                     viewSpecs.Select(vs => vs.Dash.Key(r.Parameters)).ToArray(),
                     viewSpecs.Select(vs => vs.Filter?.Key(r.Parameters) ?? "").ToArray(),
@@ -139,7 +146,7 @@ public sealed class DeflectionReportGenerator
 
         var study = new StudyMetadataDto(
             baselineName, baselinePath, studyFolder, studyMode.ToString(),
-            results.Count, DateTimeOffset.Now.ToString("o"), "Uz", "m", "mm");
+            results.Count, DateTimeOffset.Now.ToString("o"), "Uz", "m", "mm", scope?.ToDto());
 
         var siblings = siblingReports?.ToArray() ?? ReportNav.PresentIn(studyFolder, "deflection").ToArray();
         var band = limitBand is { IsActive: true } ? new DeflectionLimitBandDto(limitBand.MinMm, limitBand.MaxMm) : null;
@@ -171,12 +178,13 @@ public sealed class DeflectionReportGenerator
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Deflection Report — {{Esc(s.BaselineModelName)}}</title>
-<style>{{ReportPrintEngine.Css}}{{Style}}</style>{{ReportPrintEngine.PageStyle}}</head><body>
+<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body>
 <header>
   <div>
     <h1>Deflection Results Viewer</h1>
     <p class="meta">{{Esc(s.BaselineModelName)}} · mode {{Esc(s.StudyMode)}} · {{s.CandidateCount}} candidate(s) ·
       generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
+    {{ReportScope.Banner(s.Scope)}}
     <p class="meta print-only" data-print-view></p>
     <p class="intro">Each line is one study candidate: the vertical deflection U<sub>z</sub> [mm] of every monitored
       point plotted against its position X [m] along the truss span, under the selected result load case.
@@ -419,7 +427,7 @@ body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
   const pShape = s => MSHAPES[Math.max(0, P_IDS.indexOf(s.pretensionId)) % MSHAPES.length];
 
   // Deflection limit band (Tab 04 Output Settings) on the peak downward deflection δ = −min(Uz) [mm].
-  // A null bound is open. Same test as the Study Shortlist, so the count here matches its Pass/Fail.
+  // A null bound is open. Same test as the Tab 06A deflection criterion, so the count here matches it.
   const BAND = D.limitBand && (D.limitBand.minMm!=null || D.limitBand.maxMm!=null) ? D.limitBand : null;
   let showBand = !!BAND;
   const bandOn = () => showBand && !!BAND;

@@ -20,12 +20,13 @@ public sealed class StudyPostProcessor
     public StudyArtifactOutcome Generate(
         string studyFolder,
         IReadOnlyDictionary<string, double>? cableCapacities,
-        StudyDecisionCriteria decisionCriteria,
+        DeflectionLimitBand deflectionBand,
         IReadOnlyCollection<string>? configuredCables = null,
         ReportPrintSettings? printSettings = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(studyFolder);
-        ArgumentNullException.ThrowIfNull(decisionCriteria);
+        ArgumentNullException.ThrowIfNull(deflectionBand);
+        if (deflectionBand.Problem() is { } bandProblem) throw new InvalidOperationException(bandProblem);
 
         var root = Path.GetFullPath(studyFolder);
         var raw = new StudyRawDataStore().ReadFromStudyFolder(root);
@@ -52,9 +53,8 @@ public sealed class StudyPostProcessor
         if (hasMemberReport) currentReports.Add("member");
         if (hasSupportReport) currentReports.Add("support");
         if (hasCableReport) currentReports.Add("cable");
-        currentReports.Add("shortlist");
         var deflection = new DeflectionReportGenerator().Generate(root, results,
-            raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, currentReports, decisionCriteria.DeflectionBand,
+            raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, currentReports, deflectionBand,
             printSettings);
 
         string? member = null;
@@ -71,12 +71,8 @@ public sealed class StudyPostProcessor
                 raw.BaselineModelName, raw.StudyMode, raw.CableResultCase, validCapacities, currentReports,
                 capacitySet.Sources, printSettings);
 
-        var decisions = new StudyDecisionService().Evaluate(results, decisionCriteria);
-        var shortlist = new StudyShortlistExporter().Export(root, decisions, decisionCriteria,
-            siblingReports: currentReports, print: printSettings, baselineName: raw.BaselineModelName);
         var rawFolder = Path.Combine(root, StudyRawDataStore.DirectoryName);
         return new(StudyArtifactState.Ready, workbook, deflection, member, support, cable, null,
-            shortlist.WorkbookPath, shortlist.HtmlPath,
             Path.Combine(rawFolder, StudyRawDataStore.JsonFileName),
             Path.Combine(rawFolder, StudyRawDataStore.CsvFileName));
     }

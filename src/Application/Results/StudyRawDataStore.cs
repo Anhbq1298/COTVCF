@@ -26,7 +26,6 @@ public sealed class StudyRawDataPackage
     public string FoundationReactionResultCase { get; set; } = "";
     public string CableResultCase { get; set; } = "";
     public Dictionary<string, double> CableDesignCapacities { get; set; } = new(StringComparer.Ordinal);
-    public StudyDecisionCriteria DecisionCriteria { get; set; } = StudyDecisionCriteria.Default;
     public List<CandidateResultDto> Results { get; set; } = [];
 }
 
@@ -81,14 +80,22 @@ public sealed class StudyRawDataStore
             CableDesignCapacities = snapshot.CableDesignCapacities
                 .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && double.IsFinite(pair.Value) && pair.Value > 0)
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
-            DecisionCriteria = snapshot.DecisionCriteria,
             Results = ordered,
         };
+        return Write(studyFolder, package);
+    }
 
+    /// <summary>Writes an assembled package as the study's raw data: the JSON and its flat CSV view.</summary>
+    public StudyRawDataPaths Write(string studyFolder, StudyRawDataPackage package)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(studyFolder);
+        ArgumentNullException.ThrowIfNull(package);
+        var rawFolder = Path.Combine(Path.GetFullPath(studyFolder), DirectoryName);
+        Directory.CreateDirectory(rawFolder);
         var jsonPath = Path.Combine(rawFolder, JsonFileName);
         var csvPath = Path.Combine(rawFolder, CsvFileName);
         AtomicFile.WriteAllText(jsonPath, JsonSerializer.Serialize(package, Json));
-        AtomicFile.WriteAllText(csvPath, BuildCsv(ordered));
+        AtomicFile.WriteAllText(csvPath, BuildCsv(package.Results));
         return new(jsonPath, csvPath);
     }
 
@@ -100,8 +107,9 @@ public sealed class StudyRawDataStore
         ArgumentException.ThrowIfNullOrWhiteSpace(jsonPath);
         var full = Path.GetFullPath(jsonPath);
         if (!File.Exists(full)) throw new FileNotFoundException($"No {JsonFileName} raw-data package was found.", full);
-        var package = JsonSerializer.Deserialize<StudyRawDataPackage>(File.ReadAllText(full), Json)
-            ?? throw new InvalidDataException($"{JsonFileName} is empty or invalid.");
+        StudyRawDataPackage? read;
+        using (var stream = File.OpenRead(full)) read = JsonSerializer.Deserialize<StudyRawDataPackage>(stream, Json);   // a large study is hundreds of MB
+        var package = read ?? throw new InvalidDataException($"{JsonFileName} is empty or invalid.");
         if (package.SchemaVersion != SchemaVersion)
             throw new InvalidDataException($"Unsupported raw-data schema {package.SchemaVersion}; expected {SchemaVersion}.");
         if (package.Results is null || package.Results.Count == 0)

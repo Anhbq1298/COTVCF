@@ -112,7 +112,7 @@ internal static class StudyExecutionChecks
                 "Study run manifest records only verifiable raw JSON/CSV artifacts");
 
             var derived = new StudyPostProcessor().Generate(studyFolder,
-                snapshot.CableDesignCapacities, snapshot.DecisionCriteria);
+                snapshot.CableDesignCapacities, new DeflectionLimitBand(null, null));
             Check(StudyRunJournal.ReplaceArtifacts(studyFolder, derived) &&
                   File.Exists(derived.WorkbookPath) && File.Exists(derived.DeflectionReportPath) &&
                   File.Exists(derived.SupportReactionReportPath),
@@ -121,13 +121,6 @@ internal static class StudyExecutionChecks
             Check(diagHtml.Contains("Candidate Diagnostic Report") && diagHtml.Contains("QA/QC") &&
                   diagHtml.Contains("Monitored Deflection") && diagHtml.Contains(">top<"),
                 "Tab 06 generates candidate diagnostic HTML from raw data");
-            Check(File.Exists(derived.ShortlistReportPath) && File.Exists(derived.ShortlistWorkbookPath),
-                "Tab 06 publishes the ranked shortlist HTML and workbook");
-            var shortlistHtml = File.ReadAllText(derived.ShortlistReportPath!);
-            Check(shortlistHtml.Contains("Result Library", StringComparison.Ordinal) &&
-                  shortlistHtml.Contains(DeflectionReportGenerator.ReportFileName, StringComparison.Ordinal) &&
-                  shortlistHtml.Contains(job.IterationId, StringComparison.Ordinal),
-                "Shortlist report links the current result library and includes the ranked candidate");
             var readBack = COT_VCF.Application.Results.ConsolidatedResultWriter.Read(xlsx);
             Check(readBack.Count == 1 && readBack[0].IterationKey == job.IterationId &&
                   readBack[0].Groups.Single().Points.Count == 3 &&
@@ -137,7 +130,6 @@ internal static class StudyExecutionChecks
             var finalHtml = File.ReadAllText(reportHtml);
             Check(finalHtml.Contains("id=\"report-data\"") && finalHtml.Contains("Deflection Results Viewer") &&
                    finalHtml.Contains(job.IterationId) && finalHtml.Contains("Result Library") &&
-                   finalHtml.Contains(StudyShortlistExporter.HtmlFileName, StringComparison.Ordinal) &&
                    finalHtml.Contains(SupportReactionReportGenerator.ReportFileName, StringComparison.Ordinal) &&
                    !finalHtml.Contains(CableForceReportGenerator.ReportFileName, StringComparison.Ordinal) &&
                    !finalHtml.Contains("http://") && !finalHtml.Contains("https://") && !finalHtml.Contains("cdn."),
@@ -258,7 +250,7 @@ internal static class StudyExecutionChecks
             var analysisCount = factory.Gateways.Sum(gateway => gateway.AnalysisAttempts.Count);
             var outputs = new StudyPostProcessor().Generate(studyFolder,
                 new Dictionary<string, double>(StringComparer.Ordinal) { ["Cable-A"] = 999 },
-                snapshot.DecisionCriteria);
+                new DeflectionLimitBand(null, null));
             var cableHtml = File.ReadAllText(outputs.CableForceReportPath!);
             Check(run.Artifacts.WorkbookPath is null && File.Exists(run.Artifacts.RawJsonPath) &&
                   cableHtml.Contains("\"Cable-A\":999", StringComparison.Ordinal) &&
@@ -452,12 +444,6 @@ internal static class StudyExecutionChecks
             };
             Check(fingerprint == Fingerprints.SnapshotSha256(capacityChanged),
                 "Post-processing cable capacity does not invalidate reusable model raw data");
-            var criteriaChanged = snapshot with
-            {
-                DecisionCriteria = snapshot.DecisionCriteria with { DeflectionLimitMinMm = 100, DeflectionLimitMaxMm = 150 }
-            };
-            Check(fingerprint == Fingerprints.SnapshotSha256(criteriaChanged),
-                "Post-processing shortlist criteria do not invalidate reusable model raw data");
             state.LoadDefinitions[0].MinQz = 999;
             state.Truss.MinimumHeight = 999;
             state.Cables[0].MinForce = 999;

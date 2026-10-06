@@ -60,8 +60,8 @@ internal static class OutputSettingsChecks
         state.OutputSettings.DeflectionLimitMinMm = 100;
         state.OutputSettings.DeflectionLimitMaxMm = 150;
         Check(new OutputSettingsValidator().Validate(state, ["CASE1"]).Count == 0 &&
-              COT_VCF.Application.Results.StudyDecisionCriteria.From(state).DeflectionBand == new DeflectionLimitBand(100, 150),
-            "A 100–150 mm deflection limit band validates and becomes the Shortlist deflection criterion");
+              COT_VCF.Application.Results.QualificationCriteria.From(state.OutputSettings).DeflectionBand == new DeflectionLimitBand(100, 150),
+            "A 100–150 mm deflection limit band validates and becomes the Tab 06A deflection criterion");
 
         state.OutputSettings.DeflectionOutputCaseName = "";
         var noCase = new OutputSettingsValidator().Validate(state, ["CASE1"]);

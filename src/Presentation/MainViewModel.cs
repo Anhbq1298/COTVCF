@@ -14,7 +14,7 @@ using MessageBox = System.Windows.MessageBox;
 
 namespace COT_VCF.Presentation;
 
-public sealed class MainViewModel : Observable
+public sealed partial class MainViewModel : Observable
 {
     public ApplicationState State { get; }
     private readonly WorkflowService workflow;
@@ -64,7 +64,12 @@ public sealed class MainViewModel : Observable
     public int SelectedTab
     {
         get => selectedTab;
-        set { if (Set(ref selectedTab, value)) NotifySharedViewer(); }
+        set
+        {
+            if (!Set(ref selectedTab, value)) return;
+            NotifySharedViewer();
+            if (value == TabOptimization) RefreshOptimization();     // also picks up Tab 03 capacity edits made meanwhile
+        }
     }
     public string Message { get => message; private set => Set(ref message, value); }
     public Func<bool>? CommitEditors { get; set; }
@@ -486,6 +491,7 @@ public sealed class MainViewModel : Observable
             Notify(nameof(RawDataSummary));
             Notify(nameof(PostProcessStatus));
             CommandManager.InvalidateRequerySuggested();
+            OnRawDataChangedForOptimization();
         }
     }
     public string? RawCsvPath
@@ -568,30 +574,6 @@ public sealed class MainViewModel : Observable
     public IReadOnlyList<ReportPaperSize> PrintPaperSizes { get; } = Enum.GetValues<ReportPaperSize>();
     public IReadOnlyList<ReportPageOrientation> PrintOrientations { get; } = Enum.GetValues<ReportPageOrientation>();
     public string PrintLogoStatus => ReportPrintEngine.DescribeLogo(PrintSettings.LogoPath);
-    private string? shortlistReportPath;
-    public string? ShortlistReportPath
-    {
-        get => shortlistReportPath;
-        private set
-        {
-            if (!Set(ref shortlistReportPath, value)) return;
-            Notify(nameof(HasShortlistReport));
-            Notify(nameof(ShortlistReportName));
-        }
-    }
-    public bool HasShortlistReport => !string.IsNullOrEmpty(ShortlistReportPath) && File.Exists(ShortlistReportPath);
-    public string ShortlistReportName => HasShortlistReport ? Path.GetFileName(ShortlistReportPath!) : "No shortlist generated yet";
-    private string? shortlistWorkbookPath;
-    public string? ShortlistWorkbookPath
-    {
-        get => shortlistWorkbookPath;
-        private set
-        {
-            if (!Set(ref shortlistWorkbookPath, value)) return;
-            Notify(nameof(HasShortlistWorkbook));
-        }
-    }
-    public bool HasShortlistWorkbook => !string.IsNullOrEmpty(ShortlistWorkbookPath) && File.Exists(ShortlistWorkbookPath);
     private bool useCurrentRunArtifacts;
     private string? currentRunWorkbookPath;
     public string ResultsWorkbookPath => useCurrentRunArtifacts
@@ -821,11 +803,8 @@ public sealed class MainViewModel : Observable
     public Command OpenMegaColumnReport { get; }
     public Command ExportMegaColumnPdf { get; }
     public Command ExportSupportReactionPdf { get; }
-    public Command ExportShortlistPdf { get; }
     public Command BrowsePrintLogo { get; }
     public Command ClearPrintLogo { get; }
-    public Command OpenShortlistReport { get; }
-    public Command OpenShortlistWorkbook { get; }
     public Command OpenResultsWorkbook { get; }
     public Command OpenCandidateDiagnostic { get; }
     public Command ViewIterationError { get; }
@@ -956,8 +935,6 @@ public sealed class MainViewModel : Observable
         OpenMemberForceReport = new(_ => TryOpenFile(MemberForceReportPath), () => HasMemberForceReport);
         OpenSupportReactionReport = new(_ => TryOpenFile(SupportReactionReportPath), () => HasSupportReactionReport);
         OpenCableForceReport = new(_ => TryOpenFile(CableForceReportPath), () => HasCableForceReport);
-        OpenShortlistReport = new(_ => TryOpenFile(ShortlistReportPath), () => HasShortlistReport);
-        OpenShortlistWorkbook = new(_ => TryOpenFile(ShortlistWorkbookPath), () => HasShortlistWorkbook);
         OpenResultsWorkbook = new(_ => TryOpenFile(ResultsWorkbookPath), () => HasResultsWorkbook);
         OpenCandidateDiagnostic = new(p =>
         {
@@ -986,7 +963,6 @@ public sealed class MainViewModel : Observable
         ExportMegaColumnPdf = new(_ => ExportSummaryPdf(MemberForceReportGenerator.MegaColumnFileName, MemberGroupSummary.MegaColumn),
             () => !IsBusy && HasMemberForceReport);
         ExportSupportReactionPdf = new(_ => ExportReportPdf(SupportReactionReportPath), () => !IsBusy && HasSupportReactionReport);
-        ExportShortlistPdf = new(_ => ExportReportPdf(ShortlistReportPath), () => !IsBusy && HasShortlistReport);
         BrowsePrintLogo = new(_ =>
         {
             var dialog = new OpenFileDialog { Filter = ReportPrintEngine.LogoFileFilter, CheckFileExists = true, Title = "Company logo for report printouts" };
@@ -1074,7 +1050,11 @@ public sealed class MainViewModel : Observable
             ScheduleStudyRegeneration();
             Update();
         };
-        State.OutputSettings.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
+        State.OutputSettings.PropertyChanged += (_, _) =>
+        {
+            Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update();
+            RequalifyOptimization();        // the deflection band and the Tab 06A criteria live here
+        };
         State.OutputSettings.DeflectionPoints.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
         State.OutputSettings.FoundationLeftPoints.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
         State.OutputSettings.FoundationRightPoints.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
@@ -1442,8 +1422,6 @@ public sealed class MainViewModel : Observable
         MemberForceReportPath = null;
         SupportReactionReportPath = null;
         CableForceReportPath = null;
-        ShortlistReportPath = null;
-        ShortlistWorkbookPath = null;
         SetRunReference(null, artifactsVerified: false);
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(HasResultsWorkbook));
@@ -1471,8 +1449,6 @@ public sealed class MainViewModel : Observable
             MemberForceReportPath = result.Artifacts.MemberForceReportPath;
             SupportReactionReportPath = result.Artifacts.SupportReactionReportPath;
             CableForceReportPath = result.Artifacts.CableForceReportPath;
-            ShortlistReportPath = result.Artifacts.ShortlistReportPath;
-            ShortlistWorkbookPath = result.Artifacts.ShortlistWorkbookPath;
             SetRunReference(result.Run, result.Artifacts.State == StudyArtifactState.Ready);
             Notify(nameof(ResultsWorkbookPath));
             Notify(nameof(HasResultsWorkbook));
@@ -1708,8 +1684,6 @@ public sealed class MainViewModel : Observable
             MemberForceReportPath = null;
             SupportReactionReportPath = null;
             CableForceReportPath = null;
-            ShortlistReportPath = null;
-            ShortlistWorkbookPath = null;
             Message = $"No {StudyRawDataStore.JsonFileName} found under {StudyRawDataStore.DirectoryName}. Run the study on Tab 05 to extract raw data first.";
             return;
         }
@@ -1722,17 +1696,15 @@ public sealed class MainViewModel : Observable
             var capacities = CurrentCableCapacities();
             var configuredCables = State.Cables.Select(cable => cable.CableName)
                 .Where(name => !string.IsNullOrWhiteSpace(name)).ToArray();
-            var criteria = StudyDecisionCriteria.From(State);
+            var band = State.OutputSettings.DeflectionLimitBand;
             var print = PrintSettings.Clone();
-            var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, criteria, configuredCables, print));
+            var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, band, configuredCables, print));
             currentRunWorkbookPath = artifacts.WorkbookPath;
             useCurrentRunArtifacts = true;
             DeflectionReportPath = artifacts.DeflectionReportPath;
             MemberForceReportPath = artifacts.MemberForceReportPath;
             SupportReactionReportPath = artifacts.SupportReactionReportPath;
             CableForceReportPath = artifacts.CableForceReportPath;
-            ShortlistWorkbookPath = artifacts.ShortlistWorkbookPath;
-            ShortlistReportPath = artifacts.ShortlistReportPath;
             StudyRunJournal.ReplaceArtifacts(root, artifacts);
             RefreshDeflectionArtifacts();
             Message = $"Tab 06 outputs generated from {StudyRawDataStore.JsonFileName}" +
@@ -1748,8 +1720,6 @@ public sealed class MainViewModel : Observable
             MemberForceReportPath = null;
             SupportReactionReportPath = null;
             CableForceReportPath = null;
-            ShortlistReportPath = null;
-            ShortlistWorkbookPath = null;
             Message = ex.Message;
             Warn("Generate Post-Processing Outputs", ex.Message);
         }
@@ -1846,8 +1816,6 @@ public sealed class MainViewModel : Observable
                 MemberForceReportPath = null;
                 SupportReactionReportPath = null;
                 CableForceReportPath = null;
-                ShortlistReportPath = null;
-                ShortlistWorkbookPath = null;
                 SetRunReference(null, artifactsVerified: false);
             }
             else
@@ -1861,8 +1829,6 @@ public sealed class MainViewModel : Observable
                 MemberForceReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "MemberForceReport") : null;
                 SupportReactionReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "SupportReactionReport") : null;
                 CableForceReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "CableForceReport") : null;
-                ShortlistReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "ShortlistReport") : null;
-                ShortlistWorkbookPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "ShortlistWorkbook") : null;
                 SetRunReference(new StudyRunReference(manifest.RunId, Path.Combine(StudyRoot, StudyRunJournal.FileName),
                     manifest.BaselineSha256, manifest.SnapshotSha256, manifest.State), StudyRunJournal.ArtifactsAreIntact(manifest));
             }
@@ -1877,8 +1843,6 @@ public sealed class MainViewModel : Observable
             MemberForceReportPath = null;
             SupportReactionReportPath = null;
             CableForceReportPath = null;
-            ShortlistReportPath = null;
-            ShortlistWorkbookPath = null;
             SetRunReference(null, false);
         }
         Notify(nameof(HasResultsWorkbook));

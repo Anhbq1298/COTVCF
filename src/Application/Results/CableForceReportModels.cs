@@ -30,7 +30,8 @@ public sealed record CableForceStudyDto(
     string StudyMode,
     int CandidateCount,
     string ResultCase,          // the SAP load case the final analysed cable force was read under
-    string GeneratedAtIso);
+    string GeneratedAtIso,
+    ReportScopeDto? Scope = null);      // set when the report covers a subset of the study (Tab 06A)
 
 /// <summary>One axis value. <see cref="Value"/> is null for a categorical / mixed pretension candidate —
 /// the chart then places it by ordinal position and never invents a kN number for it.</summary>

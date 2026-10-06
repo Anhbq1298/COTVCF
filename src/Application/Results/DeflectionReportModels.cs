@@ -12,7 +12,8 @@ public sealed record StudyMetadataDto(
     string GeneratedAtIso,
     string OutputComponent,   // "Uz"
     string CoordinateUnit,    // "m"
-    string DeflectionUnit);   // "mm"
+    string DeflectionUnit,    // "mm"
+    ReportScopeDto? Scope = null);      // set when the report covers a subset of the study (Tab 06A)
 
 public sealed record DeflectionPointDto(
     string PointName, double Coord, double? UzMm, int Sequence, string Status);

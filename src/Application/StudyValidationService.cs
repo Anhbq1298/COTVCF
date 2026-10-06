@@ -91,10 +91,6 @@ public sealed class StudyValidationService
             if (composition.ExpectedRunCount == 0)
                 Error("Candidate Filters", "The active candidate filters exclude every study iteration.");
         }
-        // The deflection limit band is reported once, by OutputSettingsValidator above.
-        try { StudyDecisionService.Validate(StudyDecisionCriteria.From(state) with { DeflectionLimitMinMm = null, DeflectionLimitMaxMm = null }); }
-        catch (Exception ex) { Error("Decision Criteria", ex.Message); }
-
         if (composition.PreviewLimitExceeded)
             Error("Study Preview", $"The study exceeds the {StudyCompositionService.MaxPreviewRows:N0}-row preview limit. Reduce the candidate space.");
         else if (composition.Iterations.Count == 0)

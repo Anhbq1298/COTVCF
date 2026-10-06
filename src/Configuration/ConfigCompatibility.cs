@@ -284,6 +284,8 @@ public sealed class ConfigCompatibilityValidator
                 tc.Problems.Add($"deflection output case {t5.DeflectionOutputCaseName} does not exist in the connected model.");
             if (new DeflectionLimitBand(t5.DeflectionLimitMinMm, t5.DeflectionLimitMaxMm).Problem() is { } bandProblem)
                 tc.Problems.Add(bandProblem);
+            if (!double.IsFinite(t5.MaxCableUtilization) || t5.MaxCableUtilization <= 0)
+                tc.Problems.Add("cable utilisation limit must be a finite value greater than 0.");
         }
 
         // ---- Legacy Tab 05 JSON key / UI Tab 05 Iteration Study ----
@@ -309,12 +311,6 @@ public sealed class ConfigCompatibilityValidator
                 ValidatePositive(t6.MaxLoadingToHeightRatio, "maximum loading/height ratio", tc.Problems);
                 ValidatePositive(t6.MaxPretensionToHeightRatio, "maximum pretension/height ratio", tc.Problems);
             }
-            ValidateBounds(t6.MinimumCableForceKn, t6.MaximumCableForceKn, "cable force", tc.Problems);
-            if (!double.IsFinite(t6.DecisionWarningUtilization) || t6.DecisionWarningUtilization <= 0 || t6.DecisionWarningUtilization >= 1)
-                tc.Problems.Add("decision warning utilization must be between zero and one.");
-            var weights = new[] { t6.DeflectionRankWeight, t6.PretensionRankWeight, t6.HeightRankWeight };
-            if (weights.Any(value => !double.IsFinite(value) || value < 0) || weights.Sum() <= 0)
-                tc.Problems.Add("decision ranking weights must be finite, nonnegative, and have a positive total.");
             // OutputDirectory is retained for JSON compatibility only. Runtime study paths are always
             // derived from the connected immutable baseline model.
         }

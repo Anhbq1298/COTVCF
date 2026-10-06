@@ -114,6 +114,8 @@ public sealed class OutputSettingsConfiguration : Observable
     private string memberForceResultLoadCase = "";
     private string foundationReactionResultLoadCase = "";
     private double? deflectionLimitMinMm, deflectionLimitMaxMm;
+    private bool deflectionCriterionEnabled = true, cableCriterionEnabled = true;
+    private double maxCableUtilization = 1.0;
     public ObservableCollection<string> DeflectionPoints { get; } = [];
     public ObservableCollection<MemberForceOutputGroup> MemberForceGroups { get; } = [];
     public ObservableCollection<string> FoundationLeftPoints { get; } = [];
@@ -128,10 +130,16 @@ public sealed class OutputSettingsConfiguration : Observable
     /// <summary>SAP analysis load case or combo used for global support reactions at the selected foundations.</summary>
     public string FoundationReactionResultLoadCase { get => foundationReactionResultLoadCase; set => Set(ref foundationReactionResultLoadCase, (value ?? "").Trim()); }
     /// <summary>Deflection limit band on the peak downward U3 [mm] — drives the Deflection report band and the
-    /// Shortlist deflection gate. Post-processing only: editing it never invalidates analysed candidates.</summary>
+    /// Tab 06A deflection criterion. Post-processing only: editing it never invalidates analysed candidates.</summary>
     public double? DeflectionLimitMinMm { get => deflectionLimitMinMm; set => Set(ref deflectionLimitMinMm, value); }
     public double? DeflectionLimitMaxMm { get => deflectionLimitMaxMm; set => Set(ref deflectionLimitMaxMm, value); }
     public DeflectionLimitBand DeflectionLimitBand => new(DeflectionLimitMinMm, DeflectionLimitMaxMm);
+    /// <summary>Tab 06A qualification criteria: whether the deflection limit band and the cable-force limit are
+    /// applied, and the largest allowed cable force / design capacity (1.00 = 100 %). Post-processing only, like
+    /// the band: editing them never invalidates analysed candidates.</summary>
+    public bool DeflectionCriterionEnabled { get => deflectionCriterionEnabled; set => Set(ref deflectionCriterionEnabled, value); }
+    public bool CableCriterionEnabled { get => cableCriterionEnabled; set => Set(ref cableCriterionEnabled, value); }
+    public double MaxCableUtilization { get => maxCableUtilization; set => Set(ref maxCableUtilization, value); }
 
     public bool IsConfigured => DeflectionPoints.Count > 0 || MemberForceGroups.Count > 0 ||
         FoundationLeftPoints.Count > 0 || FoundationRightPoints.Count > 0 || CableNames.Count > 0 ||

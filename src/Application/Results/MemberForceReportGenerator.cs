@@ -21,14 +21,14 @@ public sealed class MemberForceReportGenerator
 
     public string Generate(string studyFolder, IReadOnlyList<CandidateResultDto> results,
         string baselineName, IterationStudyMode studyMode, IReadOnlyList<string>? siblingReports = null,
-        ReportPrintSettings? print = null)
+        ReportPrintSettings? print = null, ReportScope? scope = null)
     {
         Directory.CreateDirectory(studyFolder);
         var path = Path.Combine(studyFolder, ReportFileName);
         var siblings = siblingReports ?? ReportNav.PresentIn(studyFolder, "member").ToArray();
-        var dto = Build(results, baselineName, studyMode, siblings);
+        var dto = Build(results, baselineName, studyMode, siblings, scope);
         AtomicFile.WriteAllText(path, BuildHtml(dto,
-            ReportPrintEngine.Describe(print, ReportTitle, baselineName, DateTimeOffset.Now)), new System.Text.UTF8Encoding(false));
+            ReportPrintEngine.Describe(print, scope?.Title(ReportTitle) ?? ReportTitle, baselineName, DateTimeOffset.Now)), new System.Text.UTF8Encoding(false));
         WriteSummaryLauncher(studyFolder, TopChordFileName, MemberGroupSummary.Top, dto, baselineName);
         WriteSummaryLauncher(studyFolder, BottomChordFileName, MemberGroupSummary.Bottom, dto, baselineName);
         WriteSummaryLauncher(studyFolder, MegaColumnFileName, MemberGroupSummary.MegaColumn, dto, baselineName);
@@ -65,7 +65,7 @@ public sealed class MemberForceReportGenerator
     }
 
     public MemberForceReportDto Build(IReadOnlyList<CandidateResultDto> results, string baselineName, IterationStudyMode studyMode,
-        IReadOnlyList<string>? siblingReports = null)
+        IReadOnlyList<string>? siblingReports = null, ReportScope? scope = null)
     {
         var keys = results.SelectMany(result => result.MemberForceGroups ?? [])
             .Select(group => (group.SapGroupName, group.GroupName, group.OutputCase)).Distinct()
@@ -98,7 +98,7 @@ public sealed class MemberForceReportGenerator
             .Select(warning => new ResultReportWarningDto(warning.IterationKey, warning.Category,
                 warning.Severity.ToString(), warning.Message)).ToArray();
         return new MemberForceReportDto(new MemberForceStudyDto(baselineName, studyMode.ToString(), results.Count,
-            DateTimeOffset.Now.ToString("o"), IndividualProfileLimit), groups, warnings, siblingReports ?? []);
+            DateTimeOffset.Now.ToString("o"), IndividualProfileLimit, scope?.ToDto()), groups, warnings, siblingReports ?? []);
     }
 
     public string BuildHtml(MemberForceReportDto dto, ReportPrintDto? print = null)
@@ -108,8 +108,9 @@ public sealed class MemberForceReportGenerator
         var library = ReportNav.Library("member", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Member Forces — {{Esc(dto.Study.BaselineModelName)}}</title>
-<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportSummaryTheme.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body><header><div><h1>Member Forces Results Viewer</h1>
+<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportSummaryTheme.Css}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body><header><div><h1>Member Forces Results Viewer</h1>
 <div>{{Esc(dto.Study.BaselineModelName)}} · {{dto.Study.CandidateCount}} candidate(s) · {{Esc(dto.Study.StudyMode)}}</div>
+{{ReportScope.Banner(dto.Study.Scope)}}
 <div class="print-only" data-print-view></div>
 <p>Top Chord, Bottom Chord and Mega Column open on their <b>Summary</b>: the governing axial force of every pretension candidate and truss height. The chords add <b>View by Station</b> for the force along the chord. Under <b>Display</b>, All profiles / Envelope / Station matrix show every component at the stored SAP stations — start, middle and end of each analysis element by default, or All SAP stations. P/V2/V3 are kN; T/M2/M3 are kNm.</p></div>{{library}}</header>
 <nav data-print-controls><label>Group <select id="group"><option value="all">All groups</option></select></label>
@@ -160,7 +161,7 @@ function profiles(list){show(list.map(profilePanel).join(''))}
 // in both views and study-wide — colour by height id (as the Support Reactions height bands) and line style by
 // height (as the Deflection report) — so a filter never repaints a height and identity is never colour alone.
 const PALETTE=['#1f77b4','#d62728','#2ca02c','#ff7f0e','#9467bd','#8c564b','#17becf','#bcbd22','#e377c2','#7f7f7f','#393b79','#637939'],DASH=['','8 5','2 4','10 4 2 4','16 6','16 5 3 5'];
-const ALLS=D.groups.flatMap(g=>g.series),natural=(a,b)=>a.localeCompare(b,undefined,{numeric:true}),idsOf=k=>[...new Set(ALLS.map(s=>s[k]))].sort(natural),HID=idsOf('heightId'),PID=idsOf('pretensionId'),LID=idsOf('loadId');
+const ALLS=D.groups.flatMap(g=>g.series),natural=(a,b)=>a.localeCompare(b,undefined,{numeric:true}),SCOPE=D.study.scope||null,NQ=new Set(SCOPE?SCOPE.excluded.map(x=>x.join('|')):[]),nq=(l,h,p)=>NQ.has(l+'|'+h+'|'+p),idsOf=k=>(SCOPE&&SCOPE.order[k])||[...new Set(ALLS.map(s=>s[k]))].sort(natural),HID=idsOf('heightId'),PID=idsOf('pretensionId'),LID=idsOf('loadId');
 const hColour=id=>PALETTE[HID.indexOf(id)]||'#7f7f7f',hDash=id=>DASH[HID.indexOf(id)%DASH.length],hName=s=>'H'+Math.round(s.trussHeightM*1000)/1000;
 const kN=v=>(v<0?'−':'')+String(Math.round(Math.abs(v))).replace(/\B(?=(\d{3})+(?!\d))/g,','),f1=v=>(v<0?'−':'')+Math.abs(v).toFixed(1),m3=v=>String(Math.round(v*1000)/1000);
 const sumView={},sumP={};     // per group index: 'summary' | 'station', and the pretension candidate shown by station
@@ -184,12 +185,12 @@ function summaryChart(g,series,hs,ps,top){
   let grid='',bars='',lines='',labels='',hits='',ax='';const pts={};
   for(let v=0;v<=top.up+1e-9;v+=top.step){const Y=y(v).toFixed(1);grid+=`<line class="${v?'cgrid':'caxis'}" x1="${ml}" x2="${W-mr}" y1="${Y}" y2="${Y}"/><text class="ctick" x="${ml-6}" y="${+Y+3}" text-anchor="end">${tickText(v,top.step)}</text>`}
   ps.forEach((pid,i)=>{const x0=ml+i*cw+(cw-hs.length*slot)/2;
-    hs.forEach((ht,j)=>{const s=series.find(x=>x.pretensionId===pid&&x.heightId===ht.id),c=s&&sumOf(g,s),ok=!!c&&c.governingKN!=null,v=ok?measure(g,c.governingKN):null,sx=x0+j*slot,cx=sx+slot/2,cy=ok?y(v):base;
+    hs.forEach((ht,j)=>{const s=series.find(x=>x.pretensionId===pid&&x.heightId===ht.id),c=s&&sumOf(g,s),ok=!!c&&c.governingKN!=null,v=ok?measure(g,c.governingKN):null,sx=x0+j*slot,cx=sx+slot/2,cy=ok?y(v):base,out=!ok&&series.length>0&&nq(series[0].loadId,ht.id,pid);
       (pts[ht.id]??=[]).push(ok?{cx,cy}:null);
-      const tip=ok?`${pid} · ${ht.name}\nGoverning ${w.force}: ${f1(v)} MN\nSource P: ${kN(c.governingKN)} kN · ${c.step}\nAt ${c.frameName} / ${c.elementName}${g.summary.byStation?` · station ${m3(c.stationM)} m`:''}\nIteration ${s.iterationKey} · ${s.loadingLabel}\n${g.groupName} · ${g.outputCase}`:`${pid} · ${ht.name}\nResult unavailable`;
+      const tip=ok?`${pid} · ${ht.name}\nGoverning ${w.force}: ${f1(v)} MN\nSource P: ${kN(c.governingKN)} kN · ${c.step}\nAt ${c.frameName} / ${c.elementName}${g.summary.byStation?` · station ${m3(c.stationM)} m`:''}\nIteration ${s.iterationKey} · ${s.loadingLabel}\n${g.groupName} · ${g.outputCase}`:`${pid} · ${ht.name}\n${out?'Not qualified — outside the '+SCOPE.label.toLowerCase():'Result unavailable'}`;
       if(ok){bars+=`<rect data-bar="${esc(pid)}|${esc(ht.id)}" x="${(cx-bw/2).toFixed(1)}" y="${cy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(base-cy).toFixed(1)}" fill="${hColour(ht.id)}" fill-opacity=".82"/>`;
         labels+=vert?`<text class="cval" x="${cx.toFixed(1)}" y="${(cy-4).toFixed(1)}" transform="rotate(-90 ${cx.toFixed(1)} ${(cy-7).toFixed(1)})">${f1(v)}</text>`:`<text class="cval" x="${cx.toFixed(1)}" y="${(cy-7).toFixed(1)}" text-anchor="middle">${f1(v)}</text>`}
-      else labels+=`<text class="cna" x="${cx.toFixed(1)}" y="${base-4}" text-anchor="middle">n/a</text>`;
+      else labels+=`<text class="cna" x="${cx.toFixed(1)}" y="${base-4}" text-anchor="middle">${out?'NQ':'n/a'}</text>`;
       ax+=hvert?`<text class="chl" x="${cx.toFixed(1)}" y="${base+7}" text-anchor="end" transform="rotate(-90 ${cx.toFixed(1)} ${base+7})" dy="3">${esc(ht.name)}</text>`:`<text class="chl" x="${cx.toFixed(1)}" y="${base+12}" text-anchor="middle">${esc(ht.name)}</text>`;
       hits+=`<rect class="station-hit" x="${sx.toFixed(1)}" y="${mt}" width="${slot.toFixed(1)}" height="${ph+14}" fill="transparent" data-tip="${esc(tip)}"/>`});
     const by=base+(hvert?40:17);ax+=`<path class="cbr" d="M${(x0+2).toFixed(1)} ${by} v3 H${(x0+hs.length*slot-2).toFixed(1)} v-3"/><text class="cpl" x="${(x0+hs.length*slot/2).toFixed(1)}" y="${by+17}" text-anchor="middle">${esc(pid)}</text>`});
@@ -220,17 +221,17 @@ function sumPanel(g){
   const head=`<span class="cname">${esc(g.summary.title)}</span><span class="cview">${station?'By Station':'Summary'}</span>`,trace=`<span class="sub">${esc(g.groupName)} · ${esc(g.outputCase)} · governing over ${bySta?'every station':'the whole group'} and every result step</span>`;
   if(!station){
     const top=axis(0,Math.max(1e-6,...got.map(c=>measure(g,c.governingKN)))*1.04,6);
-    const legend=`<div class="clegend">${hs.map(h=>`<span>${swatch(h.id)}${esc(h.name)}</span>`).join('')}<span class="note">bar = governing force · line = trend across the pretension candidates · n/a = no result</span></div>`;
+    const legend=`<div class="clegend">${hs.map(h=>`<span>${swatch(h.id)}${esc(h.name)}</span>`).join('')}<span class="note">bar = governing force · line = trend across the pretension candidates · n/a = no result${SCOPE?' · NQ = not qualified':''}</span></div>`;
     const cards=ls.map(id=>`<div class="ccard"><div class="ctitle">${esc(g.summary.title)} – ${w.summary}<span>${esc(loadName(id))} · ${loadOf(id).length} iteration(s)</span></div>${legend}${summaryChart(g,loadOf(id),hs,ps,top)}</div>`).join('');
     const rows=ls.flatMap(id=>ps.flatMap(pid=>hs.map(h=>{const x=loadOf(id).find(q=>q.pretensionId===pid&&q.heightId===h.id),c=x&&sumOf(g,x);return c&&c.governingKN!=null
       ?`<tr><td>${esc(id)}</td><td>${esc(pid)}</td><td>${esc(h.name)}</td><td>${esc(x.iterationKey)}</td><td class="n">${f1(measure(g,c.governingKN))}</td><td class="n">${kN(c.governingKN)}</td><td>${esc(c.frameName)}</td><td>${esc(c.elementName)}</td>${bySta?`<td class="n">${m3(c.stationM)}</td>`:''}<td>${esc(c.step)}</td></tr>`
-      :`<tr><td>${esc(id)}</td><td>${esc(pid)}</td><td>${esc(h.name)}</td><td>${x?esc(x.iterationKey):'—'}</td><td class="n na" colspan="${bySta?6:5}">Result unavailable</td></tr>`}))).join('');
+      :`<tr><td>${esc(id)}</td><td>${esc(pid)}</td><td>${esc(h.name)}</td><td>${x?esc(x.iterationKey):'—'}</td><td class="n na" colspan="${bySta?6:5}">${nq(id,h.id,pid)?'Not qualified':'Result unavailable'}</td></tr>`}))).join('');
     return `<section class="panel sumpanel" data-sum-kind="${g.summary.kind}" data-sum-view="summary"><div class="chead">${head}${bySta?`<button class="cgo no-print" data-sum="station" data-g="${gi}">View by Station</button>`:''}${trace}</div>${cards}`
       +`<details class="cdata" data-print="source"><summary>Governing values — the source of every bar</summary><div class="matrix-wrap" data-print-fit><table class="ctable"><thead><tr><th>Load</th><th>Pretension</th><th>Height</th><th>Iteration</th><th class="n">Governing ${w.col} [MN]</th><th class="n">Source P [kN]</th><th>Frame object</th><th>Analysis element</th>${bySta?'<th class="n">Station [m]</th>':''}<th>Result step</th></tr></thead><tbody>${rows}</tbody></table></div></details></section>`}
   const pid=ps.includes(sumP[gi])?sumP[gi]:ps[0],shown=s.filter(x=>x.pretensionId===pid).map(x=>sumOf(g,x)).filter(c=>c&&c.profile.length),all=s.map(x=>sumOf(g,x)).filter(c=>c&&c.profile.length);
   const xs=all.flatMap(c=>[c.profile[0][0],c.profile[c.profile.length-1][0]]),vs=shown.flatMap(c=>c.profile.map(p=>measure(g,p[1])));
   const xr={lo:xs.length?Math.min(...xs):0,up:xs.length?Math.max(...xs):1},yr=axis(Math.min(0,...vs),Math.max(1e-6,...vs)*1.04,6);
-  const legend=id=>`<div class="clegend">${hs.map(h=>{const x=loadOf(id).find(q=>q.pretensionId===pid&&q.heightId===h.id),c=x&&sumOf(g,x);return c&&c.profile.length?`<span>${swatch(h.id,true)}${esc(h.name)}</span>`:`<span class="off">${esc(h.name)} — no result for ${esc(pid)}</span>`}).join('')}<span class="note">one governing point per physical station · not smoothed</span></div>`;
+  const legend=id=>`<div class="clegend">${hs.map(h=>{const x=loadOf(id).find(q=>q.pretensionId===pid&&q.heightId===h.id),c=x&&sumOf(g,x);return c&&c.profile.length?`<span>${swatch(h.id,true)}${esc(h.name)}</span>`:`<span class="off">${esc(h.name)} — ${nq(id,h.id,pid)?'not qualified':'no result'} for ${esc(pid)}</span>`}).join('')}<span class="note">one governing point per physical station · not smoothed</span></div>`;
   return `<section class="panel sumpanel" data-sum-kind="${g.summary.kind}" data-sum-view="station"><div class="chead">${head}<button class="cgo no-print" data-sum="summary" data-g="${gi}">← Summary</button><label class="cpick">Pretension Candidate <select data-sump="${gi}">${ps.map(p=>`<option value="${esc(p)}"${p===pid?' selected':''}>${esc(p)}</option>`).join('')}</select></label>${trace}</div>`
     +ls.map(id=>`<div class="ccard"><div class="ctitle">${esc(g.summary.title)} – ${w.station} · ${esc(pid)}<span>${esc(loadName(id))}</span></div>${legend(id)}${stationChart(g,loadOf(id),hs,pid,xr,yr)}</div>`).join('')+`</section>`}
 function summaries(list){show(list.map(g=>g.summary?sumPanel(g):profilePanel(g)).join(''))}

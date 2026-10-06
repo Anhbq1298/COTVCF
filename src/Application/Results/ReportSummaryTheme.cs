@@ -1,7 +1,8 @@
 namespace COT_VCF.Application.Results;
 
 /// <summary>The shared look of a report's Summary and drill-down views (member forces, support reactions): the
-/// heading with its view tag, cards, legend, SVG chart text and grid, the values table — and their paper rules.
+/// heading with its view tag, cards, KPI cards, legend, SVG chart text and grid, the values table — and their
+/// paper rules.
 /// A report puts it after its own stylesheet, so these rules win over its generic panel rules.</summary>
 internal static class ReportSummaryTheme
 {
@@ -23,6 +24,11 @@ internal static class ReportSummaryTheme
 .cna{fill:#98a2b3;font-size:8.5px;font-style:italic}
 .cdata{font-size:11px}.cdata>summary{cursor:pointer;color:#1f4788;font-weight:600;padding:3px 0}
 .ctable{border-collapse:collapse;font:10.5px Segoe UI,Arial;white-space:nowrap}.ctable th,.ctable td{padding:3px 9px;border-bottom:1px solid #eee;text-align:left}.ctable th{background:#eef1f4;position:sticky;top:0}.ctable .n{text-align:right;font-variant-numeric:tabular-nums}.ctable .na{color:#b42318}
-@media print{.sumpanel{padding:8px 0;break-inside:auto}.chead{break-after:avoid}.ccard{break-inside:avoid;max-width:none}.cdata>summary{list-style:none}.cdata>summary::-webkit-details-marker{display:none}.ctable th{position:static}}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 10px;max-width:1280px}
+.kpi{border:1px solid #c7ccd2;border-left:3px solid #8e98a3;border-radius:3px;padding:6px 10px 7px}
+.kl{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#475467}
+.kv{font:600 22px/1.25 Segoe UI,Arial;font-variant-numeric:tabular-nums}.kv span{font-size:12px;font-weight:400;color:#666}.kv.none{font-size:15px;color:#666}
+.kw{font-size:12px;font-weight:600;color:#1f4788}.kd{font-size:11px;color:#666}
+@media print{.kpis{max-width:none}.kpi{break-inside:avoid}.sumpanel{padding:8px 0;break-inside:auto}.chead{break-after:avoid}.ccard{break-inside:avoid;max-width:none}.cdata>summary{list-style:none}.cdata>summary::-webkit-details-marker{display:none}.ctable th{position:static}}
 """;
 }

@@ -19,13 +19,13 @@ public sealed class SupportReactionReportGenerator
 
     public string Generate(string studyFolder, IReadOnlyList<CandidateResultDto> results,
         string baselineName, IterationStudyMode studyMode, IReadOnlyList<string>? siblingReports = null,
-        ReportPrintSettings? print = null)
+        ReportPrintSettings? print = null, ReportScope? scope = null)
     {
         Directory.CreateDirectory(studyFolder);
         var path = Path.Combine(studyFolder, ReportFileName);
         var siblings = siblingReports ?? ReportNav.PresentIn(studyFolder, "support").ToArray();
-        AtomicFile.WriteAllText(path, BuildHtml(Build(results, baselineName, studyMode, siblings),
-                ReportPrintEngine.Describe(print, ReportTitle, baselineName, DateTimeOffset.Now)),
+        AtomicFile.WriteAllText(path, BuildHtml(Build(results, baselineName, studyMode, siblings, scope),
+                ReportPrintEngine.Describe(print, scope?.Title(ReportTitle) ?? ReportTitle, baselineName, DateTimeOffset.Now)),
             new System.Text.UTF8Encoding(false));
         return path;
     }
@@ -42,7 +42,7 @@ public sealed class SupportReactionReportGenerator
     }
 
     public SupportReactionReportDto Build(IReadOnlyList<CandidateResultDto> results, string baselineName,
-        IterationStudyMode studyMode, IReadOnlyList<string>? siblingReports = null)
+        IterationStudyMode studyMode, IReadOnlyList<string>? siblingReports = null, ReportScope? scope = null)
     {
         var keys = results.SelectMany(result => result.SupportReactionGroups ?? [])
             .Select(group => (group.FoundationSide, group.SapGroupName, group.OutputCase)).Distinct()
@@ -78,7 +78,7 @@ public sealed class SupportReactionReportGenerator
             .Select(warning => new ResultReportWarningDto(warning.IterationKey, warning.Category,
                 warning.Severity.ToString(), warning.Message)).ToArray();
         return new(new(baselineName, studyMode.ToString(), results.Count, DateTimeOffset.Now.ToString("o"),
-            IndividualProfileLimit), groups, warnings, siblingReports ?? []);
+            IndividualProfileLimit, scope?.ToDto()), groups, warnings, siblingReports ?? []);
     }
 
     public string BuildHtml(SupportReactionReportDto dto, ReportPrintDto? print = null)
@@ -88,8 +88,9 @@ public sealed class SupportReactionReportGenerator
         var library = ReportNav.Library("support", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Support Reactions — {{Esc(dto.Study.BaselineModelName)}}</title>
-<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportSummaryTheme.Css}}{{SummaryStyle}}</style>{{ReportPrintEngine.PageStyle}}</head><body><header><div><h1>Support Reactions Results Viewer</h1>
+<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportSummaryTheme.Css}}{{SummaryStyle}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body><header><div><h1>Support Reactions Results Viewer</h1>
 <div>{{Esc(dto.Study.BaselineModelName)}} · {{dto.Study.CandidateCount}} candidate(s) · {{Esc(dto.Study.StudyMode)}}</div>
+{{ReportScope.Banner(dto.Study.Scope)}}
 <div class="print-only" data-print-view></div>
 <p>Global support reactions at the two Left and two Right foundation points selected in Output Settings. Opens on the <b>Summary</b>: for one foundation side, the vertical (Fz) and horizontal (Fx) reaction of the inner support, the outer support and their algebraic sum Σ Net, per pretension candidate and truss height, in MN — with <b>View by Candidate</b> for both sides of one iteration. Under <b>View</b>, Individual supports / Foundation totals / Candidate matrix show every component (forces kN, moments kNm): each column's shaded band is the range among the candidates in scope (min to max), its darker core the middle half (P25–P75) and its line the median; <b>Band by</b> splits it per load, height or pretension candidate. Points are discrete supports; chart markers are not joined into a structural curve.</p></div>{{library}}</header>
 <nav data-print-controls><label>Foundation Side <select id="group"><option value="all">Left + Right</option></select></label>
@@ -117,11 +118,6 @@ body.pr-on .matrix thead th{white-space:normal;overflow-wrap:anywhere}
     // Summary / By Candidate on top of the shared ReportSummaryTheme: KPI cards, role-coloured bars, the schematic
     private const string SummaryStyle = """
 .cnote{margin:0 0 8px;color:#475467;font-size:11.5px;max-width:1280px}
-.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 10px;max-width:1280px}
-.kpi{border:1px solid #c7ccd2;border-left:3px solid #8e98a3;border-radius:3px;padding:6px 10px 7px}
-.kl{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#475467}
-.kv{font:600 22px/1.25 Segoe UI,Arial;font-variant-numeric:tabular-nums}.kv span{font-size:12px;font-weight:400;color:#666}.kv.none{font-size:15px;color:#666}
-.kw{font-size:12px;font-weight:600;color:#1f4788}.kd{font-size:11px;color:#666}
 [data-cand]{cursor:pointer}.kpi[data-cand]:hover{background:#f6f7f9}
 .czero{stroke:#344054;stroke-width:1.2}
 .rv{fill:#333;font-size:9.5px;paint-order:stroke;stroke:#fff;stroke-width:2.5px;stroke-linejoin:round}.rvn{fill:#101828;font-weight:700}
@@ -146,8 +142,11 @@ const esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&
 // colour whatever the filters show (L01 is the same blue in both reports). "All candidates" uses the accent blue.
 const PALETTE=['#1f77b4','#d62728','#2ca02c','#ff7f0e','#9467bd','#8c564b','#17becf','#bcbd22','#e377c2','#7f7f7f','#393b79','#637939'],ACC='#1f4788',DIMS={loadId:'Load candidate',heightId:'Truss height',pretensionId:'Pretension'};
 const ALL=D.groups.flatMap(g=>g.series),IDS={};Object.keys(DIMS).forEach(k=>IDS[k]=[...new Set(ALL.map(x=>x[k]))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})));
-const detail=(k,v)=>{const s=ALL.find(x=>x[k]===v);return k==='loadId'?s.loadingLabel:k==='heightId'?`H ${(+s.trussHeightM).toFixed(3)} m`:s.pretensionLabel},colourOf=(k,v)=>k?PALETTE[IDS[k].indexOf(v)]||ACC:ACC;
-Object.keys(DIMS).forEach(k=>{const o=[...B.options].find(o=>o.value===k),n=IDS[k].length;if(n>PALETTE.length){o.disabled=true;o.textContent+=` (${n} values · too many to colour)`}});
+// A report on a subset of the study (Tab 06A) keeps the full study's id order for its colours, and knows which
+// iterations are outside the set, so a blank slot reads "not qualified" instead of "no result".
+const SCOPE=D.study.scope||null,ORD=SCOPE?SCOPE.order:IDS,NQ=new Set(SCOPE?SCOPE.excluded.map(x=>x.join('|')):[]),nq=(l,h,p)=>NQ.has(l+'|'+h+'|'+p);
+const detail=(k,v)=>{const s=ALL.find(x=>x[k]===v);return k==='loadId'?s.loadingLabel:k==='heightId'?`H ${(+s.trussHeightM).toFixed(3)} m`:s.pretensionLabel},colourOf=(k,v)=>k?PALETTE[ORD[k].indexOf(v)]||ACC:ACC;
+Object.keys(DIMS).forEach(k=>{const o=[...B.options].find(o=>o.value===k),n=ORD[k].length;if(n>PALETTE.length){o.disabled=true;o.textContent+=` (${n} values · too many to colour)`}});
 D.groups.forEach((g,i)=>G.add(new Option(`${g.foundationSide} · ${g.outputCase}`,i)));const gs=()=>G.value==='all'?D.groups:[D.groups[+G.value]],scope=g=>g.series.filter(x=>Object.keys(chosen).every(k=>!chosen[k].size||chosen[k].has(x[k]))),rows=x=>x.rows.filter(r=>r.status==='Valid'&&step(r)===S.value&&Number.isFinite(r[prop()]));
 function filters(){const root=document.getElementById('filters'),labels={loadId:'Loading',heightId:'Height',pretensionId:'Pretension'};Object.keys(labels).forEach(k=>{const vals=IDS[k],w=document.createElement('span'),b=document.createElement('button'),pop=document.createElement('div');w.className='ms';pop.className='pop';pop.hidden=true;const all=document.createElement('label');all.className='all';all.innerHTML='<input type="checkbox" checked> All';pop.append(all);const boxes=[];vals.forEach(v=>{const row=document.createElement('label'),cb=document.createElement('input');cb.type='checkbox';cb.value=v;row.append(cb,document.createTextNode(`${v} · ${detail(k,v)}`));pop.append(row);boxes.push(cb);cb.onchange=()=>{cb.checked?chosen[k].add(v):chosen[k].delete(v);sync();render()}});function sync(){const n=chosen[k].size;b.textContent=`${labels[k]}: ${n===0?'all':n<=2?[...chosen[k]].join(', '):n+'/'+vals.length}`;w.classList.toggle('active',n>0);all.firstChild.checked=n===0;boxes.forEach(cb=>cb.checked=chosen[k].has(cb.value))}all.onclick=e=>{e.preventDefault();chosen[k].clear();sync();render()};b.onclick=e=>{e.stopPropagation();document.querySelectorAll('.pop').forEach(p=>{if(p!==pop)p.hidden=true});pop.hidden=!pop.hidden};w.append(b,pop);sync();root.append(w)})}
 function refreshSteps(){const old=S.value,all=[...new Set(gs().flatMap(g=>g.series.flatMap(x=>x.rows.filter(r=>r.status==='Valid').map(step))))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));S.innerHTML='';all.forEach(x=>S.add(new Option(x,x)));S.value=all.includes(old)?old:all.at(-1)||''}
@@ -236,8 +235,8 @@ function reactionRow(g,comp,series,hs,ps,yr,L,caption){
   ps.forEach((pid,i)=>{const x0=ml+i*L.cw+(L.cw-gw)/2;
     hs.forEach((ht,j)=>{const hx=x0+j*slot,mid=(hx+1.5*L.pitch).toFixed(1),s=series.find(x=>x.pretensionId===pid&&x.heightId===ht.id),st=s&&stepOf(g,s),pair=st&&st[comp],head=`${pid} · ${ht.name} · ${sideName(g)}`;
       ax+=`<text class="chh" x="${mid}" y="${hy.toFixed(1)}" text-anchor="middle">${esc(ht.name)}</text>`;
-      if(!pair){vals+=`<text class="cna" x="${mid}" y="${(y0-4).toFixed(1)}" text-anchor="middle">n/a</text>`;
-        hits+=`<rect class="hit" data-missing="${comp}|${esc(pid)}|${esc(ht.id)}" x="${hx.toFixed(1)}" y="${mt}" width="${(3*L.pitch).toFixed(1)}" height="${(base-mt).toFixed(1)}" fill="transparent" data-tip="${esc(head+'\nResult unavailable')}"/>`;return}
+      if(!pair){const out=!s&&series.length>0&&nq(series[0].loadId,ht.id,pid);vals+=`<text class="cna" x="${mid}" y="${(y0-4).toFixed(1)}" text-anchor="middle">${out?'NQ':'n/a'}</text>`;
+        hits+=`<rect class="hit" data-missing="${comp}|${esc(pid)}|${esc(ht.id)}" x="${hx.toFixed(1)}" y="${mt}" width="${(3*L.pitch).toFixed(1)}" height="${(base-mt).toFixed(1)}" fill="transparent" data-tip="${esc(head+'\n'+(out?'Not qualified — outside the '+SCOPE.label.toLowerCase():'Result unavailable'))}"/>`;return}
       ROLES.forEach((r,k)=>{const kn=pair[r.k],v=kn/1000,cx=hx+(k+.5)*L.pitch,Y=y(v),top=Math.min(Y,y0),hgt=Math.abs(Y-y0),up=kn>=0,net=r.k==='net',X=cx.toFixed(1),joint=jointOf(g,r.k);
         bars+=`<rect data-bar="${comp}|${esc(pid)}|${esc(ht.id)}|${r.k}" x="${(cx-bw/2).toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${hgt.toFixed(1)}" ${net?`fill="url(#${hid})" stroke="${NET}" stroke-width="1.1"`:`fill="${r.colour}"`}/>`;
         vals+=L.flat?`<text class="rv${net?' rvn':''}" x="${X}" y="${(up?top-5:top+hgt+12).toFixed(1)}" text-anchor="middle">${sgn(v)}</text>`
@@ -249,7 +248,7 @@ function reactionRow(g,comp,series,hs,ps,yr,L,caption){
         hits+=`<rect class="hit" data-cand="${esc(s.iterationKey)}" x="${(cx-L.pitch/2).toFixed(1)}" y="${mt}" width="${L.pitch.toFixed(1)}" height="${(base-mt).toFixed(1)}" fill="transparent" data-tip="${esc(t)}"/>`})});
     ax+=`<path class="cbr" d="M${(x0+2).toFixed(1)} ${by.toFixed(1)} v3 H${(x0+gw-2).toFixed(1)} v-3"/><text class="cpl" x="${(x0+gw/2).toFixed(1)}" y="${(by+15).toFixed(1)}" text-anchor="middle">${esc(pid)}</text>`});
   return `<svg class="cchart" data-chart="${comp}" viewBox="0 0 ${W} ${H.toFixed(0)}" role="img" aria-label="${esc(`${c.title}, ${sideName(g)}: inner support, outer support and their net per pretension candidate and truss height`)}"><defs>${hatch(hid)}</defs>${caption?`<text class="ccap" x="${ml}" y="11">${esc(caption)}</text>`:''}${grid}<line class="caxis" x1="${ml}" x2="${ml}" y1="${mt}" y2="${base.toFixed(1)}"/>${bars}<line class="czero" x1="${ml}" x2="${W-mr}" y1="${y0.toFixed(1)}" y2="${y0.toFixed(1)}"/>${vals}${ax}<text class="cax" transform="translate(13 ${(mt+padT+ph/2).toFixed(1)}) rotate(-90)" text-anchor="middle">${c.id} (MN)</text>${hits}</svg>`}
-const roleLegend=comp=>`<div class="clegend"><span>${swatch('inner')}Inner Support</span><span>${swatch('outer')}Outer Support</span><span>${swatch('net')}Σ Net = Inner + Outer</span><span class="note">${COMPS[comp].note} · n/a = no result</span></div>`;
+const roleLegend=comp=>`<div class="clegend"><span>${swatch('inner')}Inner Support</span><span>${swatch('outer')}Outer Support</span><span>${swatch('net')}Σ Net = Inner + Outer</span><span class="note">${COMPS[comp].note} · n/a = no result${SCOPE?' · NQ = not qualified':''}</span></div>`;
 
 // Governing values over both foundation sides and every iteration in scope, each traced to where it occurs.
 function kpiCards(){
@@ -278,7 +277,7 @@ function summaryPanel(){
     h+=`<div class="ccard${L.rows>1?' multi':''}" data-card="${comp}|${esc(g.foundationSide)}|${esc(id)}"><div class="ctitle">${COMPS[comp].title} – ${esc(sideName(g))}<span>${esc(loadLabel(id))} · ${series.length} iteration(s)</span></div>${roleLegend(comp)}${charts}</div>`}))});
   const cell=v=>`<td class="n">${kNs(v)}</td>`,body=shown.flatMap(g=>sc.ls.flatMap(id=>sc.ps.flatMap(pid=>sc.hs.map(ht=>{const s=loadOf(g,id).find(x=>x.pretensionId===pid&&x.heightId===ht.id),st=s&&stepOf(g,s);
     return `<tr><td>${esc(g.foundationSide)}</td><td class="n">${esc(g.summary.innerPoint)}</td><td class="n">${esc(g.summary.outerPoint)}</td><td>${esc(id)}</td><td>${esc(pid)}</td><td>${esc(ht.name)}</td><td>${s?esc(s.iterationKey):'—'}</td>`
-      +(st?['fx','fz'].map(k=>st[k]?cell(st[k].inner)+cell(st[k].outer)+cell(st[k].net):'<td class="n na" colspan="3">Result unavailable</td>').join(''):'<td class="n na" colspan="6">Result unavailable</td>')+'</tr>'})))).join('');
+      +(st?['fx','fz'].map(k=>st[k]?cell(st[k].inner)+cell(st[k].outer)+cell(st[k].net):'<td class="n na" colspan="3">Result unavailable</td>').join(''):`<td class="n na" colspan="6">${!s&&nq(id,ht.id,pid)?'Not qualified':'Result unavailable'}</td>`)+'</tr>'})))).join('');
   return h+`<details class="cdata" data-print="source"${open}><summary>Reaction values — the source of every bar</summary><div class="matrix-wrap" data-print-fit><table class="ctable"><thead><tr><th>Foundation</th><th class="n">Inner Pt</th><th class="n">Outer Pt</th><th>Load</th><th>Pretension</th><th>Height</th><th>Iteration</th><th class="n">Fx inner [kN]</th><th class="n">Fx outer [kN]</th><th class="n">ΣFx [kN]</th><th class="n">Fz inner [kN]</th><th class="n">Fz outer [kN]</th><th class="n">ΣFz [kN]</th></tr></thead><tbody>${body}</tbody></table></div></details></section>`}
 
 // By Candidate: both foundation sides of one iteration — outer and inner support in their order across the span,
@@ -317,7 +316,7 @@ function candidatePanel(){
   const h=`<section class="panel sumpanel" data-sum-view="candidate"><div class="chead"><span class="cname">Support Reactions</span><span class="cview">By Candidate</span><button class="cgo no-print" data-go="summary">← Summary</button>`
     +(sc.ls.length>1?sel('loadId','Loading Candidate',sc.ls.map(id=>[id,loadLabel(id)]),L0):'')+sel('pretensionId','Pretension Candidate',sc.ps.map(id=>[id,id]),P0)+sel('heightId','Truss Height',sc.hs.map(x=>[x.id,x.name]),H0.id)
     +`<span class="sub">${esc(SUM[0].outputCase)} · ${esc(S.value)}</span></div>`;
-  if(!any)return h+`<div class="ccard"><div class="ctitle">Support Reactions – ${esc(name)}<span>${esc(loadLabel(L0))}</span></div><p class="empty" data-missing="candidate">No result for ${esc(`${L0} · ${name}`)} — this iteration is not available.</p></div></section>`;
+  if(!any)return h+`<div class="ccard"><div class="ctitle">Support Reactions – ${esc(name)}<span>${esc(loadLabel(L0))}</span></div><p class="empty" data-missing="candidate">${nq(L0,H0.id,P0)?`${esc(`${L0} · ${name}`)} is not qualified — it is outside the ${esc(SCOPE.label.toLowerCase())}.`:`No result for ${esc(`${L0} · ${name}`)} — this iteration is not available.`}</p></div></section>`;
   const val=(pair,k)=>pair?`<td class="n" title="${kNs(pair[k])} kN">${mn(pair[k])}</td>`:'<td class="n na">—</td>',point=(g,k)=>esc(k==='inner'?g.summary.innerPoint:g.summary.outerPoint);
   const body=sides.flatMap(x=>x.st?x.order.map(k=>`<tr><td>${esc(x.g.foundationSide)}</td><td>${ROLE[k].name}</td><td class="n">${point(x.g,k)}</td>${val(x.st.fx,k)}${val(x.st.fz,k)}<td>${x.st.fz?behaviour(x.st.fz[k]):''}</td></tr>`):[`<tr><td>${esc(x.g.foundationSide)}</td><td class="na" colspan="5">Result unavailable</td></tr>`]).join('')
     +sides.filter(x=>x.st).map(x=>`<tr class="net"><td>${esc(x.g.foundationSide)}</td><td>Σ Net</td><td class="n">${point(x.g,'inner')} + ${point(x.g,'outer')}</td>${val(x.st.fx,'net')}${val(x.st.fz,'net')}<td>${x.st.fz?behaviour(x.st.fz.net):''}</td></tr>`).join('');

@@ -37,15 +37,15 @@ public sealed class CableForceReportGenerator
         IReadOnlyDictionary<string, double>? capacities = null,
         IReadOnlyList<string>? siblingReports = null,
         IReadOnlyDictionary<string, string>? capacitySources = null,
-        ReportPrintSettings? print = null)
+        ReportPrintSettings? print = null, ReportScope? scope = null)
     {
         Directory.CreateDirectory(studyFolder);
         var siblings = siblingReports is null
             ? ReportNav.PresentIn(studyFolder, "cable")
             : new HashSet<string>(siblingReports, StringComparer.Ordinal);
-        var dto = Build(results, baselineName, studyMode, cableResultCase, capacities, siblings.ToArray(), capacitySources);
+        var dto = Build(results, baselineName, studyMode, cableResultCase, capacities, siblings.ToArray(), capacitySources, scope);
         var path = Path.Combine(studyFolder, ReportFileName);
-        var printDto = ReportPrintEngine.Describe(print, ReportTitle, baselineName, DateTimeOffset.Now);
+        var printDto = ReportPrintEngine.Describe(print, scope?.Title(ReportTitle) ?? ReportTitle, baselineName, DateTimeOffset.Now);
         AtomicFile.WriteAllText(path, BuildHtml(dto, printDto), new System.Text.UTF8Encoding(false));
         return path;
     }
@@ -80,7 +80,7 @@ public sealed class CableForceReportGenerator
         string baselineName, IterationStudyMode studyMode, string cableResultCase,
         IReadOnlyDictionary<string, double>? capacities = null,
         IReadOnlyList<string>? siblingReports = null,
-        IReadOnlyDictionary<string, string>? capacitySources = null)
+        IReadOnlyDictionary<string, string>? capacitySources = null, ReportScope? scope = null)
     {
         var withCf = results.Where(r => (r.CableForces?.Count ?? 0) > 0)
             .OrderBy(r => r.Parameters.RunIndex).ThenBy(r => r.IterationKey, StringComparer.Ordinal).ToArray();
@@ -121,7 +121,7 @@ public sealed class CableForceReportGenerator
 
         var study = new CableForceStudyDto(baselineName, studyMode.ToString(), rows.Length,
             string.IsNullOrWhiteSpace(cableResultCase) ? "(not configured)" : cableResultCase,
-            DateTimeOffset.Now.ToString("o"));
+            DateTimeOffset.Now.ToString("o"), scope?.ToDto());
 
         // Keep only positive, finite capacities for cables that are actually in this report — matched by exact
         // cable object name. A cable without one gets no limit line and no utilisation; nothing is borrowed.
@@ -141,7 +141,7 @@ public sealed class CableForceReportGenerator
 
         return new CableForceReportDto(study, cables, loads, heights, pretensions, rows, warnings,
             caps, sources, CableGroupDetector.Suggest(cables),
-            BuildOverview(rows, cables, loads, heights, pretensions),
+            BuildOverview(rows, cables, loads, heights, pretensions, scope),
             BuildGoverning(rows, cables, loads, caps),
             (siblingReports ?? ["cable"]).ToArray());
     }
@@ -185,7 +185,7 @@ public sealed class CableForceReportGenerator
     private static IReadOnlyList<CableForceHeightOverviewDto> BuildOverview(
         IReadOnlyList<CableForceCandidateDto> rows, IReadOnlyList<string> cables,
         IReadOnlyList<CableForceAxisDto> loads, IReadOnlyList<CableForceAxisDto> heights,
-        IReadOnlyList<CableForceAxisDto> pretensions)
+        IReadOnlyList<CableForceAxisDto> pretensions, ReportScope? scope = null)
     {
         var overview = new List<CableForceHeightOverviewDto>();
         foreach (var load in loads)
@@ -214,23 +214,30 @@ public sealed class CableForceReportGenerator
 
                 overview.Add(new CableForceHeightOverviewDto(load.Id, height.Id, heightM,
                     pretensions.Count, available.Count, missing,
-                    RangeNote(available.Count, missing, heightM, gaps), ranges));
+                    RangeNote(available.Count, missing, heightM, gaps,
+                        scope is null ? [] : missing.Where(id => scope.IsExcluded(load.Id, height.Id, id)).ToArray()), ranges));
             }
         return overview;
     }
 
-    private static string RangeNote(int available, IReadOnlyList<string> missing, double heightM, int cableGaps)
+    /// <param name="outside">The missing candidates that have results but are outside the report's scope
+    /// (Tab 06A: not qualified) — named as such, not as unavailable.</param>
+    private static string RangeNote(int available, IReadOnlyList<string> missing, double heightM, int cableGaps,
+        IReadOnlyList<string> outside)
     {
         var candidates = $"{available} available pretension candidate{(available == 1 ? "" : "s")}";
         if (missing.Count == 0 && cableGaps == 0) return $"Range across {candidates}.";
 
         var note = $"Range based on {candidates}";
-        if (missing.Count > 0)
+        void List(IReadOnlyList<string> ids, string what)
         {
+            if (ids.Count == 0) return;
             const int listed = 6;
-            var names = missing.Take(listed).Select(id => $"{id}-{CableForceMath.HeightLabel(heightM)}");
-            note += $"; {string.Join(", ", names)}{(missing.Count > listed ? $" +{missing.Count - listed} more" : "")} unavailable";
+            var names = ids.Take(listed).Select(id => $"{id}-{CableForceMath.HeightLabel(heightM)}");
+            note += $"; {string.Join(", ", names)}{(ids.Count > listed ? $" +{ids.Count - listed} more" : "")} {what}";
         }
+        List(missing.Where(id => !outside.Contains(id)).ToArray(), "unavailable");
+        List(outside, "not qualified");
         if (cableGaps > 0)
             note += $"; {cableGaps} cable result{(cableGaps == 1 ? "" : "s")} unavailable and excluded";
         return note + ".";
@@ -286,7 +293,7 @@ public sealed class CableForceReportGenerator
         var library = ReportNav.Library("cable", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Cable Forces — {{Esc(s.BaselineModelName)}}</title>
-<style>{{ReportPrintEngine.Css}}{{Style}}</style>{{ReportPrintEngine.PageStyle}}</head>
+<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <pattern id="cf-loss" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="#2A78D6"/></pattern>
@@ -296,6 +303,7 @@ public sealed class CableForceReportGenerator
     <h1>Cable Forces Viewer</h1>
     <p class="meta">{{Esc(s.BaselineModelName)}} · {{Esc(s.StudyMode)}} · {{s.CandidateCount}} candidate(s) ·
       cable result case: {{Esc(s.ResultCase)}} · generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
+    {{ReportScope.Banner(s.Scope)}}
     <p class="meta print-only" id="pview"></p>
     <p class="intro"><b>Yellow</b> is the prestress target, <b>blue</b> is the change from that target to the
       final analysed force under the cable result case, and the <b>red dashed</b> line is the cable-force limit
@@ -337,7 +345,7 @@ public sealed class CableForceReportGenerator
   <span id="legnt" hidden><svg width="14" height="10"><rect width="14" height="10" fill="#2A78D6" opacity=".45"/></svg>Final force · cable has no prestress target</span>
   <span><svg width="18" height="10"><line x1="0" y1="5" x2="18" y2="5" stroke="#12305F" stroke-width="2"/></svg>Final analysed force</span>
   <span><svg width="24" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="#C62828" stroke-width="1.75" stroke-dasharray="6 4"/></svg><i id="leglim">Cable force limit</i></span>
-  <span class="small">Every bar starts at 0 · H = truss height [m] · n/a = result unavailable</span>
+  <span class="small">Every bar starts at 0 · H = truss height [m] · n/a = result unavailable{{(s.Scope is null ? "" : " · " + ReportScope.MarkerMeaning)}}</span>
 </div>
 
 <section class="blk">
@@ -505,6 +513,8 @@ a{color:var(--acc)}
     private const string Script = """
 "use strict";
 const D = JSON.parse(document.getElementById("report-data").textContent);
+// A report on a subset of the study (Tab 06A): iterations that have results but are outside the set
+const NQSET = new Set(((D.study.scope || {}).excluded || []).map(x => x.join("|"))), notQualified = (heightId, pretId) => NQSET.has(S.load + "|" + heightId + "|" + pretId);
 const el = id => document.getElementById(id);
 const CAP = D.capacities || {}, CAPSRC = D.capacitySources || {};
 const CAPS_ANY = Object.keys(CAP).length > 0;
@@ -769,7 +779,7 @@ function detailChart(pret, block, width, sc){
   bars.forEach(b => {
     const tip = [["Pretension Candidate", pret.id], ["Cable", b.c], ["Group", SIDE[S.groups[b.c]]],
       ["Truss Height", mText(b.h.value) + " m (" + b.h.id + ")"]];
-    if (!b.row){ tip.push(["Result", "Result unavailable"]); }
+    if (!b.row){ tip.push(["Result", notQualified(b.h.id, pret.id) ? "Not qualified — outside the " + D.study.scope.label.toLowerCase() : "Result unavailable"]); }
     else {
       tip.push(["Prestress Target", kn(b.tKn)], ["Final Analysed Force", b.fKn == null ? "Result unavailable" : kn(b.fKn)],
         ["Force Change", finite(b.dk) ? signed(b.dk, 0) + " kN" : "N/A"], ["Force Change", finite(b.dp) ? signed(b.dp, 1) + "%" : "N/A"],
@@ -782,7 +792,7 @@ function detailChart(pret, block, width, sc){
     if (b.over) exceed++;
     if (b.blind) return;                                   // % of capacity without a capacity: nothing to draw
     const x = r1(b.x), yT = finite(b.t) ? Y(b.t) : null, yF = finite(b.f) ? Y(b.f) : null;
-    if (yT == null && yF == null){ labels.push(`<text x="${r1(b.xc)}" y="${y0 - 5}" class="na">n/a</text>`); return; }   // a gap, never a zero bar
+    if (yT == null && yF == null){ labels.push(`<text x="${r1(b.xc)}" y="${y0 - 5}" class="na">${!b.row && notQualified(b.h.id, pret.id) ? "NQ" : "n/a"}</text>`); return; }   // a gap, never a zero bar
     if (yT != null && b.t > 0) marks.push(`<rect x="${x}" y="${r1(yT)}" width="${barW}" height="${r1(y0 - yT)}" class="tb"/>`);
     if (yF == null){ labels.push(`<text x="${r1(b.xc)}" y="${r1(yT - 5)}" class="na">n/a</text>`); return; }
     let yLabel = yF - 5, cls = "vl";

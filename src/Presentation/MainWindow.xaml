@@ -400,7 +400,7 @@
        <TextBlock Text="01  MONITORED POINTS" Style="{StaticResource Subheading}" Margin="0"/>
        <TextBlock Text="{Binding MonitoredPointCaseSummary}" Style="{StaticResource OutSummary}" ToolTip="{Binding MonitoredPointCaseSummary}"/>
        <TextBlock Text="{Binding MonitoredPointSummary}" Style="{StaticResource OutSummary}" Margin="0,1,0,0"/>
-       <!-- Deflection limit band: post-processing only (Deflection report band + Shortlist gate). Blank = open bound. -->
+       <!-- Deflection limit band: post-processing only (Deflection report band + Tab 06A deflection criterion). Blank = open bound. -->
        <Grid Margin="0,6,0,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
         <TextBlock Text="Limit band ↓U3" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
@@ -1151,24 +1151,165 @@
         </StackPanel>
         </Expander>
 
-        <Expander Style="{StaticResource PpModule}">
-         <Expander.Header><TextBlock Text="08  STUDY SHORTLIST" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
-         <StackPanel>
-          <TextBlock Text="Ranked Pass and Warning candidates from the frozen study decision criteria · lower score is preferred" Style="{StaticResource PpDesc}"/>
-          <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>
-          <TextBlock Text="{Binding ShortlistReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ShortlistReportPath}"/>
-          <WrapPanel Margin="0,4,0,0">
-           <Button Content="View Report" Command="{Binding OpenShortlistReport}" Style="{StaticResource Primary}" ToolTip="Open Study_Shortlist.html in your web browser"/>
-           <Button Content="Regenerate" Command="{Binding GeneratePostProcessOutputs}" ToolTip="Regenerate the shortlist and other Tab 06 outputs from raw JSON — no SAP"/>
-           <Button Content="Export PDF" Command="{Binding ExportShortlistPdf}" ToolTip="Print Study_Shortlist.html to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
-           <Button Content="Open Excel" Command="{Binding OpenShortlistWorkbook}" ToolTip="Open Study_Shortlist.xlsx"/>
-           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
-          </WrapPanel>
-         </StackPanel>
-        </Expander>
-
        </StackPanel>
      </ScrollViewer>
+    </Grid>
+   </TabItem>
+
+   <!-- 06A OPTIMIZATION: qualify the stored candidates against acceptance criteria, and the reports for the
+        qualified set. Post-processing only; available once Tab 06 has raw data. -->
+   <TabItem x:Name="OptimizationTab" IsEnabled="{Binding HasRawData}" ToolTipService.ShowOnDisabled="True"
+            ToolTip="Qualify the stored candidates against acceptance criteria — available once Tab 06 has raw data">
+    <TabItem.Header>
+     <StackPanel Width="124">
+      <TextBlock Text="06A  OPTIMIZATION" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="{Binding OptimizationTabStatus}" Style="{StaticResource TabHeaderStatus}"/>
+     </StackPanel>
+    </TabItem.Header>
+    <Grid Margin="2,2,6,2">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+     <Grid.Resources>
+      <Style x:Key="OptEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="Height" Value="24"/><Setter Property="MinHeight" Value="24"/><Setter Property="Padding" Value="6,1"/><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="FontSize" Value="12"/><Setter Property="TextAlignment" Value="Right"/></Style>
+      <Style x:Key="OptHint" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+      <Style x:Key="OptCard" TargetType="Border"><Setter Property="BorderBrush" Value="{StaticResource Border}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Padding" Value="10,6,10,9"/></Style>
+     </Grid.Resources>
+
+     <StackPanel Grid.Row="0" Margin="0,0,0,6">
+      <TextBlock Text="OPTIMIZATION · QUALIFIED CANDIDATES" Style="{StaticResource Subheading}" Margin="0"/>
+      <DockPanel Margin="0,3,0,0">
+       <WrapPanel DockPanel.Dock="Right" Margin="12,0,0,0">
+        <Button Content="Generate Optimized Reports" Command="{Binding GenerateOptimizedReports}" Style="{StaticResource Primary}"
+                ToolTip="Write the reports for the qualified candidates only into Study/Optimized — the full Tab 06 reports are not touched · no SAP2000"/>
+        <Button Content="Open Optimized Folder" Command="{Binding OpenOptimizedFolder}" Margin="0"
+                ToolTip="Open Study/Optimized in File Explorer"/>
+       </WrapPanel>
+       <StackPanel>
+        <TextBlock FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding BaselineModelPath}">
+         <Run Text="Study: " Foreground="{StaticResource Muted}"/><Run Text="{Binding BaselineModelName, Mode=OneWay}" FontWeight="SemiBold"/>
+        </TextBlock>
+        <TextBlock Text="{Binding OptimizationRawSummary}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}"
+                   TextTrimming="CharacterEllipsis" ToolTip="{Binding RawJsonPath}"/>
+       </StackPanel>
+      </DockPanel>
+     </StackPanel>
+
+     <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+
+      <!-- criteria -->
+      <Border x:Name="OptimizationCriteria" Style="{StaticResource OptCard}">
+       <StackPanel>
+        <TextBlock Text="CRITERIA" Style="{StaticResource Subheading}" Margin="0"/>
+        <TextBlock Style="{StaticResource OptHint}" Margin="0,2,0,0"
+                   Text="A candidate is qualified when it passes every active criterion. Post-processing only — changing a criterion never invalidates a run."/>
+
+        <CheckBox Content="Deflection within range" FontWeight="SemiBold" Margin="0,8,0,0" AutomationProperties.Name="Deflection criterion"
+                  IsChecked="{Binding State.OutputSettings.DeflectionCriterionEnabled}"
+                  ToolTip="Min ≤ δ ≤ Max, where δ is the candidate's peak downward deflection −min(Uz) over the monitored points"/>
+        <Grid Margin="20,4,0,0" IsEnabled="{Binding State.OutputSettings.DeflectionCriterionEnabled}">
+         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <TextBlock Text="δ  peak ↓Uz" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+         <TextBox Grid.Column="1" Style="{StaticResource OptEditor}" AutomationProperties.Name="Qualifying deflection minimum [mm]"
+                  ToolTip="Min peak downward deflection [mm] — blank = no lower limit"
+                  Text="{Binding State.OutputSettings.DeflectionLimitMinMm, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+         <TextBlock Grid.Column="2" Text="–" FontSize="11" VerticalAlignment="Center" Margin="6,0"/>
+         <TextBox Grid.Column="3" Style="{StaticResource OptEditor}" AutomationProperties.Name="Qualifying deflection maximum [mm]"
+                  ToolTip="Max peak downward deflection [mm] — blank = no upper limit"
+                  Text="{Binding State.OutputSettings.DeflectionLimitMaxMm, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+         <TextBlock Grid.Column="4" Text="mm" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+        </Grid>
+        <TextBlock Text="{Binding DeflectionStudyRange}" Style="{StaticResource OptHint}" Margin="20,3,0,0"/>
+
+        <CheckBox Content="Cable forces below the limit" FontWeight="SemiBold" Margin="0,9,0,0" AutomationProperties.Name="Cable force criterion"
+                  IsChecked="{Binding State.OutputSettings.CableCriterionEnabled}"
+                  ToolTip="Every cable's final analysed force stays within the limit — a share of its Tab 03 design capacity"/>
+        <Grid Margin="20,4,0,0" IsEnabled="{Binding State.OutputSettings.CableCriterionEnabled}">
+         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <TextBlock Text="force / design capacity  ≤" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+         <TextBox Grid.Column="1" Style="{StaticResource OptEditor}" AutomationProperties.Name="Cable utilisation limit"
+                  ToolTip="Largest allowed final force / design capacity of any cable — 1.00 = 100 % of the Tab 03 capacity (area × fpu × φ)"
+                  Text="{Binding State.OutputSettings.MaxCableUtilization, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+         <TextBlock Grid.Column="2" Text="1.00 = 100 % of the Tab 03 capacity" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+        </Grid>
+        <TextBlock Text="{Binding CableStudyRange}" Style="{StaticResource OptHint}" Margin="20,3,0,0"/>
+
+        <TextBlock Text="{Binding OptimizationProblem}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Error}" TextWrapping="Wrap" Margin="0,7,0,0">
+         <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Style.Triggers><DataTrigger Binding="{Binding HasOptimizationProblem}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+        </TextBlock>
+        <DockPanel Margin="0,8,0,0">
+         <Button DockPanel.Dock="Right" Content="Save Criteria" Command="{Binding SaveTabConfig}" CommandParameter="Output" Margin="8,0,0,0" VerticalAlignment="Bottom"
+                 ToolTip="Save the criteria into the active project, with the Tab 04 output settings they belong to"/>
+         <TextBlock Style="{StaticResource OptHint}" VerticalAlignment="Center"
+                    Text="The deflection range is the Tab 04 limit band — one value, edited in either place, and the band shaded in the Deflection report."/>
+        </DockPanel>
+       </StackPanel>
+      </Border>
+
+      <!-- result and the optimized report set -->
+      <Border x:Name="OptimizationResult" Grid.Column="2" Style="{StaticResource OptCard}">
+       <StackPanel>
+        <TextBlock Text="RESULT" Style="{StaticResource Subheading}" Margin="0"/>
+        <TextBlock Text="{Binding OptimizationHeadline}" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Accent}" Margin="0,2,0,0" AutomationProperties.Name="Qualified candidates"/>
+        <TextBlock Text="{Binding OptimizationBreakdown}" FontSize="11" TextWrapping="Wrap"/>
+        <TextBlock Text="{Binding OptimizationCriteriaNote}" Style="{StaticResource OptHint}" Margin="0,3,0,0"/>
+        <Border Height="1" Background="{StaticResource Border}" Margin="0,9,0,7"/>
+        <TextBlock Text="OPTIMIZED REPORTS" Style="{StaticResource Subheading}" Margin="0"/>
+        <TextBlock Text="{Binding OptimizedReportsStatus}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0" AutomationProperties.Name="Optimized reports status">
+         <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Style.Triggers><DataTrigger Binding="{Binding OptimizedReportsStale}" Value="True"><Setter Property="Foreground" Value="{StaticResource Warning}"/><Setter Property="FontWeight" Value="SemiBold"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+        </TextBlock>
+        <TextBlock Style="{StaticResource OptHint}" Margin="0,3,0,0"
+                   Text="The same charts as Tab 06, for the qualified candidates only, in Study/Optimized. A combination that did not qualify is left blank and marked NQ."/>
+        <WrapPanel Margin="0,6,0,0">
+         <Button Content="View Summary" Command="{Binding OpenOptimizationSummary}" Style="{StaticResource Primary}" ToolTip="Open Optimization_Summary.html — criteria, counts, the acceptance map and the qualified candidates"/>
+         <Button Content="Deflection" Command="{Binding OpenOptimizedDeflection}" ToolTip="Deflection report of the qualified candidates"/>
+         <Button Content="Top Chord" Command="{Binding OpenOptimizedTopChord}" ToolTip="Top Chord summary of the qualified candidates"/>
+         <Button Content="Bottom Chord" Command="{Binding OpenOptimizedBottomChord}" ToolTip="Bottom Chord summary of the qualified candidates"/>
+         <Button Content="Mega Column" Command="{Binding OpenOptimizedMegaColumn}" ToolTip="Mega Column summary of the qualified candidates"/>
+         <Button Content="Member Forces" Command="{Binding OpenOptimizedMemberForces}" ToolTip="Member-force report of the qualified candidates — every group"/>
+         <Button Content="Support Reactions" Command="{Binding OpenOptimizedSupportReactions}" ToolTip="Support Reactions summary of the qualified candidates"/>
+         <Button Content="Cable Forces" Command="{Binding OpenOptimizedCableForces}" Margin="0" ToolTip="Cable Forces report of the qualified candidates"/>
+        </WrapPanel>
+       </StackPanel>
+      </Border>
+     </Grid>
+
+     <DockPanel Grid.Row="2" Margin="0,8,0,4">
+      <ComboBox DockPanel.Dock="Right" Width="126" ItemsSource="{Binding OptimizationFilters}" SelectedItem="{Binding OptimizationFilter}" AutomationProperties.Name="Candidate status filter"
+                ToolTip="Show every candidate or one status"/>
+      <TextBlock DockPanel.Dock="Right" Text="Show" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,6,0"/>
+      <TextBlock Text="CANDIDATES" Style="{StaticResource Subheading}" Margin="0" VerticalAlignment="Center"/>
+      <TextBlock Text="{Binding OptimizationTableSummary}" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+     </DockPanel>
+     <DataGrid x:Name="OptimizationGrid" Grid.Row="3" ItemsSource="{Binding OptimizationRows}" IsReadOnly="True" AutoGenerateColumns="False"
+               CanUserDeleteRows="False" CanUserAddRows="False" CanUserResizeRows="False" HeadersVisibility="Column" RowHeaderWidth="0"
+               EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+               ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+      <DataGrid.Columns>
+       <DataGridTextColumn Header="Iteration" Binding="{Binding IterationKey}" Width="128"/>
+       <DataGridTextColumn Header="Load" Binding="{Binding LoadId}" Width="54"/>
+       <DataGridTextColumn Header="Height" Binding="{Binding Height}" Width="62"/>
+       <DataGridTextColumn Header="Pretension" Binding="{Binding PretensionId}" Width="80"/>
+       <DataGridTextColumn Header="δ [mm]" Binding="{Binding PeakDownMm, StringFormat={}{0:0.0}, TargetNullValue=—}" Width="74" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="Cable util. [%]" Binding="{Binding UtilisationPercent, StringFormat={}{0:0.0}, TargetNullValue=—}" Width="98" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="Governing cable" Binding="{Binding GoverningCable}" Width="118"/>
+       <DataGridTemplateColumn Header="Status" Width="108" SortMemberPath="Status">
+        <DataGridTemplateColumn.CellTemplate><DataTemplate>
+         <TextBlock Text="{Binding Status}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0">
+          <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+           <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+           <Style.Triggers>
+            <DataTrigger Binding="{Binding Status}" Value="Qualified"><Setter Property="Foreground" Value="{StaticResource Accent}"/></DataTrigger>
+            <DataTrigger Binding="{Binding Status}" Value="Not qualified"><Setter Property="Foreground" Value="{StaticResource Error}"/></DataTrigger>
+           </Style.Triggers>
+          </Style></TextBlock.Style>
+         </TextBlock>
+        </DataTemplate></DataGridTemplateColumn.CellTemplate>
+       </DataGridTemplateColumn>
+       <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="*" MinWidth="220">
+        <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding Reason}"/></Style></DataGridTextColumn.ElementStyle>
+       </DataGridTextColumn>
+      </DataGrid.Columns>
+     </DataGrid>
     </Grid>
    </TabItem>
 

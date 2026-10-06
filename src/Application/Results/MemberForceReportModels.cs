@@ -5,7 +5,8 @@ public sealed record MemberForceStudyDto(
     string StudyMode,
     int CandidateCount,
     string GeneratedAtIso,
-    int IndividualProfileLimit);
+    int IndividualProfileLimit,
+    ReportScopeDto? Scope = null);      // set when the report covers a subset of the study (Tab 06A)
 
 public sealed record MemberForceStationDto(
     string FrameName,

@@ -216,8 +216,8 @@ Tab 04 defines study-wide output monitoring only; editing the tab does not write
 - The monitored-points card carries an inline `Limit band ↓U3 [min] – [max] mm` row (nullable TextBoxes with
   `NullableDouble`; blank = open bound) persisted as `DeflectionLimitMinMm` / `DeflectionLimitMaxMm` in
   `Tab05OutputSettings`. It is the **single** deflection criterion (`DeflectionLimitBand`): a candidate passes when
-  Min ≤ peak downward deflection δ = −min(Uz) ≤ Max. The Tab 06 Shortlist gates on it (outside = Fail) and
-  `Deflection_Report.html` draws it as a green wash between two dashed limit lines with a per-chart
+  Min ≤ peak downward deflection δ = −min(Uz) ≤ Max. It is the Tab 06A deflection criterion (same two values,
+  editable there too) and `Deflection_Report.html` draws it as a green wash between two dashed limit lines with a per-chart
   `✓ n / N in limit band` count and ✓/✗ per candidate. It is a post-processing input: excluded from the run
   fingerprint, applied on the next Generate/Regenerate. The former hidden study Pass/Fail limits (50/75 mm) are gone.
 - Member-force groups are user-defined application groups over baseline Frame Objects; one frame belongs to at most one member-force output group. A shared result case/combo is required. Extraction retains signed local P/V2/V3 and T/M2/M3 for every SAP analysis element and result station returned for each selected frame object; it must not collapse an auto-meshed frame object to one governing value.
@@ -294,10 +294,13 @@ Study composition plus isolated child-model building, analysis, raw-result extra
   then the study publishes canonical lossless `Study/RawData/Study_Raw_Results.json` plus a flat
   `Study_Raw_Results.csv` companion. It does not generate `.xlsx` or `.html`, including candidate diagnostics.
 - Tab 06 is the only report-generation boundary. `Generate Outputs` / `Regenerate` reads the raw JSON and creates
-  the candidate diagnostics, consolidated workbook, deflection/cable/member-force/support-reaction HTML, and shortlist outputs without a SAP
+  the candidate diagnostics, consolidated workbook, deflection/cable/member-force/support-reaction HTML without a SAP
   gateway. The CSV is a spreadsheet-friendly raw view; JSON is the canonical complete post-processing input.
-- Capacity and decision criteria are post-processing inputs. Changing `fpu`, `φ`, or criteria must not invalidate
-  reusable analyzed children; the next explicit Tab 06 generation uses the current derived capacities and criteria.
+- Capacity and the Tab 06A acceptance criteria are post-processing inputs. Changing `fpu`, `φ`, or a criterion must
+  not invalidate reusable analyzed children; the next explicit Tab 06 / 06A generation uses the current values.
+- **The Study Shortlist is gone** (Module 08, `Study_Shortlist.html/.xlsx`, `StudyDecisionService`, the ranking
+  weights and the absolute cable kN bounds). Tab 06A replaces its pass / fail gate; do not reintroduce a second
+  gate. An older project or raw package that still carries those fields loads normally — they are ignored.
   Users may edit the raw JSON in place and regenerate; derived artifacts are considered stale until then.
 
 ## Tab 06 Post-Processing · Module 07 Cable Forces (`Cable_Forces_Report.html`)
@@ -483,11 +486,62 @@ legend, chart text, values table); do not fork that CSS per report.
 - Checks: `tests/SupportReactionReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
   `tests/ReportPage.cs`) through `window.reactionReport.summary('summary' | 'candidate', { loadId, pretensionId, heightId })`.
 
+## Tab 06A Optimization (`MainViewModel.Optimization.cs`, `Study/Optimized/`)
+
+Qualifies the stored candidates against acceptance criteria and writes the existing reports for the qualified
+("optimized") set. Post-processing only: raw data in, no SAP2000, never part of a run or its fingerprint.
+"Optimized" means "passes every active criterion" — there is no ranking or objective function.
+
+- **Tab**: `06A  OPTIMIZATION`, index 6, after `06 POST-PROCESSING`. `IsEnabled` is bound to `HasRawData`; the
+  header status reads `Needs raw data` / `Reading raw data…` / `Qualified n / N`. Layout: raw-data strip with
+  `Generate Optimized Reports` and `Open Optimized Folder`; a CRITERIA card and a RESULT card side by side; the
+  CANDIDATES table (virtualised `DataGrid`, status filter) filling the rest.
+- **Metrics once, criteria as often as they change**: `StudyMetricsStore.Load` derives one `CandidateMetrics` row
+  per candidate (δ = `DeflectionLimitBand.PeakDownMm` over every monitored point; the final force of every cable)
+  and keeps them in `Study/RawData/Study_Candidate_Metrics.json`, a rebuildable sidecar used only while the raw
+  file's length and timestamp still match. `StudyQualifier.Evaluate` runs on those rows — a criterion edit never
+  re-reads the raw package (hundreds of MB for a large study). Loading happens off the UI thread.
+- **Criteria** (`QualificationCriteria`, from `OutputSettingsConfiguration`): each has an enable switch.
+  1. *Deflection within range*: Min ≤ δ ≤ Max, inclusive, blank bound open. **It is the Tab 04 limit band** —
+     the same `DeflectionLimitMinMm/MaxMm`, edited in either place; never add a second deflection range.
+  2. *Cable forces below the limit*: every cable's final force / design capacity ≤ `MaxCableUtilization`
+     (default 1.00). Capacity comes from `CableCapacityResolver` exactly as in the Cable Forces report (current
+     Tab 03, then stored). The governing utilisation and its cable are reported whether or not the criterion is on.
+  The switches and the limit persist in `Tab05OutputSettings` (`DeflectionCriterionEnabled`,
+  `CableCriterionEnabled`, `MaxCableUtilization`); older projects load with both on and 1.00.
+- **Statuses**: `Qualified` / `Not qualified` (each failed criterion with its governing value, limit and cable) /
+  `Not assessed` (a result an active criterion needs is missing or invalid, a cable has no capacity, or the
+  analysis did not complete). Not assessed is never qualified and a missing value is never 0. A criterion that
+  fails wins over missing data elsewhere. To add a criterion: a verdict in `StudyQualifier.EvaluateOne`, a switch
+  in the settings, a row in the summary's criteria table.
+- **Optimized reports**: `StudyOptimizationProcessor.Generate` writes into `Study/Optimized/` —
+  `Optimization_Summary.html`, `Optimization_Criteria.json`, and Deflection / Member Forces (+ chord and mega
+  launchers) / Support Reactions / Cable Forces from **the existing generators** given the qualified subset and a
+  `ReportScope`. No forked chart code. The full reports in `Study/` are never touched. With no qualified
+  candidate only the summary is written and an earlier set's chart reports are removed.
+- **`ReportScope`** (optional last argument of each generator) is what makes a subset report honest:
+  a banner under the header and ` · Optimized set` in the printed page header; the full study's L / H / P ids, so
+  an id keeps its colour, line style and order when others drop out; and the excluded iterations, so a blank slot
+  reads **NQ / "Not qualified"** — distinct from `n/a` = no result — never a zero. Diagnostics links point back to
+  the study folder (`../`).
+- **`Optimization_Summary.html`** (rendered in C#, no script of its own): KPI cards (qualified, not qualified with
+  deflection only / cable only / both, not assessed, the study's own δ and utilisation range), the criteria table,
+  the **acceptance map** (δ against governing cable utilisation for every candidate, limits drawn, acceptance window
+  shaded, qualified points filled), the qualified candidates, and every candidate with status and reason
+  (optional on paper).
+- **Staleness**: `Optimization_Criteria.json` records the criteria, the capacity signature, the raw-data identity
+  and the qualified keys; `StudyOptimizationProcessor.IsCurrent` drives the tab's "up to date" / "out of date —
+  regenerate" line.
+- Checks: `tests/OptimizationChecks.cs` (metrics, inclusive bounds, not-assessed cases, the sidecar, the optimized
+  set with untouched full reports, identity and NQ marks through the report scripts, staleness, 1,000 candidates)
+  and the `--study-ui` Tab 06A block (enabled state, live qualification, filter, generate).
+
 ## Report Print Engine (`ReportPrintEngine`, Tab 06 Print Setup, Export PDF)
 
 Reports stay one self-contained HTML file; paper output is produced by the report itself with CSS Paged Media, so
 the browser's Print and the app's PDF export give the same pages. **Every HTML view is on the engine**: Deflection,
-Member Forces, Support Reactions, Cable Forces, the Study Shortlist and the per-candidate diagnostics. A new report
+Member Forces, Support Reactions, Cable Forces, the Tab 06A Optimization Summary and the per-candidate diagnostics.
+A new report
 must plug in the same way — do not give a report its own print header / footer.
 
 - **Print Setup** (`ReportPrintSettings`, Tab 06 card `PRINT SETUP · HEADER / FOOTER`, above module 01): company,
@@ -541,8 +595,8 @@ must plug in the same way — do not give a report its own print header / footer
   be redrawn, not stretched), moves the legend under the chart in columns, keeps the per-chart case / view / filter
   controls as a record, and prints the Source Data Matrix only when asked (`#print&group=N`). **Member Forces** and
   **Support Reactions** print the current toolbar view — one chart block per page-fit, matrix views paginate with
-  repeating headings (`#print&group=…&component=…&view=…`, plus `sampling` / `band`). **Shortlist** and
-  **diagnostics** are plain documents with the `Bar`.
+  repeating headings (`#print&group=…&component=…&view=…`, plus `sampling` / `band`). The **Optimization
+  Summary** and the **diagnostics** are plain documents with the `Bar`.
 - Checks: `tests/ReportPrintChecks.cs` (settings store, logo embedding, generated page rule and escaping, screen ⇄
   paper re-layout, `#print` options, every report carries the engine, exporter command line). The chart reports'
   own scripts need a real browser, so `--report-pdf` (opt-in) prints every report to a real PDF with the installed
