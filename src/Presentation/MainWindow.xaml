@@ -959,7 +959,7 @@
        <Expander Style="{StaticResource PpModule}">
         <Expander.Header><TextBlock Text="PRINT SETUP · HEADER / FOOTER" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="Printed in the page margins of every report page: logo top-left, project and job number in the header, company, note and page numbers in the footer. Saved for this Windows user · applied on the next Generate / Regenerate · charts print as vector graphics." Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="The starting values of each report's own Print Report screen: logo top-left, project and job number in the header, company, note and page numbers in the footer. Saved for this Windows user · embedded on the next Generate / Regenerate. Printing and saving as PDF happen in the report: View Report → Print Report, where every value can still be changed beside a live preview." Style="{StaticResource PpDesc}"/>
          <Grid Margin="0,8,0,0">
           <Grid.Resources>
            <Style x:Key="PrLabel" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,0,8,0"/></Style>
@@ -1056,9 +1056,8 @@
          <Border Height="1" Background="{StaticResource Border}" Margin="0,10,0,8"/>
          <TextBlock Text="{Binding DeflectionReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
-          <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser"/>
+          <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser — print or save it as PDF there with Print Report"/>
           <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Regenerate Tab 06 outputs from RawData/Study_Raw_Results.json — no SAP"/>
-          <Button Content="Export PDF" Command="{Binding ExportDeflectionPdf}" ToolTip="Print Deflection_Report.html to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1074,7 +1073,6 @@
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenTopChordReport}" Style="{StaticResource Primary}" ToolTip="Open the Top Chord summary of Member_Forces_Report.html in your web browser"/>
           <Button Content="Regenerate" Command="{Binding RegenerateMemberForceReport}" ToolTip="Rebuild Member_Forces_Report.html from Study_Raw_Results.json — no SAP"/>
-          <Button Content="Export PDF" Command="{Binding ExportTopChordPdf}" ToolTip="Print the Top Chord summary to Top_Chord_Report.pdf with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1087,7 +1085,6 @@
          <TextBlock Text="Opens the Bottom Chord summary in the member-force report; the other components stay under Display." Style="{StaticResource PpDesc}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenBottomChordReport}" Style="{StaticResource Primary}" ToolTip="Open the Bottom Chord summary of Member_Forces_Report.html in your web browser"/>
-          <Button Content="Export PDF" Command="{Binding ExportBottomChordPdf}" ToolTip="Print the Bottom Chord summary to Bottom_Chord_Report.pdf with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1100,7 +1097,6 @@
          <TextBlock Text="Uses the same member-force report; choose the Vierendeel Members group in the report toolbar." Style="{StaticResource PpDesc}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenMemberForceReport}" Style="{StaticResource Primary}"/>
-          <Button Content="Export PDF" Command="{Binding ExportMemberForcePdf}" ToolTip="Print Member_Forces_Report.html (all groups) to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1113,7 +1109,6 @@
          <TextBlock Text="Opens the Mega Column summary in the member-force report; the other components stay under Display." Style="{StaticResource PpDesc}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenMegaColumnReport}" Style="{StaticResource Primary}" ToolTip="Open the Mega Column summary of Member_Forces_Report.html in your web browser"/>
-          <Button Content="Export PDF" Command="{Binding ExportMegaColumnPdf}" ToolTip="Print the Mega Column summary to Mega_Column_Report.pdf with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1128,7 +1123,6 @@
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenSupportReactionReport}" Style="{StaticResource Primary}" ToolTip="Open Support_Reactions_Report.html in your web browser"/>
           <Button Content="Regenerate" Command="{Binding RegenerateSupportReactionReport}" ToolTip="Rebuild Support_Reactions_Report.html from Study_Raw_Results.json — no SAP"/>
-          <Button Content="Export PDF" Command="{Binding ExportSupportReactionPdf}" ToolTip="Print the Support Reactions summary (Left foundation, as the report opens) to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1144,7 +1138,6 @@
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenCableForceReport}" Style="{StaticResource Primary}" ToolTip="Open Cable_Forces_Report.html in your web browser"/>
           <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Regenerate Tab 06 outputs from raw JSON using the current fpu / &#966; capacities — no SAP"/>
-          <Button Content="Export PDF" Command="{Binding ExportCableForcePdf}" ToolTip="Print Cable_Forces_Report.html to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>

@@ -28,9 +28,12 @@ internal sealed class ReportPage
           querySelectorAll: function(){ return []; }, querySelector: function(){ return null; },
           body: __el("body"), documentElement: { clientWidth: 1400, setAttribute: function(){} }
         };
+        var __store = JSON.parse(__storage);
         var window = {
           addEventListener: function(type, handler){ (__handlers[type] = __handlers[type] || []).push(handler); },
-          print: function(){ __printed++; }, innerWidth: 1400, innerHeight: 900, location: { hash: __hash }
+          print: function(){ __printed++; }, innerWidth: 1400, innerHeight: 900, location: { hash: __hash },
+          localStorage: { getItem: function(key){ return Object.prototype.hasOwnProperty.call(__store, key) ? __store[key] : null; },
+                          setItem: function(key, value){ __store[key] = String(value); }, removeItem: function(key){ delete __store[key]; } }
         };
         function __fire(type){ (__handlers[type] || []).forEach(function(handler){ handler({}); }); }
         """;
@@ -41,12 +44,14 @@ internal sealed class ReportPage
     /// <param name="hash">URL fragment the page is opened with, e.g. "#print&amp;paper=A3".</param>
     /// <param name="scripts">How many of the page's scripts to run. 1 = the print engine alone, for a report
     /// whose own script needs a real browser DOM.</param>
-    public ReportPage(string html, string hash = "", int scripts = int.MaxValue)
+    /// <param name="storage">What the browser already keeps in localStorage, by key.</param>
+    public ReportPage(string html, string hash = "", int scripts = int.MaxValue, IReadOnlyDictionary<string, string>? storage = null)
     {
         var markup = Regex.Replace(html, "(<script[^>]*>).*?</script>", "$1</script>", RegexOptions.Singleline);   // tags, not script text
         StaticIds = Regex.Matches(markup, "\\bid=\"([^\"]+)\"").Select(match => match.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
 
         engine.SetValue("__hash", hash);
+        engine.SetValue("__storage", System.Text.Json.JsonSerializer.Serialize(storage ?? new Dictionary<string, string>()));
         engine.Execute(Dom);
         // embedded data blocks first, then every script in document order — as a browser would
         foreach (Match data in Regex.Matches(html,
@@ -84,6 +89,8 @@ internal sealed class ReportPage
     public int PrintCalls => (int)engine.Evaluate("__printed").AsNumber();
     public void Run(string js) => engine.Execute(js);
     public string Eval(string js) => engine.Evaluate($"String({js})").AsString();
+    /// <summary>What the page left in localStorage under <paramref name="key"/>, or "".</summary>
+    public string Stored(string key) => engine.Evaluate($"String(window.localStorage.getItem('{key}') || '')").AsString();
     /// <summary>Dispatch a window event ("load", "beforeprint", "afterprint").</summary>
     public void Fire(string type) => engine.Execute($"__fire('{type}')");
 

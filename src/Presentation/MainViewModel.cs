@@ -793,16 +793,9 @@ public sealed partial class MainViewModel : Observable
     public Command RegenerateSupportReactionReport { get; }
     public Command OpenCableForceReport { get; }
     public Command RegenerateCableForceReport { get; }
-    public Command ExportCableForcePdf { get; }
-    public Command ExportDeflectionPdf { get; }
-    public Command ExportMemberForcePdf { get; }
     public Command OpenTopChordReport { get; }
     public Command OpenBottomChordReport { get; }
-    public Command ExportTopChordPdf { get; }
-    public Command ExportBottomChordPdf { get; }
     public Command OpenMegaColumnReport { get; }
-    public Command ExportMegaColumnPdf { get; }
-    public Command ExportSupportReactionPdf { get; }
     public Command BrowsePrintLogo { get; }
     public Command ClearPrintLogo { get; }
     public Command OpenResultsWorkbook { get; }
@@ -946,23 +939,13 @@ public sealed partial class MainViewModel : Observable
         GeneratePostProcessOutputs = new(_ => GenerateStudyOutputs(), () => !IsBusy);
         RegenerateDeflectionReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
         RegenerateCableForceReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
-        ExportCableForcePdf = new(_ => ExportReportPdf(CableForceReportPath), () => !IsBusy && HasCableForceReport);
-        ExportDeflectionPdf = new(_ => ExportReportPdf(DeflectionReportPath), () => !IsBusy && HasDeflectionReport);
-        ExportMemberForcePdf = new(_ => ExportReportPdf(MemberForceReportPath), () => !IsBusy && HasMemberForceReport);
         // Modules 02 / 03 / 05 open the member-force report straight on their own Summary.
         OpenTopChordReport = new(_ => TryOpenFile(SummaryReportPath(MemberForceReportGenerator.TopChordFileName) ?? MemberForceReportPath),
             () => HasMemberForceReport);
         OpenBottomChordReport = new(_ => TryOpenFile(SummaryReportPath(MemberForceReportGenerator.BottomChordFileName) ?? MemberForceReportPath),
             () => HasMemberForceReport);
-        ExportTopChordPdf = new(_ => ExportSummaryPdf(MemberForceReportGenerator.TopChordFileName, MemberGroupSummary.Top),
-            () => !IsBusy && HasMemberForceReport);
-        ExportBottomChordPdf = new(_ => ExportSummaryPdf(MemberForceReportGenerator.BottomChordFileName, MemberGroupSummary.Bottom),
-            () => !IsBusy && HasMemberForceReport);
         OpenMegaColumnReport = new(_ => TryOpenFile(SummaryReportPath(MemberForceReportGenerator.MegaColumnFileName) ?? MemberForceReportPath),
             () => HasMemberForceReport);
-        ExportMegaColumnPdf = new(_ => ExportSummaryPdf(MemberForceReportGenerator.MegaColumnFileName, MemberGroupSummary.MegaColumn),
-            () => !IsBusy && HasMemberForceReport);
-        ExportSupportReactionPdf = new(_ => ExportReportPdf(SupportReactionReportPath), () => !IsBusy && HasSupportReactionReport);
         BrowsePrintLogo = new(_ =>
         {
             var dialog = new OpenFileDialog { Filter = ReportPrintEngine.LogoFileFilter, CheckFileExists = true, Title = "Company logo for report printouts" };
@@ -1733,44 +1716,6 @@ public sealed partial class MainViewModel : Observable
         if (!HasMemberForceReport || Path.GetDirectoryName(MemberForceReportPath!) is not { } folder) return null;
         var path = Path.Combine(folder, launcherFileName);
         return File.Exists(path) ? path : null;
-    }
-
-    /// <summary>Print one group's Summary to its own PDF; without that group, the whole member-force report.</summary>
-    private void ExportSummaryPdf(string launcherFileName, string kind)
-    {
-        if (SummaryReportPath(launcherFileName) is { } launcher)
-            ExportReportPdf(MemberForceReportPath, $"summary={kind}", Path.ChangeExtension(launcher, ".pdf"));
-        else
-            ExportReportPdf(MemberForceReportPath);
-    }
-
-    /// <summary>Print a generated report to a vector PDF beside it, with the header / footer embedded when the
-    /// report was generated, then open it. Runs a headless browser in the background — no SAP2000.</summary>
-    /// <param name="options">Report options for the export URL, e.g. <c>summary=top</c>.</param>
-    /// <param name="pdfPath">Where to write the PDF; default is the report's own name with .pdf.</param>
-    private async void ExportReportPdf(string? reportPath, string? options = null, string? pdfPath = null)
-    {
-        if (IsBusy) return;
-        if (string.IsNullOrEmpty(reportPath) || !File.Exists(reportPath))
-        {
-            Message = "Generate the report before exporting it to PDF.";
-            return;
-        }
-        IsBusy = true;
-        Message = $"Printing {Path.GetFileName(reportPath)} to PDF...";
-        try
-        {
-            var result = await Task.Run(() => ReportPdfExporter.Export(reportPath, pdfPath, options));
-            Message = $"{Path.GetFileName(result.PdfPath)} written in {result.Elapsed.TotalSeconds:0.0} s with the Print Setup " +
-                      "from the last Generate / Regenerate. Charts are vector graphics.";
-            TryOpenFile(result.PdfPath);
-        }
-        catch (Exception ex)
-        {
-            Message = ex.Message;
-            Warn("Export PDF", ex.Message, warning: true);
-        }
-        finally { IsBusy = false; }
     }
 
     private void AddPostProcessRow(COT_VCF.Domain.Results.CandidateResultDto dto)

@@ -368,10 +368,10 @@ change the engineering content, not the identity.
   its embedded data with Jint (test-only package, shared harness `tests/ReportPage.cs`) through the
   `window.cableReport` handle (`setMode`, `setLoad`, `applyGroups`, `autoDetect`, `resetGroups`), including the
   DOM-id regression check.
-- Printing: the report uses the shared print engine below (toolbar `Print report ▾`, Module 07 `Export PDF`). On paper it
-  re-lays its charts out against the sheet, keeps one pretension candidate (Side A + Side B) together per page where
-  it fits, prints a `Printed view:` line (value mode · load · grouping) and leaves the Source Data table out unless
-  asked for.
+- Printing: the report uses the shared print engine below (toolbar `Print Report`). On paper it re-lays its
+  charts out against the sheet, keeps one pretension candidate (Side A + Side B) together per page where it fits,
+  prints a `Printed view:` line (value mode · load · grouping) and leaves the Source Data table out unless asked
+  for.
 
 ## Tab 06 Post-Processing · Modules 02 / 03 / 05 Top Chord, Bottom Chord and Mega Column (`Member_Forces_Report.html`)
 
@@ -425,9 +425,8 @@ the generic views.
   drills into a chord. A URL fragment cannot be passed through the Windows shell, so generation writes tiny
   launcher pages, `Top_Chord_Report.html` / `Bottom_Chord_Report.html` / `Mega_Column_Report.html` (removed when
   the study has no such group). Modules 02 / 03 / 05 `View Report` open the launcher (`OpenTopChordReport` /
-  `OpenBottomChordReport` / `OpenMegaColumnReport`), and their `Export PDF` print that Summary to
-  `Top_Chord_Report.pdf` / `Bottom_Chord_Report.pdf` / `Mega_Column_Report.pdf`; without the group they fall
-  back to the whole member-force report. Module 04 (Vierendeel) is unchanged.
+  `OpenBottomChordReport` / `OpenMegaColumnReport`); without the group they fall back to the whole member-force
+  report. `Print Report` in the report prints the Summary it is showing. Module 04 (Vierendeel) is unchanged.
 - Checks: `tests/MemberForceReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
   `tests/ReportPage.cs`) through `window.memberReport.summary(groupIndex, 'summary' | 'station', pretensionId)`.
 
@@ -483,8 +482,8 @@ legend, chart text, values table); do not fork that CSS per report.
 - **Tooltips / traceability**: candidate · height · side, role · joint, signed MN, behaviour (Fz), source kN and
   result step, iteration key and loading, output case; the net shows `Σ Fx = Fx198 + Fx200 = …`. A collapsed
   `Reaction values` table (optional on paper) lists the kN source of every bar.
-- **Paper**: the Summary re-lays its charts at the sheet width (`reportPrint.register`), two chart rows per sheet;
-  `Export PDF` prints the report as it opens (Summary, Left foundation).
+- **Paper**: the Summary re-lays its charts at the sheet width (`reportPrint.register`); a chart card continues
+  on the next sheet between its rows. `Print Report` prints the view and side the report is showing.
 - **Deep links**: `#group=Right|all`, `#view=supports|totals|matrix`, `#detail=candidate&load=L01&pretension=P03&height=H02`.
 - Checks: `tests/SupportReactionReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
   `tests/ReportPage.cs`) through `window.reactionReport.summary('summary' | 'candidate', { loadId, pretensionId, heightId })`.
@@ -539,17 +538,63 @@ Qualifies the stored candidates against acceptance criteria and writes the exist
   set with untouched full reports, identity and NQ marks through the report scripts, staleness, 1,000 candidates)
   and the `--study-ui` Tab 06A block (enabled state, live qualification, filter, generate).
 
-## Report Print Engine (`ReportPrintEngine`, Tab 06 Print Setup, Export PDF)
+## Report Print Engine (`ReportPrintEngine`, Print Report screen, Tab 06 Print Setup)
 
-Reports stay one self-contained HTML file; paper output is produced by the report itself with CSS Paged Media, so
-the browser's Print and the app's PDF export give the same pages. **Every HTML view is on the engine**: Deflection,
-Member Forces, Support Reactions, Cable Forces, the Tab 06A Optimization Summary and the per-candidate diagnostics.
-A new report
-must plug in the same way — do not give a report its own print header / footer.
+Reports stay one self-contained HTML file and **the application exports no PDF**. Printing and saving as PDF happen
+in the report: its `Print Report` button opens a composition screen — setup on the left, a live preview of the
+sheets on the right — and what the preview shows is what the browser prints. **Every HTML view is on the engine**:
+Deflection, Member Forces, Support Reactions, Cable Forces, the Tab 06A Optimization Summary and the per-candidate
+diagnostics. A new report must plug in the same way — do not give a report its own print header / footer, and do
+not put an export button back in the app (`Export PDF`, the `Export*Pdf` commands and `ReportPdfExporter` under
+`src/` are gone on purpose).
 
-- **Print Setup** (`ReportPrintSettings`, Tab 06 card `PRINT SETUP · HEADER / FOOTER`, above module 01): company,
-  logo file, project, job no., revision, prepared by, checked by, footer note, default paper (A4 / A3 / Letter),
-  orientation, page numbers, date, include Source Data. It is a **per-user preference**
+- **Print Report screen** (`window.reportPrint`, `#pr-screen`): the `Print Report` button — accent-outlined,
+  placed straight after the main toolbar controls in every report, never behind hint or status text — opens the
+  screen; it never calls the browser's print dialog itself. Left (`#pr-setup`): Company, Project, Job No.,
+  Revision, Prepared by, Checked by, Footer note, Logo (`Choose…` / `Remove`), Paper (A4 / A3 / Letter),
+  Orientation, Page numbers, Date, Include source data table, `Print / Save as PDF`, `Use this report's defaults`.
+  Right (`#pr-pages`): the composed sheets, with a page count and a preview size (`Fit width` / `Whole page` /
+  `100 %`). Every edit re-stamps or re-composes the sheets at once. `Print / Save as PDF` is the only thing that
+  opens the browser dialog; `✕ Close` returns to the report and leaves nothing behind (no `pr-*` class on `body`).
+- **Sheets, not paged media**: the preview's `.pr-sheet` elements (`.pr-head` / `.pr-body` / `.pr-foot`, sized
+  from the paper in mm) *are* the printout — `@page{size:W H;margin:0}`, one sheet per page. While printing the
+  live report is clipped to zero height, not `display:none`, so SVG pattern definitions still resolve. Bands:
+  24 mm header, 16 mm footer, 10 mm sides. Header: logo (or company) left, report name · model centre, project over
+  `Job No. … · Rev …` right. Footer: company over `Prepared by … · Checked by …` left, note centre, date over
+  `Page N of M` right. Ctrl+P prints the same sheets (`beforeprint` / `afterprint`).
+- **Fixed content order**, whatever the order on screen: information → legends → general notes → summary →
+  charts → source tables. Legends and general notes are stated once, under one `Legend · general notes` heading
+  before the first chart — the same legend under several charts collapses to one (same content = same legend).
+  A note that belongs to one chart stays inside that chart's block and travels with it.
+- **A report marks its blocks**; the engine clones them out of the live DOM, so the report on screen is untouched:
+  - `data-pr="info|legend|note|summary|chart|source"` — one printable block and its place in the order. A block is
+    kept whole on a sheet (title + chart + its notes) and is scaled down only when it is taller than a sheet;
+  - `data-pr-keep` — a heading that stays with the block after it;
+  - `data-pr-split="selector"` — a block that may continue on the next sheet between the matched parts, its frame
+    (title, table head) repeated; a single large table splits between rows anyway;
+  - `data-pr-id` / `data-pr-type` / `data-pr-title` / `data-pr-from` — identity for the report model;
+  - `data-print-controls` on the toolbar(s) + one `data-print-view` element → a `Printed view: Group: … ·
+    Component: … · Loading: all` line; `data-print-fit` on a wide table's wrapper → scaled to the sheet width;
+  - `class="no-print"` / `class="print-only"`. A tagged block nested in another is printed in its own place, not
+    twice; collapsed `<details>` are opened while composing.
+  A document that marks nothing prints its top-level blocks in the order they stand (the diagnostics).
+  Controls never print as controls: `no-print` ones are dropped, and a `select` / text input inside a block
+  becomes plain text (`span.pr-val`), so the sheet records what the chart was showing.
+- **Report model**: `reportPrint.model()` returns `{ metadata, info, legends, generalAnnotations, summary, charts,
+  sourceTables }`, each entry `{ id, type, title, duplicatedFrom, … }` in print order. `charts` is the single
+  ordered list of the chart section — a new chart is appended to it, never inserted.
+- **Paper rules are `.pr-sheet`-scoped CSS**, not `@media print`: the preview is on screen and must look like the
+  paper. Only the engine has an `@media print` block. A report whose charts are drawn against the window width
+  registers `window.reportPrint.register({ before(page), after() })` and re-lays them out for `page.contentPx` /
+  `page.contentHeightPx`. Charts are inline SVG and are never rasterised — text stays text, bars and hatches stay
+  vector, colours print exactly (`print-color-adjust: exact`). Never let content overflow a sheet.
+- **Setup values**: the report embeds the Tab 06 Print Setup as its defaults (`#print-data`). What the user types
+  in the Print Report screen is kept by the browser (`localStorage`, key `cotvcf.printSetup.v1`, shared by every
+  report opened from disk in that browser profile) and wins over the embedded defaults until `Use this report's
+  defaults`. A logo too large for the store is printed for the session and has to be chosen again next time.
+- **Tab 06 Print Setup card** (`ReportPrintSettings`, `PRINT SETUP · HEADER / FOOTER`, above module 01): the
+  starting values of that screen — company, logo file, project, job no., revision, prepared by, checked by, footer
+  note, default paper, orientation, page numbers, date, include Source Data. It is a **per-user preference**
   (`ReportPrintSettingsStore` → `%LocalAppData%\COTVCF\ReportPrintSettings.json`), saved on every edit — not part of
   the COT VCF project file, the study folder or the run fingerprint. Like capacities and criteria it is a
   post-processing input: applied on the next Generate / Regenerate (`StudyPostProcessor.Generate(…, printSettings)`).
@@ -559,51 +604,36 @@ must plug in the same way — do not give a report its own print header / footer
   reported on the card (`DescribeLogo`) and the company name is printed top-left instead. SVG prints as vector.
   Candidate diagnostics are written once per candidate, so they are described with `embedLogo: false` and print
   the company name top-left — a study with hundreds of candidates must not carry hundreds of logo copies.
-- **Page layout**: the engine script (`window.reportPrint`) builds one `@page` rule into `<style id="pr-page">`:
-  sheet size and orientation, margins (24 mm top, 16 mm bottom, 38 px sides), and the header / footer in the
-  **page-margin boxes** on every page — top-left logo (or company), top-centre project over report name · model,
-  top-right job no. · revision and date, bottom-left company and signatories, bottom-centre note, bottom-right
-  `Page N of M` (`counter(page)` / `counter(pages)`). Side boxes are whole pixels and the centre is a `calc()` of
-  the rest so the three borders print as one unbroken rule. User text goes through a CSS-string escaper; a logo
-  value that is not an embedded image is ignored. Needs Chromium 131+ (Edge / Chrome); the browser's own header and
-  footer are suppressed automatically. Firefox prints the content without the margin header / footer.
-- **Chart quality**: charts are inline SVG and are never rasterised — text stays text, bars and hatches stay
-  vector, colours print exactly (`print-color-adjust: exact`). A report registers
-  `window.reportPrint.register({ before(page), after() })` and re-lays its charts out for `page.contentPx` (the
-  sheet's content width) instead of the window; if the sheet is narrower than a comfortable design width the SVG is
-  laid out wider and scaled down by CSS (`max-width:100%`), never below 80 %.
-- **Triggers**: the report's `Print report ▾` button — accent-outlined, placed straight after the main toolbar
-  controls in every report, never behind hint or status text — opening the panel (paper, orientation, include
-  Source Data, `Print / Save as PDF`),
-  plain Ctrl+P (`beforeprint` / `afterprint`), and the URL fragment `#print[&paper=A3&orientation=portrait&source=1]`
-  which lays the page out for paper on load. Report-specific options ride on the same fragment (Cable Forces:
-  `mode=ut`, `load=L02`).
-- **Export PDF** (`ReportPdfExporter`; an `Export PDF` button on every module 01–08, modules 02–05 sharing the
-  member-force report): runs the installed Edge (else Chrome) headless with a private profile on
-  `report.html#print` and writes `<report>.pdf` beside the report, then opens it. No SAP2000, no network. It prints
-  the report as last generated — change Print Setup, Regenerate, then export.
+- **URL fragment**: `#print[&paper=A3&orientation=portrait&source=1]` composes the sheets on load (what the checks'
+  headless browser prints); `#print=screen` opens the Print Report screen. Report-specific options ride on the
+  same fragment (Cable Forces: `mode=ut`, `load=L02`; Member Forces / Support Reactions: `group`, `component`,
+  `view`, `sampling`, `band`).
 - Engine pieces a report emits: `ReportPrintEngine.Css` (inside its `<style>`), `PageStyle` (in `<head>`),
-  `ToolbarButton` and `Panel` inside its toolbar (or `Bar` when it has none), and `Scripts(dto)` before its own
-  script. Optional hooks the engine acts on while laid out for paper (`body.pr-on`):
-  - `data-print-controls` on the toolbar(s) + one `data-print-view` element → the engine prints a
-    `Printed view: Group: … · Component: … · Loading: all` line from the hidden selects and filter buttons;
-  - `data-print="source"` on an optional data table (hidden unless *Include Source Data* — `body.pr-nosrc`);
-  - `data-print-fit` on a wide table's wrapper → scaled inside its own box to the sheet width (re-measured, floor
-    35 %). Never let content overflow the sheet: Chromium then shrinks the **whole page**. Use `body.pr-on` rules
-    (not only `@media print`) for anything that changes a table's width, so it is measured as it will print;
-  - `class="print-only"` / `class="no-print"`;
-  - `window.reportPrint.register({ before(page), after() })` for charts drawn against the window width.
-  Report-specific `@media print` rules (what to hide, `break-inside: avoid`, legend placement) stay with the report.
-- Per report: **Deflection** redraws each chart at the full sheet width (`preserveAspectRatio="none"`, so it must
-  be redrawn, not stretched), moves the legend under the chart in columns, keeps the per-chart case / view / filter
-  controls as a record, and prints the Source Data Matrix only when asked (`#print&group=N`). **Member Forces** and
-  **Support Reactions** print the current toolbar view — one chart block per page-fit, matrix views paginate with
-  repeating headings (`#print&group=…&component=…&view=…`, plus `sampling` / `band`). The **Optimization
-  Summary** and the **diagnostics** are plain documents with the `Bar`.
-- Checks: `tests/ReportPrintChecks.cs` (settings store, logo embedding, generated page rule and escaping, screen ⇄
-  paper re-layout, `#print` options, every report carries the engine, exporter command line). The chart reports'
-  own scripts need a real browser, so `--report-pdf` (opt-in) prints every report to a real PDF with the installed
-  browser; `--study-ui` renders the Print Setup card and the eight Export PDF buttons with fakes.
+  `ToolbarButton` inside its toolbar (or `Bar` when it has none), and `Scripts(dto)` before its own script.
+- Per report:
+  - **Deflection** — the candidate definitions (`#candKey`, collapsed on screen) are the legend and the warnings
+    the general notes, both above the charts. The charts are one ordered list (`#panels`): each has its own id
+    (`chart_deflection_03`), and **`Duplicate` always appends the copy to the end of the list** with the source's
+    current state (case, view, filters, zoom, highlights) and the title `… – Copy`; the copy is independent from
+    then on. `window.deflectionReport.charts()` lists `{ id, duplicatedFrom, title }`. Each chart is redrawn at the
+    sheet width (`preserveAspectRatio="none"`, so it must be redrawn, not stretched); the Source Data Matrix
+    prints only when asked and continues over sheets by block.
+  - **Cable Forces** — legend and capacity notes once; overview and per-pretension cards as chart blocks, the
+    governing table with them; Source Data when asked.
+  - **Member Forces** — prints the current toolbar view; the chart legend once after the section heading, a
+    missing-result note inside the card it concerns, matrix views continuing over sheets with repeated headings.
+  - **Support Reactions** — KPI cards as the summary, the Inner / Outer / Σ Net legend once, one chart card per
+    P × H block continuing between rows.
+  - **Optimization Summary** — tagged in C#: KPI cards and criteria as the summary, the acceptance map and the
+    qualified-candidates table as charts, the all-candidates table as source.
+    **Diagnostics** — unmarked, printed in document order with the `Bar`.
+- Checks: `tests/ReportPrintChecks.cs` (settings store, logo embedding, sheet composition and order, saved setup,
+  `#print` options, every report carries the engine) through the Jint page in `tests/ReportPage.cs`. Real layout
+  needs a real browser: `tests/ReportPdfExporter.cs` is the checks' own headless Edge / Chrome (print to PDF,
+  `RunScript` to drive a report and read values back) — it is test tooling, not an application feature.
+  `--report-pdf` (opt-in) prints every report and drives the Print Report screen of each (order, no overflowing
+  sheet, live edits, A3 / portrait, source toggle, saved setup, print called once, clean close); `--study-ui`
+  checks the Print Setup card, the seven `View Report` buttons and that no PDF button or command is left.
 
 ## Config Project File (`src/Configuration/`)
 

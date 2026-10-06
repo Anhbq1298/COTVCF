@@ -35,15 +35,15 @@ public sealed class OptimizationSummaryReport
         var b = new StringBuilder();
         b.Append("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><title>Optimization Summary — ").Append(E(baselineName)).Append("</title>")
             .Append("<style>").Append(ReportPrintEngine.Css).Append(Style).Append(ReportSummaryTheme.Css).Append(ReportScope.Css).Append("</style>")
-            .Append(ReportPrintEngine.PageStyle).Append("</head><body><header><div><h1>Optimization Summary</h1>")
+            .Append(ReportPrintEngine.PageStyle).Append("</head><body><header><div data-pr=\"info\"><h1>Optimization Summary</h1>")
             .Append($"<div>{E(baselineName)} · {s.Total} candidate(s) · {E(studyMode)}</div>")
             .Append(ReportScope.Banner(StudyOptimizationProcessor.SetLabel, StudyOptimizationProcessor.Note(q)))
-            .Append("<p>A candidate is <b>qualified</b> when it passes every active criterion. δ is the peak downward deflection −min(U<sub>z</sub>) over the monitored points; ")
+            .Append("<p data-pr=\"note\">A candidate is <b>qualified</b> when it passes every active criterion. δ is the peak downward deflection −min(U<sub>z</sub>) over the monitored points; ")
             .Append("cable utilisation is the final analysed force of a cable over its design capacity (current Tab 03 Pretension), the largest over all cables. ")
             .Append("A candidate whose result or capacity is missing is <b>not assessed</b> — never counted as qualified. The other reports of this folder show the qualified candidates only.</p>")
             .Append("</div>").Append(library).Append("</header>").Append(ReportPrintEngine.Bar)
             .Append("<main><section class=\"panel sumpanel\">")
-            .Append("<div class=\"chead\"><span class=\"cname\">Qualified Candidates</span><span class=\"cview\">Summary</span>")
+            .Append("<div class=\"chead\" data-pr=\"summary\" data-pr-keep><span class=\"cname\">Qualified Candidates</span><span class=\"cview\">Summary</span>")
             .Append($"<span class=\"sub\">{E(q.Criteria.Label)}</span></div>");
 
         // ---- KPI cards
@@ -51,7 +51,7 @@ public sealed class OptimizationSummaryReport
             $"<div class=\"kpi\" style=\"border-left-color:{colour}\"><div class=\"kl\">{E(name)}</div><div class=\"kv\">{E(value)} <span>{E(unit)}</span></div>" +
             $"<div class=\"kw\">{E(line)}</div><div class=\"kd\">{E(detail)}</div></div>";
         var share = s.Total > 0 ? (100.0 * s.Qualified / s.Total).ToString("0.#", Inv) + " % of the study" : "";
-        b.Append("<div class=\"kpis\">")
+        b.Append("<div class=\"kpis\" data-pr=\"summary\">")
             .Append(Card("Qualified", N(s.Qualified), $"of {N(s.Total)}", share, "pass every active criterion", Accent))
             .Append(Card("Not qualified", N(s.NotQualified), "", $"deflection only {N(s.FailedDeflectionOnly)} · cable only {N(s.FailedCableOnly)} · both {N(s.FailedBoth)}", "fail at least one criterion", Fail))
             .Append(Card("Not assessed", N(s.NotAssessed), "", s.NotAssessed == 0 ? "every candidate could be assessed" : "a result or a capacity is missing", "never counted as qualified", Muted))
@@ -62,7 +62,7 @@ public sealed class OptimizationSummaryReport
             .Append("</div>");
 
         // ---- criteria
-        b.Append("<div class=\"ccard\"><div class=\"ctitle\">Criteria</div><table class=\"ctable\" data-table=\"criteria\"><thead><tr><th>Criterion</th><th>Limit</th><th>Reads</th><th class=\"n\">Pass</th><th class=\"n\">Fail</th><th class=\"n\">Not assessed</th></tr></thead><tbody>");
+        b.Append("<div class=\"ccard\" data-pr=\"summary\"><div class=\"ctitle\">Criteria</div><table class=\"ctable\" data-table=\"criteria\"><thead><tr><th>Criterion</th><th>Limit</th><th>Reads</th><th class=\"n\">Pass</th><th class=\"n\">Fail</th><th class=\"n\">Not assessed</th></tr></thead><tbody>");
         void Criterion(string name, bool active, string limit, string reads, Func<CandidateQualification, CriterionVerdict> verdict) =>
             b.Append($"<tr><td>{E(name)}</td><td>{E(active ? limit : "not active")}</td><td>{E(reads)}</td>")
                 .Append(active
@@ -75,8 +75,8 @@ public sealed class OptimizationSummaryReport
 
         // ---- acceptance map
         var plotted = q.Candidates.Where(c => c.Metrics.PeakDownMm.HasValue && c.GoverningUtilisation.HasValue).ToArray();
-        b.Append("<div class=\"ccard\"><div class=\"ctitle\">Acceptance Map<span>every candidate by its δ and its governing cable utilisation · the shaded window is where both criteria pass</span></div>")
-            .Append("<div class=\"clegend\">")
+        b.Append("<div class=\"ccard\" data-pr=\"chart\" data-pr-type=\"acceptanceMap\" data-pr-id=\"chart_acceptance_map\"><div class=\"ctitle\">Acceptance Map<span>every candidate by its δ and its governing cable utilisation · the shaded window is where both criteria pass</span></div>")
+            .Append("<div class=\"clegend\" data-pr=\"legend\">")
             .Append($"<span><svg width=\"12\" height=\"12\"><circle cx=\"6\" cy=\"6\" r=\"4\" fill=\"{Accent}\"/></svg>Qualified ({N(plotted.Count(c => c.Status == QualificationStatus.Qualified))})</span>")
             .Append($"<span><svg width=\"12\" height=\"12\"><circle cx=\"6\" cy=\"6\" r=\"3.4\" fill=\"#fff\" stroke=\"{Fail}\" stroke-width=\"1.3\"/></svg>Not qualified ({N(plotted.Count(c => c.Status == QualificationStatus.NotQualified))})</span>")
             .Append($"<span><svg width=\"12\" height=\"12\"><path d=\"M2 2 L10 10 M10 2 L2 10\" stroke=\"{Muted}\" stroke-width=\"1.4\"/></svg>Not assessed ({N(plotted.Count(c => c.Status == QualificationStatus.NotAssessed))})</span>")
@@ -94,7 +94,7 @@ public sealed class OptimizationSummaryReport
                    $"<td>{E(c.GoverningCable ?? "—")}</td><td class=\"n\">{(c.GoverningForceKN is { } f ? f.ToString("#,0", Inv) : "—")}</td><td class=\"n\">{(c.GoverningCapacityKN is { } cap ? cap.ToString("#,0", Inv) : "—")}</td>" +
                    (withStatus ? $"<td class=\"st {c.Status.ToString().ToLowerInvariant()}\">{E(c.StatusText)}</td><td>{E(c.Reason)}</td>" : "") + "</tr>";
         }
-        b.Append($"<div class=\"ccard\"><div class=\"ctitle\">Qualified Candidates<span>{N(qualified.Length)} of {N(s.Total)}</span></div>");
+        b.Append($"<div class=\"ccard\" data-pr=\"chart\" data-pr-type=\"qualifiedTable\" data-pr-id=\"table_qualified\"><div class=\"ctitle\">Qualified Candidates<span>{N(qualified.Length)} of {N(s.Total)}</span></div>");
         if (qualified.Length == 0)
             b.Append("<p class=\"empty\" data-empty=\"qualified\">No candidate qualifies under these criteria — no optimized charts were generated.</p>");
         else
@@ -103,7 +103,7 @@ public sealed class OptimizationSummaryReport
         b.Append("</div>");
 
         // ---- every candidate (optional on paper)
-        b.Append("<details class=\"cdata\" data-print=\"source\"><summary>All candidates — status and governing values</summary><div class=\"matrix-wrap\" data-print-fit><table class=\"ctable\" data-table=\"all\">")
+        b.Append("<details class=\"cdata\" data-print=\"source\" data-pr=\"source\"><summary>All candidates — status and governing values</summary><div class=\"matrix-wrap\" data-print-fit><table class=\"ctable\" data-table=\"all\">")
             .Append(head).Append("<th>Status</th><th>Reason</th></tr></thead><tbody>")
             .Append(string.Concat(q.Candidates.OrderBy(c => c.Status).ThenBy(c => c.Metrics.RunIndex).Select(c => Row(c, true))))
             .Append("</tbody></table></div></details>");
@@ -186,6 +186,6 @@ public sealed class OptimizationSummaryReport
 .ccard>.ctable{margin:4px 0 6px}.ctable td.st{font-weight:600}.ctable td.st.qualified{color:#1f4788}.ctable td.st.notqualified{color:#b42318}.ctable td.st.notassessed{color:#667085}
 .alim{stroke:#344054;stroke-width:1.1;stroke-dasharray:5 3}.alab{fill:#344054;font-size:10px;font-weight:600;paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}
 [hidden]{display:none!important}
-@media print{header{display:block;padding:0 0 5px}header p,.lib{display:none!important}.panel{padding:8px 0}.matrix-wrap{max-height:none;overflow:visible}}
+.pr-sheet .panel{padding:0}.pr-sheet .matrix-wrap{max-height:none;overflow:visible}
 """;
 }

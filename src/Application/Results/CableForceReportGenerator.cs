@@ -299,13 +299,13 @@ public sealed class CableForceReportGenerator
   <pattern id="cf-loss" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="#2A78D6"/></pattern>
 </defs></svg>
 <header>
-  <div>
+  <div data-pr="info">
     <h1>Cable Forces Viewer</h1>
     <p class="meta">{{Esc(s.BaselineModelName)}} · {{Esc(s.StudyMode)}} · {{s.CandidateCount}} candidate(s) ·
       cable result case: {{Esc(s.ResultCase)}} · generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
     {{ReportScope.Banner(s.Scope)}}
     <p class="meta print-only" id="pview"></p>
-    <p class="intro"><b>Yellow</b> is the prestress target, <b>blue</b> is the change from that target to the
+    <p class="intro" data-pr="note"><b>Yellow</b> is the prestress target, <b>blue</b> is the change from that target to the
       final analysed force under the cable result case, and the <b>red dashed</b> line is the cable-force limit
       from the current Tab 03 Pretension capacity (area × fpu × φ), matched by exact cable name. A missing result
       is a gap, never 0 kN. Switch <b>Value</b> to <b>% of capacity</b> for utilisation; use <b>Cable Grouping</b>
@@ -336,9 +336,9 @@ public sealed class CableForceReportGenerator
       <span class="small" id="gstate" aria-live="polite"></span>
     </div>
   </div>
-{{ReportPrintEngine.Panel}}</div>
+</div>
 
-<div class="leg" id="legend">
+<div class="leg" id="legend" data-pr="legend">
   <span><svg width="14" height="10"><rect width="14" height="10" fill="#EDA100"/></svg>Prestress target</span>
   <span><svg width="14" height="10"><rect width="14" height="10" fill="#2A78D6"/></svg>Force pickup · target → final</span>
   <span><svg width="14" height="10"><rect width="14" height="10" fill="#EDA100"/><rect width="14" height="10" fill="url(#cf-loss)"/></svg>Force loss · final below target</span>
@@ -347,36 +347,36 @@ public sealed class CableForceReportGenerator
   <span><svg width="24" height="10"><line x1="0" y1="5" x2="24" y2="5" stroke="#C62828" stroke-width="1.75" stroke-dasharray="6 4"/></svg><i id="leglim">Cable force limit</i></span>
   <span class="small">Every bar starts at 0 · H = truss height [m] · n/a = result unavailable{{(s.Scope is null ? "" : " · " + ReportScope.MarkerMeaning)}}</span>
 </div>
+<div id="warns" data-pr="note"></div>
 
 <section class="blk">
-  <h2>01 · Cable Force Overview</h2>
-  <p class="lead" id="ovlead"></p>
+  <h2 data-pr="chart" data-pr-keep>01 · Cable Force Overview</h2>
+  <p class="lead" id="ovlead" data-pr="chart" data-pr-keep></p>
   <div id="overview"></div>
 </section>
 
 <section class="blk">
-  <h2>02 · Force Development by Pretension Candidate</h2>
-  <p class="lead" id="dtlead"></p>
+  <h2 data-pr="chart" data-pr-keep>02 · Force Development by Pretension Candidate</h2>
+  <p class="lead" id="dtlead" data-pr="chart" data-pr-keep></p>
   <div id="pnav" class="pnav"></div>
   <div id="detail"></div>
 </section>
 
 <section class="blk">
-  <h2>03 · Governing / Capacity Review</h2>
-  <p class="lead" id="govlead"></p>
-  <div id="gov" class="gov" hidden></div>
-  <div class="gvwrap"><table id="govtable" class="gv"></table></div>
-  <div id="capnotes" class="capnotes"></div>
+  <h2 data-pr="chart" data-pr-keep>03 · Governing / Capacity Review</h2>
+  <p class="lead" id="govlead" data-pr="chart" data-pr-keep></p>
+  <div id="gov" class="gov" data-pr="chart" hidden></div>
+  <div class="gvwrap" data-pr="chart" data-pr-type="governing" data-pr-id="governing"><table id="govtable" class="gv"></table></div>
+  <div id="capnotes" class="capnotes" data-pr="chart"></div>
 </section>
 
-<details class="block" data-print="source"><summary>Source Data</summary><div class="body"><div class="tablewrap"><table><thead><tr>
+<details class="block" data-print="source" data-pr="source"><summary>Source Data</summary><div class="body"><div class="tablewrap"><table><thead><tr>
   <th>Run</th><th>Candidate</th><th>Iteration Key</th><th>Load</th><th>Height</th><th>Pretension Candidate</th><th>Cable</th>
   <th>Current Group</th><th class="num">Target Prestress [kN]</th><th class="num">Final Analysed Force [kN]</th>
   <th class="num">Delta Force [kN]</th><th class="num">Delta [%]</th><th class="num">Current Capacity [kN]</th>
   <th class="num">Final Utilisation [%]</th><th>Result Status</th>
 </tr></thead><tbody id="tb"></tbody></table></div></div></details>
 
-<div id="warns"></div>
 <div id="tip" class="tip" hidden></div>
 
 <script id="report-data" type="application/json">{{json}}</script>
@@ -482,29 +482,24 @@ td{padding:5px 6px;border-bottom:1px solid #eee;white-space:nowrap}
 .num{text-align:right;font-variant-numeric:tabular-nums}.missing{color:#b42318;font-weight:600}
 #warns{padding:6px 14px;font-size:11px;color:#8a6d00}#warns .e{color:#C62828}
 a{color:var(--acc)}
-/* paper: the sheet, margins, header and footer come from the shared print engine */
-@media print{
-  header{display:block;padding:0 0 5px;border-bottom:1px solid var(--bd)}
-  .intro,.lib,#bar,.pnav,.tip{display:none!important}
-  .leg{padding:5px 0;gap:3px 14px;font-size:10px}
-  section.blk{border-bottom:0;padding:8px 0 0}
-  .lead{max-width:none;margin:0 0 6px;font-size:10.5px;break-inside:avoid;break-after:avoid}
-  .card,.pblk,.gov{break-inside:avoid}
-  .card,.pblk{margin:0 0 8px}
-  .ph{break-after:avoid}
-  .cwrap{overflow:visible;padding:3px 4px 0}
-  .gov,.gvwrap,.capnotes{max-width:none}
-  .gvwrap{overflow:visible}
-  details.block{margin:10px 0 0;border:0}
-  details.block>summary{list-style:none;padding:0 0 4px;background:none}
-  details.block>summary::-webkit-details-marker{display:none}
-  .body{border-top:0;padding:0}
-  .tablewrap{max-height:none;overflow:visible}
-  /* a table wider than the sheet would be cut off at the paper edge: let cells wrap instead */
-  th{position:static}th,td{white-space:normal}
-  .tablewrap table{font-size:8.5px}.tablewrap th,.tablewrap td{padding:2px 4px}
-  #warns{padding:8px 0 0}
-}
+#warns:empty{display:none}
+/* on a sheet of the Print Report screen: the sheet, header and footer come from the shared print engine */
+.pr-sheet .intro{max-width:none;margin:0 0 6px}
+.pr-sheet .leg{padding:0 0 6px;gap:3px 14px;font-size:10px;border:0}
+.pr-sheet h2{margin:6px 0 3px}
+.pr-sheet .lead{max-width:none;margin:0 0 6px;font-size:10.5px}
+.pr-sheet .card,.pr-sheet .ph{margin:0 0 8px}.pr-sheet .ph{margin-bottom:4px}
+.pr-sheet .cwrap{overflow:visible;padding:3px 4px 0}
+.pr-sheet .gov,.pr-sheet .gvwrap,.pr-sheet .capnotes{max-width:none}
+.pr-sheet .gvwrap{overflow:visible}
+.pr-sheet details.block{margin:0;border:0}
+.pr-sheet details.block>summary{padding:0 0 4px;background:none}
+.pr-sheet .body{border-top:0;padding:0}
+.pr-sheet .tablewrap{max-height:none;overflow:visible}
+/* a table wider than the sheet would be cut off at the paper edge: let cells wrap instead */
+.pr-sheet th{position:static}.pr-sheet th,.pr-sheet td{white-space:normal}
+.pr-sheet .tablewrap table{font-size:8.5px}.pr-sheet .tablewrap th,.pr-sheet .tablewrap td{padding:2px 4px}
+.pr-sheet #warns{padding:0 0 6px}
 """;
 
     // Self-contained report script: everything is rendered client-side from the embedded #report-data, so the
@@ -732,7 +727,7 @@ function renderOverview(width, sc, bl){
   if (!list.length || !D.cables.length){ el("overview").innerHTML = '<p class="empty">No cable-force results for this loading candidate.</p>'; return; }
   el("overview").innerHTML = list.map(ov => {
     const c = overviewChart(ov, bl.filter(b => b.cables.length), width, sc);
-    return `<div class="card"><div class="ch"><span class="ct">${esc(hShort(ov.heightM))} · truss height ${mText(ov.heightM)} m</span>`
+    return `<div class="card" data-pr="chart" data-pr-type="cableOverview" data-pr-id="overview_${esc(ov.loadId)}_${esc(ov.heightId)}"><div class="ch"><span class="ct">${esc(hShort(ov.heightM))} · truss height ${mText(ov.heightM)} m</span>`
       + `<span class="cs">Height candidate ${esc(ov.heightId)} · ${esc(ov.note)}${c.exceed ? ` · <b>${c.exceed} of ${c.n} cables above limit</b>` : ""}</span></div><div class="cwrap">${c.svg}</div></div>`;
   }).join("");
 }
@@ -838,12 +833,13 @@ function renderDetail(width, sc, bl){
        : !(n.a + n.b) ? " <b>No side grouping is applied</b> — all cables are charted together until you assign them under Cable Grouping." : "");
   if (!pres.length || !D.cables.length){ el("pnav").innerHTML = ""; el("detail").innerHTML = '<p class="empty">No cable-force results for this loading candidate.</p>'; return; }
   el("pnav").innerHTML = "Jump to " + pres.map((p, i) => `<a href="#pc-${i}">${esc(p.id)}</a>`).join("");
-  el("detail").innerHTML = pres.map((p, i) => `<div class="pblk" id="pc-${i}"><div class="ph"><b>${esc(p.id)}</b><span>${esc(pretNote(p))}</span></div>`
+  el("detail").innerHTML = pres.map((p, i) => `<div class="pblk" id="pc-${i}"><div class="ph" data-pr="chart" data-pr-keep><b>${esc(p.id)}</b><span>${esc(pretNote(p))}</span></div>`
     + bl.map(b => {
         const title = `<span class="ct">${esc(p.id)} — ${esc(b.label)}</span>`;
-        if (!b.cables.length) return `<div class="card"><div class="ch">${title}</div><p class="empty">No cables assigned to ${esc(b.label)}.</p></div>`;
+        const mark = `data-pr="chart" data-pr-type="cableDetail" data-pr-id="detail_${esc(p.id)}_${esc(b.key || b.label)}"`;
+        if (!b.cables.length) return `<div class="card" ${mark}><div class="ch">${title}</div><p class="empty">No cables assigned to ${esc(b.label)}.</p></div>`;
         const c = detailChart(p, b, width, sc);
-        return `<div class="card"><div class="ch">${title}<span class="cs">${b.cables.length} cable${b.cables.length === 1 ? "" : "s"} × ${D.heights.length} height${D.heights.length === 1 ? "" : "s"}`
+        return `<div class="card" ${mark}><div class="ch">${title}<span class="cs">${b.cables.length} cable${b.cables.length === 1 ? "" : "s"} × ${D.heights.length} height${D.heights.length === 1 ? "" : "s"}`
           + (c.missing ? ` · ${c.missing} result${c.missing === 1 ? "" : "s"} unavailable` : "")
           + (c.exceed ? ` · <b>${c.exceed} of ${c.n - c.missing} above limit</b>` : "") + `</span></div><div class="cwrap">${c.svg}</div></div>`;
       }).join("") + "</div>").join("");

@@ -5,9 +5,9 @@ using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
 using COT_VCF.Infrastructure;
 
-/// <summary>The shared report print engine: Print Setup, logo embedding, the paged layout the report builds for
-/// itself (sheet, margins, header / footer in the page margins), the screen ⇄ paper chart re-layout, and the
-/// headless PDF exporter's command line.</summary>
+/// <summary>The shared Print Report mechanism: Print Setup defaults and logo embedding, the sheets a report composes
+/// for itself (size, header and footer, the saved setup), the order of its blocks, the screen ⇄ paper chart
+/// re-layout — and, with a real browser (<c>--report-pdf</c>), the Print Report screen itself.</summary>
 internal static class ReportPrintChecks
 {
     private const string TinyPng =
@@ -22,7 +22,8 @@ internal static class ReportPrintChecks
         {
             Settings(folder);
             Logo(folder);
-            PageRules(folder);
+            Sheets(folder);
+            SavedSetup();
             CableReportOnPaper(folder);
             EveryReportPrints(folder);
             Exporter(folder);
@@ -99,77 +100,106 @@ internal static class ReportPrintChecks
         Check(dto is { Logo: "", Company: "ACME" }, "a logo that cannot be embedded simply prints the company name instead");
     }
 
-    // ---------- the @page rule the report builds for itself ----------
+    // ---------- the sheets a report composes for itself ----------
 
-    private static void PageRules(string folder)
+    private static void Sheets(string folder)
     {
         var gen = new CableForceReportGenerator();
         var report = gen.Build(Study(loads: 1), "Model.sdb", IterationStudyMode.Combined, "CASE-1", Capacities());
         var logo = Path.Combine(folder, "logo.png");
         var settings = new ReportPrintSettings
         {
-            CompanyName = "ACME Structures", LogoPath = logo, ProjectName = "Tower \"A\" \\ Phase 2\nx", JobNumber = "24-0187",
+            CompanyName = "ACME Structures", LogoPath = logo, ProjectName = "Tower \"A\" <2> & Co", JobNumber = "24-0187",
             PreparedBy = "M. Bui", CheckedBy = "T. Nguyen", Revision = "B", FooterNote = "Preliminary",
         };
         var html = gen.BuildHtml(report, ReportPrintEngine.Describe(settings, CableForceReportGenerator.ReportTitle, "Model.sdb", Issued));
-        Check(html.Contains("<style id=\"pr-page\" media=\"print\">") && html.Contains("@media print") && html.Contains("id=\"print-data\"") &&
-              html.Contains("id=\"pr-btn\"") && html.Contains("Print / Save as PDF") && html.Contains("data-print=\"source\""),
-            "the report carries the print engine: page-rule holder, print stylesheet, settings block, Print button and panel");
+        Check(html.Contains("<style id=\"pr-page\" media=\"print\">") && html.Contains("id=\"print-data\"") && html.Contains(".pr-sheet{") &&
+              Regex.IsMatch(html, "<button id=\"pr-btn\"[^>]*>Print Report</button>") && html.Contains("Print / Save as PDF") &&
+              html.Contains("id=\"pr-screen\"") && html.Contains("Report setup"),
+            "the report carries the Print Report mechanism: the button, the setup screen with its preview, the sheet styles");
+        Check(Regex.Matches(html, "@media print").Count == 1 && !html.Contains("@top-left") && !html.Contains("counter(page"),
+            "paper rules live on the sheets — one print stylesheet, the engine's, shows the sheets and nothing else");
 
         var page = new ReportPage(html);
         var css = page.Eval("window.reportPrint.css()");
-        Check(css.StartsWith("@page{size:A4 landscape;margin:24mm 38px 16mm 38px;", StringComparison.Ordinal) && page.Text("pr-page") == css,
-            "the sheet and its margins come from an @page rule built from the Print Setup");
-        Check(Regex.IsMatch(css, "@top-left\\{[^}]*content:\"\";background:url\\(\"data:image/png;base64," + Regex.Escape(TinyPng) + "\"\\) no-repeat left bottom"),
-            "the company logo is printed in the top-left page-margin box");
-        Check(css.Contains("content:\"Tower \\\"A\\\" \\\\ Phase 2 x\" \"\\A \" \"Cable Forces · Model.sdb\";", StringComparison.Ordinal),
-            "header centre: project over report name and model — quotes, backslashes and line breaks cannot leave the CSS string");
-        Check(css.Contains("content:\"Job No. 24-0187 · Rev B\" \"\\A \" \"05 Oct 2026\";", StringComparison.Ordinal),
-            "header right: job number, revision and the date the report was generated");
-        Check(css.Contains("content:\"ACME Structures\" \"\\A \" \"Prepared by M. Bui · Checked by T. Nguyen\";", StringComparison.Ordinal) &&
-              css.Contains("content:\"Preliminary\";", StringComparison.Ordinal) &&
-              css.Contains("content:\"Page \" counter(page) \" of \" counter(pages);", StringComparison.Ordinal),
-            "footer: company and signatories, the note, and Page N of M");
-        foreach (var (band, share) in new[] { ("top", "left"), ("bottom", "left") })
-        {
-            var side = int.Parse(Regex.Match(css, $"@{band}-{share}\\{{[^}}]*width:(\\d+)px").Groups[1].Value);
-            var centre = Regex.Match(css, $"@{band}-center\\{{[^}}]*width:calc\\(297mm - (\\d+)px\\)").Groups[1].Value;
-            var right = Regex.Match(css, $"@{band}-right\\{{[^}}]*width:(\\d+)px").Groups[1].Value;
-            Check(centre == (2 * 38 + 2 * side).ToString() && right == side.ToString(),
-                $"the three {band} margin boxes tile the sheet width exactly, so their rule prints as one unbroken line");
-        }
-        Check(page.Eval("window.reportPrint.page().contentPx") == "1046" && page.Value("pr-paper") == "A4" && page.Value("pr-orient") == "landscape" &&
-              page.Text("pr-info").Contains("logo") && page.Text("pr-info").Contains("Print Setup"),
-            "the Print panel opens on the Print Setup sheet and says what the header and footer carry");
+        Check(css == "@page{size:297mm 210mm;margin:0}" && page.Text("pr-page") == css,
+            "a sheet is the whole page: the page rule gives the paper size and no margins — header and footer are part of each sheet");
+        Check(page.Eval("window.reportPrint.page().sheetWidthPx") == "1122" && page.Eval("window.reportPrint.page().sheetHeightPx") == "793" &&
+              page.Eval("window.reportPrint.page().contentPx") == "1046" && page.Eval("window.reportPrint.page().contentHeightPx") == "642",
+            "A4 landscape: the sheet, and inside its header band, footer band and side margins the area charts are laid out against");
 
-        page.Run("__els['pr-paper'].onchange({ target: { value: 'A3' } })");
-        Check(page.Eval("window.reportPrint.css()").StartsWith("@page{size:A3 landscape;", StringComparison.Ordinal) &&
-              page.Eval("window.reportPrint.page().contentPx") == "1511" && page.Text("pr-page").Contains("calc(420mm - "),
-            "choosing A3 in the report rebuilds the page rule and the width charts are laid out against");
-        page.Run("__els['pr-orient'].onchange({ target: { value: 'portrait' } })");
-        page.Run("__els['pr-paper'].onchange({ target: { value: 'Letter' } })");
-        Check(page.Eval("window.reportPrint.css()").StartsWith("@page{size:letter portrait;", StringComparison.Ordinal) &&
-              page.Eval("window.reportPrint.page().widthMm") == "215.9",
+        var head = page.Eval("window.reportPrint.headHtml()");
+        Check(head.StartsWith("<div class=\"l\"><img alt=\"\" src=\"data:image/png;base64," + TinyPng + "\"></div>", StringComparison.Ordinal),
+            "sheet header, left: the company logo");
+        Check(head.Contains("<div class=\"c\">Cable Forces<span>Model.sdb</span></div>") &&
+              head.EndsWith("<div class=\"r\"><b>Tower &quot;A&quot; &lt;2&gt; &amp; Co</b>Job No. 24-0187 · Rev B</div>", StringComparison.Ordinal),
+            "sheet header: the report name and model in the centre; project, job number and revision on the right — user text cannot leave its cell");
+        Check(page.Eval("window.reportPrint.footHtml(2, 7)") ==
+              "<div class=\"l\">ACME Structures<br>Prepared by M. Bui · Checked by T. Nguyen</div><div class=\"c\">Preliminary</div><div class=\"r\">05 Oct 2026<br>Page 2 of 7</div>",
+            "sheet footer: company and signatories, the note, the date and Page n of N");
+
+        page.Run("var s = window.reportPrint.state; s.company = '<img src=x onerror=alert(1)>'; s.logo = ''; s.showPageNumbers = false; s.showDate = false;");
+        Check(page.Eval("window.reportPrint.headHtml()").StartsWith("<div class=\"l\">&lt;img src=x onerror=alert(1)&gt;</div>", StringComparison.Ordinal) &&
+              page.Eval("window.reportPrint.footHtml(1, 3)").EndsWith("<div class=\"r\"><br></div>", StringComparison.Ordinal),
+            "without a logo the company name is printed top-left, as text; page numbers and the date can be switched off");
+
+        page.Run("window.reportPrint.state.paper = 'A3'");
+        Check(page.Eval("window.reportPrint.css()") == "@page{size:420mm 297mm;margin:0}" && page.Eval("window.reportPrint.page().contentPx") == "1511",
+            "A3 gives a larger sheet and more width for the charts");
+        page.Run("window.reportPrint.state.paper = 'Letter'; window.reportPrint.state.orientation = 'portrait'");
+        Check(page.Eval("window.reportPrint.css()") == "@page{size:215.9mm 279.4mm;margin:0}" && page.Eval("window.reportPrint.page().widthMm") == "215.9",
             "orientation and Letter paper are honoured");
-        page.Run("__els['pr-paper'].onchange({ target: { value: 'B0' } })");
-        Check(page.Eval("window.reportPrint.state.paper") == "Letter", "an unknown paper size is ignored");
 
         ReportPrintDto Print(Func<ReportPrintDto, ReportPrintDto> change) =>
             change(ReportPrintEngine.Describe(new ReportPrintSettings { CompanyName = "ACME" }, "Cable Forces", "Model.sdb", Issued));
-        string CssOf(ReportPrintDto dto) => new ReportPage(gen.BuildHtml(report, dto)).Eval("window.reportPrint.css()");
-
-        var noLogo = CssOf(Print(dto => dto));
-        Check(Regex.IsMatch(noLogo, "@top-left\\{[^}]*content:\"ACME\";") && !noLogo.Contains("url("),
-            "without a logo the company name is printed top-left");
-        var forged = CssOf(Print(dto => dto with { Logo = "x\") } body{display:none} @page{ (\"" }));
-        Check(!forged.Contains("url(") && !forged.Contains("display:none"), "a logo value that is not an embedded image is never written into the page rule");
-        var bare = CssOf(Print(dto => dto with { ShowPageNumbers = false, ShowDate = false, Company = "" }));
-        Check(!bare.Contains("counter(page)") && !bare.Contains("05 Oct 2026") && bare.Contains("content:\"Cable Forces\" \"\\A \" \"Model.sdb\";"),
-            "page numbers and date can be switched off; the report name and model are always printed");
-
+        var forged = new ReportPage(gen.BuildHtml(report, Print(dto => dto with { Logo = "x\"><script>alert(1)</script>" })));
+        Check(forged.Eval("window.reportPrint.state.logo") == "" && forged.Eval("window.reportPrint.headHtml()").StartsWith("<div class=\"l\">ACME</div>", StringComparison.Ordinal),
+            "a logo value that is not an embedded image is never written into a sheet");
         var plain = new ReportPage(gen.BuildHtml(report));
-        Check(plain.Eval("window.reportPrint.css()").Contains("counter(pages)") && plain.RequestedIds.All(plain.StaticIds.Contains),
-            "a report generated without a Print Setup still prints with a header, footer and page numbers");
+        Check(plain.Eval("window.reportPrint.headHtml()") == "<div class=\"l\"></div><div class=\"c\">Cable Forces<span>Model.sdb</span></div><div class=\"r\"></div>" &&
+              plain.Eval("window.reportPrint.footHtml(1, 1)").Contains("Page 1 of 1") && plain.RequestedIds.All(plain.StaticIds.Contains),
+            "a report generated without a Print Setup still prints its name, model and page numbers");
+    }
+
+    // ---------- the setup the browser keeps for the user ----------
+
+    private static void SavedSetup()
+    {
+        const string key = "cotvcf.printSetup.v1";
+        var gen = new CableForceReportGenerator();
+        var report = gen.Build(Study(loads: 1), "Model.sdb", IterationStudyMode.Combined, "CASE-1", Capacities());
+        var html = gen.BuildHtml(report, ReportPrintEngine.Describe(
+            new ReportPrintSettings { CompanyName = "ACME", ProjectName = "Tower", PaperSize = ReportPaperSize.A3 }, "Cable Forces", "Model.sdb", Issued));
+
+        var fresh = new ReportPage(html);
+        Check(fresh.Eval("window.reportPrint.state.saved") == "false" && fresh.Eval("window.reportPrint.state.company") == "ACME" &&
+              fresh.Eval("window.reportPrint.state.paper") == "A3" && fresh.Stored(key) == "",
+            "a report opens on the Print Setup it was generated with, and stores nothing until the user changes something");
+
+        var saved = new Dictionary<string, string>
+        {
+            [key] = "{\"company\":\"Meinhardt Singapore\",\"preparedBy\":\"AB/PP\",\"paper\":\"A4\",\"orientation\":\"portrait\",\"showDate\":false,\"includeSource\":true," +
+                    "\"project\":42,\"logo\":\"javascript:alert(1)\"}",
+        };
+        var again = new ReportPage(html, storage: saved);
+        Check(again.Eval("window.reportPrint.state.saved") == "true" && again.Eval("window.reportPrint.state.company") == "Meinhardt Singapore" &&
+              again.Eval("window.reportPrint.state.preparedBy") == "AB/PP" && again.Eval("window.reportPrint.state.paper") == "A4" &&
+              again.Eval("window.reportPrint.state.orientation") == "portrait" && again.Eval("window.reportPrint.state.showDate") == "false" &&
+              again.Eval("window.reportPrint.state.includeSource") == "true",
+            "the user's latest setup, kept by the browser, is used for the next report — Company: Meinhardt Singapore, Prepared by: AB/PP");
+        Check(again.Eval("window.reportPrint.state.project") == "Tower" && again.Eval("window.reportPrint.state.logo") == "" &&
+              again.Eval("window.reportPrint.headHtml()").Contains("<div class=\"l\">Meinhardt Singapore</div>"),
+            "a stored value of the wrong kind, or a stored logo that is not an image, is ignored");
+        again.Run("window.reportPrint.reset()");
+        Check(again.Eval("window.reportPrint.state.company") == "ACME" && again.Eval("window.reportPrint.state.paper") == "A3",
+            "the report's own defaults can be brought back");
+
+        var linked = new ReportPage(html, "#print&paper=Letter&source=0", storage: saved);
+        Check(linked.Eval("window.reportPrint.state.paper") == "Letter" && linked.Eval("window.reportPrint.state.includeSource") == "false" &&
+              linked.Eval("window.reportPrint.state.company") == "Meinhardt Singapore",
+            "options in the page address win over the stored setup for that page only");
+        Check(new ReportPage(html, storage: new Dictionary<string, string> { [key] = "{ not json" }).Eval("window.reportPrint.state.company") == "ACME",
+            "an unreadable stored setup is ignored");
     }
 
     // ---------- screen ⇄ paper ----------
@@ -192,44 +222,52 @@ internal static class ReportPrintChecks
               page.Text("pview").StartsWith("Printed view: Force (kN) · load L01", StringComparison.Ordinal),
             "on screen the report is in its normal layout and keeps a one-line record of the view for the printout");
 
+        page.Run("__els['pr-btn'].onclick()");
+        Check(page.PrintCalls == 0 && page.Eval("window.reportPrint.state.open") == "true" && page.Eval("window.reportPrint.state.active") == "true" &&
+              page.BodyHasClass("pr-open"),
+            "Print Report opens the setup screen — it does not start printing");
+        page.Run("window.reportPrint.close()");
+        Check(page.Eval("window.reportPrint.state.open") == "false" && page.Eval("window.reportPrint.state.active") == "false" &&
+              !page.BodyHasClass("pr-open") && !page.BodyHasClass("pr-on") && Width(page.Charts("detail")[0]) == screen,
+            "closing the setup screen returns the report to its screen layout");
+
         page.Fire("beforeprint");                                   // Ctrl+P, the browser menu, or a headless print
         var paper = Width(page.Charts("detail")[0]);
-        Check(page.Eval("window.reportPrint.state.active") == "true" && paper != screen && paper <= 1200 &&
-              page.Charts("detail").Count == 2 * 2 && page.Charts("overview").Count == 3 && page.BodyHasClass("pr-nosrc"),
-            "printing re-lays the charts out against the sheet (never the window) and leaves the Source Data table out by default");
+        Check(page.Eval("window.reportPrint.state.active") == "true" && page.Eval("window.reportPrint.state.open") == "false" && paper != screen && paper <= 1200 &&
+              page.Charts("detail").Count == 2 * 2 && page.Charts("overview").Count == 3 && page.BodyHasClass("pr-nosrc") && page.BodyHasClass("pr-active"),
+            "the browser's own Print lays the same sheets out — charts against the sheet, never the window — without the Source Data table by default");
         Check(page.Charts("detail")[0].Contains("class=\"dl\">+") && !page.Charts("detail")[0].Contains("class=\"dl\" transform") &&
               Regex.IsMatch(page.Charts("detail")[0], "class=\"vl[^\"]*\">\\d{2},\\d{3}<"),
             "on A4 landscape the charts keep full value labels and upright percentage labels");
         page.Fire("afterprint");
-        Check(page.Eval("window.reportPrint.state.active") == "false" && Width(page.Charts("detail")[0]) == screen,
+        Check(page.Eval("window.reportPrint.state.active") == "false" && Width(page.Charts("detail")[0]) == screen && !page.BodyHasClass("pr-active"),
             "after printing the report returns to its screen layout");
 
-        page.Run("__els['pr-src'].onchange({ target: { checked: true } })");
-        page.Run("__els['pr-go'].onclick()");
-        Check(page.PrintCalls == 1 && page.Eval("window.reportPrint.state.active") == "true" && !page.BodyHasClass("pr-nosrc") && page.Checked("pr-src"),
-            "the Print button lays the page out and opens the browser's print dialog; Include Source Data is honoured");
+        page.Run("window.reportPrint.state.includeSource = true; window.reportPrint.print()");
+        Check(page.PrintCalls == 1 && page.Eval("window.reportPrint.state.active") == "true" && !page.BodyHasClass("pr-nosrc"),
+            "Print / Save as PDF lays the sheets out and opens the browser's print dialog; Include source data table is honoured");
         page.Fire("afterprint");
 
-        page.Run("__els['pr-paper'].onchange({ target: { value: 'A3' } })");
+        page.Run("window.reportPrint.state.paper = 'A3'");
         page.Fire("beforeprint");
         Check(Width(page.Charts("detail")[0]) > paper && Width(page.Charts("detail")[0]) <= 1501, "a larger sheet gives the charts more room instead of scaling them");
         page.Fire("afterprint");
 
-        // opened by the PDF exporter: laid out for paper as soon as it has loaded, with the options from the URL
+        // opened for printing: laid out for paper as soon as it has loaded, with the options from the page address
         var exported = new ReportPage(html, "#print&paper=A3&orientation=portrait&mode=ut&load=L02&source=1");
         Check(exported.Eval("window.reportPrint.state.active") == "true" && exported.Eval("window.reportPrint.state.paper") == "A3" &&
               exported.Eval("window.reportPrint.state.orientation") == "portrait" && !exported.BodyHasClass("pr-nosrc") &&
-              exported.Text("pr-page").StartsWith("@page{size:A3 portrait;", StringComparison.Ordinal),
+              exported.Text("pr-page") == "@page{size:297mm 420mm;margin:0}",
             "opened with #print the report is in print layout on load, on the requested sheet");
         Check(exported.Value("load") == "L02" && exported.Text("pview").StartsWith("Printed view: % of capacity · load L02", StringComparison.Ordinal) &&
               exported.Charts("detail").All(chart => chart.Contains("data-limit=\"util\"")),
-            "the exporter can choose the value mode and the loading candidate to print");
+            "the page address can choose the value mode and the loading candidate to print");
         exported.Fire("afterprint");
-        Check(exported.Eval("window.reportPrint.state.active") == "true", "an exported page stays in print layout");
+        Check(exported.Eval("window.reportPrint.state.active") == "true", "a page opened for printing stays in print layout");
         var ignored = new ReportPage(html, "#print&paper=Poster&load=L99&mode=xyz&%E0%A4%A=1");
         Check(ignored.Eval("window.reportPrint.state.paper") == "A4" && ignored.Value("load") == "L01" &&
               ignored.Text("pview").Contains("Force (kN)"),
-            "unknown or malformed URL options fall back to the report defaults");
+            "unknown or malformed options fall back to the report defaults");
     }
 
     // ---------- every report and diagnostic is on the engine ----------
@@ -242,10 +280,10 @@ internal static class ReportPrintChecks
         {
             var html = File.ReadAllText(path);
             var perCandidate = name == "diagnostic";
-            Check(html.Contains("<style id=\"pr-page\" media=\"print\">") && html.Contains("id=\"print-data\"") && html.Contains("@media print") &&
-                  html.Contains("id=\"pr-btn\"") && html.Contains("Print / Save as PDF") &&
+            Check(html.Contains("<style id=\"pr-page\" media=\"print\">") && html.Contains("id=\"print-data\"") && Regex.Matches(html, "@media print").Count == 1 &&
+                  Regex.IsMatch(html, "<button id=\"pr-btn\"[^>]*>Print Report</button>") && html.Contains("Print / Save as PDF") &&
                   !html.Contains("http://") && !html.Contains("https://") && !html.Contains("cdn."),
-                $"{name}: carries the print engine (page rule, print stylesheet, Print button) and stays self-contained");
+                $"{name}: has a Print Report button on the shared mechanism, keeps its paper rules on the sheets, and stays self-contained");
             Check(html.Contains("\"project\":\"Tower\"") && html.Contains("\"jobNumber\":\"24-0187\"") &&
                   html.Contains("data:image/png;base64,") == !perCandidate && (!perCandidate || html.Contains("\"logo\":\"\"")),
                 perCandidate ? $"{name}: embeds the Print Setup without a logo copy in every candidate file (company name top-left)"
@@ -253,11 +291,12 @@ internal static class ReportPrintChecks
 
             // the engine alone: these reports' own scripts need a real browser, which the opt-in --report-pdf check uses
             var page = new ReportPage(html, scripts: 1);
-            var css = page.Eval("window.reportPrint.css()");
-            Check(css.StartsWith("@page{size:A4 landscape;", StringComparison.Ordinal) && css.Contains($"\"{title} · Model.sdb\"") &&
-                  css.Contains("\"Tower\"") && css.Contains("counter(pages)") && css.Contains("url(\"data:image/png") == !perCandidate &&
-                  page.RequestedIds.All(page.StaticIds.Contains),
-                $"{name}: prints \"{title}\" with the project, logo and page numbers in the page margins");
+            var head = page.Eval("window.reportPrint.headHtml()");
+            Check(page.Eval("window.reportPrint.css()") == "@page{size:297mm 210mm;margin:0}" && head.Contains($"<div class=\"c\">{title}<span>Model.sdb</span></div>") &&
+                  head.Contains("<b>Tower</b>Job No. 24-0187") && head.Contains("<img alt=\"\" src=\"data:image/png") == !perCandidate &&
+                  (!perCandidate || head.StartsWith("<div class=\"l\">ACME</div>", StringComparison.Ordinal)) &&
+                  page.Eval("window.reportPrint.footHtml(1, 2)").Contains("Page 1 of 2") && page.RequestedIds.All(page.StaticIds.Contains),
+                $"{name}: prints \"{title}\" with the project, logo and page numbers on every sheet");
             page.Fire("beforeprint");
             var onPaper = page.BodyHasClass("pr-on") && page.BodyHasClass("pr-nosrc");
             page.Fire("afterprint");
@@ -267,13 +306,132 @@ internal static class ReportPrintChecks
         var files = GenerateAll(Path.Combine(folder, "hooks"), print).ToDictionary(item => item.Name, item => File.ReadAllText(item.Path));
         Check(new[] { "deflection", "member", "support" }.All(name => files[name].Contains("data-print-controls") && files[name].Contains("data-print-view")),
             "chart reports hand their toolbar to the engine, which prints what the hidden filters were set to");
-        Check(files["deflection"].Contains("id=\"matrixWrap\" data-print=\"source\"") && files["deflection"].Contains("id=\"matrix\" data-print-fit") &&
+        Check(files["deflection"].Contains("id=\"matrixWrap\" data-print=\"source\" data-pr=\"source\"") && files["deflection"].Contains("id=\"matrix\" data-print-fit") &&
               files["member"].Contains("class=\"matrix-wrap\" data-print-fit") && files["support"].Contains("class=\"matrix-wrap\" data-print-fit") &&
-              files["cable"].Contains("data-print=\"source\""),
+              files["cable"].Contains("data-print=\"source\" data-pr=\"source\""),
             "source tables are optional on paper, and wide matrices are scaled to the sheet instead of being cut off");
         Check(files["deflection"].Contains("PRINT.register(") && files["deflection"].Contains("printW || chart.clientWidth") &&
               files["member"].Contains("OPT.group") && files["support"].Contains("OPT.group") && files["deflection"].Contains("OPT.group"),
-            "Deflection redraws its charts for the sheet, and each chart report accepts its view from the export URL");
+            "Deflection redraws its charts for the sheet, and each chart report accepts its view from the page address");
+
+        // content order: information, legends and general notes come before the charts — in the page itself too
+        static bool Before(string html, string first, string second) => html.IndexOf(first, StringComparison.Ordinal) is var a and >= 0 && html.IndexOf(second, StringComparison.Ordinal) > a;
+        Check(new[] { "deflection", "member", "support", "cable", "optimization" }.All(name => files[name].Contains("data-pr=\"info\"") && files[name].Contains("data-pr=\"note\"")) &&
+              new[] { "deflection", "member", "support", "cable", "optimization" }.All(name => files[name].Contains("data-pr=\"legend\"") && files[name].Contains("data-pr=\"chart\"")),
+            "every report marks its blocks by role: information, legend, general note, chart");
+        Check(Before(files["deflection"], "<details id=\"candKey\" data-pr=\"legend\">", "<div id=\"panels\">") &&
+              Before(files["deflection"], "<div id=\"warns\" data-pr=\"note\">", "<div id=\"panels\">") &&
+              Before(files["cable"], "<div class=\"leg\" id=\"legend\" data-pr=\"legend\">", "01 · Cable Force Overview") &&
+              Before(files["cable"], "<div id=\"warns\" data-pr=\"note\">", "01 · Cable Force Overview") &&
+              Before(files["member"], "<div id=\"warnings\" data-pr=\"note\">", "<main id=\"panels\">") &&
+              Before(files["support"], "<div id=\"warnings\" data-pr=\"note\">", "<main id=\"panels\">"),
+            "legends, candidate definitions and warnings stand ahead of the chart section — never between or after the charts");
+        Check(files["member"].Contains("<div class=\"clegend\" data-pr=\"legend\">") && !files["member"].Contains("</div>${legend}${summaryChart") &&
+              files["support"].Contains("</p>${roleLegend()}${kpiCards()}") && !files["support"].Contains("${roleLegend(comp)}"),
+            "a summary states its legend once, ahead of its charts, instead of repeating it in every chart");
+        Check(files["deflection"].Contains("function makePanel(init){") && files["deflection"].Contains("panelsEl.appendChild(host);") &&
+              !files["deflection"].Contains("anchorAfter") && files["deflection"].Contains("+' – Copy'") && files["deflection"].Contains("from:id"),
+            "Deflection keeps its charts as one ordered list: a chart — a duplicate too — always joins the end, with its own id");
+    }
+
+    // ---------- the Print Report screen in a real browser ----------
+
+    /// <summary>What every report's Print Report screen must do, read back from the browser.</summary>
+    private const string ScreenScript = """
+        let printed = 0; window.print = () => { printed++; };
+        const R = window.reportPrint, q = s => document.querySelector(s), qa = s => Array.from(document.querySelectorAll(s));
+        const sheets = () => qa('#pr-pages > .pr-sheet');
+        const order = () => qa('#pr-pages .pr-body [data-pr], #pr-pages .pr-sec').map(e => e.classList.contains('pr-sec') ? '[' + e.textContent + ']' : e.getAttribute('data-pr')).join(' ');
+        const DR = window.deflectionReport;
+        if (DR){
+          DR.duplicate(0); DR.duplicate(0); DR.duplicate(1);
+          log('charts', DR.charts().map(c => c.id + '<' + (c.duplicatedFrom || '') + ':' + c.title).join(' | '));
+          log('chartDom', qa('#panels > section.panel').map(x => x.getAttribute('data-pr-id')).join(','));
+          const name = qa('#panels > section.panel').pop().querySelector('.pv-name'); name.value = 'Renamed copy'; name.dispatchEvent(new Event('input')); name.dispatchEvent(new Event('change'));
+          log('titles', DR.charts().map(c => c.title).join(' | '));
+        }
+        q('#pr-btn').click();
+        log('opened', !q('#pr-screen').hidden && !q('#pr-screen').classList.contains('pr-ghost') && getComputedStyle(q('#pr-screen')).position === 'fixed');
+        log('printedOnOpen', printed);
+        log('layout', Math.round(q('.pr-setup').getBoundingClientRect().right) <= Math.round(q('#pr-view').getBoundingClientRect().left) + 1);
+        log('fields', qa('#pr-screen input[data-k]').map(i => i.getAttribute('data-k')).join(',') + '|' + ['pr-logo-pick','pr-paper','pr-orient','pr-numbers','pr-date','pr-src','pr-go'].filter(id => !!document.getElementById(id)).join(','));
+        log('sheets', sheets().length);
+        log('size', sheets()[0].style.width + 'x' + sheets()[0].style.height);
+        log('order', order());
+        const m = R.model();
+        log('model', ['info','legends','generalAnnotations','summary','charts','sourceTables'].map(k => k + '=' + m[k].length).join(' '));
+        log('modelCharts', m.charts.filter(c => c.type !== 'heading').map(c => c.id).join(','));
+        log('head', sheets()[0].querySelector('.pr-head').innerText.replace(/\s+/g, ' ').trim());
+        log('logo', !!sheets()[0].querySelector('.pr-head img'));
+        log('footLast', sheets()[sheets().length - 1].querySelector('.pr-foot').innerText.replace(/\s+/g, ' ').trim());
+        const gone = e => getComputedStyle(e).display === 'none' || !e.getClientRects().length;
+        log('controlsHidden', qa('#pr-pages .no-print').every(gone) && !qa('#pr-pages select, #pr-pages textarea, #pr-pages input[type=text], #pr-pages input:not([type])').length
+          && qa('#pr-pages button').every(b => gone(b) || (getComputedStyle(b).borderTopWidth === '0px' && /rgba\(0, 0, 0, 0\)|transparent/.test(getComputedStyle(b).backgroundColor))));
+        log('vector', qa('#pr-pages svg').length + ' svg, ' + qa('#pr-pages canvas, #pr-pages .pr-body img').length + ' raster');
+        log('overflow', sheets().filter(s => { const b = s.querySelector('.pr-body'); return b.scrollHeight > b.clientHeight + 1; }).length);
+        const type = (key, value) => { const i = q('#pr-screen input[data-k="' + key + '"]'); i.value = value; i.dispatchEvent(new Event('input')); };
+        type('company', 'Meinhardt Singapore'); type('preparedBy', 'AB/PP');
+        log('typed', sheets().every(s => s.querySelector('.pr-foot .l').innerText.includes('Meinhardt Singapore') && s.querySelector('.pr-foot .l').innerText.includes('Prepared by AB/PP')));
+        log('stored', (localStorage.getItem('cotvcf.printSetup.v1') || '').includes('"company":"Meinhardt Singapore"'));
+        const before = sheets().length;
+        const pick = (id, value) => { const s = q(id); s.value = value; s.dispatchEvent(new Event('change')); };
+        pick('#pr-paper', 'A3'); log('a3', sheets()[0].style.width + 'x' + sheets()[0].style.height);
+        pick('#pr-orient', 'portrait'); log('a3portrait', sheets()[0].style.width + 'x' + sheets()[0].style.height);
+        pick('#pr-paper', 'A4'); pick('#pr-orient', 'landscape');
+        log('restored', sheets().length === before);
+        q('#pr-src').click();
+        log('source', qa('#pr-pages [data-pr="source"]').length + ' in ' + sheets().length + ' sheets; last=' + order().split(' ').pop());
+        q('#pr-src').click();
+        q('#pr-numbers').click(); q('#pr-date').click();
+        log('noNumbers', JSON.stringify(sheets()[0].querySelector('.pr-foot .r').innerText.trim()));
+        q('#pr-numbers').click(); q('#pr-date').click();
+        q('#pr-go').click(); log('printedOnGo', printed);
+        q('#pr-close').click();
+        log('closed', q('#pr-screen').hidden && !sheets().length && document.body.className.trim() === '');
+        localStorage.removeItem('cotvcf.printSetup.v1');
+        """;
+
+    private static void PrintReportScreen(string folder, string logo)
+    {
+        var print = new ReportPrintSettings { CompanyName = "ACME", LogoPath = logo, ProjectName = "Tower", JobNumber = "24-0187", Revision = "B", FooterNote = "Preliminary" };
+        foreach (var (name, title, path) in GenerateAll(folder, print))
+        {
+            var r = ReportPdfExporter.RunScript(path, ScreenScript);
+            var tagged = name != "diagnostic";
+            if (r.TryGetValue("ERROR", out var error)) throw new Exception($"FAIL: {name}: the Print Report check script stopped — {error} (after: {string.Join(", ", r.Keys)})");
+            Check(r["opened"] == "true" && r["printedOnOpen"] == "0" && r["layout"] == "true",
+                $"{name}: Print Report opens a setup screen — settings on the left, the preview on the right — and does not print");
+            Check(r["fields"] == "company,project,jobNumber,revision,preparedBy,checkedBy,footerNote|pr-logo-pick,pr-paper,pr-orient,pr-numbers,pr-date,pr-src,pr-go",
+                $"{name}: the setup has Company, Project, Job No., Revision, Prepared by, Checked by, Footer note, Logo, Paper, Orientation, Page numbers, Date and Include source data table");
+            Check(int.Parse(r["sheets"]) >= 1 && r["size"] == "1122pxx793px" && r["overflow"] == "0" && r["head"].Contains(title) && r["head"].Contains("Tower") &&
+                  r["head"].Contains("Job No. 24-0187 · Rev B") && r["logo"] == (tagged ? "true" : "false") && r["footLast"].EndsWith($"Page {r["sheets"]} of {r["sheets"]}", StringComparison.Ordinal),
+                $"{name}: the preview is {r["sheets"]} A4 landscape sheet(s), each with the header and footer, none overflowing");
+            if (tagged)
+            {
+                var order = r["order"].Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(role => !role.StartsWith('[') && !role.EndsWith(']') && role is "info" or "legend" or "note" or "summary" or "chart" or "source").ToArray();
+                string[] rank = ["info", "legend", "note", "summary", "chart", "source"];
+                Check(order.Length > 2 && order[0] == "info" && order.Contains("legend") && order.Contains("chart") &&
+                      order.Zip(order.Skip(1)).All(pair => Array.IndexOf(rank, pair.First) <= Array.IndexOf(rank, pair.Second)) && r["order"].Contains("[Legend"),
+                    $"{name}: the sheets run information → legends → general notes → summary → charts ({r["model"]})");
+            }
+            Check(r["controlsHidden"] == "true" && r["vector"].EndsWith(", 0 raster", StringComparison.Ordinal),
+                $"{name}: buttons and filters are not on the sheets, and the charts stay vector graphics ({r["vector"]})");
+            Check(r["typed"] == "true" && r["stored"] == "true" && r["a3"] == "1587pxx1122px" && r["a3portrait"] == "1122pxx1587px" && r["restored"] == "true",
+                $"{name}: typing Company and Prepared by updates every sheet at once and is kept by the browser; paper and orientation re-lay the sheets");
+            Check(r["noNumbers"] == "\"\"" && r["printedOnGo"] == "1" && r["closed"] == "true",
+                $"{name}: page numbers and date can be switched off; Print / Save as PDF prints once; Close restores the report");
+            if (name is "deflection" or "support" or "cable" or "optimization")
+                Check(int.Parse(r["source"].Split(' ')[0]) > 0 && r["source"].EndsWith("last=source", StringComparison.Ordinal),
+                    $"{name}: Include source data table adds the source table after the charts ({r["source"]})");
+            if (name != "deflection") continue;
+            Check(r["chartDom"] == "chart_deflection_01,chart_deflection_02,chart_deflection_03,chart_deflection_04" && r["modelCharts"] == r["chartDom"] &&
+                  r["charts"].Split(" | ").Select(c => c.Split(':')[0]).SequenceEqual(["chart_deflection_01<", "chart_deflection_02<chart_deflection_01",
+                      "chart_deflection_03<chart_deflection_01", "chart_deflection_04<chart_deflection_02"]),
+                "deflection: Duplicate appends the copy to the END of the charts — A, A–Copy, A–Copy, (A–Copy)–Copy — on screen, in the model and on the sheets");
+            var titles = r["titles"].Split(" | ");
+            Check(titles.Length == 4 && titles[3] == "Renamed copy" && titles[0] == titles[1].Replace(" – Copy", "") && titles[1].EndsWith(" – Copy", StringComparison.Ordinal),
+                "deflection: a copy starts from its source's configuration and name, and is independent afterwards");
+        }
     }
 
     /// <summary>One of every report on the engine, generated the way Tab 06 does.</summary>
@@ -328,7 +486,9 @@ internal static class ReportPrintChecks
         var arguments = ReportPdfExporter.BuildArguments(html, pdf, Path.Combine(folder, "profile"), "#paper=A3&mode=ut");
         Check(arguments.Contains("--headless=new") && arguments.Contains("--no-pdf-header-footer") &&
               arguments.Contains("--print-to-pdf=" + pdf) && arguments.Contains("--user-data-dir=" + Path.Combine(folder, "profile")),
-            "the PDF exporter prints headless, with its own profile and without the browser's own header and footer");
+            "the checks' browser prints headless, with its own profile and without the browser's own header and footer");
+        Check(!typeof(ReportPrintEngine).Assembly.GetTypes().Any(type => type.Name.Contains("Pdf", StringComparison.OrdinalIgnoreCase)),
+            "the application has no PDF exporter of its own: a report is printed, or saved as PDF, from its Print Report screen");
         Check(arguments[^1].StartsWith("file:///", StringComparison.Ordinal) && arguments[^1].Contains("My%20Study/Cable%20Forces.html") &&
               arguments[^1].EndsWith("#print&paper=A3&mode=ut", StringComparison.Ordinal) &&
               ReportPdfExporter.BuildArguments(html, pdf, "p")[^1].EndsWith("Cable%20Forces.html#print", StringComparison.Ordinal),
@@ -340,8 +500,9 @@ internal static class ReportPrintChecks
         Check(threw && !File.Exists(Path.Combine(folder, "nothing.pdf")), "exporting a report that was never generated fails clearly and writes nothing");
     }
 
-    /// <summary>Opt-in (<c>--report-pdf</c>): prints every report to a real PDF with the installed browser — the
-    /// one place the chart reports' own scripts run. Needs Microsoft Edge or Google Chrome; never touches SAP2000.</summary>
+    /// <summary>Opt-in (<c>--report-pdf</c>): with the installed browser, prints every report to a real PDF and
+    /// drives the Print Report screen — the one place the chart reports' own scripts and the composed sheets meet a
+    /// layout engine. Needs Microsoft Edge or Google Chrome; never touches SAP2000.</summary>
     public static void RunPdfExport()
     {
         var folder = Path.Combine(Path.GetTempPath(), "cotvcf_pdf_" + Guid.NewGuid().ToString("N"));
@@ -376,6 +537,7 @@ internal static class ReportPrintChecks
                     Check(new FileInfo(view.PdfPath).Length > 15_000, $"support: the {label} view printed to a {new FileInfo(view.PdfPath).Length / 1024} KB PDF");
                 }
             }
+            PrintReportScreen(Path.Combine(folder, "screen"), logo);
         }
         finally { try { Directory.Delete(folder, true); } catch { } }
     }

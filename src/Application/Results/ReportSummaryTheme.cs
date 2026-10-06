@@ -29,6 +29,9 @@ internal static class ReportSummaryTheme
 .kl{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#475467}
 .kv{font:600 22px/1.25 Segoe UI,Arial;font-variant-numeric:tabular-nums}.kv span{font-size:12px;font-weight:400;color:#666}.kv.none{font-size:15px;color:#666}
 .kw{font-size:12px;font-weight:600;color:#1f4788}.kd{font-size:11px;color:#666}
-@media print{.kpis{max-width:none}.kpi{break-inside:avoid}.sumpanel{padding:8px 0;break-inside:auto}.chead{break-after:avoid}.ccard{break-inside:avoid;max-width:none}.cdata>summary{list-style:none}.cdata>summary::-webkit-details-marker{display:none}.ctable th{position:static}}
+.sumpanel>.clegend{margin:0 0 9px}
+/* on a sheet of the Print Report screen */
+.pr-sheet .kpis,.pr-sheet .ccard,.pr-sheet .cnote{max-width:none}.pr-sheet .sumpanel{padding:0}.pr-sheet .chead{margin:6px 0 5px}.pr-sheet .ccard{margin:0 0 8px}
+.pr-sheet .clegend{margin:0 0 7px}.pr-sheet .ctable th{position:static}.pr-sheet .cdata>summary{padding:0 0 3px}
 """;
 }
