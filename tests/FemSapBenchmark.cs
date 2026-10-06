@@ -22,6 +22,14 @@ internal sealed record SapReferenceCandidate(string Key, string Load, string Hei
 internal sealed record SapReference(string ModelName, DateTimeOffset GeneratedAt, string CableCase, string DeflectionCase,
     string ReactionCase, List<SapReferenceCandidate> Candidates);
 
+/// <summary>Frame forces SAP2000 reported along one frame object, one entry per output station: the distance from the
+/// I-end, the frame element the row belongs to (SAP2000 meshes a frame object at the joints along it and reports a
+/// station at such a joint once for each element), and P, V2, M3 there.</summary>
+internal sealed record SapFrameForces(string Group, double[] StationM, int[] Element, double[] P, double[] V2, double[] M3);
+
+/// <summary>Frame forces of a completed study, kept beside the reference in a file of their own: candidate → frame.</summary>
+internal sealed record SapMemberReference(string Case, Dictionary<string, Dictionary<string, SapFrameForces>> Candidates);
+
 /// <summary>
 /// Internal FEM against SAP2000, like for like, on a real study (<c>--fem-sap</c>).
 /// <para><b>Same model.</b> The FEM inputs are read from SAP2000's own text copy of the baseline model
@@ -41,8 +49,18 @@ internal static class FemSapBenchmark
 {
     public const string DefaultFolder = "tests/fem-sap-benchmark";
     public const string ModelFile = "model.s2k", ProjectFile = "project.json", ReferenceFile = "sap-results.json";
+    /// <summary>Optional: SAP2000's frame forces along the monitored members. Without it the members are not compared.</summary>
+    public const string MemberFile = "sap-member-forces.json";
+    /// <summary>The page data of the member comparison, written beside the report.</summary>
+    public const string MemberReportFile = "fem-vs-sap-members.json";
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    // station arrays: one line per file instead of one line per number
+    private static readonly JsonSerializerOptions Compact = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
+    // Frame mesh of the FEM. Results at mesh nodes do not depend on it; with the members compared, 20 segments put a
+    // node on every 0.5 m output station of a 10 m chord panel.
+    private const int MeshSegments = 2, MemberMeshSegments = 20;
 
     // ΣFz does not depend on stiffness: with the same loads the two analyses must agree almost exactly (observed 0.0013 %).
     private const double TotalLoadTolerancePercent = 0.01;
@@ -71,8 +89,22 @@ internal static class FemSapBenchmark
                 }, StringComparer.Ordinal));
         }
         var candidates = new List<SapReferenceCandidate>();
+        var memberForces = new Dictionary<string, Dictionary<string, SapFrameForces>>(StringComparer.Ordinal);
         foreach (var result in raw.Results.OrderBy(item => item.Parameters.RunIndex))
         {
+            var frames = new Dictionary<string, SapFrameForces>(StringComparer.Ordinal);
+            foreach (var group in (result.MemberForceGroups ?? []).Where(group => string.Equals(group.OutputCase, raw.MemberForceResultCase, StringComparison.OrdinalIgnoreCase)))
+                foreach (var frame in group.Stations.Where(station => station.Status == ResultValueStatus.Valid).GroupBy(station => station.FrameName, StringComparer.Ordinal))
+                {
+                    // a static case reports every station as 'Max' and as 'Min' with the same values; one of them, at the final step
+                    var (stepType, step) = (frame.First().StepType, frame.Max(station => station.StepNumber));
+                    var rows = frame.Where(station => station.StepType == stepType && station.StepNumber == step).ToArray();
+                    var elements = rows.Select(row => row.ElementName).Distinct(StringComparer.Ordinal).ToList();
+                    double[] Column(Func<MemberForceStationResultDto, double> value, int digits) => rows.Select(row => Math.Round(value(row), digits)).ToArray();
+                    frames[frame.Key] = new(group.GroupName, Column(row => row.ObjectStationM, 6), rows.Select(row => elements.IndexOf(row.ElementName)).ToArray(),
+                        Column(row => row.P, 3), Column(row => row.V2, 3), Column(row => row.M3, 3));
+                }
+            if (frames.Count > 0) memberForces[result.IterationKey] = frames;
             var cables = (result.CableForces ?? []).Where(cable => cable.Status == ResultValueStatus.Valid && cable.ForceKN is not null).ToArray();
             var deflections = result.Groups.Where(group => string.Equals(group.OutputCase, raw.DeflectionOutputCase, StringComparison.OrdinalIgnoreCase))
                 .SelectMany(group => group.Points).Where(point => point.Status == ResultValueStatus.Valid && point.UzMm is not null)
@@ -99,8 +131,13 @@ internal static class FemSapBenchmark
         File.WriteAllText(Path.Combine(folder, ProjectFile), project.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
         File.WriteAllText(Path.Combine(folder, ReferenceFile), JsonSerializer.Serialize(
             new SapReference(raw.BaselineModelName, raw.GeneratedAt, raw.CableResultCase, raw.DeflectionOutputCase, raw.FoundationReactionResultCase, candidates), Json));
+        var memberPath = Path.Combine(folder, MemberFile);
+        if (memberForces.Count > 0)
+            File.WriteAllText(memberPath, JsonSerializer.Serialize(new SapMemberReference(raw.MemberForceResultCase, memberForces), Compact));
+        else if (File.Exists(memberPath)) File.Delete(memberPath);
         Console.WriteLine($"Captured {candidates.Count} SAP2000 candidates of {raw.BaselineModelName} into {folder}" +
-            $" — cable lengths read from {childModels} child model text files.");
+            $" — cable lengths read from {childModels} child model text files" +
+            (memberForces.Count > 0 ? $", frame forces of {memberForces.Values.Max(frames => frames.Count)} frames in {memberForces.Count} candidates." : "."));
     }
 
     private sealed class Failures : IProgress<FemProgress>
@@ -173,7 +210,11 @@ internal static class FemSapBenchmark
         var tab01 = state.LoadDefinitions.Select(definition => definition.LoadName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var pretension = state.Cables.Select(cable => cable.LoadPattern).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         var applied = state.AppliedPoints.Select(point => point.PointName).ToArray();
-        var resultCases = new[] { reference.CableCase, reference.ReactionCase, reference.DeflectionCase }.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var memberPath = Path.Combine(folder, MemberFile);
+        var members = File.Exists(memberPath) ? JsonSerializer.Deserialize<SapMemberReference>(File.ReadAllText(memberPath), Compact) : null;
+        var mesh = members is null ? MeshSegments : MemberMeshSegments;
+        var resultCases = new[] { reference.CableCase, reference.ReactionCase, reference.DeflectionCase, members?.Case }.OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         FemLoadPlan Plan(Func<FemCaseRow, bool> run, IReadOnlyDictionary<string, FemSectionProperties> properties)
         {
             var (patternRows, caseRows, combinationRows) = FemLoadPlan.RowsFromSap(loading, tab01, pretension);
@@ -193,7 +234,7 @@ internal static class FemSapBenchmark
         {
             var failures = new Failures();
             var runs = service.Analyze(state.Baseline, top, middle, bottom, supports, which, properties, failures, default, tolerance,
-                PlanarFrameSolver.DefaultTargetFitIterations, 2, loadPlan, cableSag);
+                PlanarFrameSolver.DefaultTargetFitIterations, mesh, loadPlan, cableSag);
             if (failures.Items.Count > 0) throw new InvalidOperationException("FEM cases did not solve: " + string.Join(" | ", failures.Items.Take(5)));
             return runs;
         }
@@ -261,7 +302,7 @@ internal static class FemSapBenchmark
         var everyCase = Plan(row => row.Supported, sections);
         var subset = candidates.Where((_, index) => index % 15 == 0).ToArray();
         var subsetRuns = service.Analyze(state.Baseline, top, middle, bottom, supports, subset, sections, null, default, tolerance,
-            PlanarFrameSolver.DefaultTargetFitIterations, 2, everyCase, true);
+            PlanarFrameSolver.DefaultTargetFitIterations, mesh, everyCase, true);
         Check(everyCase.FitCases.Count > 1 && subsetRuns.Count == subset.Length && subsetRuns.All(run =>
                 run.ResultFor(reference.CableCase).Cables.Zip(physical[run.Id].ResultFor(reference.CableCase).Cables)
                     .All(pair => Math.Abs(pair.First.AxialForceKN - pair.Second.AxialForceKN) < 1e-6 * Math.Max(1, pair.Second.AxialForceKN))),
@@ -297,10 +338,34 @@ internal static class FemSapBenchmark
                     result => target.DeflectionMm.Keys.Max(point => -result.Joints.Single(item => item.PointName == point).UZM * 1000));
         }
 
+        // Member forces: SAP2000's P, V2, M3 at its own output stations against the FEM at the same place of the same frame.
+        var memberComparison = members is null ? null
+            : CompareMembers(members, candidates, candidate => builder.BuildCandidateGeometry(state.Baseline, top, middle, bottom, candidate.Height), asModelled, mesh, sections);
+
         // The report is written before anything is judged, so a disagreement can be read in full.
         Directory.CreateDirectory(reportFolder);
-        var report = Report(reference, model, plan, samples, candidates.Length, tolerance, supports, longestStretch);
+        var report = Report(reference, model, plan, samples, candidates.Length, tolerance, supports, longestStretch, memberComparison);
         File.WriteAllText(Path.Combine(reportFolder, "fem-vs-sap.md"), report, new UTF8Encoding(false));
+        var memberReportPath = Path.Combine(reportFolder, MemberReportFile);
+        if (memberComparison is { Samples.Count: > 0 } compared)
+        {
+            // values to the nearest kN / kNm: the largest are of the order of 10⁵
+            static IEnumerable<double> Whole(double[] values) => values.Select(value => Math.Round(value) + 0.0);
+            File.WriteAllText(memberReportPath, JsonSerializer.Serialize(new
+            {
+                Case = compared.Case, compared.ShearSign, compared.MomentSign,
+                Candidates = compared.Samples.GroupBy(sample => sample.Candidate, StringComparer.Ordinal).Select(group => new
+                {
+                    Id = group.Key, group.First().Height,
+                    Frames = group.Select(sample => new
+                    {
+                        Name = sample.Frame, sample.Group, sample.Ends, S = sample.StationM.Select(value => Math.Round(value, 3)),
+                        Sap = sample.Sap.Select(Whole), Fem = sample.Fem.Select(Whole),
+                    }),
+                }),
+            }, Compact), new UTF8Encoding(false));
+        }
+        else if (File.Exists(memberReportPath)) File.Delete(memberReportPath);
         var csv = new StringBuilder("candidate,height,quantity,name,sap,fem_sap_cable_lengths,fem_chord_cable_lengths,fem_chord_lengths_straight_cables,difference_like_for_like,difference_percent_like_for_like,difference_percent_chord_lengths\n");
         string N(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
         foreach (var sample in samples)
@@ -329,6 +394,110 @@ internal static class FemSapBenchmark
             var worst = group.Max(sample => Math.Abs(sample.Difference)) / scale * 100;
             Check(worst <= band, $"{quantity}: like for like, the FEM is within {band:0.#} % of SAP2000 over {group.Length} values (worst difference {worst:0.##} % of the largest SAP2000 value, {scale:0.#})");
         }
+
+        if (memberComparison is null) return;
+        Console.WriteLine($"      Member forces: {Path.GetFullPath(memberReportPath)}");
+        Check(memberComparison.Samples.Count > 0 && memberComparison.LengthMismatchM < 1e-3,
+            $"same members: SAP2000 reports {memberComparison.Samples.Sum(sample => sample.StationM.Length)} stations along {memberComparison.Samples.Select(sample => sample.Frame).Distinct().Count()} frames " +
+            $"in '{memberComparison.Case}', and every frame is as long in the FEM as the stations SAP2000 reports along it (largest difference {memberComparison.LengthMismatchM * 1000:0.###} mm)" +
+            (memberComparison.Skipped.Count > 0 ? $" — not compared, turned about their axis: {string.Join(", ", memberComparison.Skipped)}" : ""));
+        // One rule turns the FEM's shear and moment into SAP2000's V2 and M3 on every frame, whichever way it points.
+        var against = new List<string>();
+        foreach (var component in new[] { 1, 2 })
+        {
+            var perFrame = memberComparison.Samples.GroupBy(sample => sample.Frame, StringComparer.Ordinal).Select(group => (Frame: group.Key,
+                Dot: group.Sum(sample => sample.Sap[component].Zip(sample.Fem[component], (sapValue, femValue) => sapValue * femValue).Sum()),
+                Norm: group.Sum(sample => sample.Sap[component].Sum(value => value * value)))).ToArray();
+            var largest = perFrame.Max(item => item.Norm);
+            against.AddRange(perFrame.Where(item => item.Norm > 1e-6 * largest && item.Dot <= 0).Select(item => $"{MemberComponents[component].Symbol} of {item.Frame}"));
+        }
+        Check(against.Count == 0,
+            $"same sign convention: SAP2000's V2 is {(memberComparison.ShearSign > 0 ? "+" : "−")} the FEM's shear and M3 is {(memberComparison.MomentSign > 0 ? "+" : "−")} the FEM's moment " +
+            "about SAP2000's local axes (local 2 upward, along +X for a vertical frame) — one rule for every frame" +
+            (against.Count > 0 ? " — it does not hold for " + string.Join(", ", against.Take(8)) : ""));
+        foreach (var (component, band) in MemberBands)
+        {
+            var scale = memberComparison.Samples.Max(sample => sample.Sap[component].Max(Math.Abs));
+            var worst = memberComparison.Samples.Max(sample => sample.Sap[component].Zip(sample.Fem[component], (sapValue, femValue) => Math.Abs(femValue - sapValue)).Max()) / scale * 100;
+            Check(worst <= band, $"{MemberComponents[component].Title}: the FEM is within {band:0.#} % of SAP2000 at every station " +
+                $"(worst difference {worst:0.##} % of the largest SAP2000 value, {scale:0.#})");
+        }
+    }
+
+    private static readonly (string Symbol, string Title, string Unit)[] MemberComponents =
+        [("P", "Frame axial force P [kN]", "kN"), ("V2", "Frame shear V2 [kN]", "kN"), ("M3", "Frame moment M3 [kNm]", "kNm")];
+
+    /// <summary>As <see cref="Bands"/>, for the frame forces: largest difference at any station, in % of the largest
+    /// SAP2000 value of that component over the study.</summary>
+    private static readonly (int Component, double Percent)[] MemberBands = [(0, 5), (1, 5), (2, 5)];
+
+    /// <summary>One frame of one candidate: SAP2000's P, V2, M3 at its output stations, and the FEM's at the same
+    /// places in SAP2000's sign convention. <paramref name="Ends"/> is the frame in the candidate: X, Z of I and of J.</summary>
+    private sealed record MemberSample(string Candidate, string Height, string Group, string Frame, double[] Ends, double[] StationM, double[][] Sap, double[][] Fem);
+
+    private sealed record MemberComparison(string Case, List<MemberSample> Samples, int ShearSign, int MomentSign, double LengthMismatchM, IReadOnlyCollection<string> Skipped);
+
+    private static MemberComparison CompareMembers(SapMemberReference members, IReadOnlyList<FemStudyCandidate> candidates, Func<FemStudyCandidate, GeometryModel> shapeOf,
+        IReadOnlyDictionary<string, FemStudyRun> runs, int mesh, IReadOnlyDictionary<string, FemSectionProperties> sections)
+    {
+        var samples = new List<MemberSample>();
+        var skipped = new SortedSet<string>(StringComparer.Ordinal);
+        var lengthMismatch = 0.0;
+        foreach (var candidate in candidates)
+        {
+            if (!members.Candidates.TryGetValue(candidate.Id, out var frames)) continue;
+            var shape = shapeOf(candidate);
+            var result = runs[candidate.Id].ResultFor(members.Case);
+            foreach (var (name, sap) in frames)
+            {
+                // SAP2000's V2 and M3 are the in-plane shear and moment only while the frame is not turned about its axis
+                if (Math.Abs(sections[name].LocalAngleDeg) > 1e-9) { skipped.Add(name); continue; }
+                var member = shape.Members.Single(item => item.Name == name);
+                var (start, end) = (shape.Points[member.Start].Position, shape.Points[member.End].Position);
+                var length = Math.Sqrt(Math.Pow(end.X - start.X, 2) + Math.Pow(end.Z - start.Z, 2));
+                double cosine = (end.X - start.X) / length, sine = (end.Z - start.Z) / length;
+                lengthMismatch = Math.Max(lengthMismatch, Math.Abs(sap.StationM.Max() - length));
+                // SAP2000's local 2 lies in the vertical plane of the frame and points upward — along +X when the frame is
+                // vertical. The FEM's local y is its local x turned by +90° in XZ: the same axis, or the opposite one.
+                var orientation = Math.Abs(cosine) > 1e-6 ? Math.Sign(cosine) : -Math.Sign(sine);
+                var stations = result.Frames.Single(item => item.MemberName == name).Stations
+                    ?? throw new InvalidOperationException($"The FEM returned no stations along frame '{name}'.");
+                // the FEM splits a frame at the joints along it, as SAP2000 does: mesh + 1 stations per piece, both ends included
+                var pieces = stations.Chunk(mesh + 1).ToArray();
+                var fem = new[] { new double[sap.StationM.Length], new double[sap.StationM.Length], new double[sap.StationM.Length] };
+                foreach (var element in Enumerable.Range(0, sap.StationM.Length).GroupBy(index => sap.Element[index]))
+                {
+                    // a station at a joint along the frame belongs to two pieces; SAP2000's element says which side it is on
+                    var side = (element.Min(index => sap.StationM[index]) + element.Max(index => sap.StationM[index])) / 2 / length;
+                    foreach (var index in element)
+                    {
+                        var fraction = sap.StationM[index] / length;
+                        var piece = pieces.Where(item => item[0].Fraction - 1e-9 <= fraction && fraction <= item[^1].Fraction + 1e-9)
+                            .MinBy(item => Math.Abs((item[0].Fraction + item[^1].Fraction) / 2 - side))
+                            ?? throw new InvalidOperationException($"Station {sap.StationM[index]:0.###} m is not on frame '{name}' of {candidate.Id} ({length:0.###} m).");
+                        var position = (fraction - piece[0].Fraction) / (piece[^1].Fraction - piece[0].Fraction) * mesh;
+                        var node = Math.Clamp((int)Math.Floor(position + 1e-9), 0, mesh - 1);
+                        var weight = Math.Clamp(position - node, 0, 1);
+                        double At(Func<FemFrameStation, double> value) => value(piece[node]) * (1 - weight) + value(piece[node + 1]) * weight;
+                        fem[0][index] = At(station => station.AxialKN);
+                        fem[1][index] = orientation * At(station => station.ShearKN);
+                        fem[2][index] = orientation * At(station => station.MomentKNm);
+                    }
+                }
+                samples.Add(new(candidate.Id, candidate.HeightCandidateId, sap.Group, name, [start.X, start.Z, end.X, end.Z], sap.StationM, [sap.P, sap.V2, sap.M3], fem));
+            }
+        }
+        // Which way each analysis counts a positive shear and moment is a convention; the data settle it, and the
+        // benchmark then checks that the one rule holds on every frame.
+        int Sign(int component) => samples.Sum(sample => sample.Sap[component].Zip(sample.Fem[component], (sapValue, femValue) => sapValue * femValue).Sum()) >= 0 ? 1 : -1;
+        var (shear, moment) = (Sign(1), Sign(2));
+        foreach (var sample in samples)
+            for (var index = 0; index < sample.StationM.Length; index++)
+            {
+                sample.Fem[1][index] *= shear;
+                sample.Fem[2][index] *= moment;
+            }
+        return new(members.Case, samples, shear, moment, lengthMismatch, skipped);
     }
 
     private const string CableQuantity = "Cable force [kN]", DeflectionQuantity = "Deflection Uz [mm]", PeakQuantity = "Peak downward deflection δ [mm]",
