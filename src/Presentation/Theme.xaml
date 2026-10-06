@@ -36,6 +36,9 @@
  <SolidColorBrush x:Key="ViewportGrid" Color="#EEF0F2"/>
  <SolidColorBrush x:Key="ViewportGeom" Color="#3A4048"/>
  <SolidColorBrush x:Key="ViewportEdge" Color="#8A929C"/>
+ <!-- Section figures (Tab 08 Quantities): concrete as in the 3D view, lighter for a flat fill; steel in the accent blue -->
+ <SolidColorBrush x:Key="SectionConcrete" Color="#CFCAC0"/>
+ <SolidColorBrush x:Key="SectionSteel" Color="#1F4788"/>
 
  <BooleanToVisibilityConverter x:Key="BoolVisibility"/>
  <p:NullableDoubleConverter x:Key="NullableDouble"/>

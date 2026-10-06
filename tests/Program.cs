@@ -208,6 +208,10 @@ internal static class Program
                 Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "07  FEM") &&
                        FindVisuals<Button>(window).Any(button => Equals(button.Content, "Read from SAP")) &&
                        vm.ReadFemProperties.CanExecute(null) &&
+                       FindVisuals<ComboBox>(window).Any(combo =>
+                           System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result candidate") &&
+                       FindVisuals<ComboBox>(window).Any(combo =>
+                           System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM load case or combination") &&
                        FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemPropertiesGrid") &&
                        window.SharedViewerPane.Visibility == Visibility.Visible &&
                        vm.ShowFemPinLegend && vm.SharedViewerPinSupportPoints?.SequenceEqual(["bot", "bot2"]) == true,
@@ -238,7 +242,7 @@ internal static class Program
                 window.UpdateLayout();
                 Assert(FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemResultRowsGrid") &&
                        FindVisuals<ComboBox>(window).Any(combo =>
-                           System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result combination") &&
+                           System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result candidate") &&
                        FindVisuals<RadioButton>(window).Count(button => button.GroupName == "FemResultMode") == 5 &&
                               window.SharedViewerPane.Visibility == Visibility.Visible &&
                               ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result) && vm.FemResultRows.Count > 0,
@@ -517,9 +521,9 @@ internal static class Program
                            FindVisuals<TextBlock>(window).Any(text => text.Text == "08  QUANTITIES") && window.SharedViewerPane.Visibility == Visibility.Collapsed &&
                            quantityPicker.IsEnabled && quantityPicker.SelectedItem is null && quantityGrid.Items.Count == 0 &&
                            quantityPicker.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(["L01_H01_P01", "L01_H02_P01"]) &&
-                           quantityGrid.Columns.Select(column => column.Header as string).SequenceEqual(["Section", "Member count", "Total length m", "Concrete volume m³", "Steel mass t"]) &&
+                           quantityGrid.Columns.Select(column => column.Header as string).SequenceEqual(["Section", "Figure", "Member count", "Total length m", "Concrete volume m³", "Steel mass t"]) &&
                            FindVisuals<TextBlock>(window).Any(text => text.Text == "Select a candidate model."),
-                        "Tab 08 Quantities follows Tab 07 FEM on the full width: a dropdown of the Lxx_Hxx_Pxx candidate models and the agreed five-column table");
+                        "Tab 08 Quantities follows Tab 07 FEM on the full width: a dropdown of the Lxx_Hxx_Pxx candidate models and the agreed table with its section-figure column");
                     quantityPicker.SelectedIndex = 0;
                     Pump(() => vm.QuantityState == QuantityViewState.Ready && quantityGrid.Items.Count == 6);
                     var quantityCells = FindVisuals<TextBlock>(quantityGrid).Select(text => text.Text).ToArray();
@@ -528,6 +532,15 @@ internal static class Program
                            window.QuantityProblemText.Visibility == Visibility.Collapsed && window.QuantityNotesList.Items.Count == 0 &&
                            FindVisuals<TextBlock>(window).Any(text => text.Text.StartsWith("L01_H01_P01 · SAP2000 text export", StringComparison.Ordinal)),
                         "choosing a candidate in the dropdown shows its section breakdown, the total row and where the data came from");
+                    var sectionFigures = FindVisuals<COT_VCF.Presentation.Controls.SectionFigureView>(quantityGrid).Where(view => view.IsVisible).ToArray();
+                    var quantityRowHeights = Enumerable.Range(0, quantityGrid.Items.Count)
+                        .Select(index => ((DataGridRow)quantityGrid.ItemContainerGenerator.ContainerFromIndex(index)).ActualHeight).ToArray();
+                    Assert(sectionFigures.Length == 5 && sectionFigures.All(view => view.Figure is { Shapes.Count: > 0 } && view.ActualWidth == 64 && view.ActualHeight == 42) &&
+                           new[] { "1200 × 2000 mm", "1500 × 3000 mm", "3000 × 2500 mm", "1200 × 1200 mm", "191.5 × 191.5 mm" }
+                               .All(size => FindVisuals<TextBlock>(quantityGrid).Any(text => text.Text == size && text.IsVisible)) &&
+                           sectionFigures.Select(view => view.Figure!.Shapes.Count).SequenceEqual([2, 4, 4, 1, 1]) &&
+                           quantityRowHeights.Take(5).All(height => height >= 50) && quantityRowHeights[5] < 30,
+                        "each section row shows the figure of its section with its overall size in the Figure column; the Total row has none and keeps the compact row height");
                     var quantityBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                     quantityBitmap.Render(window);
                     var quantityEncoder = new PngBitmapEncoder(); quantityEncoder.Frames.Add(BitmapFrame.Create(quantityBitmap));

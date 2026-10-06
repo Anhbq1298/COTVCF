@@ -13,7 +13,15 @@ public sealed record QuantityRow(
     double? SteelMassT,
     bool IsTotal,
     string Detail,
-    string? Problem);
+    string? Problem,
+    QuantitySectionFigure? Figure = null)
+{
+    /// <summary>Overall width × depth of the section figure in mm. Each figure is scaled to fit its cell, so this
+    /// is what tells a 3 m column from a 0.2 m cable.</summary>
+    public string FigureSize => Figure is { } figure
+        ? string.Create(CultureInfo.InvariantCulture, $"{figure.Width * 1000:0.#} × {figure.Height * 1000:0.#} mm")
+        : "";
+}
 
 public enum QuantityViewState { NoCandidate, Loading, Ready, Unavailable, Error }
 
@@ -219,7 +227,7 @@ public sealed partial class MainViewModel
         string N(double value) => value.ToString("N3", CultureInfo.InvariantCulture);
         var gaps = takeoff.Sections.Where(section => !section.Complete).Select(section => section.Section).ToArray();
         quantityRows = takeoff.Sections.Select(section => new QuantityRow(section.Section, section.MemberCount, section.TotalLengthM, section.ConcreteVolumeM3,
-                section.SteelMassT, false, section.Basis, section.Problems.Count == 0 ? null : string.Join(Environment.NewLine, section.Problems)))
+                section.SteelMassT, false, section.Basis, section.Problems.Count == 0 ? null : string.Join(Environment.NewLine, section.Problems), section.Figure))
             .Append(new QuantityRow("Total", total.MemberCount, total.TotalLengthM, total.ConcreteVolumeM3, total.SteelMassT, true,
                 gaps.Length == 0 ? "Sum of every section of the selected candidate." : "Sum over the sections — incomplete.",
                 gaps.Length == 0 ? null

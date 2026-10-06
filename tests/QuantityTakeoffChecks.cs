@@ -235,9 +235,52 @@ internal static class QuantityTakeoffChecks
               twins.Notes.Any(note => note.Contains("VRM001") && note.Contains("VRM001-copy") && note.Contains("same two joints")),
             "two objects between the same joints with one section are both in the model, so both are counted — and pointed out");
 
+        SectionFigures(fixture, baseline, candidate);
+
         var overwritten = Calculate(fixture.Edit("FRAME SECTION ASSIGNMENTS", line => Field(line, "Frame") == "VRM003" ? Set(line, "MatProp", "S355") : line));
         Check(Near(Row(overwritten, Shs).SteelMassT, 1220.6838485313665) && Row(overwritten, Shs).Components.Select(part => part.Material).Order().SequenceEqual(["S355", "S460"]),
             "a member's material overwrite replaces the material of its (one-material) section");
+    }
+
+    // ---------- the figure of a section: its stored shapes, to scale ----------
+
+    private static (double Width, double Height, double CentreX, double CentreY) Box(IReadOnlyList<QuantityFigurePoint> outline) =>
+        (outline.Max(point => point.X) - outline.Min(point => point.X), outline.Max(point => point.Y) - outline.Min(point => point.Y),
+         (outline.Max(point => point.X) + outline.Min(point => point.X)) / 2, (outline.Max(point => point.Y) + outline.Min(point => point.Y)) / 2);
+
+    private static bool Is(IReadOnlyList<QuantityFigurePoint> outline, double width, double height, double centreX = 0, double centreY = 0) =>
+        Box(outline) is var box && Near(box.Width, width, 1e-9) && Near(box.Height, height, 1e-9) && Math.Abs(box.CentreX - centreX) < 1e-9 && Math.Abs(box.CentreY - centreY) < 1e-9;
+
+    private static void SectionFigures(ExportText fixture, QuantityTakeoff baseline, QuantityTakeoff candidate)
+    {
+        var chord = Row(baseline, Cft).Figure!;
+        Check(chord.Shapes.Select(shape => (shape.Name, shape.Material, shape.Class, shape.Outlines.Count))
+                  .SequenceEqual([("Box1", "S460", QuantityMaterialClass.Steel, 2), ("Polygon1", "C70/85", QuantityMaterialClass.Concrete, 1)]) &&
+              Near(chord.Width, 1.2) && Near(chord.Height, 2.0) && Near(chord.MinX, -0.6) && Near(chord.MaxY, 1.0) &&
+              Is(chord.Shapes[0].Outlines[0], 1.2, 2.0) && Is(chord.Shapes[0].Outlines[1], 0.9, 1.7) && Is(chord.Shapes[1].Outlines[0], 0.9, 1.7) &&
+              chord.Shapes[1].Outlines[0].Count == 4,
+            "the figure of a composite section is its stored shapes in metres, back to front: the steel tube with its opening, then the concrete that fills it");
+        var column = Row(baseline, MegaA).Figure!;
+        Check(column.Shapes.Select(shape => shape.Name).SequenceEqual(["Rectangle1", "ISection1", "ISection2", "ISection3"]) &&
+              column.Shapes.Select(shape => shape.Class).SequenceEqual([QuantityMaterialClass.Concrete, QuantityMaterialClass.Steel, QuantityMaterialClass.Steel, QuantityMaterialClass.Steel]) &&
+              Near(column.Width, 1.5) && Near(column.Height, 3.0) && Is(column.Shapes[0].Outlines[0], 1.5, 3.0) &&
+              column.Shapes.Skip(1).All(shape => shape.Outlines.Count == 1 && shape.Outlines[0].Count == 12) &&
+              Is(column.Shapes[1].Outlines[0], 0.5, 0.5) && Is(column.Shapes[2].Outlines[0], 0.5, 0.5, 0, 1.0) && Is(column.Shapes[3].Outlines[0], 0.5, 0.5, 0, -1.0) &&
+              Row(baseline, MegaB).Figure is { Width: var wide, Height: var deep } && Near(wide, 3.0) && Near(deep, 2.5),
+            "embedded I-shapes are drawn where they are stored — at y = −1, 0 and +1 m in the 1.5 × 3.0 column — in front of the concrete");
+        Check(Row(baseline, Shs).Figure is { Shapes: [{ Class: QuantityMaterialClass.Steel, Material: "S460", Outlines: [var outer, var opening] }] } &&
+              Is(outer, 1.2, 1.2) && Is(opening, 0.96, 0.96) &&
+              Row(baseline, Strand).Figure is { Shapes: [{ Class: QuantityMaterialClass.Steel, Outlines: [var strand] }] } round && Near(round.Width, 0.1915, 1e-9) && Near(round.Height, 0.1915, 1e-9) &&
+              strand.Count >= 48 &&
+              Row(candidate, "FSEC1").Figure is { Shapes: [{ Outlines: [var rolled] }] } && Is(rolled, 0.127, 0.3048) && rolled.Count == 12,
+            "a standard section is drawn from its own stored dimensions — a 1.2 m tube with 0.12 m walls, a 127 × 305 I-section — and a cable as a circle of its stored diameter");
+        var noShape = Calculate(fixture.Add("SECTION DESIGNER PROPERTIES 13 - SHAPE SOLID CIRCLE", $"   SectionName={Cft}   ShapeName=Circle1   ShapeMat=C70/85   ZOrder=3   XCenter=0   YCenter=0   Diameter=0.2"));
+        var hidden = Calculate(fixture.Edit("SECTION DESIGNER PROPERTIES 04 - SHAPE I/WIDE FLANGE", line => Field(line, "SectionName") == MegaA ? Set(line, "ZOrder", "0") : line));
+        var loose = Calculate(fixture.Edit("FRAME SECTION ASSIGNMENTS", line => Field(line, "Frame") == "VRM005" ? null : line));
+        Check(Row(noShape, Cft).Figure is null && Row(noShape, MegaA).Figure is not null &&
+              Row(loose, QuantityTakeoffCalculator.UnassignedSection).Figure is null &&
+              Row(hidden, MegaA) is { ConcreteVolumeM3: null, Figure: { } stored } && stored.Shapes.Select(shape => shape.Name).SequenceEqual(["ISection1", "ISection2", "ISection3", "Rectangle1"]),
+            "a section with a shape that is not read has no figure rather than a partial one; a section whose quantities are withheld is still drawn as it is stored");
     }
 
     // ---------- what cannot be established stays unavailable ----------
@@ -375,6 +418,10 @@ internal static class QuantityTakeoffChecks
         Check(Expected(Take(SmallModel("KN, m, C"))), "a concrete column with an embedded steel tube: the tube's walls displace concrete, its inside stays concrete (0.7696 m²)");
         Check(new[] { "N, mm, C", "Kip, in, F", "Kip, ft, F", "Lb, in, F", "KN, cm, C", "Kgf, m, C", "Tonf, mm, C" }.All(units => Expected(Take(SmallModel(units)))),
             "the same model saved in N-mm, kip-in, kip-ft, lb-in, kN-cm, kgf-m or tonf-mm gives the same metres, cubic metres and tonnes");
+        Check(new[] { "KN, m, C", "N, mm, C", "Kip, in, F" }.All(units => Take(SmallModel(units)) is var model &&
+                  Row(model, "COL").Figure is { Shapes.Count: 2 } figure && Near(figure.Width, 1.0, 1e-9) && Near(figure.Height, 0.8, 1e-9) &&
+                  Row(model, "BEAM").Figure is null && Row(model, "STRAND").Figure is null),
+            "a section figure is in metres whatever units the model was saved in; a section stored without its dimensions has no figure");
         Check(Expected(Take(SmallModel("N, mm, C", tubeRotation: 30))), "a rotated embedded shape displaces the same area");
         // the tube half outside the core: only the wall area inside the core (one web and half of each flange) displaces concrete
         Check(Expected(Take(SmallModel("KN, m, C", tubeCentreX: 0.5, sectionAreaM2: 0.7848 + 0.0304 * 200 / 30)), concreteArea: 0.8 - (0.02 * 0.36 + 2 * 0.2 * 0.02)),
@@ -601,6 +648,8 @@ internal static class QuantityTakeoffChecks
               vm.QuantityRows.Take(5).All(row => !row.IsTotal) && vm.QuantityRows[^1].MemberCount == 54 && Near(vm.QuantityRows[^1].TotalLengthM, 1090.3610384951724) &&
               Near(vm.QuantityRows[^1].ConcreteVolumeM3, 795) && Near(vm.QuantityRows[^1].SteelMassT, 2862.104378822229) && vm.QuantityRows[^1].Problem is null &&
               vm.QuantityRows[0].Detail.Contains("Section Designer section") && vm.QuantityNotes.Count == 0 && !vm.HasQuantityProblem &&
+              vm.QuantityRows.Take(5).All(row => row.Figure is not null) && vm.QuantityRows[0].Figure!.Shapes.Count == 2 && vm.QuantityRows[^1].Figure is null &&
+              vm.QuantityRows.Select(row => row.FigureSize).SequenceEqual(["1200 × 2000 mm", "1500 × 3000 mm", "3000 × 2500 mm", "1200 × 1200 mm", "191.5 × 191.5 mm", ""]) &&
               vm.QuantitySource.StartsWith("L01_H01_P01 · SAP2000 text export COT_L01_H01_P01.$2k") && vm.QuantityTabStatus == "L01_H01_P01" &&
               vm.QuantityStatus == "5 sections · 54 members" && !vm.IsBusy && reader.Started == 0,
             "the selected candidate's section breakdown is shown with a total row, its data source, and no SAP2000 involved");

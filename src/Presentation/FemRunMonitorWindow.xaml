@@ -7,7 +7,7 @@
    <RowDefinition Height="8"/>
    <RowDefinition Height="3*"/>
    <RowDefinition Height="8"/>
-   <RowDefinition Height="2*"/>
+   <RowDefinition Height="Auto"/>
    <RowDefinition Height="Auto"/>
   </Grid.RowDefinitions>
 
@@ -49,11 +49,10 @@
 
   <!-- Live log -->
   <Border Grid.Row="4" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
-   <DockPanel>
-    <TextBlock DockPanel.Dock="Top" Text="WHAT THE FEM IS DOING" Style="{StaticResource Subheading}"/>
-    <ListBox x:Name="LogList" ItemsSource="{Binding FemLog}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+   <Expander Header="Diagnostic details" IsExpanded="False">
+    <ListBox x:Name="LogList" MaxHeight="150" ItemsSource="{Binding FemLog}" FontFamily="{StaticResource MonoFont}" FontSize="11"
              ScrollViewer.HorizontalScrollBarVisibility="Auto" VirtualizingPanel.IsVirtualizing="True" BorderThickness="1"/>
-   </DockPanel>
+   </Expander>
   </Border>
 
   <DockPanel Grid.Row="5" Margin="0,8,0,0" LastChildFill="False">

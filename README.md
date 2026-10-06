@@ -172,13 +172,20 @@ Tab 8 shows the concrete volume and steel mass of **one study candidate**, group
 members. Pick a candidate in the **Candidate** dropdown (`Lxx_Hxx_Pxx`); its breakdown loads in the background.
 Picking another candidate is how models are compared, including different truss heights.
 
-| Section | Member count | Total length m | Concrete volume m³ | Steel mass t |
-|---|---:|---:|---:|---:|
+| Section | Figure | Member count | Total length m | Concrete volume m³ | Steel mass t |
+|---|:-:|---:|---:|---:|---:|
 
 One row per assigned section (frame sections, then cable sections) and a **Total** row. A quantity that cannot be
 established reads **n/a** — never zero — with the reason as its tooltip and in the notes under the table; the total
 of that column is then n/a as well, and its tooltip gives the sum of the sections that could be taken off. `0.000`
 means the section really has none of that material.
+
+**Figure** shows the section's cross-section drawn to scale from the same stored data: the Section Designer shapes
+in their drawing order (concrete grey, steel blue, a tube with its opening), or a standard section from its stored
+dimensions (box/tube, I/wide flange, rectangular, circle, pipe), or a cable as a circle of its stored diameter. Each
+figure is scaled to fit its cell, so its overall width × depth in mm is printed under it; hover over it for a larger
+view. A section whose data does not describe a drawable shape shows `—`. The figure is a picture only — no quantity is
+taken from it.
 
 **Where the candidates come from.** The dropdown lists the candidates of the study that belongs to the connected
 baseline (`<baseline folder>/Study`): every `Lxx_Hxx_Pxx` the run journal (`StudyRun.json` and `RunHistory`) records

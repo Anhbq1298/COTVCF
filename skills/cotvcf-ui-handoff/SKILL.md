@@ -159,8 +159,11 @@ earlier tall-header / large-button / blue-block look.
   pipe/concrete pipe, general) via FemSectionProperties.Shape, else an equivalent solid rectangle with the same A, I33,
   I22 (SD, filled-tube, built-up…); cables are rods of their gross area; concrete materials are shaded concrete.
   Drag orbit, right/Shift-drag pan, wheel zoom, double-click / Fit fits. Needs Read from SAP for sizes.
+- FEM Candidate and Load case / combo selectors sit above the Inputs / Analysis / View / Results pages.
+  Results retains the force, reaction and deflection controls; table headings distinguish member ends from Rx/Rz or Ux/Uz.
+  Not fitted uses warning colour; Failed uses error colour. Solver behavior is unchanged.
 - Run Analysis opens the non-modal FEM Run Monitor (FemRunMonitorWindow; reopen with Analysis → Monitor): progress,
-  live log (FemLog, one line per step and per case), Cable dropdown (default Cable1a-2) and Case dropdown with
+  live log inside a collapsed Diagnostic details expander (FemLog, one line per step and per case), Cable dropdown (default Cable1a-2) and Case dropdown with
   Follow latest, and ConvergenceChart of P_result/P_preset per pretension-fitting run (run 0 = 0, line at 1, ±tol
   band) from FemCableResponse.FitHistoryKN. Help is a window (HelpWindow) with Workflow and FEM procedure topics;
   the ⓘ next to Monitor and top-bar Help on Tab 07 open the FEM procedure directly. Keep the topic concise:
@@ -255,10 +258,21 @@ model data. Reads only: never the connected model, never a write, nothing saved 
   separate SAP2000 instance is reading, and the status text; a monospace source line; a 2 px progress bar while
   loading; the problem text (warning colour for unavailable, error colour for a failed read); then the table, a
   fixed method caption and the notes — all in a 900 px left-aligned column.
-- **The agreed table** — exactly `Section | Member count | Total length m | Concrete volume m³ | Steel mass t`, one
-  row per assigned section (frames, then cables, natural name order) plus a bold `Total` row (it is the last item of
-  `QuantityRows`, so sorting is off). No portion, grade or height-variation column: choosing another candidate is the
+- **The agreed table** — exactly `Section | Figure | Member count | Total length m | Concrete volume m³ | Steel mass t`,
+  one row per assigned section (frames, then cables, natural name order) plus a bold `Total` row (it is the last item
+  of `QuantityRows`, so sorting is off). No portion, grade or height-variation column: choosing another candidate is the
   comparison between models. Do not add charts, exports or further tables here without being asked.
+- **Figure column** (added on request, right after `Section`): the section drawn to scale by
+  `Controls/SectionFigureView` from `QuantitySectionRow.Figure` (`QuantitySectionFigure`: outlines in metres, X right /
+  Y up, shapes back to front; a second outline is an opening, filled even-odd). It comes from the same stored data as
+  the quantities — the Section Designer shapes in ZOrder; a standard section from `t3` / `t2` / `tf` / `tw` / `t2b` /
+  `tfb` (box/tube, I/wide flange, rectangular, circle, pipe); a cable from its stored `Diameter` — and is null when
+  that data does not describe a drawable shape (cell shows a muted `—`; never a partial or equivalent shape). A
+  section whose quantities are withheld is still drawn as stored. Colours are the theme tokens `SectionConcrete` /
+  `SectionSteel` (steel is edged in its own colour so thin plates read as steel). Every thumbnail (64 × 42) is
+  scaled to fit, so `QuantityRow.FigureSize` prints the overall `W × D mm` under it and the cell tooltip shows a
+  larger view. This grid alone uses `RowHeight="NaN"` / `MinRowHeight="24"`: figure rows are ~60 px, the Total row
+  stays at the compact 24 px. The figure is a picture only — no quantity is taken from it.
 - **Unavailable is never zero**: `QuantityRow` quantities are `double?`; null renders `n/a` in the warning colour
   with the reason as the cell tooltip, a column total with a null in it is null, and the Total tooltip states the sum
   of the sections that could be taken off. `0.000` means the section really has none of that material. Do not turn a

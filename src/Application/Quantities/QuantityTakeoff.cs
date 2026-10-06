@@ -9,6 +9,21 @@ public enum QuantityMaterialClass { Concrete, Steel }
 /// <summary>One material of a section: its physical area and, for steel, its mass density.</summary>
 public sealed record QuantityComponent(string Material, string MaterialType, QuantityMaterialClass Class, double AreaM2, double? DensityTPerM3);
 
+public readonly record struct QuantityFigurePoint(double X, double Y);
+
+/// <summary>One drawn region of a section figure: its material and its outline. A second outline is an opening in
+/// the first (a tube), so the region is filled even-odd.</summary>
+public sealed record QuantityFigureShape(string Name, string Material, QuantityMaterialClass? Class, IReadOnlyList<IReadOnlyList<QuantityFigurePoint>> Outlines);
+
+/// <summary>The cross-section of an assigned section as the model's own data draws it — the stored Section Designer
+/// shapes, or the stored dimensions of a standard section. Metres, X to the right and Y up, shapes back to front.
+/// A picture of the section only: no quantity is taken from it.</summary>
+public sealed record QuantitySectionFigure(IReadOnlyList<QuantityFigureShape> Shapes, double MinX, double MinY, double MaxX, double MaxY)
+{
+    public double Width => MaxX - MinX;
+    public double Height => MaxY - MinY;
+}
+
 /// <summary>Quantities of the members assigned to one section. A null quantity is unavailable — it is never zero.</summary>
 public sealed record QuantitySectionRow(
     string Section,
@@ -22,6 +37,8 @@ public sealed record QuantitySectionRow(
     IReadOnlyList<QuantityComponent> Components)
 {
     public bool Complete => TotalLengthM is not null && ConcreteVolumeM3 is not null && SteelMassT is not null;
+    /// <summary>The section's cross-section, or null when its stored data does not describe one that is drawn.</summary>
+    public QuantitySectionFigure? Figure { get; init; }
 }
 
 /// <summary>Sum over the sections. A quantity is null as soon as one section cannot give it; the sum of the sections
@@ -101,7 +118,10 @@ public static class QuantityTakeoffCalculator
     private static string Number(double value, string format = "0.####") => value.ToString(format, Invariant);
 
     private sealed record Material(string Name, string Type, double? DensityTPerM3, double? Modulus);
-    private sealed record SectionData(IReadOnlyList<QuantityComponent> Components, string Basis, string? Problem, string? SteelProblem, bool Designed);
+    private sealed record SectionData(IReadOnlyList<QuantityComponent> Components, string Basis, string? Problem, string? SteelProblem, bool Designed)
+    {
+        public QuantitySectionFigure? Figure { get; init; }
+    }
     private sealed class Member(QuantityMemberKind kind, string name)
     {
         public QuantityMemberKind Kind { get; } = kind;
@@ -300,7 +320,7 @@ public static class QuantityTakeoffCalculator
             if (problems.Count > ProblemsShown)
                 problems = problems.Take(ProblemsShown).Append($"… and {problems.Count - ProblemsShown} more of the same kind").ToList();
             return new(sectionName, kind, members.Length, lengthKnown ? length : null, concreteKnown ? concrete : null, steelKnown ? steel : null,
-                problems, data?.Basis ?? "No section is assigned to these members in the model.", components);
+                problems, data?.Basis ?? "No section is assigned to these members in the model.", components) { Figure = data?.Figure };
         }
 
         private SectionData Section(QuantityMemberKind kind, string name)
@@ -309,19 +329,55 @@ public static class QuantityTakeoffCalculator
             return sections[(kind, name.ToUpperInvariant())] = kind == QuantityMemberKind.Cable ? CableSection(name) : FrameSection(name);
         }
 
-        private static SectionData Unusable(string problem, string basis = "") => new([], basis, problem, null, false);
+        private static SectionData Unusable(string problem, string basis = "", QuantitySectionFigure? figure = null) =>
+            new([], basis, problem, null, false) { Figure = figure };
+
+        private static QuantityMaterialClass? Classify(string materialType) => materialType.ToUpperInvariant() switch
+        {
+            "CONCRETE" => QuantityMaterialClass.Concrete,
+            "STEEL" or "TENDON" or "REBAR" => QuantityMaterialClass.Steel,
+            _ => null,
+        };
+
+        /// <summary>The picture of a section from outlines in the model's own length unit, back to front.</summary>
+        private QuantitySectionFigure? Figure(IEnumerable<(string Name, string Material, IReadOnlyList<PlanePoint[]> Outlines)> shapes)
+        {
+            var metres = tables.Units.MetresPerLength;
+            var drawn = shapes.Select(shape => new QuantityFigureShape(shape.Name, shape.Material,
+                materials.TryGetValue(shape.Material, out var material) ? Classify(material.Type) : null,
+                shape.Outlines.Select(outline => (IReadOnlyList<QuantityFigurePoint>)outline.Select(point => new QuantityFigurePoint(point.X * metres, point.Y * metres)).ToArray())
+                    .ToArray())).ToArray();
+            var outside = drawn.SelectMany(shape => shape.Outlines[0]).ToArray();
+            return outside.Length == 0 ? null : new(drawn, outside.Min(point => point.X), outside.Min(point => point.Y), outside.Max(point => point.X), outside.Max(point => point.Y));
+        }
+
+        /// <summary>A standard frame section from its stored dimensions: t3 is the outside depth, t2 the (top) width,
+        /// tf / tw the flange and web thickness, t2b / tfb the bottom flange. Shapes whose dimensions are not read this
+        /// way have no figure.</summary>
+        private QuantitySectionFigure? StandardFigure(string name, string shape, string material, SapTableRow section)
+        {
+            double? t3 = section.Number("t3"), t2 = section.Number("t2"), tf = section.Number("tf"), tw = section.Number("tw");
+            double? t2b = section.Number("t2b") ?? t2, tfb = section.Number("tfb") ?? tf;
+            IReadOnlyList<PlanePoint[]>? outlines = shape.ToUpperInvariant() switch
+            {
+                "BOX/TUBE" when t3 > 0 && t2 > 0 && tf > 0 && tw > 0 && 2 * tf < t3 && 2 * tw < t2 =>
+                    [SectionDesignerGeometry.Rectangle(0, 0, t2.Value, t3.Value), SectionDesignerGeometry.Rectangle(0, 0, t2.Value - 2 * tw.Value, t3.Value - 2 * tf.Value)],
+                "I/WIDE FLANGE" when t3 > 0 && t2 > 0 && tf > 0 && tw > 0 && t2b > 0 && tfb > 0 && tf + tfb < t3 && tw <= Math.Min(t2.Value, t2b.Value) =>
+                    [SectionDesignerGeometry.WideFlange(0, 0, t3.Value, t2.Value, tf.Value, tw.Value, t2b.Value, tfb.Value)],
+                "RECTANGULAR" when t3 > 0 && t2 > 0 => [SectionDesignerGeometry.Rectangle(0, 0, t2.Value, t3.Value)],
+                "CIRCLE" when t3 > 0 => [SectionDesignerGeometry.Circle(0, 0, t3.Value)],
+                "PIPE" when t3 > 0 && tw > 0 && 2 * tw < t3 => [SectionDesignerGeometry.Circle(0, 0, t3.Value), SectionDesignerGeometry.Circle(0, 0, t3.Value - 2 * tw.Value)],
+                _ => null,
+            };
+            return outlines is null ? null : Figure([(name, material, outlines)]);
+        }
 
         /// <summary>Classifies one material area. Returns what stops it from being counted, or null.</summary>
         private string? Component(string materialName, double areaM2, out QuantityComponent? component)
         {
             component = null;
             if (!materials.TryGetValue(materialName, out var material)) return $"material '{materialName}' is not defined in the model";
-            QuantityMaterialClass? kind = material.Type.ToUpperInvariant() switch
-            {
-                "CONCRETE" => QuantityMaterialClass.Concrete,
-                "STEEL" or "TENDON" or "REBAR" => QuantityMaterialClass.Steel,
-                _ => null,
-            };
+            var kind = Classify(material.Type);
             if (kind is null) return $"material '{material.Name}' is of SAP2000 type '{material.Type}', which the take-off counts as neither concrete nor steel";
             component = new(material.Name, material.Type, kind.Value, areaM2, material.DensityTPerM3);
             return null;
@@ -334,9 +390,10 @@ public static class QuantityTakeoffCalculator
             if (section.Text("Material") is not { } material) return Unusable($"cable section '{name}' names no material");
             if (section.Number("Area") is not > 0) return Unusable($"cable section '{name}' has no usable area");
             var areaM2 = section.Number("Area")!.Value * tables.Units.SquareMetresPerArea;
+            var figure = section.Number("Diameter") is > 0 and var diameter ? Figure([(name, material, [SectionDesignerGeometry.Circle(0, 0, diameter)])]) : null;
             return Component(material, areaM2, out var component) is { } refused
-                ? Unusable(refused)
-                : new([component!], $"Cable section · {Describe(component!)}", null, null, false);
+                ? Unusable(refused, figure: figure)
+                : new([component!], $"Cable section · {Describe(component!)}", null, null, false) { Figure = figure };
         }
 
         private SectionData FrameSection(string name)
@@ -359,11 +416,12 @@ public static class QuantityTakeoffCalculator
                     tables.Rows(table).Any(row => Same(row.Text("SectionName"), name)))
                 .Order(StringComparer.OrdinalIgnoreCase).ToArray();
             var basis = $"{shape} section · {Describe(component!)}";
-            if (unread.Length == 0) return new([component!], basis, null, null, false);
+            var figure = StandardFigure(name, shape, material, section);
+            if (unread.Length == 0) return new([component!], basis, null, null, false) { Figure = figure };
             var where = string.Join(", ", unread);
             return component!.Class == QuantityMaterialClass.Concrete
-                ? new([component], basis, null, $"concrete section '{name}' carries further data in {where}; reinforcement is not taken off, so its steel is unknown", false)
-                : Unusable($"frame section '{name}' carries data the take-off does not read ({where})", basis);
+                ? new([component], basis, null, $"concrete section '{name}' carries further data in {where}; reinforcement is not taken off, so its steel is unknown", false) { Figure = figure }
+                : Unusable($"frame section '{name}' carries data the take-off does not read ({where})", basis, figure);
         }
 
         private SectionData DesignedSection(string name, SapTableRow section)
@@ -392,8 +450,10 @@ public static class QuantityTakeoffCalculator
             string Refuse() => $"Section Designer section '{name}': {string.Join("; ", problems.Distinct(StringComparer.Ordinal))}";
             if (problems.Count > 0) return Unusable(Refuse(), "Section Designer section");
 
+            // Every shape of the section was read, so it can be drawn as stored — whatever the checks below say.
+            var figure = Figure(shapes.OrderBy(shape => shape.ZOrder).Select(shape => (shape.Name, shape.Material, shape.Outlines)));
             var visible = SectionDesignerGeometry.VisibleAreas(shapes, out var overlap);
-            if (overlap is not null) { problems.Add(overlap); return Unusable(Refuse(), "Section Designer section"); }
+            if (overlap is not null) { problems.Add(overlap); return Unusable(Refuse(), "Section Designer section", figure); }
             var components = new List<QuantityComponent>();
             foreach (var material in shapes.GroupBy(shape => shape.Material, StringComparer.OrdinalIgnoreCase))
             {
@@ -401,7 +461,7 @@ public static class QuantityTakeoffCalculator
                 if (Component(material.Key, area, out var component) is { } refused) problems.Add(refused);
                 else components.Add(component!);
             }
-            if (problems.Count > 0) return Unusable(Refuse(), "Section Designer section");
+            if (problems.Count > 0) return Unusable(Refuse(), "Section Designer section", figure);
 
             // The check: these areas, each weighted by its modulus over the base material's, must give the area
             // SAP2000 itself reports for the section. If they do not, the overlap rule or a shape is not what was assumed.
@@ -418,7 +478,7 @@ public static class QuantityTakeoffCalculator
                                  "so a shape or an overlap is not what the take-off assumes");
             }
             var basis = $"Section Designer section · {string.Join(" · ", components.Select(Describe))} · shapes: {string.Join(", ", shapes.Select(shape => shape.Name))}";
-            return problems.Count > 0 ? Unusable(Refuse(), basis) : new(components, basis, null, null, true);
+            return problems.Count > 0 ? Unusable(Refuse(), basis, figure) : new(components, basis, null, null, true) { Figure = figure };
         }
 
         private static string Describe(QuantityComponent component) =>
@@ -462,7 +522,10 @@ public static class QuantityTakeoffCalculator
                 SectionDesignerGeometry.Rectangle(x, y + (bottomThick - topThick) / 2, web, height - topThick - bottomThick),
                 SectionDesignerGeometry.Rectangle(x, y - height / 2 + bottomThick / 2, bottomWidth, bottomThick),
             ];
-            return (new(name, material, zOrder, pieces.Select(piece => SectionDesignerGeometry.Rotate(piece, x, y, rotation)).ToArray()), null);
+            return (new(name, material, zOrder, pieces.Select(piece => SectionDesignerGeometry.Rotate(piece, x, y, rotation)).ToArray())
+            {
+                Outlines = [SectionDesignerGeometry.Rotate(SectionDesignerGeometry.WideFlange(x, y, height, topWidth, topThick, web, bottomWidth, bottomThick), x, y, rotation)]
+            }, null);
         }
 
         // A tube: two flanges across the full width and two webs between them. Its interior is empty.
@@ -481,7 +544,14 @@ public static class QuantityTakeoffCalculator
                 SectionDesignerGeometry.Rectangle(x - width / 2 + web / 2, y, web, height - 2 * flange),
                 SectionDesignerGeometry.Rectangle(x + width / 2 - web / 2, y, web, height - 2 * flange),
             ];
-            return (new(name, material, zOrder, pieces.Select(piece => SectionDesignerGeometry.Rotate(piece, x, y, rotation)).ToArray()), null);
+            return (new(name, material, zOrder, pieces.Select(piece => SectionDesignerGeometry.Rotate(piece, x, y, rotation)).ToArray())
+            {
+                Outlines =
+                [
+                    SectionDesignerGeometry.Rotate(SectionDesignerGeometry.Rectangle(x, y, width, height), x, y, rotation),
+                    SectionDesignerGeometry.Rotate(SectionDesignerGeometry.Rectangle(x, y, width - 2 * web, height - 2 * flange), x, y, rotation),
+                ]
+            }, null);
         }
 
         private static (SectionDesignerShape?, string?) SolidRectangle(SapTableRow row)
@@ -502,8 +572,9 @@ public static class QuantityTakeoffCalculator
             if (corners.Any(row => row.Yes("Reinforcing"))) return (null, $"shape '{name}' carries reinforcement, which is not taken off");
             if (corners.Any(row => row.Number("X") is null || row.Number("Y") is null)) return (null, $"shape '{name}' has a corner without coordinates");
             if (corners.Any(row => Math.Abs(row.Number("Radius") ?? 0) > 0)) return (null, $"shape '{name}' has rounded corners, which are not read");
-            var pieces = SectionDesignerGeometry.ConvexPieces(corners.Select(row => new PlanePoint(row.Number("X")!.Value, row.Number("Y")!.Value)).ToArray());
-            return pieces is null ? (null, $"shape '{name}' is not a simple polygon with an area") : (new(name, material, zOrder, pieces), null);
+            var outline = corners.Select(row => new PlanePoint(row.Number("X")!.Value, row.Number("Y")!.Value)).ToArray();
+            var pieces = SectionDesignerGeometry.ConvexPieces(outline);
+            return pieces is null ? (null, $"shape '{name}' is not a simple polygon with an area") : (new(name, material, zOrder, pieces) { Outlines = [outline] }, null);
         }
     }
 }

@@ -1337,7 +1337,21 @@
       <TextBlock Text="{Binding FemStatus}" Style="{StaticResource TabHeaderStatus}"/>
      </StackPanel>
     </TabItem.Header>
-                <TabControl SelectedIndex="{Binding SelectedFemPage}" TabStripPlacement="Top" Background="{StaticResource Background}" BorderThickness="0">
+    <Grid>
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                         <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <TextBlock Grid.Row="1" Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,4,10,0"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
+                                          IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
+                                          ToolTip="Load case or linear-additive combination shown in the table, the viewer and the Cable Target Fit Result column."/>
+                                <TextBlock Text="CANDIDATE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding FemRuns}" SelectedItem="{Binding SelectedFemRun}"
+                                                                        DisplayMemberPath="Id" AutomationProperties.Name="FEM result candidate"
+                                                                        IsEnabled="{Binding IsIdle}" ToolTip="Choose a completed L/H/P internal FEM candidate."/>
+                         </Grid>
+                <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedFemPage}" TabStripPlacement="Top" Background="{StaticResource Background}" BorderThickness="0">
                  <TabControl.Resources>
                   <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
                    <Setter Property="Height" Value="26"/>
@@ -1487,7 +1501,7 @@
        <TextBlock Text="INTERNAL 2D FRAME ANALYSIS" Style="{StaticResource Subheading}"/>
        <TextBlock Text="{Binding FemCandidateSummary}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="0,0,0,6"/>
        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
-                   ToolTip="As SAP2000 Target Force: cable pretensions are adjusted together in a pretension-only stage (no applied loads) until every cable's tension is within this percentage of its Tab 03 target, e.g. 10% = within ±10%. The Tab 01 loads then act on that prestressed structure.">
+                   ToolTip="Cable pretensions are adjusted together under the target-force case loads to meet Tab 03 targets within this tolerance. Loaded cases then use the fitted pretension.">
         <TextBlock Text="Target-force fitting ±" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
         <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
                  IsEnabled="{Binding IsIdle}"
@@ -1495,7 +1509,7 @@
         <TextBlock Text="% of target" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
         <Border Width="1" Background="{StaticResource Border}" Margin="10,1,10,1"/>
         <TextBlock Text="Max iterations" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"
-                   ToolTip="Maximum pretension adjustments per FEM case. If the pretension-stage tensions are still outside the tolerance after this many, the case stops with an error."/>
+                   ToolTip="Maximum pretension adjustments per FEM case. If targets remain outside the tolerance, the closest fit is retained and marked Not fitted."/>
         <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
                  IsEnabled="{Binding IsIdle}"
                  Text="{Binding FemTargetFitIterations, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}"/>
@@ -1517,7 +1531,7 @@
                 ToolTip="Analyze every Tab 01 x Tab 02 x Tab 03 combination with a linear-elastic 2D XZ Euler-Bernoulli frame model, tension-only cables (with sag, when Cable sag is on), and pin supports. Reads SAP section/material properties; does not modify SAP2000."/>
         <Button Content="Cancel" Command="{Binding CancelFemAnalysis}"/>
         <Button Content="Monitor" Click="OpenFemMonitorClick" Margin="0,0,4,0"
-                ToolTip="Open the FEM run monitor: progress, live log and cable target-force convergence chart."/>
+                ToolTip="Open analysis progress and cable convergence. Diagnostic details are collapsed by default."/>
         <TextBlock Style="{StaticResource InlineHelpIcon}" MouseLeftButtonUp="ShowFemHelp"
                    ToolTip="FEM procedure — click to open the documentation under Help."
                    AutomationProperties.Name="FEM procedure help"/>
@@ -1547,7 +1561,7 @@
             <TextBlock x:Name="StatusText" Text="{Binding Status}" ToolTip="{Binding FitFailure}" VerticalAlignment="Center" Margin="4,0"/>
             <DataTemplate.Triggers>
              <DataTrigger Binding="{Binding Status}" Value="Not fitted">
-              <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Error}"/>
+              <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Warning}"/>
               <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold"/>
              </DataTrigger>
              <DataTrigger Binding="{Binding Status}" Value="Failed">
@@ -1598,18 +1612,6 @@
                  <TabItem Header="Results">
                         <Grid Margin="2,2,6,2">
                          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
-                         <Grid Margin="0,0,0,6">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                <TextBlock Grid.Row="1" Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,4,10,0"/>
-                                <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
-                                          IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
-                                          ToolTip="Load case or linear-additive combination shown in the table, the viewer and the Cable Target Fit Result column."/>
-                                <TextBlock Text="FEM COMBINATION" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                <ComboBox Grid.Column="1" ItemsSource="{Binding FemRuns}" SelectedItem="{Binding SelectedFemRun}"
-                                                                        DisplayMemberPath="Id" AutomationProperties.Name="FEM result combination"
-                                                                        IsEnabled="{Binding IsIdle}" ToolTip="Choose a completed L/H/P internal FEM combination."/>
-                         </Grid>
                          <WrapPanel Grid.Row="1" Margin="0,0,0,6">
                                 <RadioButton Content="Axial force" GroupName="FemResultMode" Margin="0,0,12,0"
                                                                                  IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=AxialForce}"/>
@@ -1619,7 +1621,7 @@
                                                                                  IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=Shear}"/>
                                 <RadioButton Content="Reactions" GroupName="FemResultMode" Margin="0,0,12,0"
                                                                                  IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=Reactions}"/>
-                                <RadioButton Content="Deflected shape" GroupName="FemResultMode"
+                                <RadioButton Content="Deflection" GroupName="FemResultMode"
                                                                                  IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=DeflectedShape}"/>
                                 <CheckBox Content="Axial values (kN)" Margin="16,0,0,0" IsChecked="{Binding ShowFemAxialValues}"
                                           IsEnabled="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=AxialForce}"
@@ -1631,14 +1633,31 @@
                                                                  ScrollViewer.HorizontalScrollBarVisibility="Auto">
                                 <DataGrid.Columns>
                                  <DataGridTextColumn Header="Member / Joint" Binding="{Binding ObjectName}" Width="1.3*" MinWidth="96"/>
-                                 <DataGridTextColumn Header="I-End / X" Binding="{Binding StartValue, StringFormat=F4}" Width="1*" MinWidth="78" ElementStyle="{StaticResource NumericCell}"/>
-                                 <DataGridTextColumn Header="J-End / Z" Binding="{Binding EndValue, StringFormat=F4}" Width="1*" MinWidth="78" ElementStyle="{StaticResource NumericCell}"/>
+                                 <DataGridTextColumn Binding="{Binding StartValue, StringFormat=F4}" Width="1*" MinWidth="78" ElementStyle="{StaticResource NumericCell}" >
+                                  <DataGridTextColumn.Header><TextBlock><TextBlock.Style><Style TargetType="TextBlock">
+                                   <Setter Property="Text" Value="I-end"/>
+                                   <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.FemResultMode, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="Reactions"><Setter Property="Text" Value="Rx [kN]"/></DataTrigger>
+                                    <DataTrigger Binding="{Binding DataContext.FemResultMode, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="DeflectedShape"><Setter Property="Text" Value="Ux [m]"/></DataTrigger>
+                                   </Style.Triggers>
+                                  </Style></TextBlock.Style></TextBlock></DataGridTextColumn.Header>
+                                 </DataGridTextColumn>
+                                 <DataGridTextColumn Binding="{Binding EndValue, StringFormat=F4}" Width="1*" MinWidth="78" ElementStyle="{StaticResource NumericCell}" >
+                                  <DataGridTextColumn.Header><TextBlock><TextBlock.Style><Style TargetType="TextBlock">
+                                   <Setter Property="Text" Value="J-end"/>
+                                   <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.FemResultMode, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="Reactions"><Setter Property="Text" Value="Rz [kN]"/></DataTrigger>
+                                    <DataTrigger Binding="{Binding DataContext.FemResultMode, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="DeflectedShape"><Setter Property="Text" Value="Uz [m]"/></DataTrigger>
+                                   </Style.Triggers>
+                                  </Style></TextBlock.Style></TextBlock></DataGridTextColumn.Header>
+                                 </DataGridTextColumn>
                                  <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width=".8*" MinWidth="68"/>
                                 </DataGrid.Columns>
                          </DataGrid>
                         </Grid>
                  </TabItem>
                 </TabControl>
+    </Grid>
    </TabItem>
 
    <!-- 08 QUANTITY TAKE-OFF: concrete volume and steel mass of one study candidate by assigned section, from that
@@ -1699,9 +1718,10 @@
       </Style></TextBlock.Style>
      </TextBlock>
 
-     <Grid Grid.Row="3" MaxWidth="900" HorizontalAlignment="Left">
+     <Grid Grid.Row="3" MaxWidth="980" HorizontalAlignment="Left">
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-      <DataGrid x:Name="QuantityGrid" ItemsSource="{Binding QuantityRows}" IsReadOnly="True" AutoGenerateColumns="False" MaxHeight="420"
+      <!-- Rows size to their content here: a row with a section figure is taller than the 24 px text rows of the theme. -->
+      <DataGrid x:Name="QuantityGrid" ItemsSource="{Binding QuantityRows}" IsReadOnly="True" AutoGenerateColumns="False" MaxHeight="470" RowHeight="NaN" MinRowHeight="24"
                 CanUserAddRows="False" CanUserDeleteRows="False" CanUserResizeRows="False" CanUserSortColumns="False" HeadersVisibility="Column" RowHeaderWidth="0"
                 SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Quantities by assigned section">
        <DataGrid.RowStyle>
@@ -1716,6 +1736,38 @@
         <DataGridTextColumn Header="Section" Binding="{Binding Section}" Width="2.4*" MinWidth="210">
          <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style></DataGridTextColumn.ElementStyle>
         </DataGridTextColumn>
+        <!-- The section as its own stored data draws it, to scale; hover for a larger view. A picture only — no quantity comes from it. -->
+        <DataGridTemplateColumn Header="Figure" Width="100" CanUserResize="False">
+         <DataGridTemplateColumn.CellTemplate><DataTemplate>
+          <Grid>
+           <Border x:Name="FigureFrame" Background="Transparent" HorizontalAlignment="Center" Margin="0,3,0,2">
+            <StackPanel>
+             <c:SectionFigureView Figure="{Binding Figure}" Width="64" Height="42" AutomationProperties.Name="Section figure"/>
+             <!-- every figure is scaled to fit, so its real overall size is stated under it -->
+             <TextBlock Text="{Binding FigureSize}" FontFamily="{StaticResource MonoFont}" FontSize="9.5" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,1,0,0"/>
+            </StackPanel>
+            <Border.ToolTip>
+             <ToolTip DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+              <StackPanel>
+               <c:SectionFigureView Figure="{Binding Figure}" Width="260" Height="220" Margin="2,2,2,6"/>
+               <TextBlock Text="{Binding Section}" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold"/>
+               <TextBlock Text="{Binding Detail}" MaxWidth="340" TextWrapping="Wrap" FontSize="11"/>
+              </StackPanel>
+             </ToolTip>
+            </Border.ToolTip>
+           </Border>
+           <TextBlock x:Name="NoFigure" Text="—" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"
+                      ToolTip="The stored data of this section does not describe a shape that can be drawn."/>
+          </Grid>
+          <DataTemplate.Triggers>
+           <DataTrigger Binding="{Binding Figure}" Value="{x:Null}"><Setter TargetName="FigureFrame" Property="Visibility" Value="Collapsed"/></DataTrigger>
+           <MultiDataTrigger>
+            <MultiDataTrigger.Conditions><Condition Binding="{Binding Figure}" Value="{x:Null}"/><Condition Binding="{Binding IsTotal}" Value="False"/></MultiDataTrigger.Conditions>
+            <Setter TargetName="NoFigure" Property="Visibility" Value="Visible"/>
+           </MultiDataTrigger>
+          </DataTemplate.Triggers>
+         </DataTemplate></DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
         <DataGridTextColumn Header="Member count" Binding="{Binding MemberCount}" Width="*" MinWidth="96" ElementStyle="{StaticResource NumericCell}"/>
         <DataGridTextColumn Header="Total length m" Binding="{Binding TotalLengthM, StringFormat={}{0:N3}, TargetNullValue=n/a}" Width="1.2*" MinWidth="104" ElementStyle="{StaticResource QuantityLength}"/>
         <DataGridTextColumn Header="Concrete volume m³" Binding="{Binding ConcreteVolumeM3, StringFormat={}{0:N3}, TargetNullValue=n/a}" Width="1.3*" MinWidth="128" ElementStyle="{StaticResource QuantityConcrete}"/>
