@@ -1493,10 +1493,14 @@
                  IsEnabled="{Binding IsIdle}"
                  Text="{Binding FemFrameMeshSegments, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}"/>
         <TextBlock Text="segments per frame" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
+        <Border Width="1" Background="{StaticResource Border}" Margin="10,1,10,1"/>
+        <CheckBox Content="Cable sag" IsChecked="{Binding FemCableSag}" IsEnabled="{Binding IsIdle}" VerticalAlignment="Center" FontSize="11"
+                  AutomationProperties.Name="FEM cable sag"
+                  ToolTip="Geometric nonlinearity of the cables. A cable that a load case loads along its length — its self-weight, when the case includes a pattern with a self-weight multiplier — hangs in a shallow parabola instead of a straight line. Its tension then follows T/k − (w·cos θ)²·L³ / 24T² = extension + P/k, its stiffness drops to Ernst's equivalent EA/L ÷ (1 + (w·cos θ·L)²·EA / 12T³), and it never goes fully slack. Negligible for highly tensioned cables; it matters for long or lightly tensioned ones. Off = straight tension-only cables."/>
        </StackPanel>
        <WrapPanel>
         <Button Content="Run Analysis" Command="{Binding RunFemAnalysis}" Style="{StaticResource Primary}"
-                ToolTip="Analyze every Tab 01 x Tab 02 x Tab 03 combination with a linear-elastic 2D XZ Euler-Bernoulli frame model, tension-only axial cables, and pin supports. Reads SAP section/material properties; does not modify SAP2000."/>
+                ToolTip="Analyze every Tab 01 x Tab 02 x Tab 03 combination with a linear-elastic 2D XZ Euler-Bernoulli frame model, tension-only cables (with sag, when Cable sag is on), and pin supports. Reads SAP section/material properties; does not modify SAP2000."/>
         <Button Content="Cancel" Command="{Binding CancelFemAnalysis}"/>
         <Button Content="Monitor" Click="OpenFemMonitorClick" Margin="0,0,4,0"
                 ToolTip="Open the FEM run monitor: progress, live log and cable target-force convergence chart."/>
@@ -1512,7 +1516,7 @@
       <Grid Margin="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
        <DockPanel>
         <TextBlock Text="CABLE TARGET FIT" Style="{StaticResource Subheading}"/>
-        <TextBlock DockPanel.Dock="Right" Text="kN · pretension stage fitted to target, then loaded" Style="{StaticResource Caption}"/>
+        <TextBlock DockPanel.Dock="Right" Text="kN · pretension stage fitted to target, then loaded · sag and stiffness of the result shown" Style="{StaticResource Caption}"/>
        </DockPanel>
        <DataGrid Grid.Row="1" ItemsSource="{Binding FemCableFitRows}" IsReadOnly="True"
                  ScrollViewer.HorizontalScrollBarVisibility="Auto" EnableRowVirtualization="True"
@@ -1542,6 +1546,12 @@
          </DataGridTemplateColumn>
          <DataGridTextColumn Header="Result" Binding="{Binding ResultForceKN, StringFormat=F1}" Width=".8*" MinWidth="62" ElementStyle="{StaticResource NumericCell}"/>
          <DataGridTextColumn Header="Applied P" Binding="{Binding AppliedPretensionKN, StringFormat=F1}" Width=".8*" MinWidth="70" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Binding="{Binding SagMm, StringFormat=F1}" Width=".6*" MinWidth="56" ElementStyle="{StaticResource NumericCell}">
+          <DataGridTextColumn.Header><TextBlock Text="Sag mm" ToolTip="Mid-span sag of the cable below its chord in the result shown: w·cos θ·L² / 8T. Blank when the cable is straight — Cable sag off, no load along the cable in this case, a vertical cable, or a combination."/></DataGridTextColumn.Header>
+         </DataGridTextColumn>
+         <DataGridTextColumn Binding="{Binding StiffnessPercent, StringFormat=F1}" Width=".6*" MinWidth="58" ElementStyle="{StaticResource NumericCell}">
+          <DataGridTextColumn.Header><TextBlock Text="Stiff. %" ToolTip="Axial stiffness the sagging cable keeps, in % of EA / L (Ernst's equivalent modulus over E). Near 100 % = the sag does not matter here."/></DataGridTextColumn.Header>
+         </DataGridTextColumn>
          <DataGridTextColumn Header="Iter." Binding="{Binding FitIterations}" Width=".4*" MinWidth="36" ElementStyle="{StaticResource NumericCell}"/>
         </DataGrid.Columns>
        </DataGrid>

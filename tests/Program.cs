@@ -198,6 +198,11 @@ internal static class Program
                        vm.FemCandidateSummary.Contains("FEM runs", StringComparison.Ordinal) &&
                        window.SharedViewerPane.Visibility == Visibility.Visible,
                     "Tab 07 Analysis renders the run controls and the candidate count");
+                var sagBox = FindVisuals<CheckBox>(window).Single(box => Equals(box.Content, "Cable sag"));
+                Assert(vm.FemCableSag && sagBox.IsChecked == true, "Tab 07 Analysis analyses cable sag by default");
+                sagBox.IsChecked = false;
+                Assert(!vm.FemCableSag, "…and the Cable sag switch turns it off for a comparison with straight cables");
+                sagBox.IsChecked = true;
                 var demoFemRun = new FemStudyRun("L01_H01_P01", "L01", "H01", "P01",
                     new FemAnalysisResult(
                         [new("bot", 0, 0, 0), new("mid", 0.001, -0.02, 0.001), new("top", 0.002, -0.04, 0.002),

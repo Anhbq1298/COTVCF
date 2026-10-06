@@ -917,7 +917,9 @@ public sealed class ModelCanvas : FrameworkElement
                 HoverBox(dc, cursor, $"{cable.Member.Name} (cable)",
                 [
                     $"T   {cable.Result.AxialForceKN,10:0.0} kN" + (cable.Result.Active ? "" : "  slack"),
-                    .. cable.Result.TargetForceKN > 0 ? new[] { $"Target {cable.Result.TargetForceKN,7:0.0} kN" } : []
+                    .. cable.Result.TargetForceKN > 0 ? new[] { $"Target {cable.Result.TargetForceKN,7:0.0} kN" } : [],
+                    .. cable.Result is { SagM: double sag, TangentStiffnessRatio: double ratio }
+                        ? new[] { $"Sag {sag * 1000,10:0.0} mm", $"Stiffness {ratio * 100,5:0.0} % of EA/L" } : []
                 ]);
                 break;
         }

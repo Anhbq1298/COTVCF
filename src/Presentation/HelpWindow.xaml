@@ -53,12 +53,14 @@
       <ListItem><Paragraph><Bold>Plane:</Bold> all analysed joints must lie in one XZ plane (Y within 0.1 µm). Three degrees of freedom per joint: UX, UZ and rotation RY.</Paragraph></ListItem>
       <ListItem><Paragraph><Bold>Frames:</Bold> linear-elastic Euler–Bernoulli beam-columns. A, E and the in-plane I come from the assigned SAP section and material,
        including SAP property modifiers (A × m1, I22 × m5, I33 × m6) and the frame's local-axis orientation. SAP end-moment releases (M3 at I and/or J) are honoured.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Cables:</Bold> tension-only axial members, stiffness EA/L. A cable never carries compression: when its force would become negative it goes slack and is removed from the stiffness.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Cables:</Bold> tension-only axial members, stiffness EA/L. A cable never carries compression: when its force would become negative it goes slack and is removed from the stiffness.
+       With <Italic>Cable sag</Italic> on (Analysis, default), a cable that a load case loads along its length hangs in a shallow parabola instead — see section 5a.</Paragraph></ListItem>
       <ListItem><Paragraph><Bold>Supports:</Bold> pins detected automatically at the lowest joints of near-vertical frame members; UX and UZ fixed, rotation free.</Paragraph></ListItem>
       <ListItem><Paragraph><Bold>Mass and self-weight:</Bold> unit weight γ and mass ρ come from the SAP material; self-weight per length = γ × gross A × weight modifier
        (mass = ρ × A × mass modifier, shown on Inputs → Sectional properties). Frame stiffness uses A × m1 and I × m5/m6; cable stiffness uses A × the cable area modifier.</Paragraph></ListItem>
       <ListItem><Paragraph><Bold>Loads:</Bold> see section 3a — SAP load patterns, cases and combinations, plus the Tab 01 study loads.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Theory:</Bold> small displacements — no P-Δ, no large-displacement geometry update and no cable sag.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Theory:</Bold> small displacements — no P-Δ and no large-displacement geometry update. The one geometric nonlinearity
+       included is the sag of the cables (section 5a).</Paragraph></ListItem>
      </List>
 
      <Paragraph Style="{StaticResource H2}">2. Frame splitting and meshing</Paragraph>
@@ -124,6 +126,27 @@
      </List>
      <Paragraph>A case that does not reach equilibrium is listed as <Italic>Failed</Italic> with its reason; the remaining cases still run.</Paragraph>
 
+     <Paragraph Style="{StaticResource H2}">5a. Cable sag (Analysis → Cable sag, on by default)</Paragraph>
+     <Paragraph>A cable that a load case loads along its length — its self-weight, when the case includes a pattern with a self-weight multiplier, or a
+      distributed load assigned to it — does not stay straight. It hangs in a shallow parabola, so its curve is longer than its chord and part of any
+      joint movement goes into changing the sag instead of stretching the cable. With w_n the load normal to the chord (self-weight w gives w·cos θ),
+      L the chord length and k = EA/L, the tension T is the positive root of</Paragraph>
+     <Paragraph Style="{StaticResource Formula}">T / k − a / T² = Δℓ(u) + P_applied / k,   a = w_n²·L³ / 24</Paragraph>
+     <Paragraph>and the cable's energy in Π(u) becomes T²/2k − 2a/T. From this follow:</Paragraph>
+     <List>
+      <ListItem><Paragraph><Bold>Stiffness:</Bold> dT/dΔℓ = k / (1 + w_n²·L²·EA / 12T³) — Ernst's equivalent modulus. Near 100 % of EA/L for a highly tensioned cable,
+       a small fraction for a long or lightly tensioned one. The cable table shows it as <Italic>Stiff. %</Italic>.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Sag:</Bold> f = w_n·L² / 8T at mid-span, shown as <Italic>Sag mm</Italic> and in the hover read-out.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>No slack switch:</Bold> the root is always positive. Where a straight cable would go slack, the sagging cable keeps the tension its
+       weight needs to hang across the shortened chord.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Pretension:</Bold> P_applied keeps its meaning — the lack of fit of the cable × EA/L. Target-force fitting adjusts it until the
+       sagging cable's tension meets the target under the loads of the pretension stage, so the fitted P_applied is a little lower than for a straight cable.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Unchanged:</Bold> a cable with no load along it in that case, or a vertical cable under gravity (w_n = 0), is the straight
+       tension-only cable. The cable's load still reaches its end joints exactly as before; sag only changes the cable's own force law. Joint displacements
+       remain small-displacement and frames remain linear. The energy stays convex, so the solution is still unique and independent of load path.</Paragraph></ListItem>
+     </List>
+     <Paragraph>Switch <Italic>Cable sag</Italic> off to compare with straight tension-only cables.</Paragraph>
+
      <Paragraph Style="{StaticResource H2}">6. Run monitor and convergence chart</Paragraph>
      <Paragraph>Run Analysis opens the run monitor (reopen it with <Italic>Monitor</Italic>). It shows progress, a live log of each step and case, and the
       convergence chart for the cable chosen under <Italic>Cable</Italic> (default Cable1a-2):</Paragraph>
@@ -144,12 +167,39 @@
 
      <Paragraph Style="{StaticResource H2}">8. Limitations — check critical results in SAP2000</Paragraph>
      <List>
-      <ListItem><Paragraph>Planar, linear-elastic, small-displacement analysis; no P-Δ, buckling, cable sag or catenary effects.</Paragraph></ListItem>
+      <ListItem><Paragraph>Planar, linear-elastic, small-displacement analysis; no P-Δ or buckling. Cable sag is the shallow-parabola (Ernst) model of
+       section 5a, not a full catenary with large displacements: it is accurate while the sag stays below about one eighth of the span and the joints
+       move little compared with the cable length.</Paragraph></ListItem>
       <ListItem><Paragraph>Only static load cases and linear additive combinations; no temperature, settlement, moving, modal, response-spectrum or time-history analysis,
        and no moment loads on members. Superposing tension-only cases in a combination is the same approximation SAP makes for combinations of nonlinear cases.</Paragraph></ListItem>
       <ListItem><Paragraph>Tendon objects, partial-fixity releases and non-pinned supports are not modelled.</Paragraph></ListItem>
       <ListItem><Paragraph>SAP2000 meets Target Force with its own iterative scheme; results should agree in the linear range but are not guaranteed identical.</Paragraph></ListItem>
      </List>
+
+     <Paragraph Style="{StaticResource H2}">9. Basis of the solver — sources and verification</Paragraph>
+     <Paragraph>The solver was written for this application. It contains no code from OpenSees, SAP2000 or any other analysis package; the only
+      library it uses is MathNet.Numerics for linear algebra. Each part implements a published, standard formulation:</Paragraph>
+     <List>
+      <ListItem><Paragraph><Bold>Frames</Bold> — direct stiffness method, Euler–Bernoulli beam-column element, end releases by condensation, consistent nodal loads:
+       McGuire, Gallagher &amp; Ziemian, <Italic>Matrix Structural Analysis</Italic>, 2nd ed., Wiley, 2000; Cook, Malkus, Plesha &amp; Witt,
+       <Italic>Concepts and Applications of Finite Element Analysis</Italic>, 4th ed., Wiley, 2002.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Frame meshing</Bold> — static condensation of the interior nodes: Guyan, "Reduction of stiffness and mass matrices",
+       AIAA Journal 3(2), 1965, p. 380.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Cable sag</Bold> — the elastic cable in a shallow parabola: Irvine, <Italic>Cable Structures</Italic>, MIT Press, 1981. Its stiffness is the
+       equivalent modulus of Ernst, "Der E-Modul von Seilen unter Berücksichtigung des Durchhanges", Der Bauingenieur 40(2), 1965, pp. 52–55; see also
+       Gimsing &amp; Georgakis, <Italic>Cable Supported Bridges</Italic>, 3rd ed., Wiley, 2012.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Tension-only equilibrium</Bold> — minimum of the total potential energy, convex for cables without compression (Kanno,
+       <Italic>Nonsmooth Mechanics and Convex Optimization</Italic>, CRC Press, 2011), by Newton's method with a backtracking line search and a Levenberg shift:
+       Nocedal &amp; Wright, <Italic>Numerical Optimization</Italic>, 2nd ed., Springer, 2006; Levenberg, Quarterly of Applied Mathematics 2(2), 1944, pp. 164–168.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Pretension fitting</Bold> — follows the intent of SAP2000's Target-Force load (CSI Analysis Reference Manual) with a Newton iteration
+       of its own on the cable pretensions; it is not CSI's algorithm.</Paragraph></ListItem>
+     </List>
+     <Paragraph><Bold>Verified</Bold> by the application's own checks against closed-form results: mid-span deflection PL³/48EI and 5wL⁴/384EI, moments wL²/8 and
+      P·a·b/L, reactions and overall equilibrium, meshed against unmeshed frames, superposition of load cases, and for cable sag an independent solution of
+      the cable equation and Ernst's formula (agreement to about 10⁻⁹).</Paragraph>
+     <Paragraph><Bold>Not verified:</Bold> the solver has not been benchmarked against SAP2000 or OpenSees on a complete model. SAP2000's cable object is a
+      catenary element analysed with large displacements, which this solver does not reproduce exactly. Use the FEM tab to explore the candidate space,
+      and confirm governing candidates with the SAP2000 study (Tabs 05–06).</Paragraph>
     </FlowDocument>
    </FlowDocumentScrollViewer>
   </TabItem>

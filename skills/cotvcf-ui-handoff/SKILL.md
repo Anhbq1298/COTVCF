@@ -167,8 +167,25 @@ earlier tall-header / large-button / blue-block look.
 - Tension-only cable equilibrium uses damped Newton iterations with a potential-energy line search, not a Boolean
   active-set toggle. Failure reports include the final free-DOF residual and active cable count.
 - Unsupported inputs fail explicitly: non-planar geometry, tendon objects, advanced local axes, axial or
-  in-plane shear releases, and rotated local axes combined with in-plane releases. Nonlinear cable sag, geometric
-  nonlinearity, and SAP analysis settings are not modeled.
+  in-plane shear releases, and rotated local axes combined with in-plane releases. P-Δ, large-displacement
+  geometry updates and SAP analysis settings are not modeled.
+- **Cable sag** (`FemCableSag`, Analysis checkbox `Cable sag`, default on → `FemStudyService.Analyze(…, cableSag)` →
+  `PlanarFrameSolver.SolveCases(…, cableSag)`; the solver API itself defaults to off) is the one geometric
+  nonlinearity. `WithSag` gives each cable the load normal to its chord in the load set being solved (uniform-
+  equivalent; self-weight w → w·cos θ, so a vertical cable or a case without load on the cable stays straight).
+  `SaggingTension` solves `T/k − a/T² = Δℓ + P/k`, `a = w_n²L³/24` (shallow parabola; unique positive root — no
+  slack switch); the tangent is Ernst's `k/(1 + w_n²L²EA/12T³)`; the energy is `T²/2k − 2a/T` (still convex, so
+  one solve per case still gives the staged result). `Assemble` linearizes a sagging cable at the current
+  displacement, so the residual and the reactions are exact. `P_applied` keeps its meaning (lack of fit × EA/L) and
+  is what target-force fitting adjusts. `FemCableResponse.SagM` / `TangentStiffnessRatio` → cable table columns
+  `Sag mm` / `Stiff. %` and the hover read-out; combinations carry neither. The load still reaches the cable's
+  end joints as before.
+- **Provenance and trust**: the solver is this application's own code — nothing from OpenSees or SAP2000;
+  MathNet.Numerics only. The class summary of `PlanarFrameSolver`, the Help window (FEM procedure §9) and the
+  README list the published sources (McGuire/Gallagher/Ziemian, Cook et al., Guyan 1965, Irvine 1981, Ernst 1965,
+  Gimsing & Georgakis, Kanno 2011, Nocedal & Wright, Levenberg 1944, CSI manual for Target Force). Keep those
+  three places in step, cite only what the code actually implements, and never describe it as benchmarked against
+  SAP2000 or OpenSees until such a comparison exists in the checks.
 - Results are streamed per candidate so cancellation or a later failure retains completed rows. Candidate count
   is capped at the existing 50,000-row preview limit.
 - The global `Load Config` picker starts in the repository `tests` folder when that folder is available.

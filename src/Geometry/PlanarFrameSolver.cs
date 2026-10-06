@@ -145,6 +145,35 @@ public static class FrameJoints
     }
 }
 
+/// <summary>
+/// Internal 2D (XZ) frame and cable solver of Tab 07 FEM.
+/// <para><b>Provenance.</b> Written for this application. No code is taken from OpenSees, SAP2000 or any other
+/// analysis package; the only library is MathNet.Numerics (dense LU and pseudo-inverse). Each part implements a
+/// published, standard formulation:</para>
+/// <list type="bullet">
+/// <item>Frames — direct stiffness method with the Euler–Bernoulli beam-column element, end releases by condensation
+/// and consistent (Hermite) nodal loads: McGuire, Gallagher &amp; Ziemian, <i>Matrix Structural Analysis</i>, 2nd ed.,
+/// Wiley, 2000; Cook, Malkus, Plesha &amp; Witt, <i>Concepts and Applications of Finite Element Analysis</i>, 4th ed.,
+/// Wiley, 2002.</item>
+/// <item>Frame meshing — interior nodes removed by static condensation: Guyan, "Reduction of stiffness and mass
+/// matrices", AIAA Journal 3(2), 1965, p. 380.</item>
+/// <item>Cable sag — the elastic cable hanging in a shallow parabola: Irvine, <i>Cable Structures</i>, MIT Press, 1981.
+/// Its tangent stiffness is the equivalent modulus of Ernst, "Der E-Modul von Seilen unter Berücksichtigung des
+/// Durchhanges", Der Bauingenieur 40(2), 1965, pp. 52–55; see also Gimsing &amp; Georgakis, <i>Cable Supported Bridges</i>,
+/// 3rd ed., Wiley, 2012.</item>
+/// <item>Tension-only equilibrium — minimum of the total potential energy, which is convex for cables that carry no
+/// compression (Kanno, <i>Nonsmooth Mechanics and Convex Optimization</i>, CRC Press, 2011), found by Newton's method
+/// with a backtracking (Armijo) line search and a Levenberg shift: Nocedal &amp; Wright, <i>Numerical Optimization</i>,
+/// 2nd ed., Springer, 2006; Levenberg, Quarterly of Applied Mathematics 2(2), 1944, pp. 164–168.</item>
+/// <item>Pretension fitting — follows the intent of SAP2000's Target-Force load (CSI Analysis Reference Manual), by a
+/// Newton iteration of its own on the cable pretensions; it is not CSI's algorithm.</item>
+/// </list>
+/// <para><b>Verification.</b> <c>tests/PlanarFrameChecks.cs</c> (<c>--fem</c>) compares the solver with closed-form
+/// results: PL³/48EI, 5wL⁴/384EI, wL²/8, P·a·b/L, reactions and equilibrium, meshed against unmeshed frames,
+/// superposition of cases, and — for cable sag — an independent scalar solution of the cable equation and Ernst's
+/// formula. It has not been benchmarked against SAP2000 or OpenSees on a full model: SAP2000's cable object is a
+/// catenary element with large displacements, so critical results are to be confirmed there.</para>
+/// </summary>
 public sealed class PlanarFrameSolver
 {
     private const double PlanarityToleranceM = 1e-7;

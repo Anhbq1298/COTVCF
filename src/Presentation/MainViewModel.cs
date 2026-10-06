@@ -884,6 +884,10 @@ public sealed partial class MainViewModel : Observable
             Set(ref femTargetFitIterations, value);
         }
     }
+    private bool femCableSag = true;
+    /// <summary>Analyse the sag of cables that a case loads along their length (self-weight, typically): the cable
+    /// hangs in a shallow parabola and its tension and stiffness follow the sag. Off = straight tension-only bars.</summary>
+    public bool FemCableSag { get => femCableSag; set => Set(ref femCableSag, value); }
     public ObservableCollection<FemSectionProperties> FemSectionProperties { get; } = [];
     public ObservableCollection<FemStudyRun> FemRuns { get; } = [];
     /// <summary>One row per completed FEM case and cable: Tab 03 target vs final FEM tension.</summary>
@@ -1860,9 +1864,11 @@ public sealed partial class MainViewModel : Observable
             var targetFitPercent = FemTargetFitPercent;
             var targetFitIterations = FemTargetFitIterations;
             var frameMeshSegments = FemFrameMeshSegments;
+            var cableSag = FemCableSag;
             FemMonitorTolerancePercent = targetFitPercent;
             FemLogLine($"Pin supports: {string.Join(", ", supports)}.");
-            FemLogLine($"Settings: target-force fitting ±{targetFitPercent:0.###}% · max {targetFitIterations:N0} fitting runs · frame mesh {frameMeshSegments} segments (cables unmeshed).");
+            FemLogLine($"Settings: target-force fitting ±{targetFitPercent:0.###}% · max {targetFitIterations:N0} fitting runs · frame mesh {frameMeshSegments} segments (cables unmeshed) · " +
+                (cableSag ? "cable sag ON (parabolic cable under the load each case puts on it)." : "cable sag OFF (straight tension-only cables)."));
             FemLogLine($"Analyzing {candidates.Count:N0} cases ({FemCandidateSummary}). Per case: build height geometry → split frames at joints and mesh → " +
                 "fit cable pretension (no loads) → apply Tab 01 loads → tension-only equilibrium → recover member forces.");
             var progress = new Progress<FemProgress>(value =>
@@ -1886,7 +1892,7 @@ public sealed partial class MainViewModel : Observable
                 Notify(nameof(FemStatus));
             });
             var results = await Task.Run(() => femStudy.Analyze(baseline, topPoints, middlePoints, bottomPoints,
-                supports, candidates, properties, progress, cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan), cancellationToken);
+                supports, candidates, properties, progress, cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan, cableSag), cancellationToken);
             var unfitted = results.Count(run => !run.Result.TargetFitConverged);
             var failed = candidates.Count - results.Count;
             FemProgressText = $"Completed {results.Count:N0} of {candidates.Count:N0} FEM cases" +

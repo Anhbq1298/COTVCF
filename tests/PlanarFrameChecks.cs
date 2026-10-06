@@ -303,6 +303,8 @@ internal static class PlanarFrameChecks
               Math.Abs(segmentedSlack.SupportReactions.Sum(reaction => reaction.ReactionZKN) + 5000) < 1e-3,
             "A cable split at a cable-only joint solves both taut and fully slack without a singular-tangent stall");
 
+        CableSag(section, modulusKNPerM2);
+
         var studyState = CandidateState();
         var service = new FemStudyService();
         var candidates = service.Compose(studyState);
@@ -312,6 +314,147 @@ internal static class PlanarFrameChecks
             "FEM candidate loads reuse the Tab 01 tributary-force calculation");
         Check(FemStudyService.FindPinSupportPoints(studyState.Baseline).SequenceEqual(["A", "B"]),
               "Automatic pin supports select lowest vertical column ends and ignore diagonal braces");
+    }
+
+    /// <summary>
+    /// Cable sag. A stay runs from joint B on a pinned beam up to a fixed anchor E (10 m, 3-4-5 slope) and carries its
+    /// own weight. The beam is linear, so B moves by its flexibility times the forces on it — taken from two
+    /// cable-free solves — and the cable tension has to satisfy one scalar equation, solved here by bisection:
+    /// <c>T/k − a/T² = P₀/k − (movement of B along the cable)</c>, a = (w·cos θ)²·L³ / 24. The solver must land on it.
+    /// </summary>
+    private static void CableSag(FemSectionProperties section, double modulusKNPerM2)
+    {
+        const double length = 10, cos = 0.8, sin = 0.6, area = 0.01, weight = 2;      // m, –, –, m², kN/m
+        var axial = modulusKNPerM2 * area / length;
+        var geometry = new GeometryModel(new Dictionary<string, StructuralPoint>(StringComparer.Ordinal)
+        {
+            ["A"] = new("A", new(-5, 0, 0)),
+            ["B"] = new("B", new(0, 0, 0)),
+            ["C"] = new("C", new(5, 0, 0)),
+            ["E"] = new("E", new(8, 0, 6))
+        },
+        [
+            new("AB", "A", "B", MemberKind.Frame),
+            new("BC", "B", "C", MemberKind.Frame),
+            new("Stay", "B", "E", MemberKind.Cable)
+        ]);
+        var beams = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal)
+        {
+            ["AB"] = section with { MemberName = "AB" },
+            ["BC"] = section with { MemberName = "BC" }
+        };
+        var stay = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["Stay"] = new("Stay", area, modulusKNPerM2, null) };
+
+        // how far B moves along the cable per unit force on it, from the beam alone
+        var beamOnly = new GeometryModel(geometry.Points.Where(point => point.Key != "E").ToDictionary(point => point.Key, point => point.Value, StringComparer.Ordinal),
+            geometry.Members.Where(member => member.Kind == MemberKind.Frame).ToArray());
+        double Along(double fx, double fz)
+        {
+            var joint = new PlanarFrameSolver().Solve(beamOnly, beams, new Dictionary<string, FemSectionProperties>(), new Dictionary<string, double>(),
+                [new("B", fx, fz)], ["A", "C"]).Joints.Single(item => item.PointName == "B");
+            return cos * joint.UXM + sin * joint.UZM;
+        }
+        double alongX = Along(1, 0), alongZ = Along(0, 1), alongCable = cos * alongX + sin * alongZ;
+
+        double Reference(double pretension, double cableWeight, bool sag, double px = 0, double pz = 0)
+        {
+            var normal = cableWeight * cos;
+            var a = sag ? normal * normal * length * length * length / 24 : 0;
+            // B carries the cable pull, the lumped half of the cable weight and its own joint load
+            var other = px * alongX + (pz - cableWeight * length / 2) * alongZ;
+            if (a == 0) return Math.Max(0, (pretension / axial - other) / (1 / axial + alongCable));
+            double Unbalance(double t) => t / axial + t * alongCable - a / (t * t) - pretension / axial + other;
+            double low = 1e-9, high = 1e7;
+            for (var step = 0; step < 200; step++)
+            {
+                var mid = (low + high) / 2;
+                if (Unbalance(mid) > 0) high = mid; else low = mid;
+            }
+            return (low + high) / 2;
+        }
+        FemLoadSet Loads(double cableWeight, double px = 0, double pz = 0) => new(
+            px == 0 && pz == 0 ? [] : [new FemJointLoad("B", px, pz)],
+            cableWeight == 0 ? [] : [new FemMemberLoad("Stay", FemLoadDirection.Gravity, 0, 1, cableWeight, cableWeight)], []);
+        FemAnalysisResult Solve(double pretension, double cableWeight, bool sag, double px = 0, double pz = 0, double? fit = null) =>
+            new PlanarFrameSolver().SolveCases(geometry, beams, stay, new Dictionary<string, double> { ["Stay"] = pretension },
+                Loads(cableWeight), [new FemCaseLoads("Case", Loads(cableWeight, px, pz), 1)], ["A", "C", "E"], default, fit,
+                PlanarFrameSolver.DefaultTargetFitIterations, 1, sag)["Case"];
+        bool Same(double value, double expected) => Math.Abs(value - expected) <= 1e-6 * Math.Max(100, Math.Abs(expected));
+
+        // a taut stay (about 3,000 kN once the beam has given way under it): the sag is a small correction
+        const double tautPretension = 30000;
+        var tautStraight = Solve(tautPretension, weight, sag: false).Cables.Single();
+        var taut = Solve(tautPretension, weight, sag: true).Cables.Single();
+        Check(Same(tautStraight.AxialForceKN, Reference(tautPretension, weight, false)) && tautStraight.AxialForceKN > 2000 && tautStraight.SagM is null && tautStraight.TangentStiffnessRatio is null,
+            "Without cable sag a stay carrying its own weight is the straight tension-only bar, weight lumped to its ends");
+        Check(Same(taut.AxialForceKN, Reference(tautPretension, weight, true)) && taut.AxialForceKN > tautStraight.AxialForceKN &&
+              taut.AxialForceKN < 1.001 * tautStraight.AxialForceKN,
+            "With cable sag a taut stay satisfies T/k − a/T² = extension + P₀/k; the tension is within 0.1 % of the straight cable's, above it");
+        var normalLoad = weight * cos;
+        var ernst = 1 / (1 + normalLoad * normalLoad * length * length * modulusKNPerM2 * area / (12 * Math.Pow(taut.AxialForceKN, 3)));
+        Check(taut.SagM is double tautSag && Math.Abs(tautSag - normalLoad * length * length / (8 * taut.AxialForceKN)) < 1e-12 &&
+              taut.TangentStiffnessRatio is double tautRatio && Math.Abs(tautRatio - ernst) < 1e-12 && tautRatio is > 0.99 and < 1,
+            "A sagging cable reports its mid-span sag w·cos θ·L² / 8T and Ernst's stiffness ratio 1 / (1 + (w·cos θ·L)²·EA / 12T³)");
+
+        // a lightly tensioned stay (about 200 kN as a straight cable): the sag governs
+        var lightStraight = Solve(2000, weight, sag: false).Cables.Single();
+        var light = Solve(2000, weight, sag: true).Cables.Single();
+        Check(Same(light.AxialForceKN, Reference(2000, weight, true)) && light.AxialForceKN > 1.1 * lightStraight.AxialForceKN &&
+              light.TangentStiffnessRatio is < 0.5 && light.SagM is > 0.05,
+            "A lightly tensioned stay sags visibly, keeps a fraction of EA / L and carries noticeably more than the straight cable — on the same force law");
+
+        // a stay that a straight cable model would call slack
+        var slackStraight = Solve(20, weight, sag: false, pz: 300);
+        var slack = Solve(20, weight, sag: true, pz: 300);
+        Check(!slackStraight.Cables.Single().Active && slackStraight.Cables.Single().AxialForceKN == 0 &&
+              slack.Cables.Single().Active && Same(slack.Cables.Single().AxialForceKN, Reference(20, weight, true, pz: 300)) &&
+              slack.Cables.Single().AxialForceKN > 10,
+            "Where the straight cable goes slack, the sagging cable keeps the tension its weight needs to hang across the shortened chord");
+        Check(Math.Abs(slack.SupportReactions.Sum(reaction => reaction.ReactionZKN) + 300 - weight * length) < 1e-5 &&
+              Math.Abs(slack.SupportReactions.Sum(reaction => reaction.ReactionXKN)) < 1e-5 && slack.NonlinearIterations <= 100,
+            "The sagging-cable equilibrium converges and the support reactions balance the joint load and the cable weight");
+
+        // nothing on the cable: nothing changes
+        var weightless = Solve(tautPretension, 0, sag: true);
+        Check(weightless.Cables.Single().AxialForceKN == Solve(tautPretension, 0, sag: false).Cables.Single().AxialForceKN && weightless.Cables.Single().SagM is null,
+            "Cable sag changes nothing for a cable the case puts no load on");
+        var vertical = new GeometryModel(new Dictionary<string, StructuralPoint>(geometry.Points, StringComparer.Ordinal) { ["D"] = new("D", new(0, 0, 5)) },
+            [.. geometry.Members.Where(member => member.Kind == MemberKind.Frame), new("Hanger", "B", "D", MemberKind.Cable)]);
+        var hanger = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["Hanger"] = new("Hanger", area, modulusKNPerM2, null) };
+        var hangerLoads = new FemLoadSet([], [new FemMemberLoad("Hanger", FemLoadDirection.Gravity, 0, 1, weight, weight)], []);
+        FemCableResponse Hanger(bool sag) => new PlanarFrameSolver().SolveCases(vertical, beams, hanger, new Dictionary<string, double> { ["Hanger"] = 100 },
+            FemLoadSet.Empty, [new FemCaseLoads("Case", hangerLoads, 1)], ["A", "C", "D"], cableSag: sag)["Case"].Cables.Single();
+        Check(Hanger(true).SagM is null && Hanger(true).AxialForceKN == Hanger(false).AxialForceKN,
+            "A vertical cable does not sag under its own weight: only the load normal to the chord counts");
+
+        // Target Force with sag: the pretension is fitted to the target under the stage loads, cable weight included
+        var fitted = Solve(1500, weight, sag: true, pz: -100, fit: 1).Cables.Single();
+        var fittedStraight = Solve(1500, weight, sag: false, pz: -100, fit: 1).Cables.Single();
+        Check(fitted.PretensionStageForceKN is double stage && Math.Abs(stage - 1500) <= 15 && fitted.TargetForceKN == 1500 &&
+              Same(fitted.AxialForceKN, Reference(fitted.AppliedPretensionKN, weight, true, pz: -100)) &&
+              fitted.AppliedPretensionKN < fittedStraight.AppliedPretensionKN,
+            "Target-force fitting works on the sagging cable: the stage tension meets the target with less lack of fit than a straight cable needs");
+        Check(FemResultCombiner.Combine([(Solve(tautPretension, weight, sag: true), 1.35)]).Cables.Single() is { SagM: null, TangentStiffnessRatio: null } combined &&
+              Math.Abs(combined.AxialForceKN - 1.35 * taut.AxialForceKN) < 1e-9 &&
+              FemCableFitRow.FromRun(new FemStudyRun("L01_H01_P01", "L01", "H01", "P01", Solve(tautPretension, weight, sag: true))).Single() is { SagMm: > 0, StiffnessPercent: > 99 and < 100 },
+            "A linear combination of cases carries no sag; the cable table shows sag in mm and the stiffness kept in % for a solved case");
+
+        // end to end, as the FEM tab runs it: SAP's DEAD pattern (self-weight × 1) → the load plan puts γ·A on the cable → it sags
+        var planSections = new Dictionary<string, FemSectionProperties>(beams, StringComparer.Ordinal)
+        {
+            ["Stay"] = stay["Stay"] with { UnitWeightKNPerM3 = weight / area }
+        };
+        var sapLoading = new SapFemLoading([new("DEAD", "Dead", 1)], [], [], [], [],
+            [new("DEAD", "Linear Static", true, [("DEAD", 1)], null, null)], [], []);
+        var (patternRows, caseRows, comboRows) = FemLoadPlan.RowsFromSap(sapLoading, [], []);
+        var plan = FemLoadPlan.Build(patternRows, caseRows, comboRows, sapLoading, planSections, geometry, [], [], []);
+        var (planFitLoads, planCases) = plan.ForCandidate([]);
+        FemCableResponse Dead(bool sag) => plan.Complete(new PlanarFrameSolver().SolveCases(geometry, beams, stay, new Dictionary<string, double> { ["Stay"] = 0 },
+            planFitLoads, planCases, ["A", "C", "E"], cableSag: sag))["DEAD"].Cables.Single();
+        Check(Same(Dead(true).AxialForceKN, Reference(0, weight, true)) && Dead(true).SagM is > 0 &&
+              Same(Dead(false).AxialForceKN, Reference(0, weight, false)) && Dead(false).SagM is null &&
+              Dead(true).AxialForceKN > 2 * Dead(false).AxialForceKN,
+            "Through the load plan, a SAP self-weight pattern makes the cable sag: a stay with no pretension hangs under its own weight");
     }
 
     private static ApplicationState CandidateState()

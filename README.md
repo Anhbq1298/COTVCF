@@ -130,8 +130,24 @@ along it; each piece is then meshed into N equal sub-elements (Analysis → Fram
 frame joints and recovered as stations for force diagrams and the deflected shape. Cable equilibrium uses damped Newton iterations with a potential-
 energy line search, so cables can transition between taut and slack without a Boolean active-set toggle loop.
 It rejects non-planar geometry, tendons, SAP advanced local axes, axial or in-plane shear releases, and rotated
-local axes with in-plane releases. It does not model nonlinear cable sag/geometric nonlinearity or run SAP2000
-analysis cases. The full candidate space is limited to 50,000 cases.
+local axes with in-plane releases. It does not run SAP2000 analysis cases. The full candidate space is limited to
+50,000 cases.
+
+**Cable sag** (Analysis → Cable sag, on by default) is the one geometric nonlinearity included. A cable that a load
+case loads along its length — its self-weight, typically — hangs in a shallow parabola, and its tension T follows
+`T/k − a/T² = extension + P/k` with `k = EA/L` and `a = (w·cos θ)²·L³/24`. Its stiffness is then Ernst's equivalent
+`k / (1 + (w·cos θ·L)²·EA / 12T³)`, and it never goes fully slack. The cable table reports the sag and the stiffness
+kept. This is the parabolic (Ernst) model, not a full catenary with large displacements: P-Δ and large-displacement
+geometry updates are not modelled.
+
+**Basis of the solver.** It was written for this application and contains no code from OpenSees, SAP2000 or any other
+analysis package (MathNet.Numerics provides the linear algebra). It implements standard formulations: the direct
+stiffness method with Euler–Bernoulli elements (McGuire, Gallagher & Ziemian, *Matrix Structural Analysis*, 2000),
+static condensation (Guyan, AIAA Journal 3(2), 1965), the shallow elastic cable (Irvine, *Cable Structures*, 1981)
+with Ernst's equivalent modulus (Der Bauingenieur 40(2), 1965), and energy minimisation by Newton's method with a
+line search (Nocedal & Wright, *Numerical Optimization*, 2006). `--fem` checks it against closed-form beam results
+and an independent solution of the cable equation. It has not been benchmarked against SAP2000 or OpenSees on a
+complete model, so governing candidates should be confirmed with the SAP2000 study.
 
 ## Project configuration
 
