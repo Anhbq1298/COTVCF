@@ -26,6 +26,8 @@
     <Product>COT VCF Parametric Automation</Product>
     <AssemblyVersion>2.0.0.0</AssemblyVersion>
     <FileVersion>2.0.0.0</FileVersion>
+    <!-- The app's own logo (the truss glyph of Theme.xaml "AppLogo") for the exe, the taskbar and shortcuts. -->
+    <ApplicationIcon>src\Presentation\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- Debug Configuration -->
