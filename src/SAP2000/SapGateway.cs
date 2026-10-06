@@ -1,4 +1,5 @@
 using COT_VCF.Application;
+using COT_VCF.Application.Quantities;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
 using COT_VCF.Geometry;
@@ -920,6 +921,35 @@ public sealed class SapGateway : ISapGateway
             throw new InvalidOperationException($"No material is assigned to {memberName} (section '{sectionName}'); FEM requires a valid elastic material.");
         return material;
     }
+    /// <summary>The model's own database tables, as SAP2000 shows them (Display → Show Tables), for the quantity
+    /// take-off. Signatures checked against CSiAPIv1 2.15 (SAP2000 27): GetAvailableTables lists the tables that hold
+    /// data; GetTableForDisplayArray returns one table as text, row by row, in the present units. Neither writes.</summary>
+    public Task<SapTableSet> ReadDatabaseTablesAsync(IReadOnlyList<string> tableNamePrefixes, ModelInfo expected) => worker.Run(() =>
+    {
+        Verify(expected);
+        int tableCount = 0; string[] keys = [], names = []; int[] importTypes = [];
+        Check(Model.DatabaseTables.GetAvailableTables(ref tableCount, ref keys, ref names, ref importTypes), "DatabaseTables.GetAvailableTables");
+        var read = new List<KeyValuePair<string, IReadOnlyList<SapTableRow>>>();
+        foreach (var key in keys.Take(tableCount).Where(key => tableNamePrefixes.Any(prefix => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))))
+        {
+            // An empty field list asks for every field; "All" is the group every object of the model belongs to.
+            string[] requested = [], fields = [], data = []; int version = 0, records = 0;
+            Check(Model.DatabaseTables.GetTableForDisplayArray(key, ref requested, "All", ref version, ref fields, ref records, ref data),
+                "DatabaseTables.GetTableForDisplayArray", key);
+            if (records == 0 || fields.Length == 0) continue;
+            if (data.Length < records * fields.Length) throw new InvalidOperationException($"SAP2000 returned an incomplete '{key}' table.");
+            var rows = new List<SapTableRow>(records);
+            for (var record = 0; record < records; record++)
+            {
+                var start = record * fields.Length;
+                rows.Add(new(fields.Select((field, column) => KeyValuePair.Create(field, data[start + column] ?? ""))));
+            }
+            read.Add(new(key, rows));
+        }
+        var info = ReadInfo();
+        Verify(expected);
+        return SapTableSet.FromTables(read, SapTableUnits.From(info), $"SAP2000 database tables of {info.Name}");
+    });
     public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => worker.Run<IReadOnlyList<ForceSource>>(() =>
     {
         Verify(expected);

@@ -44,9 +44,11 @@ public readonly record struct SapTableUnits(string Force, string Length)
 /// <summary>One record of a SAP2000 database table: field key → value as SAP2000 wrote it.</summary>
 public sealed class SapTableRow
 {
-    private readonly Dictionary<string, string> fields;
-    public SapTableRow(IEnumerable<KeyValuePair<string, string>> fields) =>
-        this.fields = new Dictionary<string, string>(fields, StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> fields = new(StringComparer.OrdinalIgnoreCase);
+    public SapTableRow(IEnumerable<KeyValuePair<string, string>> fields)
+    {
+        foreach (var (key, value) in fields) this.fields[key] = value;
+    }
 
     /// <summary>The field's text, or null when SAP2000 gave none.</summary>
     public string? Text(string field) => fields.TryGetValue(field, out var value) && value.Length > 0 ? value : null;

@@ -42,9 +42,10 @@ public sealed record FemCableFitRow(string RunId, string CableName, double? Targ
     public bool Failed { get; init; }
     public string Status => Failed ? "Failed" : FitFailure is null ? "Fitted" : "Not fitted";
 
-    /// <summary>Row for a case whose FEM solve did not reach equilibrium; it has no forces to report.</summary>
+    /// <summary>Row for a case whose FEM solve did not reach equilibrium; it has no forces to report and names no
+    /// cable — the candidate, the Failed status and the reason (Status tooltip, run log) say what happened.</summary>
     public static FemCableFitRow FailedCase(string runId, string reason) =>
-        new(runId, "(all cables)", null, null, null, null, null, reason) { Failed = true };
+        new(runId, "", null, null, null, null, null, reason) { Failed = true };
 
     /// <summary>Rows for one case; Result is the cable tension under <paramref name="resultName"/> (case or combination).</summary>
     public static IEnumerable<FemCableFitRow> FromRun(FemStudyRun run, string? resultName = null)

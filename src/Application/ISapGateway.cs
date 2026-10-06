@@ -35,6 +35,11 @@ public interface ISapGateway : IDisposable
     Task<SapFemLoading> GetFemLoadingAsync(IReadOnlyList<StructuralMember> members, IReadOnlyDictionary<string, double> localAnglesDeg,
         ModelInfo expected) =>
         throw new NotSupportedException("FEM load reads are not implemented by this SAP gateway.");
+    /// <summary>Reads, for display, every database table of the verified active model that holds data and whose
+    /// name starts with one of the given prefixes, in the model's present units. Read-only: nothing is opened for
+    /// editing and units, lock state and model are left as they are.</summary>
+    Task<Quantities.SapTableSet> ReadDatabaseTablesAsync(IReadOnlyList<string> tableNamePrefixes, ModelInfo expected) =>
+        throw new NotSupportedException("Database-table reads are not implemented by this SAP gateway.");
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
     /// <summary>Moves joints to <paramref name="proposed"/>. A cable object defined by its undeformed length is given

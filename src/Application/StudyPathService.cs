@@ -28,6 +28,9 @@ public sealed partial class StudyPathService
         return Path.Combine(GetIterationDirectory(baseline, iterationId), $"{stem}_{iterationId}.sdb");
     }
 
+    /// <summary>True for a study iteration ID of the form <c>Lxx_Hxx_Pxx</c>.</summary>
+    public static bool IsIterationId(string? value) => !string.IsNullOrWhiteSpace(value) && IterationIdPattern().IsMatch(value);
+
     private static string NormalizeBaselinePath(string baselinePath)
     {
         if (string.IsNullOrWhiteSpace(baselinePath))
