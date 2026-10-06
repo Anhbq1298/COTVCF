@@ -933,9 +933,15 @@ public sealed class SapGateway : ISapGateway
         foreach (var key in keys.Take(tableCount).Where(key => tableNamePrefixes.Any(prefix => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))))
         {
             // An empty field list asks for every field; "All" is the group every object of the model belongs to.
+            // If SAP2000 refuses the group by name, the blank group name stands for the same thing.
             string[] requested = [], fields = [], data = []; int version = 0, records = 0;
-            Check(Model.DatabaseTables.GetTableForDisplayArray(key, ref requested, "All", ref version, ref fields, ref records, ref data),
-                "DatabaseTables.GetTableForDisplayArray", key);
+            var code = Model.DatabaseTables.GetTableForDisplayArray(key, ref requested, "All", ref version, ref fields, ref records, ref data);
+            if (code != 0)
+            {
+                requested = []; fields = []; data = []; version = 0; records = 0;
+                Check(Model.DatabaseTables.GetTableForDisplayArray(key, ref requested, "", ref version, ref fields, ref records, ref data),
+                    "DatabaseTables.GetTableForDisplayArray", key);
+            }
             if (records == 0 || fields.Length == 0) continue;
             if (data.Length < records * fields.Length) throw new InvalidOperationException($"SAP2000 returned an incomplete '{key}' table.");
             var rows = new List<SapTableRow>(records);

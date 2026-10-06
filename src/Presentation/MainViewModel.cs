@@ -72,7 +72,7 @@ public sealed partial class MainViewModel : Observable
             if (!Set(ref selectedTab, value)) return;
             NotifySharedViewer();
             if (value == TabOptimization) RefreshOptimization();     // also picks up Tab 03 capacity edits made meanwhile
-            if (value == TabQuantities) RefreshQuantityCandidates();  // candidates built since the tab was last shown
+            if (value == TabQuantities) ShowQuantityTab();            // the running model again, and candidates built meanwhile
         }
     }
     public string Message { get => message; private set => Set(ref message, value); }

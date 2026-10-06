@@ -159,6 +159,9 @@ earlier tall-header / large-button / blue-block look.
   pipe/concrete pipe, general) via FemSectionProperties.Shape, else an equivalent solid rectangle with the same A, I33,
   I22 (SD, filled-tube, built-up…); cables are rods of their gross area; concrete materials are shaded concrete.
   Drag orbit, right/Shift-drag pan, wheel zoom, double-click / Fit fits. Needs Read from SAP for sizes.
+- FEM deflection viewer colours the magnified shape by displacement magnitude |U| [mm], with a displayed range
+  (maximum 0 = automatic). Undeformed geometry is a light dashed guide, independently hideable; contour can be disabled.
+  Clicking a displayed joint shows only Ux, Uy, Uz [mm]; Uy is zero for the planar solver. These are presentation controls only.
 - FEM Candidate and Load case / combo selectors sit above the Inputs / Analysis / View / Results pages.
   Results retains the force, reaction and deflection controls; table headings distinguish member ends from Rx/Rz or Ux/Uz.
   Not fitted uses warning colour; Failed uses error colour. Solver behavior is unchanged.

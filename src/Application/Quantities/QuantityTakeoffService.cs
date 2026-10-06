@@ -13,7 +13,7 @@ public interface ISapModelTableReader
     Task<SapTableSet> ReadAsync(string modelPath, CancellationToken token);
 }
 
-public enum QuantitySource { TextExport, IsolatedSapRead }
+public enum QuantitySource { TextExport, IsolatedSapRead, ConnectedSap }
 
 /// <summary>The take-off of one candidate and where its data came from.</summary>
 public sealed record QuantityLoadResult(QuantityCandidate Candidate, QuantityTakeoff Takeoff, QuantitySource Source, string SourceText);
@@ -62,6 +62,24 @@ public sealed class QuantityTakeoffService(ISapModelTableReader? sapReader = nul
             return new(null, $"the text export cannot be used: {ex.Message}");
         }
     }, token);
+
+    /// <summary>
+    /// Takes off the model that is open in the connected SAP2000 as it is at this moment — saved or not — from its
+    /// database tables, read through <paramref name="readTables"/> (the connected gateway). Nothing is kept: every
+    /// call reads SAP2000 again. Read-only; the model, its units and its lock state are not touched.
+    /// </summary>
+    public async Task<QuantityLoadResult> ReadConnectedAsync(QuantityCandidate connected, Func<IReadOnlyList<string>, Task<SapTableSet>> readTables,
+        CancellationToken token)
+    {
+        var tables = await readTables(IsolatedSapTableReader.TablePrefixes);
+        token.ThrowIfCancellationRequested();
+        if (QuantityTakeoffCalculator.MissingInputs(tables) is { Count: > 0 } missing)
+            throw new InvalidDataException($"SAP2000 did not return {string.Join(", ", missing)} for the connected model.");
+        var takeoff = await Task.Run(() => QuantityTakeoffCalculator.Calculate(tables), token);
+        var name = string.IsNullOrWhiteSpace(connected.ModelPath) ? "unsaved model" : Path.GetFileName(connected.ModelPath);
+        return new(connected, takeoff, QuantitySource.ConnectedSap,
+            $"{name} · read live from the connected SAP2000 at {DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture)} · {tables.Units}");
+    }
 
     /// <summary>Reads the candidate's model through the isolated SAP2000 reader. The result is kept for as long as
     /// the model file stays as it is.</summary>

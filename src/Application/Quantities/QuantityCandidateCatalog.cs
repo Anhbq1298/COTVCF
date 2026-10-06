@@ -7,7 +7,8 @@ namespace COT_VCF.Application.Quantities;
 /// <summary>When a study run worked on a candidate, from the run journal.</summary>
 public sealed record QuantityRunWindow(DateTimeOffset StartedAt, DateTimeOffset? CompletedAt);
 
-/// <summary>One candidate model of a study, as the study's own records and folders identify it.</summary>
+/// <summary>One model the take-off can be made for: a candidate model of a study, as the study's own records and
+/// folders identify it — or the model that is open in the connected SAP2000 right now.</summary>
 public sealed record QuantityCandidate(
     string Id,
     string ModelPath,
@@ -16,10 +17,18 @@ public sealed record QuantityCandidate(
     string? RecordWarning,
     IReadOnlyList<QuantityRunWindow> RunWindows)
 {
+    public const string ConnectedModelId = "Connected model";
+
+    /// <summary>The model open in the connected SAP2000. It is read live through the API every time — never from a
+    /// file on disk — so it shows the model as it is now, saved or not.</summary>
+    public bool IsConnectedModel { get; init; }
+
+    public static QuantityCandidate Connected(ModelInfo model) => new(ConnectedModelId, model.Path, "", null, null, []) { IsConnectedModel = true };
+
     public override string ToString() => Id;
 
     public bool Equals(QuantityCandidate? other) =>
-        other is not null && Id == other.Id && RecordStatus == other.RecordStatus && RecordWarning == other.RecordWarning &&
+        other is not null && Id == other.Id && IsConnectedModel == other.IsConnectedModel && RecordStatus == other.RecordStatus && RecordWarning == other.RecordWarning &&
         string.Equals(ModelPath, other.ModelPath, StringComparison.OrdinalIgnoreCase) &&
         string.Equals(TextExportPath, other.TextExportPath, StringComparison.OrdinalIgnoreCase) && RunWindows.SequenceEqual(other.RunWindows);
     public override int GetHashCode() => StringComparer.Ordinal.GetHashCode(Id);

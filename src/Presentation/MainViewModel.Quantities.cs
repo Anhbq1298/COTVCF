@@ -25,8 +25,9 @@ public sealed record QuantityRow(
 
 public enum QuantityViewState { NoCandidate, Loading, Ready, Unavailable, Error }
 
-// Tab 08 — Quantity Take-off: concrete volume and steel mass of one study candidate, by assigned section, from that
-// candidate's own SAP2000 model data. Reads only; never the connected model, never a write.
+// Tab 08 — Quantity Take-off: concrete volume and steel mass of one model by assigned section. The model is either
+// the one open in the connected SAP2000 — read live through the API every time, so it shows SAP2000 as it is now —
+// or a study candidate, from that candidate's own saved data. Reads only; never a write.
 public sealed partial class MainViewModel
 {
     private const int TabQuantities = 8;
@@ -42,7 +43,7 @@ public sealed partial class MainViewModel
     private int quantityRequest;
     private CancellationTokenSource? quantityCancellation;
     private Task quantitySapRead = Task.CompletedTask;
-    private bool quantitySapReading;
+    private bool quantitySapReading, quantityWaiting;
 
     public IReadOnlyList<QuantityCandidate> QuantityCandidates => quantityCandidates;
     public IReadOnlyList<QuantityRow> QuantityRows => quantityRows;
@@ -75,52 +76,73 @@ public sealed partial class MainViewModel
         : quantityState switch
         {
             QuantityViewState.Loading => "Reading…",
-            QuantityViewState.Ready => selectedQuantityCandidate?.Id + (QuantityIncomplete ? " · incomplete" : ""),
+            QuantityViewState.Ready => (selectedQuantityCandidate is { IsConnectedModel: true } ? "Live model" : selectedQuantityCandidate?.Id) +
+                                       (QuantityIncomplete ? " · incomplete" : ""),
             QuantityViewState.Unavailable => "▲ Unavailable",
             QuantityViewState.Error => "× Read failed",
-            _ => quantityCandidates.Count == 0 ? "No candidate models" : $"{quantityCandidates.Count:N0} candidates",
+            _ => quantityCandidates.Count(candidate => !candidate.IsConnectedModel) is var built && built == 0 ? "No candidate models" : $"{built:N0} candidates",
         };
 
     /// <summary>The line beside the candidate dropdown.</summary>
     public string QuantityStatus => quantityState switch
     {
-        QuantityViewState.Loading => quantitySapReading
-            ? $"Reading {selectedQuantityCandidate?.Id} in a separate SAP2000 instance…"
-            : $"Reading {selectedQuantityCandidate?.Id}…",
+        QuantityViewState.Loading => selectedQuantityCandidate is { IsConnectedModel: true }
+            ? quantityWaiting ? "Waiting for the running operation to finish, then reading the connected model…" : "Reading the connected model from SAP2000…"
+            : quantitySapReading
+                ? $"Reading {selectedQuantityCandidate?.Id} in a separate SAP2000 instance…"
+                : $"Reading {selectedQuantityCandidate?.Id}…",
         QuantityViewState.Ready => $"{quantityRows.Count(row => !row.IsTotal):N0} sections · {quantityRows.Where(row => !row.IsTotal).Sum(row => row.MemberCount):N0} members" +
             (QuantityIncomplete ? " · ▲ some quantities are unavailable — see the notes" : ""),
         QuantityViewState.Unavailable or QuantityViewState.Error => "",
-        _ => !HasSapConnection ? "Connect to SAP2000 to list the candidate models."
-            : quantityCandidates.Count == 0 ? "No candidate model found in the study folder of the connected baseline — build the study on Tab 05."
-            : "Select a candidate model.",
+        _ => !HasSapConnection ? "Connect to SAP2000 to read the connected model and list the candidate models."
+            : "Select the connected model or a candidate model.",
     };
 
     private bool QuantityIncomplete => quantityRows.Any(row => row.TotalLengthM is null || row.ConcreteVolumeM3 is null || row.SteelMassT is null);
 
     private Command? reloadQuantities, cancelQuantityRead;
-    /// <summary>Looks for candidate models again and reads the selected one again.</summary>
-    public Command ReloadQuantities => reloadQuantities ??= new(_ => { RefreshQuantityCandidates(); LoadQuantities(reload: true); },
+    /// <summary>Refresh: looks for candidate models again and reads the selected model again — the connected model
+    /// from SAP2000 as it is at that moment.</summary>
+    public Command ReloadQuantities => reloadQuantities ??= new(_ =>
+        {
+            var request = quantityRequest;
+            RefreshQuantityCandidates();
+            if (request == quantityRequest) LoadQuantities(reload: true);       // unless the refreshed list already started a read
+        },
         () => !quantitySapReading);
+
+    /// <summary>The tab is shown: the list is brought up to date, and the connected model is read again — SAP2000 may
+    /// have been worked in meanwhile. A candidate's saved data does not change by itself and is left as it is.</summary>
+    private void ShowQuantityTab()
+    {
+        var request = quantityRequest;
+        RefreshQuantityCandidates();
+        if (request == quantityRequest && selectedQuantityCandidate is { IsConnectedModel: true } && quantityState != QuantityViewState.Loading)
+            LoadQuantities(reload: true);
+    }
     public Command CancelQuantityRead => cancelQuantityRead ??= new(_ => CancelQuantityRequest(), () => quantitySapReading);
 
-    /// <summary>Brings the candidate list in line with the study folder of the connected baseline. The list object is
-    /// kept while its contents are the same, so the dropdown keeps its selection.</summary>
+    /// <summary>Brings the list in line with the connection and with the study folder of the connected baseline: the
+    /// connected model first, then the candidates. The list object is kept while its contents are the same, so the
+    /// dropdown keeps its selection.</summary>
     private void RefreshQuantityCandidates()
     {
         var connected = HasSapConnection;
         quantityStudyRoot = connected ? StudyRoot : null;
-        SetQuantityCandidates(connected ? quantityCatalog.Discover(BaselineModelPath) : []);
+        SetQuantityCandidates(connected ? [QuantityCandidate.Connected(State.Model!), .. quantityCatalog.Discover(BaselineModelPath)] : []);
     }
 
     private void SetQuantityCandidates(IReadOnlyList<QuantityCandidate> found)
     {
+        var selectedId = selectedQuantityCandidate?.Id;
         if (!found.SequenceEqual(quantityCandidates))
         {
-            var selectedId = selectedQuantityCandidate?.Id;
             quantityCandidates = found;
             Notify(nameof(QuantityCandidates));
-            SelectedQuantityCandidate = selectedId is null ? null : found.FirstOrDefault(candidate => candidate.Id == selectedId);
         }
+        // The selection stays where its model is still listed. With none, the tab opens on the model that is running.
+        SelectedQuantityCandidate = (selectedId is null ? null : quantityCandidates.FirstOrDefault(candidate => candidate.Id == selectedId))
+            ?? (selectedTab == TabQuantities ? quantityCandidates.FirstOrDefault(candidate => candidate.IsConnectedModel) : null);
         NotifyQuantities();
     }
 
@@ -160,6 +182,12 @@ public sealed partial class MainViewModel
         NotifyQuantities();
         try
         {
+            if (candidate.IsConnectedModel)
+            {
+                var live = await ReadConnectedQuantitiesAsync(candidate, request, cancellation.Token);
+                if (request == quantityRequest && live is not null) ShowQuantities(live, null);
+                return;
+            }
             var attempt = await quantityTakeoff.TryTextExportAsync(candidate, cancellation.Token);
             if (request != quantityRequest) return;
             var result = attempt.Result ?? await ReadQuantitiesWithSapAsync(candidate, attempt.Rejected ?? "its text export cannot be used", request, cancellation.Token, reload);
@@ -168,16 +196,59 @@ public sealed partial class MainViewModel
         }
         catch (OperationCanceledException)
         {
-            if (request == quantityRequest) ShowQuantityProblem(QuantityViewState.Unavailable, $"Reading {candidate.Id} was cancelled. Choose Reload to read it again.");
+            if (request == quantityRequest) ShowQuantityProblem(QuantityViewState.Unavailable, $"Reading {Named(candidate)} was cancelled. Choose Reload to read it again.");
         }
         catch (Exception ex)
         {
-            if (request == quantityRequest) ShowQuantityProblem(QuantityViewState.Error, $"The quantities of {candidate.Id} could not be read: {ex.Message}");
+            if (request == quantityRequest) ShowQuantityProblem(QuantityViewState.Error, $"The quantities of {Named(candidate)} could not be read: {ex.Message}");
         }
         finally
         {
             if (ReferenceEquals(quantityCancellation, cancellation)) quantityCancellation = null;
             cancellation.Dispose();
+        }
+    }
+
+    private static string Named(QuantityCandidate candidate) => candidate.IsConnectedModel ? "the connected model" : candidate.Id;
+
+    /// <summary>
+    /// The live read of the model open in the connected SAP2000, on the application's own SAP2000 lane. Like every
+    /// other call to the connected SAP2000 it holds the application busy while it runs, and it waits for an operation
+    /// that is already running (a connect, a refresh, a study) instead of reading in the middle of it. Read-only:
+    /// database tables for display — the model, its units and its lock state stay as they are.
+    /// Returns null when a newer request took over.
+    /// </summary>
+    private async Task<QuantityLoadResult?> ReadConnectedQuantitiesAsync(QuantityCandidate candidate, int request, CancellationToken token)
+    {
+        if (IsBusy)
+        {
+            quantityWaiting = true;
+            NotifyQuantities();
+            try
+            {
+                while (IsBusy)
+                {
+                    await Task.Delay(150, token);
+                    if (request != quantityRequest) return null;
+                }
+            }
+            finally { quantityWaiting = false; }
+        }
+        if (request != quantityRequest || !HasSapConnection) return null;
+        IsBusy = true;
+        Message = "Reading the connected model from SAP2000 (read-only)…";
+        NotifyQuantities();
+        try { return await quantityTakeoff.ReadConnectedAsync(candidate, workflow.ReadDatabaseTablesAsync, token); }
+        catch (System.Runtime.InteropServices.COMException ex)
+        {
+            Message = ex.Message;
+            State.Connection = "Connection Lost";               // as for every other call to the connected SAP2000
+            throw;
+        }
+        finally
+        {
+            IsBusy = false;
+            NotifyQuantities();
         }
     }
 
@@ -229,7 +300,7 @@ public sealed partial class MainViewModel
         quantityRows = takeoff.Sections.Select(section => new QuantityRow(section.Section, section.MemberCount, section.TotalLengthM, section.ConcreteVolumeM3,
                 section.SteelMassT, false, section.Basis, section.Problems.Count == 0 ? null : string.Join(Environment.NewLine, section.Problems), section.Figure))
             .Append(new QuantityRow("Total", total.MemberCount, total.TotalLengthM, total.ConcreteVolumeM3, total.SteelMassT, true,
-                gaps.Length == 0 ? "Sum of every section of the selected candidate." : "Sum over the sections — incomplete.",
+                gaps.Length == 0 ? "Sum of every section of the selected model." : "Sum over the sections — incomplete.",
                 gaps.Length == 0 ? null
                     : $"Not a complete total: {string.Join(", ", gaps)} could not be taken off in full. " +
                       $"The sections that could add up to {N(total.AvailableLengthM)} m, {N(total.AvailableConcreteVolumeM3)} m³ concrete and {N(total.AvailableSteelMassT)} t steel."))
@@ -242,9 +313,11 @@ public sealed partial class MainViewModel
         quantitySource = $"{result.Candidate.Id} · {result.SourceText}";
         quantityProblem = "";
         quantityState = QuantityViewState.Ready;
-        Message = gaps.Length == 0
-            ? $"Quantity take-off of {result.Candidate.Id} read from its own model data. No SAP2000 model was changed."
-            : $"Quantity take-off of {result.Candidate.Id} read; {gaps.Length} section(s) could not be taken off in full — see Tab 08.";
+        Message = gaps.Length > 0
+            ? $"Quantity take-off of {Named(result.Candidate)} read; {gaps.Length} section(s) could not be taken off in full — see Tab 08."
+            : result.Candidate.IsConnectedModel
+                ? "Quantity take-off of the connected model read live from SAP2000. Nothing in the model was changed."
+                : $"Quantity take-off of {result.Candidate.Id} read from its own model data. No SAP2000 model was changed.";
         NotifyQuantities();
     }
 

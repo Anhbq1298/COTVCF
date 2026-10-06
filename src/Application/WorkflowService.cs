@@ -154,6 +154,13 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         return result;
     }
 
+    /// <summary>Database tables of the connected model as it is in SAP2000 right now (Tab 08 live take-off). Read-only.</summary>
+    public Task<Quantities.SapTableSet> ReadDatabaseTablesAsync(IReadOnlyList<string> tableNamePrefixes)
+    {
+        if (state.Model is null) throw new InvalidOperationException("Connect to SAP2000 before reading the model's tables.");
+        return sap.ReadDatabaseTablesAsync(tableNamePrefixes, state.Model);
+    }
+
     public Task<IReadOnlyDictionary<string, FemSectionProperties>> ReadFemSectionPropertiesAsync()
     {
         if (state.Model is null) throw new InvalidOperationException("Connect to SAP2000 before reading FEM section properties.");

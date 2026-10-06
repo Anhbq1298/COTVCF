@@ -1425,10 +1425,10 @@
           <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
           <RowDefinition Height="Auto"/>
          </Grid.RowDefinitions>
-         <DockPanel>
-          <TextBlock Text="LOAD PATTERNS" Style="{StaticResource Subheading}"/>
-          <TextBlock DockPanel.Dock="Right" Text="SW mult. editable" Style="{StaticResource Caption}"/>
-         </DockPanel>
+         <StackPanel>
+          <TextBlock Text="LOAD PATTERNS" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
+          <TextBlock Text="SW mult. editable" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+         </StackPanel>
          <DataGrid Grid.Row="1" ItemsSource="{Binding FemPatternRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
                    CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
           <DataGrid.Columns>
@@ -1441,10 +1441,10 @@
           </DataGrid.Columns>
          </DataGrid>
 
-         <DockPanel Grid.Row="2" Margin="0,8,0,0">
-          <TextBlock Text="LOAD CASES" Style="{StaticResource Subheading}"/>
-          <TextBlock DockPanel.Dock="Right" Text="Definition editable, e.g. 1 DEAD + 1 PT" Style="{StaticResource Caption}"/>
-         </DockPanel>
+         <StackPanel Grid.Row="2" Margin="0,8,0,0">
+          <TextBlock Text="LOAD CASES" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
+          <TextBlock Text="Definition editable, e.g. 1 DEAD + 1 PT" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+         </StackPanel>
          <DataGrid Grid.Row="3" ItemsSource="{Binding FemCaseRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
                    CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
           <DataGrid.Columns>
@@ -1463,10 +1463,10 @@
           </DataGrid.Columns>
          </DataGrid>
 
-         <DockPanel Grid.Row="4" Margin="0,8,0,0">
-          <TextBlock Text="LOAD COMBINATIONS" Style="{StaticResource Subheading}"/>
-          <TextBlock DockPanel.Dock="Right" Text="Linear additive · e.g. 1.2 DEAD + 1.5 LIVE" Style="{StaticResource Caption}"/>
-         </DockPanel>
+         <StackPanel Grid.Row="4" Margin="0,8,0,0">
+          <TextBlock Text="LOAD COMBINATIONS" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
+          <TextBlock Text="Linear additive · e.g. 1.2 DEAD + 1.5 LIVE" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+         </StackPanel>
          <DataGrid Grid.Row="5" ItemsSource="{Binding FemCombinationRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
                    CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
           <DataGrid.Columns>
@@ -1483,7 +1483,8 @@
           </DataGrid.Columns>
          </DataGrid>
 
-         <Expander Grid.Row="6" Margin="0,6,0,0" Header="{Binding FemLoadWarnings.Count, StringFormat='Load assignment warnings ({0})'}">
+         <Expander Grid.Row="6" Margin="0,6,0,0">
+          <Expander.Header><TextBlock Text="{Binding FemLoadWarnings.Count, StringFormat='Load assignment warnings ({0})'}"/></Expander.Header>
           <ListBox ItemsSource="{Binding FemLoadWarnings}" MaxHeight="120" FontSize="11"/>
          </Expander>
         </Grid>
@@ -1690,9 +1691,9 @@
        <TextBlock DockPanel.Dock="Left" Text="CANDIDATE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
        <ComboBox x:Name="QuantityCandidatePicker" DockPanel.Dock="Left" Width="168" ItemsSource="{Binding QuantityCandidates}"
                  SelectedItem="{Binding SelectedQuantityCandidate}" DisplayMemberPath="Id" AutomationProperties.Name="Quantity take-off candidate model"
-                 ToolTip="Candidate model of the study — its own section assignments, member lengths, Section Designer shapes and material densities are read"/>
+                 ToolTip="Connected model: the model open in SAP2000, read live as it is now. Lxx_Hxx_Pxx: a candidate model of the study, from its own saved data. Either way its own section assignments, member lengths, Section Designer shapes and material densities are read."/>
        <Button DockPanel.Dock="Left" Command="{Binding ReloadQuantities}" Style="{StaticResource IconButton}" Margin="6,0,4,0"
-               AutomationProperties.Name="Reload quantities" ToolTip="Look for candidate models again and read the selected one again">
+               AutomationProperties.Name="Refresh quantities" ToolTip="Refresh: read the connected model from SAP2000 again as it is now (or the selected candidate from its saved data), and look for candidate models again">
         <Viewbox Width="15" Height="15"><Path Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Data="M14,5 A6,6 0 1 0 16,11 M16,11 L16,6 M16,11 L11,11"/></Viewbox>
        </Button>
        <Button DockPanel.Dock="Left" Content="Cancel" Command="{Binding CancelQuantityRead}" Margin="0,0,6,0"

@@ -257,6 +257,14 @@ internal static class Program
                      vm.FemResultMode = FemResultMode.DeflectedShape;
                      window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                      window.UpdateLayout();
+                     var deflectionCanvas = FindVisuals<COT_VCF.Presentation.Controls.ModelCanvas>(window).Single();
+                     var guideToggle = FindVisuals<CheckBox>(window).Single(box => Equals(box.Content, "Undeformed guide"));
+                     Assert(deflectionCanvas.ShowUndeformed && deflectionCanvas.ShowDeflectionContour,
+                         "Deflection shows a contour and an undeformed guide by default");
+                     guideToggle.IsChecked = false;
+                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                     Assert(!deflectionCanvas.ShowUndeformed, "The undeformed guide can be hidden independently of the deflection contour");
+                     guideToggle.IsChecked = true;
                      var resultsBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                      resultsBitmap.Render(window);
                      var resultsEncoder = new PngBitmapEncoder(); resultsEncoder.Frames.Add(BitmapFrame.Create(resultsBitmap));
@@ -510,22 +518,30 @@ internal static class Program
                            vm.PrintSetupProjectStatus.StartsWith("Not in Older.json yet", StringComparison.Ordinal),
                         "a project saved before the Print Setup was stored opens as before and leaves the card as it is");
 
-                    // Tab 08 Quantity Take-off: after 07 FEM, on the full width; the candidates of the connected baseline's study
+                    // Tab 08 Quantity Take-off: after 07 FEM, on the full width; the connected model live, then the candidates of the baseline's study
                     QuantityTakeoffChecks.WriteCandidates(vm.BaselineModelPath);
-                    vm.SelectedTab = 8;
-                    Pump(() => vm.QuantityCandidates.Count == 2);
                     var workflowTabs = FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs");
                     var quantityPicker = window.QuantityCandidatePicker;
                     var quantityGrid = window.QuantityGrid;
+                    var (tableReadsBefore, writesBefore) = (uiSap.DatabaseTableReads, uiSap.Writes);
+                    vm.SelectedTab = 8;
+                    Pump(() => vm.QuantityCandidates.Count == 3 && vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy && quantityGrid.Items.Count == 6);
                     Assert(workflowTabs.Items.Count == 9 && workflowTabs.Items.IndexOf(window.QuantitiesTab) == 8 && ReferenceEquals(workflowTabs.SelectedItem, window.QuantitiesTab) &&
                            FindVisuals<TextBlock>(window).Any(text => text.Text == "08  QUANTITIES") && window.SharedViewerPane.Visibility == Visibility.Collapsed &&
-                           quantityPicker.IsEnabled && quantityPicker.SelectedItem is null && quantityGrid.Items.Count == 0 &&
-                           quantityPicker.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(["L01_H01_P01", "L01_H02_P01"]) &&
-                           quantityGrid.Columns.Select(column => column.Header as string).SequenceEqual(["Section", "Figure", "Member count", "Total length m", "Concrete volume m³", "Steel mass t"]) &&
-                           FindVisuals<TextBlock>(window).Any(text => text.Text == "Select a candidate model."),
-                        "Tab 08 Quantities follows Tab 07 FEM on the full width: a dropdown of the Lxx_Hxx_Pxx candidate models and the agreed table with its section-figure column");
-                    quantityPicker.SelectedIndex = 0;
-                    Pump(() => vm.QuantityState == QuantityViewState.Ready && quantityGrid.Items.Count == 6);
+                           quantityPicker.IsEnabled && quantityPicker.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(["Connected model", "L01_H01_P01", "L01_H02_P01"]) &&
+                           quantityGrid.Columns.Select(column => column.Header as string).SequenceEqual(["Section", "Figure", "Member count", "Total length m", "Concrete volume m³", "Steel mass t"]),
+                        "Tab 08 Quantities follows Tab 07 FEM on the full width: a dropdown of the connected model and the Lxx_Hxx_Pxx candidate models, and the agreed table with its section-figure column");
+                    Assert(quantityPicker.SelectedIndex == 0 && vm.SelectedQuantityCandidate is { IsConnectedModel: true } && quantityGrid.Items.Count == 6 &&
+                           uiSap.DatabaseTableReads == tableReadsBefore + 1 && uiSap.Writes == writesBefore &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text.StartsWith("Connected model · COT_VCF.sdb · read live from the connected SAP2000 at ", StringComparison.Ordinal)) &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text == "Live model") && FindVisuals<TextBlock>(quantityGrid).Any(text => text.Text == "2,862.104"),
+                        "the tab opens on the model that is running in SAP2000, read live through the API without writing anything");
+                    FindVisuals<Button>(window).Single(button => ReferenceEquals(button.Command, vm.ReloadQuantities)).Command.Execute(null);
+                    Pump(() => uiSap.DatabaseTableReads == tableReadsBefore + 2 && vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy);
+                    Assert(uiSap.DatabaseTableReads == tableReadsBefore + 2 && uiSap.Writes == writesBefore && quantityGrid.Items.Count == 6,
+                        "the Refresh button beside the dropdown reads the connected model from SAP2000 again");
+                    quantityPicker.SelectedIndex = 1;
+                    Pump(() => vm.QuantityState == QuantityViewState.Ready && vm.SelectedQuantityCandidate?.Id == "L01_H01_P01" && quantityGrid.Items.Count == 6);
                     var quantityCells = FindVisuals<TextBlock>(quantityGrid).Select(text => text.Text).ToArray();
                     Assert(vm.SelectedQuantityCandidate?.Id == "L01_H01_P01" && quantityGrid.Items.Count == 6 && quantityGrid.Items[5] is QuantityRow { IsTotal: true, Section: "Total" } &&
                            new[] { "Total", "54", "1,090.361", "795.000", "2,862.104", "306.000", "1,365.734", "0.000" }.All(quantityCells.Contains) && !quantityCells.Contains("n/a") &&
@@ -545,7 +561,7 @@ internal static class Program
                     quantityBitmap.Render(window);
                     var quantityEncoder = new PngBitmapEncoder(); quantityEncoder.Frames.Add(BitmapFrame.Create(quantityBitmap));
                     using (var stream = File.Create(".work/quantities-tab.png")) quantityEncoder.Save(stream);
-                    quantityPicker.SelectedIndex = 1;
+                    quantityPicker.SelectedIndex = 2;
                     Pump(() => vm.QuantityState == QuantityViewState.Ready && vm.SelectedQuantityCandidate?.Id == "L01_H02_P01" && quantityGrid.Items.Count == 7);
                     var unavailableCells = FindVisuals<TextBlock>(quantityGrid).Where(text => text.Text == "n/a").ToArray();
                     Assert(unavailableCells.Length == 4 && unavailableCells.All(cell => ReferenceEquals(cell.Foreground, window.FindResource("Warning")) &&
@@ -564,9 +580,10 @@ internal static class Program
                            FindVisuals<TextBlock>(window).Any(text => text.Text == "Connect SAP") && !vm.ReloadQuantities.CanExecute(null),
                         "without a SAP connection Tab 08 is disabled and holds no candidate and no numbers");
                     uiState.Connection = "Connected";
-                    Pump(() => vm.QuantityCandidates.Count == 2);
-                    Assert(workflowTabs.IsEnabled && quantityPicker.IsEnabled && quantityPicker.Items.Count == 2 && quantityPicker.SelectedItem is null && vm.ReloadQuantities.CanExecute(null),
-                        "a successful SAP connection enables Tab 08 again");
+                    Pump(() => vm.QuantityCandidates.Count == 3 && vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy);
+                    Assert(workflowTabs.IsEnabled && quantityPicker.IsEnabled && quantityPicker.Items.Count == 3 && quantityPicker.SelectedIndex == 0 && quantityGrid.Items.Count == 6 &&
+                           vm.ReloadQuantities.CanExecute(null),
+                        "a successful SAP connection enables Tab 08 again and reads the running model");
                 }
                 finally { try { Directory.Delete(optimizationRoot, true); } catch { } }
                 window.Close(); bindingListener.Flush();
@@ -816,6 +833,12 @@ internal static class Program
         public required ModelSnapshot Snapshot { get; init; }
         public int Writes { get; private set; }
         public int CableSectionReadCount { get; private set; }
+        public int DatabaseTableReads { get; private set; }
+        public Task<COT_VCF.Application.Quantities.SapTableSet> ReadDatabaseTablesAsync(IReadOnlyList<string> tableNamePrefixes, ModelInfo expected)
+        {
+            DatabaseTableReads++;
+            return Task.FromResult(QuantityTakeoffChecks.FixtureTables(expected));
+        }
         public Task<ModelInfo> ConnectAsync() => Task.FromResult(Snapshot.Info);
         public Task<ModelInfo> OpenModelAsync(string modelPath) => Task.FromResult(Snapshot.Info with { Path = modelPath });
         public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => Task.FromResult(expected with { Path = targetPath, IsLocked = false });

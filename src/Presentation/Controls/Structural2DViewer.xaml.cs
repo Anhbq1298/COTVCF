@@ -70,6 +70,14 @@ public partial class Structural2DViewer : UserControl
         set => SetValue(MemberSectionsProperty, value);
     }
 
+    public static readonly DependencyProperty ShowUndeformedProperty = DependencyProperty.Register(nameof(ShowUndeformed), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
+    public bool ShowUndeformed { get => (bool)GetValue(ShowUndeformedProperty); set => SetValue(ShowUndeformedProperty, value); }
+    public static readonly DependencyProperty ShowDeflectionContourProperty = DependencyProperty.Register(nameof(ShowDeflectionContour), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
+    public bool ShowDeflectionContour { get => (bool)GetValue(ShowDeflectionContourProperty); set => SetValue(ShowDeflectionContourProperty, value); }
+    public static readonly DependencyProperty DeflectionRangeMinMmProperty = DependencyProperty.Register(nameof(DeflectionRangeMinMm), typeof(double), typeof(Structural2DViewer), new PropertyMetadata(0.0));
+    public double DeflectionRangeMinMm { get => (double)GetValue(DeflectionRangeMinMmProperty); set => SetValue(DeflectionRangeMinMmProperty, value); }
+    public static readonly DependencyProperty DeflectionRangeMaxMmProperty = DependencyProperty.Register(nameof(DeflectionRangeMaxMm), typeof(double), typeof(Structural2DViewer), new PropertyMetadata(0.0));
+    public double DeflectionRangeMaxMm { get => (double)GetValue(DeflectionRangeMaxMmProperty); set => SetValue(DeflectionRangeMaxMmProperty, value); }
     private bool Is3D => View3DHost?.Visibility == Visibility.Visible;
 
     private void Fit(object sender, RoutedEventArgs e)
@@ -239,6 +247,14 @@ public sealed class ModelCanvas : FrameworkElement
     public IReadOnlyDictionary<string, double>? LoadValues { get => (IReadOnlyDictionary<string, double>?)GetValue(LoadValuesProperty); set => SetValue(LoadValuesProperty, value); }
     public static readonly DependencyProperty ShowAxialValuesProperty = DependencyProperty.Register(nameof(ShowAxialValues), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
     public bool ShowAxialValues { get => (bool)GetValue(ShowAxialValuesProperty); set => SetValue(ShowAxialValuesProperty, value); }
+    public static readonly DependencyProperty ShowUndeformedProperty = DependencyProperty.Register(nameof(ShowUndeformed), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
+    public bool ShowUndeformed { get => (bool)GetValue(ShowUndeformedProperty); set => SetValue(ShowUndeformedProperty, value); }
+    public static readonly DependencyProperty ShowDeflectionContourProperty = DependencyProperty.Register(nameof(ShowDeflectionContour), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
+    public bool ShowDeflectionContour { get => (bool)GetValue(ShowDeflectionContourProperty); set => SetValue(ShowDeflectionContourProperty, value); }
+    public static readonly DependencyProperty DeflectionRangeMinMmProperty = DependencyProperty.Register(nameof(DeflectionRangeMinMm), typeof(double), typeof(ModelCanvas), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    public double DeflectionRangeMinMm { get => (double)GetValue(DeflectionRangeMinMmProperty); set => SetValue(DeflectionRangeMinMmProperty, value); }
+    public static readonly DependencyProperty DeflectionRangeMaxMmProperty = DependencyProperty.Register(nameof(DeflectionRangeMaxMm), typeof(double), typeof(ModelCanvas), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    public double DeflectionRangeMaxMm { get => (double)GetValue(DeflectionRangeMaxMmProperty); set => SetValue(DeflectionRangeMaxMmProperty, value); }
     public string Plane { get; set; } = "XZ";
 
     private readonly Dictionary<AppliedPoint, Point> appliedPointLocations = [];
@@ -288,6 +304,7 @@ public sealed class ModelCanvas : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
+        deflectedNodes.Clear();
         appliedPointLocations.Clear();
         cableLocations.Clear();
         if (ActualWidth <= 0 || ActualHeight <= 0) return;
@@ -310,6 +327,10 @@ public sealed class ModelCanvas : FrameworkElement
             Point Screen(Point point) => new((point.X - (minX + spanX / 2)) * scale + ActualWidth / 2 + pan.X, -(point.Y - (minY + spanY / 2)) * scale + ActualHeight / 2 + pan.Y);
             var screenPoints = projected.ToDictionary(item => item.Key, item => Screen(item.Value));
 
+            var deflectionView = FemResult is not null && FemResultMode == FemResultMode.DeflectedShape;
+            if (!deflectionView || ShowUndeformed)
+            {
+             if (deflectionView) dc.PushOpacity(0.22);
             // Joints the FEM connects frames at: every member end. A frame is split at those lying along it, then each
             // piece is meshed, exactly as the solver does; cables are never split or meshed.
             var memberJoints = FrameMeshSegments > 1
@@ -320,7 +341,8 @@ public sealed class ModelCanvas : FrameworkElement
             {
                 if (!screenPoints.TryGetValue(member.Start, out var start) || !screenPoints.TryGetValue(member.End, out var end)) continue;
                 var pen = new Pen(Brush(member.Kind == MemberKind.Frame ? "ViewportGeom" : "AccentBright"), 1.5);
-                if (member.Kind != MemberKind.Frame) pen.DashStyle = member.Kind == MemberKind.Cable ? DashStyles.Dash : DashStyles.Dot;
+                if (deflectionView) pen.DashStyle = DashStyles.Dash;
+                else if (member.Kind != MemberKind.Frame) pen.DashStyle = member.Kind == MemberKind.Cable ? DashStyles.Dash : DashStyles.Dot;
                 if (member.Kind == MemberKind.Frame && memberJoints is not null)
                     foreach (var piece in FrameJoints.Pieces(member, memberJoints))
                         DrawMeshedFrame(dc, pen, start + (end - start) * piece.FractionStart, start + (end - start) * piece.FractionEnd, FrameMeshSegments);
@@ -379,15 +401,17 @@ public sealed class ModelCanvas : FrameworkElement
             foreach (var name in PinSupportPoints ?? [])
                 if (screenPoints.TryGetValue(name, out var support)) DrawPinSupport(dc, support);
 
+             if (deflectionView) dc.Pop();
+            }
             if (FemResult is { } femResult)
             {
                 DrawFemResultOverlay(dc, screenPoints, femResult, FemResultMode);
-                CollectHoverTargets(screenPoints, femResult);
-                DrawHover(dc);
+                if (!deflectionView) { CollectHoverTargets(screenPoints, femResult); DrawHover(dc); }
+                else hoverTargets.Clear();
             }
             else hoverTargets.Clear();
 
-            if (ShowPointLabels)
+            if (ShowPointLabels && (!deflectionView || ShowUndeformed))
                 foreach (var item in screenPoints.OrderBy(item => item.Key))
                     Label(dc, item.Key, item.Value + new Vector(6, -18));
         }
@@ -440,37 +464,56 @@ public sealed class ModelCanvas : FrameworkElement
         if (mode == FemResultMode.DeflectedShape)
         {
             var displacements = result.Joints.ToDictionary(joint => joint.PointName, StringComparer.Ordinal);
-            var maximum = result.Joints.Select(joint => Math.Sqrt(joint.UXM * joint.UXM + joint.UZM * joint.UZM)).DefaultIfEmpty().Max();
-            if (!double.IsFinite(maximum) || maximum <= 1e-12) return;
-            var scale = 42 / maximum;
-            var pen = new Pen(Brush("AccentBright"), 2) { DashStyle = DashStyles.Dash };
+            static double Magnitude(double ux, double uz) => Math.Sqrt(ux * ux + uz * uz) * 1000;
+            var maximum = result.Joints.Select(joint => Magnitude(joint.UXM, joint.UZM))
+                .Concat(result.Frames.SelectMany(frame => frame.Stations ?? []).Select(station => Magnitude(station.UXM, station.UZM))).DefaultIfEmpty().Max();
+            if (!double.IsFinite(maximum)) return;
+            var scale = maximum > 1e-9 ? 42000 / maximum : 0;
+            var min = double.IsFinite(DeflectionRangeMinMm) ? Math.Max(0, DeflectionRangeMinMm) : 0;
+            var max = double.IsFinite(DeflectionRangeMaxMm) && DeflectionRangeMaxMm > min ? DeflectionRangeMaxMm : Math.Max(maximum, min + 1e-9);
+            Vector Offset(double ux, double uz) => Plane == "XY" ? new(ux * scale, 0) : Plane == "YZ" ? new(0, -uz * scale) : new(ux * scale, -uz * scale);
+            Brush Contour(double value) => ShowDeflectionContour ? DeflectionBrush((value - min) / (max - min)) : Brush("AccentBright");
+            void Segment(Point from, Point to, double v1, double v2)
+            {
+                var gradient = new LinearGradientBrush(((SolidColorBrush)Contour(v1)).Color, ((SolidColorBrush)Contour(v2)).Color, 0)
+                { MappingMode = BrushMappingMode.Absolute, StartPoint = from, EndPoint = to };
+                dc.DrawLine(new Pen(gradient, 3), from, to);
+            }
             var meshedFrames = result.Frames.Where(frame => frame.Stations is { Count: > 2 })
                 .ToDictionary(frame => frame.MemberName, frame => frame.Stations!, StringComparer.Ordinal);
             foreach (var member in Model.Members)
             {
                 if (!screenPoints.TryGetValue(member.Start, out var start) || !screenPoints.TryGetValue(member.End, out var end) ||
-                    !displacements.TryGetValue(member.Start, out var startDisplacement) || !displacements.TryGetValue(member.End, out var endDisplacement)) continue;
+                    !displacements.TryGetValue(member.Start, out var u1) || !displacements.TryGetValue(member.End, out var u2)) continue;
                 if (meshedFrames.TryGetValue(member.Name, out var stations))
                 {
-                    // Curved deflected shape through the recovered mesh-node displacements.
-                    var previous = (Point?)null;
-                    foreach (var station in stations)
+                    for (var i = 1; i < stations.Count; i++)
                     {
-                        var deformed = start + (end - start) * station.Fraction + new Vector(station.UXM, -station.UZM) * scale;
-                        if (previous is { } from) dc.DrawLine(pen, from, deformed);
-                        previous = deformed;
+                        var a = stations[i - 1]; var b = stations[i];
+                        Segment(start + (end - start) * a.Fraction + Offset(a.UXM, a.UZM),
+                            start + (end - start) * b.Fraction + Offset(b.UXM, b.UZM), Magnitude(a.UXM, a.UZM), Magnitude(b.UXM, b.UZM));
                     }
-                    continue;
                 }
-                var deformedStart = start + new Vector(startDisplacement.UXM, -startDisplacement.UZM) * scale;
-                var deformedEnd = end + new Vector(endDisplacement.UXM, -endDisplacement.UZM) * scale;
-                dc.DrawLine(pen, deformedStart, deformedEnd);
+                else Segment(start + Offset(u1.UXM, u1.UZM), end + Offset(u2.UXM, u2.UZM), Magnitude(u1.UXM, u1.UZM), Magnitude(u2.UXM, u2.UZM));
             }
-            var maxJoint = result.Joints.MaxBy(joint => Math.Sqrt(joint.UXM * joint.UXM + joint.UZM * joint.UZM));
-            if (maxJoint is not null && screenPoints.TryGetValue(maxJoint.PointName, out var maxPoint))
+            foreach (var joint in result.Joints)
+                if (screenPoints.TryGetValue(joint.PointName, out var original))
+                {
+                    var point = original + Offset(joint.UXM, joint.UZM);
+                    deflectedNodes[joint.PointName] = point;
+                    dc.DrawEllipse(Contour(Magnitude(joint.UXM, joint.UZM)), new Pen(Brush("ViewportBg"), 1), point, 3.5, 3.5);
+                }
+            if (ShowDeflectionContour)
             {
-                var deformed = maxPoint + new Vector(maxJoint.UXM, -maxJoint.UZM) * scale;
-                CableLabel(dc, $"max {Math.Sqrt(maxJoint.UXM * maxJoint.UXM + maxJoint.UZM * maxJoint.UZM) * 1000:0.##} mm", deformed, true);
+                var left = Math.Max(18, ActualWidth - 245); var top = ActualHeight - 70;
+                for (var i = 0; i < 100; i++) dc.DrawRectangle(DeflectionBrush(i / 99.0), null, new Rect(left + i * 1.6, top, 1.7, 10));
+                Text(dc, $"|U| {min:G5} to {max:G5} mm", new Point(left, top - 20), "Text");
+                Text(dc, "Shape magnified - click a node", new Point(left, top + 14), "Text");
+            }
+            if (selectedDeflectionNode is { } name && displacements.TryGetValue(name, out var selected) && deflectedNodes.TryGetValue(name, out var selectedPoint))
+            {
+                dc.DrawEllipse(null, new Pen(Brush("Text"), 2), selectedPoint, 7, 7);
+                CableLabel(dc, $"Ux {selected.UXM * 1000:G8} mm  Uy 0 mm  Uz {selected.UZM * 1000:G8} mm", new Point(18, 90), false);
             }
             return;
         }
@@ -587,6 +630,17 @@ public sealed class ModelCanvas : FrameworkElement
     }
 
     /// <summary>Mid-fraction and mean axial force of each piece of a frame; pieces start where a station repeats.</summary>
+    private readonly Dictionary<string, Point> deflectedNodes = [];
+    private string? selectedDeflectionNode;
+    private static SolidColorBrush DeflectionBrush(double ratio)
+    {
+        var t = Math.Clamp(ratio, 0, 1);
+        var colors = new[] { Colors.RoyalBlue, Colors.Cyan, Colors.LimeGreen, Colors.Gold, Colors.Red };
+        var index = Math.Min(3, (int)(t * 4)); var f = t * 4 - index;
+        var a = colors[index]; var b = colors[index + 1];
+        return new SolidColorBrush(Color.FromRgb((byte)(a.R + (b.R - a.R) * f), (byte)(a.G + (b.G - a.G) * f), (byte)(a.B + (b.B - a.B) * f)));
+    }
+
     private static IEnumerable<(double Fraction, double AxialKN)> AxialPieces(FemFrameResponse frame)
     {
         if (frame.Stations is not { Count: > 1 } stations)
@@ -795,6 +849,15 @@ public sealed class ModelCanvas : FrameworkElement
         if (e.ClickCount == 2) { Fit(); return; }
         Focus();
         var position = e.GetPosition(this);
+        if (FemResultMode == FemResultMode.DeflectedShape && FemResult is not null)
+        {
+            selectedDeflectionNode = deflectedNodes.Where(item => (item.Value - position).Length <= 10)
+                .OrderBy(item => (item.Value - position).Length).Select(item => item.Key).FirstOrDefault();
+            InvalidateVisual();
+            if (selectedDeflectionNode is not null) { e.Handled = true; return; }
+            last = position; CaptureMouse(); return;
+        }
+
         var hit = appliedPointLocations.Where(item => (item.Value - position).Length <= 12).OrderBy(item => (item.Value - position).Length).Select(item => item.Key).FirstOrDefault();
         if (hit is not null)
         {

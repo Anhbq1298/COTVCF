@@ -105,6 +105,16 @@ internal static class QuantityTakeoffChecks
         Write("L01_H02_P01", Reassigned(Taller(fixture)).Edit("JOINT COORDINATES", line => Field(line, "Joint") == "MTrPt005" ? null : line));
     }
 
+    /// <summary>The fixture model as the connected SAP2000 would hand it over through the database-tables API.</summary>
+    public static SapTableSet FixtureTables(ModelInfo model) =>
+        ApiTables(ExportText.Parse(File.ReadAllText(Path.Combine(FemSapBenchmark.DefaultFolder, FemSapBenchmark.ModelFile))), model);
+
+    private static SapTableSet ApiTables(ExportText export, ModelInfo model) => SapTableSet.FromTables(
+        export.ApiTables().Select(table => KeyValuePair.Create(CultureInfo.InvariantCulture.TextInfo.ToTitleCase(table.Table.ToLowerInvariant()),
+            (IReadOnlyList<SapTableRow>)Enumerable.Range(0, table.Records).Select(record => new SapTableRow(
+                table.Fields.Select((field, column) => KeyValuePair.Create(field, table.Data[record * table.Fields.Length + column])))).ToArray())),
+        SapTableUnits.From(model), $"SAP2000 database tables of {model.Name}");
+
     // ---------- reader and units ----------
 
     private static void ReaderAndUnits(ExportText fixture)
@@ -594,10 +604,16 @@ internal static class QuantityTakeoffChecks
         cancelled.Cancel();
         Throws<OperationCanceledException>(() => reader.ReadAsync(model, cancelled.Token).GetAwaiter().GetResult(), "a cancelled read starts no SAP2000");
         Check(hosts.Created == 2 && FolderState(folder) == before, "…nothing was started for it");
+        api.RefuseGroup = "All";
+        api.Groups.Clear();
+        Check(QuantityTakeoffCalculator.Calculate(reader.ReadAsync(model, CancellationToken.None).GetAwaiter().GetResult()).Complete &&
+              api.Groups.Count == 34 && api.Groups.Count(group => group == "") == 17,
+            "a SAP2000 that does not take the group 'All' by name is asked with the blank group name, which stands for the same");
+        api.RefuseGroup = null;
         File.SetAttributes(model, FileAttributes.Normal);
     }
 
-    // ---------- Tab 08 view model: gating, switching, stale requests ----------
+    // ---------- Tab 08 view model: the live connected model, gating, switching, stale requests ----------
 
     private static void ViewModel(ExportText fixture)
     {
@@ -610,36 +626,60 @@ internal static class QuantityTakeoffChecks
         var state = StudyComposerChecks.CreateState();
         state.SessionBaselineModel = state.Model! with { Path = disk.Baseline };
         state.Connection = "Disconnected";
-        var sap = new NoSap();
+        var sap = new LiveSap { Open = Taller(fixture) };                       // what is open in SAP2000 right now: no saved candidate is like it
         var workflow = new WorkflowService(sap, state);
         var reader = new GatedReader();
         var vm = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(sap, state, workflow), quantityTakeoff: new QuantityTakeoffService(reader));
+        void Pick(string id) => vm.SelectedQuantityCandidate = vm.QuantityCandidates.Single(candidate => candidate.Id == id);
+        const string Live = QuantityCandidate.ConnectedModelId;
 
         vm.SelectedTab = 8;
         Check(!vm.HasSapConnection && vm.QuantityCandidates.Count == 0 && vm.QuantityTabStatus == "Connect SAP" && vm.QuantityStatus.StartsWith("Connect to SAP2000") &&
               !vm.ReloadQuantities.CanExecute(null) && !vm.CancelQuantityRead.CanExecute(null) && vm.QuantityRows.Count == 0,
-            "before a SAP connection Tab 08 lists no candidate and its commands are unavailable");
-        var stray = new QuantityCandidateCatalog().Discover(disk.Baseline)[0];
-        vm.SelectedQuantityCandidate = stray;
+            "before a SAP connection Tab 08 lists no model and its commands are unavailable");
+        vm.SelectedQuantityCandidate = new QuantityCandidateCatalog().Discover(disk.Baseline)[0];
         vm.ReloadQuantities.Execute(null);
-        Check(vm.QuantityState == QuantityViewState.NoCandidate && !vm.QuantityLoading && vm.QuantityRows.Count == 0 && reader.Started == 0,
-            "a selection made without a connection loads nothing");
+        vm.SelectedQuantityCandidate = QuantityCandidate.Connected(state.Model!);
+        Check(vm.QuantityState == QuantityViewState.NoCandidate && !vm.QuantityLoading && vm.QuantityRows.Count == 0 && reader.Started == 0 && sap.Reads == 0,
+            "a selection made without a connection reads nothing — neither a candidate nor SAP2000");
         vm.SelectedQuantityCandidate = null;
 
+        // the running model, live
         state.Connection = "Connected";
-        Check(vm.HasSapConnection && vm.QuantityCandidates.Select(candidate => candidate.Id).SequenceEqual(["L01_H01_P01", "L01_H02_P01", "L01_H03_P01", "L01_H04_P01"]) &&
-              vm.QuantityTabStatus == "4 candidates" && vm.QuantityStatus == "Select a candidate model." && vm.ReloadQuantities.CanExecute(null) && vm.QuantityState == QuantityViewState.NoCandidate,
-            "a successful SAP connection lists the candidate models of the connected baseline's study; nothing is loaded until one is chosen");
+        Wait(() => vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy, "with a SAP connection the tab opens on the connected model and reads it from SAP2000");
+        Check(vm.QuantityCandidates.Select(candidate => candidate.Id).SequenceEqual([Live, "L01_H01_P01", "L01_H02_P01", "L01_H03_P01", "L01_H04_P01"]) &&
+              vm.QuantityCandidates[0].IsConnectedModel && vm.QuantityCandidates.Skip(1).All(candidate => !candidate.IsConnectedModel) &&
+              vm.SelectedQuantityCandidate is { IsConnectedModel: true } && vm.ReloadQuantities.CanExecute(null),
+            "the connected model is listed first, then the candidate models of the connected baseline's study");
+        Check(vm.QuantityRows.Select(row => row.Section).SequenceEqual([Cft, MegaA, MegaB, Shs, Strand, "Total"]) && vm.QuantityRows[^1] is { IsTotal: true, MemberCount: 54 } &&
+              Near(vm.QuantityRows[^1].TotalLengthM, 1186.4982387880245) && Near(vm.QuantityRows[^1].ConcreteVolumeM3, 837.9) && Near(vm.QuantityRows[^1].SteelMassT, 3070.9898736128254) &&
+              vm.QuantitySource.StartsWith($"{Live} · COT_VCF.sdb · read live from the connected SAP2000 at ") && vm.QuantitySource.EndsWith(" · kN, m") &&
+              vm.QuantityTabStatus == "Live model" && vm.QuantityStatus == "5 sections · 54 members" && vm.QuantityNotes.Count == 0 &&
+              vm.Message.StartsWith("Quantity take-off of the connected model read live from SAP2000") &&
+              sap.Reads == 1 && sap.Expected.Single() == state.Model && sap.Prefixes!.SequenceEqual(IsolatedSapTableReader.TablePrefixes) && reader.Started == 0,
+            "the take-off of the running model comes from SAP2000 itself — its own tables, tied to the connected model, no file and no second SAP2000");
+
+        sap.Open = Reassigned(Taller(fixture));                                 // the model is changed in SAP2000 …
+        vm.ReloadQuantities.Execute(null);                                      // … and Refresh is pressed
+        Wait(() => vm.QuantityState == QuantityViewState.Ready && sap.Reads == 2 && vm.QuantityRows.Any(row => row.Section == "FSEC1") && !vm.IsBusy,
+            "Refresh reads the connected model from SAP2000 again");
+        Check(vm.QuantityRows.Select(row => row.Section).SequenceEqual([Cft, "FSEC1", MegaA, MegaB, Shs, Strand, "Total"]) &&
+              vm.QuantityRows.Single(row => row.Section == Shs).MemberCount == 28 && Near(vm.QuantityRows[^1].SteelMassT, 2970.10302762366),
+            "a section changed in the running model shows after Refresh — the tab follows SAP2000, not a file saved earlier");
+        sap.Open = fixture;
         var list = vm.QuantityCandidates;
         vm.SelectedTab = 0; vm.SelectedTab = 8;
-        Check(ReferenceEquals(list, vm.QuantityCandidates), "returning to the tab keeps the candidate list when the study folder has not changed");
+        Wait(() => vm.QuantityState == QuantityViewState.Ready && sap.Reads == 3 && vm.QuantityRows.Count == 6 && !vm.IsBusy, "returning to the tab reads the connected model again");
+        Check(ReferenceEquals(list, vm.QuantityCandidates) && Near(vm.QuantityRows[^1].SteelMassT, 2862.104378822229) && vm.SelectedQuantityCandidate is { IsConnectedModel: true },
+            "…with the list and the selection as they were");
 
+        // a saved candidate: from its own file, without SAP2000
         var shown = new List<(QuantityViewState State, int Rows, string Status, string Tab)>();
         vm.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(MainViewModel.QuantityState)) lock (shown) shown.Add((vm.QuantityState, vm.QuantityRows.Count, vm.QuantityStatus, vm.QuantityTabStatus));
         };
-        vm.SelectedQuantityCandidate = vm.QuantityCandidates[0];
+        Pick("L01_H01_P01");
         Wait(() => vm.QuantityState == QuantityViewState.Ready, "the take-off of L01_H01_P01 loads in the background");
         lock (shown)
             Check(shown.Count >= 2 && shown[0] == (QuantityViewState.Loading, 0, "Reading L01_H01_P01…", "Reading…") && shown[^1].State == QuantityViewState.Ready && shown[^1].Rows == 6,
@@ -651,16 +691,16 @@ internal static class QuantityTakeoffChecks
               vm.QuantityRows.Take(5).All(row => row.Figure is not null) && vm.QuantityRows[0].Figure!.Shapes.Count == 2 && vm.QuantityRows[^1].Figure is null &&
               vm.QuantityRows.Select(row => row.FigureSize).SequenceEqual(["1200 × 2000 mm", "1500 × 3000 mm", "3000 × 2500 mm", "1200 × 1200 mm", "191.5 × 191.5 mm", ""]) &&
               vm.QuantitySource.StartsWith("L01_H01_P01 · SAP2000 text export COT_L01_H01_P01.$2k") && vm.QuantityTabStatus == "L01_H01_P01" &&
-              vm.QuantityStatus == "5 sections · 54 members" && !vm.IsBusy && reader.Started == 0,
-            "the selected candidate's section breakdown is shown with a total row, its data source, and no SAP2000 involved");
+              vm.QuantityStatus == "5 sections · 54 members" && !vm.IsBusy && reader.Started == 0 && sap.Reads == 3,
+            "a candidate's section breakdown is shown with a total row and its data source — its own saved export, SAP2000 not involved");
 
-        vm.SelectedQuantityCandidate = vm.QuantityCandidates[1];
+        Pick("L01_H02_P01");
         Wait(() => vm.QuantityState == QuantityViewState.Ready, "switching to L01_H02_P01 loads its take-off");
         Check(vm.QuantityRows.Select(row => row.Section).SequenceEqual([Cft, "FSEC1", MegaA, MegaB, Shs, Strand, "Total"]) &&
               Near(vm.QuantityRows[^1].TotalLengthM, 1186.4982387880245) && Near(vm.QuantityRows[^1].SteelMassT, 2970.10302762366) && vm.QuantityTabStatus == "L01_H02_P01",
             "switching the candidate shows that candidate's own sections and lengths — this is the comparison between models");
 
-        vm.SelectedQuantityCandidate = vm.QuantityCandidates[2];
+        Pick("L01_H03_P01");
         Wait(() => vm.QuantityState == QuantityViewState.Ready, "a candidate with a gap in its data still loads");
         var total = vm.QuantityRows[^1];
         Check(vm.QuantityRows.Single(row => row.Section == Shs) is { TotalLengthM: null, SteelMassT: null, ConcreteVolumeM3: 0 } gap && gap.Problem!.Contains("MTrPt004") &&
@@ -670,21 +710,21 @@ internal static class QuantityTakeoffChecks
             "a quantity that cannot be established is unavailable in its row and in the total — never zero, never a total of what is left");
 
         // stale requests: a slow isolated read must not overwrite a newer selection
-        vm.SelectedQuantityCandidate = vm.QuantityCandidates[3];
+        Pick("L01_H04_P01");
         Wait(() => vm.QuantitySapReading && reader.Started == 1, "a candidate without a text export starts the isolated read");
         Check(vm.IsBusy && vm.QuantityLoading && vm.QuantityRows.Count == 0 && vm.QuantityStatus == "Reading L01_H04_P01 in a separate SAP2000 instance…" &&
               vm.CancelQuantityRead.CanExecute(null) && !vm.ReloadQuantities.CanExecute(null) && vm.Message.Contains("The connected model is not touched") &&
               reader.Paths.Single() == disk.ModelPath("L01_H04_P01"),
             "while a separate SAP2000 instance reads the model the application is busy, and the read can be cancelled");
-        vm.SelectedQuantityCandidate = vm.QuantityCandidates[0];
+        Pick("L01_H01_P01");
         Wait(() => vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy, "choosing another candidate meanwhile shows that candidate");
         Check(vm.QuantityRows.Count == 6 && vm.QuantityTabStatus == "L01_H01_P01" && reader.Cancelled == 1 && !vm.QuantitySapReading && vm.SelectedQuantityCandidate!.Id == "L01_H01_P01",
             "the earlier request was cancelled and left nothing on the tab");
 
         reader.IgnoreCancellation = true;
-        vm.SelectedQuantityCandidate = vm.QuantityCandidates[3];
+        Pick("L01_H04_P01");
         Wait(() => vm.QuantitySapReading && reader.Started == 2, "the isolated read starts again");
-        vm.SelectedQuantityCandidate = vm.QuantityCandidates[1];
+        Pick("L01_H02_P01");
         Wait(() => vm.QuantityState == QuantityViewState.Ready, "the newer selection is shown while the old read is still running");
         Check(vm.IsBusy && vm.QuantityTabStatus == "L01_H02_P01" && vm.QuantityRows.Count == 7, "…the old read still holds its SAP2000 instance");
         reader.Complete(fixture);                                               // the old read finishes late, with its own candidate's data
@@ -694,56 +734,90 @@ internal static class QuantityTakeoffChecks
               vm.QuantitySource.StartsWith("L01_H02_P01 ·") && Near(vm.QuantityRows[^1].SteelMassT, 2970.10302762366),
             "a read that finishes after a newer selection does not replace it");
 
+        // the live read never runs in the middle of another SAP2000 operation: it waits for it
+        Pick("L01_H04_P01");
+        Wait(() => vm.QuantitySapReading && reader.Started == 3, "another operation holds the application");
+        Pick(Live);
+        Wait(() => vm.QuantityStatus.StartsWith("Waiting for the running operation"), "the connected model is not read while another operation is running");
+        Thread.Sleep(400);
+        Check(sap.Reads == 3 && vm.IsBusy && vm.QuantityLoading && vm.QuantityRows.Count == 0, "…SAP2000 is left alone until that operation has finished");
+        reader.Complete(fixture);
+        Wait(() => vm.QuantityState == QuantityViewState.Ready && sap.Reads == 4 && !vm.IsBusy, "…and is read as soon as it has");
+        Check(vm.QuantityTabStatus == "Live model" && vm.QuantityRows.Count == 6 && vm.QuantitySource.StartsWith(Live + " ·"), "the tab then shows the connected model");
+
         // the isolated read itself: result, cancel, failure
         reader.IgnoreCancellation = false;
-        vm.SelectedQuantityCandidate = vm.QuantityCandidates[3];
-        Wait(() => vm.QuantitySapReading && reader.Started == 3, "the isolated read starts");
+        Pick("L01_H04_P01");
+        Wait(() => vm.QuantitySapReading && reader.Started == 4, "the isolated read starts");
         reader.Complete(fixture);
         Wait(() => vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy, "the isolated read delivers");
         Check(vm.QuantityRows.Count == 6 && vm.QuantitySource.Contains("separate SAP2000 instance") &&
               vm.QuantityNotes.Single().StartsWith("The text export was not used: there is no SAP2000 text export"),
             "a take-off read through SAP2000 says so, and why the text export was not used");
         vm.ReloadQuantities.Execute(null);
-        Wait(() => vm.QuantitySapReading && reader.Started == 4, "Reload reads the model again");
+        Wait(() => vm.QuantitySapReading && reader.Started == 5, "Reload reads the model again");
         vm.CancelQuantityRead.Execute(null);
         Wait(() => vm.QuantityState == QuantityViewState.Unavailable && !vm.IsBusy, "Cancel stops the read");
         Check(vm.QuantityProblem.Contains("was cancelled") && vm.HasQuantityProblem && !vm.QuantityProblemIsError && vm.QuantityRows.Count == 0 && vm.QuantityTabStatus == "▲ Unavailable",
             "a cancelled read leaves the tab without numbers and says what happened");
         vm.ReloadQuantities.Execute(null);
-        Wait(() => vm.QuantitySapReading && reader.Started == 5, "Reload after a cancel reads again");
+        Wait(() => vm.QuantitySapReading && reader.Started == 6, "Reload after a cancel reads again");
         reader.Fail(new InvalidOperationException("SAP2000 worker 90 returned code 1 during ApplicationStart."));
         Wait(() => vm.QuantityState == QuantityViewState.Error && !vm.IsBusy, "a failed read ends");
         Check(vm.QuantityProblem == "The quantities of L01_H04_P01 could not be read: SAP2000 worker 90 returned code 1 during ApplicationStart." &&
               vm.QuantityProblemIsError && vm.QuantityRows.Count == 0 && vm.QuantityTabStatus == "× Read failed" && !vm.QuantitySapReading,
             "a failed read is an error state with SAP2000's message, not an empty table");
 
-        // connection loss empties the tab and stops a read in flight
+        // the live read fails: said so, nothing shown; a lost SAP2000 is a lost connection
+        sap.Failure = new InvalidOperationException("The active SAP model has changed. Reconnect and review your configuration.");
+        Pick(Live);
+        Wait(() => vm.QuantityState == QuantityViewState.Error && !vm.IsBusy, "a live read SAP2000 refuses ends");
+        Check(vm.QuantityProblem == "The quantities of the connected model could not be read: The active SAP model has changed. Reconnect and review your configuration." &&
+              vm.QuantityProblemIsError && vm.QuantityRows.Count == 0 && sap.Reads == 5 && state.IsSapConnected,
+            "when the model open in SAP2000 is no longer the connected one, the live read says so instead of taking off another model");
+        sap.Failure = new System.Runtime.InteropServices.COMException("The RPC server is unavailable.");
         vm.ReloadQuantities.Execute(null);
-        Wait(() => vm.QuantitySapReading && reader.Started == 6, "a read is in flight");
+        Wait(() => state.Connection == "Connection Lost" && !vm.IsBusy && vm.QuantityCandidates.Count == 0, "a SAP2000 that has gone away is a lost connection");
+        Check(vm.SelectedQuantityCandidate is null && vm.QuantityRows.Count == 0 && vm.QuantityTabStatus == "Connect SAP" && !vm.ReloadQuantities.CanExecute(null),
+            "…and the tab is empty and disabled until SAP2000 is connected again");
+        sap.Failure = null;
+        state.Connection = "Connected";
+        Wait(() => vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy && vm.SelectedQuantityCandidate is { IsConnectedModel: true } && vm.QuantityRows.Count == 6,
+            "reconnecting reads the running model again");
+
+        // connection loss empties the tab and stops a read in flight
+        Pick("L01_H04_P01");
+        Wait(() => vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy && reader.Started == 6,
+            "a candidate that was read through SAP2000 is not read again while its model file is unchanged");
+        vm.ReloadQuantities.Execute(null);
+        Wait(() => vm.QuantitySapReading && reader.Started == 7, "a read is in flight");
         state.Connection = "Connection Lost";
         Wait(() => !vm.IsBusy, "losing the connection stops the read");
         Check(vm.QuantityCandidates.Count == 0 && vm.SelectedQuantityCandidate is null && vm.QuantityRows.Count == 0 && vm.QuantityState == QuantityViewState.NoCandidate &&
               vm.QuantityTabStatus == "Connect SAP" && !vm.ReloadQuantities.CanExecute(null) && reader.Cancelled == 3 && !vm.HasQuantityProblem,
             "losing the SAP connection empties Tab 08 and disables it again");
         state.Connection = "Connected";
-        Check(vm.QuantityCandidates.Count == 4 && vm.SelectedQuantityCandidate is null && vm.QuantityStatus == "Select a candidate model.", "reconnecting lists the candidates again");
+        Wait(() => vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy, "reconnecting lists the models again");
+        Check(vm.QuantityCandidates.Count == 5 && vm.SelectedQuantityCandidate is { IsConnectedModel: true }, "…and opens on the connected model");
 
         // without an isolated reader a candidate that needs one is unavailable, not empty
         var plain = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(sap, state, workflow)) { SelectedTab = 8 };
-        plain.SelectedQuantityCandidate = plain.QuantityCandidates[3];
-        Wait(() => plain.QuantityState == QuantityViewState.Unavailable, "a candidate that cannot be read ends as unavailable");
+        Wait(() => plain.QuantityState == QuantityViewState.Ready && !plain.IsBusy, "a second view of the same session reads the connected model too");
+        plain.SelectedQuantityCandidate = plain.QuantityCandidates.Single(candidate => candidate.Id == "L01_H04_P01");
+        Wait(() => plain.QuantityState == QuantityViewState.Unavailable && !plain.IsBusy, "a candidate that cannot be read ends as unavailable");
         Check(plain.QuantityProblem.StartsWith("Quantities of L01_H04_P01 are unavailable: there is no SAP2000 text export") && plain.QuantityRows.Count == 0 &&
-              !plain.QuantityProblemIsError && !plain.IsBusy,
+              !plain.QuantityProblemIsError,
             "unavailable data is stated with its reason; the table stays empty rather than showing zeros");
 
-        // another study: the tab starts again
+        // another study: its own candidates; the take-off of a candidate that is no longer listed is dropped
         using var other = new StudyOnDisk();
         other.Candidate("L05_H05_P05", fixture);
-        vm.SelectedQuantityCandidate = vm.QuantityCandidates[0];
-        Wait(() => vm.QuantityState == QuantityViewState.Ready, "a candidate is shown");
+        Pick("L01_H02_P01");
+        Wait(() => vm.QuantityState == QuantityViewState.Ready && vm.QuantityRows.Count == 7, "a candidate is shown");
         state.SessionBaselineModel = state.Model! with { Path = other.Baseline };
-        Check(vm.QuantityCandidates.Select(candidate => candidate.Id).SequenceEqual(["L05_H05_P05"]) && vm.SelectedQuantityCandidate is null && vm.QuantityRows.Count == 0,
-            "a different baseline lists its own study's candidates and drops the take-off of the previous one");
+        Wait(() => vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy && vm.SelectedQuantityCandidate is { IsConnectedModel: true }, "a different baseline starts the tab again");
+        Check(vm.QuantityCandidates.Select(candidate => candidate.Id).SequenceEqual([Live, "L05_H05_P05"]) && vm.QuantityRows.Count == 6 && vm.QuantitySource.StartsWith(Live + " ·"),
+            "a different baseline lists its own study's candidates; the previous candidate's take-off is gone and the connected model is shown");
     }
 
     private static void FemFailedRow()
@@ -978,7 +1052,7 @@ internal static class QuantityTakeoffChecks
         public List<string> Tables { get; } = [];
         public List<string> Groups { get; } = [];
         public string CurrentPath = "";
-        public string? FailTable;
+        public string? FailTable, RefuseGroup;
         public cSapModel Model { get; }
 
         public TablesApi(ExportText export)
@@ -998,7 +1072,7 @@ internal static class QuantityTakeoffChecks
                         var key = (string)a[0]!;
                         Tables.Add(key);
                         Groups.Add((string)a[2]!);
-                        if (key == FailTable) return 1;
+                        if (key == FailTable || (string)a[2]! == RefuseGroup) return 1;
                         var table = tables[key];
                         a[3] = 1; a[4] = table.Fields; a[5] = table.Records; a[6] = table.Data;
                         return 0;
@@ -1066,8 +1140,27 @@ internal static class QuantityTakeoffChecks
         public IReadOnlyList<string>? Select(string title, IReadOnlyList<string> available, IReadOnlyList<string> selected) => null;
     }
 
-    private sealed class NoSap : ISapGateway
+    /// <summary>The connected SAP2000 as Tab 08 sees it: the model that is open in it can be asked for its database
+    /// tables. Everything that would open, change, save or analyse a model throws.</summary>
+    private sealed class LiveSap : ISapGateway
     {
+        private int reads;
+        /// <summary>The model open in SAP2000 at this moment.</summary>
+        public ExportText? Open;
+        public Exception? Failure;
+        public int Reads => Volatile.Read(ref reads);
+        public List<ModelInfo> Expected { get; } = [];
+        public IReadOnlyList<string>? Prefixes;
+        public Task<SapTableSet> ReadDatabaseTablesAsync(IReadOnlyList<string> tableNamePrefixes, ModelInfo expected)
+        {
+            lock (Expected) Expected.Add(expected);
+            Prefixes = tableNamePrefixes;
+            Interlocked.Increment(ref reads);
+            if (Failure is { } failure) return Task.FromException<SapTableSet>(failure);
+            var open = Open ?? throw new NotSupportedException();
+            return Task.Run(() => ApiTables(open, expected));                   // off the calling thread, as the SAP2000 lane is
+        }
+
         public Task<ModelInfo> ConnectAsync() => throw new NotSupportedException();
         public Task<ModelInfo> OpenModelAsync(string modelPath) => throw new NotSupportedException();
         public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => throw new NotSupportedException();
