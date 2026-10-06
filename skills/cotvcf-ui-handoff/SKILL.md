@@ -22,6 +22,9 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - If the running desktop app locks `bin/Debug/net8.0-windows/win-x64/COT VCF tools.exe` or `.dll`, close it with `Get-Process -Name 'COT VCF tools' -ErrorAction SilentlyContinue | Stop-Process -Force`, then rebuild.
 - For compile-only checks while the app is open, use `dotnet build COTVCF.csproj -o .work\build-check`.
 - Launch the app from `bin/Debug/net8.0-windows/win-x64/COT VCF tools.exe`.
+- The built application folder is `bin/COT ParametricTools_V2` (version 2.0.0.0). Produce it with
+  `dotnet publish COTVCF.csproj -c Release --self-contained false -o "bin/COT ParametricTools_V2"` — never by
+  copying a build output by hand: the earlier hand-copied `COT VCF Tools V1.0` folder went stale and showed an old app.
 
 ## Compact Engineering Density Pass
 
