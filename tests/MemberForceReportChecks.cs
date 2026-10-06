@@ -51,7 +51,7 @@ internal static class MemberForceReportChecks
         Check(html.Contains("className='ms'") && html.Contains("className='pop'") && html.Contains("Reset filters"),
             "member-force HTML uses compact multi-select L/H/P filters");
         Check(html.Contains("id=\"groupFilter\"") && html.Contains("chosenGroups") &&
-              !html.Contains("<select id=\"group\""),
+              html.Contains("<select id=\"group\" hidden"),
             "member-force HTML supports any combination of member groups instead of only one or all");
         Check(html.Contains("station-hit") && html.Contains("Frame object:") && html.Contains("Analysis element:"),
             "member-force chart exposes exact station values and SAP identifiers on hover");

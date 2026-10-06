@@ -1,5 +1,6 @@
 using System.Windows;
 using COT_VCF.Application;
+using COT_VCF.Application.Results;
 using COT_VCF.Application.Workers;
 using COT_VCF.Domain;
 using COT_VCF.Infrastructure;
@@ -18,7 +19,8 @@ public partial class App : System.Windows.Application
         var workflow = new WorkflowService(gateway, state);
         var config = new Configuration.ConfigService(gateway, state, workflow);
         var studyExecution = new StudyExecutionCoordinator(
-            new ConnectedSapInstanceHostFactory(gateway, new SapInstanceHostFactory()));
+            new ConnectedSapInstanceHostFactory(gateway, new SapInstanceHostFactory()),
+            new StudyArtifactPublisher(() => state.OutputSettings.DeflectionLimitBand));
         var outputDialogs = new OutputSettingsDialogService();
         var outputPreparation = new OutputGroupPreparationService(gateway);
         var viewModel = new MainViewModel(state, workflow, new SelectionService(), config, studyExecution,

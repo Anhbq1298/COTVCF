@@ -150,7 +150,8 @@ public sealed class DeflectionReportGenerator
 
         var siblings = siblingReports?.ToArray() ?? ReportNav.PresentIn(studyFolder, "deflection").ToArray();
         var band = limitBand is { IsActive: true } ? new DeflectionLimitBandDto(limitBand.MinMm, limitBand.MaxMm) : null;
-        return new DeflectionReportDto(study, groups, views, warnings, siblings, band);
+        return new DeflectionReportDto(study, groups, views, ReportCandidateDefinitions.Build(results),
+            warnings, siblings, band);
     }
 
     private sealed record Dim(string Name, Func<CandidateParametersDto, string> Key, Func<string, string> Label);
@@ -178,7 +179,7 @@ public sealed class DeflectionReportGenerator
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Deflection Report — {{Esc(s.BaselineModelName)}}</title>
-<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body>
+<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportCandidateDefinitions.Style}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body>
 <header>
   <div>
     <h1>Deflection Results Viewer</h1>
@@ -219,7 +220,7 @@ public sealed class DeflectionReportGenerator
   </section>
 </template>
 <div id="tip" hidden></div>
-<details id="candKey" open><summary>Candidate definitions — what each L## / H## / P## is</summary><div id="candKeyBody"></div></details>
+{{ReportCandidateDefinitions.Markup}}
 <div id="matrixWrap" data-print="source" hidden>
   <div class="mhdr"><strong>Source Data Matrix</strong><button id="mClose">Close</button></div>
   <div id="matrix" data-print-fit></div>
@@ -227,6 +228,7 @@ public sealed class DeflectionReportGenerator
 <div id="warns"></div>
 <script type="application/json" id="report-data">{{json}}</script>
 {{ReportPrintEngine.Scripts(print)}}
+<script>{{ReportCandidateDefinitions.Script}}</script>
 <script>{{Script}}</script>
 </body></html>
 """;
@@ -442,6 +444,7 @@ body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
   // Loading = one column per load pattern; Truss height = ΔH + height columns; Pretension = per-cable list.
   function buildCandKey(){
     const body = document.getElementById('candKeyBody');
+    if(!body)return; // shared candidate-definition component already rendered this section
     const bySeries = id => allSeries.find(s => s.loadId===id || s.heightId===id || s.pretensionId===id);
     const dashOf = k => { const v = (D.views[0].dashLegend.find(e=>e.key===k)||{}).value; return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
     const colOf = s => (D.views[0].colorLegend.find(e=>e.key===s.colorKeys[0])||{}).value || '#9aa0a6';

@@ -43,6 +43,11 @@ public sealed class StudyExecutionSnapshotFactory(StudyCandidateResolver? resolv
                 .Where(c => !string.IsNullOrWhiteSpace(c.CableName) && c.DesignCapacityKN is { } cap && double.IsFinite(cap) && cap > 0)
                 .GroupBy(c => c.CableName, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.First().DesignCapacityKN!.Value, StringComparer.Ordinal),
+            ConfiguredCableNames = state.Cables
+                .Select(c => c.CableName)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
             DeflectionPoints = state.OutputSettings.DeflectionPoints.ToArray(),
             DeflectionOutputCase = state.OutputSettings.DeflectionOutputCaseName,
             MemberForceResultCase = state.OutputSettings.MemberForceResultLoadCase,

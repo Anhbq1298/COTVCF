@@ -98,7 +98,8 @@ public sealed class MemberForceReportGenerator
             .Select(warning => new ResultReportWarningDto(warning.IterationKey, warning.Category,
                 warning.Severity.ToString(), warning.Message)).ToArray();
         return new MemberForceReportDto(new MemberForceStudyDto(baselineName, studyMode.ToString(), results.Count,
-            DateTimeOffset.Now.ToString("o"), IndividualProfileLimit, scope?.ToDto()), groups, warnings, siblingReports ?? []);
+            DateTimeOffset.Now.ToString("o"), IndividualProfileLimit, scope?.ToDto()), groups,
+            ReportCandidateDefinitions.Build(results), warnings, siblingReports ?? []);
     }
 
     public string BuildHtml(MemberForceReportDto dto, ReportPrintDto? print = null)
@@ -108,18 +109,19 @@ public sealed class MemberForceReportGenerator
         var library = ReportNav.Library("member", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Member Forces — {{Esc(dto.Study.BaselineModelName)}}</title>
-<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportSummaryTheme.Css}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body><header><div><h1>Member Forces Results Viewer</h1>
+<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportSummaryTheme.Css}}{{ReportCandidateDefinitions.Style}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body><header><div><h1>Member Forces Results Viewer</h1>
 <div>{{Esc(dto.Study.BaselineModelName)}} · {{dto.Study.CandidateCount}} candidate(s) · {{Esc(dto.Study.StudyMode)}}</div>
 {{ReportScope.Banner(dto.Study.Scope)}}
 <div class="print-only" data-print-view></div>
 <p>Top Chord, Bottom Chord and Mega Column open on their <b>Summary</b>: the governing axial force of every pretension candidate and truss height. The chords add <b>View by Station</b> for the force along the chord. Under <b>Display</b>, All profiles / Envelope / Station matrix show every component at the stored SAP stations — start, middle and end of each analysis element by default, or All SAP stations. P/V2/V3 are kN; T/M2/M3 are kNm.</p></div>{{library}}</header>
-<nav data-print-controls><label>Group <select id="group"><option value="all">All groups</option></select></label>
+<nav data-print-controls><span id="groupFilter"></span><select id="group" hidden><option value="all">All groups</option><option value="multiple">Multiple groups</option></select>
 <label>Component <select id="component"><option>P</option><option>V2</option><option>V3</option><option>T</option><option>M2</option><option>M3</option></select></label>
 <label>Result step <select id="step"></select></label><label>Positions <select id="sampling"><option value="summary">Start + middle + end per element</option><option value="all">All SAP stations</option></select></label><label>Display <select id="view"><option value="summary">Summary</option><option value="profiles">All profiles</option><option value="envelope">Envelope</option><option value="matrix">Station matrix</option></select></label><button id="reset">Reset filters</button>{{ReportPrintEngine.ToolbarButton}}<span id="scope"></span>
 {{ReportPrintEngine.Panel}}</nav>
-<div id="filters" data-print-controls></div><div id="notice" hidden></div><main id="panels"></main><div id="warnings"></div><div id="tip" hidden></div>
-<script type="application/json" id="data">{{data}}</script>
+<div id="filters" data-print-controls></div><div id="notice" hidden></div><main id="panels"></main>{{ReportCandidateDefinitions.Markup}}<div id="warnings"></div><div id="tip" hidden></div>
+<script type="application/json" id="report-data">{{data}}</script>
 {{ReportPrintEngine.Scripts(print)}}
+<script>{{ReportCandidateDefinitions.Script}}</script>
 <script>{{Script}}</script></body></html>
 """;
     }
@@ -134,12 +136,14 @@ body.pr-on .matrix thead th{white-space:normal;overflow-wrap:anywhere}
 """;
 
     private const string Script = """
-(()=>{const D=JSON.parse(document.getElementById('data').textContent),G=document.getElementById('group'),C=document.getElementById('component'),S=document.getElementById('step'),A=document.getElementById('sampling'),V=document.getElementById('view'),P=document.getElementById('panels'),N=document.getElementById('notice'),Q=document.getElementById('scope'),TIP=document.getElementById('tip');
+(()=>{const D=JSON.parse(document.getElementById('report-data').textContent),GR=document.getElementById('groupFilter'),G=document.getElementById('group'),C=document.getElementById('component'),S=document.getElementById('step'),A=document.getElementById('sampling'),V=document.getElementById('view'),P=document.getElementById('panels'),N=document.getElementById('notice'),Q=document.getElementById('scope'),TIP=document.getElementById('tip');
 // "#print&group=TopChord&component=M3&view=envelope" from the PDF exporter preselects the toolbar
 const OPT=(window.reportPrint&&window.reportPrint.options)||{},norm=x=>String(x).toLowerCase().replace(/[^a-z0-9]/g,''),pick=(select,value)=>{if(value!=null&&[...select.options].some(o=>o.value===value))select.value=value};
-const chosen={loadId:new Set(),heightId:new Set(),pretensionId:new Set()},colors=['#1f77b4','#d62728','#2ca02c','#ff7f0e','#9467bd','#17becf'];let hi=null;
+const chosen={loadId:new Set(),heightId:new Set(),pretensionId:new Set()},chosenGroups=new Set(),colors=['#1f77b4','#d62728','#2ca02c','#ff7f0e','#9467bd','#17becf'];let hi=null;
 const esc=x=>String(x??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])),fmt=x=>Math.abs(x)>=100?x.toFixed(0):Math.abs(x)>=1?x.toFixed(2):x.toFixed(3),prop=()=>C.value[0].toLowerCase()+C.value.slice(1),unit=()=>['T','M2','M3'].includes(C.value)?'kNm':'kN',positionLabel=()=>A.value==='summary'?'start + middle + end per element':'all SAP stations';
-D.groups.forEach((g,i)=>G.add(new Option(`${g.groupName} · ${g.outputCase}`,i)));const gs=()=>G.value==='all'?D.groups:[D.groups[+G.value]],scope=g=>g.series.filter(x=>[...Object.keys(chosen)].every(k=>!chosen[k].size||chosen[k].has(x[k]))),step=r=>`${r.stepType||'Static'} · ${Number(r.stepNumber).toLocaleString()}`,key=r=>r.sampleLabel?`${r.frameName}|${r.elementName}|${r.sampleLabel}`:`${r.frameName}|${r.elementName}|${r.objectStationM}|${r.elementStationM}`;
+D.groups.forEach((g,i)=>G.add(new Option(`${g.groupName} · ${g.outputCase}`,i)));const gs=()=>chosenGroups.size?D.groups.filter((_,i)=>chosenGroups.has(String(i))):D.groups,scope=g=>g.series.filter(x=>[...Object.keys(chosen)].every(k=>!chosen[k].size||chosen[k].has(x[k]))),step=r=>`${r.stepType||'Static'} · ${Number(r.stepNumber).toLocaleString()}`,key=r=>r.sampleLabel?`${r.frameName}|${r.elementName}|${r.sampleLabel}`:`${r.frameName}|${r.elementName}|${r.objectStationM}|${r.elementStationM}`;
+let syncGroups=()=>{};
+function groupFilter(){const w=document.createElement('span'),b=document.createElement('button'),pop=document.createElement('div');w.className='ms';pop.className='pop';pop.hidden=true;pop.onclick=e=>e.stopPropagation();const all=document.createElement('label');all.className='all';all.innerHTML='<input type="checkbox" checked> All groups';pop.append(all);const boxes=[];D.groups.forEach((g,i)=>{const row=document.createElement('label'),cb=document.createElement('input');cb.type='checkbox';cb.value=String(i);row.append(cb,document.createTextNode(`${g.groupName} · ${g.outputCase}`));pop.append(row);boxes.push(cb);cb.onchange=()=>{cb.checked?chosenGroups.add(cb.value):chosenGroups.delete(cb.value);if(chosenGroups.size===D.groups.length)chosenGroups.clear();sync();if(chosenGroups.size===1){const gi=+[...chosenGroups][0],selected=D.groups[gi];if(selected?.summary){V.value='summary';sumView[gi]='summary'}}hi=null;refreshSteps();render()}});function sync(){const n=chosenGroups.size;b.textContent=`Groups: ${n===0?'all':n<=2?[...chosenGroups].map(i=>D.groups[+i].groupName).join(', '):n+'/'+D.groups.length}`;w.classList.toggle('active',n>0);all.firstChild.checked=n===0;boxes.forEach(cb=>cb.checked=chosenGroups.has(cb.value));G.value=n===0?'all':n===1?[...chosenGroups][0]:'multiple'}syncGroups=sync;all.onclick=e=>{e.preventDefault();chosenGroups.clear();sync();hi=null;refreshSteps();render()};b.onclick=e=>{e.stopPropagation();document.querySelectorAll('.pop').forEach(p=>{if(p!==pop)p.hidden=true});pop.hidden=!pop.hidden};w.append(b,pop);sync();GR.append(w)}
 function filters(){const root=document.getElementById('filters'),labels={loadId:'Loading',heightId:'Height',pretensionId:'Pretension'},series=D.groups.flatMap(g=>g.series);Object.keys(labels).forEach(k=>{const vals=[...new Set(series.map(x=>x[k]))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})),w=document.createElement('span'),b=document.createElement('button'),pop=document.createElement('div');w.className='ms';pop.className='pop';pop.hidden=true;const all=document.createElement('label');all.className='all';all.innerHTML='<input type="checkbox" checked> All';pop.append(all);const boxes=[];vals.forEach(v=>{const sample=series.find(x=>x[k]===v),detail=k==='loadId'?sample.loadingLabel:k==='heightId'?`H ${(+sample.trussHeightM).toFixed(3)} m`:sample.pretensionLabel,row=document.createElement('label'),cb=document.createElement('input');cb.type='checkbox';cb.value=v;row.append(cb,document.createTextNode(`${v} · ${detail}`));pop.append(row);boxes.push(cb);cb.onchange=()=>{cb.checked?chosen[k].add(v):chosen[k].delete(v);sync();render()}});function sync(){const n=chosen[k].size;b.textContent=`${labels[k]}: ${n===0?'all':n<=2?[...chosen[k]].join(', '):n+'/'+vals.length}`;w.classList.toggle('active',n>0);all.firstChild.checked=n===0;boxes.forEach(cb=>cb.checked=chosen[k].has(cb.value))}all.onclick=e=>{e.preventDefault();chosen[k].clear();sync();render()};b.onclick=e=>{e.stopPropagation();document.querySelectorAll('.pop').forEach(p=>{if(p!==pop)p.hidden=true});pop.hidden=!pop.hidden};w.append(b,pop);sync();root.append(w)})}
 function refreshSteps(){const old=S.value,all=[...new Set(gs().flatMap(g=>g.series.flatMap(x=>x.stations.map(step))))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));S.innerHTML='';all.forEach(x=>S.add(new Option(x,x)));S.value=all.includes(old)?old:all.at(-1)||''}
 const rawRows=x=>x.stations.filter(r=>step(r)===S.value).sort((a,b)=>a.profileCoordinateM-b.profileCoordinateM||a.frameSequence-b.frameSequence||a.elementStationM-b.elementStationM);
@@ -241,14 +245,13 @@ function render(){const list=gs(),sum=V.value==='summary',plain=list.filter(g=>!
 // Component / Result step / Positions belong to the generic views: a Summary always reads P over every station and step
 [C,S,A].forEach(x=>{if(x.parentElement)x.parentElement.hidden=sum&&!plain.length});
 V.value==='matrix'?matrix(list):sum?summaries(list):profiles(list)}
-// choosing a chord or the mega columns in Group always lands on the Summary
-G.onchange=()=>{hi=null;const g=D.groups[+G.value];if(g&&g.summary){V.value='summary';sumView[+G.value]='summary'}refreshSteps();render()};C.onchange=render;S.onchange=render;A.onchange=render;V.onchange=render;document.getElementById('reset').onclick=()=>{Object.values(chosen).forEach(x=>x.clear());hi=null;A.value='summary';document.getElementById('filters').innerHTML='';filters();render()};document.addEventListener('click',()=>document.querySelectorAll('.pop').forEach(x=>x.hidden=true));
+G.onchange=()=>{chosenGroups.clear();if(G.value!=='all'&&G.value!=='multiple')chosenGroups.add(G.value);const g=chosenGroups.size===1?D.groups[+[...chosenGroups][0]]:null;if(g?.summary){V.value='summary';sumView[+[...chosenGroups][0]]='summary'}syncGroups();hi=null;refreshSteps();render()};C.onchange=render;S.onchange=render;A.onchange=render;V.onchange=render;document.getElementById('reset').onclick=()=>{Object.values(chosen).forEach(x=>x.clear());chosenGroups.clear();hi=null;A.value='summary';GR.innerHTML='';document.getElementById('filters').innerHTML='';groupFilter();filters();refreshSteps();render()};document.addEventListener('click',()=>document.querySelectorAll('.pop').forEach(x=>x.hidden=true));
 if(!D.groups.some(g=>g.summary)){V.remove(0);V.value='profiles'}      // no chord or mega-column group in this study: nothing to summarise
-if(OPT.group!=null){const i=D.groups.findIndex(g=>norm(g.groupName)===norm(OPT.group));if(i>=0)G.value=i}pick(C,OPT.component);pick(A,OPT.sampling);pick(V,OPT.view);
+if(OPT.group!=null){const i=D.groups.findIndex(g=>norm(g.groupName)===norm(OPT.group));if(i>=0)chosenGroups.add(String(i))}pick(C,OPT.component);pick(A,OPT.sampling);pick(V,OPT.view);
 // "#summary=top|bottom|mega" (Tab 06 modules 02 / 03 / 05) opens straight on that group; "&detail=station&pretension=P03" drills into a chord
-if(OPT.summary){const i=D.groups.findIndex(g=>g.summary&&g.summary.kind===OPT.summary);if(i>=0){G.value=i;V.value='summary';sumView[i]=OPT.detail==='station'?'station':'summary';if(OPT.pretension)sumP[i]=OPT.pretension}}
+if(OPT.summary){const i=D.groups.findIndex(g=>g.summary&&g.summary.kind===OPT.summary);if(i>=0){chosenGroups.clear();chosenGroups.add(String(i));V.value='summary';sumView[i]=OPT.detail==='station'?'station':'summary';if(OPT.pretension)sumP[i]=OPT.pretension}}
 window.memberReport={summary:sumGo,render};      // handle for scripted checks
-filters();refreshSteps();render();const w=document.getElementById('warnings');if(D.warnings.length)w.textContent=D.warnings.map(x=>`[${x.iterationKey||'study'}] ${x.message}`).join(' · ');
+groupFilter();filters();refreshSteps();render();const w=document.getElementById('warnings');if(D.warnings.length)w.textContent=D.warnings.map(x=>`[${x.iterationKey||'study'}] ${x.message}`).join(' · ');
 })();
 """;
 }

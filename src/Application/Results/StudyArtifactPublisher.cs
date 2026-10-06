@@ -1,4 +1,5 @@
 using COT_VCF.Domain.Results;
+using COT_VCF.Domain;
 using System.IO;
 
 namespace COT_VCF.Application.Results;
@@ -15,6 +16,12 @@ public interface IStudyArtifactPublisher
 public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
 {
     private readonly StudyPathService paths = new();
+    private readonly Func<DeflectionLimitBand> deflectionBand;
+
+    public StudyArtifactPublisher(Func<DeflectionLimitBand>? deflectionBand = null)
+    {
+        this.deflectionBand = deflectionBand ?? (() => new DeflectionLimitBand(null, null));
+    }
 
     public StudyArtifactOutcome Publish(StudyExecutionSnapshot snapshot, IReadOnlyList<CandidateResultDto> results)
     {
@@ -24,7 +31,8 @@ public sealed class StudyArtifactPublisher : IStudyArtifactPublisher
         try
         {
             return new StudyPostProcessor().Generate(studyFolder,
-                snapshot.CableDesignCapacities, snapshot.DecisionCriteria);
+                snapshot.CableDesignCapacities, deflectionBand(),
+                snapshot.ConfiguredCableNames);
         }
         catch (Exception ex)
         {

@@ -225,15 +225,15 @@ Tab 04 defines study-wide output monitoring only; editing the tab does not write
 - Cable output selects baseline Cable Objects plus a SAP analysis load case. This is distinct from Tab 03's target-force load pattern.
 - Configuration is persisted as `Tab05OutputSettings`; opening a project restores definitions only and never mutates SAP.
 - When Tab 05 Run starts, `OutputGroupPreparationService` is the preflight gate: verify the active model is the immutable session parent and unlocked, replace/read-back all requested `[O]-` groups, save the parent .sdb, then freeze the execution snapshot. No worker or child may start before this succeeds.
-- Member-force extraction retains every SAP station and result step; support reactions retain the configured Left/Right foundation points and global force/moment components. Tab 06 generates their reports from the raw JSON package.
+- Member-force extraction retains every SAP station and result step; support reactions retain the configured Left/Right foundation points and global force/moment components. Reports are generated from the raw JSON package.
 - `Support_Reactions_Report.html` opens on its **Summary** (see "Module 06 Support Reactions" below). Its generic
   views stay under `View`: per support point (or foundation total), a range band among the in-scope
   candidates: min–max wash, darker P25–P75 core, median line, labelled extremes, and candidate dots on top (dots hidden
   above `IndividualProfileLimit`). `Band by` splits it per L / H / P id using the Deflection report's palette order
   keyed by study-wide id (colour follows the id, never the filter); dimensions with more ids than colours are disabled.
   The matrix view ends with Min / Max / Range rows.
-- Children inherit the saved parent groups. The run extracts the configured results as raw candidate data;
-  it does not create Excel workbooks or HTML reports.
+- Children inherit the saved parent groups. The run extracts the configured results as raw candidate data, publishes
+  canonical JSON/CSV, and then automatically generates the consolidated workbook and available HTML reports.
 
 ## Iteration Study Tab (06)
 
@@ -263,8 +263,8 @@ Study composition plus isolated child-model building, analysis, raw-result extra
   loading/height/pretension candidates. Each row exposes the selected joint/load-pattern/Fz assignments
   and cable/load-pattern/target-force assignments in dedicated columns/tooltips; do not hide pretension
   after a truncated generic description. Previewing paths never creates a directory.
-- Study paths are always derived from the immutable first-connected baseline:
-  `<baseline folder>/Study/<iteration id>/<baseline stem>_<iteration id>.sdb`. Existing non-empty iteration
+- Study paths are always derived from the immutable first-connected baseline and separated by model name:
+  `<baseline folder>/Study/<baseline stem>/<iteration id>/<baseline stem>_<iteration id>.sdb`. Existing non-empty iteration
   folders or child models block the run and are never silently overwritten.
 - The user selects 1–3 **total** SAP2000 instances. The already-connected baseline instance is worker 1;
   only workers 2 and 3 create additional background SAP2000 processes. The connected host is borrowed and
@@ -290,18 +290,22 @@ Study composition plus isolated child-model building, analysis, raw-result extra
 - A candidate-level failure, including a nonzero `Analyze.RunAnalysis` result, may continue on a recovered
   worker. Failure to restore the baseline faults that worker and removes it from scheduling; healthy workers
   continue.
-- The SAP/model-run boundary ends with raw files: each successful candidate persists `Candidate_Result.json`,
-  then the study publishes canonical lossless `Study/RawData/Study_Raw_Results.json` plus a flat
-  `Study_Raw_Results.csv` companion. It does not generate `.xlsx` or `.html`, including candidate diagnostics.
-- Tab 06 is the only report-generation boundary. `Generate Outputs` / `Regenerate` reads the raw JSON and creates
-  the candidate diagnostics, consolidated workbook, deflection/cable/member-force/support-reaction HTML without a SAP
-  gateway. The CSV is a spreadsheet-friendly raw view; JSON is the canonical complete post-processing input.
+- Each successful candidate persists `Candidate_Result.json`. At the end of the run, the study first publishes
+  canonical lossless `Study/RawData/Study_Raw_Results.json` plus a flat `Study_Raw_Results.csv` companion, then
+  automatically generates candidate diagnostics, the consolidated workbook, and available deflection/cable/member-force/support-reaction HTML reports.
+- Tab 06 remains the manual retry/regeneration boundary. `Generate Outputs` / `Regenerate` recreates the same derived
+  outputs from raw JSON without a SAP gateway. The CSV is a spreadsheet-friendly raw view; JSON is the canonical
+  complete post-processing input and remains available if automatic report generation fails.
 - Capacity and the Tab 06A acceptance criteria are post-processing inputs. Changing `fpu`, `φ`, or a criterion must
-  not invalidate reusable analyzed children; the next explicit Tab 06 / 06A generation uses the current values.
+  not invalidate reusable analyzed children. Automatic publication and a later explicit Tab 06 / 06A generation use
+  the current post-processing values without changing the execution fingerprint.
 - **The Study Shortlist is gone** (Module 08, `Study_Shortlist.html/.xlsx`, `StudyDecisionService`, the ranking
   weights and the absolute cable kN bounds). Tab 06A replaces its pass / fail gate; do not reintroduce a second
   gate. An older project or raw package that still carries those fields loads normally — they are ignored.
   Users may edit the raw JSON in place and regenerate; derived artifacts are considered stale until then.
+- Every result HTML includes the same compact Candidate Definitions section for L/H/P. Pretension definitions use
+  a cable-by-candidate target-force matrix rather than repeating a cable list for every P candidate, keeping print
+  output compact. Member-force group selection is multi-select (an empty selection means all groups).
 
 ## Tab 06 Post-Processing · Module 07 Cable Forces (`Cable_Forces_Report.html`)
 
