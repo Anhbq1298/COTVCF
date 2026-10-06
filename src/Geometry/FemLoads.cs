@@ -69,7 +69,8 @@ public static class FemResultCombiner
         var cables = first.Cables.Select((cable, index) =>
         {
             var force = items.Sum(item => item.Factor * item.Result.Cables[index].AxialForceKN);
-            return cable with { AxialForceKN = force, Active = force > 1e-8 };
+            // sag and stiffness belong to one equilibrium state; a linear sum of cases has neither
+            return cable with { AxialForceKN = force, Active = force > 1e-8, SagM = null, TangentStiffnessRatio = null };
         }).ToArray();
         return new FemAnalysisResult(joints, reactions, frames, cables, items.Max(item => item.Result.NonlinearIterations),
             first.TargetFitIterations, first.TargetFitFailure);

@@ -30,8 +30,13 @@ public sealed record FemStudyRun(
 /// <summary>Target vs fitted pretension-stage tension (the deviation the fitting tolerance controls) and the final
 /// tension once the applied loads act on the prestressed structure.</summary>
 public sealed record FemCableFitRow(string RunId, string CableName, double? TargetForceKN, double? PretensionStageForceKN,
-    double? ResultForceKN, double? AppliedPretensionKN, int? FitIterations, string? FitFailure = null)
+    double? ResultForceKN, double? AppliedPretensionKN, int? FitIterations, string? FitFailure = null,
+    double? SagM = null, double? TangentStiffnessRatio = null)
 {
+    /// <summary>Mid-span sag below the chord in the result shown [mm]; blank for a straight cable.</summary>
+    public double? SagMm => SagM * 1000;
+    /// <summary>Stiffness the sagging cable keeps, in % of EA / L (Ernst's equivalent modulus over E).</summary>
+    public double? StiffnessPercent => TangentStiffnessRatio * 100;
     public double? DeviationPercent => TargetForceKN is > 0 and double target && PretensionStageForceKN is double stage
         ? (stage - target) / target * 100 : null;
     public bool Failed { get; init; }
@@ -48,7 +53,8 @@ public sealed record FemCableFitRow(string RunId, string CableName, double? Targ
         return result.Cables
             .OrderBy(cable => cable.MemberName, StringComparer.Ordinal)
             .Select(cable => new FemCableFitRow(run.Id, cable.MemberName, cable.TargetForceKN, cable.PretensionStageForceKN,
-                cable.AxialForceKN, cable.AppliedPretensionKN, result.TargetFitIterations, result.TargetFitFailure));
+                cable.AxialForceKN, cable.AppliedPretensionKN, result.TargetFitIterations, result.TargetFitFailure,
+                cable.SagM, cable.TangentStiffnessRatio));
     }
 }
 
@@ -203,7 +209,8 @@ public sealed class FemStudyService
         double? targetFitPercent = null,
         int maximumTargetFitIterations = PlanarFrameSolver.DefaultTargetFitIterations,
         int frameMeshSegments = 1,
-        FemLoadPlan? loadPlan = null)
+        FemLoadPlan? loadPlan = null,
+        bool cableSag = false)
     {
         if (frameMeshSegments is < 1 or > PlanarFrameSolver.MaximumFrameMeshSegments)
             throw new ArgumentOutOfRangeException(nameof(frameMeshSegments), $"Frame mesh must be between 1 and {PlanarFrameSolver.MaximumFrameMeshSegments} segments per frame.");
@@ -223,13 +230,13 @@ public sealed class FemStudyService
             {
                 if (loadPlan is null)
                     result = solver.Solve(geometry, frameProperties, cableProperties, candidate.PretensionTargetsKN,
-                        candidate.Loads, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments);
+                        candidate.Loads, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments, cableSag);
                 else
                 {
                     // Load cases from the SAP model (as edited), then linear-additive combinations of their results.
                     var (fitLoads, cases) = loadPlan.ForCandidate(candidate.Loads);
                     var caseResults = solver.SolveCases(geometry, frameProperties, cableProperties, candidate.PretensionTargetsKN,
-                        fitLoads, cases, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments);
+                        fitLoads, cases, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments, cableSag);
                     results = loadPlan.Complete(caseResults);
                     result = results[loadPlan.ResultNames[0]];
                 }

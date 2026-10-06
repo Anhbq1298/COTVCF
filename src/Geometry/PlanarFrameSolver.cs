@@ -67,9 +67,13 @@ public sealed record FemFrameResponse(string MemberName, double AxialStartKN, do
     double ShearStartKN, double ShearEndKN,
     double MomentStartKNm, double MomentEndKNm,
     IReadOnlyList<FemFrameStation>? Stations = null);
+/// <param name="SagM">Mid-span sag of the cable below its chord [m], when the case loads it along its length and
+/// cable sag is analysed; null for a straight (weightless or sag-off) cable.</param>
+/// <param name="TangentStiffnessRatio">Axial stiffness the sagging cable still has, as a fraction of EA / L —
+/// Ernst's equivalent modulus over E. Null with <paramref name="SagM"/>.</param>
 public sealed record FemCableResponse(string MemberName, double AxialForceKN, bool Active,
     double TargetForceKN = 0, double AppliedPretensionKN = 0, double? PretensionStageForceKN = null,
-    IReadOnlyList<double>? FitHistoryKN = null)
+    IReadOnlyList<double>? FitHistoryKN = null, double? SagM = null, double? TangentStiffnessRatio = null)
 {
     /// <summary>P_result / P_preset after each pretension-fitting run (run 1 applies the target itself).</summary>
     public IReadOnlyList<double> FitRatios => TargetForceKN > 0 && FitHistoryKN is { } history
@@ -161,12 +165,13 @@ public sealed class PlanarFrameSolver
         CancellationToken cancellationToken = default,
         double? targetFitPercent = null,
         int maximumTargetFitIterations = DefaultTargetFitIterations,
-        int frameMeshSegments = 1)
+        int frameMeshSegments = 1,
+        bool cableSag = false)
     {
         var caseLoads = new FemLoadSet(loads.Select(load => new FemJointLoad(load.PointName, load.FxKN, load.FzKN)).ToArray(), [], []);
         return SolveCases(geometry, frameSections, cableSections, cablePretensionsKN, FemLoadSet.Empty,
             [new FemCaseLoads("Default", caseLoads, 1)], pinSupportPoints, cancellationToken, targetFitPercent,
-            maximumTargetFitIterations, frameMeshSegments)["Default"];
+            maximumTargetFitIterations, frameMeshSegments, cableSag)["Default"];
     }
 
     /// <summary>
@@ -174,6 +179,10 @@ public sealed class PlanarFrameSolver
     /// given) under <paramref name="fitLoads"/> — the other loads of the case that holds the cable target-force
     /// pattern, as SAP meets a Target Force at the end of that case — then every case is solved as its own
     /// tension-only equilibrium with its loads and <see cref="FemCaseLoads.PretensionFactor"/> × the fitted pretension.
+    /// <para>With <paramref name="cableSag"/> a cable that a case loads along its length (its self-weight, typically)
+    /// is no longer a straight bar: it hangs in a shallow parabola, and its tension follows the sag — see
+    /// <see cref="SaggingTension"/>. This is the geometric nonlinearity of the cables; joint displacements stay
+    /// small-displacement, and frames stay linear.</para>
     /// </summary>
     public IReadOnlyDictionary<string, FemAnalysisResult> SolveCases(
         GeometryModel geometry,
@@ -186,7 +195,8 @@ public sealed class PlanarFrameSolver
         CancellationToken cancellationToken = default,
         double? targetFitPercent = null,
         int maximumTargetFitIterations = DefaultTargetFitIterations,
-        int frameMeshSegments = 1)
+        int frameMeshSegments = 1,
+        bool cableSag = false)
     {
         ArgumentNullException.ThrowIfNull(geometry);
         if (cases.Count == 0) throw new InvalidOperationException("At least one load case is required.");
@@ -247,8 +257,9 @@ public sealed class PlanarFrameSolver
             throw new InvalidOperationException("Target-force fitting needs at least one iteration.");
 
         // Without fitting, the target is applied once as the initial pretension. With fitting, the applied pretension is
-        // adjusted until the targets are met under the fit-stage loads. The tension-only energy is convex, so a case's
-        // equilibrium does not depend on load path and one solve with pretension and loads gives the staged result.
+        // adjusted until the targets are met under the fit-stage loads. The tension-only energy is convex — with
+        // cable sag too — so a case's equilibrium does not depend on load path and one solve with pretension and
+        // loads gives the staged result.
         var targets = cableElements.Select(cable => cable.InitialPretensionKN).ToArray();
         var applied = targets.ToArray();
         var pretensionStageForces = new double[targets.Length];
@@ -258,7 +269,8 @@ public sealed class PlanarFrameSolver
         if (targetFitPercent is double tolerancePercent && targets.Any(target => target > 0))
         {
             var (fitExternal, _) = BuildLoads(loadContext, fitLoads);
-            (applied, pretensionStageForces, targetFitIterations, targetFitFailure) = FitPretension(dofCount, frameElements, cableElements,
+            (applied, pretensionStageForces, targetFitIterations, targetFitFailure) = FitPretension(dofCount, frameElements,
+                WithSag(cableElements, fitLoads, cableSag),
                 restrained, targets, tolerancePercent, maximumTargetFitIterations, fitHistory, fitExternal, cancellationToken);
         }
 
@@ -267,12 +279,13 @@ public sealed class PlanarFrameSolver
         {
             cancellationToken.ThrowIfCancellationRequested();
             var (external, pieceLoads) = BuildLoads(loadContext, loadCase.Loads);
-            var caseCables = WithPretension(cableElements, applied.Select(value => value * loadCase.PretensionFactor).ToArray());
+            var caseCables = WithSag(WithPretension(cableElements, applied.Select(value => value * loadCase.PretensionFactor).ToArray()),
+                loadCase.Loads, cableSag);
             var (displacement, nonlinearIterations) = SolveEquilibrium(dofCount, frameElements, caseCables, external, restrained, cancellationToken);
 
             var activeCables = caseCables.Where(cable => CableForce(cable, displacement) > CableForceToleranceKN)
                 .Select(cable => cable.Member.Name).ToHashSet(StringComparer.Ordinal);
-            var (stiffness, rightHandSide) = Assemble(dofCount, frameElements, caseCables, activeCables, external);
+            var (stiffness, rightHandSide) = Assemble(dofCount, frameElements, caseCables, activeCables, external, displacement);
             var finalResidual = Residual(stiffness, rightHandSide, displacement);
 
             var jointResults = usedPoints.Select((name, index) => new FemJointResponse(name,
@@ -287,9 +300,13 @@ public sealed class PlanarFrameSolver
             var cableResults = caseCables.Select((cable, index) =>
             {
                 var force = Math.Max(0, CableForce(cable, displacement));
+                var sagging = cable.SagParameter > 0 && force > CableForceToleranceKN;
                 return new FemCableResponse(cable.Member.Name, force, force > CableForceToleranceKN, targets[index], applied[index],
                     targetFitIterations > 0 ? pretensionStageForces[index] : null,
-                    fitHistory.Count > 0 ? fitHistory.Select(forces => forces[index]).ToArray() : null);
+                    fitHistory.Count > 0 ? fitHistory.Select(forces => forces[index]).ToArray() : null,
+                    // parabola: f = w_n L² / 8T
+                    sagging ? cable.NormalLoadKNPerM * cable.Length * cable.Length / (8 * force) : null,
+                    sagging ? SaggingTangent(cable, force) / cable.AxialStiffness : null);
             }).ToArray();
             results[loadCase.Name] = new(jointResults, reactions, frameResults, cableResults, nonlinearIterations, targetFitIterations, targetFitFailure);
         }
@@ -560,6 +577,34 @@ public sealed class PlanarFrameSolver
     private static CableElement[] WithPretension(IReadOnlyList<CableElement> cables, IReadOnlyList<double> pretension) =>
         cables.Select((cable, index) => cable with { InitialPretensionKN = pretension[index] }).ToArray();
 
+    /// <summary>
+    /// Gives every cable the load that makes it sag in this load set: the distributed load on the cable, as its
+    /// component normal to the chord per unit chord length (uniform-equivalent — self-weight w gives w·cos θ). Sag
+    /// switched off, or a load set that puts nothing on a cable, leaves that cable the straight tension-only bar.
+    /// The same loads still reach the joints through <see cref="BuildLoads"/>; this only adds what they do to the
+    /// cable's own shape.
+    /// </summary>
+    private static CableElement[] WithSag(IReadOnlyList<CableElement> cables, FemLoadSet loads, bool enabled)
+    {
+        var normal = new Dictionary<string, double>(StringComparer.Ordinal);
+        if (enabled)
+        {
+            var byName = cables.ToDictionary(cable => cable.Member.Name, StringComparer.Ordinal);
+            foreach (var load in loads.Members)
+            {
+                if (!byName.TryGetValue(load.MemberName, out var cable)) continue;
+                var r1 = Math.Clamp(Math.Min(load.RelStart, load.RelEnd), 0, 1);
+                var r2 = Math.Clamp(Math.Max(load.RelStart, load.RelEnd), 0, 1);
+                if (r2 - r1 <= 1e-12) continue;
+                double Intensity(double rel) => load.ValueStart + (load.ValueEnd - load.ValueStart) * (rel - load.RelStart) / (load.RelEnd - load.RelStart);
+                var total = (Intensity(r1) + Intensity(r2)) / 2 * (r2 - r1) * cable.Length;     // linear intensity: exact
+                var (gx, gz) = LoadVector(load.Direction, cable.C, cable.S, 0);
+                normal[load.MemberName] = normal.GetValueOrDefault(load.MemberName) + (-cable.S * gx + cable.C * gz) * total;
+            }
+        }
+        return cables.Select(cable => cable with { NormalLoadKNPerM = Math.Abs(normal.GetValueOrDefault(cable.Member.Name)) / cable.Length }).ToArray();
+    }
+
     private static (double[] Displacement, int Iterations) SolveEquilibrium(int dofCount,
         IReadOnlyList<FrameElement> frameElements, IReadOnlyList<CableElement> cableElements,
         double[] external, IReadOnlySet<int> restrained, CancellationToken cancellationToken)
@@ -577,7 +622,7 @@ public sealed class PlanarFrameSolver
             cancellationToken.ThrowIfCancellationRequested();
             activeCables = cableElements.Where(cable => CableForce(cable, displacement) > CableForceToleranceKN)
                 .Select(cable => cable.Member.Name).ToHashSet(StringComparer.Ordinal);
-            (stiffness, rightHandSide) = Assemble(dofCount, frameElements, cableElements, activeCables, external);
+            (stiffness, rightHandSide) = Assemble(dofCount, frameElements, cableElements, activeCables, external, displacement);
             var residual = Residual(stiffness, rightHandSide, displacement);
             var freeDofs = Enumerable.Range(0, dofCount)
                 .Where(index => !restrained.Contains(index) && stiffness[index, index] > 0).ToArray();
@@ -849,9 +894,12 @@ public sealed class PlanarFrameSolver
                 (requireInertia ? ", and in-plane I." : "."));
     }
 
+    /// <summary>Stiffness and load vector at <paramref name="displacement"/>. A straight cable is linear, so they do
+    /// not depend on it; a sagging cable enters with its tangent stiffness there and the constant that makes
+    /// K·u − rhs its exact tension at that point — so the residual is exact and the matrix is the Newton tangent.</summary>
     private static (double[,] Stiffness, double[] RightHandSide) Assemble(int dofCount,
         IReadOnlyList<FrameElement> frames, IReadOnlyList<CableElement> cables,
-        IReadOnlySet<string> activeCables, IReadOnlyList<double> external)
+        IReadOnlySet<string> activeCables, IReadOnlyList<double> external, IReadOnlyList<double> displacement)
     {
         var stiffness = new double[dofCount, dofCount];
         var rhs = external.ToArray();
@@ -859,12 +907,19 @@ public sealed class PlanarFrameSolver
         foreach (var cable in cables)
         {
             if (!activeCables.Contains(cable.Member.Name)) continue;
+            var (axial, pretension) = (cable.AxialStiffness, cable.InitialPretensionKN);
+            if (cable.SagParameter > 0)
+            {
+                var tension = CableForce(cable, displacement);
+                axial = SaggingTangent(cable, tension);
+                pretension = tension - axial * CableExtension(cable, displacement);
+            }
             var b = new[] { -cable.C, -cable.S, cable.C, cable.S };
             var local = new double[4, 4];
             for (var row = 0; row < 4; row++)
-            for (var col = 0; col < 4; col++) local[row, col] = cable.AxialStiffness * b[row] * b[col];
+            for (var col = 0; col < 4; col++) local[row, col] = axial * b[row] * b[col];
             AddMatrix(stiffness, cable.Dofs, local);
-            for (var i = 0; i < 4; i++) rhs[cable.Dofs[i]] -= b[i] * cable.InitialPretensionKN;
+            for (var i = 0; i < 4; i++) rhs[cable.Dofs[i]] -= b[i] * pretension;
         }
         return (stiffness, rhs);
     }
@@ -900,12 +955,50 @@ public sealed class PlanarFrameSolver
         catch (Exception ex) { throw new InvalidOperationException("The FEM stiffness matrix could not be solved; check supports and connectivity.", ex); }
     }
 
+    /// <summary>Change of the chord length between the cable's end joints [m].</summary>
+    private static double CableExtension(CableElement cable, IReadOnlyList<double> displacement) =>
+        -cable.C * displacement[cable.Dofs[0]] - cable.S * displacement[cable.Dofs[1]] +
+        cable.C * displacement[cable.Dofs[2]] + cable.S * displacement[cable.Dofs[3]];
+
+    /// <summary>Cable tension at the given joint displacements. A straight cable: pretension + EA/L × extension, which
+    /// may come out negative (the caller treats that as slack). A sagging cable: always positive.</summary>
     private static double CableForce(CableElement cable, IReadOnlyList<double> displacement)
     {
-        var extension = -cable.C * displacement[cable.Dofs[0]] - cable.S * displacement[cable.Dofs[1]] +
-            cable.C * displacement[cable.Dofs[2]] + cable.S * displacement[cable.Dofs[3]];
-        return cable.InitialPretensionKN + cable.AxialStiffness * extension;
+        var straight = cable.InitialPretensionKN + cable.AxialStiffness * CableExtension(cable, displacement);
+        return cable.SagParameter > 0 ? SaggingTension(cable.AxialStiffness, cable.SagParameter, straight) : straight;
     }
+
+    /// <summary>
+    /// Tension T of an elastic cable hanging in a shallow parabola under a load w_n normal to its chord. Its length
+    /// along the curve exceeds the chord by w_n²L³ / 24T² (= a / T²), so less of the joint movement stretches it:
+    /// <c>T / k − a / T² = s / k</c>, where k = EA / L and s is the tension the same cable would have as a straight
+    /// bar (pretension + k × chord extension; negative once a straight cable would be slack). The root is unique
+    /// and positive — a cable with weight never goes fully slack, it sags further — and its slope dT/de is Ernst's
+    /// equivalent stiffness k / (1 + w_n²L²·EA / 12T³). With a = 0 this is the straight tension-only cable.
+    /// </summary>
+    private static double SaggingTension(double axialStiffness, double sagParameter, double straight)
+    {
+        // T³ − s·T² − k·a = 0. Right of its root the cubic is increasing and convex, so Newton from the upper bound
+        // max(s, 0) + ∛(k·a) comes down onto the root monotonically.
+        var q = axialStiffness * sagParameter;
+        var tension = Math.Max(straight, 0) + Math.Cbrt(q);
+        for (var iteration = 0; iteration < 100; iteration++)
+        {
+            var value = tension * tension * (tension - straight) - q;
+            var slope = tension * (3 * tension - 2 * straight);
+            if (!(slope > 0)) break;
+            var next = tension - value / slope;
+            if (!(next > 0) || !double.IsFinite(next)) break;
+            var change = Math.Abs(next - tension);
+            tension = next;
+            if (change <= 1e-13 * Math.Max(1, tension)) break;
+        }
+        return tension;
+    }
+
+    /// <summary>dT/de of a sagging cable at tension <paramref name="tension"/>: k / (1 + 2·k·a / T³).</summary>
+    private static double SaggingTangent(CableElement cable, double tension) =>
+        cable.AxialStiffness / (1 + 2 * cable.AxialStiffness * cable.SagParameter / (tension * tension * tension));
 
     private static void CondenseReleasedDof(double[,] stiffness, int released)
     {
@@ -988,7 +1081,9 @@ public sealed class PlanarFrameSolver
         foreach (var cable in cables)
         {
             var force = CableForce(cable, displacement);
-            if (force > 0) energy += force * force / (2 * cable.AxialStiffness);
+            // ∫T de. Sagging: de = (1/k + 2a/T³) dT gives T²/2k − 2a/T, convex in the extension like the straight law.
+            if (cable.SagParameter > 0) energy += force * force / (2 * cable.AxialStiffness) - 2 * cable.SagParameter / force;
+            else if (force > 0) energy += force * force / (2 * cable.AxialStiffness);
         }
         for (var index = 0; index < displacement.Count; index++) energy -= external[index] * displacement[index];
         return energy;
@@ -999,6 +1094,13 @@ public sealed class PlanarFrameSolver
         double[,] UnreleasedStiffness, double[,] InteriorRecovery, bool ReleaseStart, bool ReleaseEnd,
         double FractionStart, double FractionEnd, double Length,
         MathNet.Numerics.LinearAlgebra.Matrix<double>? InteriorFlexibility);
+    /// <param name="InitialPretensionKN">Tension the cable would have at the model geometry as a straight bar — its
+    /// lack of fit × EA / L. With sag the tension there is a little higher: the curve is longer than the chord.</param>
+    /// <param name="NormalLoadKNPerM">Distributed load normal to the chord in the load set being solved; 0 = straight.</param>
     private sealed record CableElement(StructuralMember Member, int[] Dofs, double C, double S,
-        double AxialStiffness, double InitialPretensionKN, double Length);
+        double AxialStiffness, double InitialPretensionKN, double Length, double NormalLoadKNPerM = 0)
+    {
+        /// <summary>a = w_n²·L³ / 24 [kN²·m]: the cable's curve is a / T² longer than its chord.</summary>
+        public double SagParameter => NormalLoadKNPerM * NormalLoadKNPerM * Length * Length * Length / 24;
+    }
 }
