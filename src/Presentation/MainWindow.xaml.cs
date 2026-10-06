@@ -32,7 +32,7 @@ public partial class MainWindow : Window
     }
 
     // The model preview is one shared viewer hoisted out of the TabControl. Tabs 01-04 (Loading, Truss,
-    // Pretension, Output) keep a resizable ~40/60 params/preview split; tab 05 (Iteration) takes the full width.
+        // The shared preview appears on tabs 01-04 and 07 FEM; tabs 05-06 use full width.
     private void WorkflowTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (ReferenceEquals(e.OriginalSource, WorkflowTabs)) ApplyViewerLayout();
@@ -41,7 +41,7 @@ public partial class MainWindow : Window
     private void ApplyViewerLayout()
     {
         if (ParamsColumn is null) return;
-        bool showViewer = WorkflowTabs.SelectedIndex is >= 0 and <= 3;
+        bool showViewer = WorkflowTabs.SelectedIndex is >= 0 and <= 3 || WorkflowTabs.SelectedIndex == 6;
 
         if (ViewerSplitter.Visibility == Visibility.Visible && ParamsColumn.Width.IsStar && ViewerColumn.Width.IsStar)
         {

@@ -154,6 +154,13 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         return result;
     }
 
+    public Task<IReadOnlyDictionary<string, FemSectionProperties>> ReadFemSectionPropertiesAsync()
+    {
+        if (state.Model is null) throw new InvalidOperationException("Connect to SAP2000 before reading FEM section properties.");
+        var members = state.Geometry.Members.Where(member => member.Kind is MemberKind.Frame or MemberKind.Cable).ToArray();
+        return sap.GetFemSectionPropertiesAsync(members, state.Model);
+    }
+
     public async Task ApplyLoadsAsync()
     {
         var issues = new ConfigurationValidator().ValidateLoads(state);

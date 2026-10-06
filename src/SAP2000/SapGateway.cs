@@ -1,6 +1,7 @@
 using COT_VCF.Application;
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
+using COT_VCF.Geometry;
 using COT_VCF.Infrastructure;
 using CSiAPIv1;
 using System.IO;
@@ -559,6 +560,119 @@ public sealed class SapGateway : ISapGateway
         Verify(expected);
         return results;
     });
+    public Task<IReadOnlyDictionary<string, FemSectionProperties>> GetFemSectionPropertiesAsync(
+        IReadOnlyList<StructuralMember> members, ModelInfo expected) => worker.Run<IReadOnlyDictionary<string, FemSectionProperties>>(() =>
+    {
+        Verify(expected);
+        if (!Model.GetPresentUnits().ToString().StartsWith("kN_m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Internal FEM property reads require kN/m units; the model is in {ReadInfo().Units}. Set SAP2000 to kN, m, C and refresh.");
+
+        var properties = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal);
+        foreach (var member in members)
+        {
+            if (member.Kind == MemberKind.Frame)
+            {
+                string section = "", autoSection = "";
+                Check(Model.FrameObj.GetSection(member.Name, ref section, ref autoSection), "FrameObj.GetSection", member.Name);
+                if (string.IsNullOrWhiteSpace(section)) throw new InvalidOperationException($"Frame '{member.Name}' has no assigned SAP section.");
+
+                double area = 0, as2 = 0, as3 = 0, torsion = 0, i22 = 0, i33 = 0;
+                double s22 = 0, s33 = 0, z22 = 0, z33 = 0, r22 = 0, r33 = 0;
+                Check(Model.PropFrame.GetSectProps(section, ref area, ref as2, ref as3, ref torsion,
+                    ref i22, ref i33, ref s22, ref s33, ref z22, ref z33, ref r22, ref r33), "PropFrame.GetSectProps", section);
+
+                string material = "";
+                Check(Model.PropFrame.GetMaterial(section, ref material), "PropFrame.GetMaterial", section);
+                string materialOverride = "";
+                Check(Model.FrameObj.GetMaterialOverwrite(member.Name, ref materialOverride), "FrameObj.GetMaterialOverwrite", member.Name);
+                material = ResolveEffectiveMaterial(material, materialOverride, member.Name, section);
+                var modulus = ReadElasticModulus(material, member.Name);
+
+                double[] modifiers = new double[8];
+                Check(Model.FrameObj.GetModifiers(member.Name, ref modifiers), "FrameObj.GetModifiers", member.Name);
+                if (modifiers.Length < 6) throw new InvalidOperationException($"SAP returned incomplete stiffness modifiers for frame '{member.Name}'.");
+                area *= modifiers[0];
+                i22 *= modifiers[4];
+                i33 *= modifiers[5];
+
+                double localAngle = 0; bool advancedAxes = false;
+                Check(Model.FrameObj.GetLocalAxes(member.Name, ref localAngle, ref advancedAxes), "FrameObj.GetLocalAxes", member.Name);
+                if (advancedAxes) throw new InvalidOperationException($"Frame '{member.Name}' uses advanced local axes, which the planar FEM solver does not support.");
+                var radians = localAngle * Math.PI / 180;
+                var cosine = Math.Cos(radians);
+                var sine = Math.Sin(radians);
+                var inPlaneInertia = i33 * cosine * cosine + i22 * sine * sine;
+
+                bool[] releasedI = new bool[6], releasedJ = new bool[6];
+                double[] partialI = new double[6], partialJ = new double[6];
+                Check(Model.FrameObj.GetReleases(member.Name, ref releasedI, ref releasedJ, ref partialI, ref partialJ), "FrameObj.GetReleases", member.Name);
+                if (releasedI.Length < 6 || releasedJ.Length < 6)
+                    throw new InvalidOperationException($"SAP returned incomplete end-release data for frame '{member.Name}'.");
+                var axesAligned = Math.Abs(cosine * sine) < 1e-7;
+                if (!axesAligned && (releasedI[1] || releasedI[2] || releasedI[4] || releasedI[5] ||
+                                     releasedJ[1] || releasedJ[2] || releasedJ[4] || releasedJ[5]))
+                    throw new InvalidOperationException($"Frame '{member.Name}' has a rotated local axis and an in-plane shear/moment release; this is not supported by the 2D FEM solver.");
+                if (releasedI[0] || releasedJ[0])
+                    throw new InvalidOperationException($"Frame '{member.Name}' has an axial end release, which the 2D FEM solver does not support.");
+                var inPlaneMomentIndex = Math.Abs(cosine) >= Math.Abs(sine) ? 5 : 4;
+                var inPlaneShearIndex = Math.Abs(cosine) >= Math.Abs(sine) ? 1 : 2;
+                if (releasedI[inPlaneShearIndex] || releasedJ[inPlaneShearIndex])
+                    throw new InvalidOperationException($"Frame '{member.Name}' has an in-plane shear release, which the Euler-Bernoulli FEM solver does not support.");
+
+                properties[member.Name] = new FemSectionProperties(member.Name, area, modulus, inPlaneInertia,
+                    releasedI[inPlaneMomentIndex], releasedJ[inPlaneMomentIndex], section, material);
+            }
+            else if (member.Kind == MemberKind.Cable)
+            {
+                string section = "";
+                Check(Model.CableObj.GetProperty(member.Name, ref section), "CableObj.GetProperty", member.Name);
+                if (string.IsNullOrWhiteSpace(section)) throw new InvalidOperationException($"Cable '{member.Name}' has no assigned SAP section.");
+                string material = "", notes = "", guid = ""; double area = 0; int color = 0;
+                Check(Model.PropCable.GetProp(section, ref material, ref area, ref color, ref notes, ref guid), "PropCable.GetProp", section);
+                string materialOverride = "";
+                Check(Model.CableObj.GetMaterialOverwrite(member.Name, ref materialOverride), "CableObj.GetMaterialOverwrite", member.Name);
+                material = ResolveEffectiveMaterial(material, materialOverride, member.Name, section);
+                properties[member.Name] = new FemSectionProperties(member.Name, area,
+                    ReadElasticModulus(material, member.Name), null, SectionName: section, MaterialName: material);
+            }
+        }
+        Verify(expected);
+        return properties;
+    });
+
+    private double ReadElasticModulus(string material, string memberName)
+    {
+        if (string.IsNullOrWhiteSpace(material) || material.Equals("None", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"No usable SAP material is assigned to '{memberName}'. Check its frame/cable section assignment and material override.");
+        var type = eMatType.Steel; int symmetry = 0; string notes = "", guid = "";
+        Check(Model.PropMaterial.GetMaterial(material, ref type, ref symmetry, ref notes, ref guid),
+            "PropMaterial.GetMaterial", material);
+        double e = 0;
+        if (type == eMatType.Tendon)
+        {
+            double yieldStress = 0;
+            Check(Model.PropMaterial.GetMPUniaxial(material, ref e, ref yieldStress, 0),
+                "PropMaterial.GetMPUniaxial", material);
+        }
+        else
+        {
+            double poisson = 0, thermal = 0, shear = 0;
+            Check(Model.PropMaterial.GetMPIsotropic(material, ref e, ref poisson, ref thermal, ref shear, 0),
+                "PropMaterial.GetMPIsotropic", material);
+        }
+        if (!double.IsFinite(e) || e <= 0) throw new InvalidOperationException($"SAP returned invalid elastic modulus for '{memberName}' ({material}).");
+        return e;
+    }
+
+    internal static string ResolveEffectiveMaterial(string sectionMaterial, string materialOverride, string memberName, string sectionName)
+    {
+        var section = sectionMaterial?.Trim() ?? "";
+        var material = materialOverride?.Trim() ?? "";
+        if (material.Length == 0 || material.Equals("None", StringComparison.OrdinalIgnoreCase)) material = section;
+        if (material.Length == 0 || material.Equals("None", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"No material is assigned to {memberName} (section '{sectionName}'); FEM requires a valid elastic material.");
+        return material;
+    }
     public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => worker.Run<IReadOnlyList<ForceSource>>(() =>
     {
         Verify(expected);

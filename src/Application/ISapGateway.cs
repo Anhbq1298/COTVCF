@@ -1,5 +1,6 @@
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
+using COT_VCF.Geometry;
 namespace COT_VCF.Application;
 
 public interface ISapGateway : IDisposable
@@ -26,6 +27,9 @@ public interface ISapGateway : IDisposable
     /// active model. One row per requested cable, in order; a cable whose section can't be read comes back
     /// with <c>AreaM2 == 0</c> and a Problem message rather than throwing.</summary>
     Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected);
+    Task<IReadOnlyDictionary<string, FemSectionProperties>> GetFemSectionPropertiesAsync(
+        IReadOnlyList<StructuralMember> members, ModelInfo expected) =>
+        throw new NotSupportedException("FEM section-property reads are not implemented by this SAP gateway.");
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
     Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected);

@@ -35,7 +35,7 @@
        <TextBlock Text="Save All"/>
       </StackPanel>
      </Button>
-     <Button Command="{Binding LoadConfig}" ToolTip="Open a COT VCF project file and restore Tabs 01-05" Margin="0">
+        <Button Command="{Binding LoadConfig}" ToolTip="Open a COT VCF project file (picker starts in the repository tests folder) and restore Tabs 01-05" Margin="0">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M1.5,4 L6,4 L8,6 L14.5,6 L14.5,13 L1.5,13 Z"/></Viewbox>
        <TextBlock Text="Load Config"/>
@@ -1172,6 +1172,200 @@
     </Grid>
    </TabItem>
 
+   <!-- 07 FEM -->
+   <TabItem>
+    <TabItem.Header>
+     <StackPanel Width="124">
+      <TextBlock Text="07  FEM" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="{Binding FemStatus}" Style="{StaticResource TabHeaderStatus}"/>
+     </StackPanel>
+    </TabItem.Header>
+                <TabControl SelectedIndex="{Binding SelectedFemPage}" TabStripPlacement="Top" Background="{StaticResource Background}" BorderThickness="0">
+                 <TabControl.Resources>
+                  <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+                   <Setter Property="Height" Value="26"/>
+                   <Setter Property="Width" Value="90"/>
+                  </Style>
+                 </TabControl.Resources>
+                 <TabItem Header="Inputs">
+                 <Grid Margin="2,2,6,2">
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="8"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+
+     <Border Grid.Row="0" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+      <StackPanel Margin="8">
+       <TextBlock Text="FEM MODEL INPUTS" Style="{StaticResource Subheading}"/>
+       <TextBlock Text="{Binding FemPinSupportSummary}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+       <Button Content="Read Properties" Command="{Binding ReadFemProperties}" HorizontalAlignment="Left"
+               ToolTip="Read assigned sections, materials, frame modifiers and end releases from the connected SAP2000 model. Read-only; no model changes."/>
+      </StackPanel>
+     </Border>
+
+     <Border Grid.Row="2" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+      <Grid Margin="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+       <DockPanel>
+        <TextBlock Text="SAP MEMBER PROPERTIES" Style="{StaticResource Subheading}"/>
+        <TextBlock DockPanel.Dock="Right" Text="Read-only · assigned section / material" Style="{StaticResource Caption}"/>
+       </DockPanel>
+       <DataGrid x:Name="FemPropertiesGrid" Grid.Row="1" ItemsSource="{Binding FemSectionProperties}" IsReadOnly="True" IsEnabled="{Binding IsIdle}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                 AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single">
+        <DataGrid.Columns>
+         <DataGridTextColumn Header="Member" Binding="{Binding MemberName}" Width=".9*" MinWidth="44"/>
+         <DataGridTextColumn Header="Section" Binding="{Binding SectionName}" Width=".9*" MinWidth="44"/>
+         <DataGridTextColumn Header="Mat." Binding="{Binding MaterialName}" Width=".8*" MinWidth="40"/>
+         <DataGridTextColumn Header="A [m²]" Binding="{Binding AreaM2, StringFormat=F5}" Width=".7*" MinWidth="48" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="E [GPa]" Binding="{Binding ElasticModulusGPa, StringFormat=F2}" Width=".8*" MinWidth="52" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="I [m⁴]" Binding="{Binding InPlaneInertiaM4, StringFormat=F7}" Width=".8*" MinWidth="52" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="Rel." Binding="{Binding EndRotationReleases}" Width=".6*" MinWidth="40"/>
+        </DataGrid.Columns>
+       </DataGrid>
+      </Grid>
+     </Border>
+                 </Grid>
+                 </TabItem>
+                 <TabItem Header="Analysis">
+                 <Grid Margin="2,2,6,2">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="8"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+
+     <Border Grid.Row="0" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+      <StackPanel Margin="8">
+       <TextBlock Text="INTERNAL 2D FRAME ANALYSIS" Style="{StaticResource Subheading}"/>
+       <TextBlock Text="{Binding FemCandidateSummary}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="0,0,0,6"/>
+       <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                   ToolTip="As SAP2000 Target Force: cable pretensions are adjusted together in a pretension-only stage (no applied loads) until every cable's tension is within this percentage of its Tab 03 target, e.g. 10% = within ±10%. The Tab 01 loads then act on that prestressed structure.">
+        <TextBlock Text="Target-force fitting ±" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+        <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
+                 IsEnabled="{Binding IsIdle}"
+                 Text="{Binding FemTargetFitPercent, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:0.###}, ValidatesOnExceptions=True}"/>
+        <TextBlock Text="% of target" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
+        <Border Width="1" Background="{StaticResource Border}" Margin="10,1,10,1"/>
+        <TextBlock Text="Max iterations" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"
+                   ToolTip="Maximum pretension adjustments per FEM case. If the pretension-stage tensions are still outside the tolerance after this many, the case stops with an error."/>
+        <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
+                 IsEnabled="{Binding IsIdle}"
+                 Text="{Binding FemTargetFitIterations, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}"/>
+       </StackPanel>
+       <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                   ToolTip="Each frame is divided into this many equal sub-elements in the FEM (cables are not meshed). Interior mesh nodes are condensed onto the frame joints, so joint results are unchanged; the mesh gives forces and displacements along each frame for the diagrams and deflected shape.">
+        <TextBlock Text="Frame mesh" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+        <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
+                 IsEnabled="{Binding IsIdle}"
+                 Text="{Binding FemFrameMeshSegments, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}"/>
+        <TextBlock Text="segments per frame" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
+       </StackPanel>
+       <WrapPanel>
+        <Button Content="Run Analysis" Command="{Binding RunFemAnalysis}" Style="{StaticResource Primary}"
+                ToolTip="Analyze every Tab 01 x Tab 02 x Tab 03 combination with a linear-elastic 2D XZ Euler-Bernoulli frame model, tension-only axial cables, and pin supports. Reads SAP section/material properties; does not modify SAP2000."/>
+        <Button Content="Cancel" Command="{Binding CancelFemAnalysis}" Margin="0,0,8,0"/>
+        <TextBlock Text="{Binding FemProgressText}" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap"/>
+       </WrapPanel>
+      </StackPanel>
+     </Border>
+
+     <Border Grid.Row="2" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+      <Grid Margin="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+       <DockPanel>
+        <TextBlock Text="CABLE TARGET FIT" Style="{StaticResource Subheading}"/>
+        <TextBlock DockPanel.Dock="Right" Text="kN · pretension stage fitted to target, then loaded" Style="{StaticResource Caption}"/>
+       </DockPanel>
+       <DataGrid Grid.Row="1" ItemsSource="{Binding FemCableFitRows}" IsReadOnly="True"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto" EnableRowVirtualization="True"
+                 AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single">
+        <DataGrid.Columns>
+         <DataGridTextColumn Header="Case" Binding="{Binding RunId}" Width="1*" MinWidth="80"/>
+         <DataGridTextColumn Header="Cable" Binding="{Binding CableName}" Width=".9*" MinWidth="60"/>
+         <DataGridTextColumn Header="Target" Binding="{Binding TargetForceKN, StringFormat=F1}" Width=".8*" MinWidth="62" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="Pretension" Binding="{Binding PretensionStageForceKN, StringFormat=F1}" Width=".8*" MinWidth="62" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="Dev. %" Binding="{Binding DeviationPercent, StringFormat=+0.00;-0.00;0.00}" Width=".6*" MinWidth="52" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTemplateColumn Header="Status" Width=".7*" MinWidth="62">
+          <DataGridTemplateColumn.CellTemplate>
+           <DataTemplate>
+            <TextBlock x:Name="StatusText" Text="{Binding Status}" ToolTip="{Binding FitFailure}" VerticalAlignment="Center" Margin="4,0"/>
+            <DataTemplate.Triggers>
+             <DataTrigger Binding="{Binding Status}" Value="Not fitted">
+              <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Error}"/>
+              <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold"/>
+             </DataTrigger>
+             <DataTrigger Binding="{Binding Status}" Value="Failed">
+              <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Error}"/>
+              <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold"/>
+             </DataTrigger>
+            </DataTemplate.Triggers>
+           </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+         </DataGridTemplateColumn>
+         <DataGridTextColumn Header="Result" Binding="{Binding ResultForceKN, StringFormat=F1}" Width=".8*" MinWidth="62" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="Applied P" Binding="{Binding AppliedPretensionKN, StringFormat=F1}" Width=".8*" MinWidth="70" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="Iter." Binding="{Binding FitIterations}" Width=".4*" MinWidth="36" ElementStyle="{StaticResource NumericCell}"/>
+        </DataGrid.Columns>
+       </DataGrid>
+      </Grid>
+     </Border>
+                 </Grid>
+                 </TabItem>
+                 <TabItem Header="View">
+                 <Grid Margin="2,2,6,2">
+     <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" VerticalAlignment="Top">
+      <StackPanel Margin="8">
+       <TextBlock Text="VIEW OPTIONS" Style="{StaticResource Subheading}"/>
+       <TextBlock Text="Overlays on the model viewer while the FEM tab is open." Foreground="{StaticResource Muted}" FontSize="11" Margin="0,0,0,8"/>
+       <WrapPanel>
+        <ToggleButton Style="{StaticResource ViewToggle}" Content="Frame mesh" IsChecked="{Binding ShowFemFrameMesh}" MinWidth="96" Margin="0,0,6,6" Padding="10,4"
+                      ToolTip="Draw each frame broken into its FEM mesh segments (Analysis → Frame mesh). Cables are not meshed."/>
+        <ToggleButton Style="{StaticResource ViewToggle}" Content="Member size" IsChecked="{Binding ShowFemMemberSizes}" MinWidth="96" Margin="0,0,6,6" Padding="10,4"
+                      ToolTip="Label each frame and cable with its assigned SAP section."/>
+        <ToggleButton Style="{StaticResource ViewToggle}" Content="Loading" IsChecked="{Binding ShowFemLoads}" MinWidth="96" Margin="0,0,6,6" Padding="10,4"
+                      ToolTip="Show the Tab 01 load arrows; with a completed case selected on Results, each arrow is labelled with its Fz."/>
+       </WrapPanel>
+       <TextBlock Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap">
+        <Run Text="Mesh:"/> <Run Text="{Binding FemFrameMeshSegments, Mode=OneWay}"/> <Run Text="segments per frame · cables unmeshed."/>
+       </TextBlock>
+       <TextBlock Text="{Binding FemMemberSizeHint}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
+      </StackPanel>
+     </Border>
+                 </Grid>
+                 </TabItem>
+                 <TabItem Header="Results">
+                        <Grid Margin="2,2,6,2">
+                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+                         <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="FEM COMBINATION" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding FemRuns}" SelectedItem="{Binding SelectedFemRun}"
+                                                                        DisplayMemberPath="Id" AutomationProperties.Name="FEM result combination"
+                                                                        IsEnabled="{Binding IsIdle}" ToolTip="Choose a completed L/H/P internal FEM combination."/>
+                         </Grid>
+                         <WrapPanel Grid.Row="1" Margin="0,0,0,6">
+                                <RadioButton Content="Axial force" GroupName="FemResultMode" Margin="0,0,12,0"
+                                                                                 IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=AxialForce}"/>
+                                <RadioButton Content="Bending" GroupName="FemResultMode" Margin="0,0,12,0"
+                                                                                 IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=BendingMoment}"/>
+                                <RadioButton Content="Shear" GroupName="FemResultMode" Margin="0,0,12,0"
+                                                                                 IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=Shear}"/>
+                                <RadioButton Content="Reactions" GroupName="FemResultMode" Margin="0,0,12,0"
+                                                                                 IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=Reactions}"/>
+                                <RadioButton Content="Deflected shape" GroupName="FemResultMode"
+                                                                                 IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=DeflectedShape}"/>
+                                <CheckBox Content="Axial values (kN)" Margin="16,0,0,0" IsChecked="{Binding ShowFemAxialValues}"
+                                          IsEnabled="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=AxialForce}"
+                                          ToolTip="In Axial force view, label every frame and cable tension in the viewer with its axial force in whole kN (+ tension, − compression)."/>
+                         </WrapPanel>
+                         <TextBlock Grid.Row="2" Text="{Binding FemResultSummary}" Style="{StaticResource Caption}" Margin="0,0,0,6"/>
+                         <DataGrid x:Name="FemResultRowsGrid" Grid.Row="3" ItemsSource="{Binding FemResultRows}" IsReadOnly="True" IsEnabled="{Binding IsIdle}"
+                                                                 AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single"
+                                                                 ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                                <DataGrid.Columns>
+                                 <DataGridTextColumn Header="Member / Joint" Binding="{Binding ObjectName}" Width="1.3*" MinWidth="96"/>
+                                 <DataGridTextColumn Header="I-End / X" Binding="{Binding StartValue, StringFormat=F4}" Width="1*" MinWidth="78" ElementStyle="{StaticResource NumericCell}"/>
+                                 <DataGridTextColumn Header="J-End / Z" Binding="{Binding EndValue, StringFormat=F4}" Width="1*" MinWidth="78" ElementStyle="{StaticResource NumericCell}"/>
+                                 <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width=".8*" MinWidth="68"/>
+                                </DataGrid.Columns>
+                         </DataGrid>
+                        </Grid>
+                 </TabItem>
+                </TabControl>
+   </TabItem>
+
   </TabControl>
 
   <GridSplitter x:Name="ViewerSplitter" Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="{StaticResource Border}"/>
@@ -1188,6 +1382,14 @@
                           MiddlePoints="{Binding SharedViewerMiddlePoints}"
                           BottomPoints="{Binding SharedViewerBottomPoints}"
                           Cables="{Binding SharedViewerCables}"
+                          PinSupportPoints="{Binding SharedViewerPinSupportPoints}"
+                          FemResult="{Binding SharedViewerFemResult}"
+                          FemResultMode="{Binding SharedViewerFemResultMode}"
+                          FrameMeshSegments="{Binding SharedViewerFrameMeshSegments}"
+                          MemberSizes="{Binding SharedViewerMemberSizes}"
+                          ShowLoads="{Binding SharedViewerShowLoads}"
+                          LoadValues="{Binding SharedViewerLoadValues}"
+                          ShowAxialValues="{Binding ShowFemAxialValues}"
                           SelectedCable="{Binding SelectedCable, Mode=TwoWay}"
                           AutomationProperties.Name="Shared structural model preview"/>
     <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,8" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3"
@@ -1196,6 +1398,13 @@
       <Ellipse Width="8" Height="8" Fill="{StaticResource ChordTop}" VerticalAlignment="Center"/><TextBlock Text="Top" Style="{StaticResource Caption}" Margin="4,0,10,0"/>
       <Ellipse Width="8" Height="8" Fill="{StaticResource ChordMiddle}" VerticalAlignment="Center"/><TextBlock Text="Middle" Style="{StaticResource Caption}" Margin="4,0,10,0"/>
       <Ellipse Width="8" Height="8" Fill="{StaticResource ChordBottom}" VerticalAlignment="Center"/><TextBlock Text="Bottom" Style="{StaticResource Caption}" Margin="4,0,0,0"/>
+     </StackPanel>
+    </Border>
+    <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,8" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3"
+            Visibility="{Binding ShowFemPinLegend, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="FEM pin support legend">
+     <StackPanel Orientation="Horizontal">
+      <Path Data="M8,1 L1,11 L15,11 Z M0,13 L16,13 M3,13 L1,16 M8,13 L6,16 M13,13 L11,16" Stroke="{StaticResource Accent}" StrokeThickness="1.2" Fill="{StaticResource ViewportBg}" Width="16" Height="16" Stretch="Fill"/>
+      <TextBlock Text="PIN · X/Z fixed · rotation free" Style="{StaticResource Caption}" Margin="6,0,0,0"/>
      </StackPanel>
     </Border>
    </Grid>

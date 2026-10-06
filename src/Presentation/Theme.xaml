@@ -147,6 +147,36 @@
    <Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.9"/></Trigger>
   </Style.Triggers>
  </Style>
+ <!-- On/off view toggle: same chrome as Button; checked = accent fill. -->
+ <Style x:Key="ViewToggle" TargetType="ToggleButton">
+  <Setter Property="MinHeight" Value="28"/>
+  <Setter Property="Padding" Value="10,3"/>
+  <Setter Property="Background" Value="{StaticResource Raised}"/>
+  <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+  <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+  <Setter Property="BorderThickness" Value="1"/>
+  <Setter Property="FontWeight" Value="SemiBold"/>
+  <Setter Property="FontSize" Value="12"/>
+  <Setter Property="Template">
+   <Setter.Value>
+    <ControlTemplate TargetType="ToggleButton">
+     <Border x:Name="Border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="2" Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+      <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+     </Border>
+     <ControlTemplate.Triggers>
+      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Border" Property="Background" Value="{StaticResource Surface}"/></Trigger>
+      <Trigger Property="IsChecked" Value="True">
+       <Setter TargetName="Border" Property="Background" Value="{StaticResource Accent}"/>
+       <Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource Accent}"/>
+       <Setter Property="Foreground" Value="{StaticResource Raised}"/>
+      </Trigger>
+      <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Border" Property="BorderBrush" Value="{StaticResource AccentBright}"/></Trigger>
+      <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
+     </ControlTemplate.Triggers>
+    </ControlTemplate>
+   </Setter.Value>
+  </Setter>
+ </Style>
  <!-- Icon-only chrome button (top bar). -->
  <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
   <Setter Property="Width" Value="28"/>
