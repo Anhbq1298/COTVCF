@@ -344,7 +344,7 @@ internal static class FemSapBenchmark
 
         // The report is written before anything is judged, so a disagreement can be read in full.
         Directory.CreateDirectory(reportFolder);
-        var report = Report(reference, model, plan, samples, candidates.Length, tolerance, supports, longestStretch, memberComparison);
+        var report = Report(reference, model, plan, samples, candidates.Length, tolerance, supports, longestStretch);
         File.WriteAllText(Path.Combine(reportFolder, "fem-vs-sap.md"), report, new UTF8Encoding(false));
         var memberReportPath = Path.Combine(reportFolder, MemberReportFile);
         if (memberComparison is { Samples.Count: > 0 } compared)
