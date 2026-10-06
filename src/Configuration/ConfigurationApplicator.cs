@@ -20,6 +20,25 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         if (check.Study.Ok && cfg.Tab05IterationStudy is { } s) ApplyStudy(s);
     }
 
+    /// <summary>Puts a project's Print Setup onto the card. Presentation only — no validation against the model.
+    /// An unknown paper or orientation in a hand-edited file falls back to the default.</summary>
+    public static void ApplyPrintSetup(PrintSetupConfigDto setup, ReportPrintSettings target)
+    {
+        target.CompanyName = setup.CompanyName ?? "";
+        target.LogoPath = setup.LogoPath ?? "";
+        target.ProjectName = setup.ProjectName ?? "";
+        target.JobNumber = setup.JobNumber ?? "";
+        target.Revision = setup.Revision ?? "";
+        target.PreparedBy = setup.PreparedBy ?? "";
+        target.CheckedBy = setup.CheckedBy ?? "";
+        target.FooterNote = setup.FooterNote ?? "";
+        target.PaperSize = Enum.IsDefined(setup.PaperSize) ? setup.PaperSize : ReportPaperSize.A4;
+        target.Orientation = Enum.IsDefined(setup.Orientation) ? setup.Orientation : ReportPageOrientation.Landscape;
+        target.ShowPageNumbers = setup.ShowPageNumbers;
+        target.ShowDate = setup.ShowDate;
+        target.IncludeSourceData = setup.IncludeSourceData;
+    }
+
     private void ApplyLoading(LoadingConfigDto d)
     {
         state.TributaryWidthB = d.TributaryWidth;

@@ -37,6 +37,27 @@ public sealed class ConfigurationExtractor
     public OutputSettingsConfigDto ExtractOutputSection(ApplicationState state) => ExtractOutput(state);
     public IterationStudyConfigDto ExtractStudySection(ApplicationState state) => ExtractStudy(state);
 
+    /// <summary>The Print Setup card as a project keeps it (texts trimmed).</summary>
+    public PrintSetupConfigDto ExtractPrintSetup(ReportPrintSettings settings) => new()
+    {
+        CompanyName = settings.CompanyName.Trim(), LogoPath = settings.LogoPath.Trim(), ProjectName = settings.ProjectName.Trim(),
+        JobNumber = settings.JobNumber.Trim(), Revision = settings.Revision.Trim(), PreparedBy = settings.PreparedBy.Trim(),
+        CheckedBy = settings.CheckedBy.Trim(), FooterNote = settings.FooterNote.Trim(), PaperSize = settings.PaperSize,
+        Orientation = settings.Orientation, ShowPageNumbers = settings.ShowPageNumbers, ShowDate = settings.ShowDate,
+        IncludeSourceData = settings.IncludeSourceData,
+    };
+
+    /// <summary>Whether the card still shows what the project holds — what "Saved" means for the Print Setup.</summary>
+    public bool SamePrintSetup(PrintSetupConfigDto saved, ReportPrintSettings settings)
+    {
+        var now = ExtractPrintSetup(settings);
+        return (saved.CompanyName ?? "") == now.CompanyName && (saved.LogoPath ?? "") == now.LogoPath && (saved.ProjectName ?? "") == now.ProjectName &&
+               (saved.JobNumber ?? "") == now.JobNumber && (saved.Revision ?? "") == now.Revision && (saved.PreparedBy ?? "") == now.PreparedBy &&
+               (saved.CheckedBy ?? "") == now.CheckedBy && (saved.FooterNote ?? "") == now.FooterNote && saved.PaperSize == now.PaperSize &&
+               saved.Orientation == now.Orientation && saved.ShowPageNumbers == now.ShowPageNumbers && saved.ShowDate == now.ShowDate &&
+               saved.IncludeSourceData == now.IncludeSourceData;
+    }
+
     /// <summary>Recompute a project's model snapshot from whichever tab sections it currently holds,
     /// preserving <see cref="ModelSnapshotDto.OriginalFileName"/>.</summary>
     public ModelSnapshotDto RebuildSnapshot(CotVcfConfigDto project, ApplicationState state, IReadOnlyCollection<string> modelLoadCases) =>

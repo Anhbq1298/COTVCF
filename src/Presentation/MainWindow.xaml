@@ -961,7 +961,7 @@
        <Expander Style="{StaticResource PpModule}">
         <Expander.Header><TextBlock Text="PRINT SETUP · HEADER / FOOTER" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="The starting values of each report's own Print Report screen: logo top-left, project and job number in the header, company, note and page numbers in the footer. Saved for this Windows user · embedded on the next Generate / Regenerate. One report: View Report → Print Report, where every value can still be changed beside a live preview. Everything at once: Print All Reports, which uses the values below as they are now." Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="The starting values of each report's own Print Report screen: logo top-left, project and job number in the header, company, note and page numbers in the footer. Saved with the project (Save All / Save Print Setup · restored by Load Config) and remembered for this Windows user · embedded on the next Generate / Regenerate. One report: View Report → Print Report, where every value can still be changed beside a live preview. Everything at once: Print All Reports, which uses the values below as they are now." Style="{StaticResource PpDesc}"/>
          <Grid Margin="0,8,0,0">
           <Grid.Resources>
            <Style x:Key="PrLabel" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,0,8,0"/></Style>
@@ -1015,6 +1015,11 @@
           <CheckBox Content="Date" IsChecked="{Binding PrintSettings.ShowDate}" VerticalAlignment="Center" Margin="0,0,14,0" ToolTip="Header, right: the date the report was generated"/>
           <CheckBox Content="Include Source Data table" IsChecked="{Binding PrintSettings.IncludeSourceData}" VerticalAlignment="Center" ToolTip="Default for the report's print option — the full table adds many pages"/>
          </WrapPanel>
+         <DockPanel Margin="0,8,0,0">
+          <Button DockPanel.Dock="Right" Content="Save Print Setup" Command="{Binding SavePrintSetup}" Margin="8,0,0,0"
+                  ToolTip="Store this Print Setup in the active project file — Save All does the same, and Load Config restores it with the project"/>
+          <TextBlock Text="{Binding PrintSetupProjectStatus}" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding PrintSetupProjectStatus}"/>
+         </DockPanel>
         </StackPanel>
        </Expander>
 

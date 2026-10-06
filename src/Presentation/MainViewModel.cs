@@ -574,6 +574,22 @@ public sealed partial class MainViewModel : Observable
     public IReadOnlyList<ReportPaperSize> PrintPaperSizes { get; } = Enum.GetValues<ReportPaperSize>();
     public IReadOnlyList<ReportPageOrientation> PrintOrientations { get; } = Enum.GetValues<ReportPageOrientation>();
     public string PrintLogoStatus => ReportPrintEngine.DescribeLogo(PrintSettings.LogoPath);
+
+    /// <summary>Where the Print Setup on the card stands against the project file.</summary>
+    public string PrintSetupProjectStatus
+    {
+        get
+        {
+            if (!config.Session.HasActiveProject)
+                return "No project open — kept for this Windows user. Save All stores it in the project file.";
+            var file = config.Session.FileName;
+            if (config.Session.Project?.PrintSetup is not { } saved)
+                return $"Not in {file} yet — Save Print Setup (or Save All) stores it with the project.";
+            return new ConfigurationExtractor().SamePrintSetup(saved, PrintSettings)
+                ? $"Saved in {file} · Load Config restores it"
+                : $"Modified * — differs from {file}";
+        }
+    }
     private bool useCurrentRunArtifacts;
     private string? currentRunWorkbookPath;
     public string ResultsWorkbookPath => useCurrentRunArtifacts
@@ -798,6 +814,7 @@ public sealed partial class MainViewModel : Observable
     public Command OpenMegaColumnReport { get; }
     public Command BrowsePrintLogo { get; }
     public Command ClearPrintLogo { get; }
+    public Command SavePrintSetup { get; }
     public Command PrintAllReports { get; }
     public Command OpenResultsWorkbook { get; }
     public Command OpenCandidateDiagnostic { get; }
@@ -836,6 +853,7 @@ public sealed partial class MainViewModel : Observable
         {
             this.printStore?.TrySave(PrintSettings);
             if (e.PropertyName == nameof(ReportPrintSettings.LogoPath)) Notify(nameof(PrintLogoStatus));
+            Notify(nameof(PrintSetupProjectStatus));
         };
         StudyWorkers.CollectionChanged += (_, _) =>
         {
@@ -954,6 +972,8 @@ public sealed partial class MainViewModel : Observable
             if (dialog.ShowDialog() == true) PrintSettings.LogoPath = dialog.FileName;
         });
         ClearPrintLogo = new(_ => PrintSettings.LogoPath = "", () => PrintSettings.LogoPath.Length > 0);
+        // the card's own save: the Print Setup alone into the active project (Save All writes it too)
+        SavePrintSetup = new(_ => RunSave(ConfigTabs.None, printSetup: true), () => CanUseConfig);
         PrintAllReports = new(_ => PrintAll(StudyRoot, "Study Reports"),
             () => !IsBusy && (HasDeflectionReport || HasMemberForceReport || HasSupportReactionReport || HasCableForceReport));
         ViewIterationError = new(p =>
@@ -2189,10 +2209,12 @@ public sealed partial class MainViewModel : Observable
     // Per-tab Save: overwrites only this tab's section of the active project (other tabs come from the
     // in-memory project, NOT their unsaved UI); creates the project via Save-As the first time.
     private void SaveTab(ConfigTabs single) => RunSave(single);
-    // Save All: extracts every tab from the UI and rewrites the whole project atomically.
-    private void SaveAll() => RunSave(ConfigTabs.All);
+    // Save All: extracts every tab from the UI — and the Print Setup — and rewrites the whole project atomically.
+    private void SaveAll() => RunSave(ConfigTabs.All, printSetup: true);
 
-    private async void RunSave(ConfigTabs uiTabs)
+    /// <param name="printSetup">Write the Print Setup card into the project too. With no tab at all
+    /// (<see cref="ConfigTabs.None"/>) that is the only thing the save changes.</param>
+    private async void RunSave(ConfigTabs uiTabs, bool printSetup = false)
     {
         if (IsBusy) return;
         if (CommitEditors?.Invoke() == false) return;
@@ -2201,13 +2223,15 @@ public sealed partial class MainViewModel : Observable
         IsBusy = true;
         try
         {
-            var outcome = await config.SaveAsync(uiTabs, () => PickSavePath(uiTabs));
+            var outcome = await config.SaveAsync(uiTabs, () => PickSavePath(uiTabs), printSetup ? PrintSettings.Clone() : null);
             switch (outcome.Result)
             {
                 case SaveResult.Saved:
                     Message = uiTabs == ConfigTabs.All
                         ? $"Project configuration saved · {config.Session.FileName}"
-                        : $"{TabsLabel(uiTabs)} configuration saved · {config.Session.FileName}";
+                        : uiTabs == ConfigTabs.None
+                            ? $"Print Setup saved · {config.Session.FileName}"
+                            : $"{TabsLabel(uiTabs)} configuration saved · {config.Session.FileName}";
                     break;
                 case SaveResult.Cancelled:
                     if (!string.IsNullOrEmpty(outcome.Message)) Message = outcome.Message;
@@ -2229,20 +2253,25 @@ public sealed partial class MainViewModel : Observable
 
     // Load Config = open a project. Full-or-nothing: every present tab must validate against the
     // connected model, or the current project is left untouched.
-    private async void OpenProject()
+    private void OpenProject()
     {
         if (IsBusy) return;
         if (CommitEditors?.Invoke() == false) return;
         if (!config.CanUse) { Warn("Cannot Load Configuration", "Connect to a SAP2000 model first."); return; }
 
         var dialog = new OpenFileDialog { Filter = ConfigFilter, CheckFileExists = true };
-        if (dialog.ShowDialog() != true) return;
+        if (dialog.ShowDialog() == true) OpenProjectFile(dialog.FileName);
+    }
 
+    /// <summary>Opens the project at <paramref name="path"/> — what Load Config does once the file is chosen.</summary>
+    internal async void OpenProjectFile(string path)
+    {
+        if (IsBusy) return;
         IsBusy = true;
         try
         {
             CotVcfConfigDto project;
-            try { project = config.Read(dialog.FileName); }
+            try { project = config.Read(path); }
             catch (Exception ex)
             {
                 Warn("Unable to Load Configuration", ex.Message);
@@ -2259,10 +2288,15 @@ public sealed partial class MainViewModel : Observable
             }
 
             applyingProject = true;
-            try { config.Apply(project, check); }
+            try
+            {
+                config.Apply(project, check);
+                // a project that carries a Print Setup brings it along; an older one leaves the card as it is
+                if (project.PrintSetup is { } printSetup) ConfigurationApplicator.ApplyPrintSetup(printSetup, PrintSettings);
+            }
             finally { applyingProject = false; }
             RegenerateStudyPreview();
-            config.SetActiveProject(dialog.FileName, project);
+            config.SetActiveProject(path, project);
             config.Session.ClearDirty();
             SelectedAppliedPoint = null;
             SelectedCable = null;
@@ -2274,6 +2308,7 @@ public sealed partial class MainViewModel : Observable
             if (check.Cable.Present) present.Add("Cable Force");
             if (check.Output.Present) present.Add("Output Settings");
             if (check.Study.Present) present.Add("Iteration Study");
+            if (project.PrintSetup is not null) present.Add("Print Setup");
 
             if (check.ModelAppearsRenamed)
             {
@@ -2372,7 +2407,7 @@ public sealed partial class MainViewModel : Observable
             nameof(MonitoredPointSummary), nameof(MonitoredPointCaseSummary), nameof(MonitoredPointStatus), nameof(DeflectionLimitSummary), nameof(MemberForceSummary), nameof(MemberForceStatus),
             nameof(FoundationSummary), nameof(FoundationStatus), nameof(CableForceSummary), nameof(CableForceStatus),
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
-            nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName),
+            nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
             nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount),

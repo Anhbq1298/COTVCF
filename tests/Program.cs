@@ -355,6 +355,47 @@ internal static class Program
                     Assert(File.GetLastWriteTimeUtc(studyDeflection).Year > 2020 && vm.HasDeflectionReport &&
                            kept.All(file => File.GetLastWriteTimeUtc(file.Key) == file.Value),
                         "module 01 Regenerate rewrites the deflection report and leaves the workbook and the other reports as they are");
+
+                    // Print Setup travels with the project file: Save All and the card's own save write it, Load Config restores it
+                    var projectFile = Path.Combine(optimizationRoot, "Project.json");
+                    string Setup(string key) => System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(projectFile))!["printSetup"]?[key]?.ToString() ?? "(none)";
+                    vm.PrintSettings.CompanyName = "Meinhardt"; vm.PrintSettings.ProjectName = "City of Tomorrow"; vm.PrintSettings.JobNumber = "J-100";
+                    vm.PrintSettings.PaperSize = ReportPaperSize.A3; vm.PrintSettings.Orientation = ReportPageOrientation.Portrait; vm.PrintSettings.ShowDate = false;
+                    Assert(vm.PrintSetupProjectStatus.StartsWith("No project open", StringComparison.Ordinal) && vm.SavePrintSetup.CanExecute(null),
+                        "without a project the Print Setup card says it is kept for this Windows user only");
+                    var savedAll = uiConfig.SaveAsync(COT_VCF.Configuration.ConfigTabs.All, () => projectFile, vm.PrintSettings).GetAwaiter().GetResult();
+                    Assert(savedAll.Result == COT_VCF.Configuration.SaveResult.Saved && Setup("projectName") == "City of Tomorrow" && Setup("jobNumber") == "J-100" &&
+                           Setup("companyName") == "Meinhardt" && Setup("paperSize") == "A3" && Setup("orientation") == "Portrait" && Setup("showDate") == "false" &&
+                           vm.PrintSetupProjectStatus.StartsWith("Saved in Project.json", StringComparison.Ordinal),
+                        "Save All stores the Print Setup in the project file as printSetup");
+                    vm.PrintSettings.JobNumber = "J-200";
+                    var tabOnly = uiConfig.SaveAsync(COT_VCF.Configuration.ConfigTabs.Loading, null).GetAwaiter().GetResult();
+                    Assert(tabOnly.Result == COT_VCF.Configuration.SaveResult.Saved && Setup("jobNumber") == "J-100" &&
+                           vm.PrintSetupProjectStatus.StartsWith("Modified *", StringComparison.Ordinal),
+                        "a per-tab save keeps the project's Print Setup, and the card shows it as modified");
+                    vm.SavePrintSetup.Execute(null);
+                    Pump(() => !vm.IsBusy && vm.Message.StartsWith("Print Setup saved", StringComparison.Ordinal));
+                    Assert(Setup("jobNumber") == "J-200" && vm.Message == "Print Setup saved · Project.json" &&
+                           vm.PrintSetupProjectStatus.StartsWith("Saved in Project.json", StringComparison.Ordinal),
+                        "Save Print Setup writes the card alone into the active project");
+
+                    vm.PrintSettings.ProjectName = "Something else"; vm.PrintSettings.PaperSize = ReportPaperSize.A4; vm.PrintSettings.ShowDate = true;
+                    vm.OpenProjectFile(projectFile);
+                    Pump(() => !vm.IsBusy && vm.Message.StartsWith("Project Project.json opened", StringComparison.Ordinal));
+                    Assert(vm.PrintSettings.ProjectName == "City of Tomorrow" && vm.PrintSettings.JobNumber == "J-200" && vm.PrintSettings.CompanyName == "Meinhardt" &&
+                           vm.PrintSettings.PaperSize == ReportPaperSize.A3 && vm.PrintSettings.Orientation == ReportPageOrientation.Portrait && !vm.PrintSettings.ShowDate &&
+                           vm.Message.EndsWith("Print Setup", StringComparison.Ordinal) && vm.PrintSetupProjectStatus.StartsWith("Saved in Project.json", StringComparison.Ordinal),
+                        "Load Config restores the Print Setup with the project");
+                    var olderProject = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(projectFile))!.AsObject();
+                    olderProject.Remove("printSetup");
+                    var olderFile = Path.Combine(optimizationRoot, "Older.json");
+                    File.WriteAllText(olderFile, olderProject.ToJsonString());
+                    vm.PrintSettings.ProjectName = "Kept";
+                    vm.OpenProjectFile(olderFile);
+                    Pump(() => !vm.IsBusy && vm.Message.StartsWith("Project Older.json opened", StringComparison.Ordinal));
+                    Assert(vm.PrintSettings.ProjectName == "Kept" && vm.PrintSettings.JobNumber == "J-200" && !vm.Message.Contains("Print Setup", StringComparison.Ordinal) &&
+                           vm.PrintSetupProjectStatus.StartsWith("Not in Older.json yet", StringComparison.Ordinal),
+                        "a project saved before the Print Setup was stored opens as before and leaves the card as it is");
                 }
                 finally { try { Directory.Delete(optimizationRoot, true); } catch { } }
                 window.Close(); bindingListener.Flush();

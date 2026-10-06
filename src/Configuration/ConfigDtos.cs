@@ -24,6 +24,10 @@ public sealed class CotVcfConfigDto
     public OutputSettingsConfigDto? Tab05OutputSettings { get; set; }
     // Legacy v1 JSON property name retained even though the study is now displayed as Tab 05.
     public IterationStudyConfigDto? Tab05IterationStudy { get; set; }
+    /// <summary>Header / footer of the printed reports (Tab 06 Print Setup). Not a tab section: it is never checked
+    /// against the SAP model and does not count towards <see cref="PresentTabs"/>. Absent in a project saved before
+    /// it existed — opening such a project leaves the Print Setup card as it is.</summary>
+    public PrintSetupConfigDto? PrintSetup { get; set; }
 
     public ConfigTabs PresentTabs =>
         (Tab02Loading is not null ? ConfigTabs.Loading : 0)
@@ -188,6 +192,26 @@ public sealed class OutputSettingsConfigDto
     public bool DeflectionCriterionEnabled { get; set; } = true;
     public bool CableCriterionEnabled { get; set; } = true;
     public double MaxCableUtilization { get; set; } = 1.0;
+}
+
+/// <summary>The Print Setup card as the project keeps it. A presentation input only — no result, no SAP object.</summary>
+public sealed class PrintSetupConfigDto
+{
+    public string CompanyName { get; set; } = "";
+    /// <summary>Path of the logo image on the machine that saved the project. Where that file is missing the
+    /// company name is printed top-left instead.</summary>
+    public string LogoPath { get; set; } = "";
+    public string ProjectName { get; set; } = "";
+    public string JobNumber { get; set; } = "";
+    public string Revision { get; set; } = "";
+    public string PreparedBy { get; set; } = "";
+    public string CheckedBy { get; set; } = "";
+    public string FooterNote { get; set; } = "";
+    public ReportPaperSize PaperSize { get; set; } = ReportPaperSize.A4;
+    public ReportPageOrientation Orientation { get; set; } = ReportPageOrientation.Landscape;
+    public bool ShowPageNumbers { get; set; } = true;
+    public bool ShowDate { get; set; } = true;
+    public bool IncludeSourceData { get; set; }
 }
 
 public sealed class MemberForceGroupConfigDto
