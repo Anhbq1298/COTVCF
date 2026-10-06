@@ -1066,8 +1066,18 @@ public sealed class SapGateway : ISapGateway
             if (proposed.Points.Values.Any(q => q.Name != p.Name && Near(q.Position, p.Position)) || expectedGeometry.Points.Values.Any(q => q.Name != p.Name && Near(q.Position, p.Position)))
                 throw new InvalidOperationException($"Moving {p.Name} would overlap another point within the SAP merge tolerance. Review the proposed height.");
         }
-        var journal = RecoveryJournal.Save("geometry", new { Model = expected, Before = expectedGeometry, Proposed = proposed });
+        // A cable object defined by its undeformed length keeps that number when its end joints move: SAP2000 would then
+        // analyse a cable of the old length stretched across the new chord — too short and too stiff. Read every such
+        // cable before the joints move, so it can be given the same length relative to its chord afterwards.
+        var movedPoints = updates.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        var cableShapes = expectedGeometry.Members
+            .Where(m => m.Kind == MemberKind.Cable && (movedPoints.Contains(m.Start) || movedPoints.Contains(m.End)))
+            .Select(m => ReadCableShape(m.Name, ChordLength(expectedGeometry, m), ChordLength(proposed, m)))
+            .Where(shape => shape is not null && Math.Abs(shape.NewChord - shape.OldChord) > 1e-9)
+            .Select(shape => shape!).ToArray();
+        var journal = RecoveryJournal.Save("geometry", new { Model = expected, Before = expectedGeometry, Proposed = proposed, Cables = cableShapes });
         var attempted = new List<StructuralPoint>();
+        var attemptedCables = new List<CableShape>();
         try
         {
             foreach (var p in updates)
@@ -1078,21 +1088,73 @@ public sealed class SapGateway : ISapGateway
                 Check(Model.EditPoint.ChangeCoordinates_1(p.Name, p.Position.X, p.Position.Y, p.Position.Z, true), "EditPoint.ChangeCoordinates_1", p.Name);
                 if (!Close(ReadPosition(p.Name), p.Position)) throw new InvalidOperationException($"Point {p.Name} did not reach the requested coordinates.");
             }
+            foreach (var shape in cableShapes)
+            {
+                Verify(expected, true);
+                attemptedCables.Add(shape);
+                WriteCableShape(shape, shape.NewUndeformedLength);
+                // read back against the new chord: SAP2000 must now report the length it was given, and the same relative length as before
+                var written = ReadCableShape(shape.Name, shape.NewChord, shape.NewChord);
+                if (written is null || Math.Abs(written.UndeformedLength - shape.NewUndeformedLength) > 1e-6 * Math.Max(1, shape.NewUndeformedLength))
+                    throw new InvalidOperationException($"Cable {shape.Name} did not take its undeformed length for the new geometry.");
+            }
         }
         catch (Exception original)
         {
             var failures = new List<string>();
+            foreach (var shape in attemptedCables.AsEnumerable().Reverse())
+            {
+                try { WriteCableShape(shape, shape.UndeformedLength); }
+                catch (Exception ex) { failures.Add(ex.Message); }
+            }
             foreach (var p in attempted.AsEnumerable().Reverse())
             {
                 try { Verify(expected, true); if (!Model.GetPresentCoordSystem().Equals("Global", StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Restore requires SAP's Global coordinate system."); Check(Model.EditPoint.ChangeCoordinates_1(p.Name, p.Position.X, p.Position.Y, p.Position.Z, true), "Restore coordinates", p.Name); }
                 catch (Exception ex) { failures.Add(ex.Message); }
             }
-            throw new InvalidOperationException(original.Message + (failures.Count == 0 ? " Attempted coordinate changes were restored." : " Some coordinates could not be restored: " + string.Join("; ", failures)) + $" Recovery data: {journal}", original);
+            throw new InvalidOperationException(original.Message + (failures.Count == 0 ? " Attempted coordinate and cable-length changes were restored." : " Some changes could not be restored: " + string.Join("; ", failures)) + $" Recovery data: {journal}", original);
         }
         Check(Model.View.RefreshView(0, false), "View.RefreshView");
         return true;
     });
     private static bool Close(Position a, Position b) => Math.Abs(a.X - b.X) <= 1e-7 && Math.Abs(a.Y - b.Y) <= 1e-7 && Math.Abs(a.Z - b.Z) <= 1e-7;
+
+    // CableObj.GetCableData / SetCableData: cable type 8 is "defined by its undeformed length"; in the parameter array
+    // GetCableData returns, [9] is that length and [10] the same length relative to the chord between the end joints.
+    private const int CableByUndeformedLength = 8;
+    private const int UndeformedLengthParameter = 9, RelativeLengthParameter = 10;
+
+    /// <summary>A cable object defined by its undeformed length, as it stands before its end joints move.</summary>
+    private sealed record CableShape(string Name, int Type, int Segments, double Weight, double ProjectedLoad, bool UseDeformedGeometry,
+        bool ModelUsingFrames, double UndeformedLength, double OldChord, double NewChord)
+    {
+        /// <summary>The same length relative to the chord, on the new chord.</summary>
+        public double NewUndeformedLength => UndeformedLength * NewChord / OldChord;
+    }
+
+    private static double ChordLength(GeometryModel geometry, StructuralMember member)
+    {
+        var (a, b) = (geometry.Points[member.Start].Position, geometry.Points[member.End].Position);
+        return Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y) + (b.Z - a.Z) * (b.Z - a.Z));
+    }
+
+    /// <summary>The cable's shape definition when it is defined by its undeformed length; null for every other
+    /// definition (tension, sag, relative length), which SAP2000 re-evaluates on the geometry by itself. Refuses a
+    /// reply it cannot make sense of — the reported relative length has to be the reported length over the chord.</summary>
+    private CableShape? ReadCableShape(string name, double oldChord, double newChord)
+    {
+        int type = 0, segments = 0; double weight = 0, load = 0; bool deformed = false, frames = false; double[] parameters = [];
+        Check(Model.CableObj.GetCableData(name, ref type, ref segments, ref weight, ref load, ref deformed, ref frames, ref parameters), "CableObj.GetCableData", name);
+        if (type != CableByUndeformedLength) return null;
+        if (parameters.Length <= RelativeLengthParameter || !(oldChord > 0) || !(parameters[UndeformedLengthParameter] > 0) ||
+            Math.Abs(parameters[UndeformedLengthParameter] / oldChord - parameters[RelativeLengthParameter]) > 1e-4)
+            throw new InvalidOperationException($"SAP2000 returned the shape data of cable {name} in an unexpected layout; its length cannot be carried over to the new geometry.");
+        return new(name, type, segments, weight, load, deformed, frames, parameters[UndeformedLengthParameter], oldChord, newChord);
+    }
+
+    private void WriteCableShape(CableShape shape, double undeformedLength) =>
+        Check(Model.CableObj.SetCableData(shape.Name, shape.Type, shape.Segments, shape.Weight, shape.ProjectedLoad, undeformedLength,
+            shape.UseDeformedGeometry, shape.ModelUsingFrames), "CableObj.SetCableData", shape.Name);
     private static bool SamePath(string left, string right)
     {
         try { return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase); }

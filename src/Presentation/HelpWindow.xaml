@@ -197,9 +197,24 @@
      <Paragraph><Bold>Verified</Bold> by the application's own checks against closed-form results: mid-span deflection PL³/48EI and 5wL⁴/384EI, moments wL²/8 and
       P·a·b/L, reactions and overall equilibrium, meshed against unmeshed frames, superposition of load cases, and for cable sag an independent solution of
       the cable equation and Ernst's formula (agreement to about 10⁻⁹).</Paragraph>
-     <Paragraph><Bold>Not verified:</Bold> the solver has not been benchmarked against SAP2000 or OpenSees on a complete model. SAP2000's cable object is a
-      catenary element analysed with large displacements, which this solver does not reproduce exactly. Use the FEM tab to explore the candidate space,
-      and confirm governing candidates with the SAP2000 study (Tabs 05–06).</Paragraph>
+     <Paragraph><Bold>Benchmarked against SAP2000</Bold> on a completed study (COT Framing_V1.2, 135 candidates), like for like: the FEM is run on SAP2000's own
+      text copy of the model, on the same candidates, with the cable target forces met in the same case (<Italic>Pretension</Italic>, which includes
+      self-weight) and compared in the same staged load cases. The total vertical reaction agrees to 0.002 %; cable forces to within 3.8 % and
+      deflections to within 3.2 % of the largest SAP2000 value (mean differences about 600 kN and 2 mm); support reactions to within 1.2 %. What
+      remains is the difference in theory: SAP2000 analysed those cases with P-Delta / large displacements, catenary cables and shear-deformable
+      frames. The comparison is a check of the application (<Italic>--fem-sap</Italic>) and can be re-run on another study. Not compared with OpenSees.</Paragraph>
+     <Paragraph><Bold>Two things that benchmark found — read them before comparing the FEM tab with a SAP2000 study:</Bold></Paragraph>
+     <List>
+      <ListItem><Paragraph><Bold>Composite Section Designer sections weigh too much in the FEM tab.</Bold> SAP2000 reports the area of such a section transformed to
+       its base material, and the FEM's SAP read multiplies that by the base material's unit weight. A concrete-filled steel box of 105 kN/m becomes
+       150 kN/m. On the benchmark model the FEM tab carries 4 % more load than SAP2000. (The benchmark itself uses the correct weights.)</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>SAP2000 studies run before this was fixed kept the baseline cable lengths.</Bold> The study changes the truss height by moving
+       joints. The ends of a cable move with them, but a SAP2000 cable object defined by its undeformed length keeps that number — SAP2000's text copy
+       of each child model shows it. In a taller candidate SAP2000 then analysed cables whose undeformed length was up to 29 % shorter than the chord
+       they span — up to 41 % stiffer — and gave smaller deflections than the FEM tab (on the benchmark: equal at the baseline height, about −25 % at
+       the tallest). The study now gives every such cable the same length relative to its chord when it moves the joints; on the tallest candidate
+       SAP2000 and the FEM tab then agree within 0.2 % on deflection. Candidates above the baseline height from an earlier study have to be run again.</Paragraph></ListItem>
+     </List>
     </FlowDocument>
    </FlowDocumentScrollViewer>
   </TabItem>

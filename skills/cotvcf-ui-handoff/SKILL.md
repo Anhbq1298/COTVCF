@@ -184,8 +184,48 @@ earlier tall-header / large-button / blue-block look.
   MathNet.Numerics only. The class summary of `PlanarFrameSolver`, the Help window (FEM procedure §9) and the
   README list the published sources (McGuire/Gallagher/Ziemian, Cook et al., Guyan 1965, Irvine 1981, Ernst 1965,
   Gimsing & Georgakis, Kanno 2011, Nocedal & Wright, Levenberg 1944, CSI manual for Target Force). Keep those
-  three places in step, cite only what the code actually implements, and never describe it as benchmarked against
-  SAP2000 or OpenSees until such a comparison exists in the checks.
+  three places in step, cite only what the code actually implements, and state only the agreement the benchmark
+  below actually shows. It has not been compared with OpenSees.
+- **Pretension stages** (`FemLoadPlan.FitCases` / `StagesFor`, used by `FemStudyService.Analyze`): every case whose
+  own definition applies the Tab 03 target-force pattern is a stage of its own — SAP2000 meets a Target Force at
+  the end of that case, under that case's loads — and a case takes its pretension from the stage it continues from
+  (`InitialCase` chain). One `SolveCases` call per stage. Do not go back to one fit for all cases: on the real
+  model `Pretension` (target force + self-weight) and `Pretension Only [For Ref]` both apply the pattern, and the
+  staged result cases continue from the first.
+- **FEM against SAP2000** (`tests/FemSapBenchmark.cs`, `--fem-sap`; fixture `tests/fem-sap-benchmark`: `model.s2k`,
+  `project.json`, `sap-results.json`; `--fem-sap-capture` rebuilds it from a study on disk). Offline — never
+  attaches to SAP2000. `tests/SapModelText.cs` reads SAP2000's text copy of the model (`.$2k`) into the same
+  inputs `SapGateway` reads live, and refuses any analysis input it does not map. Like for like means: same
+  candidates (keys, heights, every cable target checked), same supports, same stage (only the cases SAP2000's
+  results were read from are run; the pretension is fitted in `Pretension` with SAP2000's own TFTol), same loads
+  (ΣFz first — independent of stiffness), same cable lengths (below). Result on COT Framing_V1.2, 135 candidates:
+  ΣFz 0.002 %, cable force ≤ 3.8 %, deflection ≤ 3.2 %, Fz ≤ 0.32 %, Fx ≤ 1.2 % of the largest SAP2000 value;
+  the bands in the check (5 / 5 / 5 / 1 / 2 %) are regression bands for this study. Cable sag changes a cable
+  force by ≤ 0.2 % at these tensions (17–51 MN).
+- **Two defects the benchmark found** (the first is open, the second is fixed):
+  1. `SapGateway.GetFemSectionPropertiesAsync` weighs a composite Section Designer section as base-material unit
+     weight × the transformed area SAP2000 reports (CFT chords 149.6 instead of 105.2 kN/m; +4 % total load on
+     this model). SAP2000 weighs each shape with its own material; `SapModelText.CompositeUnitWeight` does that
+     from the Section Designer tables and is confirmed by ΣFz. The live read needs the same (the same tables are
+     available through SAP2000's database-tables API) and must be verified against a running SAP2000.
+  2. **Fixed.** `SapGateway.MovePointsAsync` used to move joints and leave the cable shape data alone. A SAP2000
+     cable object defined by its undeformed length (`CableObj.GetCableData` type 8) keeps that number when its end
+     joints move, so taller candidates were analysed with cables whose undeformed length was up to 29 % shorter
+     than the chord they span — 41 % stiffer (evidence: SAP2000's own `.$2k` copy of every child model of the
+     benchmark study lists `UnDefLength` = the baseline chord and `UnDefRelLen` < 1, 0.707 for Cable2a at the
+     tallest height; ΣFz agrees only with baseline cable weights). **Now** the geometry write reads every such
+     cable before the move and afterwards sets its undeformed length to the same length *relative to its chord*
+     (`SetCableData`, type and every other setting kept), reads it back, and rolls the joints and cables back if it
+     did not take. Other cable definitions (tension, sag, relative length) are left to SAP2000. Constants:
+     type 8 = undeformed length; parameter [9] = undeformed length, [10] = relative length — a reply where
+     [9] / chord ≠ [10] is refused before anything is written. This applies to the study's child models and to
+     Tab 02's own apply. Verified against SAP2000 27.1 by `--cable-length-live <baseline.sdb> <project.json>
+     [--analyse]` (`tests/CableLengthLiveCheck.cs`; starts its own SAP2000 on a copy under `.work`, never attaches
+     to the user's): all 16 cables at relative length 1.000 at the tallest height, and with `--analyse` the
+     tallest candidate through the real study path — SAP2000 peak deflection 93.3 → 114.5 mm, FEM 114.7 mm, cable
+     forces within 1.6 %. **A study run before the fix is wrong above the baseline height and has to be run
+     again**; the committed benchmark fixture is such a study, which is why the benchmark still reproduces the
+     stale lengths from the lengths SAP2000 recorded (it adapts once the fixture is re-captured from a new study).
 - Results are streamed per candidate so cancellation or a later failure retains completed rows. Candidate count
   is capped at the existing 50,000-row preview limit.
 - The global `Load Config` picker starts in the repository `tests` folder when that folder is available.

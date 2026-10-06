@@ -37,6 +37,8 @@ public interface ISapGateway : IDisposable
         throw new NotSupportedException("FEM load reads are not implemented by this SAP gateway.");
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
+    /// <summary>Moves joints to <paramref name="proposed"/>. A cable object defined by its undeformed length is given
+    /// the same length relative to its chord on the new geometry — SAP2000 would otherwise keep the old length.</summary>
     Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected);
     /// <summary>Assigns a Cable Loads / Target Force value on an existing load pattern.
     /// Reserved for execution and never called while editing Tab 3.</summary>

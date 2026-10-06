@@ -304,6 +304,7 @@ internal static class PlanarFrameChecks
             "A cable split at a cable-only joint solves both taut and fully slack without a singular-tangent stall");
 
         CableSag(section, modulusKNPerM2);
+        SapModelTextReader();
 
         var studyState = CandidateState();
         var service = new FemStudyService();
@@ -455,6 +456,67 @@ internal static class PlanarFrameChecks
               Same(Dead(false).AxialForceKN, Reference(0, weight, false)) && Dead(false).SagM is null &&
               Dead(true).AxialForceKN > 2 * Dead(false).AxialForceKN,
             "Through the load plan, a SAP self-weight pattern makes the cable sag: a stay with no pretension hangs under its own weight");
+
+        // Pretension stages. SAP2000 meets a Target Force at the end of the case that applies the target-force pattern, so
+        // a model with two such cases has two stages, and a case that continues from one of them carries that one's
+        // pretension. Here: PT alone (for reference), PT with self-weight, and a loaded case continuing from the latter.
+        var staged = new SapFemLoading([new("DEAD", "Dead", 1), new("PT", "Other", 0), new("LIVE", "Live", 0)],
+            [new("LIVE", new FemJointLoad("B", 0, -100))], [], [], [],
+            [
+                new("PT only", "Nonlinear Static", true, [("PT", 1)], null, null),
+                new("Pretension", "Nonlinear Static", true, [("PT", 1), ("DEAD", 1)], null, null),
+                new("Staged", "Nonlinear Static", true, [("LIVE", 1)], "Pretension", null),
+            ], [], []);
+        var (stagePatterns, stageCases, stageCombinations) = FemLoadPlan.RowsFromSap(staged, [], ["PT"]);
+        var stagePlan = FemLoadPlan.Build(stagePatterns, stageCases, stageCombinations, staged, planSections, geometry, [], ["PT"], []);
+        var stages = stagePlan.StagesFor([]);
+        Check(stagePlan.FitCases.SequenceEqual(["PT only", "Pretension"]) && stages.Count == 2 &&
+              stages[0].FitCase == "PT only" && stages[0].FitLoads.IsEmpty && stages[0].Cases.Select(item => item.Name).SequenceEqual(["PT only"]) &&
+              stages[1].FitCase == "Pretension" && stages[1].FitLoads.Members.Count == 1 && stages[1].Cases.Select(item => item.Name).SequenceEqual(["Pretension", "Staged"]) &&
+              stages[1].Cases.All(item => item.PretensionFactor == 1),
+            "Each case that applies the target-force pattern is a pretension stage of its own; a case continuing from one belongs to that stage");
+        var stageTargets = new Dictionary<string, double> { ["Stay"] = 1500 };
+        var stageResults = stages.SelectMany(stage => new PlanarFrameSolver().SolveCases(geometry, beams, planSections.Where(pair => pair.Key == "Stay").ToDictionary(pair => pair.Key, pair => pair.Value),
+            stageTargets, stage.FitLoads, stage.Cases, ["A", "C", "E"], default, 0.01, cableSag: true)).ToDictionary(pair => pair.Key, pair => pair.Value.Cables.Single());
+        Check(Math.Abs(stageResults["Pretension"].AxialForceKN - 1500) <= 0.15 + 1e-9 && Math.Abs(stageResults["PT only"].AxialForceKN - 1500) <= 0.15 + 1e-9 &&
+              stageResults["Staged"].AppliedPretensionKN == stageResults["Pretension"].AppliedPretensionKN &&
+              Math.Abs(stageResults["Pretension"].AppliedPretensionKN - stageResults["PT only"].AppliedPretensionKN) > 1 &&
+              stageResults["Staged"].AxialForceKN > stageResults["Pretension"].AxialForceKN,
+            "Both stages meet the target under their own loads — with different pretensions — and the staged case continues with the pretension of the case it continues from");
+    }
+
+    /// <summary>The reader of SAP2000's model text, on the model of the FEM-against-SAP2000 benchmark (<c>--fem-sap</c>
+    /// runs the comparison itself).</summary>
+    private static void SapModelTextReader()
+    {
+        var path = System.IO.Path.Combine(FemSapBenchmark.DefaultFolder, FemSapBenchmark.ModelFile);
+        if (!System.IO.File.Exists(path)) throw new System.IO.FileNotFoundException("Run the checks from the repository root: the benchmark model text was not found.", path);
+        var model = SapModelText.Read(path);
+        var geometry = model.Geometry();
+        var sections = model.SectionProperties();
+        var loading = model.Loading();
+        Check(geometry.Points.Count == 41 && geometry.Members.Count(member => member.Kind == MemberKind.Frame) == 38 &&
+              geometry.Members.Count(member => member.Kind == MemberKind.Cable) == 16 && sections.Count == 54 &&
+              model.PinSupports().SequenceEqual(["198", "199", "200", "205"]),
+            "SAP2000 model text: 41 joints, 38 frames, 16 cables, every member with its section, and the four pinned supports");
+        var cable = sections["Cable1a-2"];
+        var rotated = sections["188"];
+        Check(cable.IsCable && Math.Abs(cable.AreaM2 - 0.028802317797652074) < 1e-15 && Math.Abs(cable.ElasticModulusKNPerM2 - 196500599.8511997) < 1e-3 &&
+              Math.Abs(cable.WeightPerLengthKNPerM - 0.028802317797652074 * 76.97286394226478) < 1e-9 &&
+              rotated.LocalAngleDeg == 90 && rotated.InPlaneInertiaM4 is double inertia && Math.Abs(inertia - 6.215005792682927) < 1e-9,
+            "SAP2000 model text: cable area, modulus and weight from its section and material; a mega column turned 90° bends about its other axis (I22, not I33)");
+        // concrete-filled steel box: 0.87 m² of steel and 1.53 m² of concrete, reported by SAP2000 as 5.986 m² of concrete
+        var chord = sections.Values.First(item => item.SectionName!.StartsWith("CFT_SHS", StringComparison.Ordinal));
+        Check(Math.Abs(chord.AreaM2 - 5.98609756097561) < 1e-12 && Math.Abs(chord.WeightPerLengthKNPerM - (0.87 * 76.97286394226478 + 1.53 * 24.992617659999993)) < 1e-6 &&
+              model.Notes.Count(note => note.StartsWith("Composite Section Designer section", StringComparison.Ordinal)) == 3,
+            "SAP2000 model text: a composite Section Designer section weighs what its shapes weigh (105.2 kN/m), not concrete × its transformed area (149.6 kN/m)");
+        var stagedCase = loading.Cases.Single(item => item.Name == "NL ULS001: 1.35DL+1.5LL-staged");
+        Check(loading.Patterns.Select(pattern => (pattern.Name, pattern.SelfWeightMultiplier)).SequenceEqual([("DEAD", 1), ("DEAD_ABOVE", 0), ("LL_ABOVE", 0), ("Pretension", 0)]) &&
+              stagedCase.InitialCase == "Pretension" && stagedCase.Loads.SequenceEqual([("DEAD_ABOVE", 1.35), ("LL_ABOVE", 1.5), ("DEAD", 0.35)]) &&
+              loading.Cases.Single(item => item.Name == "Pretension").Loads.SequenceEqual([("Pretension", 1), ("DEAD", 1)]) &&
+              loading.Cases.Single(item => item.Name == "MODAL").Supported == false && loading.JointLoads.Count == 22 &&
+              model.GeometricNonlinearity["Pretension"] == "Large Displ" && model.TargetForceTolerancePercent["Pretension"] == 1,
+            "SAP2000 model text: load patterns, joint loads and static cases — the staged cases continue from 'Pretension', which applies the target force with self-weight");
     }
 
     private static ApplicationState CandidateState()

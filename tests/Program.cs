@@ -496,6 +496,34 @@ internal static class Program
                 PlanarFrameChecks.Run();
                 return 0;
             }
+            // Live: starts its own SAP2000 on a copy of the baseline under .work and checks that cable lengths follow the joints.
+            var cableLengthLive = Array.IndexOf(args, "--cable-length-live");
+            if (cableLengthLive >= 0)
+            {
+                if (cableLengthLive + 2 >= args.Length) throw new ArgumentException("--cable-length-live needs: <baseline .sdb> <project .json> [--analyse].");
+                CableLengthLiveCheck.RunAsync(args[cableLengthLive + 1], args[cableLengthLive + 2], args.Contains("--analyse")).GetAwaiter().GetResult();
+                return 0;
+            }
+            // Internal FEM against SAP2000 on a real study, like for like. Offline: reads the fixture only.
+            //   --fem-sap [fixture folder]                                   compare (default tests/fem-sap-benchmark)
+            //   --fem-sap-capture <model.$2k> <project.json> <raw results.json> [fixture folder]   refresh the fixture
+            var femSapCapture = Array.IndexOf(args, "--fem-sap-capture");
+            if (femSapCapture >= 0)
+            {
+                if (femSapCapture + 3 >= args.Length)
+                    throw new ArgumentException("--fem-sap-capture needs: <SAP2000 model text .$2k> <project .json> <Study_Raw_Results.json> [fixture folder].");
+                FemSapBenchmark.Capture(args[femSapCapture + 1], args[femSapCapture + 2], args[femSapCapture + 3],
+                    femSapCapture + 4 < args.Length ? args[femSapCapture + 4] : FemSapBenchmark.DefaultFolder);
+                return 0;
+            }
+            var femSap = Array.IndexOf(args, "--fem-sap");
+            if (femSap >= 0)
+            {
+                var fixture = femSap + 1 < args.Length && !args[femSap + 1].StartsWith("--", StringComparison.Ordinal) ? args[femSap + 1] : FemSapBenchmark.DefaultFolder;
+                FemSapBenchmark.Run(fixture, Path.Combine(".work", "fem-vs-sap"));
+                Console.WriteLine("Internal FEM against SAP2000: all like-for-like checks passed.");
+                return 0;
+            }
             if (args.Contains("--ui-read"))
             {
                 using var sap = new SapGateway();

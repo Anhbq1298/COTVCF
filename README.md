@@ -146,8 +146,25 @@ stiffness method with Euler–Bernoulli elements (McGuire, Gallagher & Ziemian, 
 static condensation (Guyan, AIAA Journal 3(2), 1965), the shallow elastic cable (Irvine, *Cable Structures*, 1981)
 with Ernst's equivalent modulus (Der Bauingenieur 40(2), 1965), and energy minimisation by Newton's method with a
 line search (Nocedal & Wright, *Numerical Optimization*, 2006). `--fem` checks it against closed-form beam results
-and an independent solution of the cable equation. It has not been benchmarked against SAP2000 or OpenSees on a
-complete model, so governing candidates should be confirmed with the SAP2000 study.
+and an independent solution of the cable equation.
+
+**Benchmark against SAP2000** (`--fem-sap`, fixture in `tests/fem-sap-benchmark`). The FEM is run on SAP2000's own
+text copy of the COT Framing_V1.2 model and compared, like for like, with the completed SAP2000 study of 135
+candidates: same candidates, cable target forces met in the same case (`Pretension`, self-weight included), same
+staged load cases. The total vertical reaction agrees to 0.002 %; cable forces to within 3.8 % and deflections to
+within 3.2 % of the largest SAP2000 value; reactions to within 1.2 %. The remainder is the difference in theory
+(SAP2000: P-Delta / large displacements, catenary cables, shear-deformable frames). Not compared with OpenSees.
+
+The benchmark found two things that affect a comparison of the FEM tab with a SAP2000 study:
+
+- The FEM's SAP read overstates the self-weight of composite Section Designer sections (base-material unit weight ×
+  transformed area): 150 instead of 105 kN/m for the concrete-filled chords, 4 % more total load on this model.
+- **Fixed — studies run before the fix have to be run again above the baseline height.** The SAP2000 study changes
+  the truss height by moving joints, and a cable object defined by its undeformed length kept the length of the
+  baseline model (SAP2000's own text copies of the child models record it): up to 29 % shorter than the chord it
+  spans, so up to 41 % stiffer, in the tallest candidates. The geometry write now gives every such cable the same
+  length relative to its chord on the new geometry. Verified in SAP2000 27.1 (`--cable-length-live`): on the tallest
+  candidate the peak deflection goes from 93.3 mm to 114.5 mm, and the FEM tab gives 114.7 mm.
 
 ## Project configuration
 
@@ -178,9 +195,10 @@ Default executable:
 dotnet run --project tests\COT_VCF.Checks.csproj
 dotnet run --project tests\COT_VCF.Checks.csproj -- --study-ui
 dotnet run --project tests\COT_VCF.Checks.csproj -- --fem
+dotnet run --project tests\COT_VCF.Checks.csproj -- --fem-sap
 ```
 
-The first command runs offline workflow and guarded SAP-write tests using test doubles. The second opens the WPF smoke test and checks workflow/FEM bindings. The third runs the internal FEM analytical and candidate-composition checks. Live SAP checks are intentionally separate because they require a running SAP2000 instance.
+The first command runs offline workflow and guarded SAP-write tests using test doubles. The second opens the WPF smoke test and checks workflow/FEM bindings. The third runs the internal FEM analytical and candidate-composition checks. The fourth compares the internal FEM with a completed SAP2000 study, like for like, from the fixture in `tests/fem-sap-benchmark` (offline; report in `.work/fem-vs-sap`). Live SAP checks are intentionally separate because they require a running SAP2000 instance.
 
 ## Implementation boundaries
 
