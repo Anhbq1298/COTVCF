@@ -30,6 +30,11 @@ public interface ISapGateway : IDisposable
     Task<IReadOnlyDictionary<string, FemSectionProperties>> GetFemSectionPropertiesAsync(
         IReadOnlyList<StructuralMember> members, ModelInfo expected) =>
         throw new NotSupportedException("FEM section-property reads are not implemented by this SAP gateway.");
+    /// <summary>Read-only snapshot of load patterns (with self-weight multipliers), the loads assigned to the given
+    /// joints/frames/cables, static load cases and response combinations, for the internal FEM.</summary>
+    Task<SapFemLoading> GetFemLoadingAsync(IReadOnlyList<StructuralMember> members, IReadOnlyDictionary<string, double> localAnglesDeg,
+        ModelInfo expected) =>
+        throw new NotSupportedException("FEM load reads are not implemented by this SAP gateway.");
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
     Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected);

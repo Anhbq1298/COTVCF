@@ -11,8 +11,28 @@ public sealed record FemSectionProperties(
     bool ReleaseStartRotation = false,
     bool ReleaseEndRotation = false,
     string? SectionName = null,
-    string? MaterialName = null)
+    string? MaterialName = null,
+    double LocalAngleDeg = 0,
+    double UnitWeightKNPerM3 = 0,
+    double UnitMassTPerM3 = 0,
+    double GrossAreaM2 = 0,
+    IReadOnlyList<double>? Modifiers = null,
+    FemSectionShape? Shape = null)
 {
+    public bool IsCable => InPlaneInertiaM4 is null;
+    // SAP modifier order — frames: A, As2, As3, J, I22, I33, Mass, Weight; cables: A, Mass, Weight.
+    private double Modifier(int frameIndex, int cableIndex) =>
+        Modifiers is { } values && (IsCable ? cableIndex : frameIndex) is var index && index < values.Count ? values[index] : 1;
+    public double AreaModifier => Modifier(0, 0);
+    public double InertiaModifier => IsCable ? double.NaN : Modifier(5, -1);
+    public double MassModifier => Modifier(6, 1);
+    public double WeightModifier => Modifier(7, 2);
+    private double SelfWeightArea => GrossAreaM2 > 0 ? GrossAreaM2 : AreaM2;
+    /// <summary>Self-weight per length = unit weight × gross area × weight modifier [kN/m].</summary>
+    public double WeightPerLengthKNPerM => UnitWeightKNPerM3 * SelfWeightArea * WeightModifier;
+    /// <summary>Mass per length = unit mass × gross area × mass modifier [t/m].</summary>
+    public double MassPerLengthTPerM => UnitMassTPerM3 * SelfWeightArea * MassModifier;
+    public double? InertiaModifierOrNull => IsCable ? null : InertiaModifier;
     public double ElasticModulusGPa => ElasticModulusKNPerM2 / 1_000_000;
     public string EndRotationReleases => (ReleaseStartRotation, ReleaseEndRotation) switch
     {
@@ -23,7 +43,22 @@ public sealed record FemSectionProperties(
     };
 }
 
-public sealed record FemAppliedLoad(string PointName, double FxKN, double FzKN);
+public enum SectionShapeKind { Rectangle, Box, I, Channel, Tee, Angle, Circle, Pipe, Equivalent }
+
+/// <summary>
+/// Cross-section outline for drawing, in SAP's section axes: <see cref="Depth"/> (t3) along local 2 and
+/// <see cref="Width"/> (t2) along local 3 [m]. <see cref="SectionShapeKind.Equivalent"/> is a solid rectangle with the
+/// section's A, I33 and I22 (used when SAP gives no dimensions, e.g. Section Designer or filled-tube sections).
+/// </summary>
+public sealed record FemSectionShape(SectionShapeKind Kind, double Depth, double Width, double FlangeThickness = 0, double WebThickness = 0,
+    double BottomWidth = 0, double BottomFlangeThickness = 0)
+{
+    public static FemSectionShape? EquivalentRectangle(double area, double i33, double i22) =>
+        area > 0 && i33 > 0 && i22 > 0 ? new(SectionShapeKind.Equivalent, Math.Sqrt(12 * i33 / area), Math.Sqrt(12 * i22 / area)) : null;
+}
+
+/// <summary>A Tab 01 study load at a joint; <see cref="Pattern"/> is its SAP load pattern.</summary>
+public sealed record FemAppliedLoad(string PointName, double FxKN, double FzKN, string? Pattern = null);
 public sealed record FemJointResponse(string PointName, double UXM, double UZM, double RotationRad);
 public sealed record FemSupportReaction(string PointName, double ReactionXKN, double ReactionZKN);
 /// <summary>Result at one frame mesh node: <see cref="Fraction"/> runs 0 (I-end) to 1 (J-end) along the frame.</summary>
@@ -33,7 +68,13 @@ public sealed record FemFrameResponse(string MemberName, double AxialStartKN, do
     double MomentStartKNm, double MomentEndKNm,
     IReadOnlyList<FemFrameStation>? Stations = null);
 public sealed record FemCableResponse(string MemberName, double AxialForceKN, bool Active,
-    double TargetForceKN = 0, double AppliedPretensionKN = 0, double? PretensionStageForceKN = null);
+    double TargetForceKN = 0, double AppliedPretensionKN = 0, double? PretensionStageForceKN = null,
+    IReadOnlyList<double>? FitHistoryKN = null)
+{
+    /// <summary>P_result / P_preset after each pretension-fitting run (run 1 applies the target itself).</summary>
+    public IReadOnlyList<double> FitRatios => TargetForceKN > 0 && FitHistoryKN is { } history
+        ? history.Select(force => force / TargetForceKN).ToArray() : [];
+}
 public sealed record FemAnalysisResult(
     IReadOnlyList<FemJointResponse> Joints,
     IReadOnlyList<FemSupportReaction> SupportReactions,
@@ -109,6 +150,7 @@ public sealed class PlanarFrameSolver
     public const int DefaultFrameMeshSegments = 10;
     public const int MaximumFrameMeshSegments = 100;
 
+    /// <summary>Single loading (joint loads only) with the pretension applied — the original one-case entry point.</summary>
     public FemAnalysisResult Solve(
         GeometryModel geometry,
         IReadOnlyDictionary<string, FemSectionProperties> frameSections,
@@ -121,7 +163,33 @@ public sealed class PlanarFrameSolver
         int maximumTargetFitIterations = DefaultTargetFitIterations,
         int frameMeshSegments = 1)
     {
+        var caseLoads = new FemLoadSet(loads.Select(load => new FemJointLoad(load.PointName, load.FxKN, load.FzKN)).ToArray(), [], []);
+        return SolveCases(geometry, frameSections, cableSections, cablePretensionsKN, FemLoadSet.Empty,
+            [new FemCaseLoads("Default", caseLoads, 1)], pinSupportPoints, cancellationToken, targetFitPercent,
+            maximumTargetFitIterations, frameMeshSegments)["Default"];
+    }
+
+    /// <summary>
+    /// Solves several load cases on one candidate geometry. The cable pretension is fitted once (when a tolerance is
+    /// given) under <paramref name="fitLoads"/> — the other loads of the case that holds the cable target-force
+    /// pattern, as SAP meets a Target Force at the end of that case — then every case is solved as its own
+    /// tension-only equilibrium with its loads and <see cref="FemCaseLoads.PretensionFactor"/> × the fitted pretension.
+    /// </summary>
+    public IReadOnlyDictionary<string, FemAnalysisResult> SolveCases(
+        GeometryModel geometry,
+        IReadOnlyDictionary<string, FemSectionProperties> frameSections,
+        IReadOnlyDictionary<string, FemSectionProperties> cableSections,
+        IReadOnlyDictionary<string, double> cablePretensionsKN,
+        FemLoadSet fitLoads,
+        IReadOnlyList<FemCaseLoads> cases,
+        IReadOnlyList<string> pinSupportPoints,
+        CancellationToken cancellationToken = default,
+        double? targetFitPercent = null,
+        int maximumTargetFitIterations = DefaultTargetFitIterations,
+        int frameMeshSegments = 1)
+    {
         ArgumentNullException.ThrowIfNull(geometry);
+        if (cases.Count == 0) throw new InvalidOperationException("At least one load case is required.");
         var frameMembers = geometry.Members.Where(member => member.Kind == MemberKind.Frame).ToArray();
         if (frameMembers.Length == 0) throw new InvalidOperationException("The connected model has no frame members to analyze.");
 
@@ -156,23 +224,11 @@ public sealed class PlanarFrameSolver
         var cableElements = cableMembers.Select(member => CreateCable(member, points, nodeIndex,
             cableSections[member.Name], cablePretensionsKN.GetValueOrDefault(member.Name))).ToArray();
 
-        foreach (var load in loads)
-        {
-            if (!nodeIndex.ContainsKey(load.PointName)) throw new InvalidOperationException($"Load point '{load.PointName}' is not connected to an analyzed member.");
-            if (!double.IsFinite(load.FxKN) || !double.IsFinite(load.FzKN)) throw new InvalidOperationException($"Load at '{load.PointName}' is not finite.");
-        }
         var supports = pinSupportPoints.Distinct(StringComparer.Ordinal).ToArray();
         if (supports.Length < 2 || supports.Any(name => !nodeIndex.ContainsKey(name)))
             throw new InvalidOperationException("At least two valid pin-support joints connected to analyzed members are required.");
 
         var dofCount = usedPoints.Length * 3;
-        var external = new double[dofCount];
-        foreach (var load in loads)
-        {
-            var start = nodeIndex[load.PointName] * 3;
-            external[start] += load.FxKN;
-            external[start + 1] += load.FzKN;
-        }
         var restrained = new HashSet<int>();
         foreach (var support in supports)
         {
@@ -180,62 +236,254 @@ public sealed class PlanarFrameSolver
             restrained.Add(start);
             restrained.Add(start + 1);
         }
+        var loadContext = new LoadContext(dofCount, nodeIndex,
+            frameElements.GroupBy(frame => frame.Member.Name, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal),
+            cableElements.ToDictionary(cable => cable.Member.Name, StringComparer.Ordinal),
+            frameSections.ToDictionary(pair => pair.Key, pair => pair.Value.LocalAngleDeg, StringComparer.Ordinal));
 
         if (targetFitPercent is double fit && (!double.IsFinite(fit) || fit <= 0 || fit >= 100))
             throw new InvalidOperationException("Target-force fitting tolerance must be greater than 0% and less than 100%.");
         if (maximumTargetFitIterations < 1)
             throw new InvalidOperationException("Target-force fitting needs at least one iteration.");
 
-        // Without fitting, the target is applied once as the initial pretension. With fitting, the target is met in a
-        // pretension-only stage (as SAP meets a Target Force in its own PRETENSION load case), and the applied loads
-        // then act on that prestressed state. The tension-only energy is convex, so the loaded equilibrium does not
-        // depend on load path and a single solve with the fitted pretension and full loads gives the staged result.
+        // Without fitting, the target is applied once as the initial pretension. With fitting, the applied pretension is
+        // adjusted until the targets are met under the fit-stage loads. The tension-only energy is convex, so a case's
+        // equilibrium does not depend on load path and one solve with pretension and loads gives the staged result.
         var targets = cableElements.Select(cable => cable.InitialPretensionKN).ToArray();
         var applied = targets.ToArray();
         var pretensionStageForces = new double[targets.Length];
         var targetFitIterations = 0;
+        var fitHistory = new List<double[]>();
         string? targetFitFailure = null;
         if (targetFitPercent is double tolerancePercent && targets.Any(target => target > 0))
+        {
+            var (fitExternal, _) = BuildLoads(loadContext, fitLoads);
             (applied, pretensionStageForces, targetFitIterations, targetFitFailure) = FitPretension(dofCount, frameElements, cableElements,
-                restrained, targets, tolerancePercent, maximumTargetFitIterations, cancellationToken);
-        cableElements = WithPretension(cableElements, applied);
-        var (displacement, nonlinearIterations) = SolveEquilibrium(dofCount, frameElements, cableElements, external, restrained, cancellationToken);
+                restrained, targets, tolerancePercent, maximumTargetFitIterations, fitHistory, fitExternal, cancellationToken);
+        }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        var activeCables = cableElements.Where(cable => CableForce(cable, displacement) > CableForceToleranceKN)
-            .Select(cable => cable.Member.Name).ToHashSet(StringComparer.Ordinal);
-        var (stiffness, rightHandSide) = Assemble(dofCount, frameElements, cableElements, activeCables, external);
-        var finalResidual = Residual(stiffness, rightHandSide, displacement);
-
-        var jointResults = usedPoints.Select((name, index) => new FemJointResponse(name,
-            displacement[index * 3], displacement[index * 3 + 1], displacement[index * 3 + 2])).ToArray();
-        var reactions = supports.Select(name =>
+        var results = new Dictionary<string, FemAnalysisResult>(StringComparer.Ordinal);
+        foreach (var loadCase in cases)
         {
-            var start = nodeIndex[name] * 3;
-            return new FemSupportReaction(name, finalResidual[start], finalResidual[start + 1]);
-        }).ToArray();
-        var frameResults = frameElements.GroupBy(frame => frame.Member.Name, StringComparer.Ordinal)
-            .Select(pieces => FrameResponse(pieces.ToArray(), displacement)).ToArray();
-        var cableResults = cableElements.Select((cable, index) =>
-        {
-            var force = Math.Max(0, CableForce(cable, displacement));
-            return new FemCableResponse(cable.Member.Name, force, force > CableForceToleranceKN, targets[index], applied[index],
-                targetFitIterations > 0 ? pretensionStageForces[index] : null);
-        }).ToArray();
+            cancellationToken.ThrowIfCancellationRequested();
+            var (external, pieceLoads) = BuildLoads(loadContext, loadCase.Loads);
+            var caseCables = WithPretension(cableElements, applied.Select(value => value * loadCase.PretensionFactor).ToArray());
+            var (displacement, nonlinearIterations) = SolveEquilibrium(dofCount, frameElements, caseCables, external, restrained, cancellationToken);
 
-        return new(jointResults, reactions, frameResults, cableResults, nonlinearIterations, targetFitIterations, targetFitFailure);
+            var activeCables = caseCables.Where(cable => CableForce(cable, displacement) > CableForceToleranceKN)
+                .Select(cable => cable.Member.Name).ToHashSet(StringComparer.Ordinal);
+            var (stiffness, rightHandSide) = Assemble(dofCount, frameElements, caseCables, activeCables, external);
+            var finalResidual = Residual(stiffness, rightHandSide, displacement);
+
+            var jointResults = usedPoints.Select((name, index) => new FemJointResponse(name,
+                displacement[index * 3], displacement[index * 3 + 1], displacement[index * 3 + 2])).ToArray();
+            var reactions = supports.Select(name =>
+            {
+                var start = nodeIndex[name] * 3;
+                return new FemSupportReaction(name, finalResidual[start], finalResidual[start + 1]);
+            }).ToArray();
+            var frameResults = frameElements.GroupBy(frame => frame.Member.Name, StringComparer.Ordinal)
+                .Select(pieces => FrameResponse(pieces.ToArray(), displacement, pieceLoads)).ToArray();
+            var cableResults = caseCables.Select((cable, index) =>
+            {
+                var force = Math.Max(0, CableForce(cable, displacement));
+                return new FemCableResponse(cable.Member.Name, force, force > CableForceToleranceKN, targets[index], applied[index],
+                    targetFitIterations > 0 ? pretensionStageForces[index] : null,
+                    fitHistory.Count > 0 ? fitHistory.Select(forces => forces[index]).ToArray() : null);
+            }).ToArray();
+            results[loadCase.Name] = new(jointResults, reactions, frameResults, cableResults, nonlinearIterations, targetFitIterations, targetFitFailure);
+        }
+        return results;
+    }
+
+    private sealed record LoadContext(int DofCount, IReadOnlyDictionary<string, int> NodeIndex,
+        IReadOnlyDictionary<string, FrameElement[]> FramePieces, IReadOnlyDictionary<string, CableElement> Cables,
+        IReadOnlyDictionary<string, double> LocalAnglesDeg);
+
+    private static readonly (double Point, double Weight)[] Gauss3 =
+        [(0.5 - Math.Sqrt(0.15), 5.0 / 18), (0.5, 8.0 / 18), (0.5 + Math.Sqrt(0.15), 5.0 / 18)];
+
+    /// <summary>
+    /// Global load vector of a load set. Joint loads go straight to the joints (SAP M2 about +Y acts as −θ in the XZ
+    /// model). Frame member loads become consistent (Hermite) nodal loads on every mesh node, integrated exactly by
+    /// 3-point Gauss over each sub-element; interior node loads are condensed onto the end joints with the same
+    /// static condensation as the stiffness (and through any end release). Cable member loads are lumped to the
+    /// cable's end joints by statics, since a cable carries load only axially.
+    /// </summary>
+    private static (double[] External, Dictionary<FrameElement, PieceLoad> PieceLoads) BuildLoads(LoadContext context, FemLoadSet loads)
+    {
+        var external = new double[context.DofCount];
+        var nodeLoads = new Dictionary<FrameElement, (double[] Nodes, double[][] Sub)>(ReferenceEqualityComparer.Instance);
+        foreach (var load in loads.Joints)
+        {
+            if (!context.NodeIndex.TryGetValue(load.PointName, out var node))
+                throw new InvalidOperationException($"Load point '{load.PointName}' is not connected to an analyzed member.");
+            if (!double.IsFinite(load.FxKN) || !double.IsFinite(load.FzKN) || !double.IsFinite(load.MyKNm))
+                throw new InvalidOperationException($"Load at '{load.PointName}' is not finite.");
+            external[node * 3] += load.FxKN;
+            external[node * 3 + 1] += load.FzKN;
+            external[node * 3 + 2] -= load.MyKNm;
+        }
+
+        (double[] Nodes, double[][] Sub) PieceVectors(FrameElement piece)
+        {
+            if (!nodeLoads.TryGetValue(piece, out var vectors))
+                nodeLoads[piece] = vectors = (new double[3 * (piece.Segments + 1)], Enumerable.Range(0, piece.Segments).Select(_ => new double[6]).ToArray());
+            return vectors;
+        }
+        void AddSubElementLoad(FrameElement piece, int segment, double xi, double axial, double transverse)
+        {
+            var h = piece.Length / piece.Segments;
+            double[] shape = [(1 - xi) * axial, (1 - 3 * xi * xi + 2 * xi * xi * xi) * transverse, h * (xi - 2 * xi * xi + xi * xi * xi) * transverse,
+                xi * axial, (3 * xi * xi - 2 * xi * xi * xi) * transverse, h * (-xi * xi + xi * xi * xi) * transverse];
+            var (nodes, sub) = PieceVectors(piece);
+            for (var index = 0; index < 6; index++)
+            {
+                sub[segment][index] += shape[index];
+                nodes[3 * segment + index] += shape[index];
+            }
+        }
+
+        foreach (var load in loads.Members)
+        {
+            if (!double.IsFinite(load.ValueStart) || !double.IsFinite(load.ValueEnd)) throw new InvalidOperationException($"Member load on '{load.MemberName}' is not finite.");
+            var r1 = Math.Clamp(Math.Min(load.RelStart, load.RelEnd), 0, 1);
+            var r2 = Math.Clamp(Math.Max(load.RelStart, load.RelEnd), 0, 1);
+            if (r2 - r1 <= 1e-12) continue;
+            double Intensity(double rel) => load.ValueStart + (load.ValueEnd - load.ValueStart) * (rel - load.RelStart) / (load.RelEnd - load.RelStart);
+            if (context.FramePieces.TryGetValue(load.MemberName, out var pieces))
+            {
+                var memberLength = pieces.Sum(piece => piece.Length);
+                var (gx, gz) = LoadVector(load.Direction, pieces[0].C, pieces[0].S, context.LocalAnglesDeg.GetValueOrDefault(load.MemberName));
+                foreach (var piece in pieces)
+                for (var segment = 0; segment < piece.Segments; segment++)
+                {
+                    var a = piece.FractionStart + (piece.FractionEnd - piece.FractionStart) * segment / piece.Segments;
+                    var b = piece.FractionStart + (piece.FractionEnd - piece.FractionStart) * (segment + 1) / piece.Segments;
+                    var from = Math.Max(a, r1);
+                    var to = Math.Min(b, r2);
+                    if (to - from <= 1e-12) continue;
+                    foreach (var (point, weight) in Gauss3)
+                    {
+                        var rel = from + (to - from) * point;
+                        var q = Intensity(rel) * weight * (to - from) * memberLength;
+                        var (qx, qz) = (gx * q, gz * q);
+                        AddSubElementLoad(piece, segment, (rel - a) / (b - a), qx * piece.C + qz * piece.S, -qx * piece.S + qz * piece.C);
+                    }
+                }
+            }
+            else if (context.Cables.TryGetValue(load.MemberName, out var cable))
+            {
+                var length = cable.Length;
+                var (gx, gz) = LoadVector(load.Direction, cable.C, cable.S, 0);
+                double forceI = 0, forceJ = 0;
+                foreach (var (point, weight) in Gauss3)
+                {
+                    var rel = r1 + (r2 - r1) * point;
+                    var q = Intensity(rel) * weight * (r2 - r1) * length;
+                    forceI += q * (1 - rel);
+                    forceJ += q * rel;
+                }
+                external[cable.Dofs[0]] += gx * forceI;
+                external[cable.Dofs[1]] += gz * forceI;
+                external[cable.Dofs[2]] += gx * forceJ;
+                external[cable.Dofs[3]] += gz * forceJ;
+            }
+            else throw new InvalidOperationException($"Member load on '{load.MemberName}', which is not an analyzed frame or cable.");
+        }
+
+        foreach (var load in loads.MemberPoints)
+        {
+            if (!double.IsFinite(load.ValueKN)) throw new InvalidOperationException($"Point load on '{load.MemberName}' is not finite.");
+            var rel = Math.Clamp(load.Rel, 0, 1);
+            if (context.FramePieces.TryGetValue(load.MemberName, out var pieces))
+            {
+                var direction = load.Direction switch
+                {
+                    FemLoadDirection.ProjectedX => FemLoadDirection.GlobalX,
+                    FemLoadDirection.ProjectedZ => FemLoadDirection.GlobalZ,
+                    FemLoadDirection.ProjectedGravity => FemLoadDirection.Gravity,
+                    var other => other
+                };
+                var (gx, gz) = LoadVector(direction, pieces[0].C, pieces[0].S, context.LocalAnglesDeg.GetValueOrDefault(load.MemberName));
+                var (px, pz) = (gx * load.ValueKN, gz * load.ValueKN);
+                var piece = pieces.First(item => rel <= item.FractionEnd + 1e-12);
+                var local = (rel - piece.FractionStart) / (piece.FractionEnd - piece.FractionStart) * piece.Segments;
+                var segment = Math.Clamp((int)Math.Floor(local), 0, piece.Segments - 1);
+                AddSubElementLoad(piece, segment, Math.Clamp(local - segment, 0, 1), px * piece.C + pz * piece.S, -px * piece.S + pz * piece.C);
+            }
+            else throw new InvalidOperationException($"Point load on '{load.MemberName}', which is not an analyzed frame.");
+        }
+
+        var pieceLoads = new Dictionary<FrameElement, PieceLoad>(ReferenceEqualityComparer.Instance);
+        foreach (var (piece, (nodes, sub)) in nodeLoads)
+        {
+            // Condensed end load g = f_e + Rᵀ f_i (R = −K_ii⁻¹K_ie), then through the releases like the stiffness.
+            var interiorCount = piece.InteriorRecovery.GetLength(0);
+            var condensed = new double[6];
+            for (var index = 0; index < 3; index++)
+            {
+                condensed[index] = nodes[index];
+                condensed[3 + index] = nodes[nodes.Length - 3 + index];
+            }
+            for (var col = 0; col < 6; col++)
+            for (var row = 0; row < interiorCount; row++) condensed[col] += piece.InteriorRecovery[row, col] * nodes[3 + row];
+
+            var released = (double[])condensed.Clone();
+            var matrix = (double[,])piece.UnreleasedStiffness.Clone();
+            foreach (var dof in new[] { piece.ReleaseStart ? 2 : -1, piece.ReleaseEnd ? 5 : -1 }.Where(dof => dof >= 0))
+            {
+                for (var other = 0; other < 6; other++)
+                    if (other != dof) released[other] -= matrix[other, dof] / matrix[dof, dof] * released[dof];
+                CondenseReleasedDof(matrix, dof);
+                released[dof] = 0;
+            }
+            for (var row = 0; row < 6; row++)
+            {
+                var value = 0.0;
+                for (var k = 0; k < 6; k++) value += piece.Transform[k, row] * released[k];
+                external[piece.Dofs[row]] += value;
+            }
+            pieceLoads[piece] = new PieceLoad(nodes, sub, condensed);
+        }
+        return (external, pieceLoads);
+    }
+
+    /// <summary>Global (X, Z) components per unit load value for a member whose I→J direction is (c, s).</summary>
+    private static (double X, double Z) LoadVector(FemLoadDirection direction, double c, double s, double localAngleDeg)
+    {
+        switch (direction)
+        {
+            case FemLoadDirection.GlobalX: return (1, 0);
+            case FemLoadDirection.GlobalZ: return (0, 1);
+            case FemLoadDirection.Gravity: return (0, -1);
+            case FemLoadDirection.ProjectedX: return (Math.Abs(s), 0);
+            case FemLoadDirection.ProjectedZ: return (0, Math.Abs(c));
+            case FemLoadDirection.ProjectedGravity: return (0, -Math.Abs(c));
+            case FemLoadDirection.Local1: return (c, s);
+            case FemLoadDirection.Local2:
+            {
+                // SAP default local 2: +X for a vertical member, otherwise the in-plane normal with a +Z component.
+                // A local-axis angle rotates it out of the plane; only its in-plane part (cos angle) acts here.
+                var (nx, nz) = Math.Abs(c) < 1e-6 ? (1.0, 0.0) : c > 0 ? (-s, c) : (s, -c);
+                var inPlane = Math.Cos(localAngleDeg * Math.PI / 180);
+                return (nx * inPlane, nz * inPlane);
+            }
+            default: throw new InvalidOperationException($"Unsupported load direction {direction}.");
+        }
     }
 
     /// <summary>
-    /// Newton iteration on the cable pretensions so that, with no external load, every targeted cable's tension is
+    /// Newton iteration on the cable pretensions so that, under the fit-stage loads, every targeted cable's tension is
     /// within <paramref name="tolerancePercent"/> of its target. The Jacobian is built by finite differences over all
     /// targeted cables, so the interaction between cables (tensioning one changes the others) is accounted for.
     /// </summary>
     private static (double[] Applied, double[] StageForces, int Iterations, string? Failure) FitPretension(int dofCount,
         IReadOnlyList<FrameElement> frameElements, CableElement[] cableElements, IReadOnlySet<int> restrained,
-        double[] targets, double tolerancePercent, int maximumIterations, CancellationToken cancellationToken)
+        double[] targets, double tolerancePercent, int maximumIterations, List<double[]> history, double[] fitExternal,
+        CancellationToken cancellationToken)
     {
-        var noLoad = new double[dofCount];
+        var noLoad = fitExternal;
         var targeted = Enumerable.Range(0, targets.Length).Where(index => targets[index] > 0).ToArray();
         var applied = targets.ToArray();
         double[] StageForces(double[] pretension)
@@ -261,6 +509,7 @@ public sealed class PlanarFrameSolver
         for (var iteration = 1; ; iteration++)
         {
             var forces = StageForces(applied);
+            history.Add(forces);
             var worst = targeted.MaxBy(index => Math.Abs(forces[index] - targets[index]) / targets[index]);
             var worstDeviation = Math.Abs(forces[worst] - targets[worst]) / targets[worst] * 100;
             if (worstDeviation < best.WorstDeviation) best = (applied.ToArray(), forces, worstDeviation);
@@ -442,11 +691,13 @@ public sealed class PlanarFrameSolver
         var interiorDofs = Enumerable.Range(3, nodeDofs - 6).ToArray();
         var local = new double[6, 6];
         var recovery = new double[interiorDofs.Length, 6];
+        MathNet.Numerics.LinearAlgebra.Matrix<double>? interiorFlexibility = null;
         if (interiorDofs.Length == 0) local = (double[,])subStiffness.Clone();
         else
         {
             var kii = DenseMatrix.Create(interiorDofs.Length, interiorDofs.Length, (row, col) => assembled[interiorDofs[row], interiorDofs[col]]);
             var kie = DenseMatrix.Create(interiorDofs.Length, 6, (row, col) => assembled[interiorDofs[row], endDofs[col]]);
+            interiorFlexibility = kii.Inverse();
             var r = -kii.Solve(kie);
             for (var row = 0; row < 6; row++)
             for (var col = 0; col < 6; col++)
@@ -476,15 +727,20 @@ public sealed class PlanarFrameSolver
             nodeIndex[member.Start] * 3 + 2, nodeIndex[member.End] * 3,
             nodeIndex[member.End] * 3 + 1, nodeIndex[member.End] * 3 + 2 };
         return new(member, dofs, local, transform, global, segments, c, s, subStiffness, unreleased, recovery,
-            properties.ReleaseStartRotation, properties.ReleaseEndRotation, fractionStart, fractionEnd);
+            properties.ReleaseStartRotation, properties.ReleaseEndRotation, fractionStart, fractionEnd, length, interiorFlexibility);
     }
 
+    /// <summary>Member loads of one frame piece for one case, in the piece's local axes: consistent nodal loads on
+    /// every mesh node, the fixed-end load vector of each sub-element, and the condensed end-joint load (before
+    /// releases) used to recover a released end rotation.</summary>
+    private sealed record PieceLoad(double[] Nodes, double[][] SubElements, double[] CondensedEnds);
+
     /// <summary>Local displacements (u, w, θ) of every mesh node of a frame, from the end-joint solution.</summary>
-    private static double[] MeshNodeDisplacements(FrameElement frame, IReadOnlyList<double> displacement)
+    private static double[] MeshNodeDisplacements(FrameElement frame, IReadOnlyList<double> displacement, PieceLoad? load)
     {
         var ends = ToLocalDisplacement(frame.Transform, frame.Dofs, displacement);
         // A released end rotation is the member's own rotation, not the joint's: recover it from the unreleased
-        // condensed stiffness with zero end moment at the released end(s).
+        // condensed stiffness with zero end moment at the released end(s), including any member load on the piece.
         var released = new List<int>();
         if (frame.ReleaseStart) released.Add(2);
         if (frame.ReleaseEnd) released.Add(5);
@@ -492,7 +748,8 @@ public sealed class PlanarFrameSolver
         {
             var others = Enumerable.Range(0, 6).Except(released).ToArray();
             var krr = DenseMatrix.Create(released.Count, released.Count, (row, col) => frame.UnreleasedStiffness[released[row], released[col]]);
-            var rhs = DenseVector.Create(released.Count, row => -others.Sum(col => frame.UnreleasedStiffness[released[row], col] * ends[col]));
+            var rhs = DenseVector.Create(released.Count, row => (load?.CondensedEnds[released[row]] ?? 0) -
+                others.Sum(col => frame.UnreleasedStiffness[released[row], col] * ends[col]));
             var rotations = krr.Solve(rhs);
             for (var index = 0; index < released.Count; index++) ends[released[index]] = rotations[index];
         }
@@ -502,9 +759,13 @@ public sealed class PlanarFrameSolver
             nodes[index] = ends[index];
             nodes[nodes.Length - 3 + index] = ends[3 + index];
         }
+        // Interior nodes: u_i = K_ii⁻¹ f_i − K_ii⁻¹ K_ie u_e.
+        var interiorLoad = load is not null && frame.InteriorFlexibility is { } flexibility
+            ? flexibility * DenseVector.OfArray(load.Nodes.Skip(3).Take(nodes.Length - 6).ToArray())
+            : null;
         for (var row = 0; row < frame.InteriorRecovery.GetLength(0); row++)
         {
-            var value = 0.0;
+            var value = interiorLoad?[row] ?? 0;
             for (var col = 0; col < 6; col++) value += frame.InteriorRecovery[row, col] * ends[col];
             nodes[3 + row] = value;
         }
@@ -513,19 +774,24 @@ public sealed class PlanarFrameSolver
 
     /// <summary>One result per SAP frame, with stations from every piece (split at intermediate joints) and mesh node.
     /// Stations repeat at a piece boundary so a jump in shear or axial force where a member connects stays visible.</summary>
-    private static FemFrameResponse FrameResponse(IReadOnlyList<FrameElement> pieces, IReadOnlyList<double> displacement)
+    private static FemFrameResponse FrameResponse(IReadOnlyList<FrameElement> pieces, IReadOnlyList<double> displacement,
+        IReadOnlyDictionary<FrameElement, PieceLoad> loads)
     {
         var stations = new List<FemFrameStation>();
         double[] firstForces = [];
         double[] lastForces = [];
         foreach (var frame in pieces)
         {
-            var nodes = MeshNodeDisplacements(frame, displacement);
+            var load = loads.GetValueOrDefault(frame);
+            var nodes = MeshNodeDisplacements(frame, displacement, load);
             var pieceStations = new FemFrameStation[frame.Segments + 1];
             double[] pieceFirst = [];
             for (var segment = 0; segment < frame.Segments; segment++)
             {
+                // Sub-element end forces = k·d − fixed-end load vector.
                 var forces = Multiply(frame.SubStiffness, nodes.Skip(3 * segment).Take(6).ToArray());
+                if (load is not null)
+                    for (var index = 0; index < 6; index++) forces[index] -= load.SubElements[segment][index];
                 if (segment == 0) pieceFirst = forces;
                 lastForces = forces;
                 pieceStations[segment + 1] = Station(frame, nodes, segment + 1, forces[3], -forces[4], forces[5]);
@@ -559,7 +825,7 @@ public sealed class PlanarFrameSolver
         var dofs = new[] { nodeIndex[member.Start] * 3, nodeIndex[member.Start] * 3 + 1,
             nodeIndex[member.End] * 3, nodeIndex[member.End] * 3 + 1 };
         var axial = properties.ElasticModulusKNPerM2 * properties.AreaM2 / length;
-        return new(member, dofs, c, s, axial, pretensionKN);
+        return new(member, dofs, c, s, axial, pretensionKN, length);
     }
 
     private static (double C, double S, double Length) Direction(StructuralMember member, IReadOnlyDictionary<string, Position> points)
@@ -731,7 +997,8 @@ public sealed class PlanarFrameSolver
     private sealed record FrameElement(StructuralMember Member, int[] Dofs, double[,] LocalStiffness,
         double[,] Transform, double[,] GlobalStiffness, int Segments, double C, double S, double[,] SubStiffness,
         double[,] UnreleasedStiffness, double[,] InteriorRecovery, bool ReleaseStart, bool ReleaseEnd,
-        double FractionStart, double FractionEnd);
+        double FractionStart, double FractionEnd, double Length,
+        MathNet.Numerics.LinearAlgebra.Matrix<double>? InteriorFlexibility);
     private sealed record CableElement(StructuralMember Member, int[] Dofs, double C, double S,
-        double AxialStiffness, double InitialPretensionKN);
+        double AxialStiffness, double InitialPretensionKN, double Length);
 }

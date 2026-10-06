@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using COT_VCF.Application;
 using COT_VCF.Domain;
 using COT_VCF.Geometry;
@@ -59,7 +60,23 @@ public partial class Structural2DViewer : UserControl
     /// <summary>In the axial-force result view, label frame axial forces and cable tensions in whole kN.</summary>
     public bool ShowAxialValues { get => (bool)GetValue(ShowAxialValuesProperty); set => SetValue(ShowAxialValuesProperty, value); }
 
-    private void Fit(object sender, RoutedEventArgs e) => Canvas.Fit();
+    public static readonly DependencyProperty MemberSectionsProperty = DependencyProperty.Register(nameof(MemberSections),
+        typeof(IReadOnlyDictionary<string, FemSectionProperties>), typeof(Structural2DViewer),
+        new PropertyMetadata(null, (d, _) => ((Structural2DViewer)d).Rebuild3D(keepCamera: true)));
+    /// <summary>SAP section data per member (shape, local-axis angle, area) for the to-scale 3D view.</summary>
+    public IReadOnlyDictionary<string, FemSectionProperties>? MemberSections
+    {
+        get => (IReadOnlyDictionary<string, FemSectionProperties>?)GetValue(MemberSectionsProperty);
+        set => SetValue(MemberSectionsProperty, value);
+    }
+
+    private bool Is3D => View3DHost?.Visibility == Visibility.Visible;
+
+    private void Fit(object sender, RoutedEventArgs e)
+    {
+        if (Is3D) Fit3D();
+        else Canvas.Fit();
+    }
     private void ResetView(object sender, RoutedEventArgs e)
     {
         Plane.SelectedIndex = 1; // XZ, the workflow default
@@ -69,8 +86,115 @@ public partial class Structural2DViewer : UserControl
     private void PlaneChanged(object sender, SelectionChangedEventArgs e)
     {
         if (Canvas is null) return;
-        Canvas.Plane = ((ComboBoxItem)Plane.SelectedItem).Content.ToString()!;
+        var plane = ((ComboBoxItem)Plane.SelectedItem).Content.ToString()!;
+        var show3D = plane == "3D";
+        View3DHost.Visibility = show3D ? Visibility.Visible : Visibility.Collapsed;
+        Canvas.Visibility = show3D ? Visibility.Collapsed : Visibility.Visible;
+        if (show3D)
+        {
+            azimuthDeg = -45; elevationDeg = 35.264; // true isometric
+            Rebuild3D(keepCamera: false);
+            return;
+        }
+        Canvas.Plane = plane;
         Canvas.Fit();
+    }
+
+    protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.Property == ModelProperty) Rebuild3D(keepCamera: false);
+    }
+
+    // ---- 3D view: orthographic camera orbiting the model centre ----
+    private double azimuthDeg = -45, elevationDeg = 35.264, viewWidth = 10;
+    private Point3D target;
+    private Point? dragStart;
+    private bool panning;
+
+    private void Rebuild3D(bool keepCamera)
+    {
+        if (!Is3D || Structure3D is null) return;
+        var scene = StructureModel3D.Build(Model, MemberSections);
+        Structure3D.Content = scene.Model;
+        View3DInfo.Text = MemberSections is null
+            ? "Isometric 3D · member sizes not read — use Read from SAP (FEM → Inputs) for to-scale sections · drag rotate · right-drag pan · wheel zoom · double-click fit"
+            : $"Isometric 3D · to scale · {scene.FramesWithSapShape} frames with SAP section dimensions" +
+              (scene.FramesApproximated > 0 ? $", {scene.FramesApproximated} as equivalent solid (same A, I)" : "") +
+              " · drag rotate · right-drag pan · wheel zoom · double-click fit";
+        if (!keepCamera || scene.Bounds.IsEmpty) Fit3D();
+        else UpdateCamera();
+    }
+
+    private void Fit3D()
+    {
+        if (Structure3D?.Content is not Model3D model || model.Bounds.IsEmpty) { UpdateCamera(); return; }
+        var bounds = model.Bounds;
+        target = new Point3D(bounds.X + bounds.SizeX / 2, bounds.Y + bounds.SizeY / 2, bounds.Z + bounds.SizeZ / 2);
+        var diagonal = Math.Sqrt(bounds.SizeX * bounds.SizeX + bounds.SizeY * bounds.SizeY + bounds.SizeZ * bounds.SizeZ);
+        // The orthographic camera width is horizontal; the visible height is width / aspect. Fit the bounding-sphere
+        // diameter in both directions.
+        var aspect = View3DHost.ActualHeight > 0 ? View3DHost.ActualWidth / View3DHost.ActualHeight : 1.6;
+        viewWidth = Math.Max(1e-3, diagonal * 1.08 * Math.Max(1, aspect));
+        UpdateCamera();
+    }
+
+    private void UpdateCamera()
+    {
+        if (Camera3D is null) return;
+        var azimuth = azimuthDeg * Math.PI / 180;
+        var elevation = elevationDeg * Math.PI / 180;
+        // Looking from (cos az·cos el, sin az·cos el, sin el) towards the target; Z stays up.
+        var from = new Vector3D(Math.Cos(azimuth) * Math.Cos(elevation), Math.Sin(azimuth) * Math.Cos(elevation), Math.Sin(elevation));
+        Camera3D.Position = target + from * viewWidth * 10;
+        Camera3D.LookDirection = -from;
+        Camera3D.Width = viewWidth;
+    }
+
+    private void View3DMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2) { Fit3D(); return; }
+        dragStart = e.GetPosition(View3DHost);
+        panning = e.ChangedButton == MouseButton.Right || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        View3DHost.CaptureMouse();
+    }
+
+    private void View3DMouseMove(object sender, MouseEventArgs e)
+    {
+        if (dragStart is not { } start || !View3DHost.IsMouseCaptured) return;
+        var now = e.GetPosition(View3DHost);
+        var delta = now - start;
+        dragStart = now;
+        if (panning)
+        {
+            // Move the target in the camera's screen plane.
+            var look = Camera3D.LookDirection; look.Normalize();
+            var right = Vector3D.CrossProduct(look, new Vector3D(0, 0, 1));
+            if (right.Length < 1e-9) right = new Vector3D(1, 0, 0);
+            right.Normalize();
+            var up = Vector3D.CrossProduct(right, look);
+            var metresPerPixel = viewWidth / Math.Max(1, View3DHost.ActualWidth);
+            target += (-right * delta.X + up * delta.Y) * metresPerPixel;
+        }
+        else
+        {
+            azimuthDeg -= delta.X * 0.4;
+            elevationDeg = Math.Clamp(elevationDeg + delta.Y * 0.4, -89, 89);
+        }
+        UpdateCamera();
+    }
+
+    private void View3DMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        dragStart = null;
+        if (View3DHost.IsMouseCaptured) View3DHost.ReleaseMouseCapture();
+    }
+
+    private void View3DMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        viewWidth = Math.Max(1e-3, viewWidth * (e.Delta > 0 ? 1 / 1.15 : 1.15));
+        UpdateCamera();
+        e.Handled = true;
     }
 }
 
@@ -255,7 +379,13 @@ public sealed class ModelCanvas : FrameworkElement
             foreach (var name in PinSupportPoints ?? [])
                 if (screenPoints.TryGetValue(name, out var support)) DrawPinSupport(dc, support);
 
-            if (FemResult is { } femResult) DrawFemResultOverlay(dc, screenPoints, femResult, FemResultMode);
+            if (FemResult is { } femResult)
+            {
+                DrawFemResultOverlay(dc, screenPoints, femResult, FemResultMode);
+                CollectHoverTargets(screenPoints, femResult);
+                DrawHover(dc);
+            }
+            else hoverTargets.Clear();
 
             if (ShowPointLabels)
                 foreach (var item in screenPoints.OrderBy(item => item.Key))
@@ -691,11 +821,169 @@ public sealed class ModelCanvas : FrameworkElement
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        if (last is not { } point || !IsMouseCaptured) return;
         var next = e.GetPosition(this);
+        if (last is not { } point || !IsMouseCaptured)
+        {
+            // Hover read-out of FEM results at the section under the cursor.
+            if (FemResult is null && hoverCursor is null) return;
+            hoverCursor = next;
+            InvalidateVisual();
+            return;
+        }
         pan += next - point;
         last = next;
         InvalidateVisual();
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (hoverCursor is null) return;
+        hoverCursor = null;
+        InvalidateVisual();
+    }
+
+    private abstract record HoverTarget;
+    private sealed record FrameHover(StructuralMember Member, FemFrameResponse Result, Point Start, Point End, double LengthM) : HoverTarget;
+    private sealed record CableHover(StructuralMember Member, FemCableResponse Result, Point Start, Point End) : HoverTarget;
+    private sealed record SupportHover(FemSupportReaction Result, Point Point) : HoverTarget;
+
+    private readonly List<HoverTarget> hoverTargets = [];
+    private Point? hoverCursor;
+    private const double HoverRadius = 10;
+
+    private void CollectHoverTargets(IReadOnlyDictionary<string, Point> screenPoints, FemAnalysisResult result)
+    {
+        hoverTargets.Clear();
+        var frames = result.Frames.ToDictionary(frame => frame.MemberName, StringComparer.Ordinal);
+        var cables = result.Cables.ToDictionary(cable => cable.MemberName, StringComparer.Ordinal);
+        foreach (var member in Model.Members)
+        {
+            if (!screenPoints.TryGetValue(member.Start, out var start) || !screenPoints.TryGetValue(member.End, out var end)) continue;
+            if (member.Kind == MemberKind.Frame && frames.TryGetValue(member.Name, out var frame))
+            {
+                var a = Model.Points[member.Start].Position;
+                var b = Model.Points[member.End].Position;
+                hoverTargets.Add(new FrameHover(member, frame, start, end, Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Z - a.Z, 2))));
+            }
+            else if (member.Kind == MemberKind.Cable && cables.TryGetValue(member.Name, out var cable))
+                hoverTargets.Add(new CableHover(member, cable, start, end));
+        }
+        foreach (var reaction in result.SupportReactions)
+            if (screenPoints.TryGetValue(reaction.PointName, out var point)) hoverTargets.Add(new SupportHover(reaction, point));
+    }
+
+    private void DrawHover(DrawingContext dc)
+    {
+        if (hoverCursor is not { } cursor) return;
+        // Supports win over members when both are within reach (a pin sits at the end of a column).
+        var support = hoverTargets.OfType<SupportHover>().Where(item => (item.Point - cursor).Length <= HoverRadius + 6)
+            .MinBy(item => (item.Point - cursor).Length);
+        if (support is not null)
+        {
+            HoverMarker(dc, support.Point);
+            HoverBox(dc, cursor, $"Support {support.Result.PointName}",
+                [$"Rx  {support.Result.ReactionXKN,10:0.0} kN", $"Rz  {support.Result.ReactionZKN,10:0.0} kN"]);
+            return;
+        }
+        var nearest = hoverTargets
+            .Select(target => target switch
+            {
+                FrameHover frame => (Target: target, Hit: Nearest(cursor, frame.Start, frame.End)),
+                CableHover cable => (Target: target, Hit: Nearest(cursor, cable.Start, cable.End)),
+                _ => (Target: target, Hit: (Fraction: 0.0, Distance: double.PositiveInfinity, Point: cursor))
+            })
+            .Where(item => item.Hit.Distance <= HoverRadius)
+            .OrderBy(item => item.Hit.Distance)
+            .FirstOrDefault();
+        switch (nearest.Target)
+        {
+            case FrameHover frame:
+            {
+                var section = SectionAt(frame.Result, nearest.Hit.Fraction);
+                DrawSectionCut(dc, frame.Start, frame.End, nearest.Hit.Point);
+                HoverBox(dc, cursor, $"{frame.Member.Name}  x = {nearest.Hit.Fraction * frame.LengthM:0.000} m  ({nearest.Hit.Fraction * 100:0}%)",
+                [
+                    $"N   {section.AxialKN,10:0.0} kN",
+                    $"V   {section.ShearKN,10:0.0} kN",
+                    $"M   {section.MomentKNm,10:0.0} kN·m",
+                    $"ux  {section.UXM * 1000,10:0.00} mm",
+                    $"uz  {section.UZM * 1000,10:0.00} mm"
+                ]);
+                break;
+            }
+            case CableHover cable:
+                HoverMarker(dc, nearest.Hit.Point);
+                HoverBox(dc, cursor, $"{cable.Member.Name} (cable)",
+                [
+                    $"T   {cable.Result.AxialForceKN,10:0.0} kN" + (cable.Result.Active ? "" : "  slack"),
+                    .. cable.Result.TargetForceKN > 0 ? new[] { $"Target {cable.Result.TargetForceKN,7:0.0} kN" } : []
+                ]);
+                break;
+        }
+    }
+
+    /// <summary>Linear interpolation between the mesh stations bracketing the fraction (stations repeat at the joints
+    /// where a frame is split; the piece containing the fraction is used).</summary>
+    private static FemFrameStation SectionAt(FemFrameResponse frame, double fraction)
+    {
+        var stations = frame.Stations is { Count: > 1 } list ? list :
+        [
+            new(0, frame.AxialStartKN, frame.ShearStartKN, frame.MomentStartKNm, 0, 0),
+            new(1, frame.AxialEndKN, frame.ShearEndKN, frame.MomentEndKNm, 0, 0)
+        ];
+        for (var index = 1; index < stations.Count; index++)
+        {
+            var a = stations[index - 1];
+            var b = stations[index];
+            if (b.Fraction <= a.Fraction || fraction > b.Fraction && index < stations.Count - 1) continue;
+            var t = Math.Clamp((fraction - a.Fraction) / (b.Fraction - a.Fraction), 0, 1);
+            double Lerp(double from, double to) => from + (to - from) * t;
+            return new(fraction, Lerp(a.AxialKN, b.AxialKN), Lerp(a.ShearKN, b.ShearKN), Lerp(a.MomentKNm, b.MomentKNm),
+                Lerp(a.UXM, b.UXM), Lerp(a.UZM, b.UZM));
+        }
+        return stations[^1];
+    }
+
+    private static (double Fraction, double Distance, Point Point) Nearest(Point point, Point start, Point end)
+    {
+        var segment = end - start;
+        var lengthSquared = segment.X * segment.X + segment.Y * segment.Y;
+        if (lengthSquared <= double.Epsilon) return (0, (point - start).Length, start);
+        var t = Math.Clamp(((point - start).X * segment.X + (point - start).Y * segment.Y) / lengthSquared, 0, 1);
+        var onSegment = start + segment * t;
+        return (t, (point - onSegment).Length, onSegment);
+    }
+
+    private void DrawSectionCut(DrawingContext dc, Point start, Point end, Point at)
+    {
+        var direction = end - start;
+        if (direction.Length < 1) return;
+        direction.Normalize();
+        var normal = new Vector(-direction.Y, direction.X);
+        dc.DrawLine(new Pen(Brush("Error"), 1.5) { DashStyle = DashStyles.Dash }, at - normal * 14, at + normal * 14);
+        HoverMarker(dc, at);
+    }
+
+    private void HoverMarker(DrawingContext dc, Point at) =>
+        dc.DrawEllipse(Brush("Error"), new Pen(Brush("ViewportBg"), 1.5), at, 4, 4);
+
+    private void HoverBox(DrawingContext dc, Point cursor, string title, IReadOnlyList<string> lines)
+    {
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var heading = new FormattedText(title, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal), 11, Brush("Text"), dpi);
+        var body = new FormattedText(string.Join("\n", lines), CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface("Consolas"), 11, Brush("Text"), dpi);
+        var width = Math.Max(heading.Width, body.Width) + 16;
+        var height = heading.Height + body.Height + 14;
+        // Keep the box inside the viewport, preferring below-right of the cursor.
+        var x = cursor.X + 16 + width > ActualWidth ? cursor.X - 16 - width : cursor.X + 16;
+        var y = cursor.Y + 16 + height > ActualHeight ? cursor.Y - 16 - height : cursor.Y + 16;
+        var box = new Rect(Math.Max(4, x), Math.Max(4, y), width, height);
+        dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(240, 255, 255, 255)), new Pen(Brush("AccentBright"), 1), box, 3, 3);
+        dc.DrawText(heading, new Point(box.X + 8, box.Y + 5));
+        dc.DrawText(body, new Point(box.X + 8, box.Y + 9 + heading.Height));
     }
 
     protected override void OnMouseUp(MouseButtonEventArgs e)

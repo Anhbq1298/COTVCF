@@ -24,9 +24,14 @@ public partial class MainWindow : Window
         Left = work.Left + (work.Width - Width) / 2;
         Top = work.Top + (work.Height - Height) / 2;
 
-        DataContextChanged += (_, _) =>
+        DataContextChanged += (_, e) =>
         {
-            if (DataContext is MainViewModel vm) vm.CommitEditors = CommitEditors;
+            if (e.OldValue is MainViewModel old) old.FemAnalysisStarted -= OpenFemMonitor;
+            if (DataContext is MainViewModel vm)
+            {
+                vm.CommitEditors = CommitEditors;
+                vm.FemAnalysisStarted += OpenFemMonitor;
+            }
         };
         Loaded += (_, _) => ApplyViewerLayout();
     }
@@ -226,16 +231,37 @@ public partial class MainWindow : Window
         return false;
     }
 
-    private void ShowHelp(object sender, RoutedEventArgs e) => MessageBox.Show(this,
-        "1. Connect to a running SAP2000 model from the top bar and load geometry.\n" +
-        "2. Tab 01: select Point Objects in SAP2000, add them as applied points, and define loading criteria.\n" +
-        "3. Tab 02: select level chord groups, capture a baseline and preview height changes.\n" +
-        "4. Tab 03: select SAP cable objects and define PRETENSION target-force candidates.\n" +
-        "5. Tab 04: define deflection points, member-force groups, foundation reactions, and monitored cables/result case. No SAP group write occurs while editing.\n" +
-        "6. Tab 05: select study rows and 1-3 total SAP2000 instances. Run first prepares [O]- groups on the parent baseline and saves it, then workers create children from that prepared parent.\n" +
-        "7. Each worker is sequential; workers run in parallel and reopen the immutable baseline before every candidate.\n\n" +
-        "Viewer: mouse wheel zooms, drag pans, double-click or Home fits.\n" +
-        "Each child runs the load cases enabled in SAP2000, is verified, and its monitored-point deflection is extracted for Tab 06.\n" +
-        "A candidate whose child model already exists (e.g. from an overlapping study mode) is reused - opened, verified and re-extracted - never rebuilt or overwritten. Delete its iteration folder to force a rebuild.",
-        "COT VCF Parametric Automation — Help", MessageBoxButton.OK, MessageBoxImage.Information);
+    private HelpWindow? helpWindow;
+    private void ShowHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.Workflow);
+
+    private void ShowFemHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.FemProcedure);
+
+    private void ShowHelpTopic(HelpWindow.Topic topic)
+    {
+        if (helpWindow is null)
+        {
+            helpWindow = new HelpWindow { Owner = this };
+            helpWindow.Closed += (_, _) => helpWindow = null;
+            helpWindow.Show();
+        }
+        helpWindow.Select(topic);
+        helpWindow.Activate();
+    }
+
+    private FemRunMonitorWindow? femMonitor;
+    private void OpenFemMonitor(object? sender, EventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        vm.PrepareFemMonitor();
+        if (femMonitor is null)
+        {
+            femMonitor = new FemRunMonitorWindow(vm) { Owner = this };
+            femMonitor.Closed += (_, _) => femMonitor = null;
+            femMonitor.Show();
+        }
+        else if (femMonitor.WindowState == WindowState.Minimized) femMonitor.WindowState = WindowState.Normal;
+        femMonitor.Activate();
+    }
+
+    private void OpenFemMonitorClick(object sender, RoutedEventArgs e) => OpenFemMonitor(sender, e);
 }

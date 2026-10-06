@@ -1,0 +1,157 @@
+<Window x:Class="COT_VCF.Presentation.HelpWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="COT VCF Parametric Automation — Help" Icon="{StaticResource AppLogo}" Width="860" Height="760" MinWidth="560" MinHeight="420"
+        Background="{StaticResource Background}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+ <Window.Resources>
+  <Style TargetType="Paragraph"><Setter Property="Margin" Value="0,0,0,8"/><Setter Property="LineHeight" Value="19"/></Style>
+  <Style x:Key="H1" TargetType="Paragraph"><Setter Property="FontSize" Value="18"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Margin" Value="0,0,0,10"/></Style>
+  <Style x:Key="H2" TargetType="Paragraph"><Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Margin" Value="0,14,0,6"/><Setter Property="Foreground" Value="{StaticResource Accent}"/></Style>
+  <Style x:Key="Formula" TargetType="Paragraph"><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="Margin" Value="18,2,0,8"/><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Padding" Value="8,4"/></Style>
+  <Style TargetType="List"><Setter Property="Margin" Value="0,0,0,8"/><Setter Property="Padding" Value="20,0,0,0"/></Style>
+  <Style TargetType="FlowDocument"><Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="12.5"/><Setter Property="PagePadding" Value="22,16"/><Setter Property="Background" Value="White"/></Style>
+ </Window.Resources>
+ <TabControl x:Name="Topics" Margin="8" TabStripPlacement="Top">
+  <TabControl.Resources>
+   <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+    <Setter Property="Height" Value="28"/>
+    <Setter Property="Width" Value="130"/>
+   </Style>
+  </TabControl.Resources>
+
+  <!-- ===================== WORKFLOW ===================== -->
+  <TabItem Header="Workflow">
+   <FlowDocumentScrollViewer VerticalScrollBarVisibility="Auto">
+    <FlowDocument>
+     <Paragraph Style="{StaticResource H1}">Workflow</Paragraph>
+     <List MarkerStyle="Decimal">
+      <ListItem><Paragraph>Connect to a running SAP2000 model from the top bar and load geometry.</Paragraph></ListItem>
+      <ListItem><Paragraph>Tab 01: select Point Objects in SAP2000, add them as applied points, and define loading criteria.</Paragraph></ListItem>
+      <ListItem><Paragraph>Tab 02: select level chord groups, capture a baseline and preview height changes.</Paragraph></ListItem>
+      <ListItem><Paragraph>Tab 03: select SAP cable objects and define PRETENSION target-force candidates.</Paragraph></ListItem>
+      <ListItem><Paragraph>Tab 04: define deflection points, member-force groups, foundation reactions, and monitored cables/result case. No SAP group write occurs while editing.</Paragraph></ListItem>
+      <ListItem><Paragraph>Tab 05: select study rows and 1-3 total SAP2000 instances. Run first prepares [O]- groups on the parent baseline and saves it, then workers create children from that prepared parent.</Paragraph></ListItem>
+      <ListItem><Paragraph>Each worker is sequential; workers run in parallel and reopen the immutable baseline before every candidate.</Paragraph></ListItem>
+      <ListItem><Paragraph>Tab 07 FEM: an internal 2D analysis of the full Tab 01-03 candidate space without running SAP2000 — see the FEM procedure topic.</Paragraph></ListItem>
+     </List>
+     <Paragraph>Viewer: mouse wheel zooms, drag pans, double-click or Home fits. With FEM results shown, hover over a member to read the section result.</Paragraph>
+     <Paragraph>Each child runs the load cases enabled in SAP2000, is verified, and its monitored-point deflection is extracted for Tab 06.</Paragraph>
+     <Paragraph>A candidate whose child model already exists (e.g. from an overlapping study mode) is reused — opened, verified and re-extracted — never rebuilt or overwritten. Delete its iteration folder to force a rebuild.</Paragraph>
+    </FlowDocument>
+   </FlowDocumentScrollViewer>
+  </TabItem>
+
+  <!-- ===================== FEM PROCEDURE ===================== -->
+  <TabItem Header="FEM procedure">
+   <FlowDocumentScrollViewer VerticalScrollBarVisibility="Auto">
+    <FlowDocument>
+     <Paragraph Style="{StaticResource H1}">Tab 07 FEM — analysis procedure</Paragraph>
+     <Paragraph>The FEM tab analyses every Tab 01 loading × Tab 02 height × Tab 03 pretension combination with an internal two-dimensional
+      frame solver. It reads section and material data from the connected SAP2000 model but never writes to it, and it does not run SAP2000.
+      Units are kN and m throughout.</Paragraph>
+
+     <Paragraph Style="{StaticResource H2}">1. Structural model</Paragraph>
+     <List>
+      <ListItem><Paragraph><Bold>Plane:</Bold> all analysed joints must lie in one XZ plane (Y within 0.1 µm). Three degrees of freedom per joint: UX, UZ and rotation RY.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Frames:</Bold> linear-elastic Euler–Bernoulli beam-columns. A, E and the in-plane I come from the assigned SAP section and material,
+       including SAP property modifiers (A × m1, I22 × m5, I33 × m6) and the frame's local-axis orientation. SAP end-moment releases (M3 at I and/or J) are honoured.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Cables:</Bold> tension-only axial members, stiffness EA/L. A cable never carries compression: when its force would become negative it goes slack and is removed from the stiffness.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Supports:</Bold> pins detected automatically at the lowest joints of near-vertical frame members; UX and UZ fixed, rotation free.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Mass and self-weight:</Bold> unit weight γ and mass ρ come from the SAP material; self-weight per length = γ × gross A × weight modifier
+       (mass = ρ × A × mass modifier, shown on Inputs → Sectional properties). Frame stiffness uses A × m1 and I × m5/m6; cable stiffness uses A × the cable area modifier.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Loads:</Bold> see section 3a — SAP load patterns, cases and combinations, plus the Tab 01 study loads.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Theory:</Bold> small displacements — no P-Δ, no large-displacement geometry update and no cable sag.</Paragraph></ListItem>
+     </List>
+
+     <Paragraph Style="{StaticResource H2}">2. Frame splitting and meshing</Paragraph>
+     <Paragraph>As in SAP2000, a frame is first split at every member-end joint that lies on it (within 1 mm), so verticals and cable anchors along a
+      full-length chord connect to it. Each piece is then divided into N equal sub-elements (Analysis → <Italic>Frame mesh</Italic>, default 10).
+      Cables are never split or meshed.</Paragraph>
+     <Paragraph>The interior mesh nodes carry no load and connect only to their frame, so they are statically condensed onto the frame's end joints:</Paragraph>
+     <Paragraph Style="{StaticResource Formula}">K_condensed = K_ee − K_ei · K_ii⁻¹ · K_ie</Paragraph>
+     <Paragraph>This is exact and keeps the global system the size of the original model. After the solve, the mesh-node displacements are recovered
+      (u_i = −K_ii⁻¹ K_ie u_e) and give the axial force, shear, moment and displacement at every station along the frame — used by the diagrams,
+      the curved deflected shape and the hover read-out. For joint loads only, meshing does not change joint displacements or member-end forces.</Paragraph>
+
+     <Paragraph Style="{StaticResource H2}">3. Candidate cases</Paragraph>
+     <Paragraph>Case IDs combine the three axes, e.g. <Run FontFamily="{StaticResource MonoFont}">L02_H03_P05</Run> = loading row 2, height 3, pretension combination 5.
+      For each case the Tab 02 chord offsets are applied to the baseline geometry, then the two stages below are solved.</Paragraph>
+
+     <Paragraph Style="{StaticResource H2}">3a. Load patterns, load cases and combinations (Inputs → Loads)</Paragraph>
+     <Paragraph><Italic>Read from SAP</Italic> imports, read-only, the model's load patterns (type and self-weight multiplier), every load assigned to the analysed
+      joints, frames and cables, its static load cases and its response combinations. They can then be edited here — self-weight multiplier, case
+      definition (e.g. <Run FontFamily="{StaticResource MonoFont}">1 DEAD + 1 PT</Run>), combination factors and which to run — without changing SAP.</Paragraph>
+     <List>
+      <ListItem><Paragraph><Bold>Pattern loads:</Bold> joint F1, F3 and M2 (global); frame distributed and point loads in local 1/2, global X/Z, projected X/Z and
+       gravity directions; SAP gravity-load assignments (multiples of self-weight); cable distributed and gravity loads (lumped to the cable ends).
+       Out-of-plane components, moment loads on members and non-global coordinate systems are ignored and listed as warnings.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Member loads on the mesh:</Bold> converted to consistent nodal loads on every mesh node (Hermite shape functions, integrated exactly),
+       condensed with the stiffness, and subtracted as fixed-end forces when the station forces are recovered — so diagrams show the true load effect along the member.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Tab 01 study loads:</Bold> in a Tab 01 load pattern, SAP joint forces at the applied points are replaced by the candidate's loads, as the SAP study writes them.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Load cases:</Bold> each linear or nonlinear static case is solved as its own tension-only equilibrium. A nonlinear case that
+       continues from another includes that case's loads (staged). A case that includes a Tab 03 target-force pattern carries the fitted pretension × its factor;
+       a case without it has no cable pretension. (SAP treats cables in a linear case as linear; here cables are always tension-only.)</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Combinations:</Bold> linear additive combinations are evaluated as the factored sum of case (or nested combination) results, as SAP does.
+       Envelope, absolute, SRSS and range combinations are listed but not evaluated.</Paragraph></ListItem>
+      <ListItem><Paragraph>If no SAP case uses the Tab 03 or Tab 01 patterns, the app adds <Run FontFamily="{StaticResource MonoFont}">FEM_PT</Run> (target-force pattern alone)
+       and <Run FontFamily="{StaticResource MonoFont}">FEM_TAB01</Run> (Tab 01 loads, continuing from the pretension case) so the study loads always act on the prestressed structure.</Paragraph></ListItem>
+      <ListItem><Paragraph>On Results, <Italic>Load case / combo</Italic> chooses which result the table, viewer, hover read-out and the Cable target fit Result column show.</Paragraph></ListItem>
+     </List>
+
+     <Paragraph Style="{StaticResource H2}">4. Stage 1 — cable pretension fitting (SAP "Target Force")</Paragraph>
+     <Paragraph>Each Tab 03 value is a <Italic>target</Italic> tension P_preset, not a load. SAP2000 meets a Target Force at the end of the load case in which
+      the target-force pattern is applied, so the solver finds the applied pretensions P_applied that produce the targets under <Bold>the other loads of that case</Bold>
+      (none, for a pretension-only case such as FEM_PT; e.g. self-weight if the case also holds DEAD):</Paragraph>
+     <List MarkerStyle="Decimal">
+      <ListItem><Paragraph>Run 1: apply P_applied = P_preset to every cable and solve. Because the frame shortens under the pretension, P_result is usually below the target.</Paragraph></ListItem>
+      <ListItem><Paragraph>Build the response matrix J (how each cable's tension changes per kN of pretension in every cable) by finite differences — this captures the interaction between cables.</Paragraph></ListItem>
+      <ListItem><Paragraph>Correct all pretensions together: ΔP = J⁺ · (P_preset − P_result) (minimum-norm, so cable segments in series share the correction evenly); pretension is kept ≥ 0.</Paragraph></ListItem>
+      <ListItem><Paragraph>Repeat until every cable satisfies the tolerance, or until <Italic>Max iterations</Italic> runs (default 100).</Paragraph></ListItem>
+     </List>
+     <Paragraph Style="{StaticResource Formula}">| P_result / P_preset − 1 | ≤ tolerance (Analysis → Target-force fitting ±, default 10 %)</Paragraph>
+     <Paragraph>The pretension-only response is nearly linear, so this Newton procedure normally converges in 2–4 runs. If the targets cannot all be
+      met — for example opposing cables whose targets would need a negative (compressive) pretension in one of them — the closest result is kept, the case is
+      marked <Italic>Not fitted</Italic> with the reason, and the run continues.</Paragraph>
+
+     <Paragraph Style="{StaticResource H2}">5. Stage 2 — loaded equilibrium</Paragraph>
+     <Paragraph>Every load case is then solved with its loads and its share of the fitted pretension. The tension-only problem is solved by a damped
+      Newton method minimising total potential energy:</Paragraph>
+     <Paragraph Style="{StaticResource Formula}">Π(u) = ½ uᵀK_frames u + Σ_cables T(u)² / (2·EA/L) − fᵀu,   T(u) = max(0, P_applied + EA/L · Δℓ(u))</Paragraph>
+     <List>
+      <ListItem><Paragraph>Each iteration re-checks which cables are taut, solves for a step, then halves it (line search) until the energy decreases.</Paragraph></ListItem>
+      <ListItem><Paragraph>Slack cables keep a tiny stiffness (10⁻⁶ EA/L) in the step matrix only, and a growing diagonal (Levenberg) shift is tried if a step fails —
+       this keeps joints held only by slack or collinear cables solvable. Residual and energy use the true stiffness, so the converged answer is unchanged.</Paragraph></ListItem>
+      <ListItem><Paragraph>Converged when the largest free-DOF residual force ≤ 10⁻⁷ × the largest load or pretension (max 100 iterations). Because the energy is convex,
+       the result does not depend on load path, so "pretension then load" is solved in one step.</Paragraph></ListItem>
+     </List>
+     <Paragraph>A case that does not reach equilibrium is listed as <Italic>Failed</Italic> with its reason; the remaining cases still run.</Paragraph>
+
+     <Paragraph Style="{StaticResource H2}">6. Run monitor and convergence chart</Paragraph>
+     <Paragraph>Run Analysis opens the run monitor (reopen it with <Italic>Monitor</Italic>). It shows progress, a live log of each step and case, and the
+      convergence chart for the cable chosen under <Italic>Cable</Italic> (default Cable1a-2):</Paragraph>
+     <List>
+      <ListItem><Paragraph>x-axis — number of run (pretension-fitting iteration); run 0 is the unstressed state;</Paragraph></ListItem>
+      <ListItem><Paragraph>y-axis — P_result / P_preset; the line at 1 is the target and the shaded band is the ± tolerance.</Paragraph></ListItem>
+     </List>
+     <Paragraph>The chart follows each case as it completes; choose a <Italic>Case</Italic> to inspect a particular one.</Paragraph>
+
+     <Paragraph Style="{StaticResource H2}">7. Results and sign conventions</Paragraph>
+     <List>
+      <ListItem><Paragraph><Bold>Cable target fit</Bold> (Analysis): Target, Pretension (stage-1 tension), Dev. %, Status, Result (final tension under load), Applied P and fitting runs.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Axial force</Bold>: + tension, − compression. Cable tensions are labelled "T … kN".</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Bending moment and shear</Bold>: one convention along each frame from I to J, continuous across joints.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Reactions</Bold>: Rx (+ global X) and Rz (+ up) shown separately.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Displacements</Bold>: ux, uz in the global axes; the deflected shape is magnified for display only.</Paragraph></ListItem>
+     </List>
+
+     <Paragraph Style="{StaticResource H2}">8. Limitations — check critical results in SAP2000</Paragraph>
+     <List>
+      <ListItem><Paragraph>Planar, linear-elastic, small-displacement analysis; no P-Δ, buckling, cable sag or catenary effects.</Paragraph></ListItem>
+      <ListItem><Paragraph>Only static load cases and linear additive combinations; no temperature, settlement, moving, modal, response-spectrum or time-history analysis,
+       and no moment loads on members. Superposing tension-only cases in a combination is the same approximation SAP makes for combinations of nonlinear cases.</Paragraph></ListItem>
+      <ListItem><Paragraph>Tendon objects, partial-fixity releases and non-pinned supports are not modelled.</Paragraph></ListItem>
+      <ListItem><Paragraph>SAP2000 meets Target Force with its own iterative scheme; results should agree in the linear range but are not guaranteed identical.</Paragraph></ListItem>
+     </List>
+    </FlowDocument>
+   </FlowDocumentScrollViewer>
+  </TabItem>
+ </TabControl>
+</Window>

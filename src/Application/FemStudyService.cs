@@ -19,7 +19,13 @@ public sealed record FemStudyRun(
     string HeightCandidateId,
     string PretensionCandidateId,
     FemAnalysisResult Result,
-    IReadOnlyList<FemAppliedLoad>? Loads = null);
+    IReadOnlyList<FemAppliedLoad>? Loads = null,
+    IReadOnlyDictionary<string, FemAnalysisResult>? Results = null)
+{
+    /// <summary>The named load case / combination result, or <see cref="Result"/> when there is none by that name.</summary>
+    public FemAnalysisResult ResultFor(string? name) =>
+        name is not null && Results is not null && Results.TryGetValue(name, out var result) ? result : Result;
+}
 
 /// <summary>Target vs fitted pretension-stage tension (the deviation the fitting tolerance controls) and the final
 /// tension once the applied loads act on the prestressed structure.</summary>
@@ -35,10 +41,15 @@ public sealed record FemCableFitRow(string RunId, string CableName, double? Targ
     public static FemCableFitRow FailedCase(string runId, string reason) =>
         new(runId, "(all cables)", null, null, null, null, null, reason) { Failed = true };
 
-    public static IEnumerable<FemCableFitRow> FromRun(FemStudyRun run) => run.Result.Cables
-        .OrderBy(cable => cable.MemberName, StringComparer.Ordinal)
-        .Select(cable => new FemCableFitRow(run.Id, cable.MemberName, cable.TargetForceKN, cable.PretensionStageForceKN,
-            cable.AxialForceKN, cable.AppliedPretensionKN, run.Result.TargetFitIterations, run.Result.TargetFitFailure));
+    /// <summary>Rows for one case; Result is the cable tension under <paramref name="resultName"/> (case or combination).</summary>
+    public static IEnumerable<FemCableFitRow> FromRun(FemStudyRun run, string? resultName = null)
+    {
+        var result = run.ResultFor(resultName);
+        return result.Cables
+            .OrderBy(cable => cable.MemberName, StringComparer.Ordinal)
+            .Select(cable => new FemCableFitRow(run.Id, cable.MemberName, cable.TargetForceKN, cable.PretensionStageForceKN,
+                cable.AxialForceKN, cable.AppliedPretensionKN, result.TargetFitIterations, result.TargetFitFailure));
+    }
 }
 
 public enum FemResultMode { AxialForce, BendingMoment, Shear, Reactions, DeflectedShape }
@@ -117,7 +128,7 @@ public sealed class FemStudyService
         {
             var rows = StudyCompositionService.BuildPointLoads(state, combination);
             return (Id: StudyCompositionService.CandidateId('L', combination.Index),
-                Loads: (IReadOnlyList<FemAppliedLoad>)rows.Select(row => new FemAppliedLoad(row.AppliedPt, 0, row.FzKn)).ToArray());
+                Loads: (IReadOnlyList<FemAppliedLoad>)rows.Select(row => new FemAppliedLoad(row.AppliedPt, 0, row.FzKn, row.Case)).ToArray());
         }).ToArray();
         var heights = state.Truss.CandidateHeights.Select((height, index) =>
         {
@@ -191,7 +202,8 @@ public sealed class FemStudyService
         CancellationToken cancellationToken = default,
         double? targetFitPercent = null,
         int maximumTargetFitIterations = PlanarFrameSolver.DefaultTargetFitIterations,
-        int frameMeshSegments = 1)
+        int frameMeshSegments = 1,
+        FemLoadPlan? loadPlan = null)
     {
         if (frameMeshSegments is < 1 or > PlanarFrameSolver.MaximumFrameMeshSegments)
             throw new ArgumentOutOfRangeException(nameof(frameMeshSegments), $"Frame mesh must be between 1 and {PlanarFrameSolver.MaximumFrameMeshSegments} segments per frame.");
@@ -206,10 +218,21 @@ public sealed class FemStudyService
             var candidate = candidates[index];
             var geometry = geometryBuilder.BuildCandidateGeometry(baseline, topPoints, middlePoints, bottomPoints, candidate.Height);
             FemAnalysisResult result;
+            IReadOnlyDictionary<string, FemAnalysisResult>? results = null;
             try
             {
-                result = solver.Solve(geometry, frameProperties, cableProperties, candidate.PretensionTargetsKN,
-                    candidate.Loads, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments);
+                if (loadPlan is null)
+                    result = solver.Solve(geometry, frameProperties, cableProperties, candidate.PretensionTargetsKN,
+                        candidate.Loads, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments);
+                else
+                {
+                    // Load cases from the SAP model (as edited), then linear-additive combinations of their results.
+                    var (fitLoads, cases) = loadPlan.ForCandidate(candidate.Loads);
+                    var caseResults = solver.SolveCases(geometry, frameProperties, cableProperties, candidate.PretensionTargetsKN,
+                        fitLoads, cases, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments);
+                    results = loadPlan.Complete(caseResults);
+                    result = results[loadPlan.ResultNames[0]];
+                }
             }
             catch (InvalidOperationException ex)
             {
@@ -218,7 +241,7 @@ public sealed class FemStudyService
                 continue;
             }
             var run = new FemStudyRun(candidate.Id, candidate.LoadingCandidateId, candidate.HeightCandidateId,
-                candidate.PretensionCandidateId, result, candidate.Loads);
+                candidate.PretensionCandidateId, result, candidate.Loads, results);
             runs.Add(run);
             progress?.Report(new FemProgress(index + 1, candidates.Count, candidate.Id, run));
         }

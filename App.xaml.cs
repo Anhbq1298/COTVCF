@@ -13,6 +13,21 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // A UI-thread error must not silently close the app (and lose the SAP session): log it, report it, keep running.
+        DispatcherUnhandledException += (_, args) =>
+        {
+            var log = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "COTVCF", "error.log");
+            try
+            {
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(log)!);
+                System.IO.File.AppendAllText(log, $"{DateTime.Now:O}{Environment.NewLine}{args.Exception}{Environment.NewLine}{Environment.NewLine}");
+            }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+            MessageBox.Show(MainWindow, $"{args.Exception.Message}{Environment.NewLine}{Environment.NewLine}Details were written to {log}. " +
+                "The app is still running; save your work.", "COT VCF — unexpected error", MessageBoxButton.OK, MessageBoxImage.Error);
+            args.Handled = true;
+        };
         gateway = new();
         var state = new ApplicationState();
         var workflow = new WorkflowService(gateway, state);

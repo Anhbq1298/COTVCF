@@ -591,6 +591,8 @@ public sealed class SapGateway : ISapGateway
                 double[] modifiers = new double[8];
                 Check(Model.FrameObj.GetModifiers(member.Name, ref modifiers), "FrameObj.GetModifiers", member.Name);
                 if (modifiers.Length < 6) throw new InvalidOperationException($"SAP returned incomplete stiffness modifiers for frame '{member.Name}'.");
+                var grossArea = area;
+                var shape = ReadSectionShape(section, area, i33, i22);
                 area *= modifiers[0];
                 i22 *= modifiers[4];
                 i33 *= modifiers[5];
@@ -619,8 +621,10 @@ public sealed class SapGateway : ISapGateway
                 if (releasedI[inPlaneShearIndex] || releasedJ[inPlaneShearIndex])
                     throw new InvalidOperationException($"Frame '{member.Name}' has an in-plane shear release, which the Euler-Bernoulli FEM solver does not support.");
 
+                var (unitWeight, unitMass) = ReadWeightAndMass(material);
                 properties[member.Name] = new FemSectionProperties(member.Name, area, modulus, inPlaneInertia,
-                    releasedI[inPlaneMomentIndex], releasedJ[inPlaneMomentIndex], section, material);
+                    releasedI[inPlaneMomentIndex], releasedJ[inPlaneMomentIndex], section, material,
+                    localAngle, unitWeight, unitMass, grossArea, modifiers.ToArray(), shape);
             }
             else if (member.Kind == MemberKind.Cable)
             {
@@ -632,13 +636,256 @@ public sealed class SapGateway : ISapGateway
                 string materialOverride = "";
                 Check(Model.CableObj.GetMaterialOverwrite(member.Name, ref materialOverride), "CableObj.GetMaterialOverwrite", member.Name);
                 material = ResolveEffectiveMaterial(material, materialOverride, member.Name, section);
-                properties[member.Name] = new FemSectionProperties(member.Name, area,
-                    ReadElasticModulus(material, member.Name), null, SectionName: section, MaterialName: material);
+                // Cable modifiers (SAP order): area, mass, weight.
+                double[] cableModifiers = new double[3];
+                Check(Model.CableObj.GetModifiers(member.Name, ref cableModifiers), "CableObj.GetModifiers", member.Name);
+                if (cableModifiers.Length < 3) cableModifiers = [1, 1, 1];
+                var (unitWeight, unitMass) = ReadWeightAndMass(material);
+                properties[member.Name] = new FemSectionProperties(member.Name, area * cableModifiers[0],
+                    ReadElasticModulus(material, member.Name), null, SectionName: section, MaterialName: material,
+                    UnitWeightKNPerM3: unitWeight, UnitMassTPerM3: unitMass, GrossAreaM2: area, Modifiers: cableModifiers.ToArray());
             }
         }
         Verify(expected);
         return properties;
     });
+
+    public Task<SapFemLoading> GetFemLoadingAsync(IReadOnlyList<StructuralMember> members, IReadOnlyDictionary<string, double> localAnglesDeg,
+        ModelInfo expected) => worker.Run(() =>
+    {
+        Verify(expected);
+        if (!Model.GetPresentUnits().ToString().StartsWith("kN_m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Internal FEM load reads require kN/m units; the model is in {ReadInfo().Units}. Set SAP2000 to kN, m, C and refresh.");
+        var warnings = new List<string>();
+        void Warn(string message) { if (warnings.Count < 200) warnings.Add(message); }
+
+        // Load patterns.
+        int count = 0; string[] names = [];
+        Check(Model.LoadPatterns.GetNameList(ref count, ref names), "LoadPatterns.GetNameList");
+        var patterns = names.Take(count).Select(name =>
+        {
+            double selfWeight = 0; var type = eLoadPatternType.Other;
+            Check(Model.LoadPatterns.GetSelfWTMultiplier(name, ref selfWeight), "LoadPatterns.GetSelfWTMultiplier", name);
+            Check(Model.LoadPatterns.GetLoadType(name, ref type), "LoadPatterns.GetLoadType", name);
+            return new SapLoadPattern(name, type.ToString(), selfWeight);
+        }).ToArray();
+
+        static FemLoadDirection? Direction(int dir) => dir switch
+        {
+            1 => FemLoadDirection.Local1, 2 => FemLoadDirection.Local2, 4 => FemLoadDirection.GlobalX, 6 => FemLoadDirection.GlobalZ,
+            7 => FemLoadDirection.ProjectedX, 9 => FemLoadDirection.ProjectedZ, 10 => FemLoadDirection.Gravity, 11 => FemLoadDirection.ProjectedGravity,
+            _ => null // local 3 and global/projected Y act out of the XZ plane
+        };
+        bool UsableCsys(string csys, int dir) => dir <= 3 ? csys.Equals("Local", StringComparison.OrdinalIgnoreCase)
+            : csys.Equals("Global", StringComparison.OrdinalIgnoreCase);
+
+        // Joint loads on every analysed joint.
+        var jointLoads = new List<SapPatternJointLoad>();
+        foreach (var point in members.SelectMany(member => new[] { member.Start, member.End }).Distinct(StringComparer.Ordinal))
+        {
+            int n = 0; string[] pts = [], pats = [], csys = []; int[] steps = [];
+            double[] f1 = [], f2 = [], f3 = [], m1 = [], m2 = [], m3 = [];
+            if (Model.PointObj.GetLoadForce(point, ref n, ref pts, ref pats, ref steps, ref csys, ref f1, ref f2, ref f3, ref m1, ref m2, ref m3, eItemType.Objects) != 0) continue;
+            for (var i = 0; i < n; i++)
+            {
+                if (!csys[i].Equals("Global", StringComparison.OrdinalIgnoreCase)) { Warn($"Joint load on {point} ({pats[i]}) uses coordinate system '{csys[i]}' — ignored."); continue; }
+                if (Math.Abs(f2[i]) > 1e-9 || Math.Abs(m1[i]) > 1e-9 || Math.Abs(m3[i]) > 1e-9)
+                    Warn($"Joint load on {point} ({pats[i]}) has out-of-plane components (F2/M1/M3) — ignored; F1, F3 and M2 used.");
+                jointLoads.Add(new(pats[i], new FemJointLoad(point, f1[i], f3[i], m2[i])));
+            }
+        }
+
+        // Member loads on analysed frames and cables.
+        var memberLoads = new List<SapPatternMemberLoad>();
+        var pointLoads = new List<SapPatternMemberPointLoad>();
+        var gravityLoads = new List<SapPatternGravityLoad>();
+        foreach (var member in members)
+        {
+            var angle = localAnglesDeg.GetValueOrDefault(member.Name);
+            if (member.Kind == MemberKind.Frame)
+            {
+                int n = 0; string[] frames = [], pats = [], csys = []; int[] types = [], dirs = [];
+                double[] rd1 = [], rd2 = [], d1 = [], d2 = [], v1 = [], v2 = [];
+                if (Model.FrameObj.GetLoadDistributed(member.Name, ref n, ref frames, ref pats, ref types, ref csys, ref dirs, ref rd1, ref rd2, ref d1, ref d2, ref v1, ref v2, eItemType.Objects) == 0)
+                    for (var i = 0; i < n; i++)
+                    {
+                        var direction = Direction(dirs[i]);
+                        if (types[i] != 1 || direction is null || !UsableCsys(csys[i], dirs[i]))
+                        { Warn($"Distributed load on {member.Name} ({pats[i]}, dir {dirs[i]}, {csys[i]}) is a moment or acts out of the XZ plane — ignored."); continue; }
+                        if (direction == FemLoadDirection.Local2 && Math.Abs(Math.Sin(angle * Math.PI / 180)) > 1e-6)
+                            Warn($"Local-2 load on {member.Name} ({pats[i]}) with local axis angle {angle:0.#}° — only its in-plane part is used.");
+                        memberLoads.Add(new(pats[i], new FemMemberLoad(member.Name, direction.Value, rd1[i], rd2[i], v1[i], v2[i])));
+                    }
+                n = 0; frames = []; pats = []; csys = []; types = []; dirs = [];
+                double[] rel = [], dist = [], val = [];
+                if (Model.FrameObj.GetLoadPoint(member.Name, ref n, ref frames, ref pats, ref types, ref csys, ref dirs, ref rel, ref dist, ref val, eItemType.Objects) == 0)
+                    for (var i = 0; i < n; i++)
+                    {
+                        var direction = Direction(dirs[i]);
+                        if (types[i] != 1 || direction is null || !UsableCsys(csys[i], dirs[i]))
+                        { Warn($"Point load on {member.Name} ({pats[i]}, dir {dirs[i]}, {csys[i]}) is a moment or acts out of the XZ plane — ignored."); continue; }
+                        pointLoads.Add(new(pats[i], new FemMemberPointLoad(member.Name, direction.Value, rel[i], val[i])));
+                    }
+                n = 0; frames = []; pats = []; csys = [];
+                double[] gx = [], gy = [], gz = [];
+                if (Model.FrameObj.GetLoadGravity(member.Name, ref n, ref frames, ref pats, ref csys, ref gx, ref gy, ref gz, eItemType.Objects) == 0)
+                    for (var i = 0; i < n; i++)
+                    {
+                        if (!csys[i].Equals("Global", StringComparison.OrdinalIgnoreCase)) { Warn($"Gravity load on {member.Name} ({pats[i]}) in '{csys[i]}' — ignored."); continue; }
+                        gravityLoads.Add(new(pats[i], member.Name, gx[i], gz[i]));
+                    }
+            }
+            else if (member.Kind == MemberKind.Cable)
+            {
+                int n = 0; string[] cables = [], pats = [], csys = []; int[] types = [], dirs = []; double[] values = [];
+                if (Model.CableObj.GetLoadDistributed(member.Name, ref n, ref cables, ref pats, ref types, ref csys, ref dirs, ref values, eItemType.Objects) == 0)
+                    for (var i = 0; i < n; i++)
+                    {
+                        var direction = Direction(dirs[i]);
+                        if (types[i] != 1 || direction is null || !UsableCsys(csys[i], dirs[i]))
+                        { Warn($"Distributed load on cable {member.Name} ({pats[i]}, dir {dirs[i]}) is a moment or acts out of the XZ plane — ignored."); continue; }
+                        memberLoads.Add(new(pats[i], new FemMemberLoad(member.Name, direction.Value, 0, 1, values[i], values[i])));
+                    }
+                n = 0; cables = []; pats = []; csys = [];
+                double[] gx = [], gy = [], gz = [];
+                if (Model.CableObj.GetLoadGravity(member.Name, ref n, ref cables, ref pats, ref csys, ref gx, ref gy, ref gz, eItemType.Objects) == 0)
+                    for (var i = 0; i < n; i++)
+                        if (csys[i].Equals("Global", StringComparison.OrdinalIgnoreCase)) gravityLoads.Add(new(pats[i], member.Name, gx[i], gz[i]));
+                        else Warn($"Gravity load on cable {member.Name} ({pats[i]}) in '{csys[i]}' — ignored.");
+            }
+        }
+
+        // Static load cases.
+        count = 0; names = [];
+        Check(Model.LoadCases.GetNameList(ref count, ref names), "LoadCases.GetNameList");
+        var cases = new List<SapLoadCase>();
+        foreach (var name in names.Take(count))
+        {
+            var type = eLoadCaseType.LinearStatic; int subType = 0;
+            Check(Model.LoadCases.GetTypeOAPI(name, ref type, ref subType), "LoadCases.GetTypeOAPI", name);
+            int n = 0; string[] loadTypes = [], loadNames = []; double[] factors = [];
+            string initial = "";
+            if (type == eLoadCaseType.LinearStatic)
+            {
+                Check(Model.LoadCases.StaticLinear.GetLoads(name, ref n, ref loadTypes, ref loadNames, ref factors), "StaticLinear.GetLoads", name);
+                Model.LoadCases.StaticLinear.GetInitialCase(name, ref initial);
+            }
+            else if (type == eLoadCaseType.NonlinearStatic)
+            {
+                Check(Model.LoadCases.StaticNonlinear.GetLoads(name, ref n, ref loadTypes, ref loadNames, ref factors), "StaticNonlinear.GetLoads", name);
+                Model.LoadCases.StaticNonlinear.GetInitialCase(name, ref initial);
+            }
+            else
+            {
+                cases.Add(new(name, type.ToString(), false, [], null, "Not a static case — not used by the internal FEM."));
+                continue;
+            }
+            var loads = new List<(string, double)>();
+            var note = "";
+            for (var i = 0; i < n; i++)
+                if (loadTypes[i].Equals("Load", StringComparison.OrdinalIgnoreCase)) loads.Add((loadNames[i], factors[i]));
+                else note = "Acceleration loads are not used.";
+            var initialCase = FemLoadPlan.IsNoInitialCase(initial) ? null : initial;
+            if (type == eLoadCaseType.LinearStatic && initialCase is not null)
+                note = (note + " Continues from the stiffness of '" + initialCase + "' in SAP; here its loads are included.").Trim();
+            cases.Add(new(name, type == eLoadCaseType.LinearStatic ? "Linear Static" : "Nonlinear Static", true, loads, initialCase, note.Length == 0 ? null : note));
+        }
+
+        // Response combinations.
+        count = 0; names = [];
+        Check(Model.RespCombo.GetNameList(ref count, ref names), "RespCombo.GetNameList");
+        var combinations = new List<SapLoadCombination>();
+        foreach (var name in names.Take(count))
+        {
+            int comboType = 0;
+            Check(Model.RespCombo.GetTypeOAPI(name, ref comboType), "RespCombo.GetTypeOAPI", name);
+            int n = 0; eCNameType[] itemTypes = []; string[] itemNames = []; double[] factors = [];
+            Check(Model.RespCombo.GetCaseList(name, ref n, ref itemTypes, ref itemNames, ref factors), "RespCombo.GetCaseList", name);
+            var typeName = comboType switch { 0 => "Linear Additive", 1 => "Envelope", 2 => "Absolute Additive", 3 => "SRSS", 4 => "Range Additive", _ => $"Type {comboType}" };
+            combinations.Add(new(name, typeName, comboType == 0,
+                Enumerable.Range(0, n).Select(i => (itemNames[i], itemTypes[i] == eCNameType.LoadCombo, factors[i])).ToArray(),
+                comboType == 0 ? null : "Only linear additive combinations are evaluated."));
+        }
+
+        Verify(expected);
+        return new SapFemLoading(patterns, jointLoads, memberLoads, pointLoads, gravityLoads, cases, combinations, warnings);
+    });
+
+    /// <summary>
+    /// Section outline for the 3D view, from the type-specific SAP getters (dimensions in m). Types without a
+    /// dimension getter (Section Designer, filled/encased, built-up, variable…) or a failed read fall back to the
+    /// solid rectangle with the same A, I33, I22. Read-only.
+    /// </summary>
+    private FemSectionShape? ReadSectionShape(string section, double area, double i33, double i22)
+    {
+        var fallback = FemSectionShape.EquivalentRectangle(area, i33, i22);
+        var type = eFramePropType.General;
+        if (Model.PropFrame.GetTypeOAPI(section, ref type) != 0) return fallback;
+        string file = "", mat = "", notes = "", guid = ""; int color = 0;
+        double t3 = 0, t2 = 0, tf = 0, tw = 0, t2b = 0, tfb = 0;
+        int rc;
+        FemSectionShape? shape = null;
+        switch (type)
+        {
+            case eFramePropType.Rectangular:
+                rc = Model.PropFrame.GetRectangle(section, ref file, ref mat, ref t3, ref t2, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.Rectangle, t3, t2);
+                break;
+            case eFramePropType.Box:
+                rc = Model.PropFrame.GetTube(section, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.Box, t3, t2, tf, tw);
+                break;
+            case eFramePropType.ConcreteBox:
+                rc = Model.PropFrame.GetConcreteBox(section, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.Box, t3, t2, tf, tw);
+                break;
+            case eFramePropType.I:
+                rc = Model.PropFrame.GetISection(section, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref t2b, ref tfb, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.I, t3, t2, tf, tw, t2b, tfb);
+                break;
+            case eFramePropType.Channel:
+                rc = Model.PropFrame.GetChannel(section, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.Channel, t3, t2, tf, tw);
+                break;
+            case eFramePropType.T:
+                rc = Model.PropFrame.GetTee(section, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.Tee, t3, t2, tf, tw);
+                break;
+            case eFramePropType.Angle:
+                rc = Model.PropFrame.GetAngle(section, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.Angle, t3, t2, tf, tw);
+                break;
+            case eFramePropType.Circle:
+                rc = Model.PropFrame.GetCircle(section, ref file, ref mat, ref t3, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.Circle, t3, t3);
+                break;
+            case eFramePropType.Pipe:
+                rc = Model.PropFrame.GetPipe(section, ref file, ref mat, ref t3, ref tw, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.Pipe, t3, t3, 0, tw);
+                break;
+            case eFramePropType.ConcretePipe:
+                rc = Model.PropFrame.GetConcretePipe(section, ref file, ref mat, ref t3, ref tw, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.Pipe, t3, t3, 0, tw);
+                break;
+            case eFramePropType.General:
+            {
+                double a = 0, as2 = 0, as3 = 0, j = 0, gi22 = 0, gi33 = 0, s22 = 0, s33 = 0, z22 = 0, z33 = 0, r22 = 0, r33 = 0;
+                rc = Model.PropFrame.GetGeneral(section, ref file, ref mat, ref t3, ref t2, ref a, ref as2, ref as3, ref j,
+                    ref gi22, ref gi33, ref s22, ref s33, ref z22, ref z33, ref r22, ref r33, ref color, ref notes, ref guid);
+                if (rc == 0) shape = new(SectionShapeKind.Rectangle, t3, t2);
+                break;
+            }
+        }
+        return shape is { Depth: > 0, Width: > 0 } && double.IsFinite(shape.Depth) && double.IsFinite(shape.Width) ? shape : fallback;
+    }
+
+    /// <summary>Material weight per volume [kN/m³] and mass per volume [kN·s²/m⁴ = t/m³] in the kN-m model units.</summary>
+    private (double Weight, double Mass) ReadWeightAndMass(string material)
+    {
+        double weight = 0, mass = 0;
+        Check(Model.PropMaterial.GetWeightAndMass(material, ref weight, ref mass), "PropMaterial.GetWeightAndMass", material);
+        return (double.IsFinite(weight) ? weight : 0, double.IsFinite(mass) ? mass : 0);
+    }
 
     private double ReadElasticModulus(string material, string memberName)
     {

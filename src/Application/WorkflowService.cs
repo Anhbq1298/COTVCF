@@ -161,6 +161,13 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         return sap.GetFemSectionPropertiesAsync(members, state.Model);
     }
 
+    public Task<SapFemLoading> ReadFemLoadingAsync(IReadOnlyDictionary<string, FemSectionProperties> sections)
+    {
+        if (state.Model is null) throw new InvalidOperationException("Connect to SAP2000 before reading FEM loading.");
+        var members = state.Geometry.Members.Where(member => member.Kind is MemberKind.Frame or MemberKind.Cable).ToArray();
+        return sap.GetFemLoadingAsync(members, sections.ToDictionary(pair => pair.Key, pair => pair.Value.LocalAngleDeg, StringComparer.Ordinal), state.Model);
+    }
+
     public async Task ApplyLoadsAsync()
     {
         var issues = new ConfigurationValidator().ValidateLoads(state);

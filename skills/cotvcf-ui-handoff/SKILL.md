@@ -125,16 +125,35 @@ earlier tall-header / large-button / blue-block look.
 - The internal model is linear-elastic 2D XZ Euler-Bernoulli frames plus axial tension-only cables with Tab 03
   target forces fitted in a pretension-only stage (FEM Analysis: ±% tolerance, default 10, and max iterations,
   default 100; all cables adjusted together) before the Tab 01 loads act on the prestressed state. FEM page tabs
-  are Inputs (pin supports, Read Properties, SAP member properties) | Analysis (fitting ±%, max iterations, Frame
+  are Inputs (pin supports, "Read from SAP", and sub-tabs Sectional properties — A/E/I/releases plus γ, ρ, w = γ·A·mod w,
+  m = ρ·A·mod m and Mod A/I/m/w — and Loads — editable load patterns (SW multiplier), static load cases (Run, definition
+  "1 DEAD + 1 PT", continues-from) and combinations (Run, factors); read via ISapGateway.GetFemLoadingAsync, never
+  written back; FemLoadPlan resolves them per candidate: Tab 01 loads replace SAP joint forces at applied points in their
+  pattern; each case solved tension-only; pretension fitted in the case whose own definition holds the Tab 03 pattern;
+  linear-additive combos superpose case results; FEM_PT/FEM_TAB01 app rows added when SAP has no such cases) | Analysis (fitting ±%, max iterations, Frame
   mesh segments per frame (default 10). Like SAP, each frame is first split at every member-end joint lying on it
   within 1 mm (FrameJoints.Pieces — e.g. full-length chords crossed by verticals and cable anchors), then each piece
   is meshed; cables are never split or meshed. Interior mesh nodes are statically condensed onto the joints and
   recovered as stations for diagrams/deflected shape; the viewer splits frames the same way), run controls, cable table:
   Target / Pretension / Dev. % / Status / Result / Applied P / Iter.) | View (ViewToggle buttons: Frame mesh,
-  Member size, Loading — viewer overlays only while the FEM tab is open) | Results (Axial force view draws frame
+  Member size, Loading — viewer overlays only while the FEM tab is open) | Results (Load case / combo selector drives the
+  table, viewer, hover and the cable table Result column; Axial force view draws frame
   axial diagrams and cable tensions together; "Axial values (kN)" checkbox labels each frame piece and each cable
   ("T n kN", drawn on top) in whole kN; Reactions view draws Rx and Rz as separate arrows with separate whole-kN
-  labels — never a combined resultant). Frame moments use one sign
+  labels — never a combined resultant). In every result view, hovering within 10 px of a member shows a section
+  read-out: frames → name, x from I-end [m] and %, N/V/M and ux/uz interpolated between mesh stations, with a dashed
+  section-cut marker; cables → tension, slack state, target; supports (priority) → Rx/Rz.
+- Shared viewer projection dropdown has XY / XZ / YZ / 3D. 3D (StructureModel3D + WPF Viewport3D, orthographic,
+  true isometric default) extrudes every frame's SAP section to scale along SAP default local axes rotated by the
+  local-axis angle; shapes from PropFrame type getters (rectangle, box/concrete box, I, channel, tee, angle, circle,
+  pipe/concrete pipe, general) via FemSectionProperties.Shape, else an equivalent solid rectangle with the same A, I33,
+  I22 (SD, filled-tube, built-up…); cables are rods of their gross area; concrete materials are shaded concrete.
+  Drag orbit, right/Shift-drag pan, wheel zoom, double-click / Fit fits. Needs Read from SAP for sizes.
+- Run Analysis opens the non-modal FEM Run Monitor (FemRunMonitorWindow; reopen with Analysis → Monitor): progress,
+  live log (FemLog, one line per step and per case), Cable dropdown (default Cable1a-2) and Case dropdown with
+  Follow latest, and ConvergenceChart of P_result/P_preset per pretension-fitting run (run 0 = 0, line at 1, ±tol
+  band) from FemCableResponse.FitHistoryKN. Help is a window (HelpWindow) with Workflow and FEM procedure topics;
+  the ⓘ next to Monitor opens the FEM procedure directly. Keep the FEM procedure text in sync with the solver. Frame moments use one sign
   convention at both ends (I-end = -f2), so diagrams are continuous across joints. A case whose targets cannot be met
   is not an error: it keeps the closest pretension, is marked "Not fitted" (reason in the Status tooltip), and the
   run continues. A case whose equilibrium solve fails gets one "Failed" row with the reason; the run continues. Pins are auto-detected at the lowest joints connected to near-vertical frame
