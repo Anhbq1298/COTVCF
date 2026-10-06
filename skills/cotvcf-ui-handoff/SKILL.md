@@ -621,11 +621,16 @@ the `Export*Pdf` commands were removed on purpose).
   defaults`. A logo too large for the store is printed for the session and has to be chosen again next time.
 - **Tab 06 Print Setup card** (`ReportPrintSettings`, `PRINT SETUP · HEADER / FOOTER`, above module 01): the
   starting values of that screen — company, logo file, project, job no., revision, prepared by, checked by, footer
-  note, default paper, orientation, page numbers, date, include Source Data. It is a **per-user preference**
-  (`ReportPrintSettingsStore` → `%LocalAppData%\COTVCF\ReportPrintSettings.json`), saved on every edit — not part of
-  the COT VCF project file, the study folder or the run fingerprint. Like capacities and criteria it is a
-  post-processing input: applied on the next Generate / Regenerate (`StudyPostProcessor.Generate(…, printSettings)`).
-  `MainViewModel` takes the store as an optional constructor argument; without one (checks) settings stay in memory.
+  note, default paper, orientation, page numbers, date, include Source Data. The card is the one source; it is
+  kept in two places. **Per Windows user** (`ReportPrintSettingsStore` →
+  `%LocalAppData%\COTVCF\ReportPrintSettings.json`), saved on every edit — what the card shows at start-up. **In
+  the project file** as `printSetup` (see Config Project File): written by `Save All` and by the card's
+  `Save Print Setup`, restored onto the card by `Load Config`; the status line under the card reads
+  `Saved in <file>` / `Modified * — differs from <file>` / `Not in <file> yet` / `No project open`
+  (`PrintSetupProjectStatus`). It is never part of the study folder or the run fingerprint. Like capacities and
+  criteria it is a post-processing input: applied on the next Generate / Regenerate
+  (`StudyPostProcessor.Generate(…, printSettings)`). `MainViewModel` takes the store as an optional constructor
+  argument; without one (checks) settings stay in memory.
 - **Logo**: `ReportPrintEngine.LogoDataUri` embeds the file as a data URI (PNG / JPG / SVG / GIF / WEBP / BMP, at
   most `MaxLogoBytes`), so the report needs no external resource. A missing / unsupported / oversized logo is
   reported on the card (`DescribeLogo`) and the company name is printed top-left instead. SVG prints as vector.
@@ -667,8 +672,18 @@ the `Export*Pdf` commands were removed on purpose).
 ## Config Project File (`src/Configuration/`)
 
 The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 01–05,
-including the Tab 05 mode/fixed candidate/selection exclusions. Never serialise ViewModels; project save/load
-never mutates SAP.
+including the Tab 05 mode/fixed candidate/selection exclusions, and the Tab 06 Print Setup. Never serialise
+ViewModels; project save/load never mutates SAP.
+
+- **`printSetup`** (`PrintSetupConfigDto`: company, logo path, project, job no., revision, prepared / checked by,
+  footer note, paper, orientation, page numbers, date, include Source Data) is **not a tab section**: no
+  `ConfigTabs` flag, not in `PresentTabs`, never validated against the model. `ConfigService.SaveAsync(uiTabs,
+  pickPath, printSetup)` writes it only when the caller hands the card over — `Save All`
+  (`RunSave(ConfigTabs.All, printSetup: true)`) and the card's `Save Print Setup` (`RunSave(ConfigTabs.None,
+  printSetup: true)`, which changes nothing else). A per-tab save keeps the project's `printSetup`, like every
+  other section it does not own. `OpenProjectFile` applies it with `ConfigurationApplicator.ApplyPrintSetup`; a
+  project saved before it existed has no section and leaves the card as it is. The logo is stored as a path — on
+  a machine without that file the card says so and the company name is printed instead.
 
 - `ConfigProjectSession` (held by `ConfigService`): `FilePath`, in-memory `Project` (`CotVcfConfigDto`),
   `Tab02/03/04Dirty`. Once a project is open the in-memory `Project` is the source of truth; the file is
