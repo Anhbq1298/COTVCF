@@ -2,6 +2,7 @@ using COT_VCF.Application;
 using COT_VCF.Application.Results;
 using COT_VCF.Configuration;
 using COT_VCF.Domain;
+using COT_VCF.Geometry;
 using COT_VCF.Infrastructure;
 using Microsoft.Win32;
 using System.Collections;
@@ -137,18 +138,27 @@ public sealed partial class MainViewModel : Observable
     public IReadOnlyList<string> TrussMiddlePoints => State.Truss.MiddlePoints;
     public IReadOnlyList<string> TrussBottomPoints => State.Truss.BottomPoints;
 
-    // ---- Hoisted model preview: one Structural2DViewer shared by tabs 01-04 (index 0-3) ----
-    // Workflow tabs after the SAP Model tab was removed: 0 Loading, 1 Truss, 2 Pretension, 3 Output, 4 Iteration.
-    private const int TabLoading = 0, TabTruss = 1, TabPretension = 2, TabOutput = 3, TabIteration = 4;
-    public bool ShowSharedViewer => selectedTab is >= TabLoading and <= TabOutput;
+    // ---- Hoisted model preview: shared by tabs 01-04 and 07 FEM ----
+    private const int TabLoading = 0, TabTruss = 1, TabPretension = 2, TabOutput = 3, TabIteration = 4, TabFem = 7;     // 5 = Post-Processing, 6 = 06A Optimization (MainViewModel.Optimization.cs)
+    public bool ShowSharedViewer => selectedTab is >= TabLoading and <= TabOutput || selectedTab == TabFem;
     public bool ShowTrussLegend => selectedTab == TabTruss;
     public GeometryModel SharedViewerModel =>
         (selectedTab == TabTruss ? State.Preview : State.Geometry) ?? GeometryModel.Empty;
     public IEnumerable<AppliedPoint>? SharedViewerAppliedPoints =>
-        selectedTab == TabLoading ? State.AppliedPoints : null;
+        selectedTab is TabLoading or TabFem ? State.AppliedPoints : null;
     public IEnumerable<string>? SharedViewerTopPoints => selectedTab == TabTruss ? State.Truss.TopPoints : null;
     public IEnumerable<string>? SharedViewerMiddlePoints => selectedTab == TabTruss ? State.Truss.MiddlePoints : null;
     public IEnumerable<string>? SharedViewerBottomPoints => selectedTab == TabTruss ? State.Truss.BottomPoints : null;
+    public IReadOnlyList<string> FemPinSupportPoints
+    {
+        get
+        {
+            try { return FemStudyService.FindPinSupportPoints(State.Baseline); }
+            catch { return []; }
+        }
+    }
+    public IEnumerable<string>? SharedViewerPinSupportPoints => selectedTab == TabFem ? FemPinSupportPoints : null;
+    public bool ShowFemPinLegend => selectedTab == TabFem;
     public IEnumerable<CablePretensionConfig>? SharedViewerCables =>
         selectedTab is TabPretension or TabOutput ? State.Cables : null;
     public string SharedViewerCaption => selectedTab switch
@@ -156,6 +166,8 @@ public sealed partial class MainViewModel : Observable
         TabTruss => HeightSummary,
         TabPretension => CablePreviewSummary,
         TabOutput => GeometrySummary,
+        TabFem when SelectedFemPage == FemResultsPage => FemResultDiagramTitle,
+        TabFem => $"FEM · {GeometrySummary}",
         _ => "",
     };
     public string SharedViewerHint => selectedTab switch
@@ -164,6 +176,10 @@ public sealed partial class MainViewModel : Observable
         TabTruss => "Preview height only — Top red · Middle blue · Bottom green.",
         TabPretension => "Configured cables are highlighted and labelled by SAP2000 cable name.",
         TabOutput => "Point and member labels for picking deflection points, foundation reactions, member-force groups and monitored cables.",
+        TabFem when SelectedFemPage == FemResultsPage && FemResultMode == FemResultMode.DeflectedShape => "Deformed shape is visually magnified; displacement values in the Results table are true scale.",
+        TabFem when SelectedFemPage == FemResultsPage && FemResultMode == FemResultMode.Reactions => "Green vectors show support reaction direction; labels and the Results table show exact magnitudes and components.",
+        TabFem when SelectedFemPage == FemResultsPage => "Blue = positive (tension for axial force); red = negative (compression). Diagram width is auto-scaled; table values are exact.",
+        TabFem => "Internal 2D XZ FEM · Tab 01 loading points are highlighted; automatically detected base pins restrain X/Z translation and leave rotation free.",
         _ => "",
     };
     private void NotifySharedViewer()
@@ -171,7 +187,18 @@ public sealed partial class MainViewModel : Observable
         Notify(nameof(ShowSharedViewer)); Notify(nameof(ShowTrussLegend));
         Notify(nameof(SharedViewerModel)); Notify(nameof(SharedViewerAppliedPoints));
         Notify(nameof(SharedViewerTopPoints)); Notify(nameof(SharedViewerMiddlePoints)); Notify(nameof(SharedViewerBottomPoints));
-        Notify(nameof(SharedViewerCables)); Notify(nameof(SharedViewerCaption)); Notify(nameof(SharedViewerHint));
+        Notify(nameof(SharedViewerCables)); Notify(nameof(SharedViewerPinSupportPoints)); Notify(nameof(ShowFemPinLegend));
+        Notify(nameof(SharedViewerFemResult)); Notify(nameof(SharedViewerFemResultMode));
+        Notify(nameof(SharedViewerFrameMeshSegments)); Notify(nameof(SharedViewerMemberSizes));
+        Notify(nameof(SharedViewerShowLoads)); Notify(nameof(SharedViewerLoadValues));
+        Notify(nameof(SharedViewerCaption)); Notify(nameof(SharedViewerHint));
+    }
+    private void NotifyFemResultSelection()
+    {
+        Notify(nameof(FemResultRows)); Notify(nameof(FemResultSummary));
+        Notify(nameof(FemResultStartHeader)); Notify(nameof(FemResultEndHeader));
+        Notify(nameof(FemResultNames)); Notify(nameof(FemResultDiagramTitle));
+        NotifySharedViewer();
     }
     public bool CanViewTrussCandidates => TrussCandidatesReady(out _);
     public string TrussCandidatesHint { get { TrussCandidatesReady(out var reason); return reason; } }
@@ -822,6 +849,318 @@ public sealed partial class MainViewModel : Observable
     public Command SaveTabConfig { get; }
     public Command SaveAllConfig { get; }
     public Command LoadConfig { get; }
+    public Command ReadFemProperties { get; }
+    public Command RunFemAnalysis { get; }
+    public Command CancelFemAnalysis { get; }
+
+    private readonly FemStudyService femStudy = new();
+    private CancellationTokenSource? femCancellation;
+    private bool isFemRunning;
+    private string femProgressText = "Load a COT VCF project, then run the full Tab 01-03 candidate space.";
+    private FemStudyRun? selectedFemRun;
+    private FemResultMode femResultMode;
+    private int selectedFemPage;
+    private double femTargetFitPercent = 10;
+    /// <summary>Stop adjusting cable pretension once every cable's pretension-stage tension (before applied loads) is within this % of its Tab 03 target.</summary>
+    public double FemTargetFitPercent
+    {
+        get => femTargetFitPercent;
+        set
+        {
+            if (!double.IsFinite(value) || value <= 0 || value >= 100)
+                throw new ArgumentOutOfRangeException(nameof(value), "Enter a fitting tolerance greater than 0% and less than 100%.");
+            Set(ref femTargetFitPercent, value);
+        }
+    }
+    private int femTargetFitIterations = PlanarFrameSolver.DefaultTargetFitIterations;
+    /// <summary>Maximum pretension adjustments per FEM case while fitting cable tensions to their targets.</summary>
+    public int FemTargetFitIterations
+    {
+        get => femTargetFitIterations;
+        set
+        {
+            if (value < 1 || value > 10_000)
+                throw new ArgumentOutOfRangeException(nameof(value), "Enter between 1 and 10,000 fitting iterations.");
+            Set(ref femTargetFitIterations, value);
+        }
+    }
+    public ObservableCollection<FemSectionProperties> FemSectionProperties { get; } = [];
+    public ObservableCollection<FemStudyRun> FemRuns { get; } = [];
+    /// <summary>One row per completed FEM case and cable: Tab 03 target vs final FEM tension.</summary>
+    public ObservableCollection<FemCableFitRow> FemCableFitRows { get; } = [];
+    // ---- FEM run monitor (pop-up window opened by Run Analysis) ----
+    public const string DefaultMonitorCable = "Cable1a-2";
+    private const int MaximumFemLogLines = 5000;
+    /// <summary>Raised when a FEM run starts so the view can open the run monitor window.</summary>
+    public event EventHandler? FemAnalysisStarted;
+    public ObservableCollection<string> FemLog { get; } = [];
+    private int femMonitorTotal;
+    private int femMonitorCompleted;
+    private bool femMonitorRunning;
+    private bool femMonitorFollowLatest = true;
+    private FemStudyRun? femMonitorRun;
+    private string? femMonitorCable;
+    private double femMonitorTolerancePercent;
+    public int FemMonitorTotal { get => femMonitorTotal; private set { if (Set(ref femMonitorTotal, value)) { Notify(nameof(FemMonitorProgressText)); Notify(nameof(FemMonitorProgressMaximum)); } } }
+    /// <summary>Progress-bar maximum; 1 before any run so an empty bar is not drawn as complete.</summary>
+    public int FemMonitorProgressMaximum => Math.Max(1, FemMonitorTotal);
+    public int FemMonitorCompleted { get => femMonitorCompleted; private set { if (Set(ref femMonitorCompleted, value)) Notify(nameof(FemMonitorProgressText)); } }
+    public bool FemMonitorRunning { get => femMonitorRunning; private set { if (Set(ref femMonitorRunning, value)) Notify(nameof(FemMonitorProgressText)); } }
+    public string FemMonitorProgressText => FemMonitorTotal == 0 ? "No FEM run yet." :
+        $"{(FemMonitorRunning ? "Running" : "Finished")} · {FemMonitorCompleted:N0} / {FemMonitorTotal:N0} cases";
+    public double FemMonitorTolerancePercent { get => femMonitorTolerancePercent; private set => Set(ref femMonitorTolerancePercent, value); }
+    /// <summary>While on, the chart follows each case as it completes; picking a case turns it off.</summary>
+    public bool FemMonitorFollowLatest
+    {
+        get => femMonitorFollowLatest;
+        set { if (Set(ref femMonitorFollowLatest, value) && value && FemRuns.Count > 0) FemMonitorRun = FemRuns[^1]; }
+    }
+    public FemStudyRun? FemMonitorRun
+    {
+        get => femMonitorRun;
+        set
+        {
+            if (!Set(ref femMonitorRun, value)) return;
+            if (value is not null && FemRuns.Count > 0 && !ReferenceEquals(value, FemRuns[^1]) && femMonitorFollowLatest)
+            {
+                femMonitorFollowLatest = false;
+                Notify(nameof(FemMonitorFollowLatest));
+            }
+            NotifyFemMonitorChart();
+        }
+    }
+    public IReadOnlyList<string> FemMonitorCableNames => State.Cables.Select(cable => cable.CableName)
+        .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.Ordinal).ToArray();
+    public string? FemMonitorCable
+    {
+        get => femMonitorCable;
+        set { if (Set(ref femMonitorCable, value)) NotifyFemMonitorChart(); }
+    }
+    private FemCableResponse? FemMonitorCableResult => FemMonitorRun?.Result.Cables
+        .FirstOrDefault(cable => cable.MemberName.Equals(FemMonitorCable, StringComparison.Ordinal));
+    public IReadOnlyList<double> FemMonitorRatios => FemMonitorCableResult?.FitRatios ?? [];
+    public string FemMonitorChartSummary
+    {
+        get
+        {
+            if (FemMonitorRun is not { } run) return "Waiting for the first completed case…";
+            if (FemMonitorCableResult is not { } cable) return $"{run.Id}: cable '{FemMonitorCable}' is not in this FEM model.";
+            if (cable.TargetForceKN <= 0 || cable.FitHistoryKN is null) return $"{run.Id} · {cable.MemberName}: no target force to fit.";
+            var ratio = cable.PretensionStageForceKN / cable.TargetForceKN;
+            var loaded = SelectedFemResultName is { } loadName && run.Results?.ContainsKey(loadName) == true
+                ? run.ResultFor(loadName).Cables.FirstOrDefault(item => item.MemberName == cable.MemberName)
+                : null;
+            return $"{run.Id} · {cable.MemberName} · P_preset {cable.TargetForceKN:0} kN → P_result {cable.PretensionStageForceKN:0} kN " +
+                $"(ratio {ratio:0.000}) after {cable.FitHistoryKN.Count} run(s) · applied pretension {cable.AppliedPretensionKN:0} kN · " +
+                (run.Result.TargetFitConverged ? $"within ±{FemMonitorTolerancePercent:0.###}%" : "NOT fitted") +
+                (loaded is not null ? $" · under {SelectedFemResultName}: T = {loaded.AxialForceKN:0} kN (ratio {loaded.AxialForceKN / cable.TargetForceKN:0.000})" : "");
+        }
+    }
+
+    private void NotifyFemMonitorChart()
+    {
+        Notify(nameof(FemMonitorRatios));
+        Notify(nameof(FemMonitorChartSummary));
+    }
+
+    private void StartFemMonitor(int total)
+    {
+        FemLog.Clear();
+        FemMonitorTotal = total;
+        FemMonitorCompleted = 0;
+        FemMonitorRunning = true;
+        femMonitorRun = null;
+        femMonitorFollowLatest = true;
+        Notify(nameof(FemMonitorFollowLatest));
+        Notify(nameof(FemMonitorRun));
+        PrepareFemMonitor();
+        FemAnalysisStarted?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Refresh the Cable list from Tab 03 and select Cable1a-2 (or the first cable) if nothing valid is chosen.</summary>
+    public void PrepareFemMonitor()
+    {
+        Notify(nameof(FemMonitorCableNames));
+        var names = FemMonitorCableNames;
+        if (FemMonitorCable is null || !names.Contains(FemMonitorCable, StringComparer.Ordinal))
+            FemMonitorCable = names.FirstOrDefault(name => name.Equals(DefaultMonitorCable, StringComparison.OrdinalIgnoreCase)) ?? names.FirstOrDefault();
+        if (femMonitorRun is null && FemRuns.Count > 0) FemMonitorRun = FemRuns[^1];
+        NotifyFemMonitorChart();
+    }
+
+    private void FemLogLine(string line)
+    {
+        FemLog.Add($"{DateTime.Now:HH:mm:ss}  {line}");
+        while (FemLog.Count > MaximumFemLogLines) FemLog.RemoveAt(0);
+    }
+
+    private static string DescribeFemRun(FemStudyRun run, int completed, int total)
+    {
+        var result = run.Result;
+        var fitted = result.Cables.Where(cable => cable.TargetForceKN > 0 && cable.PretensionStageForceKN is not null).ToArray();
+        var worst = fitted.Select(cable => Math.Abs(cable.PretensionStageForceKN!.Value / cable.TargetForceKN - 1) * 100).DefaultIfEmpty().Max();
+        var fit = result.TargetFitIterations == 0 ? "no target fitting"
+            : result.TargetFitConverged ? $"pretension fitted in {result.TargetFitIterations} run(s), max deviation {worst:0.##}%"
+            : $"NOT fitted after {result.TargetFitIterations} run(s), max deviation {worst:0.##}%";
+        var slack = result.Cables.Count(cable => !cable.Active);
+        return $"[{completed}/{total}] {run.Id} · {fit} · loaded equilibrium in {result.NonlinearIterations} Newton iteration(s)" +
+            (slack > 0 ? $" · {slack} slack cable(s)" : "") +
+            $" · max |N| {result.MaximumAbsoluteAxialKN:0} kN · max deflection {result.MaximumDownwardDeflectionMm:0.#} mm";
+    }
+
+    public const int FemInputsPage = 0;
+    public const int FemAnalysisPage = 1;
+    public const int FemViewPage = 2;
+    public const int FemResultsPage = 3;
+
+    private int femFrameMeshSegments = PlanarFrameSolver.DefaultFrameMeshSegments;
+    /// <summary>Number of equal sub-elements each frame is divided into for the FEM (cables are not meshed).</summary>
+    public int FemFrameMeshSegments
+    {
+        get => femFrameMeshSegments;
+        set
+        {
+            if (value < 1 || value > PlanarFrameSolver.MaximumFrameMeshSegments)
+                throw new ArgumentOutOfRangeException(nameof(value), $"Enter between 1 and {PlanarFrameSolver.MaximumFrameMeshSegments} segments per frame.");
+            if (Set(ref femFrameMeshSegments, value)) Notify(nameof(SharedViewerFrameMeshSegments));
+        }
+    }
+
+    private bool showFemFrameMesh;
+    private bool showFemMemberSizes;
+    private bool showFemLoads = true;
+    public bool ShowFemFrameMesh { get => showFemFrameMesh; set { if (Set(ref showFemFrameMesh, value)) Notify(nameof(SharedViewerFrameMeshSegments)); } }
+    public bool ShowFemMemberSizes { get => showFemMemberSizes; set { if (Set(ref showFemMemberSizes, value)) { Notify(nameof(SharedViewerMemberSizes)); Notify(nameof(FemMemberSizeHint)); } } }
+    public bool ShowFemLoads { get => showFemLoads; set { if (Set(ref showFemLoads, value)) { Notify(nameof(SharedViewerShowLoads)); Notify(nameof(SharedViewerLoadValues)); } } }
+
+    private bool showFemAxialValues = true;
+    /// <summary>Label frame axial forces and cable tensions (whole kN) in the Axial force result view.</summary>
+    public bool ShowFemAxialValues { get => showFemAxialValues; set => Set(ref showFemAxialValues, value); }
+
+    /// <summary>SAP section data (shape, local-axis angle, area) per member once read, for the to-scale 3D view.</summary>
+    public IReadOnlyDictionary<string, FemSectionProperties>? SharedViewerSections => FemSectionProperties.Count == 0 ? null
+        : FemSectionProperties.GroupBy(property => property.MemberName, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+    public int SharedViewerFrameMeshSegments => selectedTab == TabFem && ShowFemFrameMesh ? FemFrameMeshSegments : 0;
+    public IReadOnlyDictionary<string, string>? SharedViewerMemberSizes =>
+        selectedTab == TabFem && ShowFemMemberSizes && FemSectionProperties.Count > 0
+            ? FemSectionProperties.Where(property => !string.IsNullOrWhiteSpace(property.SectionName))
+                .ToDictionary(property => property.MemberName, property => property.SectionName!, StringComparer.Ordinal)
+            : null;
+    public string FemMemberSizeHint => ShowFemMemberSizes && FemSectionProperties.Count == 0
+        ? "No sections read yet — use Read Properties on the Inputs page."
+        : "Section name labelled along each frame and cable.";
+    public bool SharedViewerShowLoads => selectedTab != TabFem || ShowFemLoads;
+    /// <summary>Vertical load per point of the selected FEM case, labelled at the load arrows.</summary>
+    public IReadOnlyDictionary<string, double>? SharedViewerLoadValues =>
+        selectedTab == TabFem && ShowFemLoads && SelectedFemRun?.Loads is { } loads
+            ? loads.GroupBy(load => load.PointName, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(load => load.FzKN), StringComparer.Ordinal)
+            : null;
+    public int SelectedFemPage
+    {
+        get => selectedFemPage;
+        set
+        {
+            if (!Set(ref selectedFemPage, value)) return;
+            NotifySharedViewer();
+        }
+    }
+    public FemResultMode FemResultMode
+    {
+        get => femResultMode;
+        set
+        {
+            if (!Set(ref femResultMode, value)) return;
+            NotifyFemResultSelection();
+        }
+    }
+    public FemStudyRun? SelectedFemRun
+    {
+        get => selectedFemRun;
+        set
+        {
+            if (!Set(ref selectedFemRun, value)) return;
+            NotifyFemResultSelection();
+        }
+    }
+    public IReadOnlyList<FemResultRow> FemResultRows => FemResultTable.Build(SelectedFemResult, FemResultMode);
+    public FemAnalysisResult? SharedViewerFemResult =>
+        selectedTab == TabFem && SelectedFemPage == FemResultsPage ? SelectedFemResult : null;
+    public FemResultMode SharedViewerFemResultMode => FemResultMode;
+    public string FemResultDiagramTitle
+    {
+        get
+        {
+            var name = FemResultMode switch
+            {
+                FemResultMode.AxialForce => "Axial Force Diagram",
+                FemResultMode.BendingMoment => "Bending Moment Diagram",
+                FemResultMode.Shear => "Shear Diagram",
+                FemResultMode.Reactions => "Reaction Diagram",
+                _ => "Deflected Shape"
+            };
+            var unit = FemResultMode switch
+            {
+                FemResultMode.BendingMoment => "kN·m",
+                FemResultMode.DeflectedShape => "mm",
+                _ => "kN"
+            };
+            return SelectedFemRun is { } run ? $"{name} ({run.Id}{(SelectedFemResultName is { } loadName ? " · " + loadName : "")}) [{unit}]" : $"{name} [no results]";
+        }
+    }
+    public string FemResultSummary => SelectedFemRun is { } run
+        ? $"{run.Id} · {SelectedFemResultName ?? "result"} · {FemResultMode} · {FemResultRows.Count:N0} results"
+        : "No completed FEM combination selected.";
+    public string FemResultStartHeader => FemResultMode switch
+    {
+        FemResultMode.Reactions => "Fx [kN]",
+        FemResultMode.DeflectedShape => "UX [m]",
+        _ => "I-End"
+    };
+    public string FemResultEndHeader => FemResultMode switch
+    {
+        FemResultMode.Reactions => "Fz [kN]",
+        FemResultMode.DeflectedShape => "UZ [m]",
+        _ => "J-End"
+    };
+    public string FemCandidateSummary
+    {
+        get
+        {
+            var loads = LoadingCandidates.TotalCount(State.LoadDefinitions);
+            var heights = State.BaselineCaptured ? State.Truss.CandidateCount : 0;
+            var pretensions = PretensionCandidates.TotalCount(State.Cables.ToArray());
+            return $"Loading {loads:N0} x height {heights:N0} x pretension {pretensions:N0} = {femStudy.CandidateCount(State):N0} FEM runs";
+        }
+    }
+    public string FemPinSupportSummary
+    {
+        get
+        {
+            try
+            {
+                var points = FemStudyService.FindPinSupportPoints(State.Baseline);
+                return $"{points.Count} auto-detected pin supports at lowest frame elevation: {string.Join(", ", points)}";
+            }
+            catch (Exception ex) { return ex.Message; }
+        }
+    }
+    public string FemProgressText { get => femProgressText; private set => Set(ref femProgressText, value); }
+    public string FemStatus => isFemRunning ? "RUNNING" : FemRuns.Count > 0 ? $"{FemRuns.Count:N0} cases complete" :
+        State.IsSapConnected && State.BaselineCaptured && femStudy.CandidateCount(State) > 0 ? "READY TO ANALYZE" : "LOAD CONFIG / CONNECT SAP";
+    public bool CanRunFemAnalysis
+    {
+        get
+        {
+            var count = femStudy.CandidateCount(State);
+            return !IsBusy && State.IsSapConnected && State.Model is not null && State.BaselineCaptured &&
+                count > BigInteger.Zero && count <= FemStudyService.MaxCandidates;
+        }
+    }
+    public bool CanReadFemProperties => !IsBusy && State.IsSapConnected && State.Model is not null &&
+        State.Geometry.Members.Any(member => member.Kind is MemberKind.Frame or MemberKind.Cable);
+    public bool CanCancelFemAnalysis => isFemRunning;
 
     public bool CanUseConfig => !IsBusy && State.IsSapConnected && State.Model is not null;
     private bool applyingProject;
@@ -992,6 +1331,9 @@ public sealed partial class MainViewModel : Observable
         }), () => CanUseConfig);
         SaveAllConfig = new(_ => SaveAll(), () => CanUseConfig);
         LoadConfig = new(_ => OpenProject(), () => CanUseConfig);
+        ReadFemProperties = new(_ => ReadFemModelProperties(), () => CanReadFemProperties);
+        RunFemAnalysis = new(_ => AnalyzeFem(), () => CanRunFemAnalysis);
+        CancelFemAnalysis = new(_ => femCancellation?.Cancel(), () => CanCancelFemAnalysis);
 
         void Dirty(ConfigTabs tab) { if (!applyingProject) config.Session.MarkDirty(tab); }
 
@@ -1337,6 +1679,247 @@ public sealed partial class MainViewModel : Observable
                 : $"{Issues.Count} study validation issue{(Issues.Count == 1 ? "" : "s")} need review.";
         NotifyStudyPresentation();
         return preflightReport.Ready;
+    }
+
+    private async void ReadFemModelProperties()
+    {
+        if (IsBusy) return;
+        IsBusy = true;
+        FemSectionProperties.Clear();
+        FemProgressText = "Reading sections, materials, modifiers, end releases, load patterns, cases and combinations from the connected model.";
+        try
+        {
+            var properties = await ReadAndDisplayFemPropertiesAsync(resetLoadRows: true);
+            FemProgressText = $"Read section/material properties for {properties.Count:N0} frame and cable members, {FemPatternRows.Count} load patterns, " +
+                $"{FemCaseRows.Count} load cases and {FemCombinationRows.Count} combinations" +
+                (femSapLoading.Warnings.Count > 0 ? $" ({femSapLoading.Warnings.Count} load warning(s) — see Loads)" : "") + ". No model changes made.";
+            Message = FemProgressText;
+        }
+        catch (Exception ex)
+        {
+            FemProgressText = $"Property transfer failed: {ex.Message}";
+            Message = ex.Message;
+            Warn("FEM Model Properties", ex.Message);
+        }
+        finally { IsBusy = false; Update(); }
+    }
+
+    /// <summary>Reads section properties and the SAP loading snapshot. Edited load rows are kept unless
+    /// <paramref name="resetLoadRows"/> (Read from SAP) or there are none yet.</summary>
+    private async Task<IReadOnlyDictionary<string, FemSectionProperties>> ReadAndDisplayFemPropertiesAsync(bool resetLoadRows = false)
+    {
+        var properties = await workflow.ReadFemSectionPropertiesAsync();
+        var requiredMembers = State.Geometry.Members
+            .Where(member => member.Kind is MemberKind.Frame or MemberKind.Cable)
+            .Select(member => member.Name).ToHashSet(StringComparer.Ordinal);
+        var missingProperty = requiredMembers.FirstOrDefault(name => !properties.ContainsKey(name));
+        if (missingProperty is not null)
+            throw new InvalidOperationException($"The connected model did not provide section/material properties for '{missingProperty}'.");
+
+        FemSectionProperties.Clear();
+        foreach (var property in properties.Values.OrderBy(value => value.MemberName, StringComparer.Ordinal))
+            FemSectionProperties.Add(property);
+        Notify(nameof(SharedViewerMemberSizes));
+        Notify(nameof(SharedViewerSections));
+        Notify(nameof(FemMemberSizeHint));
+
+        femSapLoading = await workflow.ReadFemLoadingAsync(properties);
+        if (resetLoadRows || FemPatternRows.Count == 0) ResetFemLoadRows();
+        FemLoadWarnings.Clear();
+        foreach (var warning in femSapLoading.Warnings) FemLoadWarnings.Add(warning);
+        Notify(nameof(FemLoadSummary));
+        return properties;
+    }
+
+    // ---- FEM loading (Inputs → Loads): read from SAP, editable here, never written back ----
+    private SapFemLoading femSapLoading = SapFemLoading.Empty;
+    public ObservableCollection<FemPatternRow> FemPatternRows { get; } = [];
+    public ObservableCollection<FemCaseRow> FemCaseRows { get; } = [];
+    public ObservableCollection<FemCombinationRow> FemCombinationRows { get; } = [];
+    public ObservableCollection<string> FemLoadWarnings { get; } = [];
+    public string FemLoadSummary => FemPatternRows.Count == 0
+        ? "Not read yet — use Read from SAP on the Inputs page (also read automatically when the analysis runs)."
+        : $"{FemPatternRows.Count} patterns · {FemCaseRows.Count(row => row.Run)} of {FemCaseRows.Count} cases and " +
+          $"{FemCombinationRows.Count(row => row.Run)} of {FemCombinationRows.Count} combinations ticked to run" +
+          (FemLoadWarnings.Count > 0 ? $" · {FemLoadWarnings.Count} load assignment warning(s)" : "");
+    private IReadOnlyList<string> Tab01Patterns => State.LoadDefinitions.Select(definition => definition.LoadName)
+        .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    private IReadOnlyList<string> PretensionPatterns => State.Cables.Select(cable => cable.LoadPattern)
+        .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    private void ResetFemLoadRows()
+    {
+        var (patterns, cases, combinations) = FemLoadPlan.RowsFromSap(femSapLoading, Tab01Patterns, PretensionPatterns);
+        foreach (var row in FemCaseRows) row.PropertyChanged -= LoadRowChanged;
+        foreach (var row in FemCombinationRows) row.PropertyChanged -= LoadRowChanged;
+        FemPatternRows.Clear(); FemCaseRows.Clear(); FemCombinationRows.Clear();
+        foreach (var row in patterns) FemPatternRows.Add(row);
+        foreach (var row in cases) { row.PropertyChanged += LoadRowChanged; FemCaseRows.Add(row); }
+        foreach (var row in combinations) { row.PropertyChanged += LoadRowChanged; FemCombinationRows.Add(row); }
+        Notify(nameof(FemLoadSummary));
+        Notify(nameof(FemLoadSelectionNames));
+        // Default view: the first combination, else the last case (typically the loaded stage).
+        var names = FemLoadSelectionNames;
+        if (SelectedFemResultName is null || !names.Contains(SelectedFemResultName, StringComparer.OrdinalIgnoreCase))
+            SelectedFemResultName = FemCombinationRows.FirstOrDefault(row => row.Run)?.Name ?? names.LastOrDefault();
+    }
+
+    private void LoadRowChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        Notify(nameof(FemLoadSummary));
+        Notify(nameof(FemLoadSelectionNames));
+    }
+
+    /// <summary>Load cases and combinations ticked to run on Inputs → Loads (cases first), for the Loadcase/Loadcomb pickers.</summary>
+    public IReadOnlyList<string> FemLoadSelectionNames => FemCaseRows.Where(row => row.Run).Select(row => row.Name)
+        .Concat(FemCombinationRows.Where(row => row.Run).Select(row => row.Name)).ToArray();
+
+    // ---- Which load case / combination the Results page, viewer and cable table show ----
+    private string? selectedFemResultName;
+    public IReadOnlyList<string> FemResultNames => SelectedFemRun?.Results?.Keys.ToArray() is { Length: > 0 } keys
+        ? femResultOrder.Where(keys.Contains).Concat(keys.Except(femResultOrder)).ToArray() : [];
+    private IReadOnlyList<string> femResultOrder = [];
+    public string? SelectedFemResultName
+    {
+        get => selectedFemResultName;
+        set
+        {
+            if (!Set(ref selectedFemResultName, value)) return;
+            NotifyFemResultSelection();
+            RebuildFemCableFitRows();
+            Notify(nameof(FemMonitorChartSummary));
+        }
+    }
+    private FemAnalysisResult? SelectedFemResult => SelectedFemRun?.ResultFor(SelectedFemResultName);
+
+    private void RebuildFemCableFitRows()
+    {
+        var failed = FemCableFitRows.Where(row => row.Failed).ToArray();
+        FemCableFitRows.Clear();
+        foreach (var run in FemRuns)
+        foreach (var row in FemCableFitRow.FromRun(run, SelectedFemResultName)) FemCableFitRows.Add(row);
+        foreach (var row in failed) FemCableFitRows.Add(row);
+    }
+
+    private async void AnalyzeFem()
+    {
+        if (IsBusy || CommitEditors?.Invoke() == false) return;
+
+        IReadOnlyList<FemStudyCandidate> candidates;
+        IReadOnlyList<string> supports;
+        try
+        {
+            candidates = femStudy.Compose(State);
+            supports = FemStudyService.FindPinSupportPoints(State.Baseline);
+        }
+        catch (Exception ex)
+        {
+            FemProgressText = ex.Message;
+            Message = ex.Message;
+            Warn("FEM Inputs", ex.Message);
+            Update();
+            return;
+        }
+
+        IsBusy = true;
+        isFemRunning = true;
+        femCancellation = new CancellationTokenSource();
+        var cancellationToken = femCancellation.Token;
+        FemRuns.Clear();
+        FemCableFitRows.Clear();
+        SelectedFemRun = null;
+        FemSectionProperties.Clear();
+        FemProgressText = $"Reading assigned SAP sections and material properties · {candidates.Count:N0} candidates";
+        Notify(nameof(FemStatus));
+        Notify(nameof(CanCancelFemAnalysis));
+        CommandManager.InvalidateRequerySuggested();
+        StartFemMonitor(candidates.Count);
+        try
+        {
+            FemLogLine("Reading assigned SAP2000 sections, materials, modifiers and end releases (read-only)…");
+            var properties = await ReadAndDisplayFemPropertiesAsync();
+            FemLogLine($"Read {properties.Count(pair => pair.Value.InPlaneInertiaM4 is not null):N0} frame and {properties.Count(pair => pair.Value.InPlaneInertiaM4 is null):N0} cable sections " +
+                $"(self-weight from unit weight × gross area × weight modifier).");
+            FemLogLine($"Read SAP loading: {femSapLoading.Patterns.Count} patterns, {femSapLoading.JointLoads.Count} joint, " +
+                $"{femSapLoading.MemberLoads.Count + femSapLoading.MemberPointLoads.Count + femSapLoading.GravityLoads.Count} member load assignments, " +
+                $"{femSapLoading.Cases.Count} cases, {femSapLoading.Combinations.Count} combinations" +
+                (femSapLoading.Warnings.Count > 0 ? $" · {femSapLoading.Warnings.Count} warning(s), see Inputs → Loads" : "") + ".");
+            var loadPlan = FemLoadPlan.Build(FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), femSapLoading,
+                properties, State.Baseline, Tab01Patterns, PretensionPatterns, State.AppliedPoints.Select(point => point.PointName).ToArray());
+            FemLogLine($"Load cases solved per candidate: {string.Join(", ", loadPlan.CaseNames)}" +
+                (loadPlan.CombinationNames.Count > 0 ? $" · combinations: {string.Join(", ", loadPlan.CombinationNames)}" : "") +
+                (loadPlan.FitCase is { } fitCase ? $" · cable target forces fitted in case '{fitCase}'" : "") + ".");
+            foreach (var note in loadPlan.Notes) FemLogLine("Note: " + note);
+            femResultOrder = loadPlan.ResultNames;
+            SelectedFemResultName = loadPlan.CombinationNames.FirstOrDefault() ?? loadPlan.CaseNames[^1];
+
+            var baseline = State.Baseline;
+            var topPoints = State.Truss.TopPoints.ToArray();
+            var middlePoints = State.Truss.MiddlePoints.ToArray();
+            var bottomPoints = State.Truss.BottomPoints.ToArray();
+            var targetFitPercent = FemTargetFitPercent;
+            var targetFitIterations = FemTargetFitIterations;
+            var frameMeshSegments = FemFrameMeshSegments;
+            FemMonitorTolerancePercent = targetFitPercent;
+            FemLogLine($"Pin supports: {string.Join(", ", supports)}.");
+            FemLogLine($"Settings: target-force fitting ±{targetFitPercent:0.###}% · max {targetFitIterations:N0} fitting runs · frame mesh {frameMeshSegments} segments (cables unmeshed).");
+            FemLogLine($"Analyzing {candidates.Count:N0} cases ({FemCandidateSummary}). Per case: build height geometry → split frames at joints and mesh → " +
+                "fit cable pretension (no loads) → apply Tab 01 loads → tension-only equilibrium → recover member forces.");
+            var progress = new Progress<FemProgress>(value =>
+            {
+                if (!isFemRunning) return;
+                if (value.CompletedRun is { } completedRun)
+                {
+                    FemRuns.Add(completedRun);
+                    foreach (var row in FemCableFitRow.FromRun(completedRun, SelectedFemResultName)) FemCableFitRows.Add(row);
+                    SelectedFemRun ??= completedRun;
+                    FemLogLine(DescribeFemRun(completedRun, value.Completed, value.Total));
+                    if (FemMonitorFollowLatest) FemMonitorRun = completedRun;
+                }
+                if (value.Failure is { } failure)
+                {
+                    FemCableFitRows.Add(FemCableFitRow.FailedCase(value.CandidateId, failure));
+                    FemLogLine($"[{value.Completed}/{value.Total}] {value.CandidateId} · FAILED · {failure}");
+                }
+                FemMonitorCompleted = value.Completed;
+                FemProgressText = $"Analyzing {value.Completed:N0} / {value.Total:N0} · {value.CandidateId}";
+                Notify(nameof(FemStatus));
+            });
+            var results = await Task.Run(() => femStudy.Analyze(baseline, topPoints, middlePoints, bottomPoints,
+                supports, candidates, properties, progress, cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan), cancellationToken);
+            var unfitted = results.Count(run => !run.Result.TargetFitConverged);
+            var failed = candidates.Count - results.Count;
+            FemProgressText = $"Completed {results.Count:N0} of {candidates.Count:N0} FEM cases" +
+                (failed > 0 ? $" · {failed:N0} failed to reach equilibrium" : "") +
+                (unfitted > 0 ? $" · {unfitted:N0} not fitted within {targetFitPercent:0.###}% (closest pretension used)"
+                    : $" · pretension stage within {targetFitPercent:0.###}% of target") +
+                (failed + unfitted > 0 ? " · see Cable Target Fit" : "") +
+                " · linked SAP2000 model unchanged.";
+            Message = FemProgressText;
+            FemLogLine(FemProgressText);
+        }
+        catch (OperationCanceledException)
+        {
+            FemProgressText = $"Cancelled after {FemRuns.Count:N0} completed cases.";
+            Message = FemProgressText;
+            FemLogLine(FemProgressText);
+        }
+        catch (Exception ex)
+        {
+            FemProgressText = $"FEM analysis failed: {ex.Message}";
+            Message = ex.Message;
+            FemLogLine(FemProgressText);
+            Warn("FEM Analysis", ex.Message);
+        }
+        finally
+        {
+            FemMonitorRunning = false;
+            isFemRunning = false;
+            femCancellation?.Dispose();
+            femCancellation = null;
+            IsBusy = false;
+            Update();
+        }
     }
 
     private async void RunStudy(StudyRunIntent intent = StudyRunIntent.AllSelected)
@@ -2251,6 +2834,16 @@ public sealed partial class MainViewModel : Observable
         finally { IsBusy = false; Update(); }
     }
 
+    private static string? FindTestsDirectory()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var tests = Path.Combine(directory.FullName, "tests");
+            if (Directory.Exists(tests)) return tests;
+        }
+        return null;
+    }
+
     // Load Config = open a project. Full-or-nothing: every present tab must validate against the
     // connected model, or the current project is left untouched.
     private void OpenProject()
@@ -2260,6 +2853,7 @@ public sealed partial class MainViewModel : Observable
         if (!config.CanUse) { Warn("Cannot Load Configuration", "Connect to a SAP2000 model first."); return; }
 
         var dialog = new OpenFileDialog { Filter = ConfigFilter, CheckFileExists = true };
+        if (FindTestsDirectory() is { } testsDirectory) dialog.InitialDirectory = testsDirectory;
         if (dialog.ShowDialog() == true) OpenProjectFile(dialog.FileName);
     }
 
@@ -2408,6 +3002,8 @@ public sealed partial class MainViewModel : Observable
             nameof(FoundationSummary), nameof(FoundationStatus), nameof(CableForceSummary), nameof(CableForceStatus),
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
             nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
+            nameof(FemCandidateSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus),
+            nameof(CanRunFemAnalysis), nameof(CanCancelFemAnalysis),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
             nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount),

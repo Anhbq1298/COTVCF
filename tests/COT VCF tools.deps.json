@@ -1,0 +1,1343 @@
+{
+  "configVersion": "1.0",
+  "units": {
+    "length": "m",
+    "force": "kN",
+    "pressure": "kPa"
+  },
+  "model": {
+    "originalFileName": "COT Framing_V1.2.sdb",
+    "fileName": "COT Framing_V1.2_100m.sdb",
+    "points": [
+      {
+        "name": "198",
+        "x": -50,
+        "y": 0,
+        "z": -20
+      },
+      {
+        "name": "199",
+        "x": 50,
+        "y": 0,
+        "z": -20
+      },
+      {
+        "name": "200",
+        "x": -60,
+        "y": 0,
+        "z": -20
+      },
+      {
+        "name": "201",
+        "x": -60,
+        "y": 0,
+        "z": -10
+      },
+      {
+        "name": "202",
+        "x": -50,
+        "y": 0,
+        "z": -10
+      },
+      {
+        "name": "203",
+        "x": 50,
+        "y": 0,
+        "z": -10
+      },
+      {
+        "name": "204",
+        "x": 60,
+        "y": 0,
+        "z": -10
+      },
+      {
+        "name": "205",
+        "x": 60,
+        "y": 0,
+        "z": -20
+      },
+      {
+        "name": "BTrPt001",
+        "x": -50,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "BTrPt002",
+        "x": -40,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "BTrPt003",
+        "x": -30,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "BTrPt004",
+        "x": -20,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "BTrPt005",
+        "x": -10,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "BTrPt006",
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "BTrPt007",
+        "x": 10,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "BTrPt008",
+        "x": 20,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "BTrPt009",
+        "x": 30,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "BTrPt010",
+        "x": 40,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "BTrPt011",
+        "x": 50,
+        "y": 0,
+        "z": 0
+      },
+      {
+        "name": "MTrPt001",
+        "x": -50,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "MTrPt002",
+        "x": -40,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "MTrPt003",
+        "x": -30,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "MTrPt004",
+        "x": -20,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "MTrPt005",
+        "x": -10,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "MTrPt006",
+        "x": 0,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "MTrPt007",
+        "x": 10,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "MTrPt008",
+        "x": 20,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "MTrPt009",
+        "x": 30,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "MTrPt010",
+        "x": 40,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "MTrPt011",
+        "x": 50,
+        "y": 0,
+        "z": 10
+      },
+      {
+        "name": "TTrPt001",
+        "x": -50,
+        "y": 0,
+        "z": 20
+      },
+      {
+        "name": "TTrPt002",
+        "x": -40,
+        "y": 0,
+        "z": 20
+      },
+      {
+        "name": "TTrPt003",
+        "x": -30,
+        "y": 0,
+        "z": 20
+      },
+      {
+        "name": "TTrPt004",
+        "x": -20,
+        "y": 0,
+        "z": 20
+      },
+      {
+        "name": "TTrPt005",
+        "x": -10,
+        "y": 0,
+        "z": 20
+      },
+      {
+        "name": "TTrPt006",
+        "x": 0,
+        "y": 0,
+        "z": 20
+      },
+      {
+        "name": "TTrPt007",
+        "x": 10,
+        "y": 0,
+        "z": 20
+      },
+      {
+        "name": "TTrPt008",
+        "x": 20,
+        "y": 0,
+        "z": 20
+      },
+      {
+        "name": "TTrPt009",
+        "x": 30,
+        "y": 0,
+        "z": 20
+      },
+      {
+        "name": "TTrPt010",
+        "x": 40,
+        "y": 0,
+        "z": 20
+      },
+      {
+        "name": "TTrPt011",
+        "x": 50,
+        "y": 0,
+        "z": 20
+      }
+    ],
+    "cables": [
+      {
+        "name": "Cable1a-2",
+        "pointI": "TTrPt001",
+        "pointJ": "201",
+        "pointICoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": -60,
+          "y": 0,
+          "z": -10
+        }
+      },
+      {
+        "name": "Cable1b-2",
+        "pointI": "TTrPt011",
+        "pointJ": "204",
+        "pointICoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": 60,
+          "y": 0,
+          "z": -10
+        }
+      },
+      {
+        "name": "Cable2a-2",
+        "pointI": "TTrPt001",
+        "pointJ": "BTrPt002",
+        "pointICoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": -40,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "Cable2b-2",
+        "pointI": "TTrPt011",
+        "pointJ": "BTrPt010",
+        "pointICoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": 40,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "Cable3a-2",
+        "pointI": "TTrPt001",
+        "pointJ": "BTrPt003",
+        "pointICoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": -30,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "Cable3b-2",
+        "pointI": "TTrPt011",
+        "pointJ": "BTrPt009",
+        "pointICoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": 30,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "Cable4a-2",
+        "pointI": "TTrPt001",
+        "pointJ": "BTrPt004",
+        "pointICoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": -20,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "Cable4b-2",
+        "pointI": "TTrPt011",
+        "pointJ": "BTrPt008",
+        "pointICoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": 20,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "Cable5a-2",
+        "pointI": "TTrPt001",
+        "pointJ": "BTrPt005",
+        "pointICoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": -10,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "Cable5b-2",
+        "pointI": "TTrPt011",
+        "pointJ": "BTrPt007",
+        "pointICoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": 10,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "Cable6a-2",
+        "pointI": "TTrPt001",
+        "pointJ": "BTrPt006",
+        "pointICoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "Cable6b-2",
+        "pointI": "TTrPt011",
+        "pointJ": "BTrPt006",
+        "pointICoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "Cable7a-2",
+        "pointI": "201",
+        "pointJ": "198",
+        "pointICoordinate": {
+          "x": -60,
+          "y": 0,
+          "z": -10
+        },
+        "pointJCoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": -20
+        }
+      },
+      {
+        "name": "Cable7b-2",
+        "pointI": "204",
+        "pointJ": "199",
+        "pointICoordinate": {
+          "x": 60,
+          "y": 0,
+          "z": -10
+        },
+        "pointJCoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": -20
+        }
+      },
+      {
+        "name": "Cable8a-2",
+        "pointI": "202",
+        "pointJ": "200",
+        "pointICoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": -10
+        },
+        "pointJCoordinate": {
+          "x": -60,
+          "y": 0,
+          "z": -20
+        }
+      },
+      {
+        "name": "Cable8b-2",
+        "pointI": "203",
+        "pointJ": "205",
+        "pointICoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": -10
+        },
+        "pointJCoordinate": {
+          "x": 60,
+          "y": 0,
+          "z": -20
+        }
+      }
+    ],
+    "frames": [
+      {
+        "name": "BottomChord",
+        "pointI": "BTrPt011",
+        "pointJ": "BTrPt001",
+        "pointICoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": 0
+        },
+        "pointJCoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": 0
+        }
+      },
+      {
+        "name": "TopChord",
+        "pointI": "TTrPt001",
+        "pointJ": "TTrPt011",
+        "pointICoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": 20
+        },
+        "pointJCoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": 20
+        }
+      },
+      {
+        "name": "VRM001",
+        "pointI": "BTrPt004",
+        "pointJ": "MTrPt004",
+        "pointICoordinate": {
+          "x": -20,
+          "y": 0,
+          "z": 0
+        },
+        "pointJCoordinate": {
+          "x": -20,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM002",
+        "pointI": "MTrPt004",
+        "pointJ": "TTrPt004",
+        "pointICoordinate": {
+          "x": -20,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": -20,
+          "y": 0,
+          "z": 20
+        }
+      },
+      {
+        "name": "VRM003",
+        "pointI": "BTrPt005",
+        "pointJ": "MTrPt005",
+        "pointICoordinate": {
+          "x": -10,
+          "y": 0,
+          "z": 0
+        },
+        "pointJCoordinate": {
+          "x": -10,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM004",
+        "pointI": "MTrPt005",
+        "pointJ": "TTrPt005",
+        "pointICoordinate": {
+          "x": -10,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": -10,
+          "y": 0,
+          "z": 20
+        }
+      },
+      {
+        "name": "VRM005",
+        "pointI": "BTrPt006",
+        "pointJ": "MTrPt006",
+        "pointICoordinate": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "pointJCoordinate": {
+          "x": 0,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM006",
+        "pointI": "MTrPt006",
+        "pointJ": "TTrPt006",
+        "pointICoordinate": {
+          "x": 0,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 0,
+          "y": 0,
+          "z": 20
+        }
+      },
+      {
+        "name": "VRM007",
+        "pointI": "BTrPt007",
+        "pointJ": "MTrPt007",
+        "pointICoordinate": {
+          "x": 10,
+          "y": 0,
+          "z": 0
+        },
+        "pointJCoordinate": {
+          "x": 10,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM008",
+        "pointI": "MTrPt007",
+        "pointJ": "TTrPt007",
+        "pointICoordinate": {
+          "x": 10,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 10,
+          "y": 0,
+          "z": 20
+        }
+      },
+      {
+        "name": "VRM009",
+        "pointI": "BTrPt008",
+        "pointJ": "MTrPt008",
+        "pointICoordinate": {
+          "x": 20,
+          "y": 0,
+          "z": 0
+        },
+        "pointJCoordinate": {
+          "x": 20,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM010",
+        "pointI": "MTrPt008",
+        "pointJ": "TTrPt008",
+        "pointICoordinate": {
+          "x": 20,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 20,
+          "y": 0,
+          "z": 20
+        }
+      },
+      {
+        "name": "VRM011",
+        "pointI": "BTrPt009",
+        "pointJ": "MTrPt009",
+        "pointICoordinate": {
+          "x": 30,
+          "y": 0,
+          "z": 0
+        },
+        "pointJCoordinate": {
+          "x": 30,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM012",
+        "pointI": "MTrPt009",
+        "pointJ": "TTrPt009",
+        "pointICoordinate": {
+          "x": 30,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 30,
+          "y": 0,
+          "z": 20
+        }
+      },
+      {
+        "name": "VRM013",
+        "pointI": "BTrPt010",
+        "pointJ": "MTrPt010",
+        "pointICoordinate": {
+          "x": 40,
+          "y": 0,
+          "z": 0
+        },
+        "pointJCoordinate": {
+          "x": 40,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM014",
+        "pointI": "MTrPt010",
+        "pointJ": "TTrPt010",
+        "pointICoordinate": {
+          "x": 40,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 40,
+          "y": 0,
+          "z": 20
+        }
+      },
+      {
+        "name": "VRM015",
+        "pointI": "MTrPt005",
+        "pointJ": "MTrPt006",
+        "pointICoordinate": {
+          "x": -10,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 0,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM016",
+        "pointI": "MTrPt006",
+        "pointJ": "MTrPt007",
+        "pointICoordinate": {
+          "x": 0,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 10,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM017",
+        "pointI": "MTrPt007",
+        "pointJ": "MTrPt008",
+        "pointICoordinate": {
+          "x": 10,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 20,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM018",
+        "pointI": "MTrPt008",
+        "pointJ": "MTrPt009",
+        "pointICoordinate": {
+          "x": 20,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 30,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM019",
+        "pointI": "MTrPt009",
+        "pointJ": "MTrPt010",
+        "pointICoordinate": {
+          "x": 30,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 40,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM020",
+        "pointI": "MTrPt010",
+        "pointJ": "MTrPt011",
+        "pointICoordinate": {
+          "x": 40,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": 50,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM021",
+        "pointI": "MTrPt001",
+        "pointJ": "MTrPt002",
+        "pointICoordinate": {
+          "x": -50,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": -40,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM022",
+        "pointI": "MTrPt002",
+        "pointJ": "MTrPt003",
+        "pointICoordinate": {
+          "x": -40,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": -30,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM023",
+        "pointI": "MTrPt003",
+        "pointJ": "MTrPt004",
+        "pointICoordinate": {
+          "x": -30,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": -20,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM024",
+        "pointI": "MTrPt004",
+        "pointJ": "MTrPt005",
+        "pointICoordinate": {
+          "x": -20,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": -10,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM025",
+        "pointI": "BTrPt002",
+        "pointJ": "MTrPt002",
+        "pointICoordinate": {
+          "x": -40,
+          "y": 0,
+          "z": 0
+        },
+        "pointJCoordinate": {
+          "x": -40,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM026",
+        "pointI": "MTrPt002",
+        "pointJ": "TTrPt002",
+        "pointICoordinate": {
+          "x": -40,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": -40,
+          "y": 0,
+          "z": 20
+        }
+      },
+      {
+        "name": "VRM027",
+        "pointI": "BTrPt003",
+        "pointJ": "MTrPt003",
+        "pointICoordinate": {
+          "x": -30,
+          "y": 0,
+          "z": 0
+        },
+        "pointJCoordinate": {
+          "x": -30,
+          "y": 0,
+          "z": 10
+        }
+      },
+      {
+        "name": "VRM028",
+        "pointI": "MTrPt003",
+        "pointJ": "TTrPt003",
+        "pointICoordinate": {
+          "x": -30,
+          "y": 0,
+          "z": 10
+        },
+        "pointJCoordinate": {
+          "x": -30,
+          "y": 0,
+          "z": 20
+        }
+      }
+    ],
+    "loadPatterns": [
+      "DEAD_ABOVE",
+      "LL_ABOVE",
+      "Pretension"
+    ],
+    "loadCases": [
+      "DEAD",
+      "DEAD_ABOVE_NL",
+      "DEAD_NL",
+      "LL_ABOVE_NL",
+      "MODAL",
+      "NL SLS001: 1.0DL\u002B1.0LL",
+      "NL SLS001: 1.0DL\u002B1.0LL-staged",
+      "NL ULS001: 1.35DL\u002B1.5LL",
+      "NL ULS001: 1.35DL\u002B1.5LL-staged",
+      "Pretension",
+      "Pretension Onlyh [For Ref]"
+    ]
+  },
+  "tab02Loading": {
+    "tributaryWidth": 12,
+    "numberOfStories": 10,
+    "appliedPoints": [
+      "TTrPt001",
+      "TTrPt002",
+      "TTrPt003",
+      "TTrPt004",
+      "TTrPt005",
+      "TTrPt006",
+      "TTrPt007",
+      "TTrPt008",
+      "TTrPt009",
+      "TTrPt010",
+      "TTrPt011"
+    ],
+    "loadDefinitions": [
+      {
+        "loadName": "DEAD_ABOVE",
+        "incrementEnabled": false,
+        "fixedQz": 10
+      },
+      {
+        "loadName": "LL_ABOVE",
+        "incrementEnabled": true,
+        "minQz": 5,
+        "maxQz": 10,
+        "stepQz": 2.5
+      }
+    ]
+  },
+  "tab03TrussHeight": {
+    "topPoints": [
+      "TTrPt001",
+      "TTrPt002",
+      "TTrPt003",
+      "TTrPt004",
+      "TTrPt005",
+      "TTrPt006",
+      "TTrPt007",
+      "TTrPt008",
+      "TTrPt009",
+      "TTrPt010",
+      "TTrPt011"
+    ],
+    "middlePoints": [
+      "MTrPt001",
+      "MTrPt002",
+      "MTrPt003",
+      "MTrPt004",
+      "MTrPt005",
+      "MTrPt006",
+      "MTrPt007",
+      "MTrPt008",
+      "MTrPt009",
+      "MTrPt010",
+      "MTrPt011"
+    ],
+    "bottomPoints": [
+      "BTrPt001",
+      "BTrPt002",
+      "BTrPt003",
+      "BTrPt004",
+      "BTrPt005",
+      "BTrPt006",
+      "BTrPt007",
+      "BTrPt008",
+      "BTrPt009",
+      "BTrPt010",
+      "BTrPt011"
+    ],
+    "referenceElevation": "Middle",
+    "minDeltaH": 0,
+    "maxDeltaH": 10,
+    "stepDeltaH": 2
+  },
+  "tab04CableForce": {
+    "cables": [
+      {
+        "cableName": "Cable1a-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Range",
+        "minForce": 100000,
+        "maxForce": 105000,
+        "stepForce": 10000,
+        "syncMode": "Independent",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable1b-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 15000,
+        "syncMode": "SameValues",
+        "referenceCableName": "Cable1a-2",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable2a-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 30000,
+        "syncMode": "Independent",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable2b-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 5000,
+        "syncMode": "SameValues",
+        "referenceCableName": "Cable2a-2",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable3a-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 30000,
+        "syncMode": "Independent",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable3b-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 7500,
+        "syncMode": "SameValues",
+        "referenceCableName": "Cable3a-2",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable4a-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Range",
+        "minForce": 40000,
+        "maxForce": 40000,
+        "syncMode": "SameStep",
+        "referenceCableName": "Cable6a-2",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable4b-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Range",
+        "minForce": 40000,
+        "maxForce": 40000,
+        "syncMode": "SameStep",
+        "referenceCableName": "Cable6a-2",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable5a-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 30000,
+        "syncMode": "Independent",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable5b-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 12500,
+        "syncMode": "SameValues",
+        "referenceCableName": "Cable5a-2",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable6a-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Range",
+        "minForce": 40000,
+        "maxForce": 40000,
+        "stepForce": 5000,
+        "syncMode": "Independent",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable6b-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 15000,
+        "syncMode": "SameValues",
+        "referenceCableName": "Cable6a-2",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable7a-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 30000,
+        "syncMode": "Independent",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable7b-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 30000,
+        "syncMode": "SameValues",
+        "referenceCableName": "Cable7a-2",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable8a-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 30000,
+        "syncMode": "Independent",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      },
+      {
+        "cableName": "Cable8b-2",
+        "pretensionLoadCase": "Pretension",
+        "mode": "Fixed",
+        "fixedForce": 30000,
+        "syncMode": "SameValues",
+        "referenceCableName": "Cable8a-2",
+        "sectionName": "192T15.7",
+        "sectionAreaM2": 0.028802317797652074,
+        "designCapacityKN": 31106.50322146424
+      }
+    ],
+    "cableStrengthMpa": 2160,
+    "strengthReductionFactor": 0.5
+  },
+  "tab05OutputSettings": {
+    "outputGroupPrefix": "[O]-",
+    "deflectionPointNames": [
+      "BTrPt001",
+      "BTrPt002",
+      "BTrPt003",
+      "BTrPt004",
+      "BTrPt005",
+      "BTrPt006",
+      "BTrPt007",
+      "BTrPt008",
+      "BTrPt009",
+      "BTrPt010",
+      "BTrPt011"
+    ],
+    "memberForceGroups": [
+      {
+        "id": "9f0e374f09154c47a20a22846bc3f6d3",
+        "name": "TopChord",
+        "sapGroupName": "[O]-TopChord",
+        "frameNames": [
+          "TopChord"
+        ]
+      },
+      {
+        "id": "14e1f73179ed4fbb9b6606373d9693f9",
+        "name": "BottomChord",
+        "sapGroupName": "[O]-BottomChord",
+        "frameNames": [
+          "BottomChord"
+        ]
+      },
+      {
+        "id": "387807e0472546d998088f6b4775515f",
+        "name": "VRM",
+        "sapGroupName": "[O]-VRM",
+        "frameNames": [
+          "VRM001",
+          "VRM002",
+          "VRM003",
+          "VRM004",
+          "VRM005",
+          "VRM006",
+          "VRM007",
+          "VRM008",
+          "VRM009",
+          "VRM010",
+          "VRM011",
+          "VRM012",
+          "VRM013",
+          "VRM014",
+          "VRM015",
+          "VRM016",
+          "VRM017",
+          "VRM018",
+          "VRM019",
+          "VRM020",
+          "VRM021",
+          "VRM022",
+          "VRM023",
+          "VRM024",
+          "VRM025",
+          "VRM026",
+          "VRM027",
+          "VRM028"
+        ]
+      }
+    ],
+    "foundationLeftPointNames": [
+      "198",
+      "200"
+    ],
+    "foundationRightPointNames": [
+      "199",
+      "205"
+    ],
+    "cableNames": [
+      "Cable1a-2",
+      "Cable1b-2",
+      "Cable2a-2",
+      "Cable2b-2",
+      "Cable3a-2",
+      "Cable3b-2",
+      "Cable4a-2",
+      "Cable4b-2",
+      "Cable5a-2",
+      "Cable5b-2",
+      "Cable6a-2",
+      "Cable6b-2",
+      "Cable7a-2",
+      "Cable7b-2",
+      "Cable8a-2",
+      "Cable8b-2"
+    ],
+    "cableResultLoadCase": "NL ULS001: 1.35DL\u002B1.5LL-staged",
+    "deflectionOutputCaseName": "NL SLS001: 1.0DL\u002B1.0LL-staged",
+    "memberForceResultLoadCase": "NL ULS001: 1.35DL\u002B1.5LL-staged",
+    "foundationReactionResultLoadCase": "NL ULS001: 1.35DL\u002B1.5LL-staged",
+    "deflectionLimitMinMm": 100,
+    "deflectionLimitMaxMm": 200
+  },
+  "tab05IterationStudy": {
+    "studyMode": "FixPretension",
+    "fixedHeightCandidateId": "H01",
+    "fixedPretensionCandidateId": "P01",
+    "outputDirectory": "C:\\Projects\\CoT\\VCF\\Model 1\\Study",
+    "excludedIterationKeys": [],
+    "useCandidateFilters": false,
+    "decisionWarningUtilization": 0.9,
+    "deflectionRankWeight": 0.5,
+    "pretensionRankWeight": 0.3,
+    "heightRankWeight": 0.2
+  },
+  "presentTabs": "All"
+}

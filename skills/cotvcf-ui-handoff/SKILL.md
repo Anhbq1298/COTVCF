@@ -88,28 +88,92 @@ earlier tall-header / large-button / blue-block look.
 
 ## Workflow tabs & shared model preview
 
-- There is **no** standalone "SAP Model" tab. The five workflow tabs (left rail) are **01 Loading, 02 Truss
-  Height, 03 Pretension, 04 Output Settings, 05 Iteration** (`SelectedIndex` 0-4). Connecting is the top-bar
-  `Connect SAP` button only. The `NN` in each header, all doc/help "Tab NN" prose, and the config validation
-  labels use this 01-05 numbering; the DTO property names (`Tab02Loading` … `Tab05IterationStudy`) and JSON keys
-  are **unchanged** legacy v1 identifiers — do not renumber them.
+- There is **no** standalone "SAP Model" tab. The left rail is **01 Loading, 02 Truss Height, 03 Pretension,
+  04 Output Settings, 05 Iteration, 06 Post-Processing, 06A Optimization, 07 FEM** (`SelectedIndex` 0-7:
+  Optimization is index 6 — `TabOptimization` — and FEM is index 7 — `TabFem`). Connecting is the
+  top-bar `Connect SAP` button only. Project JSON stores the Tabs 01-05 inputs and the Print Setup; nothing of
+  the FEM tab is saved in it. DTO property names (`Tab02Loading` … `Tab05IterationStudy`) and JSON keys are
+  unchanged legacy v1 identifiers.
 - There is **one** `Structural2DViewer` (`x:Name="SharedViewer"`), hoisted out of the `TabControl` into a
   three-column grid in `MainWindow.xaml`: `ParamsColumn` (the `TabControl`, params only) | `ViewerSplitterColumn` |
   `ViewerColumn` (the `SharedViewerPane` `DockPanel`). Switching tabs never rebuilds the viewer.
 - `MainWindow.xaml.cs` `ApplyViewerLayout()` (called from `Loaded` and `WorkflowTabs_SelectionChanged`): tabs
-  01-04 (index 0-3) get the resizable ~40/60 params/preview split; tab 05 Iteration (index 4) hides the viewer +
-  splitter and the `TabControl` takes the full width. The user's dragged split is remembered in
+  01-04 (index 0-3) and 07 FEM (index 7) get the resizable ~40/60 params/preview split; tabs 05 Iteration,
+  06 Post-Processing and 06A Optimization (indices 4-6) hide the viewer + splitter and the `TabControl` takes the
+  full width. The user's dragged split is remembered in
   `paramsColumnWidth` / `viewerColumnWidth`.
 - The viewer's `Model` and every overlay come from `MainViewModel` `SharedViewer*` computed properties gated on
   `selectedTab` (`SharedViewerModel`, `SharedViewerAppliedPoints`, `SharedViewerTopPoints/Middle/Bottom`,
   `SharedViewerCables`, `SharedViewerCaption`, `SharedViewerHint`, `ShowTrussLegend`). `NotifySharedViewer()` is
   called from the `SelectedTab` setter and from `Update()`, so both a tab switch and any state refresh re-raise them.
-- Overlays per tab: Loading → applied-point arrows + selection sync; Truss → Top/Middle/Bottom recoloured joints
+- Overlays per tab: Loading and FEM → applied-point arrows + selection sync; Truss → Top/Middle/Bottom recoloured joints
   + legend chip; Pretension → `State.Cables` highlight/labels + selection sync; Output → `State.Cables`
   highlight/labels plus point labels (so the user can read names to pick deflection points, foundation reactions,
-  member-force groups and monitored cables). Caption (Consolas, top) = `HeightSummary` on Truss,
+  member-force groups and monitored cables). FEM uses the linked geometry and Tab 01 load-point overlays. Caption
+  (Consolas, top) = `HeightSummary` on Truss,
   `CablePreviewSummary` on Pretension, `GeometrySummary` on Output, empty on Loading.
 - Do **not** re-add a per-tab `Structural2DViewer`; the params panels are viewer-free.
+
+## Tab 07 FEM
+
+- Runs every Cartesian Tab 01 × Tab 02 × Tab 03 candidate combination in the internal solver; it does not use
+  Tab 05 study mode/filters and never writes to SAP2000.
+- SAP properties are read on the existing STA gateway lane in kN/m units: assigned frame/cable sections,
+  effective section material, elastic modulus (isotropic getter except SAP `Tendon` materials, which use the
+  uniaxial getter), frame area/in-plane inertia modifiers, and frame end rotation releases. A CSI `None`
+  material-overwrite sentinel means "use the section material"; it is never passed as a material name.
+- `Read Properties` populates the read-only member-property grid before analysis; it does not write SAP data.
+- FEM has nested `Analysis` / `Results` subtabs. Results selects one completed `Lxx_Hxx_Pxx` candidate and offers
+  Axial Force, Bending Moment, Shear, Reactions, and Deflected Shape; the shared viewer draws filled blue-positive /
+  red-negative member diagrams, green support vectors, or the visually magnified deformed shape. The adjacent
+  grid lists values and units; diagram widths are auto-scaled and are not numeric scale. These are internal FEM
+  combinations built from Tab 01 loading rows, not SAP2000 saved analysis cases or combinations.
+- The internal model is linear-elastic 2D XZ Euler-Bernoulli frames plus axial tension-only cables with Tab 03
+  target forces fitted in a pretension-only stage (FEM Analysis: ±% tolerance, default 10, and max iterations,
+  default 100; all cables adjusted together) before the Tab 01 loads act on the prestressed state. FEM page tabs
+  are Inputs (pin supports, "Read from SAP", and sub-tabs Sectional properties — A/E/I/releases plus γ, ρ, w = γ·A·mod w,
+  m = ρ·A·mod m and Mod A/I/m/w — and Loads — editable load patterns (SW multiplier), static load cases (Run, definition
+  "1 DEAD + 1 PT", continues-from) and combinations (Run, factors); read via ISapGateway.GetFemLoadingAsync, never
+  written back; FemLoadPlan resolves them per candidate: Tab 01 loads replace SAP joint forces at applied points in their
+  pattern; each case solved tension-only; pretension fitted in the case whose own definition holds the Tab 03 pattern;
+  linear-additive combos superpose case results; FEM_PT/FEM_TAB01 app rows added when SAP has no such cases) | Analysis (fitting ±%, max iterations, Frame
+  mesh segments per frame (default 10). Like SAP, each frame is first split at every member-end joint lying on it
+  within 1 mm (FrameJoints.Pieces — e.g. full-length chords crossed by verticals and cable anchors), then each piece
+  is meshed; cables are never split or meshed. Interior mesh nodes are statically condensed onto the joints and
+  recovered as stations for diagrams/deflected shape; the viewer splits frames the same way), run controls, cable table:
+  Target / Pretension / Dev. % / Status / Result / Applied P / Iter.) | View (ViewToggle buttons: Frame mesh,
+  Member size, Loading — viewer overlays only while the FEM tab is open) | Results (Load case / combo selector drives the
+  table, viewer, hover and the cable table Result column; Axial force view draws frame
+  axial diagrams and cable tensions together; "Axial values (kN)" checkbox labels each frame piece and each cable
+  ("T n kN", drawn on top) in whole kN; Reactions view draws Rx and Rz as separate arrows with separate whole-kN
+  labels — never a combined resultant). In every result view, hovering within 10 px of a member shows a section
+  read-out: frames → name, x from I-end [m] and %, N/V/M and ux/uz interpolated between mesh stations, with a dashed
+  section-cut marker; cables → tension, slack state, target; supports (priority) → Rx/Rz.
+- Shared viewer projection dropdown has XY / XZ / YZ / 3D. 3D (StructureModel3D + WPF Viewport3D, orthographic,
+  true isometric default) extrudes every frame's SAP section to scale along SAP default local axes rotated by the
+  local-axis angle; shapes from PropFrame type getters (rectangle, box/concrete box, I, channel, tee, angle, circle,
+  pipe/concrete pipe, general) via FemSectionProperties.Shape, else an equivalent solid rectangle with the same A, I33,
+  I22 (SD, filled-tube, built-up…); cables are rods of their gross area; concrete materials are shaded concrete.
+  Drag orbit, right/Shift-drag pan, wheel zoom, double-click / Fit fits. Needs Read from SAP for sizes.
+- Run Analysis opens the non-modal FEM Run Monitor (FemRunMonitorWindow; reopen with Analysis → Monitor): progress,
+  live log (FemLog, one line per step and per case), Cable dropdown (default Cable1a-2) and Case dropdown with
+  Follow latest, and ConvergenceChart of P_result/P_preset per pretension-fitting run (run 0 = 0, line at 1, ±tol
+  band) from FemCableResponse.FitHistoryKN. Help is a window (HelpWindow) with Workflow and FEM procedure topics;
+  the ⓘ next to Monitor opens the FEM procedure directly. Keep the FEM procedure text in sync with the solver. Frame moments use one sign
+  convention at both ends (I-end = -f2), so diagrams are continuous across joints. A case whose targets cannot be met
+  is not an error: it keeps the closest pretension, is marked "Not fitted" (reason in the Status tooltip), and the
+  run continues. A case whose equilibrium solve fails gets one "Failed" row with the reason; the run continues. Pins are auto-detected at the lowest joints connected to near-vertical frame
+  members, drawn at the base joints in the shared viewer; they restrain X/Z translations and leave rotation free.
+- Tension-only cable equilibrium uses damped Newton iterations with a potential-energy line search, not a Boolean
+  active-set toggle. Failure reports include the final free-DOF residual and active cable count.
+- Unsupported inputs fail explicitly: non-planar geometry, tendon objects, advanced local axes, axial or
+  in-plane shear releases, and rotated local axes combined with in-plane releases. Nonlinear cable sag, geometric
+  nonlinearity, and SAP analysis settings are not modeled.
+- Results are streamed per candidate so cancellation or a later failure retains completed rows. Candidate count
+  is capped at the existing 50,000-row preview limit.
+- The global `Load Config` picker starts in the repository `tests` folder when that folder is available.
+- The connection gateway attaches to SAP2000 only. An ETABS-originated model must be open/exported into SAP2000;
+  direct ETABS process attachment is not part of this FEM workflow.
 
 ## Loading Criteria Tab
 

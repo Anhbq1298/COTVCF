@@ -8,6 +8,12 @@ internal static class GatewayChecks
 {
     public static void Run()
     {
+        Check(SapGateway.ResolveEffectiveMaterial("A992", "None", "Frame1", "W14X90") == "A992" &&
+              SapGateway.ResolveEffectiveMaterial("A992", "", "Frame1", "W14X90") == "A992" &&
+              SapGateway.ResolveEffectiveMaterial("A992", "UserSteel", "Frame1", "W14X90") == "UserSteel",
+            "FEM material resolution ignores CSI None overrides and respects explicit member overrides");
+        Throws(() => SapGateway.ResolveEffectiveMaterial("None", "None", "Frame1", "W14X90"));
+
         var fake = new FakeApi();
         using var gateway = new SapGateway(fake.Model);
         var expected = new ModelInfo("test.sdb", "26", 6, "kN", "m", false);

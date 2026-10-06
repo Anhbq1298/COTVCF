@@ -26,6 +26,19 @@ internal static class Program
                 LiveStudyCheck.RunAsync(args[liveStudyIndex + 1], liveMatrixIndex >= 0).GetAwaiter().GetResult();
                 return 0;
             }
+            if (args.Contains("--fem-property-read"))
+            {
+                using var sap = new SapGateway();
+                var info = sap.ConnectAsync().GetAwaiter().GetResult();
+                var snapshot = sap.ReadAsync().GetAwaiter().GetResult();
+                var members = snapshot.Geometry.Members
+                    .Where(member => member.Kind is MemberKind.Frame or MemberKind.Cable).ToArray();
+                var properties = sap.GetFemSectionPropertiesAsync(members, info).GetAwaiter().GetResult();
+                var missing = members.Where(member => !properties.ContainsKey(member.Name)).Select(member => member.Name).ToArray();
+                if (missing.Length > 0) throw new InvalidOperationException("FEM properties were not returned for: " + string.Join(", ", missing));
+                Console.WriteLine($"PASS: read FEM section/material properties for {properties.Count} frame/cable members from {info.Name}; no model writes performed.");
+                return 0;
+            }
             if (args.Contains("--study-ui"))
             {
                 var app = new System.Windows.Application();
@@ -36,6 +49,16 @@ internal static class Program
                 PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
 
                 var uiState = StudyComposerChecks.CreateState();
+                var femPoints = uiState.Geometry.Points.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+                femPoints["bot2"] = new("bot2", new(4, 0, 0));
+                femPoints["mid2"] = new("mid2", new(4, 0, 7.5));
+                var femGeometry = new GeometryModel(femPoints, uiState.Geometry.Members.Concat([
+                    new StructuralMember("Column1", "bot", "mid", MemberKind.Frame),
+                    new StructuralMember("Column2", "bot2", "mid2", MemberKind.Frame)
+                ]).ToArray());
+                uiState.Geometry = femGeometry;
+                uiState.Baseline = femGeometry;
+                uiState.SessionBaseline = femGeometry;
                 var uiSap = new FakeSap { Snapshot = new(uiState.Model!, uiState.Geometry, uiState.LoadPatterns.ToArray()) };
                 var uiWorkflow = new WorkflowService(uiSap, uiState);
                 var uiConfig = new COT_VCF.Configuration.ConfigService(uiSap, uiState, uiWorkflow);
@@ -155,6 +178,66 @@ internal static class Program
                        FindVisuals<TextBlock>(window).Any(text => text.Text == "06  SUPPORT REACTIONS") &&
                        FindVisuals<TextBlock>(window).Any(text => text.Text == "07  CABLE FORCES · kN"),
                     "Post-processing UI lists the result modules 01–07; the shortlist module is gone");
+
+                // Tab 07 FEM sits after 06A Optimization (index 7); its pages are Inputs / Analysis / View / Results
+                vm.SelectedTab = 7;
+                vm.SelectedFemPage = MainViewModel.FemInputsPage;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "07  FEM") &&
+                       FindVisuals<Button>(window).Any(button => Equals(button.Content, "Read from SAP")) &&
+                       vm.ReadFemProperties.CanExecute(null) &&
+                       FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemPropertiesGrid") &&
+                       window.SharedViewerPane.Visibility == Visibility.Visible &&
+                       vm.ShowFemPinLegend && vm.SharedViewerPinSupportPoints?.SequenceEqual(["bot", "bot2"]) == true,
+                    "Tab 07 Inputs renders the SAP property transfer, the property grid, the supports and the shared viewer");
+                vm.SelectedFemPage = MainViewModel.FemAnalysisPage;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(FindVisuals<Button>(window).Any(button => Equals(button.Content, "Run Analysis")) &&
+                       vm.FemCandidateSummary.Contains("FEM runs", StringComparison.Ordinal) &&
+                       window.SharedViewerPane.Visibility == Visibility.Visible,
+                    "Tab 07 Analysis renders the run controls and the candidate count");
+                var demoFemRun = new FemStudyRun("L01_H01_P01", "L01", "H01", "P01",
+                    new FemAnalysisResult(
+                        [new("bot", 0, 0, 0), new("mid", 0.001, -0.02, 0.001), new("top", 0.002, -0.04, 0.002),
+                         new("bot2", 0, 0, 0), new("mid2", 0.001, -0.02, 0.001)],
+                        [new("bot", 0, 100), new("bot2", 0, 100)],
+                        [new("Column1", 100, 100, -10, 10, 0, 0), new("Column2", 100, 100, -10, 10, 0, 0)],
+                        [new("Cable-A", 100, true)], 4));
+                vm.FemRuns.Add(demoFemRun);
+                vm.SelectedFemRun = demoFemRun;
+                vm.SelectedFemPage = MainViewModel.FemResultsPage;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemResultRowsGrid") &&
+                       FindVisuals<ComboBox>(window).Any(combo =>
+                           System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result combination") &&
+                       FindVisuals<RadioButton>(window).Count(button => button.GroupName == "FemResultMode") == 5 &&
+                              window.SharedViewerPane.Visibility == Visibility.Visible &&
+                              ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result) && vm.FemResultRows.Count > 0,
+                          "Tab 07 Results selects a completed L/H/P combination and feeds its response rows to the shared viewer");
+                    vm.FemResultMode = FemResultMode.AxialForce;
+                    window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                    window.UpdateLayout();
+                    var axialBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                    axialBitmap.Render(window);
+                    var axialEncoder = new PngBitmapEncoder(); axialEncoder.Frames.Add(BitmapFrame.Create(axialBitmap));
+                    using (var stream = File.Create(".work/fem-axial-results.png")) axialEncoder.Save(stream);
+                     vm.FemResultMode = FemResultMode.DeflectedShape;
+                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                     window.UpdateLayout();
+                     var resultsBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                     resultsBitmap.Render(window);
+                     var resultsEncoder = new PngBitmapEncoder(); resultsEncoder.Frames.Add(BitmapFrame.Create(resultsBitmap));
+                     using (var stream = File.Create(".work/fem-results-tab.png")) resultsEncoder.Save(stream);
+                var femBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                femBitmap.Render(window);
+                var femEncoder = new PngBitmapEncoder(); femEncoder.Frames.Add(BitmapFrame.Create(femBitmap));
+                using (var stream = File.Create(".work/fem-tab.png")) femEncoder.Save(stream);
+                vm.SelectedTab = 5;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
 
                 // Tab 06 Print Setup: header / footer of the printed reports, and the Module 07 PDF export
                 var printSetup = FindVisuals<Expander>(window).Single(expander =>
@@ -403,6 +486,11 @@ internal static class Program
                 Console.WriteLine("PASS: Tab 5 rendered with no WPF binding errors.");
                 return 0;
             }
+            if (args.Contains("--fem"))
+            {
+                PlanarFrameChecks.Run();
+                return 0;
+            }
             if (args.Contains("--ui-read"))
             {
                 using var sap = new SapGateway();
@@ -515,6 +603,7 @@ internal static class Program
             OutputSettingsChecks.Run();
             ReliabilityChecks.Run();
             StudyComposerChecks.Run();
+            PlanarFrameChecks.Run();
             StudyExecutionChecks.Run();
             OptimizationChecks.Run();
             CableForceReportChecks.Run();

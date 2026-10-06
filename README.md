@@ -2,7 +2,7 @@
 
 WPF / .NET 8 desktop application for defining structural-study candidates from an existing SAP2000 model, then building and analyzing one isolated child `.sdb` model per selected combination.
 
-The workflow is sequential:
+The study workflow is sequential:
 
 `SAP baseline -> loading candidates -> truss-height candidates -> cable-pretension candidates -> analyzed and verified child models`
 
@@ -95,13 +95,51 @@ The Tab 5 selector is the **total SAP2000 instance count**, not an additional-wo
 
 The connected instance is worker 1 and processes candidates. The study pool borrows it and does not close it. Calls are sequential inside each worker and parallel across workers; the next available worker receives the next queued candidate.
 
+## Tab 7 — FEM
+
+Tab 7 runs every loading × truss-height × cable-pretension combination configured in Tabs 1–3. It uses the
+existing project configuration loaded through **Load Config**; the file picker starts in the repository
+`tests` folder when available. The example project file in that folder contains the input sections for all three
+candidate dimensions.
+
+The analysis is internal and read-only with respect to SAP2000. **Read Properties** transfers each assigned
+frame/cable section, effective material (including the CSI `None` override sentinel), A, E, in-plane I, frame
+stiffness modifiers, and in-plane end releases into the FEM property grid before running. Isotropic materials use
+SAP's isotropic modulus API; tendon materials use the uniaxial modulus API. The results report peak downward
+joint displacement, axial force, bending moment, and support reaction per candidate. Auto-detected lowest column
+bases are drawn as pin symbols and modeled with X/Z translations fixed and in-plane rotation free.
+
+Tab 07 contains **Analysis** and **Results** subtabs. Results selects a completed internal `Lxx_Hxx_Pxx`
+combination and displays Axial Force, Bending Moment, Shear, Reactions, or Deflected Shape in the shared model
+preview, with a matching numeric table. These are the internal FEM candidate results, not saved SAP2000 load-case
+results; the selected loading combination is assembled from the Tab 1 definitions. Axial, bending, and shear
+results draw filled blue-positive/red-negative diagrams (positive axial force is tension); reactions draw support
+vectors; the deformed shape is visually magnified. Diagram widths are auto-scaled for display, while the adjacent
+table retains calculated values and units.
+
+The active analysis connection is SAP2000. For an ETABS-originated model, open/export that model into SAP2000
+first; this feature does not attach directly to an ETABS process.
+
+The current solver is linear-elastic 2D XZ Euler-Bernoulli frame analysis with axial tension-only cables and
+Tab 3 target forces met like SAP Target Force: the FEM Analysis page's fitting tolerance (default ±10%) and
+max iterations (default 100) control a pretension-only stage in which all cable pretensions are adjusted together
+(finite-difference Newton) until each cable is within tolerance of its target; the Tab 1 loads then act on that
+prestressed state, so loads that alone exceed a target do not block fitting. As in SAP, a frame is split at every
+member-end joint lying on it (within 1 mm), so a full-length chord connects to the verticals and cable anchors
+along it; each piece is then meshed into N equal sub-elements (Analysis → Frame mesh, default 10; cables are not meshed); interior mesh nodes are condensed onto the
+frame joints and recovered as stations for force diagrams and the deflected shape. Cable equilibrium uses damped Newton iterations with a potential-
+energy line search, so cables can transition between taut and slack without a Boolean active-set toggle loop.
+It rejects non-planar geometry, tendons, SAP advanced local axes, axial or in-plane shear releases, and rotated
+local axes with in-plane releases. It does not model nonlinear cable sag/geometric nonlinearity or run SAP2000
+analysis cases. The full candidate space is limited to 50,000 cases.
+
 ## Project configuration
 
 The COT VCF project JSON stores the configuration for Tabs 1–5 and their study selections; loading a project never writes to SAP2000. **Save Config** updates the current tab section, while **Save All** validates and saves all sections atomically. Saved configuration is checked against the connected model before it is applied.
 
 ## Build and run
 
-Requirements: Windows x64, .NET 8 Desktop Runtime, and SAP2000 26. `CSiAPIv1.dll` is referenced from the local SAP2000 installation and is not committed.
+Requirements: Windows x64, .NET 8 Desktop Runtime, and a local SAP2000 installation providing `CSiAPIv1.dll` (SAP2000 26 is the project default; the installed SAP2000 27 API also builds). The API DLL is not committed.
 
 ```powershell
 dotnet build COTVCF.sln
@@ -123,9 +161,10 @@ Default executable:
 ```powershell
 dotnet run --project tests\COT_VCF.Checks.csproj
 dotnet run --project tests\COT_VCF.Checks.csproj -- --study-ui
+dotnet run --project tests\COT_VCF.Checks.csproj -- --fem
 ```
 
-The first command runs offline workflow and guarded SAP-write tests using test doubles. The second opens the Tab 5 UI smoke test and checks WPF bindings. Live SAP checks are intentionally separate because they require a running SAP2000 instance.
+The first command runs offline workflow and guarded SAP-write tests using test doubles. The second opens the WPF smoke test and checks workflow/FEM bindings. The third runs the internal FEM analytical and candidate-composition checks. Live SAP checks are intentionally separate because they require a running SAP2000 instance.
 
 ## Implementation boundaries
 

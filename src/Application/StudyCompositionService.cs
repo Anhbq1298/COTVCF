@@ -206,7 +206,7 @@ public sealed class StudyCompositionService
         return $"Loading {load.Id}: {forceText}; qz {qzText} kPa";
     }
 
-    private static IReadOnlyList<LoadingCandidate> BuildPointLoads(ApplicationState state, LoadingCombination combination)
+    public static IReadOnlyList<LoadingCandidate> BuildPointLoads(ApplicationState state, LoadingCombination combination)
     {
         var points = state.AppliedPoints.OrderBy(point => point.X).ThenBy(point => point.PointName, StringComparer.Ordinal).ToArray();
         var rows = new List<LoadingCandidate>(points.Length * combination.Loads.Count);
