@@ -4,7 +4,11 @@ internal readonly record struct PlanePoint(double X, double Y);
 
 /// <summary>One Section Designer shape as drawn: its material, its place in the drawing order and its outline as
 /// convex pieces that do not overlap each other.</summary>
-internal sealed record SectionDesignerShape(string Name, string Material, double ZOrder, IReadOnlyList<PlanePoint[]> Pieces);
+internal sealed record SectionDesignerShape(string Name, string Material, double ZOrder, IReadOnlyList<PlanePoint[]> Pieces)
+{
+    /// <summary>The shape as it is drawn: its outside first, then any opening (a tube). The pieces when not given.</summary>
+    public IReadOnlyList<PlanePoint[]> Outlines { get; init; } = Pieces;
+}
 
 /// <summary>
 /// Plane geometry of Section Designer shapes. A shape is held as convex pieces, so the part of a shape that another
@@ -32,6 +36,22 @@ internal static class SectionDesignerGeometry
         new(centreX - width / 2, centreY - height / 2), new(centreX + width / 2, centreY - height / 2),
         new(centreX + width / 2, centreY + height / 2), new(centreX - width / 2, centreY + height / 2),
     ];
+
+    /// <summary>Outline of an I-shape about the centre of its bounding box, flanges centred on the web.</summary>
+    public static PlanePoint[] WideFlange(double centreX, double centreY, double height, double topWidth, double topThick, double web, double bottomWidth, double bottomThick) =>
+    [
+        new(centreX - bottomWidth / 2, centreY - height / 2), new(centreX + bottomWidth / 2, centreY - height / 2),
+        new(centreX + bottomWidth / 2, centreY - height / 2 + bottomThick), new(centreX + web / 2, centreY - height / 2 + bottomThick),
+        new(centreX + web / 2, centreY + height / 2 - topThick), new(centreX + topWidth / 2, centreY + height / 2 - topThick),
+        new(centreX + topWidth / 2, centreY + height / 2), new(centreX - topWidth / 2, centreY + height / 2),
+        new(centreX - topWidth / 2, centreY + height / 2 - topThick), new(centreX - web / 2, centreY + height / 2 - topThick),
+        new(centreX - web / 2, centreY - height / 2 + bottomThick), new(centreX - bottomWidth / 2, centreY - height / 2 + bottomThick),
+    ];
+
+    /// <summary>A circle as a many-sided outline, for drawing only.</summary>
+    public static PlanePoint[] Circle(double centreX, double centreY, double diameter, int sides = 72) =>
+        Enumerable.Range(0, sides).Select(i => new PlanePoint(
+            centreX + diameter / 2 * Math.Cos(2 * Math.PI * i / sides), centreY + diameter / 2 * Math.Sin(2 * Math.PI * i / sides))).ToArray();
 
     public static PlanePoint[] Rotate(PlanePoint[] polygon, double centreX, double centreY, double degrees)
     {

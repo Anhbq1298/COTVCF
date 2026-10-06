@@ -5,7 +5,6 @@
   <Style TargetType="Paragraph"><Setter Property="Margin" Value="0,0,0,8"/><Setter Property="LineHeight" Value="19"/></Style>
   <Style x:Key="H1" TargetType="Paragraph"><Setter Property="FontSize" Value="18"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Margin" Value="0,0,0,10"/></Style>
   <Style x:Key="H2" TargetType="Paragraph"><Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Margin" Value="0,14,0,6"/><Setter Property="Foreground" Value="{StaticResource Accent}"/></Style>
-  <Style x:Key="Formula" TargetType="Paragraph"><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="Margin" Value="18,2,0,8"/><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Padding" Value="8,4"/></Style>
   <Style TargetType="List"><Setter Property="Margin" Value="0,0,0,8"/><Setter Property="Padding" Value="20,0,0,0"/></Style>
   <Style TargetType="FlowDocument"><Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="12.5"/><Setter Property="PagePadding" Value="22,16"/><Setter Property="Background" Value="White"/></Style>
  </Window.Resources>
@@ -44,178 +43,29 @@
   <TabItem Header="FEM procedure">
    <FlowDocumentScrollViewer VerticalScrollBarVisibility="Auto">
     <FlowDocument>
-     <Paragraph Style="{StaticResource H1}">Tab 07 FEM — analysis procedure</Paragraph>
-     <Paragraph>The FEM tab analyses every Tab 01 loading × Tab 02 height × Tab 03 pretension combination with an internal two-dimensional
-      frame solver. It reads section and material data from the connected SAP2000 model but never writes to it, and it does not run SAP2000.
-      Units are kN and m throughout.</Paragraph>
+     <Paragraph Style="{StaticResource H1}">Tab 07 FEM: quick procedure</Paragraph>
+     <Paragraph>Compare loading, height and pretension candidates using the internal 2D XZ solver. Section, material and load data are read from SAP2000; FEM analysis does not change the SAP model.</Paragraph>
 
-     <Paragraph Style="{StaticResource H2}">1. Structural model</Paragraph>
+     <Paragraph Style="{StaticResource H2}">1. Prepare the candidates</Paragraph>
+     <Paragraph>Connect to SAP2000 and load geometry. Define loading in Tab 01, height variations in Tab 02 and cable target forces in Tab 03. A candidate such as L02_H03_P05 identifies one combination of those rows.</Paragraph>
+
+     <Paragraph Style="{StaticResource H2}">2. Check the inputs</Paragraph>
+     <Paragraph>In FEM Inputs, use Read from SAP. Review sectional properties, material weights, load patterns, static cases and combinations. Check the geometry and automatically detected base pins in the viewer. Editing FEM inputs affects the internal analysis only.</Paragraph>
+
+     <Paragraph Style="{StaticResource H2}">3. Set up and run</Paragraph>
+     <Paragraph>In Analysis, choose the frame mesh, target-force fitting tolerance and maximum iterations. Cable sag is enabled by default; switch it off when comparing straight-cable behavior. Click Run Analysis.</Paragraph>
+     <Paragraph>The solver first adjusts applied cable pretension to meet the Tab 03 targets under the target-force case's loads. It then solves the loaded cases using the fitted pretension. Monitor shows progress and the cable target-force convergence chart; a ratio of 1 means the target is met.</Paragraph>
+
+     <Paragraph Style="{StaticResource H2}">4. Review the results</Paragraph>
      <List>
-      <ListItem><Paragraph><Bold>Plane:</Bold> all analysed joints must lie in one XZ plane (Y within 0.1 µm). Three degrees of freedom per joint: UX, UZ and rotation RY.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Frames:</Bold> linear-elastic Euler–Bernoulli beam-columns. A, E and the in-plane I come from the assigned SAP section and material,
-       including SAP property modifiers (A × m1, I22 × m5, I33 × m6) and the frame's local-axis orientation. SAP end-moment releases (M3 at I and/or J) are honoured.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Cables:</Bold> tension-only axial members, stiffness EA/L. A cable never carries compression: when its force would become negative it goes slack and is removed from the stiffness.
-       With <Italic>Cable sag</Italic> on (Analysis, default), a cable that a load case loads along its length hangs in a shallow parabola instead — see section 5a.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Supports:</Bold> pins detected automatically at the lowest joints of near-vertical frame members; UX and UZ fixed, rotation free.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Mass and self-weight:</Bold> unit weight γ and mass ρ come from the SAP material; self-weight per length = γ × gross A × weight modifier
-       (mass = ρ × A × mass modifier, shown on Inputs → Sectional properties). Frame stiffness uses A × m1 and I × m5/m6; cable stiffness uses A × the cable area modifier.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Loads:</Bold> see section 3a — SAP load patterns, cases and combinations, plus the Tab 01 study loads.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Theory:</Bold> small displacements — no P-Δ and no large-displacement geometry update. The one geometric nonlinearity
-       included is the sag of the cables (section 5a).</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Cable target fit:</Bold> compare Target, Pretension and Dev. %. Result is the cable tension in the selected load case; Applied P is the fitted pretension input.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Status:</Bold> Not fitted means the target tolerance was not met and the closest fit is retained. Failed means equilibrium was not reached. Check the Status tooltip for the reason.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Results:</Bold> select a candidate and Load case / combo to inspect member axial forces, cable forces, bending, shear, deflection and support reactions in the table and viewer.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Signs and units:</Bold> axial force is positive in tension and negative in compression; Rx is positive along global X and Rz upward. Read the displayed unit labels. The deflected shape is magnified; table displacements are true values.</Paragraph></ListItem>
      </List>
 
-     <Paragraph Style="{StaticResource H2}">2. Frame splitting and meshing</Paragraph>
-     <Paragraph>As in SAP2000, a frame is first split at every member-end joint that lies on it (within 1 mm), so verticals and cable anchors along a
-      full-length chord connect to it. Each piece is then divided into N equal sub-elements (Analysis → <Italic>Frame mesh</Italic>, default 10).
-      Cables are never split or meshed.</Paragraph>
-     <Paragraph>The interior mesh nodes carry no load and connect only to their frame, so they are statically condensed onto the frame's end joints:</Paragraph>
-     <Paragraph Style="{StaticResource Formula}">K_condensed = K_ee − K_ei · K_ii⁻¹ · K_ie</Paragraph>
-     <Paragraph>This is exact and keeps the global system the size of the original model. After the solve, the mesh-node displacements are recovered
-      (u_i = −K_ii⁻¹ K_ie u_e) and give the axial force, shear, moment and displacement at every station along the frame — used by the diagrams,
-      the curved deflected shape and the hover read-out. For joint loads only, meshing does not change joint displacements or member-end forces.</Paragraph>
-
-     <Paragraph Style="{StaticResource H2}">3. Candidate cases</Paragraph>
-     <Paragraph>Case IDs combine the three axes, e.g. <Run FontFamily="{StaticResource MonoFont}">L02_H03_P05</Run> = loading row 2, height 3, pretension combination 5.
-      For each case the Tab 02 chord offsets are applied to the baseline geometry, then the two stages below are solved.</Paragraph>
-
-     <Paragraph Style="{StaticResource H2}">3a. Load patterns, load cases and combinations (Inputs → Loads)</Paragraph>
-     <Paragraph><Italic>Read from SAP</Italic> imports, read-only, the model's load patterns (type and self-weight multiplier), every load assigned to the analysed
-      joints, frames and cables, its static load cases and its response combinations. They can then be edited here — self-weight multiplier, case
-      definition (e.g. <Run FontFamily="{StaticResource MonoFont}">1 DEAD + 1 PT</Run>), combination factors and which to run — without changing SAP.</Paragraph>
-     <List>
-      <ListItem><Paragraph><Bold>Pattern loads:</Bold> joint F1, F3 and M2 (global); frame distributed and point loads in local 1/2, global X/Z, projected X/Z and
-       gravity directions; SAP gravity-load assignments (multiples of self-weight); cable distributed and gravity loads (lumped to the cable ends).
-       Out-of-plane components, moment loads on members and non-global coordinate systems are ignored and listed as warnings.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Member loads on the mesh:</Bold> converted to consistent nodal loads on every mesh node (Hermite shape functions, integrated exactly),
-       condensed with the stiffness, and subtracted as fixed-end forces when the station forces are recovered — so diagrams show the true load effect along the member.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Tab 01 study loads:</Bold> in a Tab 01 load pattern, SAP joint forces at the applied points are replaced by the candidate's loads, as the SAP study writes them.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Load cases:</Bold> each linear or nonlinear static case is solved as its own tension-only equilibrium. A nonlinear case that
-       continues from another includes that case's loads (staged). A case that includes a Tab 03 target-force pattern carries the fitted pretension × its factor;
-       a case without it has no cable pretension. (SAP treats cables in a linear case as linear; here cables are always tension-only.)</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Combinations:</Bold> linear additive combinations are evaluated as the factored sum of case (or nested combination) results, as SAP does.
-       Envelope, absolute, SRSS and range combinations are listed but not evaluated.</Paragraph></ListItem>
-      <ListItem><Paragraph>If no SAP case uses the Tab 03 or Tab 01 patterns, the app adds <Run FontFamily="{StaticResource MonoFont}">FEM_PT</Run> (target-force pattern alone)
-       and <Run FontFamily="{StaticResource MonoFont}">FEM_TAB01</Run> (Tab 01 loads, continuing from the pretension case) so the study loads always act on the prestressed structure.</Paragraph></ListItem>
-      <ListItem><Paragraph>On Results, <Italic>Load case / combo</Italic> chooses which result the table, viewer, hover read-out and the Cable target fit Result column show.</Paragraph></ListItem>
-     </List>
-
-     <Paragraph Style="{StaticResource H2}">4. Stage 1 — cable pretension fitting (SAP "Target Force")</Paragraph>
-     <Paragraph>Each Tab 03 value is a <Italic>target</Italic> tension P_preset, not a load. SAP2000 meets a Target Force at the end of the load case in which
-      the target-force pattern is applied, so the solver finds the applied pretensions P_applied that produce the targets under <Bold>the other loads of that case</Bold>
-      (none, for a pretension-only case such as FEM_PT; e.g. self-weight if the case also holds DEAD):</Paragraph>
-     <List MarkerStyle="Decimal">
-      <ListItem><Paragraph>Run 1: apply P_applied = P_preset to every cable and solve. Because the frame shortens under the pretension, P_result is usually below the target.</Paragraph></ListItem>
-      <ListItem><Paragraph>Build the response matrix J (how each cable's tension changes per kN of pretension in every cable) by finite differences — this captures the interaction between cables.</Paragraph></ListItem>
-      <ListItem><Paragraph>Correct all pretensions together: ΔP = J⁺ · (P_preset − P_result) (minimum-norm, so cable segments in series share the correction evenly); pretension is kept ≥ 0.</Paragraph></ListItem>
-      <ListItem><Paragraph>Repeat until every cable satisfies the tolerance, or until <Italic>Max iterations</Italic> runs (default 100).</Paragraph></ListItem>
-     </List>
-     <Paragraph Style="{StaticResource Formula}">| P_result / P_preset − 1 | ≤ tolerance (Analysis → Target-force fitting ±, default 10 %)</Paragraph>
-     <Paragraph>The pretension-only response is nearly linear, so this Newton procedure normally converges in 2–4 runs. If the targets cannot all be
-      met — for example opposing cables whose targets would need a negative (compressive) pretension in one of them — the closest result is kept, the case is
-      marked <Italic>Not fitted</Italic> with the reason, and the run continues.</Paragraph>
-
-     <Paragraph Style="{StaticResource H2}">5. Stage 2 — loaded equilibrium</Paragraph>
-     <Paragraph>Every load case is then solved with its loads and its share of the fitted pretension. The tension-only problem is solved by a damped
-      Newton method minimising total potential energy:</Paragraph>
-     <Paragraph Style="{StaticResource Formula}">Π(u) = ½ uᵀK_frames u + Σ_cables T(u)² / (2·EA/L) − fᵀu,   T(u) = max(0, P_applied + EA/L · Δℓ(u))</Paragraph>
-     <List>
-      <ListItem><Paragraph>Each iteration re-checks which cables are taut, solves for a step, then halves it (line search) until the energy decreases.</Paragraph></ListItem>
-      <ListItem><Paragraph>Slack cables keep a tiny stiffness (10⁻⁶ EA/L) in the step matrix only, and a growing diagonal (Levenberg) shift is tried if a step fails —
-       this keeps joints held only by slack or collinear cables solvable. Residual and energy use the true stiffness, so the converged answer is unchanged.</Paragraph></ListItem>
-      <ListItem><Paragraph>Converged when the largest free-DOF residual force ≤ 10⁻⁷ × the largest load or pretension (max 100 iterations). Because the energy is convex,
-       the result does not depend on load path, so "pretension then load" is solved in one step.</Paragraph></ListItem>
-     </List>
-     <Paragraph>A case that does not reach equilibrium is listed as <Italic>Failed</Italic> with its reason; the remaining cases still run.</Paragraph>
-
-     <Paragraph Style="{StaticResource H2}">5a. Cable sag (Analysis → Cable sag, on by default)</Paragraph>
-     <Paragraph>A cable that a load case loads along its length — its self-weight, when the case includes a pattern with a self-weight multiplier, or a
-      distributed load assigned to it — does not stay straight. It hangs in a shallow parabola, so its curve is longer than its chord and part of any
-      joint movement goes into changing the sag instead of stretching the cable. With w_n the load normal to the chord (self-weight w gives w·cos θ),
-      L the chord length and k = EA/L, the tension T is the positive root of</Paragraph>
-     <Paragraph Style="{StaticResource Formula}">T / k − a / T² = Δℓ(u) + P_applied / k,   a = w_n²·L³ / 24</Paragraph>
-     <Paragraph>and the cable's energy in Π(u) becomes T²/2k − 2a/T. From this follow:</Paragraph>
-     <List>
-      <ListItem><Paragraph><Bold>Stiffness:</Bold> dT/dΔℓ = k / (1 + w_n²·L²·EA / 12T³) — Ernst's equivalent modulus. Near 100 % of EA/L for a highly tensioned cable,
-       a small fraction for a long or lightly tensioned one. The cable table shows it as <Italic>Stiff. %</Italic>.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Sag:</Bold> f = w_n·L² / 8T at mid-span, shown as <Italic>Sag mm</Italic> and in the hover read-out.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>No slack switch:</Bold> the root is always positive. Where a straight cable would go slack, the sagging cable keeps the tension its
-       weight needs to hang across the shortened chord.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Pretension:</Bold> P_applied keeps its meaning — the lack of fit of the cable × EA/L. Target-force fitting adjusts it until the
-       sagging cable's tension meets the target under the loads of the pretension stage, so the fitted P_applied is a little lower than for a straight cable.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Unchanged:</Bold> a cable with no load along it in that case, or a vertical cable under gravity (w_n = 0), is the straight
-       tension-only cable. The cable's load still reaches its end joints exactly as before; sag only changes the cable's own force law. Joint displacements
-       remain small-displacement and frames remain linear. The energy stays convex, so the solution is still unique and independent of load path.</Paragraph></ListItem>
-     </List>
-     <Paragraph>Switch <Italic>Cable sag</Italic> off to compare with straight tension-only cables.</Paragraph>
-
-     <Paragraph Style="{StaticResource H2}">6. Run monitor and convergence chart</Paragraph>
-     <Paragraph>Run Analysis opens the run monitor (reopen it with <Italic>Monitor</Italic>). It shows progress, a live log of each step and case, and the
-      convergence chart for the cable chosen under <Italic>Cable</Italic> (default Cable1a-2):</Paragraph>
-     <List>
-      <ListItem><Paragraph>x-axis — number of run (pretension-fitting iteration); run 0 is the unstressed state;</Paragraph></ListItem>
-      <ListItem><Paragraph>y-axis — P_result / P_preset; the line at 1 is the target and the shaded band is the ± tolerance.</Paragraph></ListItem>
-     </List>
-     <Paragraph>The chart follows each case as it completes; choose a <Italic>Case</Italic> to inspect a particular one.</Paragraph>
-
-     <Paragraph Style="{StaticResource H2}">7. Results and sign conventions</Paragraph>
-     <List>
-      <ListItem><Paragraph><Bold>Cable target fit</Bold> (Analysis): Target, Pretension (stage-1 tension), Dev. %, Status, Result (final tension under load), Applied P and fitting runs.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Axial force</Bold>: + tension, − compression. Cable tensions are labelled "T … kN".</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Bending moment and shear</Bold>: one convention along each frame from I to J, continuous across joints.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Reactions</Bold>: Rx (+ global X) and Rz (+ up) shown separately.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Displacements</Bold>: ux, uz in the global axes; the deflected shape is magnified for display only.</Paragraph></ListItem>
-     </List>
-
-     <Paragraph Style="{StaticResource H2}">8. Limitations — check critical results in SAP2000</Paragraph>
-     <List>
-      <ListItem><Paragraph>Planar, linear-elastic, small-displacement analysis; no P-Δ or buckling. Cable sag is the shallow-parabola (Ernst) model of
-       section 5a, not a full catenary with large displacements: it is accurate while the sag stays below about one eighth of the span and the joints
-       move little compared with the cable length.</Paragraph></ListItem>
-      <ListItem><Paragraph>Only static load cases and linear additive combinations; no temperature, settlement, moving, modal, response-spectrum or time-history analysis,
-       and no moment loads on members. Superposing tension-only cases in a combination is the same approximation SAP makes for combinations of nonlinear cases.</Paragraph></ListItem>
-      <ListItem><Paragraph>Tendon objects, partial-fixity releases and non-pinned supports are not modelled.</Paragraph></ListItem>
-      <ListItem><Paragraph>SAP2000 meets Target Force with its own iterative scheme; results should agree in the linear range but are not guaranteed identical.</Paragraph></ListItem>
-     </List>
-
-     <Paragraph Style="{StaticResource H2}">9. Basis of the solver — sources and verification</Paragraph>
-     <Paragraph>The solver was written for this application. It contains no code from OpenSees, SAP2000 or any other analysis package; the only
-      library it uses is MathNet.Numerics for linear algebra. Each part implements a published, standard formulation:</Paragraph>
-     <List>
-      <ListItem><Paragraph><Bold>Frames</Bold> — direct stiffness method, Euler–Bernoulli beam-column element, end releases by condensation, consistent nodal loads:
-       McGuire, Gallagher &amp; Ziemian, <Italic>Matrix Structural Analysis</Italic>, 2nd ed., Wiley, 2000; Cook, Malkus, Plesha &amp; Witt,
-       <Italic>Concepts and Applications of Finite Element Analysis</Italic>, 4th ed., Wiley, 2002.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Frame meshing</Bold> — static condensation of the interior nodes: Guyan, "Reduction of stiffness and mass matrices",
-       AIAA Journal 3(2), 1965, p. 380.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Cable sag</Bold> — the elastic cable in a shallow parabola: Irvine, <Italic>Cable Structures</Italic>, MIT Press, 1981. Its stiffness is the
-       equivalent modulus of Ernst, "Der E-Modul von Seilen unter Berücksichtigung des Durchhanges", Der Bauingenieur 40(2), 1965, pp. 52–55; see also
-       Gimsing &amp; Georgakis, <Italic>Cable Supported Bridges</Italic>, 3rd ed., Wiley, 2012.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Tension-only equilibrium</Bold> — minimum of the total potential energy, convex for cables without compression (Kanno,
-       <Italic>Nonsmooth Mechanics and Convex Optimization</Italic>, CRC Press, 2011), by Newton's method with a backtracking line search and a Levenberg shift:
-       Nocedal &amp; Wright, <Italic>Numerical Optimization</Italic>, 2nd ed., Springer, 2006; Levenberg, Quarterly of Applied Mathematics 2(2), 1944, pp. 164–168.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Pretension fitting</Bold> — follows the intent of SAP2000's Target-Force load (CSI Analysis Reference Manual) with a Newton iteration
-       of its own on the cable pretensions; it is not CSI's algorithm.</Paragraph></ListItem>
-     </List>
-     <Paragraph><Bold>Verified</Bold> by the application's own checks against closed-form results: mid-span deflection PL³/48EI and 5wL⁴/384EI, moments wL²/8 and
-      P·a·b/L, reactions and overall equilibrium, meshed against unmeshed frames, superposition of load cases, and for cable sag an independent solution of
-      the cable equation and Ernst's formula (agreement to about 10⁻⁹).</Paragraph>
-     <Paragraph><Bold>Benchmarked against SAP2000</Bold> on a completed study (COT Framing_V1.2, 135 candidates), like for like: the FEM is run on SAP2000's own
-      text copy of the model, on the same candidates, with the cable target forces met in the same case (<Italic>Pretension</Italic>, which includes
-      self-weight) and compared in the same staged load cases. The total vertical reaction agrees to 0.002 %; cable forces to within 3.8 % and
-      deflections to within 3.2 % of the largest SAP2000 value (mean differences about 600 kN and 2 mm); support reactions to within 1.2 %. What
-      remains is the difference in theory: SAP2000 analysed those cases with P-Delta / large displacements, catenary cables and shear-deformable
-      frames. The comparison is a check of the application (<Italic>--fem-sap</Italic>) and can be re-run on another study. Not compared with OpenSees.</Paragraph>
-     <Paragraph><Bold>Two things that benchmark found — read them before comparing the FEM tab with a SAP2000 study:</Bold></Paragraph>
-     <List>
-      <ListItem><Paragraph><Bold>Composite Section Designer sections weigh too much in the FEM tab.</Bold> SAP2000 reports the area of such a section transformed to
-       its base material, and the FEM's SAP read multiplies that by the base material's unit weight. A concrete-filled steel box of 105 kN/m becomes
-       150 kN/m. On the benchmark model the FEM tab carries 4 % more load than SAP2000. (The benchmark itself uses the correct weights.)</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>SAP2000 studies run before this was fixed kept the baseline cable lengths.</Bold> The study changes the truss height by moving
-       joints. The ends of a cable move with them, but a SAP2000 cable object defined by its undeformed length keeps that number — SAP2000's text copy
-       of each child model shows it. In a taller candidate SAP2000 then analysed cables whose undeformed length was up to 29 % shorter than the chord
-       they span — up to 41 % stiffer — and gave smaller deflections than the FEM tab (on the benchmark: equal at the baseline height, about −25 % at
-       the tallest). The study now gives every such cable the same length relative to its chord when it moves the joints; on the tallest candidate
-       SAP2000 and the FEM tab then agree within 0.2 % on deflection. Candidates above the baseline height from an earlier study have to be run again.</Paragraph></ListItem>
-     </List>
+     <Paragraph Style="{StaticResource H2}">Main analysis limits</Paragraph>
+     <Paragraph>The solver uses planar, linear-elastic frames, tension-only cables and small joint displacements. Cable sag uses a shallow-parabola approximation. P-Delta, buckling and full large-displacement catenary behavior are not included. Only supported static cases and linear additive combinations are evaluated. Check critical results against the corresponding SAP2000 candidate and load case.</Paragraph>
     </FlowDocument>
    </FlowDocumentScrollViewer>
   </TabItem>

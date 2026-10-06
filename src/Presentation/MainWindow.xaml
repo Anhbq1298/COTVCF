@@ -20,7 +20,7 @@
      <Button Command="{Binding Refresh}" Style="{StaticResource IconButton}" ToolTip="Refresh connection and geometry">
       <Viewbox Width="15" Height="15"><Path Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Data="M14,5 A6,6 0 1 0 16,11 M16,11 L16,6 M16,11 L11,11"/></Viewbox>
      </Button>
-     <Button Content="Help" Click="ShowHelp" Margin="0"/>
+     <Button Content="Help" Click="ShowHelp" Margin="0" ToolTip="Open workflow help, or the FEM procedure when Tab 07 is selected." AutomationProperties.Name="Open help"/>
     </StackPanel>
     <Grid VerticalAlignment="Center">
      <Grid.ColumnDefinitions>

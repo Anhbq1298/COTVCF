@@ -232,7 +232,8 @@ public partial class MainWindow : Window
     }
 
     private HelpWindow? helpWindow;
-    private void ShowHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.Workflow);
+    private void ShowHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(DataContext is MainViewModel { SelectedTab: 7 }
+        ? HelpWindow.Topic.FemProcedure : HelpWindow.Topic.Workflow);
 
     private void ShowFemHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.FemProcedure);
 

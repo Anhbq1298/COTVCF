@@ -163,7 +163,9 @@ earlier tall-header / large-button / blue-block look.
   live log (FemLog, one line per step and per case), Cable dropdown (default Cable1a-2) and Case dropdown with
   Follow latest, and ConvergenceChart of P_result/P_preset per pretension-fitting run (run 0 = 0, line at 1, ±tol
   band) from FemCableResponse.FitHistoryKN. Help is a window (HelpWindow) with Workflow and FEM procedure topics;
-  the ⓘ next to Monitor opens the FEM procedure directly. Keep the FEM procedure text in sync with the solver. Frame moments use one sign
+  the ⓘ next to Monitor and top-bar Help on Tab 07 open the FEM procedure directly. Keep the topic concise:
+  preparation, inputs, run settings, results and main limitations; omit debug logs and algorithm details.
+  Keep the FEM procedure text in sync with the solver. Frame moments use one sign
   convention at both ends (I-end = -f2), so diagrams are continuous across joints. A case whose targets cannot be met
   is not an error: it keeps the closest pretension, is marked "Not fitted" (reason in the Status tooltip), and the
   run continues. A case whose equilibrium solve fails gets one "Failed" row with the reason; the run continues.
@@ -187,10 +189,10 @@ earlier tall-header / large-button / blue-block look.
   `Sag mm` / `Stiff. %` and the hover read-out; combinations carry neither. The load still reaches the cable's
   end joints as before.
 - **Provenance and trust**: the solver is this application's own code — nothing from OpenSees or SAP2000;
-  MathNet.Numerics only. The class summary of `PlanarFrameSolver`, the Help window (FEM procedure §9) and the
-  README list the published sources (McGuire/Gallagher/Ziemian, Cook et al., Guyan 1965, Irvine 1981, Ernst 1965,
+  MathNet.Numerics only. The class summary of `PlanarFrameSolver` and the README list the published sources
+  (McGuire/Gallagher/Ziemian, Cook et al., Guyan 1965, Irvine 1981, Ernst 1965,
   Gimsing & Georgakis, Kanno 2011, Nocedal & Wright, Levenberg 1944, CSI manual for Target Force). Keep those
-  three places in step, cite only what the code actually implements, and state only the agreement the benchmark
+  two places in step; omit benchmark and verification references from the concise FEM help. Cite only what the code actually implements, and state only the agreement the benchmark
   below actually shows. It has not been compared with OpenSees.
 - **Pretension stages** (`FemLoadPlan.FitCases` / `StagesFor`, used by `FemStudyService.Analyze`): every case whose
   own definition applies the Tab 03 target-force pattern is a stage of its own — SAP2000 meets a Target Force at
