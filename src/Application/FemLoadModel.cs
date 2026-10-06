@@ -148,11 +148,17 @@ public sealed class FemLoadPlan
     private readonly IReadOnlyList<(string Name, IReadOnlyList<(string Name, bool IsCombination, double Factor)> Items)> combinations;
     private readonly IReadOnlySet<string> tab01Patterns;
     private readonly IReadOnlySet<string> pretensionPatterns;
+    private readonly IReadOnlyDictionary<string, string?> fitStageOf;
 
     public IReadOnlyList<string> CaseNames { get; }
     public IReadOnlyList<string> CombinationNames { get; }
-    /// <summary>Case whose loads (other than the cable target-force pattern) act while the pretension is fitted.</summary>
+    /// <summary>Case whose loads (other than the cable target-force pattern) act while the pretension is fitted —
+    /// the first of <see cref="FitCases"/>.</summary>
     public string? FitCase { get; }
+    /// <summary>Every pretension stage of the run. SAP meets a Target Force at the end of the case that applies the
+    /// target-force pattern, so each such case is a stage of its own, and a case that continues from one (directly
+    /// or through other cases) carries the pretension fitted in that stage — not in some other case.</summary>
+    public IReadOnlyList<string> FitCases { get; }
     public IReadOnlyList<string> Notes { get; }
     /// <summary>Every result name in display order: run cases, then run combinations.</summary>
     public IReadOnlyList<string> ResultNames => [.. CaseNames, .. CombinationNames];
@@ -160,8 +166,12 @@ public sealed class FemLoadPlan
     private FemLoadPlan(IReadOnlyDictionary<string, FemLoadSet> patternLoads,
         IReadOnlyDictionary<string, IReadOnlyList<(string, double)>> resolvedCases, IReadOnlyList<string> caseNames,
         IReadOnlyList<(string, IReadOnlyList<(string, bool, double)>)> combinations, string? fitCase,
-        IReadOnlySet<string> tab01Patterns, IReadOnlySet<string> pretensionPatterns, IReadOnlyList<string> notes)
+        IReadOnlySet<string> tab01Patterns, IReadOnlySet<string> pretensionPatterns, IReadOnlyList<string> notes,
+        IReadOnlyDictionary<string, string?> fitStageOf)
     {
+        this.fitStageOf = fitStageOf;
+        FitCases = caseNames.Select(name => fitStageOf[name]).Where(stage => stage is not null).Select(stage => stage!)
+            .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(stage => string.Equals(stage, fitCase, StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToArray();
         this.patternLoads = patternLoads;
         this.resolvedCases = resolvedCases;
         CaseNames = caseNames;
@@ -305,16 +315,49 @@ public sealed class FemLoadPlan
         if (tab01.Count > 0 && !neededCases.Any(name => resolved[name].Any(term => tab01.Contains(term.Item1))))
             notes.Add("No load case that will run includes a Tab 01 load pattern, so the Tab 01 candidate loads do not affect the results.");
 
+        // The stage a case takes its pretension from: itself when its own definition applies the target-force pattern,
+        // otherwise the nearest case it continues from that does. None = the case carries no cable pretension.
+        var stages = new Dictionary<string, string?>(comparer);
+        string? StageOf(string name)
+        {
+            if (stages.TryGetValue(name, out var known)) return known;
+            var row = caseRows[name];
+            return stages[name] = ownTerms[name].Any(term => pretension.Contains(term.Pattern)) ? row.Name
+                : IsNoInitialCase(row.InitialCase) ? null : StageOf(row.InitialCase);
+        }
+        foreach (var name in resolved.Keys.ToArray()) StageOf(name);
+        if (stages.Values.Where(stage => stage is not null).Distinct(comparer).Count() > 1)
+            notes.Add("Several load cases apply the cable target-force pattern; each is its own pretension stage, and a case uses the stage it continues from.");
+
         return new FemLoadPlan(loads, resolved, neededCases, orderedCombinations, fitCase,
-            tab01, pretension, notes);
+            tab01, pretension, notes, stages);
     }
 
     /// <summary>SAP reports "start from zero / unstressed" as an empty name, "None" or "Zero".</summary>
     public static bool IsNoInitialCase(string? name) => string.IsNullOrWhiteSpace(name) ||
         name.Trim().Equals("None", StringComparison.OrdinalIgnoreCase) || name.Trim().Equals("Zero", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Solver input for one candidate: fit-stage loads and every case with the candidate's Tab 01 loads.</summary>
-    public (FemLoadSet FitLoads, IReadOnlyList<FemCaseLoads> Cases) ForCandidate(IReadOnlyList<FemAppliedLoad> candidateLoads)
+    /// <summary>
+    /// Solver input for one candidate, one group per pretension stage: the loads acting while that stage's pretension
+    /// is fitted, and the cases that carry it (the stage itself and every case continuing from it). Cases without
+    /// cable pretension ride with the first group. Each group is one <c>SolveCases</c> call.
+    /// </summary>
+    public IReadOnlyList<(string? FitCase, FemLoadSet FitLoads, IReadOnlyList<FemCaseLoads> Cases)> StagesFor(IReadOnlyList<FemAppliedLoad> candidateLoads)
+    {
+        var (_, all) = ForCandidate(candidateLoads);
+        if (FitCases.Count == 0) return [(null, FemLoadSet.Empty, all)];
+        return FitCases.Select((stage, index) => ((string?)stage, ForCandidate(candidateLoads, stage).FitLoads,
+            (IReadOnlyList<FemCaseLoads>)all.Where(item => fitStageOf[item.Name] is { } own
+                ? string.Equals(own, stage, StringComparison.OrdinalIgnoreCase) : index == 0).ToArray()))
+            .Where(group => group.Item3.Count > 0).ToArray();
+    }
+
+    /// <summary>Solver input for one candidate with a single pretension stage (<see cref="FitCase"/>): fit-stage loads
+    /// and every case with the candidate's Tab 01 loads. A run with several stages uses <see cref="StagesFor"/>.</summary>
+    public (FemLoadSet FitLoads, IReadOnlyList<FemCaseLoads> Cases) ForCandidate(IReadOnlyList<FemAppliedLoad> candidateLoads) =>
+        ForCandidate(candidateLoads, FitCase);
+
+    private (FemLoadSet FitLoads, IReadOnlyList<FemCaseLoads> Cases) ForCandidate(IReadOnlyList<FemAppliedLoad> candidateLoads, string? fitCase)
     {
         FemLoadSet PatternSet(string pattern)
         {
@@ -330,7 +373,7 @@ public sealed class FemLoadPlan
         double PretensionFactor(string name) => resolvedCases[name].Where(term => pretensionPatterns.Contains(term.Pattern))
             .Select(term => term.Factor).FirstOrDefault();
 
-        var fit = FitCase is null ? FemLoadSet.Empty : CaseSet(FitCase);
+        var fit = fitCase is null ? FemLoadSet.Empty : CaseSet(fitCase);
         var caseLoads = CaseNames.Select(name => new FemCaseLoads(name, CaseSet(name), PretensionFactor(name))).ToArray();
         return (fit, caseLoads);
     }

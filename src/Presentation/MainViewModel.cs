@@ -1852,7 +1852,8 @@ public sealed partial class MainViewModel : Observable
                 properties, State.Baseline, Tab01Patterns, PretensionPatterns, State.AppliedPoints.Select(point => point.PointName).ToArray());
             FemLogLine($"Load cases solved per candidate: {string.Join(", ", loadPlan.CaseNames)}" +
                 (loadPlan.CombinationNames.Count > 0 ? $" · combinations: {string.Join(", ", loadPlan.CombinationNames)}" : "") +
-                (loadPlan.FitCase is { } fitCase ? $" · cable target forces fitted in case '{fitCase}'" : "") + ".");
+                (loadPlan.FitCases.Count > 0 ? $" · cable target forces fitted in {string.Join(", ", loadPlan.FitCases.Select(name => $"'{name}'"))}" +
+                    (loadPlan.FitCases.Count > 1 ? " (each case uses the stage it continues from)" : "") : "") + ".");
             foreach (var note in loadPlan.Notes) FemLogLine("Note: " + note);
             femResultOrder = loadPlan.ResultNames;
             SelectedFemResultName = loadPlan.CombinationNames.FirstOrDefault() ?? loadPlan.CaseNames[^1];
