@@ -299,6 +299,14 @@ Study composition plus isolated child-model building, analysis, raw-result extra
 - Tab 06 is the only report-generation boundary. `Generate Outputs` / `Regenerate` reads the raw JSON and creates
   the candidate diagnostics, consolidated workbook, deflection/cable/member-force/support-reaction HTML without a SAP
   gateway. The CSV is a spreadsheet-friendly raw view; JSON is the canonical complete post-processing input.
+- **`Generate Outputs` writes everything; a module's `Regenerate` writes its own report only**
+  (`StudyPostProcessor.Generate(…, StudyOutputs outputs)`: `RegenerateDeflectionReport` / `…MemberForceReport` /
+  `…SupportReactionReport` / `…CableForceReport` each pass their one flag). The Excel workbook is by far the
+  slowest output (≈ 17 of 20 s on the 135-candidate study; a single report takes 0.6–2 s) and no report depends on
+  it — never put it, the diagnostics or the other reports back behind a module's Regenerate. A report regenerated
+  alone gets its own run-journal entry (`StudyRunJournal.RefreshArtifact`); the other entries stay. If the raw
+  package changed since the outputs were generated (its journal hash no longer matches) every output is stale, so
+  a module's Regenerate then regenerates everything and says so.
 - Capacity and the Tab 06A acceptance criteria are post-processing inputs. Changing `fpu`, `φ`, or a criterion must
   not invalidate reusable analyzed children; the next explicit Tab 06 / 06A generation uses the current values.
 - **The Study Shortlist is gone** (Module 08, `Study_Shortlist.html/.xlsx`, `StudyDecisionService`, the ranking

@@ -329,6 +329,32 @@ internal static class Program
                     liveBitmap.Render(window);
                     var liveEncoder = new PngBitmapEncoder(); liveEncoder.Frames.Add(BitmapFrame.Create(liveBitmap));
                     using (var stream = File.Create(".work/optimization-tab-data.png")) liveEncoder.Save(stream);
+
+                    // Tab 06: a module's Regenerate rebuilds its own report only; Generate Outputs writes everything
+                    var studyWorkbook = Path.Combine(vm.StudyRoot, "Deflection_Results_Source.xlsx");
+                    var studyCable = Path.Combine(vm.StudyRoot, "Cable_Forces_Report.html");
+                    vm.RegenerateCableForceReport.Execute(null);
+                    Pump(() => !vm.IsBusy && vm.HasCableForceReport);
+                    Assert(File.Exists(studyCable) && Directory.GetFiles(vm.StudyRoot, "*.html").Length == 1 && !File.Exists(studyWorkbook) &&
+                           !vm.HasDeflectionReport && !vm.HasMemberForceReport && !vm.HasSupportReactionReport &&
+                           vm.Message.StartsWith("Cable_Forces_Report.html regenerated", StringComparison.Ordinal) && vm.Message.Contains("this report only", StringComparison.Ordinal),
+                        "module 07 Regenerate writes the cable report alone — no workbook, no other report");
+                    // as in the running application: what follows an await returns to the UI thread
+                    SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(window.Dispatcher));
+                    vm.GeneratePostProcessOutputs.Execute(null);
+                    Pump(() => !vm.IsBusy && File.Exists(studyWorkbook));
+                    var studyDeflection = Path.Combine(vm.StudyRoot, "Deflection_Report.html");
+                    Assert(File.Exists(studyWorkbook) && File.Exists(studyDeflection) && File.Exists(Path.Combine(vm.StudyRoot, "Member_Forces_Report.html")) &&
+                           File.Exists(Path.Combine(vm.StudyRoot, "Support_Reactions_Report.html")) && vm.Message.StartsWith("Tab 06 outputs generated", StringComparison.Ordinal),
+                        "Generate Outputs writes the workbook and every report");
+                    var kept = new[] { studyWorkbook, studyCable, Path.Combine(vm.StudyRoot, "Member_Forces_Report.html") }
+                        .ToDictionary(path => path, File.GetLastWriteTimeUtc);
+                    File.SetLastWriteTimeUtc(studyDeflection, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+                    vm.RegenerateDeflectionReport.Execute(null);
+                    Pump(() => !vm.IsBusy && vm.Message.StartsWith("Deflection_Report.html regenerated", StringComparison.Ordinal));
+                    Assert(File.GetLastWriteTimeUtc(studyDeflection).Year > 2020 && vm.HasDeflectionReport &&
+                           kept.All(file => File.GetLastWriteTimeUtc(file.Key) == file.Value),
+                        "module 01 Regenerate rewrites the deflection report and leaves the workbook and the other reports as they are");
                 }
                 finally { try { Directory.Delete(optimizationRoot, true); } catch { } }
                 window.Close(); bindingListener.Flush();
