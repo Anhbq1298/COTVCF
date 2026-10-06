@@ -91,9 +91,6 @@ public sealed class StudyValidationService
             if (composition.ExpectedRunCount == 0)
                 Error("Candidate Filters", "The active candidate filters exclude every study iteration.");
         }
-        try { StudyDecisionService.Validate(StudyDecisionCriteria.From(state.Study)); }
-        catch (Exception ex) { Error("Decision Criteria", ex.Message); }
-
         if (composition.PreviewLimitExceeded)
             Error("Study Preview", $"The study exceeds the {StudyCompositionService.MaxPreviewRows:N0}-row preview limit. Reduce the candidate space.");
         else if (composition.Iterations.Count == 0)

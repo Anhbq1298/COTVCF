@@ -2,6 +2,7 @@ using COT_VCF.Application;
 using COT_VCF.Application.Results;
 using COT_VCF.Configuration;
 using COT_VCF.Domain;
+using COT_VCF.Infrastructure;
 using Microsoft.Win32;
 using System.Collections;
 using System.Collections.ObjectModel;
@@ -13,7 +14,7 @@ using MessageBox = System.Windows.MessageBox;
 
 namespace COT_VCF.Presentation;
 
-public sealed class MainViewModel : Observable
+public sealed partial class MainViewModel : Observable
 {
     public ApplicationState State { get; }
     private readonly WorkflowService workflow;
@@ -25,6 +26,7 @@ public sealed class MainViewModel : Observable
     private readonly StudyPreflightService studyPreflight = new();
     private readonly IOutputSettingsDialogService? outputDialogs;
     private readonly OutputGroupPreparationService? outputGroupPreparation;
+    private readonly ReportPrintSettingsStore? printStore;
     private bool busy;
     private int selectedTab;
     private AppliedPoint? selectedAppliedPoint;
@@ -62,7 +64,12 @@ public sealed class MainViewModel : Observable
     public int SelectedTab
     {
         get => selectedTab;
-        set { if (Set(ref selectedTab, value)) NotifySharedViewer(); }
+        set
+        {
+            if (!Set(ref selectedTab, value)) return;
+            NotifySharedViewer();
+            if (value == TabOptimization) RefreshOptimization();     // also picks up Tab 03 capacity edits made meanwhile
+        }
     }
     public string Message { get => message; private set => Set(ref message, value); }
     public Func<bool>? CommitEditors { get; set; }
@@ -484,6 +491,7 @@ public sealed class MainViewModel : Observable
             Notify(nameof(RawDataSummary));
             Notify(nameof(PostProcessStatus));
             CommandManager.InvalidateRequerySuggested();
+            OnRawDataChangedForOptimization();
         }
     }
     public string? RawCsvPath
@@ -559,30 +567,13 @@ public sealed class MainViewModel : Observable
     }
     public bool HasCableForceReport => !string.IsNullOrEmpty(CableForceReportPath) && File.Exists(CableForceReportPath);
     public string CableForceReportName => HasCableForceReport ? Path.GetFileName(CableForceReportPath!) : "No cable-force report generated yet";
-    private string? shortlistReportPath;
-    public string? ShortlistReportPath
-    {
-        get => shortlistReportPath;
-        private set
-        {
-            if (!Set(ref shortlistReportPath, value)) return;
-            Notify(nameof(HasShortlistReport));
-            Notify(nameof(ShortlistReportName));
-        }
-    }
-    public bool HasShortlistReport => !string.IsNullOrEmpty(ShortlistReportPath) && File.Exists(ShortlistReportPath);
-    public string ShortlistReportName => HasShortlistReport ? Path.GetFileName(ShortlistReportPath!) : "No shortlist generated yet";
-    private string? shortlistWorkbookPath;
-    public string? ShortlistWorkbookPath
-    {
-        get => shortlistWorkbookPath;
-        private set
-        {
-            if (!Set(ref shortlistWorkbookPath, value)) return;
-            Notify(nameof(HasShortlistWorkbook));
-        }
-    }
-    public bool HasShortlistWorkbook => !string.IsNullOrEmpty(ShortlistWorkbookPath) && File.Exists(ShortlistWorkbookPath);
+
+    /// <summary>Header / footer, logo and default sheet printed by the reports. A presentation input: it is
+    /// embedded on the next Generate / Regenerate and never invalidates results.</summary>
+    public ReportPrintSettings PrintSettings { get; }
+    public IReadOnlyList<ReportPaperSize> PrintPaperSizes { get; } = Enum.GetValues<ReportPaperSize>();
+    public IReadOnlyList<ReportPageOrientation> PrintOrientations { get; } = Enum.GetValues<ReportPageOrientation>();
+    public string PrintLogoStatus => ReportPrintEngine.DescribeLogo(PrintSettings.LogoPath);
     private bool useCurrentRunArtifacts;
     private string? currentRunWorkbookPath;
     public string ResultsWorkbookPath => useCurrentRunArtifacts
@@ -695,9 +686,26 @@ public sealed class MainViewModel : Observable
         : $"U3 · {Out.DeflectionOutputCaseName}";
     public string MonitoredPointSummary =>
         $"{Out.DeflectionPoints.Count} point{(Out.DeflectionPoints.Count == 1 ? "" : "s")}";
-    public string MonitoredPointStatus => Out.DeflectionPoints.Count == 0 ? StatusNotConfigured
+    public string MonitoredPointStatus => Out.DeflectionLimitBand.Problem() is not null ? StatusInvalid
+        : Out.DeflectionPoints.Count == 0 ? StatusNotConfigured
         : string.IsNullOrWhiteSpace(Out.DeflectionOutputCaseName) ? StatusIncomplete
         : StatusReady;
+    /// <summary>One-line reading of the Tab 04 deflection limit band (peak downward U3).</summary>
+    public string DeflectionLimitSummary
+    {
+        get
+        {
+            var band = Out.DeflectionLimitBand;
+            if (band.Problem() is { } problem) return problem;
+            return band switch
+            {
+                { MinMm: double lo, MaxMm: double hi } => $"Pass when {lo:0.###} ≤ peak ↓U3 ≤ {hi:0.###} mm",
+                { MaxMm: double hi } => $"Pass when peak ↓U3 ≤ {hi:0.###} mm",
+                { MinMm: double lo } => $"Pass when peak ↓U3 ≥ {lo:0.###} mm",
+                _ => "No limit band · deflection is not a pass/fail criterion",
+            };
+        }
+    }
     public string MemberForceSummary
     {
         get
@@ -785,8 +793,18 @@ public sealed class MainViewModel : Observable
     public Command RegenerateSupportReactionReport { get; }
     public Command OpenCableForceReport { get; }
     public Command RegenerateCableForceReport { get; }
-    public Command OpenShortlistReport { get; }
-    public Command OpenShortlistWorkbook { get; }
+    public Command ExportCableForcePdf { get; }
+    public Command ExportDeflectionPdf { get; }
+    public Command ExportMemberForcePdf { get; }
+    public Command OpenTopChordReport { get; }
+    public Command OpenBottomChordReport { get; }
+    public Command ExportTopChordPdf { get; }
+    public Command ExportBottomChordPdf { get; }
+    public Command OpenMegaColumnReport { get; }
+    public Command ExportMegaColumnPdf { get; }
+    public Command ExportSupportReactionPdf { get; }
+    public Command BrowsePrintLogo { get; }
+    public Command ClearPrintLogo { get; }
     public Command OpenResultsWorkbook { get; }
     public Command OpenCandidateDiagnostic { get; }
     public Command ViewIterationError { get; }
@@ -805,7 +823,8 @@ public sealed class MainViewModel : Observable
         StudyExecutionCoordinator? studyExecution = null,
         StudyExecutionSnapshotFactory? studySnapshotFactory = null,
         IOutputSettingsDialogService? outputDialogs = null,
-        OutputGroupPreparationService? outputGroupPreparation = null)
+        OutputGroupPreparationService? outputGroupPreparation = null,
+        ReportPrintSettingsStore? printStore = null)
     {
         State = state;
         this.workflow = workflow;
@@ -815,6 +834,15 @@ public sealed class MainViewModel : Observable
         this.studySnapshotFactory = studySnapshotFactory ?? new();
         this.outputDialogs = outputDialogs;
         this.outputGroupPreparation = outputGroupPreparation;
+        this.printStore = printStore;
+        // Print Setup is a per-user preference: loaded once, saved on every edit. Without a store (checks) it is
+        // simply held in memory.
+        PrintSettings = printStore?.Load() ?? new();
+        PrintSettings.PropertyChanged += (_, e) =>
+        {
+            this.printStore?.TrySave(PrintSettings);
+            if (e.PropertyName == nameof(ReportPrintSettings.LogoPath)) Notify(nameof(PrintLogoStatus));
+        };
         StudyWorkers.CollectionChanged += (_, _) =>
         {
             Notify(nameof(HasStudyWorkers));
@@ -907,8 +935,6 @@ public sealed class MainViewModel : Observable
         OpenMemberForceReport = new(_ => TryOpenFile(MemberForceReportPath), () => HasMemberForceReport);
         OpenSupportReactionReport = new(_ => TryOpenFile(SupportReactionReportPath), () => HasSupportReactionReport);
         OpenCableForceReport = new(_ => TryOpenFile(CableForceReportPath), () => HasCableForceReport);
-        OpenShortlistReport = new(_ => TryOpenFile(ShortlistReportPath), () => HasShortlistReport);
-        OpenShortlistWorkbook = new(_ => TryOpenFile(ShortlistWorkbookPath), () => HasShortlistWorkbook);
         OpenResultsWorkbook = new(_ => TryOpenFile(ResultsWorkbookPath), () => HasResultsWorkbook);
         OpenCandidateDiagnostic = new(p =>
         {
@@ -920,6 +946,29 @@ public sealed class MainViewModel : Observable
         GeneratePostProcessOutputs = new(_ => GenerateStudyOutputs(), () => !IsBusy);
         RegenerateDeflectionReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
         RegenerateCableForceReport = new(_ => GenerateStudyOutputs(), () => !IsBusy);
+        ExportCableForcePdf = new(_ => ExportReportPdf(CableForceReportPath), () => !IsBusy && HasCableForceReport);
+        ExportDeflectionPdf = new(_ => ExportReportPdf(DeflectionReportPath), () => !IsBusy && HasDeflectionReport);
+        ExportMemberForcePdf = new(_ => ExportReportPdf(MemberForceReportPath), () => !IsBusy && HasMemberForceReport);
+        // Modules 02 / 03 / 05 open the member-force report straight on their own Summary.
+        OpenTopChordReport = new(_ => TryOpenFile(SummaryReportPath(MemberForceReportGenerator.TopChordFileName) ?? MemberForceReportPath),
+            () => HasMemberForceReport);
+        OpenBottomChordReport = new(_ => TryOpenFile(SummaryReportPath(MemberForceReportGenerator.BottomChordFileName) ?? MemberForceReportPath),
+            () => HasMemberForceReport);
+        ExportTopChordPdf = new(_ => ExportSummaryPdf(MemberForceReportGenerator.TopChordFileName, MemberGroupSummary.Top),
+            () => !IsBusy && HasMemberForceReport);
+        ExportBottomChordPdf = new(_ => ExportSummaryPdf(MemberForceReportGenerator.BottomChordFileName, MemberGroupSummary.Bottom),
+            () => !IsBusy && HasMemberForceReport);
+        OpenMegaColumnReport = new(_ => TryOpenFile(SummaryReportPath(MemberForceReportGenerator.MegaColumnFileName) ?? MemberForceReportPath),
+            () => HasMemberForceReport);
+        ExportMegaColumnPdf = new(_ => ExportSummaryPdf(MemberForceReportGenerator.MegaColumnFileName, MemberGroupSummary.MegaColumn),
+            () => !IsBusy && HasMemberForceReport);
+        ExportSupportReactionPdf = new(_ => ExportReportPdf(SupportReactionReportPath), () => !IsBusy && HasSupportReactionReport);
+        BrowsePrintLogo = new(_ =>
+        {
+            var dialog = new OpenFileDialog { Filter = ReportPrintEngine.LogoFileFilter, CheckFileExists = true, Title = "Company logo for report printouts" };
+            if (dialog.ShowDialog() == true) PrintSettings.LogoPath = dialog.FileName;
+        });
+        ClearPrintLogo = new(_ => PrintSettings.LogoPath = "", () => PrintSettings.LogoPath.Length > 0);
         ViewIterationError = new(p =>
         {
             if (p is StudyIteration { ErrorMessage.Length: > 0 } row)
@@ -1001,7 +1050,11 @@ public sealed class MainViewModel : Observable
             ScheduleStudyRegeneration();
             Update();
         };
-        State.OutputSettings.PropertyChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
+        State.OutputSettings.PropertyChanged += (_, _) =>
+        {
+            Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update();
+            RequalifyOptimization();        // the deflection band and the Tab 06A criteria live here
+        };
         State.OutputSettings.DeflectionPoints.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
         State.OutputSettings.FoundationLeftPoints.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
         State.OutputSettings.FoundationRightPoints.CollectionChanged += (_, _) => { Dirty(ConfigTabs.Output); InvalidateStudyValidation(); Update(); };
@@ -1369,8 +1422,6 @@ public sealed class MainViewModel : Observable
         MemberForceReportPath = null;
         SupportReactionReportPath = null;
         CableForceReportPath = null;
-        ShortlistReportPath = null;
-        ShortlistWorkbookPath = null;
         SetRunReference(null, artifactsVerified: false);
         Notify(nameof(ResultsWorkbookPath));
         Notify(nameof(HasResultsWorkbook));
@@ -1398,8 +1449,6 @@ public sealed class MainViewModel : Observable
             MemberForceReportPath = result.Artifacts.MemberForceReportPath;
             SupportReactionReportPath = result.Artifacts.SupportReactionReportPath;
             CableForceReportPath = result.Artifacts.CableForceReportPath;
-            ShortlistReportPath = result.Artifacts.ShortlistReportPath;
-            ShortlistWorkbookPath = result.Artifacts.ShortlistWorkbookPath;
             SetRunReference(result.Run, result.Artifacts.State == StudyArtifactState.Ready);
             Notify(nameof(ResultsWorkbookPath));
             Notify(nameof(HasResultsWorkbook));
@@ -1635,8 +1684,6 @@ public sealed class MainViewModel : Observable
             MemberForceReportPath = null;
             SupportReactionReportPath = null;
             CableForceReportPath = null;
-            ShortlistReportPath = null;
-            ShortlistWorkbookPath = null;
             Message = $"No {StudyRawDataStore.JsonFileName} found under {StudyRawDataStore.DirectoryName}. Run the study on Tab 05 to extract raw data first.";
             return;
         }
@@ -1644,21 +1691,24 @@ public sealed class MainViewModel : Observable
         try
         {
             var root = StudyRoot;
-            var capacities = State.Cables.Count > 0 ? CurrentCableCapacities() : null;
-            var criteria = StudyDecisionCriteria.From(State.Study);
-            var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, criteria));
+            // Current Tab 03 capacity wins per cable; a Tab 03 cable that cannot resolve one is reported as
+            // unavailable, and only a cable Tab 03 does not know falls back to the capacity stored with the results.
+            var capacities = CurrentCableCapacities();
+            var configuredCables = State.Cables.Select(cable => cable.CableName)
+                .Where(name => !string.IsNullOrWhiteSpace(name)).ToArray();
+            var band = State.OutputSettings.DeflectionLimitBand;
+            var print = PrintSettings.Clone();
+            var artifacts = await Task.Run(() => new StudyPostProcessor().Generate(root, capacities, band, configuredCables, print));
             currentRunWorkbookPath = artifacts.WorkbookPath;
             useCurrentRunArtifacts = true;
             DeflectionReportPath = artifacts.DeflectionReportPath;
             MemberForceReportPath = artifacts.MemberForceReportPath;
             SupportReactionReportPath = artifacts.SupportReactionReportPath;
             CableForceReportPath = artifacts.CableForceReportPath;
-            ShortlistWorkbookPath = artifacts.ShortlistWorkbookPath;
-            ShortlistReportPath = artifacts.ShortlistReportPath;
             StudyRunJournal.ReplaceArtifacts(root, artifacts);
             RefreshDeflectionArtifacts();
             Message = $"Tab 06 outputs generated from {StudyRawDataStore.JsonFileName}" +
-                      (capacities?.Count > 0
+                      (capacities.Count > 0
                           ? $" · capacity from fpu {State.CableStrengthMpa:0.###} MPa · φ {State.CableStrengthReductionFactor:0.###}."
                           : ".") + " No SAP2000 run was performed.";
         }
@@ -1670,10 +1720,55 @@ public sealed class MainViewModel : Observable
             MemberForceReportPath = null;
             SupportReactionReportPath = null;
             CableForceReportPath = null;
-            ShortlistReportPath = null;
-            ShortlistWorkbookPath = null;
             Message = ex.Message;
             Warn("Generate Post-Processing Outputs", ex.Message);
+        }
+        finally { IsBusy = false; }
+    }
+
+    /// <summary>The page that opens the member-force report on one group's Summary (top chord, bottom chord,
+    /// mega column) — present only when this study has that group.</summary>
+    private string? SummaryReportPath(string launcherFileName)
+    {
+        if (!HasMemberForceReport || Path.GetDirectoryName(MemberForceReportPath!) is not { } folder) return null;
+        var path = Path.Combine(folder, launcherFileName);
+        return File.Exists(path) ? path : null;
+    }
+
+    /// <summary>Print one group's Summary to its own PDF; without that group, the whole member-force report.</summary>
+    private void ExportSummaryPdf(string launcherFileName, string kind)
+    {
+        if (SummaryReportPath(launcherFileName) is { } launcher)
+            ExportReportPdf(MemberForceReportPath, $"summary={kind}", Path.ChangeExtension(launcher, ".pdf"));
+        else
+            ExportReportPdf(MemberForceReportPath);
+    }
+
+    /// <summary>Print a generated report to a vector PDF beside it, with the header / footer embedded when the
+    /// report was generated, then open it. Runs a headless browser in the background — no SAP2000.</summary>
+    /// <param name="options">Report options for the export URL, e.g. <c>summary=top</c>.</param>
+    /// <param name="pdfPath">Where to write the PDF; default is the report's own name with .pdf.</param>
+    private async void ExportReportPdf(string? reportPath, string? options = null, string? pdfPath = null)
+    {
+        if (IsBusy) return;
+        if (string.IsNullOrEmpty(reportPath) || !File.Exists(reportPath))
+        {
+            Message = "Generate the report before exporting it to PDF.";
+            return;
+        }
+        IsBusy = true;
+        Message = $"Printing {Path.GetFileName(reportPath)} to PDF...";
+        try
+        {
+            var result = await Task.Run(() => ReportPdfExporter.Export(reportPath, pdfPath, options));
+            Message = $"{Path.GetFileName(result.PdfPath)} written in {result.Elapsed.TotalSeconds:0.0} s with the Print Setup " +
+                      "from the last Generate / Regenerate. Charts are vector graphics.";
+            TryOpenFile(result.PdfPath);
+        }
+        catch (Exception ex)
+        {
+            Message = ex.Message;
+            Warn("Export PDF", ex.Message, warning: true);
         }
         finally { IsBusy = false; }
     }
@@ -1721,8 +1816,6 @@ public sealed class MainViewModel : Observable
                 MemberForceReportPath = null;
                 SupportReactionReportPath = null;
                 CableForceReportPath = null;
-                ShortlistReportPath = null;
-                ShortlistWorkbookPath = null;
                 SetRunReference(null, artifactsVerified: false);
             }
             else
@@ -1736,8 +1829,6 @@ public sealed class MainViewModel : Observable
                 MemberForceReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "MemberForceReport") : null;
                 SupportReactionReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "SupportReactionReport") : null;
                 CableForceReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "CableForceReport") : null;
-                ShortlistReportPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "ShortlistReport") : null;
-                ShortlistWorkbookPath = derivedAreCurrent ? StudyRunJournal.ValidArtifactPath(manifest, "ShortlistWorkbook") : null;
                 SetRunReference(new StudyRunReference(manifest.RunId, Path.Combine(StudyRoot, StudyRunJournal.FileName),
                     manifest.BaselineSha256, manifest.SnapshotSha256, manifest.State), StudyRunJournal.ArtifactsAreIntact(manifest));
             }
@@ -1752,8 +1843,6 @@ public sealed class MainViewModel : Observable
             MemberForceReportPath = null;
             SupportReactionReportPath = null;
             CableForceReportPath = null;
-            ShortlistReportPath = null;
-            ShortlistWorkbookPath = null;
             SetRunReference(null, false);
         }
         Notify(nameof(HasResultsWorkbook));
@@ -2218,7 +2307,7 @@ public sealed class MainViewModel : Observable
             nameof(CableStrengthMpa), nameof(CableStrengthReductionFactor),
             nameof(CablePreviewSummary), nameof(DeflectionOutputSummary), nameof(MemberForceOutputSummary),
             nameof(FoundationOutputSummary), nameof(CableOutputSummary),
-            nameof(MonitoredPointSummary), nameof(MonitoredPointCaseSummary), nameof(MonitoredPointStatus), nameof(MemberForceSummary), nameof(MemberForceStatus),
+            nameof(MonitoredPointSummary), nameof(MonitoredPointCaseSummary), nameof(MonitoredPointStatus), nameof(DeflectionLimitSummary), nameof(MemberForceSummary), nameof(MemberForceStatus),
             nameof(FoundationSummary), nameof(FoundationStatus), nameof(CableForceSummary), nameof(CableForceStatus),
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
             nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName),

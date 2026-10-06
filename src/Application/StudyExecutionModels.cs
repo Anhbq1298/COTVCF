@@ -51,8 +51,6 @@ public sealed record StudyExecutionSnapshot(
     public IReadOnlyList<string> FoundationLeftPoints { get; init; } = [];
     public IReadOnlyList<string> FoundationRightPoints { get; init; } = [];
     public string FoundationReactionResultCase { get; init; } = "";
-    // Default decision/ranking criteria written into raw JSON; Tab 06 may apply current criteria later.
-    public StudyDecisionCriteria DecisionCriteria { get; init; } = new(50, 75, null, null, 0.9, 0.5, 0.3, 0.2);
 }
 
 public sealed record StudyExecutionProgress
@@ -102,8 +100,6 @@ public sealed record StudyArtifactOutcome(
     string? SupportReactionReportPath,
     string? CableForceReportPath,
     string? ErrorMessage,
-    string? ShortlistWorkbookPath = null,
-    string? ShortlistReportPath = null,
     string? RawJsonPath = null,
     string? RawCsvPath = null)
 {

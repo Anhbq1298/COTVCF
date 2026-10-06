@@ -284,9 +284,7 @@ public sealed class StudyRunJournal
             ("DeflectionReport", outcome.DeflectionReportPath),
             ("MemberForceReport", outcome.MemberForceReportPath),
             ("SupportReactionReport", outcome.SupportReactionReportPath),
-            ("CableForceReport", outcome.CableForceReportPath),
-            ("ShortlistWorkbook", outcome.ShortlistWorkbookPath),
-            ("ShortlistReport", outcome.ShortlistReportPath)
+            ("CableForceReport", outcome.CableForceReportPath)
         })
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) continue;

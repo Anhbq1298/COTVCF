@@ -31,12 +31,14 @@ public sealed class DeflectionReportGenerator
         string studyFolder,
         IReadOnlyList<CandidateResultDto> results,
         string baselineName, string baselinePath, IterationStudyMode studyMode,
-        IReadOnlyList<string>? siblingReports = null)
+        IReadOnlyList<string>? siblingReports = null, DeflectionLimitBand? limitBand = null,
+        ReportPrintSettings? print = null, ReportScope? scope = null)
     {
         Directory.CreateDirectory(studyFolder);
-        var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode, siblingReports);
+        var dto = Build(results, studyFolder, baselineName, baselinePath, studyMode, siblingReports, limitBand, scope);
         var path = Path.Combine(studyFolder, ReportFileName);
-        AtomicFile.WriteAllText(path, BuildHtml(dto), new System.Text.UTF8Encoding(false));
+        AtomicFile.WriteAllText(path, BuildHtml(dto, ReportPrintEngine.Describe(print, scope?.Title(ReportTitle) ?? ReportTitle, baselineName, DateTimeOffset.Now)),
+            new System.Text.UTF8Encoding(false));
         return path;
     }
 
@@ -57,7 +59,7 @@ public sealed class DeflectionReportGenerator
     public DeflectionReportDto Build(
         IReadOnlyList<CandidateResultDto> results,
         string studyFolder, string baselineName, string baselinePath, IterationStudyMode studyMode,
-        IReadOnlyList<string>? siblingReports = null)
+        IReadOnlyList<string>? siblingReports = null, DeflectionLimitBand? limitBand = null, ReportScope? scope = null)
     {
         // One report group per (monitored point group × result load case) — so a study that extracts Uz
         // under several cases yields one selectable chart source per case.
@@ -84,17 +86,24 @@ public sealed class DeflectionReportGenerator
             (loadDim, preDim, heightDim),
         };
 
-        List<LegendEntryDto> ColorLegendFor(Dim d) => flat.Select(d.Key).Distinct()
-            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
-            .Select((k, i) => new LegendEntryDto(k, d.Label(k), k == "" ? "#9aa0a6" : Palette[i % Palette.Length]))
+        // The ids a dimension shows, each with the index that picks its colour / line style. A report on a subset
+        // of the study (Tab 06A) takes that index from the full study, so an id looks the same as in the full report.
+        List<(string Key, int Index)> Present(Dim d)
+        {
+            var present = flat.Select(d.Key).Distinct().OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal).ToList();
+            var full = scope is null ? null : ReferenceEquals(d, heightDim) ? scope.HeightIds : ReferenceEquals(d, loadDim) ? scope.LoadIds : scope.PretensionIds;
+            if (full is null) return present.Select((k, i) => (k, i)).ToList();
+            int Position(string k) { var i = full.ToList().IndexOf(k); return i < 0 ? full.Count + present.IndexOf(k) : i; }
+            return present.OrderBy(Position).Select(k => (k, Position(k))).ToList();
+        }
+        List<LegendEntryDto> ColorLegendFor(Dim d) => Present(d)
+            .Select(e => new LegendEntryDto(e.Key, d.Label(e.Key), e.Key == "" ? "#9aa0a6" : Palette[e.Index % Palette.Length]))
             .ToList();
-        List<LegendEntryDto> DashLegendFor(Dim d) => flat.Select(d.Key).Distinct()
-            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
-            .Select((k, i) => new LegendEntryDto(k, d.Label(k), Dashes[i % Dashes.Length]))
+        List<LegendEntryDto> DashLegendFor(Dim d) => Present(d)
+            .Select(e => new LegendEntryDto(e.Key, d.Label(e.Key), Dashes[e.Index % Dashes.Length]))
             .ToList();
-        List<LegendEntryDto> FilterLegendFor(Dim? d) => d is null ? [] : flat.Select(d.Key).Distinct()
-            .OrderBy(SortKey).ThenBy(k => k, StringComparer.Ordinal)
-            .Select(k => new LegendEntryDto(k, d.Label(k), "")).ToList();
+        List<LegendEntryDto> FilterLegendFor(Dim? d) => d is null ? [] : Present(d)
+            .Select(e => new LegendEntryDto(e.Key, d.Label(e.Key), "")).ToList();
 
         var views = viewSpecs.Select(vs => new ChartViewDto(
             vs.Color.Name, ColorLegendFor(vs.Color),
@@ -116,14 +125,16 @@ public sealed class DeflectionReportGenerator
                     r.Parameters.LoadingCandidateId, r.Parameters.HeightCandidateId, r.Parameters.PretensionCandidateId,
                     r.Parameters.LoadLevelKPa, r.Parameters.LoadingLabel,
                     r.Parameters.TrussHeightM, r.Parameters.DeltaHM, r.Parameters.PretensionKN, r.Parameters.PretensionLabel,
-                    r.ExtractionStatus.ToString(), r.DiagnosticReportRelativePath,
+                    r.ExtractionStatus.ToString(), (scope?.StudyFolderPath ?? "") + r.DiagnosticReportRelativePath,
                     viewSpecs.Select(vs => vs.Color.Key(r.Parameters)).ToArray(),
                     viewSpecs.Select(vs => vs.Dash.Key(r.Parameters)).ToArray(),
                     viewSpecs.Select(vs => vs.Filter?.Key(r.Parameters) ?? "").ToArray(),
                     (r.Parameters.PretensionCables ?? []).Select(c => new PretensionCableEntryDto(c.CableName, c.TargetForceKN)).ToArray(),
                     (r.Parameters.LoadingComponents ?? []).Select(c => new LoadComponentEntryDto(c.PatternName, c.LevelKPa)).ToArray(),
                     g.Points.OrderBy(p => p.Sequence).Select(p => new DeflectionPointDto(
-                        p.PointName, Axis(p, g.ProfileAxis), p.UzMm, p.Sequence, p.Status.ToString())).ToArray()));
+                        p.PointName, Axis(p, g.ProfileAxis), p.UzMm, p.Sequence, p.Status.ToString())).ToArray(),
+                    DeflectionLimitBand.PeakDownMm(g.Points
+                        .Where(p => p.Status == ResultValueStatus.Valid && p.UzMm.HasValue).Select(p => p.UzMm!.Value))));
             }
             if (series.Count > 0)
                 groups.Add(new DeflectionGroupReportDto(gn, oc, axis, series));
@@ -135,11 +146,11 @@ public sealed class DeflectionReportGenerator
 
         var study = new StudyMetadataDto(
             baselineName, baselinePath, studyFolder, studyMode.ToString(),
-            results.Count, DateTimeOffset.Now.ToString("o"), "Uz", "m", "mm");
+            results.Count, DateTimeOffset.Now.ToString("o"), "Uz", "m", "mm", scope?.ToDto());
 
         var siblings = siblingReports?.ToArray() ?? ReportNav.PresentIn(studyFolder, "deflection").ToArray();
-        return new DeflectionReportDto(study, groups, views, ReportCandidateDefinitions.Build(results),
-            warnings, siblings);
+        var band = limitBand is { IsActive: true } ? new DeflectionLimitBandDto(limitBand.MinMm, limitBand.MaxMm) : null;
+        return new DeflectionReportDto(study, groups, views, warnings, siblings, band);
     }
 
     private sealed record Dim(string Name, Func<CandidateParametersDto, string> Key, Func<string, string> Label);
@@ -151,42 +162,55 @@ public sealed class DeflectionReportGenerator
 
     // ---------- HTML ----------
 
-    public string BuildHtml(DeflectionReportDto dto)
+    /// <summary>Report name printed in the page header.</summary>
+    public const string ReportTitle = "Deflection · Uz";
+
+    public string BuildHtml(DeflectionReportDto dto, ReportPrintDto? print = null)
     {
         var json = JsonSerializer.Serialize(dto, Json);
         var s = dto.Study;
+        print ??= ReportPrintEngine.Describe(null, ReportTitle, s.BaselineModelName, DateTimeOffset.Now);
         var library = ReportNav.Library("deflection", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
+        var bandNote = dto.LimitBand is { } b
+            ? $"<br>Shaded strip = deflection <b>limit band</b> {Esc(new DeflectionLimitBand(b.MinMm, b.MaxMm).Label)} on the peak " +
+              "downward U<sub>z</sub> (Tab 04 Output Settings): a candidate passes when the lowest point of its line sits inside the strip."
+            : "";
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <title>Deflection Report — {{Esc(s.BaselineModelName)}}</title>
-<style>{{Style}}{{ReportCandidateDefinitions.Style}}</style></head><body>
+<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body>
 <header>
   <div>
     <h1>Deflection Results Viewer</h1>
     <p class="meta">{{Esc(s.BaselineModelName)}} · mode {{Esc(s.StudyMode)}} · {{s.CandidateCount}} candidate(s) ·
       generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
+    {{ReportScope.Banner(s.Scope)}}
+    <p class="meta print-only" data-print-view></p>
     <p class="intro">Each line is one study candidate: the vertical deflection U<sub>z</sub> [mm] of every monitored
       point plotted against its position X [m] along the truss span, under the selected result load case.
       <b>Colour</b> = load candidate · <b>line style</b> = truss height · <b>marker</b> = pretension candidate.
-      See <i>Candidate definitions</i> below for what each L## / H## / P## is.</p>
+      See <i>Candidate definitions</i> below for what each L## / H## / P## is.{{bandNote}}</p>
   </div>
   {{library}}
 </header>
-<div id="toolbar">
+<div id="toolbar" data-print-controls>
   <label>Group <select id="group"></select></label>
   <span class="sep"></span>
   <label><input type="checkbox" id="legendToggle" checked> Plot legend</label>
+  <label id="bandToggleWrap" title="Show the deflection limit band and the pass count"><input type="checkbox" id="bandToggle" checked> Limit band</label>
   <button id="reset">Reset zoom</button>
   <button id="srcBtn">View source data</button>
+  {{ReportPrintEngine.ToolbarButton}}
   <span class="sep"></span>
   <span class="hint">each chart has its own name + L / H / P filter · click a legend row = highlight · wheel = zoom X · drag = pan · dbl-click = reset · Duplicate clones the chart</span>
-</div>
+{{ReportPrintEngine.Panel}}</div>
 <div id="panels"></div>
 <template id="panelTpl">
   <section class="panel">
     <div class="pbar">
       <input class="pv-name" title="Chart name — click to edit" spellcheck="false">
       <span class="pv-sub"></span>
+      <span class="pv-band" hidden></span>
       <span class="pv-ctl"></span>
       <button class="pv-dup" title="Duplicate this chart with all its current settings">＋ Duplicate</button>
       <button class="pv-rm" title="Remove this chart" hidden>✕ Remove</button>
@@ -195,14 +219,14 @@ public sealed class DeflectionReportGenerator
   </section>
 </template>
 <div id="tip" hidden></div>
-{{ReportCandidateDefinitions.Markup}}
-<div id="matrixWrap" hidden>
+<details id="candKey" open><summary>Candidate definitions — what each L## / H## / P## is</summary><div id="candKeyBody"></div></details>
+<div id="matrixWrap" data-print="source" hidden>
   <div class="mhdr"><strong>Source Data Matrix</strong><button id="mClose">Close</button></div>
-  <div id="matrix"></div>
+  <div id="matrix" data-print-fit></div>
 </div>
 <div id="warns"></div>
 <script type="application/json" id="report-data">{{json}}</script>
-<script>{{ReportCandidateDefinitions.Script}}</script>
+{{ReportPrintEngine.Scripts(print)}}
 <script>{{Script}}</script>
 </body></html>
 """;
@@ -247,6 +271,9 @@ button{cursor:pointer}button:hover{background:var(--su)}
 .pv-name:hover{border-color:var(--bd)}
 .pv-name:focus{border-color:var(--acc);background:#fff;outline:none}
 .pv-sub{font-size:11px;color:var(--mu)}
+/* limit-band pass count: text stays in ink, the check icon carries the status colour */
+.pv-band{font-size:11px;color:var(--tx);border:1px solid var(--bd);border-radius:3px;padding:1px 7px;background:#F3F8F3}
+.pv-band .ok{color:#2E7D32;font-weight:700}
 .pv-ctl{display:flex;gap:6px;flex-wrap:wrap}
 .pv-ctl select{font-size:11px;padding:2px 4px;max-width:230px}
 .pv-dup{margin-left:auto;font-size:11px;padding:2px 8px}
@@ -267,7 +294,33 @@ button{cursor:pointer}button:hover{background:var(--su)}
 .legend .sw{width:24px;height:0;border-top-width:3px;border-top-style:solid;flex:none}
 .legend .dash{width:26px;height:0;border-top:2px solid #444;flex:none}
 .legend .mk{flex:none;overflow:visible}
+.legend .bd{margin-left:auto;padding-left:4px;font-weight:700;font-size:11px}
+.bd.ok{color:#2E7D32}.bd.no{color:#C62828}
 #tip{position:fixed;pointer-events:none;background:#fffffff2;border:1px solid var(--acc);border-radius:3px;padding:6px 8px;font:11px/1.4 Consolas,monospace;z-index:20;max-width:280px}
+#candKey{border-top:1px solid var(--bd);font-size:11.5px}
+#candKey>summary{cursor:pointer;padding:6px 14px;background:var(--su);font-weight:600;color:var(--acc)}
+#candKeyBody{display:flex;gap:36px;flex-wrap:wrap;padding:12px 14px 16px;align-items:flex-start}
+#candKeyBody .grp{min-width:200px}
+#candKeyBody .pgrp{min-width:340px}
+#candKeyBody h5{margin:0 0 6px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--mu)}
+#candKeyBody h5 .cnt{color:var(--acc);font-weight:700;font-size:11px;margin-left:3px}
+#candKeyBody .kr{display:flex;align-items:flex-start;gap:8px;padding:2px 0}
+#candKeyBody .kid{font:600 11px Consolas,monospace;color:var(--tx);flex:none}
+#candKeyBody .kval{line-height:1.5}
+#candKeyBody .ksw{display:inline-block;width:22px;height:0;border-top-width:3px;border-top-style:solid;flex:none;vertical-align:middle}
+#candKeyBody .kmk{flex:none}
+#candKeyBody table.kt{border-collapse:collapse;font-size:11px}
+#candKeyBody table.kt th{font-weight:400;color:var(--mu);text-align:right;padding:0 8px 3px;font-size:10px;white-space:nowrap}
+#candKeyBody table.kt td{padding:2px 8px;text-align:right;white-space:nowrap}
+#candKeyBody table.kt td.kid{text-align:left;padding-left:2px}
+#candKeyBody table.kt td.csw{padding-right:0;width:26px}
+#candKeyBody .pblk{margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--bd)}
+#candKeyBody .pblk:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+#candKeyBody .pgh{display:flex;align-items:center;gap:8px}
+#candKeyBody .pgh .pgn{color:var(--mu);font-size:10.5px}
+#candKeyBody .ptbl{margin:3px 0 0 26px}
+#candKeyBody .ptbl td:nth-child(1),#candKeyBody .ptbl td:nth-child(4){text-align:left;font-family:Consolas,monospace;color:var(--tx)}
+#candKeyBody .ptbl td.pgap{width:1px;min-width:1px;padding:0;background:var(--bd)}
 #matrixWrap{border-top:1px solid var(--bd);border-bottom:1px solid var(--bd)}
 .mhdr{display:flex;justify-content:space-between;align-items:center;padding:5px 14px;background:var(--su)}
 #matrix{overflow:auto;max-height:42vh}
@@ -285,10 +338,38 @@ button{cursor:pointer}button:hover{background:var(--su)}
 #matrix th.k{font-weight:600;color:var(--mu)}
 #matrix thead th.ch{cursor:pointer}#matrix thead th.ch:hover{background:#e8f0fe}
 #matrix .hi{background:#e8f0fe !important}
+#matrix tfoot th,#matrix tfoot td{background:var(--su);font-weight:600}
 #legend .row.hi{background:#e8f0fe;border-radius:2px}
 #warns{padding:6px 14px;font-size:11px;color:#8a6d00}
 #warns .e{color:#C62828}
 a{color:var(--acc)}
+/* paper: the sheet, margins, header and footer come from the shared print engine. Each chart is redrawn at the
+   full sheet width with its legend underneath in columns (a side column would run off the page), and keeps its
+   own case / view / filter controls as a record of what is shown. */
+@media print{
+  header{display:block;padding:0 0 5px}
+  /* the intro repeats what the printed legend headings and the limit-band labels already say */
+  .lib,.intro,#toolbar,#tip,.pv-dup,.pv-rm,.mhdr button,.legend .lcb,.legend .hint2{display:none!important}
+  .panel{border-bottom:0}.panel.copy{background:none}
+  .pbar{padding:6px 0 2px;break-after:avoid}
+  .stage{display:block;height:auto;padding:4px 0 8px}
+  .chart{display:block;width:100%}
+  .legend{width:auto;border-left:0;border-top:1px solid var(--bd);overflow:visible;padding:6px 0 0;font-size:10px;columns:7;column-gap:14px;break-inside:avoid}
+  .legend h4{margin:0 0 3px;break-after:avoid}.legend .row{padding:1px 0;break-inside:avoid}
+  #candKey{border-top:0;margin-top:6px}#candKey>summary{list-style:none;padding:5px 0;background:none}
+  #candKey>summary::-webkit-details-marker{display:none}
+  #candKeyBody{padding:6px 0 10px;gap:24px}#candKeyBody .grp,#candKeyBody .pblk{break-inside:avoid}
+  #matrixWrap{border:0}.mhdr{padding:5px 0;background:none}
+  #matrix thead th,#matrix th:first-child,#matrix th:nth-child(2),#matrix td:nth-child(2){position:static}
+  #warns{padding:6px 0}
+}
+/* laid out for paper: a matrix column is as wide as its values, headed by the candidate id alone (what each id
+   is, is printed under Candidate definitions) — so the table needs far less scaling to fit the sheet */
+body.pr-on #matrix thead th span{display:none}
+body.pr-on #matrix th,body.pr-on #matrix td{padding:1px 4px}
+body.pr-on #matrix thead th{white-space:normal;overflow-wrap:anywhere}
+body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
+.mpart{font-size:10.5px;color:var(--mu);padding:4px 0 3px;break-after:avoid}
 """;
 
     private const string Script = """
@@ -319,6 +400,8 @@ a{color:var(--acc)}
   // colour/line relationship, load case and zoom. Duplicate clones the whole config; one chart by default.
   // `hidden` = per-candidate show/hide (shared), `hi` = matrix-highlighted candidate (shared).
   let gi = 0, showLegend = true, hidden = new Set(), hi = null;
+  let printW = 0, printH = 0;      // > 0 while laid out for paper: the chart size on the sheet, not in the window
+  const PRINT = window.reportPrint || null, OPT = PRINT ? PRINT.options : {};
   const panels = [];
   const tpl = document.getElementById('panelTpl'), panelsEl = document.getElementById('panels');
   const mw = document.getElementById('matrixWrap'), srcBtn = document.getElementById('srcBtn');
@@ -342,6 +425,80 @@ a{color:var(--acc)}
   const P_IDS = CAND.P.map(o=>o.id);
   const P_ON = P_IDS.length > 1;
   const pShape = s => MSHAPES[Math.max(0, P_IDS.indexOf(s.pretensionId)) % MSHAPES.length];
+
+  // Deflection limit band (Tab 04 Output Settings) on the peak downward deflection δ = −min(Uz) [mm].
+  // A null bound is open. Same test as the Tab 06A deflection criterion, so the count here matches it.
+  const BAND = D.limitBand && (D.limitBand.minMm!=null || D.limitBand.maxMm!=null) ? D.limitBand : null;
+  let showBand = !!BAND;
+  const bandOn = () => showBand && !!BAND;
+  const fmtMm = v => (+v).toLocaleString('en-US',{maximumFractionDigits:3, useGrouping:false});
+  const inBand = s => s.peakDownMm!=null && (BAND.minMm==null || s.peakDownMm>=BAND.minMm) && (BAND.maxMm==null || s.peakDownMm<=BAND.maxMm);
+  const bandLabel = () => BAND.minMm!=null && BAND.maxMm!=null ? `${fmtMm(BAND.minMm)}–${fmtMm(BAND.maxMm)} mm`
+    : BAND.maxMm!=null ? `≤ ${fmtMm(BAND.maxMm)} mm` : `≥ ${fmtMm(BAND.minMm)} mm`;
+  const peakText = s => s.peakDownMm==null ? '—' : `${fmtMm(s.peakDownMm)} mm`;
+
+  // one-off glossary of every candidate id -> its meaning (colour for L, dash for H, marker shape for P)
+  // Candidate definitions block — mirrors the Tab 05 "Candidate Definitions" panel:
+  // Loading = one column per load pattern; Truss height = ΔH + height columns; Pretension = per-cable list.
+  function buildCandKey(){
+    const body = document.getElementById('candKeyBody');
+    const bySeries = id => allSeries.find(s => s.loadId===id || s.heightId===id || s.pretensionId===id);
+    const dashOf = k => { const v = (D.views[0].dashLegend.find(e=>e.key===k)||{}).value; return v==='dot'?'dotted':(v==='solid'?'solid':'dashed'); };
+    const colOf = s => (D.views[0].colorLegend.find(e=>e.key===s.colorKeys[0])||{}).value || '#9aa0a6';
+    const kfmt = n => (+n).toLocaleString('en-US',{maximumFractionDigits:0});
+    const h5 = (t,n) => `<h5>${t} <span class="cnt">${n}</span></h5>`;
+
+    // ---- Loading candidates: a column per load pattern ----
+    const LCOLS = [...new Set(allSeries.flatMap(s => (s.loadingComponents||[]).map(c=>c.pattern)))];
+    let L;
+    if(LCOLS.length){
+      const head = `<tr><th></th><th></th>${LCOLS.map(p=>`<th>${esc(p)}</th>`).join('')}</tr>`;
+      const rows = CAND.L.map(o=>{
+        const s = bySeries(o.id);
+        const map = {}; (s.loadingComponents||[]).forEach(c=>map[c.pattern]=c.levelKPa);
+        const cells = LCOLS.map(p=> p in map ? `<td>${(+map[p]).toFixed(2)} kPa</td>` : `<td>—</td>`).join('');
+        return `<tr><td class="csw"><span class="ksw" style="border-top-color:${colOf(s)}"></span></td><td class="kid">${o.id}</td>${cells}</tr>`;
+      }).join('');
+      L = `<div class="grp">${h5('Loading candidates', CAND.L.length)}<table class="kt">${head}${rows}</table></div>`;
+    } else {
+      L = `<div class="grp">${h5('Loading candidates', CAND.L.length)}` + CAND.L.map(o=>{
+        const s = bySeries(o.id);
+        return `<div class="kr"><span class="ksw" style="border-top-color:${colOf(s)}"></span><span class="kid">${o.id}</span><span class="kval">${esc(s.loadingLabel)}</span></div>`;
+      }).join('') + `</div>`;
+    }
+
+    // ---- Truss-height candidates: ΔH baseline + truss height ----
+    const Hhead = `<tr><th></th><th></th><th>ΔH baseline</th><th>Truss height</th></tr>`;
+    const Hrows = CAND.H.map(o=>{
+      const s = bySeries(o.id);
+      const dh = s.deltaHM!=null ? `${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)} m` : '—';
+      return `<tr><td class="csw"><span class="ksw" style="border-top-style:${dashOf(s.dashKeys[0])};border-top-color:#444"></span></td><td class="kid">${o.id}</td><td>${dh}</td><td>${(+s.trussHeightM).toFixed(2)} m</td></tr>`;
+    }).join('');
+    const H = `<div class="grp">${h5('Truss-height candidates', CAND.H.length)}<table class="kt">${Hhead}${Hrows}</table></div>`;
+
+    // ---- Pretension candidates: per-P block, one row per cable ----
+    let P = '';
+    if(P_ON){
+      P = `<div class="grp pgrp">${h5('Pretension candidates', CAND.P.length)}` + CAND.P.map(o=>{
+        const shape = MSHAPES[P_IDS.indexOf(o.id) % MSHAPES.length];
+        const s = bySeries(o.id);
+        const cabs = s.pretensionCables || [];
+        const note = cabs.length
+          ? `${cabs.length} cable target${cabs.length===1?'':'s'}`
+          : esc(s.pretensionKN!=null ? `${kfmt(s.pretensionKN)} kN` : (s.pretensionLabel||'—'));
+        const hdr = `<div class="pgh"><svg class="kmk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(shape,11,9,5.6,'#555',1)}</svg><span class="kid">${o.id}</span><span class="pgn">${note}</span></div>`;
+        let list = '';
+        if(cabs.length){
+          const cell = c => c ? `<td>${esc(c.cable)}</td><td>${kfmt(c.forceKN)} kN</td>` : `<td></td><td></td>`;
+          const rows = [];
+          for(let i=0;i<cabs.length;i+=2) rows.push(`<tr>${cell(cabs[i])}<td class="pgap"></td>${cell(cabs[i+1])}</tr>`);
+          list = `<table class="kt ptbl">${rows.join('')}</table>`;
+        }
+        return `<div class="pblk">${hdr}${list}</div>`;
+      }).join('') + `</div>`;
+    }
+    body.innerHTML = L + H + P;
+  }
 
   // one multi-select dropdown over `opts`; `set` is the backing Set (empty = all); onChange runs after edits.
   function buildMS(tag, opts, set, onChange){
@@ -382,7 +539,7 @@ a{color:var(--acc)}
     if(anchorAfter) anchorAfter.after(host); else panelsEl.appendChild(host);
     const chart = host.querySelector('.chart'), legendEl = host.querySelector('.legend');
     const dupBtn = host.querySelector('.pv-dup'), rmBtn = host.querySelector('.pv-rm'), ctlEl = host.querySelector('.pv-ctl');
-    const nameEl = host.querySelector('.pv-name');
+    const nameEl = host.querySelector('.pv-name'), bandEl = host.querySelector('.pv-band');
 
     let vi = init.vi|0, linked = !!init.linked;
     let localGi = init.gi != null ? init.gi : gi;
@@ -474,13 +631,16 @@ a{color:var(--acc)}
     function render(){
       const g = grp(), V = view(); if(!g){ chart.innerHTML=''; legendEl.innerHTML=''; return; }
       legendEl.hidden = !showLegend;
-      const W = chart.clientWidth||900, H = chart.clientHeight||360, m={l:58,r:14,t:34,b:40};
+      chart.style.height = printW ? printH + 'px' : '';
+      const W = printW || chart.clientWidth||900, H = printW ? printH : (chart.clientHeight||360), m={l:58,r:14,t:34,b:40};
       const all = g.series.flatMap(s=>s.points.filter(p=>p.uzMm!=null));
       const [dx0,dx1] = xExtent();
       let x0=dx0, x1=dx1;
       if(zoomX){ x0=zoomX[0]; x1=zoomX[1]; }
       if(x0<dx0) x0=dx0; if(x1>dx1) x1=dx1; if(x1-x0 < (dx1-dx0)*0.02){ x0=dx0; x1=dx1; }
       let ys = all.map(p=>p.uzMm);
+      const band = bandOn();
+      if(band){ if(BAND.minMm!=null) ys.push(-BAND.minMm); if(BAND.maxMm!=null) ys.push(-BAND.maxMm); }
       let y0 = Math.min(...ys,0), y1 = Math.max(...ys,0);
       if(x0===x1){x0-=1;x1+=1;} if(y0===y1){y0-=1;y1+=1;}
       const py = 0.06*(y1-y0); y0-=py; y1+=py;
@@ -494,12 +654,25 @@ a{color:var(--acc)}
       P.push(`<text x="${(m.l+W-m.r)/2}" y="30" font-size="9.5" fill="#666" text-anchor="middle">${g.groupName} · ${g.outputCase} · ${viewLabel(V)}</text>`);
       ticks(x0,x1,8).forEach(t=>{ const X=sx(t); P.push(`<line x1="${X}" y1="${m.t}" x2="${X}" y2="${H-m.b}" stroke="#eef0f2"/><text x="${X}" y="${H-m.b+16}" font-size="10" fill="#666" text-anchor="middle">${fmt(t)}</text>`); });
       ticks(y0,y1,6).forEach(t=>{ const Y=sy(t); P.push(`<line x1="${m.l}" y1="${Y}" x2="${W-m.r}" y2="${Y}" stroke="${t===0?'#c7ccd2':'#eef0f2'}"/><text x="${m.l-6}" y="${Y+3}" font-size="10" fill="#666" text-anchor="end">${fmt(t)}</text>`); });
+      const bandLabels = [];
+      if(band){
+        // pass zone: a light wash between the limits (an open bound runs to the plot edge) + dashed limit lines.
+        // +Uz is up, so the Min limit (smaller sag) is the upper line and Max the lower one.
+        const yTop = BAND.minMm!=null ? sy(-BAND.minMm) : m.t, yBot = BAND.maxMm!=null ? sy(-BAND.maxMm) : H-m.b;
+        P.push(`<rect x="${m.l}" y="${yTop.toFixed(1)}" width="${W-m.l-m.r}" height="${Math.max(0,yBot-yTop).toFixed(1)}" fill="#2E7D32" fill-opacity="0.09"/>`);
+        const limit = (v, text, above) => { const Y = sy(-v);
+          P.push(`<line x1="${m.l}" y1="${Y.toFixed(1)}" x2="${W-m.r}" y2="${Y.toFixed(1)}" stroke="#2E7D32" stroke-width="1.5" stroke-dasharray="7 4"/>`);
+          bandLabels.push(`<text x="${W-m.r-4}" y="${(above ? Y-5 : Y+12).toFixed(1)}" font-size="10" font-weight="600" fill="#333" text-anchor="end" stroke="#fff" stroke-width="3" paint-order="stroke">${text}</text>`); };
+        if(BAND.minMm!=null) limit(BAND.minMm, `limit min ${fmtMm(BAND.minMm)} mm`, true);
+        if(BAND.maxMm!=null) limit(BAND.maxMm, `limit max ${fmtMm(BAND.maxMm)} mm`, false);
+      }
       P.push(`<line x1="${m.l}" y1="${m.t}" x2="${m.l}" y2="${H-m.b}" stroke="#333"/><line x1="${m.l}" y1="${H-m.b}" x2="${W-m.r}" y2="${H-m.b}" stroke="#333"/>`);
       P.push(`<text x="${(m.l+W-m.r)/2}" y="${H-6}" font-size="11" fill="#333" text-anchor="middle">${g.profileAxis} coordinate [m]</text>`);
       P.push(`<text transform="translate(14,${(m.t+H-m.b)/2}) rotate(-90)" font-size="11" fill="#333" text-anchor="middle">Uz [mm]  (− = downward)</text>`);
 
       const lineSolid = V.dashMarkers;   // this view's line dim IS pretension -> solid line, marker carries P
-      visible().slice().sort((a,b)=>(emph(a)?1:0)-(emph(b)?1:0)).forEach(s=>{
+      const vis = visible();
+      vis.slice().sort((a,b)=>(emph(a)?1:0)-(emph(b)?1:0)).forEach(s=>{
         const vp = s.points.filter(p=>p.uzMm!=null);
         const pts = vp.map(p=>`${sx(p.coord).toFixed(1)},${sy(p.uzMm).toFixed(1)}`).join(' ');
         if(!pts) return;
@@ -516,8 +689,15 @@ a{color:var(--acc)}
           else { P.push(`<circle cx="${X}" cy="${Y}" r="${on?3.4:2.4}" fill="${c}" opacity="${op}"${kd}/>`); }
         });
       });
+      P.push(...bandLabels);
       chart.setAttribute('viewBox',`0 0 ${W} ${H}`);
       chart.innerHTML = P.join('');
+      // pass count over the candidates this chart currently shows (L / H / P filter + show/hide ticks)
+      bandEl.hidden = !band;
+      if(band){
+        bandEl.innerHTML = `<span class="ok">✓</span> <b>${vis.filter(inBand).length}</b> / ${vis.length} in limit band ${esc(bandLabel())}`;
+        bandEl.title = 'Candidates shown in this chart whose peak downward Uz lies inside the limit band';
+      }
       drawLegend();
     }
 
@@ -553,7 +733,10 @@ a{color:var(--acc)}
         const swatch = P_ON
           ? `<svg class="mk" width="22" height="18" viewBox="0 0 22 18">${markerSvg(pShape(s),11,9,5.2,col,1)}</svg>`
           : `<span class="sw" style="border-top-color:${col};border-top-style:${dashCss(V.dashLegend,dashKey(s))}"></span>`;
-        h.push(`<div class="row cand${off}${on}" data-k="${esc(s.iterationKey)}" title="${esc(s.iterationKey)} · ${esc(s.loadingLabel)} · H ${(+s.trussHeightM).toFixed(2)} m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}">${cb(shown)}${swatch}${esc(s.iterationKey)}</div>`); });
+        const mark = !bandOn() ? '' : inBand(s)
+          ? `<span class="bd ok" title="peak ↓Uz ${peakText(s)} · inside limit band">✓</span>`
+          : `<span class="bd no" title="peak ↓Uz ${peakText(s)} · outside limit band">✗</span>`;
+        h.push(`<div class="row cand${off}${on}" data-k="${esc(s.iterationKey)}" title="${esc(s.iterationKey)} · ${esc(s.loadingLabel)} · H ${(+s.trussHeightM).toFixed(2)} m${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+' kN':''}">${cb(shown)}${swatch}${esc(s.iterationKey)}${mark}</div>`); });
       legendEl.innerHTML = h.join('');
       const wire = (cls, fn) => legendEl.querySelectorAll('.row.'+cls).forEach(r=>{
         const act = () => fn(r.dataset.k);
@@ -573,7 +756,8 @@ a{color:var(--acc)}
         tip.hidden=false;
         tip.innerHTML = `${esc(k)}<br>point ${esc(t.dataset.pt)}<br>X ${(+t.dataset.x).toFixed(3)} m<br>Uz ${(+t.dataset.uz).toFixed(3)} mm<br>`
           + `${esc(s.loadingLabel)}<br>H ${(+s.trussHeightM).toFixed(3)} m (ΔH ${s.deltaHM>=0?'+':''}${(+s.deltaHM).toFixed(3)})<br>`
-          + `${esc(s.pretensionLabel)}<br>case ${esc(grp().outputCase)}`;
+          + `${esc(s.pretensionLabel)}<br>case ${esc(grp().outputCase)}<br>peak ↓Uz ${peakText(s)}`
+          + (bandOn() ? (inBand(s) ? ' · in limit band' : ' · outside limit band') : '');
         tip.style.left = Math.min(ev.clientX+12, window.innerWidth - tip.offsetWidth - 8) + 'px';
         tip.style.top  = Math.min(ev.clientY+12, window.innerHeight - tip.offsetHeight - 8) + 'px';
       } else tip.hidden=true;
@@ -611,9 +795,19 @@ a{color:var(--acc)}
     vis.forEach(s=>s.points.forEach(p=>{ const key=p.pointName+'|'+p.coord; if(!rowsMap.has(key)) rowsMap.set(key,{pt:p.pointName,x:p.coord,vals:{}}); }));
     vis.forEach(s=>s.points.forEach(p=>{ const r=rowsMap.get(p.pointName+'|'+p.coord); if(r) r.vals[s.iterationKey]=p.uzMm; }));
     const rows=[...rowsMap.values()].sort((a,b)=>a.x-b.x);
-    const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${esc(s.iterationKey)}" title="click to highlight this candidate in every chart">${esc(s.iterationKey)}<br><span style="font-weight:400;color:#666">${esc(s.loadingLabel)} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
-    const body = rows.map(r=>`<tr><th class="k">${esc(r.pt)}</th><td>${fmt(r.x)}</td>${vis.map(s=>{const v=r.vals[s.iterationKey];return `<td${s.iterationKey===hi?' class="hi"':''}>${v==null?'—':(+v).toFixed(3)}</td>`;}).join('')}</tr>`).join('');
-    document.getElementById('matrix').innerHTML = `<table><thead><tr><th class="k">Point</th><th>X [m]</th>${th}</tr></thead><tbody>${body}</tbody></table>`;
+    // On paper the matrix is split into tables of as many candidate columns as fit the sheet, so every value prints
+    // at full size however many candidates the study has; on screen it stays one scrolling table.
+    const per = printW ? Math.max(6, Math.floor((printW - 160) / 62)) : Math.max(1, vis.length);
+    const tableFor = vis => {
+      const th = vis.map(s=>`<th class="ch${s.iterationKey===hi?' hi':''}" data-k="${esc(s.iterationKey)}" title="click to highlight this candidate in every chart">${esc(s.iterationKey)}<br><span style="font-weight:400;color:#666">${esc(s.loadingLabel)} · H${(+s.trussHeightM).toFixed(2)}${s.pretensionKN!=null?' · '+(+s.pretensionKN).toFixed(0)+'kN':''}</span></th>`).join('');
+      const body = rows.map(r=>`<tr><th class="k">${esc(r.pt)}</th><td>${fmt(r.x)}</td>${vis.map(s=>{const v=r.vals[s.iterationKey];return `<td${s.iterationKey===hi?' class="hi"':''}>${v==null?'—':(+v).toFixed(3)}</td>`;}).join('')}</tr>`).join('');
+      const foot = `<tr><th class="k">Peak ↓Uz</th><td>[mm]</td>${vis.map(s=>`<td${s.iterationKey===hi?' class="hi"':''}>${s.peakDownMm==null?'—':(+s.peakDownMm).toFixed(3)}${bandOn()?(inBand(s)?' ✓':' ✗'):''}</td>`).join('')}</tr>`;
+      return `<table><thead><tr><th class="k">Point</th><th>X [m]</th>${th}</tr></thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+    };
+    let html = '';
+    for(let i=0; i<Math.max(1,vis.length); i+=per)
+      html += (printW && vis.length>per ? `<div class="mpart">Candidates ${i+1}–${Math.min(vis.length,i+per)} of ${vis.length}</div>` : '') + tableFor(vis.slice(i,i+per));
+    document.getElementById('matrix').innerHTML = html;
     document.querySelectorAll('#matrix thead th.ch').forEach(el=>el.onclick=()=>{ hi = (hi===el.dataset.k? null : el.dataset.k); renderAll(); });
   }
 
@@ -626,21 +820,32 @@ a{color:var(--acc)}
 
   function renderAll(){ panels.forEach(p=>p.render()); if(!mw.hidden) drawMatrix(); drawWarnings(); }
 
+  // "#print&group=1" from the PDF exporter chooses the monitored group / result case to print
+  if(OPT.group != null && D.groups[+OPT.group]){ gi = +OPT.group; sel.value = gi; }
   if(!D.groups.length){
     panelsEl.innerHTML='<p style="padding:20px;color:#666">No deflection results in this study.</p>';
     srcBtn.hidden = true;
   } else {
+    buildCandKey();
     // one chart by default — name it, filter it (L / H / P), pick its relationship & case; Duplicate clones it.
     panels.push(makePanel(null, { vi:0, linked:true }));
   }
 
   sel.onchange=()=>{ gi=+sel.value; hi=null; panels.forEach(p=>{ p.followGlobal(); p.reset(); }); renderAll(); };
   document.getElementById('legendToggle').onchange=e=>{ showLegend=e.target.checked; renderAll(); };
+  document.getElementById('bandToggleWrap').hidden = !BAND;
+  document.getElementById('bandToggle').onchange=e=>{ showBand=e.target.checked; renderAll(); };
   document.getElementById('reset').onclick=()=>{ panels.forEach(p=>p.reset()); renderAll(); };
   function toggleSrc(show){ mw.hidden=!show; srcBtn.textContent = show?'Hide source data':'View source data'; if(show) drawMatrix(); }
   srcBtn.onclick=()=>toggleSrc(mw.hidden);
   document.getElementById('mClose').onclick=()=>toggleSrc(false);
   window.addEventListener('resize',()=>renderAll());
+  // paper: every chart is redrawn against the sheet — full width, and short enough that the title block, the chart
+  // and its legend share one landscape page — and the Source Data Matrix follows the print option
+  if(PRINT){ let opened = false; PRINT.register({
+    before: pg => { printW = Math.max(400, pg.contentPx); printH = Math.max(280, Math.min(430, pg.contentHeightPx - 320));
+      opened = PRINT.state.includeSource && mw.hidden && D.groups.length > 0; if(opened) toggleSrc(true); renderAll(); },
+    after: () => { printW = 0; if(opened) toggleSrc(false); opened = false; renderAll(); } }); }
   renderAll();
 })();
 """;

@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Text;
+using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
 using COT_VCF.Infrastructure;
 
@@ -10,21 +11,30 @@ namespace COT_VCF.Application.Results;
 /// QA/QC / traceability document for one candidate. Not the consolidated study report.</summary>
 public sealed class CandidateDiagnosticReportGenerator
 {
-    public string Write(CandidateResultDto result, string iterationDirectory)
+    /// <summary>Report name printed in the page header, followed by the candidate id.</summary>
+    public const string ReportTitle = "Candidate Diagnostic";
+
+    public string Write(CandidateResultDto result, string iterationDirectory, ReportPrintSettings? print = null)
     {
         Directory.CreateDirectory(iterationDirectory);
         var path = Path.Combine(iterationDirectory, result.DiagnosticReportFileName);
-        AtomicFile.WriteAllText(path, BuildHtml(result), new UTF8Encoding(false));
+        AtomicFile.WriteAllText(path, BuildHtml(result, Describe(result, print)), new UTF8Encoding(false));
         return path;
     }
 
-    public string BuildHtml(CandidateResultDto r)
+    // One file per candidate: the header carries the company name, not a logo copy in every file.
+    private static ReportPrintDto Describe(CandidateResultDto r, ReportPrintSettings? print) =>
+        ReportPrintEngine.Describe(print, $"{ReportTitle} · {r.IterationKey}", r.BaselineModelName,
+            r.ExtractionCompletedAt == default ? DateTimeOffset.Now : r.ExtractionCompletedAt, embedLogo: false);
+
+    public string BuildHtml(CandidateResultDto r, ReportPrintDto? print = null)
     {
         var p = r.Parameters;
         var b = new StringBuilder();
         b.Append("<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">");
         b.Append($"<title>Deflection Diagnostic — {E(r.IterationKey)}</title>");
-        b.Append("<style>").Append(Css).Append("</style></head><body>");
+        b.Append("<style>").Append(ReportPrintEngine.Css).Append(Css).Append("</style>")
+            .Append(ReportPrintEngine.PageStyle).Append("</head><body>").Append(ReportPrintEngine.Bar);
 
         b.Append("<header><h1>Candidate Diagnostic Report — Deflection · U<sub>z</sub></h1>");
         b.Append("<p class=\"purpose\">Records the analysis configuration, execution status, extracted monitored-point "
@@ -84,6 +94,7 @@ public sealed class CandidateDiagnosticReportGenerator
         }
         b.Append("</section>");
 
+        b.Append(ReportPrintEngine.Scripts(print ?? Describe(r, null)));
         b.Append("</body></html>");
         return b.ToString();
     }
@@ -108,5 +119,6 @@ public sealed class CandidateDiagnosticReportGenerator
     thead th{background:var(--su);color:var(--mu);font-weight:600}.n{text-align:right;font-family:Consolas,monospace}
     table.kv{width:auto}table.kv th{background:var(--su);color:var(--mu);white-space:nowrap}
     tr.bad td{background:#FDECEA}tr.warn td{background:#FFF4E5}.ok{color:var(--ok)}
+    @media print{body{padding:0}header{margin-bottom:10px}h2{margin:14px 0 6px}section{break-inside:avoid}}
     """;
 }

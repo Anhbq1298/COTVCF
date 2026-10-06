@@ -213,14 +213,27 @@ Tab 04 defines study-wide output monitoring only; editing the tab does not write
 - Fixed output units: displacement mm, force kN, moment kNm.
 - Output groups use the reserved `[O]-` namespace: `[O]-DeflectionMonitorPts`, dynamic member-force groups `[O]-{user suffix}`, `[O]-FoundationLeft`, `[O]-FoundationRight`, and `[O]-CableMonitor`.
 - Deflection monitoring selects baseline Point Objects and fixes the future output to Global U3.
+- The monitored-points card carries an inline `Limit band ↓U3 [min] – [max] mm` row (nullable TextBoxes with
+  `NullableDouble`; blank = open bound) persisted as `DeflectionLimitMinMm` / `DeflectionLimitMaxMm` in
+  `Tab05OutputSettings`. It is the **single** deflection criterion (`DeflectionLimitBand`): a candidate passes when
+  Min ≤ peak downward deflection δ = −min(Uz) ≤ Max. It is the Tab 06A deflection criterion (same two values,
+  editable there too) and `Deflection_Report.html` draws it as a green wash between two dashed limit lines with a per-chart
+  `✓ n / N in limit band` count and ✓/✗ per candidate. It is a post-processing input: excluded from the run
+  fingerprint, applied on the next Generate/Regenerate. The former hidden study Pass/Fail limits (50/75 mm) are gone.
 - Member-force groups are user-defined application groups over baseline Frame Objects; one frame belongs to at most one member-force output group. A shared result case/combo is required. Extraction retains signed local P/V2/V3 and T/M2/M3 for every SAP analysis element and result station returned for each selected frame object; it must not collapse an auto-meshed frame object to one governing value.
 - Foundations require exactly two baseline points on the Left and exactly two on the Right, with no overlap.
 - Cable output selects baseline Cable Objects plus a SAP analysis load case. This is distinct from Tab 03's target-force load pattern.
 - Configuration is persisted as `Tab05OutputSettings`; opening a project restores definitions only and never mutates SAP.
 - When Tab 05 Run starts, `OutputGroupPreparationService` is the preflight gate: verify the active model is the immutable session parent and unlocked, replace/read-back all requested `[O]-` groups, save the parent .sdb, then freeze the execution snapshot. No worker or child may start before this succeeds.
-- Member-force extraction retains every SAP station and result step; support reactions retain the configured Left/Right foundation points and global force/moment components. Reports are generated from the raw JSON package.
-- Children inherit the saved parent groups. The run extracts the configured results as raw candidate data, publishes
-  canonical JSON/CSV, and then automatically generates the Excel workbook and available HTML reports.
+- Member-force extraction retains every SAP station and result step; support reactions retain the configured Left/Right foundation points and global force/moment components. Tab 06 generates their reports from the raw JSON package.
+- `Support_Reactions_Report.html` opens on its **Summary** (see "Module 06 Support Reactions" below). Its generic
+  views stay under `View`: per support point (or foundation total), a range band among the in-scope
+  candidates: min–max wash, darker P25–P75 core, median line, labelled extremes, and candidate dots on top (dots hidden
+  above `IndividualProfileLimit`). `Band by` splits it per L / H / P id using the Deflection report's palette order
+  keyed by study-wide id (colour follows the id, never the filter); dimensions with more ids than colours are disabled.
+  The matrix view ends with Min / Max / Range rows.
+- Children inherit the saved parent groups. The run extracts the configured results as raw candidate data;
+  it does not create Excel workbooks or HTML reports.
 
 ## Iteration Study Tab (06)
 
@@ -250,8 +263,8 @@ Study composition plus isolated child-model building, analysis, raw-result extra
   loading/height/pretension candidates. Each row exposes the selected joint/load-pattern/Fz assignments
   and cable/load-pattern/target-force assignments in dedicated columns/tooltips; do not hide pretension
   after a truncated generic description. Previewing paths never creates a directory.
-- Study paths are always derived from the immutable first-connected baseline and separated by model name:
-  `<baseline folder>/Study/<baseline stem>/<iteration id>/<baseline stem>_<iteration id>.sdb`. Existing non-empty iteration
+- Study paths are always derived from the immutable first-connected baseline:
+  `<baseline folder>/Study/<iteration id>/<baseline stem>_<iteration id>.sdb`. Existing non-empty iteration
   folders or child models block the run and are never silently overwritten.
 - The user selects 1–3 **total** SAP2000 instances. The already-connected baseline instance is worker 1;
   only workers 2 and 3 create additional background SAP2000 processes. The connected host is borrowed and
@@ -277,19 +290,317 @@ Study composition plus isolated child-model building, analysis, raw-result extra
 - A candidate-level failure, including a nonzero `Analyze.RunAnalysis` result, may continue on a recovered
   worker. Failure to restore the baseline faults that worker and removes it from scheduling; healthy workers
   continue.
-- Each successful candidate persists `Candidate_Result.json`. At the end of the run, the study first publishes
-  canonical lossless `Study/RawData/Study_Raw_Results.json` plus a flat `Study_Raw_Results.csv` companion, then
-  automatically generates candidate diagnostics, the consolidated workbook, available deflection/cable/member-force/support-reaction HTML reports, and shortlist outputs from that raw package.
-- Tab 06 remains the manual retry/regeneration boundary. `Generate Outputs` / `Regenerate` recreates the same derived
-  outputs from raw JSON without a SAP gateway. The CSV is a spreadsheet-friendly raw view; JSON is the canonical
-  complete post-processing input and remains available if automatic report generation fails.
-- Capacity and decision criteria are post-processing inputs. Changing `fpu`, `φ`, or criteria must not invalidate
-  reusable analyzed children. Automatic generation uses the values frozen at run start; a later explicit Tab 06
-  generation uses the current derived capacities and criteria.
+- The SAP/model-run boundary ends with raw files: each successful candidate persists `Candidate_Result.json`,
+  then the study publishes canonical lossless `Study/RawData/Study_Raw_Results.json` plus a flat
+  `Study_Raw_Results.csv` companion. It does not generate `.xlsx` or `.html`, including candidate diagnostics.
+- Tab 06 is the only report-generation boundary. `Generate Outputs` / `Regenerate` reads the raw JSON and creates
+  the candidate diagnostics, consolidated workbook, deflection/cable/member-force/support-reaction HTML without a SAP
+  gateway. The CSV is a spreadsheet-friendly raw view; JSON is the canonical complete post-processing input.
+- Capacity and the Tab 06A acceptance criteria are post-processing inputs. Changing `fpu`, `φ`, or a criterion must
+  not invalidate reusable analyzed children; the next explicit Tab 06 / 06A generation uses the current values.
+- **The Study Shortlist is gone** (Module 08, `Study_Shortlist.html/.xlsx`, `StudyDecisionService`, the ranking
+  weights and the absolute cable kN bounds). Tab 06A replaces its pass / fail gate; do not reintroduce a second
+  gate. An older project or raw package that still carries those fields loads normally — they are ignored.
   Users may edit the raw JSON in place and regenerate; derived artifacts are considered stale until then.
-- Every result HTML includes the same compact Candidate Definitions section for L/H/P. Pretension definitions use
-  a cable-by-candidate target-force matrix rather than repeating a cable list for every P candidate, keeping print
-  output compact. Member-force group selection is multi-select (an empty selection means all groups).
+
+## Tab 06 Post-Processing · Module 07 Cable Forces (`Cable_Forces_Report.html`)
+
+Prestress target vs final analysed cable force. The file name, the report shell (header, metadata line, Result
+Library, sticky `#bar`, `Force (kN)` / `% of capacity` toggle, `section.blk`, `details.block` Source Data, `#warns`)
+and the Module 07 buttons / bindings (`View Report`, `Regenerate`, `Open Excel`, `Open Study Folder`) are fixed —
+change the engineering content, not the identity.
+
+- **Self-contained HTML**: inline CSS / SVG / JavaScript only. No CDN, chart library, server or external resource.
+  Everything renders client-side from the embedded `#report-data` JSON (`CableForceReportDto`).
+- **SAP-free and backward compatible**: `Regenerate` reads `Study_Raw_Results.json` through `StudyPostProcessor`
+  (workbook regeneration via `CableForceReportGenerator.RegenerateFromWorkbook` stays supported). Only values that
+  were already extracted are read (`TargetForceKN`, `ForceKN`, status, L / H / P ids, `TrussHeightM`, result case);
+  a missing per-row target falls back to the candidate's own `PretensionCables` entry for the same cable. Side,
+  delta force / %, ranges, governing rows and chart order are **derived at report time** and never written back
+  to the raw JSON, the workbook result sheets, SAP2000 or the project. Raw schema stays `SchemaVersion = 1`.
+  A format change to this report must never require a SAP2000 run or a study re-run.
+- **Force development** (`CableForceMath`): `DeltaForce = Final − Target`; `DeltaPercent = (Final − Target) / Target × 100`
+  (> 0 pickup, < 0 loss). Delta % is N/A when the target is 0 or missing or the final force is missing. A missing
+  result stays `null` → an `n/a` gap / `Result unavailable`, never 0.
+- **Capacity source of truth = current Tab 03** (`CablePretensionConfig.ResolveCapacity(fpu, φ)` = area × fpu × 1000 × φ).
+  `MainViewModel.GenerateStudyOutputs` passes `CurrentCableCapacities()` plus the names of every cable on Tab 03;
+  `CableCapacityResolver.Resolve` decides per **exact cable object name**: current Tab 03 value → else, only for a
+  cable Tab 03 does not know, the capacity stored with the results for that same name → else unavailable. A Tab 03
+  cable whose capacity cannot be resolved is unavailable (`Capacity unavailable from current Tab 3 configuration`),
+  not a fallback. Never infer a capacity from forces, the chart maximum, another cable, a side, or a constant.
+  Changing fpu / φ then `Regenerate` moves the limit and utilisation without touching target / final / H / P.
+- **Result case wording**: charts say `Final analysed force`; the actual case comes from `CableForceStudyDto.ResultCase`
+  (metadata line and tooltips). Do not hardcode `ULS`.
+- **Cable Grouping** (toolbar panel): every cable gets `Side A` / `Side B` / `Unassigned`, with `Apply Grouping`,
+  `Auto Detect`, `Reset`. It is presentation state only and re-renders client-side; it never changes a force,
+  delta, capacity, utilisation or governing candidate. `CableGroupDetector.Suggest` embeds the Auto Detect
+  suggestion (`autoGroups`): a side is suggested only when exactly one marker in the name (a/b, A/B, L/R,
+  Left/Right at a word edge) has a counterpart cable differing by that marker alone; anything else — lone
+  markers, two competing markers, an a/b/c series, arbitrary names — stays `Unassigned`. The report opens on that
+  suggestion, states `N cables currently unassigned.`, and charts unassigned cables separately (one
+  `All cables · Unassigned` chart per P while nothing is assigned). The applied grouping is kept in `localStorage`
+  per baseline model; `Reset` clears it.
+- **Cable order** is natural-name order (`NaturalNameComparer`: Cable1, Cable2, Cable10) — never a hard-coded list.
+- **01 · Cable Force Overview**: one chart per truss height actually present in the results. Per cable, a yellow
+  target range and a blue final-force range across the pretension candidates with a result there (pale below the
+  minimum, solid min → max, from 0; identical targets draw one target level). The header note names what is missing
+  (`Range based on 8 available pretension candidates; P08-H30 unavailable.`).
+- **02 · Force Development by Pretension Candidate**: for every P candidate one chart per populated group
+  (`Pxx — Side A`, `Pxx — Side B`; an empty side shows `No cables assigned to Side A.`). Two-level category axis:
+  bars clustered per cable, one bar per truss height labelled with the real height (`H20` = 20 m). Yellow = target
+  from 0; solid blue stacked on top = pickup (top = final); hatched blue band from final up to target = loss (lower
+  edge = final); a dark cap marks the final force. Final force is labelled first, Δ% only where it fits; label
+  format is decided per chart so neighbours never collide.
+- **Limit**: red `#C62828` dashed `6 4`. Force mode: one continuous `Cable Force Limit` line when every displayed
+  cable has an equal capacity (within tolerance), otherwise one segment per cable cluster that has a capacity, and
+  nothing for a cable without one. `% of capacity` mode: one `Design Limit · 100%` line with headroom above it.
+  Exceedance turns only the final-force value and cap red; bars keep yellow / blue. Draw order: grid, bars, limit,
+  final-force markers and labels.
+- **03 · Governing / Capacity Review**: per cable the largest final force, its candidate / height / P, current
+  capacity, utilisation and a within / exceeds / N/A verdict, for the selected load (study-wide line when the
+  study has several loads).
+- A **Load** selector appears only when the study has more than one loading candidate; loads are never mixed
+  inside a chart. One shared Y-scale from 0 per load and value mode.
+- Checks: `tests/CableForceReportChecks.cs` covers the derivations in C# and runs the report's own script against
+  its embedded data with Jint (test-only package, shared harness `tests/ReportPage.cs`) through the
+  `window.cableReport` handle (`setMode`, `setLoad`, `applyGroups`, `autoDetect`, `resetGroups`), including the
+  DOM-id regression check.
+- Printing: the report uses the shared print engine below (toolbar `Print report ▾`, Module 07 `Export PDF`). On paper it
+  re-lays its charts out against the sheet, keeps one pretension candidate (Side A + Side B) together per page where
+  it fits, prints a `Printed view:` line (value mode · load · grouping) and leaves the Source Data table out unless
+  asked for.
+
+## Tab 06 Post-Processing · Modules 02 / 03 / 05 Top Chord, Bottom Chord and Mega Column (`Member_Forces_Report.html`)
+
+A visualization layer inside the existing member-force report — no SAP2000, extraction, candidate or raw-data
+change. `MemberGroupSummary.Kind` reads the member-force group name: `chord` plus `top` / `upper` → `top`,
+`chord` plus `bottom` / `btm` / `lower` → `bottom` (e.g. `TopChord`, `[O]-BottomChord`), `mega` plus `col` →
+`mega` (e.g. `MegaColumns`). Such a group gets a `Summary` section in the report DTO
+(`MemberGroupSummaryDto`: `Kind`, `Title`, `ByStation`, `Candidates`); any other group (Vierendeel …) keeps only
+the generic views.
+
+- **Derived at report time, in C#** (`MemberGroupSummary.Summarise`, tested): per iteration the governing axial
+  force over **every valid station and result step** — Top Chord and Mega Column = max |P| (compression
+  magnitude), Bottom Chord = max P (tension as stored) — with the signed source P, frame, analysis element,
+  physical station and result step it comes from; plus, for a chord, a profile with **one governing point per
+  physical station** (profile coordinate rounded to 0.1 mm, so two elements meeting at a node do not plot
+  twice). Nothing is smoothed, interpolated or defaulted: an iteration without a valid station has no value,
+  never 0.
+- **Mega Column is Summary only — never indicate a station for it** (`MemberGroupSummary.HasStations` = false,
+  `ByStation` = false). A mega-column group is a set of separate columns, so a position along "the group" means
+  nothing: no `View by Station`, no station in the tooltip, no `Station [m]` column in the values table,
+  `StationM` = null and an empty `Profile` in the data, and `summary(i, 'station')` / `&detail=station` stay on
+  the Summary. The frame object and analysis element stay — they say which column governs. Title
+  `Mega Column – Governing Axial Compression`, axis `Governing Compression |P| (MN)`, trace line
+  `governing over the whole group and every result step`.
+- **Summary is the default** (`Display = Summary`, value `summary`): heading `Top Chord` + `Summary` tag, then one
+  card per loading candidate in scope — never mixed. Grouped columns: pretension candidates in natural order
+  (P01 → P09), within each one bar per truss height (`H` + the real height), a small gap between candidates,
+  value above each bar in MN to one decimal, and one trend line per height through the bar-top centres with a
+  small circular marker, on the same Y-axis (from 0, shared by the group's cards). A missing iteration
+  (e.g. P08-H30) has no bar and no marker, shows a muted `n/a`, and **breaks** its trend line. Titles:
+  `Top Chord – Governing Axial Compression` / `Governing Compression |P| (MN)`; `Bottom Chord – Governing Axial
+  Tension` / `Governing Tension P (MN)`. A `Governing values` table (optional on paper) lists every bar's source.
+- **By Station is a chord drill-down, not a tab**: `View by Station` on a chord Summary opens it; it shows `By Station`,
+  `← Summary` and a `Pretension Candidate` selector (actual candidates, default the first), and one line per
+  truss height along the physical chord (left support → midspan → right support): `Compression |P| (MN)` for the
+  top chord, `Tension P (MN)` for the bottom chord with the stored sign kept (compression near the supports
+  plots below 0). Do not add `By Station` to the Display select or as a permanent tab.
+- **Height styling is global**: colour by study-wide height id in the shared palette order (the Support Reactions
+  height bands) and line style by height in the Deflection order (solid, dash, dot …). Same in Summary and By
+  Station; a filter never repaints a height. The palette's green / orange pair is weak for red-green colour
+  blindness, which is why every bar also carries its `H` label and every line its dash style.
+- Choosing a chord or the mega columns in **Group** always lands on the Summary; with `All groups` those groups
+  show their Summary and the other groups their profile chart. Component / Result step / Positions hide while
+  only summaries are shown (they read P over every station and step). `All profiles` / `Envelope` /
+  `Station matrix` remain under Display for every group, chords and mega columns included. The L / H / P filters
+  apply to the summaries too.
+- **Tooltips / traceability**: Summary — `P03 · H25`, governing force in MN, source P [kN] and step, frame /
+  element (and, for a chord, station), iteration key and loading, group and output case; By Station — candidate,
+  height, station, force, source P. The output case is the group's own (`OutputCase`), never a hardcoded name.
+- **Deep links**: `#summary=top|bottom|mega` opens on that group's Summary; `&detail=station&pretension=P03`
+  drills into a chord. A URL fragment cannot be passed through the Windows shell, so generation writes tiny
+  launcher pages, `Top_Chord_Report.html` / `Bottom_Chord_Report.html` / `Mega_Column_Report.html` (removed when
+  the study has no such group). Modules 02 / 03 / 05 `View Report` open the launcher (`OpenTopChordReport` /
+  `OpenBottomChordReport` / `OpenMegaColumnReport`), and their `Export PDF` print that Summary to
+  `Top_Chord_Report.pdf` / `Bottom_Chord_Report.pdf` / `Mega_Column_Report.pdf`; without the group they fall
+  back to the whole member-force report. Module 04 (Vierendeel) is unchanged.
+- Checks: `tests/MemberForceReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
+  `tests/ReportPage.cs`) through `window.memberReport.summary(groupIndex, 'summary' | 'station', pretensionId)`.
+
+## Tab 06 Post-Processing · Module 06 Support Reactions (`Support_Reactions_Report.html`)
+
+A visualization layer inside the existing support-reaction report — no SAP2000, extraction, candidate or raw-data
+change. It shares the Summary look of the member-force report (`ReportSummaryTheme.Css`: heading + view tag, cards,
+legend, chart text, values table); do not fork that CSS per report.
+
+- **Inner / outer is derived, not hardcoded** (`SupportReactionSummary.ResolveRoles`): per foundation side, the
+  inner support is the point nearer in plan to the centre of all foundation points (towards the other foundation),
+  the outer one the farther. Current model: Left inner Pt 198 / outer Pt 200, Right inner Pt 199 / outer Pt 205.
+  A side without exactly two located points at different distances gets no role and no Summary — the report then
+  opens on `Individual supports` as before. Never guess a role, never assume Left = Right.
+- **Derived at report time, in C#** (`SupportReactionSummary.Summarise`, tested): per iteration and result step a
+  `SupportReactionPairDto(Inner, Outer, Net)` for `Fx` and for `Fz`, in stored kN with the SAP sign.
+  `Net = Inner + Outer` is the **algebraic** sum (+24.3 + (−14.9) = +9.4, never 39.2). A component is null unless
+  both supports have a valid value in that step: no sum over one joint, no zero, no estimate. `Fy` and the moments
+  are not part of the Summary (they stay in the generic views).
+- **Summary is the default** (`View = Summary`): heading `Support Reactions` + `Summary` tag, a one-line reading
+  guide, then (1) four KPI cards, (2) `Vertical Reaction Fz`, (3) `Horizontal Reaction Fx`, one card per loading
+  candidate in scope — never mixed. It reads the selected **Result step**; `Component` and `Band by` hide.
+- **KPI cards** cover both foundation sides and every iteration in scope: `Max Inner Compression` (max Fz inner),
+  `Max Outer Uplift` (max |Fz outer| where it is negative; `No uplift` otherwise), `Max Individual Horizontal
+  Reaction` (max of |Fx inner|, |Fx outer|), `Max Net Horizontal Reaction per Side` (max |Fx inner + Fx outer|).
+  Each shows the value in MN, `L · P · H · side` (the load only when the study has several; `Left/Right` when both
+  sides read the same to the shown decimal) and the role with its joint(s). Clicking one opens that iteration by
+  candidate.
+- **Chart grammar** (both charts identical): pretension candidates in natural order; within each, one slot per
+  truss height; within each height **three adjacent bars — Inner | Outer | Σ Net** — about a visible zero line,
+  half a bar of air after each height and a wider gap before the next candidate. Signs are kept (Fz: + compression,
+  − uplift; Fx: global X direction). Σ Net is its own bar from zero, never stacked. Colour is the **role**, not the
+  height: inner `#1f4788` solid, outer `#ff7f0e` solid, Σ Net hatched + outlined slate (a resultant, not a
+  support). Values are signed MN to one decimal, above a positive bar / below a negative one, the net in bold.
+- **Joint identification is mandatory on every bar**: two-level label `Inner` / `Pt 198`, `Outer` / `Pt 200`,
+  `Σ Net` / `198+200` — on two lines when the bars are wide enough, otherwise one upright line
+  (`Inner Pt 198`). The legend only names the three categories; it never replaces the bar labels.
+- **Density**: when a row cannot give each bar a labelled 9.5 px, the candidates wrap to further rows (5 heights →
+  P01–P05 / P06–P09), each row captioned `Fz · L01 · Left Foundation · P01 – P05`. Do not shrink the labels or drop
+  the joints instead.
+- **Missing iteration** (e.g. P08-H30): its height slot stays blank with a muted `n/a` — no bars, no bar labels, no
+  zero, nothing interpolated — and the values table says `Result unavailable`.
+- **Foundation side**: the toolbar `Foundation Side` select is the side selector — the Summary opens on the first
+  (Left) side; `Right` and `Left + Right` (separate charts per side, never one bar for two sides' joints) are one
+  click away. One signed axis per component is shared by every card shown.
+- **By Candidate is a drill-down, not a tab**: `View by Candidate` (or a click on a bar / KPI card) opens it with
+  `← Summary`, `Pretension Candidate` and `Truss Height` selectors (plus `Loading Candidate` when the study has
+  several). It shows both sides of one iteration: a schematic left to right — Left outer, Left inner | Right inner,
+  Right outer — with an Fz and an Fx arrow per support in its actual direction, the signed value, `Compression` /
+  `Uplift`, and `Net Left` / `Net Right` (ΣFz, ΣFx) below; then a table `Foundation | Role | Point | Fx | Fz` with
+  the two resultant rows. A missing iteration says so and draws nothing. Do not add `By Candidate` to the View
+  select.
+- **Tooltips / traceability**: candidate · height · side, role · joint, signed MN, behaviour (Fz), source kN and
+  result step, iteration key and loading, output case; the net shows `Σ Fx = Fx198 + Fx200 = …`. A collapsed
+  `Reaction values` table (optional on paper) lists the kN source of every bar.
+- **Paper**: the Summary re-lays its charts at the sheet width (`reportPrint.register`), two chart rows per sheet;
+  `Export PDF` prints the report as it opens (Summary, Left foundation).
+- **Deep links**: `#group=Right|all`, `#view=supports|totals|matrix`, `#detail=candidate&load=L01&pretension=P03&height=H02`.
+- Checks: `tests/SupportReactionReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
+  `tests/ReportPage.cs`) through `window.reactionReport.summary('summary' | 'candidate', { loadId, pretensionId, heightId })`.
+
+## Tab 06A Optimization (`MainViewModel.Optimization.cs`, `Study/Optimized/`)
+
+Qualifies the stored candidates against acceptance criteria and writes the existing reports for the qualified
+("optimized") set. Post-processing only: raw data in, no SAP2000, never part of a run or its fingerprint.
+"Optimized" means "passes every active criterion" — there is no ranking or objective function.
+
+- **Tab**: `06A  OPTIMIZATION`, index 6, after `06 POST-PROCESSING`. `IsEnabled` is bound to `HasRawData`; the
+  header status reads `Needs raw data` / `Reading raw data…` / `Qualified n / N`. Layout: raw-data strip with
+  `Generate Optimized Reports` and `Open Optimized Folder`; a CRITERIA card and a RESULT card side by side; the
+  CANDIDATES table (virtualised `DataGrid`, status filter) filling the rest.
+- **Metrics once, criteria as often as they change**: `StudyMetricsStore.Load` derives one `CandidateMetrics` row
+  per candidate (δ = `DeflectionLimitBand.PeakDownMm` over every monitored point; the final force of every cable)
+  and keeps them in `Study/RawData/Study_Candidate_Metrics.json`, a rebuildable sidecar used only while the raw
+  file's length and timestamp still match. `StudyQualifier.Evaluate` runs on those rows — a criterion edit never
+  re-reads the raw package (hundreds of MB for a large study). Loading happens off the UI thread.
+- **Criteria** (`QualificationCriteria`, from `OutputSettingsConfiguration`): each has an enable switch.
+  1. *Deflection within range*: Min ≤ δ ≤ Max, inclusive, blank bound open. **It is the Tab 04 limit band** —
+     the same `DeflectionLimitMinMm/MaxMm`, edited in either place; never add a second deflection range.
+  2. *Cable forces below the limit*: every cable's final force / design capacity ≤ `MaxCableUtilization`
+     (default 1.00). Capacity comes from `CableCapacityResolver` exactly as in the Cable Forces report (current
+     Tab 03, then stored). The governing utilisation and its cable are reported whether or not the criterion is on.
+  The switches and the limit persist in `Tab05OutputSettings` (`DeflectionCriterionEnabled`,
+  `CableCriterionEnabled`, `MaxCableUtilization`); older projects load with both on and 1.00.
+- **Statuses**: `Qualified` / `Not qualified` (each failed criterion with its governing value, limit and cable) /
+  `Not assessed` (a result an active criterion needs is missing or invalid, a cable has no capacity, or the
+  analysis did not complete). Not assessed is never qualified and a missing value is never 0. A criterion that
+  fails wins over missing data elsewhere. To add a criterion: a verdict in `StudyQualifier.EvaluateOne`, a switch
+  in the settings, a row in the summary's criteria table.
+- **Optimized reports**: `StudyOptimizationProcessor.Generate` writes into `Study/Optimized/` —
+  `Optimization_Summary.html`, `Optimization_Criteria.json`, and Deflection / Member Forces (+ chord and mega
+  launchers) / Support Reactions / Cable Forces from **the existing generators** given the qualified subset and a
+  `ReportScope`. No forked chart code. The full reports in `Study/` are never touched. With no qualified
+  candidate only the summary is written and an earlier set's chart reports are removed.
+- **`ReportScope`** (optional last argument of each generator) is what makes a subset report honest:
+  a banner under the header and ` · Optimized set` in the printed page header; the full study's L / H / P ids, so
+  an id keeps its colour, line style and order when others drop out; and the excluded iterations, so a blank slot
+  reads **NQ / "Not qualified"** — distinct from `n/a` = no result — never a zero. Diagnostics links point back to
+  the study folder (`../`).
+- **`Optimization_Summary.html`** (rendered in C#, no script of its own): KPI cards (qualified, not qualified with
+  deflection only / cable only / both, not assessed, the study's own δ and utilisation range), the criteria table,
+  the **acceptance map** (δ against governing cable utilisation for every candidate, limits drawn, acceptance window
+  shaded, qualified points filled), the qualified candidates, and every candidate with status and reason
+  (optional on paper).
+- **Staleness**: `Optimization_Criteria.json` records the criteria, the capacity signature, the raw-data identity
+  and the qualified keys; `StudyOptimizationProcessor.IsCurrent` drives the tab's "up to date" / "out of date —
+  regenerate" line.
+- Checks: `tests/OptimizationChecks.cs` (metrics, inclusive bounds, not-assessed cases, the sidecar, the optimized
+  set with untouched full reports, identity and NQ marks through the report scripts, staleness, 1,000 candidates)
+  and the `--study-ui` Tab 06A block (enabled state, live qualification, filter, generate).
+
+## Report Print Engine (`ReportPrintEngine`, Tab 06 Print Setup, Export PDF)
+
+Reports stay one self-contained HTML file; paper output is produced by the report itself with CSS Paged Media, so
+the browser's Print and the app's PDF export give the same pages. **Every HTML view is on the engine**: Deflection,
+Member Forces, Support Reactions, Cable Forces, the Tab 06A Optimization Summary and the per-candidate diagnostics.
+A new report
+must plug in the same way — do not give a report its own print header / footer.
+
+- **Print Setup** (`ReportPrintSettings`, Tab 06 card `PRINT SETUP · HEADER / FOOTER`, above module 01): company,
+  logo file, project, job no., revision, prepared by, checked by, footer note, default paper (A4 / A3 / Letter),
+  orientation, page numbers, date, include Source Data. It is a **per-user preference**
+  (`ReportPrintSettingsStore` → `%LocalAppData%\COTVCF\ReportPrintSettings.json`), saved on every edit — not part of
+  the COT VCF project file, the study folder or the run fingerprint. Like capacities and criteria it is a
+  post-processing input: applied on the next Generate / Regenerate (`StudyPostProcessor.Generate(…, printSettings)`).
+  `MainViewModel` takes the store as an optional constructor argument; without one (checks) settings stay in memory.
+- **Logo**: `ReportPrintEngine.LogoDataUri` embeds the file as a data URI (PNG / JPG / SVG / GIF / WEBP / BMP, at
+  most `MaxLogoBytes`), so the report needs no external resource. A missing / unsupported / oversized logo is
+  reported on the card (`DescribeLogo`) and the company name is printed top-left instead. SVG prints as vector.
+  Candidate diagnostics are written once per candidate, so they are described with `embedLogo: false` and print
+  the company name top-left — a study with hundreds of candidates must not carry hundreds of logo copies.
+- **Page layout**: the engine script (`window.reportPrint`) builds one `@page` rule into `<style id="pr-page">`:
+  sheet size and orientation, margins (24 mm top, 16 mm bottom, 38 px sides), and the header / footer in the
+  **page-margin boxes** on every page — top-left logo (or company), top-centre project over report name · model,
+  top-right job no. · revision and date, bottom-left company and signatories, bottom-centre note, bottom-right
+  `Page N of M` (`counter(page)` / `counter(pages)`). Side boxes are whole pixels and the centre is a `calc()` of
+  the rest so the three borders print as one unbroken rule. User text goes through a CSS-string escaper; a logo
+  value that is not an embedded image is ignored. Needs Chromium 131+ (Edge / Chrome); the browser's own header and
+  footer are suppressed automatically. Firefox prints the content without the margin header / footer.
+- **Chart quality**: charts are inline SVG and are never rasterised — text stays text, bars and hatches stay
+  vector, colours print exactly (`print-color-adjust: exact`). A report registers
+  `window.reportPrint.register({ before(page), after() })` and re-lays its charts out for `page.contentPx` (the
+  sheet's content width) instead of the window; if the sheet is narrower than a comfortable design width the SVG is
+  laid out wider and scaled down by CSS (`max-width:100%`), never below 80 %.
+- **Triggers**: the report's `Print report ▾` button — accent-outlined, placed straight after the main toolbar
+  controls in every report, never behind hint or status text — opening the panel (paper, orientation, include
+  Source Data, `Print / Save as PDF`),
+  plain Ctrl+P (`beforeprint` / `afterprint`), and the URL fragment `#print[&paper=A3&orientation=portrait&source=1]`
+  which lays the page out for paper on load. Report-specific options ride on the same fragment (Cable Forces:
+  `mode=ut`, `load=L02`).
+- **Export PDF** (`ReportPdfExporter`; an `Export PDF` button on every module 01–08, modules 02–05 sharing the
+  member-force report): runs the installed Edge (else Chrome) headless with a private profile on
+  `report.html#print` and writes `<report>.pdf` beside the report, then opens it. No SAP2000, no network. It prints
+  the report as last generated — change Print Setup, Regenerate, then export.
+- Engine pieces a report emits: `ReportPrintEngine.Css` (inside its `<style>`), `PageStyle` (in `<head>`),
+  `ToolbarButton` and `Panel` inside its toolbar (or `Bar` when it has none), and `Scripts(dto)` before its own
+  script. Optional hooks the engine acts on while laid out for paper (`body.pr-on`):
+  - `data-print-controls` on the toolbar(s) + one `data-print-view` element → the engine prints a
+    `Printed view: Group: … · Component: … · Loading: all` line from the hidden selects and filter buttons;
+  - `data-print="source"` on an optional data table (hidden unless *Include Source Data* — `body.pr-nosrc`);
+  - `data-print-fit` on a wide table's wrapper → scaled inside its own box to the sheet width (re-measured, floor
+    35 %). Never let content overflow the sheet: Chromium then shrinks the **whole page**. Use `body.pr-on` rules
+    (not only `@media print`) for anything that changes a table's width, so it is measured as it will print;
+  - `class="print-only"` / `class="no-print"`;
+  - `window.reportPrint.register({ before(page), after() })` for charts drawn against the window width.
+  Report-specific `@media print` rules (what to hide, `break-inside: avoid`, legend placement) stay with the report.
+- Per report: **Deflection** redraws each chart at the full sheet width (`preserveAspectRatio="none"`, so it must
+  be redrawn, not stretched), moves the legend under the chart in columns, keeps the per-chart case / view / filter
+  controls as a record, and prints the Source Data Matrix only when asked (`#print&group=N`). **Member Forces** and
+  **Support Reactions** print the current toolbar view — one chart block per page-fit, matrix views paginate with
+  repeating headings (`#print&group=…&component=…&view=…`, plus `sampling` / `band`). The **Optimization
+  Summary** and the **diagnostics** are plain documents with the `Bar`.
+- Checks: `tests/ReportPrintChecks.cs` (settings store, logo embedding, generated page rule and escaping, screen ⇄
+  paper re-layout, `#print` options, every report carries the engine, exporter command line). The chart reports'
+  own scripts need a real browser, so `--report-pdf` (opt-in) prints every report to a real PDF with the installed
+  browser; `--study-ui` renders the Print Setup card and the eight Export PDF buttons with fakes.
 
 ## Config Project File (`src/Configuration/`)
 

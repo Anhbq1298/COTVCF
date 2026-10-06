@@ -49,6 +49,20 @@ internal static class OutputSettingsChecks
         var valid = new OutputSettingsValidator().Validate(state, ["CASE1"]);
         Check(valid.Count == 0, "Complete output settings validate");
 
+        state.OutputSettings.DeflectionLimitMinMm = 150;
+        state.OutputSettings.DeflectionLimitMaxMm = 100;
+        Check(new OutputSettingsValidator().Validate(state, ["CASE1"]).Any(i => i.Message.Contains("limit band Max") && i.Severity == ValidationSeverity.Error),
+            "A deflection limit band with Max below Min is an error");
+        state.OutputSettings.DeflectionLimitMinMm = -5;
+        state.OutputSettings.DeflectionLimitMaxMm = null;
+        Check(new OutputSettingsValidator().Validate(state, ["CASE1"]).Any(i => i.Message.Contains("limit band Min") && i.Severity == ValidationSeverity.Error),
+            "A negative deflection limit is an error");
+        state.OutputSettings.DeflectionLimitMinMm = 100;
+        state.OutputSettings.DeflectionLimitMaxMm = 150;
+        Check(new OutputSettingsValidator().Validate(state, ["CASE1"]).Count == 0 &&
+              COT_VCF.Application.Results.QualificationCriteria.From(state.OutputSettings).DeflectionBand == new DeflectionLimitBand(100, 150),
+            "A 100–150 mm deflection limit band validates and becomes the Tab 06A deflection criterion");
+
         state.OutputSettings.DeflectionOutputCaseName = "";
         var noCase = new OutputSettingsValidator().Validate(state, ["CASE1"]);
         Check(noCase.Any(i => i.Message.Contains("deflection output case") && i.Severity == ValidationSeverity.Warning),
@@ -69,7 +83,8 @@ internal static class OutputSettingsChecks
         Check(dto.MemberForceGroups.Single().SapGroupName == "[O]-TopChords" &&
               dto.FoundationLeftPointNames.Count == 2 && dto.CableResultLoadCase == "CASE1" &&
               dto.DeflectionOutputCaseName == "CASE1" && dto.MemberForceResultLoadCase == "CASE1" &&
-              dto.FoundationReactionResultLoadCase == "CASE1",
+              dto.FoundationReactionResultLoadCase == "CASE1" &&
+              dto.DeflectionLimitMinMm == 100 && dto.DeflectionLimitMaxMm == 150,
             "Output settings extract to project DTO");
 
         var target = new ApplicationState { Geometry = geometry, SessionBaseline = geometry, Model = model, SessionBaselineModel = model, Connection = "Connected" };
@@ -81,7 +96,8 @@ internal static class OutputSettingsChecks
               target.OutputSettings.CableResultLoadCase == "CASE1" &&
               target.OutputSettings.DeflectionOutputCaseName == "CASE1" &&
               target.OutputSettings.MemberForceResultLoadCase == "CASE1" &&
-              target.OutputSettings.FoundationReactionResultLoadCase == "CASE1",
+              target.OutputSettings.FoundationReactionResultLoadCase == "CASE1" &&
+              target.OutputSettings.DeflectionLimitBand == new DeflectionLimitBand(100, 150),
             "Output settings restore without writing SAP");
 
         var fake = new FakeSap(model);

@@ -151,9 +151,154 @@ internal static class Program
                 vm.SelectedTab = 5;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
-                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "08  STUDY SHORTLIST") &&
-                       FindVisuals<TextBlock>(window).Any(text => text.Text == "06  SUPPORT REACTIONS"),
-                    "Post-processing UI exposes the ranked shortlist report and workbook module");
+                Assert(!FindVisuals<TextBlock>(window).Any(text => text.Text.Contains("SHORTLIST", StringComparison.OrdinalIgnoreCase)) &&
+                       FindVisuals<TextBlock>(window).Any(text => text.Text == "06  SUPPORT REACTIONS") &&
+                       FindVisuals<TextBlock>(window).Any(text => text.Text == "07  CABLE FORCES · kN"),
+                    "Post-processing UI lists the result modules 01–07; the shortlist module is gone");
+
+                // Tab 06 Print Setup: header / footer of the printed reports, and the Module 07 PDF export
+                var printSetup = FindVisuals<Expander>(window).Single(expander =>
+                    expander.Header is TextBlock { Text: "PRINT SETUP · HEADER / FOOTER" });
+                var cableModule = FindVisuals<Expander>(window).Single(expander =>
+                    expander.Header is TextBlock { Text: "07  CABLE FORCES · kN" });
+                printSetup.IsExpanded = true; cableModule.IsExpanded = true;
+                vm.PrintSettings.CompanyName = "ACME Structures";
+                vm.PrintSettings.ProjectName = "COT Transfer Truss";
+                vm.PrintSettings.PaperSize = ReportPaperSize.A3;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(FindVisuals<TextBox>(printSetup).Any(box => box.Text == "ACME Structures" &&
+                           System.Windows.Automation.AutomationProperties.GetName(box) == "Company name") &&
+                       FindVisuals<TextBox>(printSetup).Count(box => !box.IsReadOnly) == 7 &&
+                       FindVisuals<ComboBox>(printSetup).Any(combo => Equals(combo.SelectedItem, ReportPaperSize.A3)) &&
+                       FindVisuals<ComboBox>(printSetup).Any(combo => Equals(combo.SelectedItem, ReportPageOrientation.Landscape)) &&
+                       FindVisuals<TextBlock>(printSetup).Any(text => text.Text.StartsWith("No logo", StringComparison.Ordinal)),
+                    "Print Setup card binds the header / footer fields, the default sheet and the logo status");
+                var companyBox = FindVisuals<TextBox>(printSetup).First(box =>
+                    System.Windows.Automation.AutomationProperties.GetName(box) == "Company name");
+                companyBox.Text = "ACME Structures Pte Ltd";
+                Assert(vm.PrintSettings.CompanyName == "ACME Structures Pte Ltd" && !vm.ClearPrintLogo.CanExecute(null),
+                    "typing in the Print Setup card updates the settings immediately");
+                Assert(FindVisuals<Button>(cableModule).Any(button => Equals(button.Content, "Export PDF") && !button.IsEnabled) &&
+                       !vm.ExportCableForcePdf.CanExecute(null),
+                    "Module 07 offers Export PDF, disabled until the cable report exists");
+                foreach (var module in FindVisuals<Expander>(window).ToArray()) module.IsExpanded = true;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                var exportButtons = FindVisuals<Button>(window).Where(button => Equals(button.Content, "Export PDF")).ToArray();
+                Assert(exportButtons.Length == 7 && exportButtons.All(button => !button.IsEnabled) &&
+                       !vm.ExportDeflectionPdf.CanExecute(null) && !vm.ExportMemberForcePdf.CanExecute(null) &&
+                       !vm.ExportSupportReactionPdf.CanExecute(null),
+                    "every post-processing module (01–07) offers Export PDF, disabled until its report exists");
+                var postBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                postBitmap.Render(window);
+                var postEncoder = new PngBitmapEncoder(); postEncoder.Frames.Add(BitmapFrame.Create(postBitmap));
+                using (var stream = File.Create(".work/post-processing-tab.png")) postEncoder.Save(stream);
+
+                // Tab 06A Optimization: only available with raw data; criteria edit the shared output settings
+                var optimizationTab = window.OptimizationTab;
+                Assert(!vm.HasRawData && !optimizationTab.IsEnabled && vm.OptimizationTabStatus == "Needs raw data" &&
+                       FindVisuals<TextBlock>(window).Any(text => text.Text == "06A  OPTIMIZATION"),
+                    "Tab 06A Optimization is listed after Tab 06 and stays disabled until the study has raw data");
+                vm.SelectedTab = 6;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                var criteriaCard = window.OptimizationCriteria;
+                var checks = FindVisuals<CheckBox>(criteriaCard).Select(box => box.Content as string).ToArray();
+                var limitBox = FindVisuals<TextBox>(criteriaCard).Single(box =>
+                    System.Windows.Automation.AutomationProperties.GetName(box) == "Cable utilisation limit");
+                var maxBox = FindVisuals<TextBox>(criteriaCard).Single(box =>
+                    System.Windows.Automation.AutomationProperties.GetName(box) == "Qualifying deflection maximum [mm]");
+                Assert(checks.SequenceEqual(["Deflection within range", "Cable forces below the limit"]) && limitBox.Text == "1",
+                    "Tab 06A shows the two criteria — deflection within range and cable forces below the limit — both on, limit 1.00");
+                limitBox.Text = "0.85"; maxBox.Text = "150";
+                Assert(vm.State.OutputSettings.MaxCableUtilization == 0.85 && vm.State.OutputSettings.DeflectionLimitMaxMm == 150 &&
+                       COT_VCF.Application.Results.QualificationCriteria.From(vm.State.OutputSettings).Label == "Deflection δ ≤ 150 mm · Cable utilisation ≤ 0.85",
+                    "typing a limit on Tab 06A updates the criteria immediately — the deflection range is the Tab 04 limit band itself");
+                limitBox.Text = "0";
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(vm.HasOptimizationProblem && vm.OptimizationProblem.Contains("greater than 0") && vm.OptimizationTabStatus == "Needs raw data",
+                    "an unusable cable limit is reported on the tab");
+                limitBox.Text = "1";
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                var optimizationButtons = FindVisuals<Button>(window).Where(button => button.Content is string label &&
+                    (label is "Generate Optimized Reports" or "View Summary" or "Open Optimized Folder" or "Save Criteria")).ToArray();
+                Assert(optimizationButtons.Length == 4 && !vm.GenerateOptimizedReports.CanExecute(null) && !vm.OpenOptimizationSummary.CanExecute(null) &&
+                       window.OptimizationGrid.Columns.Select(column => column.Header as string)
+                           .SequenceEqual(["Iteration", "Load", "Height", "Pretension", "δ [mm]", "Cable util. [%]", "Governing cable", "Status", "Reason"]) &&
+                       vm.OptimizedReportsStatus == "No optimized reports generated yet." && vm.OptimizationFilters.Count == 4,
+                    "Tab 06A offers Generate Optimized Reports, the report buttons and the candidate table; nothing can be generated without raw data");
+                var optimizationBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                optimizationBitmap.Render(window);
+                var optimizationEncoder = new PngBitmapEncoder(); optimizationEncoder.Frames.Add(BitmapFrame.Create(optimizationBitmap));
+                using (var stream = File.Create(".work/optimization-tab.png")) optimizationEncoder.Save(stream);
+
+                // …and with raw data: the metrics load in the background, criteria apply at once, the set is generated
+                var optimizationRoot = Path.Combine(Path.GetTempPath(), "cotvcf_optui_" + Guid.NewGuid().ToString("N"));
+                try
+                {
+                    Directory.CreateDirectory(optimizationRoot);
+                    File.WriteAllText(Path.Combine(optimizationRoot, "COT_VCF.sdb"), "baseline");
+                    uiState.SessionBaselineModel = uiState.Model! with { Path = Path.Combine(optimizationRoot, "COT_VCF.sdb") };
+                    OptimizationChecks.WriteStudy(vm.StudyRoot, vm.BaselineModelPath);
+                    void Pump(Func<bool> done)
+                    {
+                        // always once: a view model change reaches the bound controls on the next dispatcher pass
+                        var until = DateTime.UtcNow.AddSeconds(30);
+                        do { window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle); if (!done()) Thread.Sleep(15); }
+                        while (!done() && DateTime.UtcNow < until);
+                        window.UpdateLayout();
+                    }
+                    vm.RefreshDeflectionArtifacts();
+                    Pump(() => vm.HasRawData && !vm.OptimizationLoading && vm.OptimizationRows.Count > 0);
+                    Assert(vm.HasRawData && optimizationTab.IsEnabled && vm.SelectedTab == 6 && vm.OptimizationRows.Count == 27 &&
+                           vm.OptimizationTabStatus.StartsWith("Qualified ") && vm.OptimizationRawSummary.StartsWith("27 candidates") && !vm.HasOptimizationProblem,
+                        "with raw data Tab 06A is enabled and lists every candidate of the study with its status");
+
+                    var output = vm.State.OutputSettings;
+                    output.DeflectionLimitMinMm = 50; output.DeflectionLimitMaxMm = 100; output.MaxCableUtilization = 0.8;
+                    var index = new COT_VCF.Application.Results.StudyMetricsStore().Load(vm.StudyRoot);
+                    var current = uiState.Cables.Where(cable => cable.ResolveCapacity(uiState.CableStrengthMpa, uiState.CableStrengthReductionFactor) is > 0)
+                        .ToDictionary(cable => cable.CableName, cable => cable.ResolveCapacity(uiState.CableStrengthMpa, uiState.CableStrengthReductionFactor)!.Value);
+                    var expected = COT_VCF.Application.Results.StudyQualifier.Evaluate(index.Candidates,
+                        COT_VCF.Application.Results.QualificationCriteria.From(output),
+                        COT_VCF.Application.Results.CableCapacityResolver.Resolve(current, uiState.Cables.Select(cable => cable.CableName).ToArray(), index.StoredCableCapacities).Capacities).Summary;
+                    Assert(expected.Qualified is > 0 and < 27 && vm.OptimizationRows.Count(row => row.Status == "Qualified") == expected.Qualified &&
+                           vm.OptimizationTabStatus == $"Qualified {expected.Qualified} / 27" && vm.OptimizationHeadline.StartsWith($"Qualified {expected.Qualified} of 27") &&
+                           vm.OptimizationBreakdown.Contains($"failed deflection only {expected.FailedDeflectionOnly}") && vm.DeflectionStudyRange == "δ in this study: 40–140 mm" &&
+                           vm.OptimizationCriteriaNote.StartsWith("Active: Deflection δ 50–100 mm · Cable utilisation ≤ 0.80"),
+                        "changing a criterion re-qualifies every candidate at once — counts, breakdown and the study's own ranges");
+                    vm.OptimizationFilter = "Qualified";
+                    Pump(() => true);
+                    Assert(vm.OptimizationRows.Count == expected.Qualified && window.OptimizationGrid.Items.Count == expected.Qualified &&
+                           vm.OptimizationRows.All(row => row.Kind == COT_VCF.Application.Results.QualificationStatus.Qualified) &&
+                           vm.OptimizationTableSummary == $"{expected.Qualified} shown of 27",
+                        "the candidate table filters by status");
+                    vm.OptimizationFilter = "All";
+
+                    Assert(vm.GenerateOptimizedReports.CanExecute(null) && !vm.OpenOptimizationSummary.CanExecute(null), "Generate Optimized Reports is available once candidates are qualified");
+                    vm.GenerateOptimizedReports.Execute(null);
+                    Pump(() => !vm.IsBusy && vm.OpenOptimizationSummary.CanExecute(null));
+                    var optimizedFolder = Path.Combine(vm.StudyRoot, "Optimized");
+                    Assert(File.Exists(Path.Combine(optimizedFolder, "Optimization_Summary.html")) && File.Exists(Path.Combine(optimizedFolder, "Deflection_Report.html")) &&
+                           File.Exists(Path.Combine(optimizedFolder, "Top_Chord_Report.html")) && !Directory.EnumerateFiles(vm.StudyRoot, "*.html").Any() &&
+                           vm.OpenOptimizedDeflection.CanExecute(null) && vm.OpenOptimizedTopChord.CanExecute(null) && vm.OpenOptimizedSupportReactions.CanExecute(null) &&
+                           vm.OpenOptimizedCableForces.CanExecute(null) && vm.OpenOptimizedFolder.CanExecute(null) && !vm.OpenOptimizedBottomChord.CanExecute(null) &&
+                           vm.OptimizedReportsStatus.StartsWith($"Optimized reports are up to date · {expected.Qualified} of 27 candidates") && !vm.OptimizedReportsStale &&
+                           vm.Message.Contains($"{expected.Qualified} of 27 candidates qualify"),
+                        "Generate Optimized Reports writes the set into Study/Optimized, enables its View buttons and reports it up to date");
+                    output.MaxCableUtilization = 0.9;
+                    Assert(vm.OptimizedReportsStatus.Contains("out of date") && vm.OptimizedReportsStale, "after a criterion changes the optimized reports are flagged out of date");
+                    output.MaxCableUtilization = 0.8;
+                    Pump(() => true);
+                    Assert(!vm.OptimizedReportsStatus.Contains("out of date") && !vm.OptimizedReportsStale, "…and current again when the criterion is set back");
+                    var liveBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                    liveBitmap.Render(window);
+                    var liveEncoder = new PngBitmapEncoder(); liveEncoder.Frames.Add(BitmapFrame.Create(liveBitmap));
+                    using (var stream = File.Create(".work/optimization-tab-data.png")) liveEncoder.Save(stream);
+                }
+                finally { try { Directory.Delete(optimizationRoot, true); } catch { } }
                 window.Close(); bindingListener.Flush();
                 if (bindingLog.ToString().Length > 0) throw new Exception("WPF binding errors: " + bindingLog);
                 Console.WriteLine("PASS: Tab 5 rendered with no WPF binding errors.");
@@ -215,6 +360,12 @@ internal static class Program
                 Assert(result!.SequenceEqual(["B", "C"]), "Blue-highlighted rows are returned as the selection");
                 return 0;
             }
+            if (args.Contains("--report-pdf"))
+            {
+                // Opt-in: prints a generated report to a real PDF with the installed Edge / Chrome. No SAP2000.
+                ReportPrintChecks.RunPdfExport();
+                return 0;
+            }
             if (args.Contains("--sap-read"))
             {
                 using var sap = new SapGateway();
@@ -266,8 +417,9 @@ internal static class Program
             ReliabilityChecks.Run();
             StudyComposerChecks.Run();
             StudyExecutionChecks.Run();
-            StudyDecisionChecks.Run();
+            OptimizationChecks.Run();
             CableForceReportChecks.Run();
+            ReportPrintChecks.Run();
             MemberForceReportChecks.Run();
             SupportReactionReportChecks.Run();
             GatewayChecks.Run();

@@ -522,10 +522,6 @@ public sealed class IterationStudyConfig : Observable
     private bool useCandidateFilters;
     private double? minLoadingKpa, maxLoadingKpa, minHeightM, maxHeightM, minPretensionKn, maxPretensionKn;
     private double? maxLoadingToHeightRatio, maxPretensionToHeightRatio;
-    private double? deflectionPassLimitMm = 50, deflectionFailLimitMm = 75;
-    private double? minimumCableForceKn, maximumCableForceKn;
-    private double decisionWarningUtilization = 0.9;
-    private double deflectionRankWeight = 0.5, pretensionRankWeight = 0.3, heightRankWeight = 0.2;
     private readonly HashSet<string> excludedIterationKeys = new(StringComparer.Ordinal);
     public IterationStudyMode Mode { get => mode; set => Set(ref mode, value); }
     public string FixedHeightCandidateId { get => fixedHeightCandidateId; set => Set(ref fixedHeightCandidateId, value ?? ""); }
@@ -542,14 +538,6 @@ public sealed class IterationStudyConfig : Observable
     public double? MaxLoadingToHeightRatio { get => maxLoadingToHeightRatio; set => Set(ref maxLoadingToHeightRatio, value); }
     /// <summary>Optional cross-dimension predicate: max |target force| / height must not exceed this kN/m value.</summary>
     public double? MaxPretensionToHeightRatio { get => maxPretensionToHeightRatio; set => Set(ref maxPretensionToHeightRatio, value); }
-    public double? DeflectionPassLimitMm { get => deflectionPassLimitMm; set => Set(ref deflectionPassLimitMm, value); }
-    public double? DeflectionFailLimitMm { get => deflectionFailLimitMm; set => Set(ref deflectionFailLimitMm, value); }
-    public double? MinimumCableForceKn { get => minimumCableForceKn; set => Set(ref minimumCableForceKn, value); }
-    public double? MaximumCableForceKn { get => maximumCableForceKn; set => Set(ref maximumCableForceKn, value); }
-    public double DecisionWarningUtilization { get => decisionWarningUtilization; set => Set(ref decisionWarningUtilization, value); }
-    public double DeflectionRankWeight { get => deflectionRankWeight; set => Set(ref deflectionRankWeight, value); }
-    public double PretensionRankWeight { get => pretensionRankWeight; set => Set(ref pretensionRankWeight, value); }
-    public double HeightRankWeight { get => heightRankWeight; set => Set(ref heightRankWeight, value); }
     public IReadOnlyCollection<string> ExcludedIterationKeys => excludedIterationKeys;
 
     public bool IsRunSelected(string iterationKey) => !excludedIterationKeys.Contains(iterationKey);

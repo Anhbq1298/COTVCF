@@ -382,6 +382,7 @@
       <Style x:Key="OutSummary" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Margin" Value="0,2,0,0"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style>
       <Style x:Key="OutStatus" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="VerticalAlignment" Value="Center"/></Style>
       <Style x:Key="OutEdit" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinHeight" Value="24"/><Setter Property="Padding" Value="12,2"/><Setter Property="Margin" Value="0"/></Style>
+      <Style x:Key="BandEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="Height" Value="24"/><Setter Property="MinHeight" Value="24"/><Setter Property="Padding" Value="6,1"/><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="FontSize" Value="12"/><Setter Property="TextAlignment" Value="Right"/></Style>
      </Grid.Resources>
 
      <StackPanel Grid.Row="0" Margin="0,0,0,6">
@@ -399,6 +400,21 @@
        <TextBlock Text="01  MONITORED POINTS" Style="{StaticResource Subheading}" Margin="0"/>
        <TextBlock Text="{Binding MonitoredPointCaseSummary}" Style="{StaticResource OutSummary}" ToolTip="{Binding MonitoredPointCaseSummary}"/>
        <TextBlock Text="{Binding MonitoredPointSummary}" Style="{StaticResource OutSummary}" Margin="0,1,0,0"/>
+       <!-- Deflection limit band: post-processing only (Deflection report band + Tab 06A deflection criterion). Blank = open bound. -->
+       <Grid Margin="0,6,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <TextBlock Text="Limit band ↓U3" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"
+                   ToolTip="Acceptance window on each candidate's peak downward deflection. A candidate passes when Min ≤ peak ↓U3 ≤ Max. Leave a bound blank to keep it open."/>
+        <TextBox Grid.Column="1" Style="{StaticResource BandEditor}" AutomationProperties.Name="Deflection limit band minimum [mm]"
+                 ToolTip="Min peak downward deflection [mm] — blank = no lower limit"
+                 Text="{Binding State.OutputSettings.DeflectionLimitMinMm, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+        <TextBlock Grid.Column="2" Text="–" FontSize="11" VerticalAlignment="Center" Margin="6,0"/>
+        <TextBox Grid.Column="3" Style="{StaticResource BandEditor}" AutomationProperties.Name="Deflection limit band maximum [mm]"
+                 ToolTip="Max peak downward deflection [mm] — blank = no upper limit"
+                 Text="{Binding State.OutputSettings.DeflectionLimitMaxMm, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+        <TextBlock Grid.Column="4" Text="mm" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+       </Grid>
+       <TextBlock Text="{Binding DeflectionLimitSummary}" Style="{StaticResource OutStatus}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionLimitSummary}"/>
        <Grid Margin="0,4,0,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
         <TextBlock Text="{Binding MonitoredPointStatus}" Style="{StaticResource OutStatus}"/>
@@ -939,6 +955,67 @@
      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
       <StackPanel>
 
+       <!-- Print Setup: header / footer of the printed reports. Per-user preference; applied on the next Generate / Regenerate. -->
+       <Expander Style="{StaticResource PpModule}">
+        <Expander.Header><TextBlock Text="PRINT SETUP · HEADER / FOOTER" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
+        <StackPanel>
+         <TextBlock Text="Printed in the page margins of every report page: logo top-left, project and job number in the header, company, note and page numbers in the footer. Saved for this Windows user · applied on the next Generate / Regenerate · charts print as vector graphics." Style="{StaticResource PpDesc}"/>
+         <Grid Margin="0,8,0,0">
+          <Grid.Resources>
+           <Style x:Key="PrLabel" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,0,8,0"/></Style>
+           <Style x:Key="PrText" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="Margin" Value="0,0,0,4"/><Setter Property="MaxLength" Value="90"/></Style>
+          </Grid.Resources>
+          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+          <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="Company" Style="{StaticResource PrLabel}"/>
+          <TextBox Grid.Row="0" Grid.Column="1" Style="{StaticResource PrText}" AutomationProperties.Name="Company name" ToolTip="Footer, left. Printed top-left instead of the logo when no logo is set."
+                   Text="{Binding PrintSettings.CompanyName, UpdateSourceTrigger=PropertyChanged}"/>
+          <TextBlock Grid.Row="0" Grid.Column="3" Text="Project" Style="{StaticResource PrLabel}"/>
+          <TextBox Grid.Row="0" Grid.Column="4" Style="{StaticResource PrText}" AutomationProperties.Name="Project name" ToolTip="Header, centre — above the report name and model"
+                   Text="{Binding PrintSettings.ProjectName, UpdateSourceTrigger=PropertyChanged}"/>
+
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Job No." Style="{StaticResource PrLabel}"/>
+          <TextBox Grid.Row="1" Grid.Column="1" Style="{StaticResource PrText}" AutomationProperties.Name="Job number" ToolTip="Header, right"
+                   Text="{Binding PrintSettings.JobNumber, UpdateSourceTrigger=PropertyChanged}"/>
+          <TextBlock Grid.Row="1" Grid.Column="3" Text="Revision" Style="{StaticResource PrLabel}"/>
+          <TextBox Grid.Row="1" Grid.Column="4" Style="{StaticResource PrText}" AutomationProperties.Name="Revision" ToolTip="Header, right — beside the job number"
+                   Text="{Binding PrintSettings.Revision, UpdateSourceTrigger=PropertyChanged}"/>
+
+          <TextBlock Grid.Row="2" Grid.Column="0" Text="Prepared by" Style="{StaticResource PrLabel}"/>
+          <TextBox Grid.Row="2" Grid.Column="1" Style="{StaticResource PrText}" AutomationProperties.Name="Prepared by" ToolTip="Footer, left"
+                   Text="{Binding PrintSettings.PreparedBy, UpdateSourceTrigger=PropertyChanged}"/>
+          <TextBlock Grid.Row="2" Grid.Column="3" Text="Checked by" Style="{StaticResource PrLabel}"/>
+          <TextBox Grid.Row="2" Grid.Column="4" Style="{StaticResource PrText}" AutomationProperties.Name="Checked by" ToolTip="Footer, left"
+                   Text="{Binding PrintSettings.CheckedBy, UpdateSourceTrigger=PropertyChanged}"/>
+
+          <TextBlock Grid.Row="3" Grid.Column="0" Text="Footer note" Style="{StaticResource PrLabel}"/>
+          <TextBox Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4" Style="{StaticResource PrText}" AutomationProperties.Name="Footer note" ToolTip="Footer, centre — for example a status or confidentiality line"
+                   Text="{Binding PrintSettings.FooterNote, UpdateSourceTrigger=PropertyChanged}"/>
+
+          <TextBlock Grid.Row="4" Grid.Column="0" Text="Logo" Style="{StaticResource PrLabel}"/>
+          <DockPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="4" Margin="0,0,0,2">
+           <Button DockPanel.Dock="Right" Content="Clear" Command="{Binding ClearPrintLogo}" Margin="4,0,0,0" ToolTip="Print the company name top-left instead of a logo"/>
+           <Button DockPanel.Dock="Right" Content="Browse..." Command="{Binding BrowsePrintLogo}" Margin="6,0,0,0" ToolTip="Choose the logo printed top-left on every page — SVG, or PNG at least 600 px wide, prints sharpest"/>
+           <TextBox IsReadOnly="True" Margin="0" FontFamily="{StaticResource MonoFont}" FontSize="11" AutomationProperties.Name="Logo file"
+                    Text="{Binding PrintSettings.LogoPath, Mode=OneWay}" ToolTip="{Binding PrintSettings.LogoPath}"/>
+          </DockPanel>
+          <TextBlock Grid.Row="5" Grid.Column="1" Grid.ColumnSpan="4" Text="{Binding PrintLogoStatus}" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding PrintLogoStatus}"/>
+         </Grid>
+         <WrapPanel Margin="0,8,0,0">
+          <TextBlock Text="Paper" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+          <ComboBox Width="78" ItemsSource="{Binding PrintPaperSizes}" SelectedItem="{Binding PrintSettings.PaperSize}" AutomationProperties.Name="Default paper size" Margin="0,0,14,0"
+                    ToolTip="Default sheet — it can still be changed in the report's Print panel"/>
+          <TextBlock Text="Orientation" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+          <ComboBox Width="104" ItemsSource="{Binding PrintOrientations}" SelectedItem="{Binding PrintSettings.Orientation}" AutomationProperties.Name="Default page orientation" Margin="0,0,14,0"
+                    ToolTip="Landscape suits the wide cable charts"/>
+          <CheckBox Content="Page numbers" IsChecked="{Binding PrintSettings.ShowPageNumbers}" VerticalAlignment="Center" Margin="0,0,14,0" ToolTip="Footer, right: Page N of M"/>
+          <CheckBox Content="Date" IsChecked="{Binding PrintSettings.ShowDate}" VerticalAlignment="Center" Margin="0,0,14,0" ToolTip="Header, right: the date the report was generated"/>
+          <CheckBox Content="Include Source Data table" IsChecked="{Binding PrintSettings.IncludeSourceData}" VerticalAlignment="Center" ToolTip="Default for the report's print option — the full table adds many pages"/>
+         </WrapPanel>
+        </StackPanel>
+       </Expander>
+
        <Expander Style="{StaticResource PpModule}" IsExpanded="True">
         <Expander.Header><TextBlock Text="01  DEFLECTION · Uz" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
@@ -981,6 +1058,7 @@
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser"/>
           <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Regenerate Tab 06 outputs from RawData/Study_Raw_Results.json — no SAP"/>
+          <Button Content="Export PDF" Command="{Binding ExportDeflectionPdf}" ToolTip="Print Deflection_Report.html to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -990,12 +1068,13 @@
        <Expander Style="{StaticResource PpModule}">
         <Expander.Header><TextBlock Text="02  TOP CHORDS" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="Member forces — P / V2 / V3 [kN] · T / M2 / M3 [kNm]" Style="{StaticResource PpDesc}"/>
-         <TextBlock Text="Signed governing value per configured frame · L / H / P filters · automatic envelope above 50 candidates" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Summary — governing axial compression max |P| [MN] per pretension candidate and truss height, with a trend line per height · View by Station for |P| along the chord" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Member forces P / V2 / V3 [kN] · T / M2 / M3 [kNm] stay under Display in the same report · L / H / P filters · automatic envelope above 50 candidates" Style="{StaticResource PpDesc}"/>
          <TextBlock Text="{Binding MemberForceReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding MemberForceReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
-          <Button Content="View Report" Command="{Binding OpenMemberForceReport}" Style="{StaticResource Primary}" ToolTip="Open Member_Forces_Report.html in your web browser"/>
+          <Button Content="View Report" Command="{Binding OpenTopChordReport}" Style="{StaticResource Primary}" ToolTip="Open the Top Chord summary of Member_Forces_Report.html in your web browser"/>
           <Button Content="Regenerate" Command="{Binding RegenerateMemberForceReport}" ToolTip="Rebuild Member_Forces_Report.html from Study_Raw_Results.json — no SAP"/>
+          <Button Content="Export PDF" Command="{Binding ExportTopChordPdf}" ToolTip="Print the Top Chord summary to Top_Chord_Report.pdf with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1004,10 +1083,11 @@
        <Expander Style="{StaticResource PpModule}">
         <Expander.Header><TextBlock Text="03  BOTTOM CHORDS" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="Member forces — P / V2 / V3 [kN] · T / M2 / M3 [kNm]" Style="{StaticResource PpDesc}"/>
-         <TextBlock Text="Uses the same member-force report; choose the Bottom Chords group in the report toolbar." Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Summary — governing axial tension max P [MN] per pretension candidate and truss height, with a trend line per height · View by Station for P along the chord" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Opens the Bottom Chord summary in the member-force report; the other components stay under Display." Style="{StaticResource PpDesc}"/>
          <WrapPanel Margin="0,4,0,0">
-          <Button Content="View Report" Command="{Binding OpenMemberForceReport}" Style="{StaticResource Primary}"/>
+          <Button Content="View Report" Command="{Binding OpenBottomChordReport}" Style="{StaticResource Primary}" ToolTip="Open the Bottom Chord summary of Member_Forces_Report.html in your web browser"/>
+          <Button Content="Export PDF" Command="{Binding ExportBottomChordPdf}" ToolTip="Print the Bottom Chord summary to Bottom_Chord_Report.pdf with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1020,6 +1100,7 @@
          <TextBlock Text="Uses the same member-force report; choose the Vierendeel Members group in the report toolbar." Style="{StaticResource PpDesc}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenMemberForceReport}" Style="{StaticResource Primary}"/>
+          <Button Content="Export PDF" Command="{Binding ExportMemberForcePdf}" ToolTip="Print Member_Forces_Report.html (all groups) to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1028,10 +1109,11 @@
        <Expander Style="{StaticResource PpModule}">
         <Expander.Header><TextBlock Text="05  MEGA COLUMNS" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="Member forces — P / V2 / V3 [kN] · T / M2 / M3 [kNm]" Style="{StaticResource PpDesc}"/>
-         <TextBlock Text="Uses the same member-force report; choose the Mega Columns group in the report toolbar." Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Summary — governing axial compression max |P| [MN] per pretension candidate and truss height, with a trend line per height · no station view" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Opens the Mega Column summary in the member-force report; the other components stay under Display." Style="{StaticResource PpDesc}"/>
          <WrapPanel Margin="0,4,0,0">
-          <Button Content="View Report" Command="{Binding OpenMemberForceReport}" Style="{StaticResource Primary}"/>
+          <Button Content="View Report" Command="{Binding OpenMegaColumnReport}" Style="{StaticResource Primary}" ToolTip="Open the Mega Column summary of Member_Forces_Report.html in your web browser"/>
+          <Button Content="Export PDF" Command="{Binding ExportMegaColumnPdf}" ToolTip="Print the Mega Column summary to Mega_Column_Report.pdf with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1040,12 +1122,13 @@
        <Expander Style="{StaticResource PpModule}">
         <Expander.Header><TextBlock Text="06  SUPPORT REACTIONS" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="Global Fx / Fy / Fz [kN] · Mx / My / Mz [kNm] at the two Left and two Right foundation points" Style="{StaticResource PpDesc}"/>
-         <TextBlock Text="Individual supports or foundation totals · result-step and L / H / P filters · automatic envelope above 50 candidates" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Summary — per foundation side, vertical Fz and horizontal Fx [MN] of the inner support, the outer support and their Σ net, per pretension candidate and truss height · governing KPI cards · View by Candidate for both sides of one iteration" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="All components Fx / Fy / Fz [kN] · Mx / My / Mz [kNm] stay under View: individual supports, foundation totals, candidate matrix · result-step and L / H / P filters" Style="{StaticResource PpDesc}"/>
          <TextBlock Text="{Binding SupportReactionReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding SupportReactionReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenSupportReactionReport}" Style="{StaticResource Primary}" ToolTip="Open Support_Reactions_Report.html in your web browser"/>
           <Button Content="Regenerate" Command="{Binding RegenerateSupportReactionReport}" ToolTip="Rebuild Support_Reactions_Report.html from Study_Raw_Results.json — no SAP"/>
+          <Button Content="Export PDF" Command="{Binding ExportSupportReactionPdf}" ToolTip="Print the Support Reactions summary (Left foundation, as the report opens) to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1055,35 +1138,178 @@
        <Expander Style="{StaticResource PpModule}">
         <Expander.Header><TextBlock Text="07  CABLE FORCES · kN" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="Analysed cable axial force per configured cable · read under the Output Settings cable result case · one chart per cable · shared Y-scale" Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="Prestress target vs final analysed cable force · grouped by pretension candidate, truss height and user-defined cable side · force pickup/loss and design limit" Style="{StaticResource PpDesc}"/>
          <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>
          <TextBlock Text="{Binding CableForceReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding CableForceReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenCableForceReport}" Style="{StaticResource Primary}" ToolTip="Open Cable_Forces_Report.html in your web browser"/>
           <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Regenerate Tab 06 outputs from raw JSON using the current fpu / &#966; capacities — no SAP"/>
+          <Button Content="Export PDF" Command="{Binding ExportCableForcePdf}" ToolTip="Print Cable_Forces_Report.html to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
         </Expander>
 
-        <Expander Style="{StaticResource PpModule}">
-         <Expander.Header><TextBlock Text="08  STUDY SHORTLIST" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
-         <StackPanel>
-          <TextBlock Text="Ranked Pass and Warning candidates from the frozen study decision criteria · lower score is preferred" Style="{StaticResource PpDesc}"/>
-          <Border Height="1" Background="{StaticResource Border}" Margin="0,8,0,8"/>
-          <TextBlock Text="{Binding ShortlistReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ShortlistReportPath}"/>
-          <WrapPanel Margin="0,4,0,0">
-           <Button Content="View Report" Command="{Binding OpenShortlistReport}" Style="{StaticResource Primary}" ToolTip="Open Study_Shortlist.html in your web browser"/>
-           <Button Content="Regenerate" Command="{Binding GeneratePostProcessOutputs}" ToolTip="Regenerate the shortlist and other Tab 06 outputs from raw JSON — no SAP"/>
-           <Button Content="Open Excel" Command="{Binding OpenShortlistWorkbook}" ToolTip="Open Study_Shortlist.xlsx"/>
-           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
-          </WrapPanel>
-         </StackPanel>
-        </Expander>
-
        </StackPanel>
      </ScrollViewer>
+    </Grid>
+   </TabItem>
+
+   <!-- 06A OPTIMIZATION: qualify the stored candidates against acceptance criteria, and the reports for the
+        qualified set. Post-processing only; available once Tab 06 has raw data. -->
+   <TabItem x:Name="OptimizationTab" IsEnabled="{Binding HasRawData}" ToolTipService.ShowOnDisabled="True"
+            ToolTip="Qualify the stored candidates against acceptance criteria — available once Tab 06 has raw data">
+    <TabItem.Header>
+     <StackPanel Width="124">
+      <TextBlock Text="06A  OPTIMIZATION" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="{Binding OptimizationTabStatus}" Style="{StaticResource TabHeaderStatus}"/>
+     </StackPanel>
+    </TabItem.Header>
+    <Grid Margin="2,2,6,2">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+     <Grid.Resources>
+      <Style x:Key="OptEditor" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="Height" Value="24"/><Setter Property="MinHeight" Value="24"/><Setter Property="Padding" Value="6,1"/><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="FontSize" Value="12"/><Setter Property="TextAlignment" Value="Right"/></Style>
+      <Style x:Key="OptHint" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+      <Style x:Key="OptCard" TargetType="Border"><Setter Property="BorderBrush" Value="{StaticResource Border}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Padding" Value="10,6,10,9"/></Style>
+     </Grid.Resources>
+
+     <StackPanel Grid.Row="0" Margin="0,0,0,6">
+      <TextBlock Text="OPTIMIZATION · QUALIFIED CANDIDATES" Style="{StaticResource Subheading}" Margin="0"/>
+      <DockPanel Margin="0,3,0,0">
+       <WrapPanel DockPanel.Dock="Right" Margin="12,0,0,0">
+        <Button Content="Generate Optimized Reports" Command="{Binding GenerateOptimizedReports}" Style="{StaticResource Primary}"
+                ToolTip="Write the reports for the qualified candidates only into Study/Optimized — the full Tab 06 reports are not touched · no SAP2000"/>
+        <Button Content="Open Optimized Folder" Command="{Binding OpenOptimizedFolder}" Margin="0"
+                ToolTip="Open Study/Optimized in File Explorer"/>
+       </WrapPanel>
+       <StackPanel>
+        <TextBlock FontSize="11" TextTrimming="CharacterEllipsis" ToolTip="{Binding BaselineModelPath}">
+         <Run Text="Study: " Foreground="{StaticResource Muted}"/><Run Text="{Binding BaselineModelName, Mode=OneWay}" FontWeight="SemiBold"/>
+        </TextBlock>
+        <TextBlock Text="{Binding OptimizationRawSummary}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}"
+                   TextTrimming="CharacterEllipsis" ToolTip="{Binding RawJsonPath}"/>
+       </StackPanel>
+      </DockPanel>
+     </StackPanel>
+
+     <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+
+      <!-- criteria -->
+      <Border x:Name="OptimizationCriteria" Style="{StaticResource OptCard}">
+       <StackPanel>
+        <TextBlock Text="CRITERIA" Style="{StaticResource Subheading}" Margin="0"/>
+        <TextBlock Style="{StaticResource OptHint}" Margin="0,2,0,0"
+                   Text="A candidate is qualified when it passes every active criterion. Post-processing only — changing a criterion never invalidates a run."/>
+
+        <CheckBox Content="Deflection within range" FontWeight="SemiBold" Margin="0,8,0,0" AutomationProperties.Name="Deflection criterion"
+                  IsChecked="{Binding State.OutputSettings.DeflectionCriterionEnabled}"
+                  ToolTip="Min ≤ δ ≤ Max, where δ is the candidate's peak downward deflection −min(Uz) over the monitored points"/>
+        <Grid Margin="20,4,0,0" IsEnabled="{Binding State.OutputSettings.DeflectionCriterionEnabled}">
+         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <TextBlock Text="δ  peak ↓Uz" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+         <TextBox Grid.Column="1" Style="{StaticResource OptEditor}" AutomationProperties.Name="Qualifying deflection minimum [mm]"
+                  ToolTip="Min peak downward deflection [mm] — blank = no lower limit"
+                  Text="{Binding State.OutputSettings.DeflectionLimitMinMm, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+         <TextBlock Grid.Column="2" Text="–" FontSize="11" VerticalAlignment="Center" Margin="6,0"/>
+         <TextBox Grid.Column="3" Style="{StaticResource OptEditor}" AutomationProperties.Name="Qualifying deflection maximum [mm]"
+                  ToolTip="Max peak downward deflection [mm] — blank = no upper limit"
+                  Text="{Binding State.OutputSettings.DeflectionLimitMaxMm, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+         <TextBlock Grid.Column="4" Text="mm" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="6,0,0,0"/>
+        </Grid>
+        <TextBlock Text="{Binding DeflectionStudyRange}" Style="{StaticResource OptHint}" Margin="20,3,0,0"/>
+
+        <CheckBox Content="Cable forces below the limit" FontWeight="SemiBold" Margin="0,9,0,0" AutomationProperties.Name="Cable force criterion"
+                  IsChecked="{Binding State.OutputSettings.CableCriterionEnabled}"
+                  ToolTip="Every cable's final analysed force stays within the limit — a share of its Tab 03 design capacity"/>
+        <Grid Margin="20,4,0,0" IsEnabled="{Binding State.OutputSettings.CableCriterionEnabled}">
+         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <TextBlock Text="force / design capacity  ≤" FontSize="11" VerticalAlignment="Center" Margin="0,0,8,0"/>
+         <TextBox Grid.Column="1" Style="{StaticResource OptEditor}" AutomationProperties.Name="Cable utilisation limit"
+                  ToolTip="Largest allowed final force / design capacity of any cable — 1.00 = 100 % of the Tab 03 capacity (area × fpu × φ)"
+                  Text="{Binding State.OutputSettings.MaxCableUtilization, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"/>
+         <TextBlock Grid.Column="2" Text="1.00 = 100 % of the Tab 03 capacity" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="8,0,0,0" TextTrimming="CharacterEllipsis"/>
+        </Grid>
+        <TextBlock Text="{Binding CableStudyRange}" Style="{StaticResource OptHint}" Margin="20,3,0,0"/>
+
+        <TextBlock Text="{Binding OptimizationProblem}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Error}" TextWrapping="Wrap" Margin="0,7,0,0">
+         <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Style.Triggers><DataTrigger Binding="{Binding HasOptimizationProblem}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+        </TextBlock>
+        <DockPanel Margin="0,8,0,0">
+         <Button DockPanel.Dock="Right" Content="Save Criteria" Command="{Binding SaveTabConfig}" CommandParameter="Output" Margin="8,0,0,0" VerticalAlignment="Bottom"
+                 ToolTip="Save the criteria into the active project, with the Tab 04 output settings they belong to"/>
+         <TextBlock Style="{StaticResource OptHint}" VerticalAlignment="Center"
+                    Text="The deflection range is the Tab 04 limit band — one value, edited in either place, and the band shaded in the Deflection report."/>
+        </DockPanel>
+       </StackPanel>
+      </Border>
+
+      <!-- result and the optimized report set -->
+      <Border x:Name="OptimizationResult" Grid.Column="2" Style="{StaticResource OptCard}">
+       <StackPanel>
+        <TextBlock Text="RESULT" Style="{StaticResource Subheading}" Margin="0"/>
+        <TextBlock Text="{Binding OptimizationHeadline}" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource Accent}" Margin="0,2,0,0" AutomationProperties.Name="Qualified candidates"/>
+        <TextBlock Text="{Binding OptimizationBreakdown}" FontSize="11" TextWrapping="Wrap"/>
+        <TextBlock Text="{Binding OptimizationCriteriaNote}" Style="{StaticResource OptHint}" Margin="0,3,0,0"/>
+        <Border Height="1" Background="{StaticResource Border}" Margin="0,9,0,7"/>
+        <TextBlock Text="OPTIMIZED REPORTS" Style="{StaticResource Subheading}" Margin="0"/>
+        <TextBlock Text="{Binding OptimizedReportsStatus}" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0" AutomationProperties.Name="Optimized reports status">
+         <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Style.Triggers><DataTrigger Binding="{Binding OptimizedReportsStale}" Value="True"><Setter Property="Foreground" Value="{StaticResource Warning}"/><Setter Property="FontWeight" Value="SemiBold"/></DataTrigger></Style.Triggers></Style></TextBlock.Style>
+        </TextBlock>
+        <TextBlock Style="{StaticResource OptHint}" Margin="0,3,0,0"
+                   Text="The same charts as Tab 06, for the qualified candidates only, in Study/Optimized. A combination that did not qualify is left blank and marked NQ."/>
+        <WrapPanel Margin="0,6,0,0">
+         <Button Content="View Summary" Command="{Binding OpenOptimizationSummary}" Style="{StaticResource Primary}" ToolTip="Open Optimization_Summary.html — criteria, counts, the acceptance map and the qualified candidates"/>
+         <Button Content="Deflection" Command="{Binding OpenOptimizedDeflection}" ToolTip="Deflection report of the qualified candidates"/>
+         <Button Content="Top Chord" Command="{Binding OpenOptimizedTopChord}" ToolTip="Top Chord summary of the qualified candidates"/>
+         <Button Content="Bottom Chord" Command="{Binding OpenOptimizedBottomChord}" ToolTip="Bottom Chord summary of the qualified candidates"/>
+         <Button Content="Mega Column" Command="{Binding OpenOptimizedMegaColumn}" ToolTip="Mega Column summary of the qualified candidates"/>
+         <Button Content="Member Forces" Command="{Binding OpenOptimizedMemberForces}" ToolTip="Member-force report of the qualified candidates — every group"/>
+         <Button Content="Support Reactions" Command="{Binding OpenOptimizedSupportReactions}" ToolTip="Support Reactions summary of the qualified candidates"/>
+         <Button Content="Cable Forces" Command="{Binding OpenOptimizedCableForces}" Margin="0" ToolTip="Cable Forces report of the qualified candidates"/>
+        </WrapPanel>
+       </StackPanel>
+      </Border>
+     </Grid>
+
+     <DockPanel Grid.Row="2" Margin="0,8,0,4">
+      <ComboBox DockPanel.Dock="Right" Width="126" ItemsSource="{Binding OptimizationFilters}" SelectedItem="{Binding OptimizationFilter}" AutomationProperties.Name="Candidate status filter"
+                ToolTip="Show every candidate or one status"/>
+      <TextBlock DockPanel.Dock="Right" Text="Show" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,6,0"/>
+      <TextBlock Text="CANDIDATES" Style="{StaticResource Subheading}" Margin="0" VerticalAlignment="Center"/>
+      <TextBlock Text="{Binding OptimizationTableSummary}" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+     </DockPanel>
+     <DataGrid x:Name="OptimizationGrid" Grid.Row="3" ItemsSource="{Binding OptimizationRows}" IsReadOnly="True" AutoGenerateColumns="False"
+               CanUserDeleteRows="False" CanUserAddRows="False" CanUserResizeRows="False" HeadersVisibility="Column" RowHeaderWidth="0"
+               EnableRowVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+               ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+      <DataGrid.Columns>
+       <DataGridTextColumn Header="Iteration" Binding="{Binding IterationKey}" Width="128"/>
+       <DataGridTextColumn Header="Load" Binding="{Binding LoadId}" Width="54"/>
+       <DataGridTextColumn Header="Height" Binding="{Binding Height}" Width="62"/>
+       <DataGridTextColumn Header="Pretension" Binding="{Binding PretensionId}" Width="80"/>
+       <DataGridTextColumn Header="δ [mm]" Binding="{Binding PeakDownMm, StringFormat={}{0:0.0}, TargetNullValue=—}" Width="74" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="Cable util. [%]" Binding="{Binding UtilisationPercent, StringFormat={}{0:0.0}, TargetNullValue=—}" Width="98" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="Governing cable" Binding="{Binding GoverningCable}" Width="118"/>
+       <DataGridTemplateColumn Header="Status" Width="108" SortMemberPath="Status">
+        <DataGridTemplateColumn.CellTemplate><DataTemplate>
+         <TextBlock Text="{Binding Status}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="4,0">
+          <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+           <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+           <Style.Triggers>
+            <DataTrigger Binding="{Binding Status}" Value="Qualified"><Setter Property="Foreground" Value="{StaticResource Accent}"/></DataTrigger>
+            <DataTrigger Binding="{Binding Status}" Value="Not qualified"><Setter Property="Foreground" Value="{StaticResource Error}"/></DataTrigger>
+           </Style.Triggers>
+          </Style></TextBlock.Style>
+         </TextBlock>
+        </DataTemplate></DataGridTemplateColumn.CellTemplate>
+       </DataGridTemplateColumn>
+       <DataGridTextColumn Header="Reason" Binding="{Binding Reason}" Width="*" MinWidth="220">
+        <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding Reason}"/></Style></DataGridTextColumn.ElementStyle>
+       </DataGridTextColumn>
+      </DataGrid.Columns>
+     </DataGrid>
     </Grid>
    </TabItem>
 

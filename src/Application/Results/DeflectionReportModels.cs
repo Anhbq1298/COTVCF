@@ -12,7 +12,8 @@ public sealed record StudyMetadataDto(
     string GeneratedAtIso,
     string OutputComponent,   // "Uz"
     string CoordinateUnit,    // "m"
-    string DeflectionUnit);   // "mm"
+    string DeflectionUnit,    // "mm"
+    ReportScopeDto? Scope = null);      // set when the report covers a subset of the study (Tab 06A)
 
 public sealed record DeflectionPointDto(
     string PointName, double Coord, double? UzMm, int Sequence, string Status);
@@ -36,7 +37,8 @@ public sealed record DeflectionCandidateSeriesDto(
     IReadOnlyList<string> FilterKeys,  // one per view — key into that view's FilterLegend ("" when the view has none)
     IReadOnlyList<PretensionCableEntryDto> PretensionCables,  // per-cable target force for this candidate
     IReadOnlyList<LoadComponentEntryDto> LoadingComponents,   // per-pattern qz for this loading candidate
-    IReadOnlyList<DeflectionPointDto> Points);
+    IReadOnlyList<DeflectionPointDto> Points,
+    double? PeakDownMm);      // −min(Uz) over this group's valid points — what the limit band is tested against
 
 public sealed record PretensionCableEntryDto(string Cable, double ForceKN);
 public sealed record LoadComponentEntryDto(string Pattern, double LevelKPa);
@@ -48,6 +50,9 @@ public sealed record DeflectionGroupReportDto(
     IReadOnlyList<DeflectionCandidateSeriesDto> Series);
 
 public sealed record LegendEntryDto(string Key, string Label, string Value);
+
+/// <summary>Deflection limit band on the peak downward Uz [mm, + = sag]; a null bound is open.</summary>
+public sealed record DeflectionLimitBandDto(double? MinMm, double? MaxMm);
 
 /// <summary>One chart panel: the deflection profile coloured by <see cref="ColorDimension"/> with the line
 /// style keyed to <see cref="DashDimension"/>. The report carries one per parameter the study actually
@@ -68,6 +73,7 @@ public sealed record DeflectionReportDto(
     ReportCandidateDefinitionsDto CandidateDefinitions,
     IReadOnlyList<ResultReportWarningDto> Warnings,
     // module keys whose sibling report exists in the same study folder (drives the Result Library links)
-    IReadOnlyList<string> SiblingReports);
+    IReadOnlyList<string> SiblingReports,
+    DeflectionLimitBandDto? LimitBand);   // null = no band configured
 
 public sealed record ResultReportWarningDto(string IterationKey, string Category, string Severity, string Message);

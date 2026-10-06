@@ -13,11 +13,12 @@ public static class ReportNav
     /// <summary>Every report module, in display order. Add a row here when a new module ships a report.</summary>
     public static readonly IReadOnlyList<Module> Modules =
     [
+        // Only in an optimized report set (Tab 06A); the study folder itself has no such page.
+        new("optimization", "Optimization Summary", OptimizationSummaryReport.FileName),
         new("deflection", "Deflection · Uz", DeflectionReportGenerator.ReportFileName),
         new("member",     "Member Forces",   MemberForceReportGenerator.ReportFileName),
         new("support",    "Support Reactions", SupportReactionReportGenerator.ReportFileName),
         new("cable",      "Cable Forces",   CableForceReportGenerator.ReportFileName),
-        new("shortlist",  "Study Shortlist", StudyShortlistExporter.HtmlFileName),
     ];
 
     /// <summary>Result-Library markup for the report identified by <paramref name="current"/>.
