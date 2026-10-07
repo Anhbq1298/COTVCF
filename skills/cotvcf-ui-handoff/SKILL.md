@@ -248,8 +248,30 @@ earlier tall-header / large-button / blue-block look.
 
 ## Tab 08 Quantity Take-off (`MainViewModel.Quantities.cs`, `src/Application/Quantities/`)
 
-Concrete volume and steel mass of **one study candidate** by assigned section, from that candidate's own SAP2000
-model data. Reads only: never the connected model, never a write, nothing saved in the project JSON.
+Concrete volume and steel mass of **one model** by assigned section, from that model's own SAP2000 data: the
+**connected model**, read live from the running SAP2000, or a **study candidate**, from its own saved data. Reads
+only: never a write, nothing saved in the project JSON.
+
+- **Connected model = live** (the user asked for this: a table read from a file saved hours ago "is not real time").
+  `QuantityCandidate.Connected(State.Model)` is always the first dropdown entry (`Id` = `Connected model`,
+  `IsConnectedModel`), and the tab opens on it when nothing is selected. It is read through
+  `WorkflowService.ReadDatabaseTablesAsync` → `ISapGateway.ReadDatabaseTablesAsync` on the connected gateway's lane
+  (`QuantityTakeoffService.ReadConnectedAsync`): never cached, never from a file, so an unsaved change in SAP2000 shows.
+  It is re-read on **Refresh** (`ReloadQuantities`, the icon beside the dropdown), every time the tab is shown
+  (`ShowQuantityTab`), and after the top-bar refresh (the session change clears the tab and it opens on the connected
+  model again). It is on request, not polled. `ReadConnectedQuantitiesAsync` runs it under `IsBusy` like every other
+  call to the connected SAP2000 and **waits** while another operation is busy (connect / refresh / study) instead of
+  reading in the middle of it; a `COMException` sets `Connection Lost` as elsewhere. The gateway verifies the active
+  model is still the connected one (`Verify(expected)`) — if not, the error tells the user to reconnect; do not read
+  whatever happens to be open. Read-only: display tables in present units; no unit change, no unlock, no save.
+  Header status `Live model`; source line `Connected model · <file> · read live from the connected SAP2000 at HH:mm:ss`.
+  A candidate never uses the connected SAP2000: its file is the truth, and its source line shows when it was written.
+  **Verified live on SAP2000 27.1** (`--quantity-connected`, 2026-10-07, COT Framing_V1.2): 17 tables in ~1.5 s; table
+  keys in title case, field keys identical to the text export, group `All` accepted (the blank group name is the
+  fallback); model, units and lock state unchanged. SAP2000 rounds display-table numbers to about five figures
+  (`UnitMass` 7.849, a cable `Area` 0.028802), so `SapGateway.Refine` replaces `UnitMass`, the frame-section `Area`
+  and the cable-section `Area` with `PropMaterial.GetWeightAndMass` / `PropFrame.GetSectProps` / `PropCable.GetProp`
+  where the getter agrees with the displayed value to 0.1 % — with that the live take-off equals the saved one.
 
 - **Tab**: `08  QUANTITIES`, index 8, after `07 FEM`, full width (no shared viewer). It sits inside the workflow grid
   gated by `HasSapConnection`, and the view model gates too: without a connection the candidate list is empty and a
@@ -305,7 +327,8 @@ model data. Reads only: never the connected model, never a write, nothing saved 
      One at a time (static semaphore); results are kept per model file stamp. The view model runs it under `IsBusy`
      (so Connect / Refresh / a study run cannot start meanwhile and attach to that instance), chains reads through
      `quantitySapRead`, and refuses while another operation is busy. Without a reader (checks) the state is
-     `Unavailable`. Signatures verified against CSiAPIv1 2.15 (SAP2000 27); **not yet run against a live SAP2000** —
+     `Unavailable`. Signatures verified against CSiAPIv1 2.15 (SAP2000 27) and the table read itself verified
+     live on the connected model; **the separate instance on a private copy has not yet been run live** —
      `--quantity-live <candidate.sdb>` does that (opt-in, starts its own SAP2000, never attaches).
 - **Calculation** (`QuantityTakeoffCalculator.Calculate(SapTableSet)` — one calculation for both sources; table and
   field names are matched case-insensitively because the API uses title case):
@@ -338,7 +361,9 @@ model data. Reads only: never the connected model, never a write, nothing saved 
   geometry, composite separation, overlap, grouping, totals, duplicates, every withheld case, the catalog, source
   selection and freshness, the isolated read against `ApiDouble` API doubles (private copy, candidate folder
   byte-identical, only read calls), and the view model (gating, switching, stale requests, cancel, failure,
-  connection loss). `--study-ui` checks the tab, the five headers, `n/a` cells and gating. `--quantity-study
+  connection loss) and the live connected model (opens on it, Refresh and tab re-entry read SAP2000 again, waits
+  while busy, failure, lost connection). `--study-ui` checks the tab, the headers, the live read, Refresh, `n/a` cells
+  and gating. `--quantity-connected` (opt-in, live, read-only) takes off the model open in the running SAP2000. `--quantity-study
   <baseline.sdb>` prints every candidate of a real study from its exports (offline).
 
 ## Loading Criteria Tab

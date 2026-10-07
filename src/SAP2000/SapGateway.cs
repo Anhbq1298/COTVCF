@@ -923,7 +923,9 @@ public sealed class SapGateway : ISapGateway
     }
     /// <summary>The model's own database tables, as SAP2000 shows them (Display → Show Tables), for the quantity
     /// take-off. Signatures checked against CSiAPIv1 2.15 (SAP2000 27): GetAvailableTables lists the tables that hold
-    /// data; GetTableForDisplayArray returns one table as text, row by row, in the present units. Neither writes.</summary>
+    /// data; GetTableForDisplayArray returns one table as text, row by row, in the present units. Neither writes.
+    /// Run against SAP2000 27.1: table keys come in title case, field keys are those of the text export, and numbers
+    /// are rounded for display (a density as 7.849, an area as 0.028802) — see <see cref="Refine"/>.</summary>
     public Task<SapTableSet> ReadDatabaseTablesAsync(IReadOnlyList<string> tableNamePrefixes, ModelInfo expected) => worker.Run(() =>
     {
         Verify(expected);
@@ -947,8 +949,10 @@ public sealed class SapGateway : ISapGateway
             var rows = new List<SapTableRow>(records);
             for (var record = 0; record < records; record++)
             {
-                var start = record * fields.Length;
-                rows.Add(new(fields.Select((field, column) => KeyValuePair.Create(field, data[start + column] ?? ""))));
+                var values = new string[fields.Length];
+                for (var column = 0; column < fields.Length; column++) values[column] = data[record * fields.Length + column] ?? "";
+                Refine(key, fields, values);
+                rows.Add(new(fields.Select((field, column) => KeyValuePair.Create(field, values[column]))));
             }
             read.Add(new(key, rows));
         }
@@ -956,6 +960,45 @@ public sealed class SapGateway : ISapGateway
         Verify(expected);
         return SapTableSet.FromTables(read, SapTableUnits.From(info), $"SAP2000 database tables of {info.Name}");
     });
+    /// <summary>
+    /// The display tables round their numbers to about five figures. The three a quantity is multiplied by — a
+    /// material's mass density, a frame section's area and a cable section's area — are therefore taken from their own
+    /// read-only getters, at full precision, in the same present units. The getter's value replaces the displayed one
+    /// only where the two agree to 0.1 %, i.e. where it is the same number with more digits; where SAP2000 does not
+    /// answer, or answers something else, the displayed value stays.
+    /// </summary>
+    private void Refine(string table, string[] fields, string[] values)
+    {
+        int Column(string field) => Array.FindIndex(fields, candidate => candidate.Equals(field, StringComparison.OrdinalIgnoreCase));
+        string? Shown(string field) => Column(field) is >= 0 and var column && values[column].Length > 0 ? values[column] : null;
+        void Exact(string field, double exact)
+        {
+            if (!double.IsFinite(exact) || Shown(field) is not { } text ||
+                !double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var shown)) return;
+            if (Math.Abs(exact - shown) <= 1e-3 * Math.Abs(shown)) values[Column(field)] = exact.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        if (table.Equals("Material Properties 02 - Basic Mechanical Properties", StringComparison.OrdinalIgnoreCase))
+        {
+            double weight = 0, mass = 0;
+            if (Shown("Material") is { } material && Shown("UnitMass") is not null && Model.PropMaterial.GetWeightAndMass(material, ref weight, ref mass) == 0)
+                Exact("UnitMass", mass);
+        }
+        else if (table.Equals("Frame Section Properties 01 - General", StringComparison.OrdinalIgnoreCase))
+        {
+            double area = 0, as2 = 0, as3 = 0, torsion = 0, i22 = 0, i33 = 0, s22 = 0, s33 = 0, z22 = 0, z33 = 0, r22 = 0, r33 = 0;
+            if (Shown("SectionName") is { } section && Shown("Area") is not null &&
+                Model.PropFrame.GetSectProps(section, ref area, ref as2, ref as3, ref torsion, ref i22, ref i33, ref s22, ref s33, ref z22, ref z33, ref r22, ref r33) == 0)
+                Exact("Area", area);
+        }
+        else if (table.Equals("Cable Section Definitions", StringComparison.OrdinalIgnoreCase))
+        {
+            string material = "", notes = "", guid = ""; double area = 0; int color = 0;
+            if (Shown("CableSect") is { } section && Shown("Area") is not null &&
+                Model.PropCable.GetProp(section, ref material, ref area, ref color, ref notes, ref guid) == 0)
+                Exact("Area", area);
+        }
+    }
     public Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected) => worker.Run<IReadOnlyList<ForceSource>>(() =>
     {
         Verify(expected);

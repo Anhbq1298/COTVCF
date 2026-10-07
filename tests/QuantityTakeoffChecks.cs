@@ -63,6 +63,52 @@ internal static class QuantityTakeoffChecks
         static string Text(double? value) => value?.ToString("N3", CultureInfo.InvariantCulture) ?? "n/a";
     }
 
+    /// <summary>Opt-in, live and read-only: attaches to the running SAP2000 and takes off the model that is open in
+    /// it through the database-tables API — what Tab 08 does for "Connected model". Opens nothing, writes nothing,
+    /// changes no units; the model's identity, units and lock state are compared before and after.</summary>
+    public static async Task RunConnectedAsync()
+    {
+        using var sap = new SapGateway();
+        var before = await sap.ConnectAsync();
+        Console.WriteLine($"Attached to {before.Name} · SAP2000 {before.Version} · {before.Units} · locked = {before.IsLocked}");
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var tables = await sap.ReadDatabaseTablesAsync(IsolatedSapTableReader.TablePrefixes, before);
+        Console.WriteLine($"{tables.TableNames.Count} tables in {watch.Elapsed.TotalSeconds:0.0} s, units {tables.Units}:");
+        foreach (var name in tables.TableNames.Order(StringComparer.OrdinalIgnoreCase)) Console.WriteLine($"    {name}  ({tables.Rows(name).Count} rows)");
+        string Sample(string table, params string[] fields) => tables.Rows(table).FirstOrDefault() is { } row
+            ? string.Join("  ", fields.Select(field => $"{field}={row.Text(field) ?? "(none)"}")) : "(no rows)";
+        Console.WriteLine("as SAP2000 hands the values over:");
+        Console.WriteLine("    joint     " + Sample("JOINT COORDINATES", "Joint", "CoordSys", "CoordType", "XorR", "Y", "Z"));
+        Console.WriteLine("    frame     " + Sample("CONNECTIVITY - FRAME", "Frame", "JointI", "JointJ", "IsCurved"));
+        Console.WriteLine("    assigned  " + Sample("FRAME SECTION ASSIGNMENTS", "Frame", "AnalSect", "MatProp"));
+        Console.WriteLine("    section   " + Sample("FRAME SECTION PROPERTIES 01 - GENERAL", "SectionName", "Material", "Shape", "t3", "t2", "tf", "tw", "Area"));
+        Console.WriteLine("    material  " + Sample("MATERIAL PROPERTIES 02 - BASIC MECHANICAL PROPERTIES", "Material", "UnitMass", "E1"));
+        Console.WriteLine("    cable     " + Sample("CABLE SECTION DEFINITIONS", "CableSect", "Material", "Diameter", "Area"));
+        Check(QuantityTakeoffCalculator.MissingInputs(tables) is var missing && missing.Count == 0,
+            "the connected SAP2000 returns every table the take-off needs" + (missing.Count > 0 ? " — missing: " + string.Join(", ", missing) : ""));
+        var takeoff = QuantityTakeoffCalculator.Calculate(tables);
+        static string Text(double? value) => value?.ToString("N3", CultureInfo.InvariantCulture) ?? "n/a";
+        foreach (var row in takeoff.Sections)
+            Console.WriteLine($"    {row.Section,-40} {row.MemberCount,3}  {Text(row.TotalLengthM),12} m  {Text(row.ConcreteVolumeM3),12} m³  {Text(row.SteelMassT),12} t  figure: {(row.Figure is null ? "none" : $"{row.Figure.Width * 1000:0.#} × {row.Figure.Height * 1000:0.#} mm")}");
+        Console.WriteLine($"    {"Total",-40} {takeoff.Total.MemberCount,3}  {Text(takeoff.Total.TotalLengthM),12} m  {Text(takeoff.Total.ConcreteVolumeM3),12} m³  {Text(takeoff.Total.SteelMassT),12} t");
+        foreach (var note in takeoff.Notes) Console.WriteLine("    note: " + note);
+        var after = await sap.GetCurrentModelInfoAsync();
+        Check(after == before, $"the connected model is as it was: {after.Name} · {after.Units} · locked = {after.IsLocked}");
+        Check(takeoff.Complete, "every section of the connected model is taken off in full");
+
+        // SAP2000's own text copy of the same model, when the model has not been changed since it was saved, must agree
+        var export = Path.ChangeExtension(before.Path, QuantityCandidateCatalog.TextExportExtension);
+        if (!File.Exists(export)) { Console.WriteLine("No text export beside the model to compare with."); return; }
+        var saved = QuantityTakeoffCalculator.Calculate(SapTableSet.ReadText(export));
+        var same = saved.Sections.Count == takeoff.Sections.Count && saved.Sections.Zip(takeoff.Sections).All(pair =>
+            pair.First.Section == pair.Second.Section && pair.First.MemberCount == pair.Second.MemberCount && Near(pair.First.TotalLengthM, pair.Second.TotalLengthM, 1e-4) &&
+            Near(pair.First.ConcreteVolumeM3, pair.Second.ConcreteVolumeM3, 1e-4) && Near(pair.First.SteelMassT, pair.Second.SteelMassT, 1e-4));
+        Console.WriteLine(same
+            ? $"SAME as the model's saved text export {Path.GetFileName(export)} (to 0.01 %)."
+            : $"DIFFERENT from the saved text export {Path.GetFileName(export)}: total {Text(saved.Total.TotalLengthM)} m, {Text(saved.Total.ConcreteVolumeM3)} m³, {Text(saved.Total.SteelMassT)} t there — " +
+              "expected only if the model was changed in SAP2000 since it was saved.");
+    }
+
     /// <summary>Opt-in, live: reads one candidate model through the isolated SAP2000 workflow — a SAP2000 instance of
     /// its own on a private copy — and compares the result with the candidate's text export. Never attaches to a
     /// running SAP2000 and never opens the candidate's own files in SAP2000.</summary>
@@ -590,7 +636,8 @@ internal static class QuantityTakeoffChecks
             "the instance is closed and its private copy removed when the read is over — with a copy an earlier read left behind days ago, not a recent one");
         Directory.Delete(inUse);
         Check(api.Calls.Distinct().Order().SequenceEqual(new[] { "DatabaseTables.GetAvailableTables", "DatabaseTables.GetTableForDisplayArray", "File.OpenFile",
-                  "GetModelFilename", "GetModelIsLocked", "GetPresentUnits", "GetVersion", "get_DatabaseTables", "get_File" }.Order()) &&
+                  "GetModelFilename", "GetModelIsLocked", "GetPresentUnits", "GetVersion", "PropCable.GetProp", "PropFrame.GetSectProps", "PropMaterial.GetWeightAndMass",
+                  "get_DatabaseTables", "get_File", "get_PropCable", "get_PropFrame", "get_PropMaterial" }.Order()) &&
               api.Tables.All(table => IsolatedSapTableReader.TablePrefixes.Any(prefix => table.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))) &&
               api.Tables.Count == 17 && api.Groups.All(group => group == "All"),
             "the read asks SAP2000 only for the model's identity and the tables it needs: no unit change, no unlock, no edit, no save, no analysis");
@@ -604,6 +651,17 @@ internal static class QuantityTakeoffChecks
         cancelled.Cancel();
         Throws<OperationCanceledException>(() => reader.ReadAsync(model, cancelled.Token).GetAwaiter().GetResult(), "a cancelled read starts no SAP2000");
         Check(hosts.Created == 2 && FolderState(folder) == before, "…nothing was started for it");
+        // SAP2000 rounds what it displays; the density and the areas a quantity is multiplied by are taken at full precision
+        api.RoundForDisplay = true;
+        var exact = QuantityTakeoffCalculator.Calculate(reader.ReadAsync(model, CancellationToken.None).GetAwaiter().GetResult());
+        api.GettersAnswer = false;
+        var rounded = QuantityTakeoffCalculator.Calculate(reader.ReadAsync(model, CancellationToken.None).GetAwaiter().GetResult());
+        api.GettersAnswer = true;
+        api.RoundForDisplay = false;
+        Check(exact.Complete && Near(exact.Total.SteelMassT, 2862.104378822229) && Near(Row(exact, Strand).SteelMassT, 110.85629119867916) && Near(exact.Total.ConcreteVolumeM3, 795),
+            "numbers SAP2000 rounds for display — a density shown as 7.849, a cable area as 0.028802 — are read at full precision, so the live take-off equals the saved one");
+        Check(rounded.Complete && !Near(rounded.Total.SteelMassT, 2862.104378822229, 1e-8) && Near(rounded.Total.SteelMassT, 2862.104378822229, 1e-4),
+            "…and where SAP2000 does not answer for the full number, the displayed one is used rather than nothing");
         api.RefuseGroup = "All";
         api.Groups.Clear();
         Check(QuantityTakeoffCalculator.Calculate(reader.ReadAsync(model, CancellationToken.None).GetAwaiter().GetResult()).Complete &&
@@ -1053,6 +1111,8 @@ internal static class QuantityTakeoffChecks
         public List<string> Groups { get; } = [];
         public string CurrentPath = "";
         public string? FailTable, RefuseGroup;
+        /// <summary>SAP2000 shows a density or an area with about five figures; its getters give the full number.</summary>
+        public bool RoundForDisplay, GettersAnswer = true;
         public cSapModel Model { get; }
 
         public TablesApi(ExportText export)
@@ -1074,10 +1134,42 @@ internal static class QuantityTakeoffChecks
                         Groups.Add((string)a[2]!);
                         if (key == FailTable || (string)a[2]! == RefuseGroup) return 1;
                         var table = tables[key];
-                        a[3] = 1; a[4] = table.Fields; a[5] = table.Records; a[6] = table.Data;
+                        a[3] = 1; a[4] = table.Fields; a[5] = table.Records; a[6] = RoundForDisplay ? Displayed(table.Fields, table.Data) : table.Data;
                         return 0;
                     default: throw new NotSupportedException(name);
                 }
+            });
+            string Stored(string table, string nameField, object? name, string field)
+            {
+                var (fields, data, records) = tables[table];
+                int key = Array.IndexOf(fields, nameField), value = Array.IndexOf(fields, field);
+                var record = Enumerable.Range(0, records).First(index => data[index * fields.Length + key] == (string)name!);
+                return data[record * fields.Length + value];
+            }
+            double Number(string text) => double.Parse(text, NumberStyles.Float, CultureInfo.InvariantCulture);
+            var materials = ApiDouble.Create<cPropMaterial>((name, a) =>
+            {
+                Calls.Add("PropMaterial." + name);
+                if (name != "GetWeightAndMass") throw new NotSupportedException(name);
+                if (!GettersAnswer) return 1;
+                a[2] = Number(Stored("Material Properties 02 - Basic Mechanical Properties", "Material", a[0], "UnitMass"));
+                return 0;
+            });
+            var frameSections = ApiDouble.Create<cPropFrame>((name, a) =>
+            {
+                Calls.Add("PropFrame." + name);
+                if (name != "GetSectProps") throw new NotSupportedException(name);
+                if (!GettersAnswer) return 1;
+                a[1] = Number(Stored("Frame Section Properties 01 - General", "SectionName", a[0], "Area"));
+                return 0;
+            });
+            var cableSections = ApiDouble.Create<cPropCable>((name, a) =>
+            {
+                Calls.Add("PropCable." + name);
+                if (name != "GetProp") throw new NotSupportedException(name);
+                if (!GettersAnswer) return 1;
+                a[2] = Number(Stored("Cable Section Definitions", "CableSect", a[0], "Area"));
+                return 0;
             });
             var file = ApiDouble.Create<cFile>((name, a) =>
             {
@@ -1097,10 +1189,23 @@ internal static class QuantityTakeoffChecks
                     case "GetModelIsLocked": return true;                       // an analysed model, as copied
                     case "get_File": return file;
                     case "get_DatabaseTables": return database;
+                    case "get_PropMaterial": return materials;
+                    case "get_PropFrame": return frameSections;
+                    case "get_PropCable": return cableSections;
                     default: throw new NotSupportedException(name);
                 }
             });
         }
+    }
+
+    /// <summary>A table's values as SAP2000 displays them: densities and areas cut to five significant figures.</summary>
+    private static string[] Displayed(string[] fields, string[] data)
+    {
+        var shown = data.ToArray();
+        for (var index = 0; index < shown.Length; index++)
+            if (fields[index % fields.Length] is "UnitMass" or "Area" && double.TryParse(shown[index], NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+                shown[index] = value.ToString("G5", CultureInfo.InvariantCulture);
+        return shown;
     }
 
     private sealed class TablesHostFactory(TablesApi api) : ISapInstanceHostFactory

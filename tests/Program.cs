@@ -612,6 +612,12 @@ internal static class Program
                 QuantityTakeoffChecks.PrintStudy(args[quantityStudy + 1]);
                 return 0;
             }
+            // Live, read-only: the Tab 08 take-off of the model open in the running SAP2000, through the API. Attaches; opens and writes nothing.
+            if (args.Contains("--quantity-connected"))
+            {
+                QuantityTakeoffChecks.RunConnectedAsync().GetAwaiter().GetResult();
+                return 0;
+            }
             // Live: the isolated SAP2000 read of one candidate model — a SAP2000 of its own on a private copy; never attaches to the user's.
             var quantityLive = Array.IndexOf(args, "--quantity-live");
             if (quantityLive >= 0)

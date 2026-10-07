@@ -168,9 +168,15 @@ The benchmark found two things that affect a comparison of the FEM tab with a SA
 
 ## Tab 8 — Quantity Take-off
 
-Tab 8 shows the concrete volume and steel mass of **one study candidate**, grouped by the section assigned to its
-members. Pick a candidate in the **Candidate** dropdown (`Lxx_Hxx_Pxx`); its breakdown loads in the background.
-Picking another candidate is how models are compared, including different truss heights.
+Tab 8 shows the concrete volume and steel mass of **one model**, grouped by the section assigned to its members.
+The **Candidate** dropdown lists **Connected model** first — the model that is open in the connected SAP2000, read
+**live** — and then the study's candidates (`Lxx_Hxx_Pxx`). The tab opens on the connected model; the breakdown loads
+in the background. Picking another entry is how models are compared, including different truss heights.
+
+**Live means live on request.** The connected model is read from SAP2000 itself through the API each time: when the
+tab is opened, when it is shown again, and when **Refresh** (the icon beside the dropdown, or the top-bar refresh) is
+pressed. Change a section in SAP2000, press Refresh, and the table follows — saved or not. It is not polled in the
+background. A candidate, by contrast, is a saved model: it is read from its own file and shows when that was written.
 
 | Section | Figure | Member count | Total length m | Concrete volume m³ | Steel mass t |
 |---|:-:|---:|---:|---:|---:|
@@ -192,8 +198,20 @@ baseline (`<baseline folder>/Study`): every `Lxx_Hxx_Pxx` the run journal (`Stud
 or that has a folder there, provided its model or SAP2000's text copy of it is on disk. A candidate a run failed on is
 listed with a warning. The tab is available only while SAP2000 is connected, like the rest of the workflow.
 
-**Where the data comes from.** Always the selected candidate's own model — never the baseline, the connected model or
-the Tab 7 FEM properties:
+**Where the data comes from.** Always the selected model's own data — never another model's, and never the Tab 7 FEM
+properties.
+
+*Connected model* — the database tables of the model open in the connected SAP2000 (`GetAvailableTables`,
+`GetTableForDisplayArray`), on the application's own SAP2000 lane and in the model's present units. Read-only: no
+table is opened for editing, units and lock state are not touched, nothing is saved. Like every call to the connected
+SAP2000 it keeps the application busy for the moment it takes, and it waits for a connect, refresh or study that is
+already running. If the model open in SAP2000 is no longer the one that was connected, the read says so — use the
+top-bar refresh. SAP2000 rounds the numbers in these tables for display (a density as 7.849); a material's mass
+density and the area of a frame or cable section are therefore taken from their own getters at full precision, so a
+live take-off equals the one from the saved model. Run against SAP2000 27.1 (`--quantity-connected`): 17 tables in
+about 1.5 s, model, units and lock state unchanged.
+
+*A candidate* — never the connected SAP2000:
 
 1. SAP2000's text copy of the candidate (`<model>.$2k`, written by SAP2000 beside the `.sdb` at every save) is used
    when it was written for that model, is complete, holds every table the take-off needs, and is not older than the
@@ -205,9 +223,9 @@ the Tab 7 FEM properties:
    same tables are read through the database-tables API (`GetAvailableTables`, `GetTableForDisplayArray`), and the
    instance is closed without saving. SAP2000 never opens the candidate's own files, and the connected SAP2000 — its
    model, units and lock state — is not involved. The application is busy while this runs; **Cancel** or another
-   selection stops it. The API signatures were checked against the installed `CSiAPIv1.dll` (SAP2000 27) and the
-   workflow is covered by API doubles; **it has not yet been run against a live SAP2000** — `--quantity-live` below
-   does that.
+   selection stops it. The table read itself is the one used for the connected model and has been run against
+   SAP2000 27.1; **starting a separate instance on a private copy has not yet been run live** (it is covered by API
+   doubles) — `--quantity-live` below does that.
 
 The line under the dropdown states which source was used.
 
@@ -270,9 +288,10 @@ dotnet run --project tests\COT_VCF.Checks.csproj -- --study-ui
 dotnet run --project tests\COT_VCF.Checks.csproj -- --fem
 dotnet run --project tests\COT_VCF.Checks.csproj -- --fem-sap
 dotnet run --project tests\COT_VCF.Checks.csproj -- --quantity-study "<baseline>.sdb"
+dotnet run --project tests\COT_VCF.Checks.csproj -- --quantity-connected
 ```
 
-The first command runs offline workflow and guarded SAP-write tests using test doubles, including the Tab 8 quantity take-off (calculation, candidate records, source selection, the isolated read against API doubles, and the tab's loading / stale-request / connection behaviour). The second opens the WPF smoke test and checks workflow/FEM/quantity bindings. The third runs the internal FEM analytical and candidate-composition checks. The fourth compares the internal FEM with a completed SAP2000 study, like for like, from the fixture in `tests/fem-sap-benchmark` (offline; report in `.work/fem-vs-sap`). The fifth prints the quantity take-off of every candidate of a study on disk from the candidates' own text exports (offline; reads only). Live SAP checks are intentionally separate because they require SAP2000: `--quantity-live "<candidate>.sdb"` runs the isolated Tab 8 read on one candidate — it starts its own SAP2000 on a private copy, never attaches to a running one — and compares the result with that candidate's text export.
+The first command runs offline workflow and guarded SAP-write tests using test doubles, including the Tab 8 quantity take-off (calculation, candidate records, source selection, the isolated read against API doubles, and the tab's loading / stale-request / connection behaviour). The second opens the WPF smoke test and checks workflow/FEM/quantity bindings. The third runs the internal FEM analytical and candidate-composition checks. The fourth compares the internal FEM with a completed SAP2000 study, like for like, from the fixture in `tests/fem-sap-benchmark` (offline; report in `.work/fem-vs-sap`). The fifth prints the quantity take-off of every candidate of a study on disk from the candidates' own text exports (offline; reads only). The sixth is live but read-only: it attaches to the running SAP2000, takes off the model open in it through the API exactly as Tab 8's *Connected model* does, prints the values as SAP2000 hands them over, and confirms that the model, its units and its lock state are unchanged. Live SAP checks are intentionally separate because they require SAP2000: `--quantity-live "<candidate>.sdb"` runs the isolated Tab 8 read on one candidate — it starts its own SAP2000 on a private copy, never attaches to a running one — and compares the result with that candidate's text export.
 
 The checks project takes the same `-p:SapInstallDir=...` as the application when SAP2000 26 is not the installed version.
 
