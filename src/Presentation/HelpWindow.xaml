@@ -60,7 +60,7 @@
      <List>
       <ListItem><Paragraph><Bold>Cable target fit:</Bold> compare Target, Pretension and Dev. %. Result is the cable tension in the selected load case; Applied P is the fitted pretension input.</Paragraph></ListItem>
       <ListItem><Paragraph><Bold>Status:</Bold> Not fitted means the target tolerance was not met and the closest fit is retained. Failed means equilibrium was not reached. Check the Status tooltip for the reason.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Results:</Bold> expand a candidate in the result tree and select axial forces, bending, shear, reactions or deflection to update the viewer. Click View Results to open a separate table with candidate and Load case / combo dropdowns. Select Cable target fit in the tree to inspect its fitting table.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Results:</Bold> choose a candidate and load case in Result Explorer, then select axial forces, bending, shear, reactions or deflection to update the viewer. Click View Results to open a separate table with candidate and Load case / combo dropdowns. Select Cable target fit in the tree to inspect its fitting table.</Paragraph></ListItem>
       <ListItem><Paragraph><Bold>Signs and units:</Bold> axial force is positive in tension and negative in compression; Rx is positive along global X and Rz upward. Read the displayed unit labels. The deflected shape is magnified; table displacements are true values.</Paragraph></ListItem>
      </List>
 

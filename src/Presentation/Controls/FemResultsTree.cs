@@ -18,6 +18,12 @@ public sealed class FemResultsTree : TreeView
     public FemStudyRun? SelectedRun { get => (FemStudyRun?)GetValue(SelectedRunProperty); set => SetValue(SelectedRunProperty, value); }
     public FemResultMode ResultMode { get => (FemResultMode)GetValue(ResultModeProperty); set => SetValue(ResultModeProperty, value); }
     public bool CanViewResults { get => (bool)GetValue(CanViewResultsProperty); private set => SetValue(CanViewResultsProperty, value); }
+    public static readonly DependencyProperty SearchTextProperty = DependencyProperty.Register(nameof(SearchText), typeof(string), typeof(FemResultsTree), new PropertyMetadata("", (d, _) => ((FemResultsTree)d).Rebuild()));
+    public static readonly DependencyProperty IssuesOnlyProperty = DependencyProperty.Register(nameof(IssuesOnly), typeof(bool), typeof(FemResultsTree), new PropertyMetadata(false, (d, _) => ((FemResultsTree)d).Rebuild()));
+    public static readonly DependencyProperty SelectedReasonProperty = DependencyProperty.Register(nameof(SelectedReason), typeof(string), typeof(FemResultsTree), new PropertyMetadata(""));
+    public string SearchText { get => (string)GetValue(SearchTextProperty); set => SetValue(SearchTextProperty, value); }
+    public bool IssuesOnly { get => (bool)GetValue(IssuesOnlyProperty); set => SetValue(IssuesOnlyProperty, value); }
+    public string SelectedReason { get => (string)GetValue(SelectedReasonProperty); private set => SetValue(SelectedReasonProperty, value); }
     public bool CableFitSelected { get; private set; }
     private bool navigating;
     private sealed record Selection(FemStudyRun Run, FemResultMode? Mode = null, bool CableFit = false);
@@ -27,7 +33,13 @@ public sealed class FemResultsTree : TreeView
         Unloaded += (_, _) => Subscribe(false);
         SelectedItemChanged += (_, _) =>
         {
-            if (SelectedItem is not TreeViewItem { Tag: Selection selection }) { CanViewResults = false; return; }
+            if (SelectedItem is not TreeViewItem { Tag: Selection selection })
+            {
+                CanViewResults = false;
+                SelectedReason = (SelectedItem as TreeViewItem)?.ToolTip as string ?? "";
+                return;
+            }
+            SelectedReason = selection.Run.Result.TargetFitFailure ?? "";
             navigating = true;
             try
             {
@@ -42,15 +54,7 @@ public sealed class FemResultsTree : TreeView
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (navigating || (e.Property != SelectedRunProperty && e.Property != ResultModeProperty)) return;
-        foreach (var candidate in Items.OfType<TreeViewItem>())
-        {
-            if (candidate.Tag is not Selection selection || selection.Run != SelectedRun) continue;
-            var child = candidate.Items.OfType<TreeViewItem>().FirstOrDefault(item =>
-                item.Tag is Selection value && (CableFitSelected ? value.CableFit : value.Mode == ResultMode));
-            if (child is not null) { candidate.IsExpanded = true; child.IsSelected = true; }
-            break;
-        }
+        if (!navigating && (e.Property == SelectedRunProperty || e.Property == ResultModeProperty)) Rebuild();
     }
     private static void SourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -74,23 +78,23 @@ public sealed class FemResultsTree : TreeView
             e.NewItems?.Cast<FemCableFitRow>().All(row => !row.Failed) == true) return;
         Rebuild();
     }
+    private bool Matches(string id) => id.Contains(SearchText?.Trim() ?? "", StringComparison.OrdinalIgnoreCase);
     private void Rebuild()
     {
-        var expanded = Items.OfType<TreeViewItem>().Where(item => item.IsExpanded).Select(item => (item.Tag as Selection)?.Run.Id).ToHashSet();
-        var selected = (SelectedItem as TreeViewItem)?.Tag as Selection;
-        Items.Clear(); CanViewResults = false;
-        foreach (var run in Runs ?? [])
+        Items.Clear(); CanViewResults = false; SelectedReason = "";
+        if (SelectedRun is not { } run)
         {
-            var candidate = new TreeViewItem { Header = run.Id + (run.Result.TargetFitConverged ? "" : " - Not fitted"), Tag = new Selection(run), IsExpanded = expanded.Contains(run.Id) };
-            foreach (var (title, mode) in new[] { ("Axial forces / cables", FemResultMode.AxialForce), ("Bending moments", FemResultMode.BendingMoment), ("Shear forces", FemResultMode.Shear), ("Support reactions", FemResultMode.Reactions), ("Deflection", FemResultMode.DeflectedShape) })
-                candidate.Items.Add(new TreeViewItem { Header = title, Tag = new Selection(run, mode) });
-            candidate.Items.Add(new TreeViewItem { Header = "Cable target fit", Tag = new Selection(run, CableFit: true) });
-            Items.Add(candidate);
-            foreach (var item in candidate.Items.Cast<TreeViewItem>().Prepend(candidate))
-                if (selected is not null && item.Tag is Selection value && value.Run.Id == selected.Run.Id && value.Mode == selected.Mode && value.CableFit == selected.CableFit) item.IsSelected = true;
+            Items.Add(new TreeViewItem { Header = "Choose a completed candidate", IsEnabled = false });
+            return;
         }
-        foreach (var failed in (FitRows ?? []).Where(row => row.Failed))
-            Items.Add(new TreeViewItem { Header = failed.RunId + " - Failed", ToolTip = failed.FitFailure, Foreground = (System.Windows.Media.Brush)FindResource("Error") });
-        if (Items.Count == 0) Items.Add(new TreeViewItem { Header = "Run Analysis to populate results", IsEnabled = false });
+        foreach (var (title, mode) in new[] { ("Axial forces / cables", FemResultMode.AxialForce), ("Bending moments", FemResultMode.BendingMoment), ("Shear forces", FemResultMode.Shear), ("Support reactions", FemResultMode.Reactions), ("Deflection", FemResultMode.DeflectedShape) })
+        {
+            var item = new TreeViewItem { Header = title, Tag = new Selection(run, mode) };
+            Items.Add(item);
+            if (!CableFitSelected && mode == ResultMode) item.IsSelected = true;
+        }
+        var fit = new TreeViewItem { Header = "Cable target fit", Tag = new Selection(run, CableFit: true) };
+        Items.Add(fit);
+        if (CableFitSelected) fit.IsSelected = true;
     }
 }

@@ -1339,18 +1339,6 @@
     </TabItem.Header>
     <Grid>
      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                         <Grid Margin="0,0,0,6">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                <TextBlock Grid.Row="1" Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,4,10,0"/>
-                                <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
-                                          IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
-                                          ToolTip="Load case or linear-additive combination shown in the table, the viewer and the Cable Target Fit Result column."/>
-                                <TextBlock Text="CANDIDATE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                <ComboBox Grid.Column="1" ItemsSource="{Binding FemRuns}" SelectedItem="{Binding SelectedFemRun}"
-                                                                        DisplayMemberPath="Id" AutomationProperties.Name="FEM result candidate"
-                                                                        IsEnabled="{Binding IsIdle}" ToolTip="Choose a completed L/H/P internal FEM candidate."/>
-                         </Grid>
                 <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedFemPage}" TabStripPlacement="Top" Background="{StaticResource Background}" BorderThickness="0">
                  <TabControl.Resources>
                   <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
@@ -1545,8 +1533,22 @@
       <DockPanel>
        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
         <TextBlock Text="RESULT EXPLORER" Style="{StaticResource Subheading}"/>
-        <TextBlock Text="Expand a candidate, select a result, then View Results." Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+        <TextBlock Text="Choose a candidate and load case, select an output, then View Results." Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                         <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <TextBlock Grid.Row="1" Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,4,10,0"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
+                                          IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
+                                          ToolTip="Load case or linear-additive combination shown in the table, the viewer and the Cable Target Fit Result column."/>
+                                <TextBlock Text="CANDIDATE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding FemRuns}" SelectedItem="{Binding SelectedFemRun}"
+                                                                        DisplayMemberPath="Id" AutomationProperties.Name="FEM result candidate"
+                                                                        IsEnabled="{Binding IsIdle}" ToolTip="Choose a completed L/H/P internal FEM candidate."/>
+                         </Grid>
+
        </StackPanel>
+       <TextBlock DockPanel.Dock="Bottom" Text="{Binding SelectedReason, ElementName=FemResultExplorer}" TextWrapping="Wrap" Foreground="{StaticResource Warning}" Margin="0,6,0,0" MaxHeight="90" ToolTip="{Binding SelectedReason, ElementName=FemResultExplorer}" AutomationProperties.Name="Selected FEM candidate issue"/>
        <Button DockPanel.Dock="Bottom" Content="View Results" Click="OpenFemResultsClick" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,8,0,0" IsEnabled="{Binding ElementName=FemResultExplorer, Path=CanViewResults}"/>
        <c:FemResultsTree x:Name="FemResultExplorer" Runs="{Binding FemRuns}" FitRows="{Binding FemCableFitRows}" SelectedRun="{Binding SelectedFemRun, Mode=TwoWay}" ResultMode="{Binding FemResultMode, Mode=TwoWay}"/>
       </DockPanel>
@@ -1725,7 +1727,7 @@
                           Cables="{Binding SharedViewerCables}"
                           PinSupportPoints="{Binding SharedViewerPinSupportPoints}"
                           FemResult="{Binding SharedViewerFemResult}"
-                          FemResultMode="{Binding SharedViewerFemResultMode}"
+                          FemResultMode="{Binding FemResultMode, Mode=TwoWay}"
                           FrameMeshSegments="{Binding SharedViewerFrameMeshSegments}"
                           MemberSizes="{Binding SharedViewerMemberSizes}"
                           ShowLoads="{Binding SharedViewerShowLoads}"

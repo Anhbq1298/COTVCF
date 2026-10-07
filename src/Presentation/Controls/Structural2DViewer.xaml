@@ -87,6 +87,20 @@
     </StackPanel>
    </Border>
 
+   <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="8,0,8,95" Padding="8,5" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3">
+    <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Visible"/><Style.Triggers>
+     <DataTrigger Binding="{Binding FemResult, ElementName=Root}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+     <DataTrigger Binding="{Binding Visibility, ElementName=Canvas}" Value="Collapsed"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+    </Style.Triggers></Style></Border.Style>
+    <WrapPanel>
+     <RadioButton Content="Axial" GroupName="ViewerResultMode" Margin="0,0,10,0" AutomationProperties.Name="Show axial on chart" IsChecked="{Binding FemResultMode, ElementName=Root, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=AxialForce}"/>
+     <RadioButton Content="Bending" GroupName="ViewerResultMode" Margin="0,0,10,0" AutomationProperties.Name="Show bending on chart" IsChecked="{Binding FemResultMode, ElementName=Root, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=BendingMoment}"/>
+     <RadioButton Content="Shear" GroupName="ViewerResultMode" Margin="0,0,10,0" AutomationProperties.Name="Show shear on chart" IsChecked="{Binding FemResultMode, ElementName=Root, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Shear}"/>
+     <RadioButton Content="Deflection" GroupName="ViewerResultMode" Margin="0,0,10,0" AutomationProperties.Name="Show deflection on chart" IsChecked="{Binding FemResultMode, ElementName=Root, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=DeflectedShape}"/>
+     <RadioButton Content="Reactions" GroupName="ViewerResultMode" Margin="0,0,10,0" AutomationProperties.Name="Show reactions on chart" IsChecked="{Binding FemResultMode, ElementName=Root, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Reactions}"/>
+    </WrapPanel>
+   </Border>
+
    <TextBlock HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8,0,0,6" Style="{StaticResource Caption}"
              Text="Wheel zoom &#183; Drag pan &#183; Dbl-click fit &#183; Solid frame &#183; Dashed cable &#183; Dotted tendon"/>
 

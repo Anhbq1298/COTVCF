@@ -208,10 +208,6 @@ internal static class Program
                 Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "07  FEM") &&
                        FindVisuals<Button>(window).Any(button => Equals(button.Content, "Read from SAP")) &&
                        vm.ReadFemProperties.CanExecute(null) &&
-                       FindVisuals<ComboBox>(window).Any(combo =>
-                           System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result candidate") &&
-                       FindVisuals<ComboBox>(window).Any(combo =>
-                           System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM load case or combination") &&
                        FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemPropertiesGrid") &&
                        window.SharedViewerPane.Visibility == Visibility.Visible &&
                        vm.ShowFemPinLegend && vm.SharedViewerPinSupportPoints?.SequenceEqual(["bot", "bot2"]) == true,
@@ -241,9 +237,9 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
                 var resultTree = FindVisuals<COT_VCF.Presentation.Controls.FemResultsTree>(window).Single();
-                var candidateNode = resultTree.Items.OfType<TreeViewItem>().First();
-                candidateNode.IsExpanded = true;
-                var deflectionNode = candidateNode.Items.OfType<TreeViewItem>().Single(item => Equals(item.Header, "Deflection"));
+                Assert(resultTree.Items.Count == 6 && resultTree.Items.OfType<TreeViewItem>().All(item => item.Items.Count == 0),
+                    "Result Explorer shows six flat outputs filtered by the candidate and load-case dropdowns");
+                var deflectionNode = resultTree.Items.OfType<TreeViewItem>().Single(item => Equals(item.Header, "Deflection"));
                 deflectionNode.IsSelected = true;
                 Assert(vm.FemResultMode == FemResultMode.DeflectedShape && ReferenceEquals(vm.SelectedFemRun, demoFemRun) &&
                        resultTree.CanViewResults && !FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemResultRowsGrid") &&
@@ -258,6 +254,11 @@ internal static class Program
                        FindVisuals<ComboBox>(tableWindow).Any(combo => System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM load case or combination"),
                     "View Results opens a separate populated table with candidate and load-case dropdowns above it");
                 tableWindow.Close();
+                var chartShear = FindVisuals<RadioButton>(window).Single(button => button.GroupName == "ViewerResultMode" && Equals(button.Content, "Shear"));
+                chartShear.IsChecked = true;
+                Assert(vm.FemResultMode == FemResultMode.Shear &&
+                       resultTree.SelectedItem is TreeViewItem { Header: "Shear forces" },
+                    "The floating chart buttons switch the result and keep the result explorer synchronized");
                     vm.FemResultMode = FemResultMode.AxialForce;
                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                     window.UpdateLayout();
