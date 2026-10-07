@@ -249,6 +249,21 @@ public partial class MainWindow : Window
         helpWindow.Activate();
     }
 
+    private FemResultsWindow? femResultsWindow;
+    private void OpenFemResultsClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || !FemResultExplorer.CanViewResults) return;
+        if (femResultsWindow is null)
+        {
+            femResultsWindow = new FemResultsWindow(vm) { Owner = this };
+            femResultsWindow.Closed += (_, _) => femResultsWindow = null;
+            femResultsWindow.Show();
+        }
+        femResultsWindow.SelectCableFit(FemResultExplorer.CableFitSelected);
+        if (femResultsWindow.WindowState == WindowState.Minimized) femResultsWindow.WindowState = WindowState.Normal;
+        femResultsWindow.Activate();
+    }
+
     private FemRunMonitorWindow? femMonitor;
     private void OpenFemMonitor(object? sender, EventArgs e)
     {

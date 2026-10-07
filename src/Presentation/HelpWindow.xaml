@@ -53,14 +53,14 @@
      <Paragraph>In FEM Inputs, use Read from SAP. Review sectional properties, material weights, load patterns, static cases and combinations. Check the geometry and automatically detected base pins in the viewer. Editing FEM inputs affects the internal analysis only.</Paragraph>
 
      <Paragraph Style="{StaticResource H2}">3. Set up and run</Paragraph>
-     <Paragraph>In Analysis, choose the frame mesh, target-force fitting tolerance and maximum iterations. Cable sag is enabled by default; switch it off when comparing straight-cable behavior. Click Run Analysis.</Paragraph>
+     <Paragraph>In Analysis &amp; Results, choose the frame mesh, target-force fitting tolerance and maximum iterations. Cable sag is enabled by default; switch it off when comparing straight-cable behavior. Click Run Analysis.</Paragraph>
      <Paragraph>The solver first adjusts applied cable pretension to meet the Tab 03 targets under the target-force case's loads. It then solves the loaded cases using the fitted pretension. Monitor shows progress and the cable target-force convergence chart; a ratio of 1 means the target is met.</Paragraph>
 
      <Paragraph Style="{StaticResource H2}">4. Review the results</Paragraph>
      <List>
       <ListItem><Paragraph><Bold>Cable target fit:</Bold> compare Target, Pretension and Dev. %. Result is the cable tension in the selected load case; Applied P is the fitted pretension input.</Paragraph></ListItem>
       <ListItem><Paragraph><Bold>Status:</Bold> Not fitted means the target tolerance was not met and the closest fit is retained. Failed means equilibrium was not reached. Check the Status tooltip for the reason.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Results:</Bold> select a candidate and Load case / combo to inspect member axial forces, cable forces, bending, shear, deflection and support reactions in the table and viewer.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Results:</Bold> expand a candidate in the result tree and select axial forces, bending, shear, reactions or deflection to update the viewer. Click View Results to open a separate table with candidate and Load case / combo dropdowns. Select Cable target fit in the tree to inspect its fitting table.</Paragraph></ListItem>
       <ListItem><Paragraph><Bold>Signs and units:</Bold> axial force is positive in tension and negative in compression; Rx is positive along global X and Rz upward. Read the displayed unit labels. The deflected shape is magnified; table displacements are true values.</Paragraph></ListItem>
      </List>
 

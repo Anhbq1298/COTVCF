@@ -240,13 +240,24 @@ internal static class Program
                 vm.SelectedFemPage = MainViewModel.FemResultsPage;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
-                Assert(FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemResultRowsGrid") &&
-                       FindVisuals<ComboBox>(window).Any(combo =>
-                           System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result candidate") &&
-                       FindVisuals<RadioButton>(window).Count(button => button.GroupName == "FemResultMode") == 5 &&
-                              window.SharedViewerPane.Visibility == Visibility.Visible &&
-                              ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result) && vm.FemResultRows.Count > 0,
-                          "Tab 07 Results selects a completed L/H/P combination and feeds its response rows to the shared viewer");
+                var resultTree = FindVisuals<COT_VCF.Presentation.Controls.FemResultsTree>(window).Single();
+                var candidateNode = resultTree.Items.OfType<TreeViewItem>().First();
+                candidateNode.IsExpanded = true;
+                var deflectionNode = candidateNode.Items.OfType<TreeViewItem>().Single(item => Equals(item.Header, "Deflection"));
+                deflectionNode.IsSelected = true;
+                Assert(vm.FemResultMode == FemResultMode.DeflectedShape && ReferenceEquals(vm.SelectedFemRun, demoFemRun) &&
+                       resultTree.CanViewResults && !FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemResultRowsGrid") &&
+                       window.SharedViewerPane.Visibility == Visibility.Visible && ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result),
+                    "The combined FEM page uses a candidate/result tree to select the diagram without embedding a result table");
+                FindVisuals<Button>(window).Single(button => Equals(button.Content, "View Results")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                var tableWindow = window.OwnedWindows.OfType<FemResultsWindow>().Single();
+                tableWindow.UpdateLayout();
+                Assert(FindVisuals<DataGrid>(tableWindow).Any(grid => grid.Name == "FemResultRowsGrid" && grid.Items.Count > 0) &&
+                       FindVisuals<ComboBox>(tableWindow).Any(combo => System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result candidate") &&
+                       FindVisuals<ComboBox>(tableWindow).Any(combo => System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM load case or combination"),
+                    "View Results opens a separate populated table with candidate and load-case dropdowns above it");
+                tableWindow.Close();
                     vm.FemResultMode = FemResultMode.AxialForce;
                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                     window.UpdateLayout();

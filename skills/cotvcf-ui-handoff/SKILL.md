@@ -162,8 +162,11 @@ earlier tall-header / large-button / blue-block look.
 - FEM deflection viewer colours the magnified shape by displacement magnitude |U| [mm], with a displayed range
   (maximum 0 = automatic). Undeformed geometry is a light dashed guide, independently hideable; contour can be disabled.
   Clicking a displayed joint shows only Ux, Uy, Uz [mm]; Uy is zero for the planar solver. These are presentation controls only.
-- FEM Candidate and Load case / combo selectors sit above the Inputs / Analysis / View / Results pages.
-  Results retains the force, reaction and deflection controls; table headings distinguish member ends from Rx/Rz or Ux/Uz.
+- FEM Candidate and Load case / combo selectors sit above Inputs / Analysis & Results / View.
+  Analysis & Results combines run controls with a candidate/result tree (FemResultsTree), without embedded result grids.
+  Selecting a result updates the shared viewer; View Results opens FemResultsWindow with candidate/load-case dropdowns,
+  member/joint results and a cable target-fit table filtered to that candidate. Failed candidates retain their reason in the tree tooltip.
+  Table headings distinguish member ends from Rx/Rz or Ux/Uz. FemResultsPage aliases FemAnalysisPage for viewer routing.
   Not fitted uses warning colour; Failed uses error colour. Solver behavior is unchanged.
 - Run Analysis opens the non-modal FEM Run Monitor (FemRunMonitorWindow; reopen with Analysis → Monitor): progress,
   live log inside a collapsed Diagnostic details expander (FemLog, one line per step and per case), Cable dropdown (default Cable1a-2) and Case dropdown with

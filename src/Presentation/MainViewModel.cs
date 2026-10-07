@@ -199,6 +199,7 @@ public sealed partial class MainViewModel : Observable
     private void NotifyFemResultSelection()
     {
         Notify(nameof(FemResultRows)); Notify(nameof(FemResultSummary));
+        Notify(nameof(SelectedCandidateCableFitRows));
         Notify(nameof(FemResultStartHeader)); Notify(nameof(FemResultEndHeader));
         Notify(nameof(FemResultNames)); Notify(nameof(FemResultDiagramTitle));
         NotifySharedViewer();
@@ -1019,7 +1020,7 @@ public sealed partial class MainViewModel : Observable
     public const int FemInputsPage = 0;
     public const int FemAnalysisPage = 1;
     public const int FemViewPage = 2;
-    public const int FemResultsPage = 3;
+    public const int FemResultsPage = FemAnalysisPage;
 
     private int femFrameMeshSegments = PlanarFrameSolver.DefaultFrameMeshSegments;
     /// <summary>Number of equal sub-elements each frame is divided into for the FEM (cables are not meshed).</summary>
@@ -1092,6 +1093,8 @@ public sealed partial class MainViewModel : Observable
             NotifyFemResultSelection();
         }
     }
+    public IEnumerable<FemCableFitRow> SelectedCandidateCableFitRows => SelectedFemRun is { } run
+        ? FemCableFitRow.FromRun(run, SelectedFemResultName) : [];
     public IReadOnlyList<FemResultRow> FemResultRows => FemResultTable.Build(SelectedFemResult, FemResultMode);
     public FemAnalysisResult? SharedViewerFemResult =>
         selectedTab == TabFem && SelectedFemPage == FemResultsPage ? SelectedFemResult : null;
