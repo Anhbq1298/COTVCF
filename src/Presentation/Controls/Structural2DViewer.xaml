@@ -24,13 +24,49 @@
  </UserControl.Resources>
  <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource ViewportBg}">
   <Grid>
-   <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" ShowFrameLabels="{Binding ShowFrameLabels, ElementName=Root}" ShowCableLabels="{Binding ShowCableLabels, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}" Cables="{Binding Cables, ElementName=Root}" SelectedCable="{Binding SelectedCable, ElementName=Root, Mode=TwoWay}" TopPoints="{Binding TopPoints, ElementName=Root}" MiddlePoints="{Binding MiddlePoints, ElementName=Root}" BottomPoints="{Binding BottomPoints, ElementName=Root}"/>
+    <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" ShowFrameLabels="{Binding ShowFrameLabels, ElementName=Root}" ShowCableLabels="{Binding ShowCableLabels, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}" Cables="{Binding Cables, ElementName=Root}" SelectedCable="{Binding SelectedCable, ElementName=Root, Mode=TwoWay}" TopPoints="{Binding TopPoints, ElementName=Root}" MiddlePoints="{Binding MiddlePoints, ElementName=Root}" BottomPoints="{Binding BottomPoints, ElementName=Root}" PinSupportPoints="{Binding PinSupportPoints, ElementName=Root}" FemResult="{Binding FemResult, ElementName=Root}" FemResultMode="{Binding FemResultMode, ElementName=Root}" FrameMeshSegments="{Binding FrameMeshSegments, ElementName=Root}" MemberSizes="{Binding MemberSizes, ElementName=Root}" ShowLoads="{Binding ShowLoads, ElementName=Root}" LoadValues="{Binding LoadValues, ElementName=Root}" ShowAxialValues="{Binding ShowAxialValues, ElementName=Root}" ShowUndeformed="{Binding ShowUndeformed, ElementName=Root}" ShowDeflectionContour="{Binding ShowDeflectionContour, ElementName=Root}" DeflectionRangeMinMm="{Binding DeflectionRangeMinMm, ElementName=Root}" DeflectionRangeMaxMm="{Binding DeflectionRangeMaxMm, ElementName=Root}"/>
+
+   <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,32,8,0" Padding="6" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1">
+    <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
+     <MultiDataTrigger><MultiDataTrigger.Conditions><Condition Binding="{Binding FemResultMode, ElementName=Root}" Value="DeflectedShape"/><Condition Binding="{Binding Visibility, ElementName=Canvas}" Value="Visible"/></MultiDataTrigger.Conditions><Setter Property="Visibility" Value="Visible"/></MultiDataTrigger>
+    </Style.Triggers></Style></Border.Style>
+    <WrapPanel>
+     <CheckBox Content="Undeformed guide" IsChecked="{Binding ShowUndeformed, ElementName=Root}" Margin="0,0,10,0"/>
+     <CheckBox Content="Contour |U|" IsChecked="{Binding ShowDeflectionContour, ElementName=Root}" Margin="0,0,10,0"/>
+     <TextBlock Text="Range [mm]" VerticalAlignment="Center" Margin="0,0,4,0"/>
+     <TextBox Width="55" Text="{Binding DeflectionRangeMinMm, ElementName=Root, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" AutomationProperties.Name="Deflection contour minimum mm"/>
+     <TextBlock Text="to" VerticalAlignment="Center" Margin="4,0"/>
+     <TextBox Width="55" Text="{Binding DeflectionRangeMaxMm, ElementName=Root, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" AutomationProperties.Name="Deflection contour maximum mm" ToolTip="0 uses the automatic maximum. Values above the range use the top colour."/>
+    </WrapPanel>
+   </Border>
+
+   <!-- 3D isometric view: to-scale extruded sections (shown when the projection is "3D") -->
+   <Grid x:Name="View3DHost" Visibility="Collapsed" Background="{StaticResource ViewportBg}" ClipToBounds="True"
+         MouseLeftButtonDown="View3DMouseDown" MouseRightButtonDown="View3DMouseDown" MouseMove="View3DMouseMove"
+         MouseLeftButtonUp="View3DMouseUp" MouseRightButtonUp="View3DMouseUp" MouseWheel="View3DMouseWheel">
+    <Viewport3D x:Name="View3D" IsHitTestVisible="False">
+     <Viewport3D.Camera>
+      <OrthographicCamera x:Name="Camera3D" UpDirection="0,0,1"/>
+     </Viewport3D.Camera>
+     <ModelVisual3D>
+      <ModelVisual3D.Content>
+       <Model3DGroup>
+        <AmbientLight Color="#5A5A5A"/>
+        <DirectionalLight Color="#C8C8C8" Direction="-0.6,0.8,-1"/>
+        <DirectionalLight Color="#6E6E6E" Direction="0.7,-0.4,0.5"/>
+       </Model3DGroup>
+      </ModelVisual3D.Content>
+     </ModelVisual3D>
+     <ModelVisual3D x:Name="Structure3D"/>
+    </Viewport3D>
+    <TextBlock x:Name="View3DInfo" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,12,0,0" Style="{StaticResource Caption}"/>
+   </Grid>
 
    <!-- floating viewer controls (top-right) -->
    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" CornerRadius="3" Padding="3" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1">
     <StackPanel Orientation="Horizontal">
      <ComboBox x:Name="Plane" Width="52" SelectedIndex="1" SelectionChanged="PlaneChanged" ToolTip="Projection plane" VerticalAlignment="Center">
-      <ComboBoxItem Content="XY"/><ComboBoxItem Content="XZ"/><ComboBoxItem Content="YZ"/>
+      <ComboBoxItem Content="XY"/><ComboBoxItem Content="XZ"/><ComboBoxItem Content="YZ"/><ComboBoxItem Content="3D" ToolTip="Isometric 3D view with members extruded to their actual SAP section size"/>
      </ComboBox>
      <Button Style="{StaticResource ViewerTool}" Click="Fit" ToolTip="Fit / zoom extents (Home)">
       <Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,6 L2,2 L6,2 M14,2 L18,2 L18,6 M18,14 L18,18 L14,18 M6,18 L2,18 L2,14"/>
@@ -49,6 +85,20 @@
       <TextBlock Text="C" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
      </ToggleButton>
     </StackPanel>
+   </Border>
+
+   <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="8,0,8,95" Padding="8,5" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3">
+    <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Visible"/><Style.Triggers>
+     <DataTrigger Binding="{Binding FemResult, ElementName=Root}" Value="{x:Null}"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+     <DataTrigger Binding="{Binding Visibility, ElementName=Canvas}" Value="Collapsed"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+    </Style.Triggers></Style></Border.Style>
+    <WrapPanel>
+     <RadioButton Content="Axial" GroupName="ViewerResultMode" Margin="0,0,10,0" AutomationProperties.Name="Show axial on chart" IsChecked="{Binding FemResultMode, ElementName=Root, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=AxialForce}"/>
+     <RadioButton Content="Bending" GroupName="ViewerResultMode" Margin="0,0,10,0" AutomationProperties.Name="Show bending on chart" IsChecked="{Binding FemResultMode, ElementName=Root, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=BendingMoment}"/>
+     <RadioButton Content="Shear" GroupName="ViewerResultMode" Margin="0,0,10,0" AutomationProperties.Name="Show shear on chart" IsChecked="{Binding FemResultMode, ElementName=Root, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Shear}"/>
+     <RadioButton Content="Deflection" GroupName="ViewerResultMode" Margin="0,0,10,0" AutomationProperties.Name="Show deflection on chart" IsChecked="{Binding FemResultMode, ElementName=Root, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=DeflectedShape}"/>
+     <RadioButton Content="Reactions" GroupName="ViewerResultMode" Margin="0,0,10,0" AutomationProperties.Name="Show reactions on chart" IsChecked="{Binding FemResultMode, ElementName=Root, Mode=TwoWay, Converter={StaticResource EnumMatch}, ConverterParameter=Reactions}"/>
+    </WrapPanel>
    </Border>
 
    <TextBlock HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8,0,0,6" Style="{StaticResource Caption}"

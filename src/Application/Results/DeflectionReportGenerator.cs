@@ -181,16 +181,16 @@ public sealed class DeflectionReportGenerator
 <title>Deflection Report — {{Esc(s.BaselineModelName)}}</title>
 <style>{{ReportPrintEngine.Css}}{{Style}}{{ReportCandidateDefinitions.Style}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body>
 <header>
-  <div>
+  <div data-pr="info">
     <h1>Deflection Results Viewer</h1>
     <p class="meta">{{Esc(s.BaselineModelName)}} · mode {{Esc(s.StudyMode)}} · {{s.CandidateCount}} candidate(s) ·
       generated {{Esc(s.GeneratedAtIso[..19].Replace('T', ' '))}}</p>
     {{ReportScope.Banner(s.Scope)}}
     <p class="meta print-only" data-print-view></p>
-    <p class="intro">Each line is one study candidate: the vertical deflection U<sub>z</sub> [mm] of every monitored
+    <p class="intro" data-pr="note">Each line is one study candidate: the vertical deflection U<sub>z</sub> [mm] of every monitored
       point plotted against its position X [m] along the truss span, under the selected result load case.
       <b>Colour</b> = load candidate · <b>line style</b> = truss height · <b>marker</b> = pretension candidate.
-      See <i>Candidate definitions</i> below for what each L## / H## / P## is.{{bandNote}}</p>
+      <i>Candidate definitions</i>, ahead of the charts, say what each L## / H## / P## is.{{bandNote}}</p>
   </div>
   {{library}}
 </header>
@@ -203,11 +203,13 @@ public sealed class DeflectionReportGenerator
   <button id="srcBtn">View source data</button>
   {{ReportPrintEngine.ToolbarButton}}
   <span class="sep"></span>
-  <span class="hint">each chart has its own name + L / H / P filter · click a legend row = highlight · wheel = zoom X · drag = pan · dbl-click = reset · Duplicate clones the chart</span>
-{{ReportPrintEngine.Panel}}</div>
+  <span class="hint">each chart has its own name + L / H / P filter · click a legend row = highlight · wheel = zoom X · drag = pan · dbl-click = reset · Duplicate adds an independent copy at the end of the charts</span>
+</div>
+{{ReportCandidateDefinitions.Markup}}
+<div id="warns" data-pr="note"></div>
 <div id="panels"></div>
 <template id="panelTpl">
-  <section class="panel">
+  <section class="panel" data-pr="chart" data-pr-type="deflection">
     <div class="pbar">
       <input class="pv-name" title="Chart name — click to edit" spellcheck="false">
       <span class="pv-sub"></span>
@@ -220,12 +222,10 @@ public sealed class DeflectionReportGenerator
   </section>
 </template>
 <div id="tip" hidden></div>
-{{ReportCandidateDefinitions.Markup}}
-<div id="matrixWrap" data-print="source" hidden>
+<div id="matrixWrap" data-print="source" data-pr="source" data-pr-split=".mchunk" hidden>
   <div class="mhdr"><strong>Source Data Matrix</strong><button id="mClose">Close</button></div>
   <div id="matrix" data-print-fit></div>
 </div>
-<div id="warns"></div>
 <script type="application/json" id="report-data">{{json}}</script>
 {{ReportPrintEngine.Scripts(print)}}
 <script>{{ReportCandidateDefinitions.Script}}</script>
@@ -342,29 +342,28 @@ button{cursor:pointer}button:hover{background:var(--su)}
 #matrix .hi{background:#e8f0fe !important}
 #matrix tfoot th,#matrix tfoot td{background:var(--su);font-weight:600}
 #legend .row.hi{background:#e8f0fe;border-radius:2px}
-#warns{padding:6px 14px;font-size:11px;color:#8a6d00}
+#warns{padding:6px 14px;font-size:11px;color:#8a6d00}#warns:empty{display:none}
 #warns .e{color:#C62828}
 a{color:var(--acc)}
-/* paper: the sheet, margins, header and footer come from the shared print engine. Each chart is redrawn at the
-   full sheet width with its legend underneath in columns (a side column would run off the page), and keeps its
-   own case / view / filter controls as a record of what is shown. */
-@media print{
-  header{display:block;padding:0 0 5px}
-  /* the intro repeats what the printed legend headings and the limit-band labels already say */
-  .lib,.intro,#toolbar,#tip,.pv-dup,.pv-rm,.mhdr button,.legend .lcb,.legend .hint2{display:none!important}
-  .panel{border-bottom:0}.panel.copy{background:none}
-  .pbar{padding:6px 0 2px;break-after:avoid}
-  .stage{display:block;height:auto;padding:4px 0 8px}
-  .chart{display:block;width:100%}
-  .legend{width:auto;border-left:0;border-top:1px solid var(--bd);overflow:visible;padding:6px 0 0;font-size:10px;columns:7;column-gap:14px;break-inside:avoid}
-  .legend h4{margin:0 0 3px;break-after:avoid}.legend .row{padding:1px 0;break-inside:avoid}
-  #candKey{border-top:0;margin-top:6px}#candKey>summary{list-style:none;padding:5px 0;background:none}
-  #candKey>summary::-webkit-details-marker{display:none}
-  #candKeyBody{padding:6px 0 10px;gap:24px}#candKeyBody .grp,#candKeyBody .pblk{break-inside:avoid}
-  #matrixWrap{border:0}.mhdr{padding:5px 0;background:none}
-  #matrix thead th,#matrix th:first-child,#matrix th:nth-child(2),#matrix td:nth-child(2){position:static}
-  #warns{padding:6px 0}
-}
+/* on a sheet of the Print Report screen: the sheet, header and footer come from the shared print engine. Each
+   chart is redrawn at the full sheet width with its legend underneath in columns (a side column would run off the
+   page), and keeps its own case / view / filter controls as a record of what is shown. */
+.pr-sheet .intro{max-width:none;margin:0 0 6px}
+.pr-sheet .pv-dup,.pr-sheet .pv-rm,.pr-sheet .mhdr button,.pr-sheet .legend .lcb,.pr-sheet .legend .hint2{display:none!important}
+.pr-sheet .panel{border-bottom:0}.pr-sheet .panel.copy{background:none}
+.pr-sheet .pbar{padding:2px 0}
+.pr-sheet .stage{display:block;height:auto;padding:4px 0 8px}
+.pr-sheet .chart{display:block;width:100%}
+.pr-sheet .legend{width:auto;border-left:0;border-top:1px solid var(--bd);overflow:visible;padding:6px 0 0;font-size:10px;columns:7;column-gap:14px}
+.pr-sheet .legend h4{margin:0 0 3px;break-after:avoid}.pr-sheet .legend .row{padding:1px 0;break-inside:avoid}
+.pr-sheet #candKey{border-top:0;margin:0 0 6px}.pr-sheet #candKey>summary{padding:0 0 4px;background:none}
+/* the definitions fill the sheet width: loads and heights side by side, the pretension candidates in columns below */
+.pr-sheet #candKeyBody{padding:2px 0 4px;gap:8px 28px;font-size:10px}.pr-sheet #candKeyBody .grp,.pr-sheet #candKeyBody .pblk{break-inside:avoid}
+.pr-sheet #candKeyBody .pgrp{flex:1 1 100%;min-width:0;columns:5;column-gap:14px}.pr-sheet #candKeyBody .pgrp h5{column-span:all}
+.pr-sheet #candKeyBody table.kt{font-size:8.5px}.pr-sheet #candKeyBody table.kt td{padding:1px 3px}.pr-sheet #candKeyBody .ptbl{margin-left:2px}.pr-sheet #candKeyBody .pblk{margin-bottom:5px;padding-bottom:5px}
+.pr-sheet #matrixWrap{border:0}.pr-sheet .mhdr{padding:0 0 4px;background:none}
+.pr-sheet #matrix thead th,.pr-sheet #matrix th:first-child,.pr-sheet #matrix th:nth-child(2),.pr-sheet #matrix td:nth-child(2){position:static}
+.pr-sheet #warns{padding:0 0 6px}
 /* laid out for paper: a matrix column is as wide as its values, headed by the candidate id alone (what each id
    is, is printed under Candidate definitions) — so the table needs far less scaling to fit the sheet */
 body.pr-on #matrix thead th span{display:none}
@@ -399,12 +398,15 @@ body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
   }
 
   // Each chart panel is a self-contained view: editable name, its own L / H / P candidate filter,
-  // colour/line relationship, load case and zoom. Duplicate clones the whole config; one chart by default.
+  // colour/line relationship, load case and zoom. `panels` is the report's chart list, in the order the charts
+  // stand on screen and on paper. A new chart always joins its END — Duplicate copies the whole configuration of
+  // its source into an independent chart there, never beside the source. One chart by default.
   // `hidden` = per-candidate show/hide (shared), `hi` = matrix-highlighted candidate (shared).
   let gi = 0, showLegend = true, hidden = new Set(), hi = null;
   let printW = 0, printH = 0;      // > 0 while laid out for paper: the chart size on the sheet, not in the window
   const PRINT = window.reportPrint || null, OPT = PRINT ? PRINT.options : {};
   const panels = [];
+  let chartSeq = 0;                // every chart gets its own id, e.g. chart_deflection_03
   const tpl = document.getElementById('panelTpl'), panelsEl = document.getElementById('panels');
   const mw = document.getElementById('matrixWrap'), srcBtn = document.getElementById('srcBtn');
 
@@ -482,7 +484,8 @@ body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
     // ---- Pretension candidates: per-P block, one row per cable ----
     let P = '';
     if(P_ON){
-      P = `<div class="grp pgrp">${h5('Pretension candidates', CAND.P.length)}` + CAND.P.map(o=>{
+      // a block of its own on paper: it may continue on the next sheet between two candidates
+      P = `<div class="grp pgrp" data-pr="legend" data-pr-split=".pblk">${h5('Pretension candidates', CAND.P.length)}` + CAND.P.map(o=>{
         const shape = MSHAPES[P_IDS.indexOf(o.id) % MSHAPES.length];
         const s = bySeries(o.id);
         const cabs = s.pretensionCables || [];
@@ -536,10 +539,12 @@ body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
   function fmt(v){ return Math.abs(v)>=100?v.toFixed(0):Math.abs(v)>=1?v.toFixed(2):v.toFixed(3); }
   function gVisible(){ return D.groups[gi].series.filter(s=>!hidden.has(s.iterationKey)); }
 
-  function makePanel(anchorAfter, init){
-    // init: { vi, linked, gi, hidden(Set), name, selL[], selH[], selP[] }
+  function makePanel(init){
+    // init: { vi, linked, gi, hidden(Set), name, selL[], selH[], selP[], zoom[], hiSel[], from }
     const host = tpl.content.firstElementChild.cloneNode(true);
-    if(anchorAfter) anchorAfter.after(host); else panelsEl.appendChild(host);
+    const id = 'chart_deflection_' + String(++chartSeq).padStart(2,'0');
+    host.setAttribute('data-pr-id', id); if(init.from) host.setAttribute('data-pr-from', init.from);
+    panelsEl.appendChild(host);
     const chart = host.querySelector('.chart'), legendEl = host.querySelector('.legend');
     const dupBtn = host.querySelector('.pv-dup'), rmBtn = host.querySelector('.pv-rm'), ctlEl = host.querySelector('.pv-ctl');
     const nameEl = host.querySelector('.pv-name'), bandEl = host.querySelector('.pv-band');
@@ -548,8 +553,8 @@ body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
     let localGi = init.gi != null ? init.gi : gi;
     let localGroupSet = init.gi != null;   // a copy carries its own group/case; a linked panel follows the toolbar until its "case:" selector is touched
     let localHidden = new Set(init.hidden || hidden);
-    let zoomX = null, api;
-    const hiSel = new Set();   // multi-select highlight: "c:L01" / "d:H02" / "p:P01" — tick legend rows to add/remove
+    let zoomX = init.zoom ? [...init.zoom] : null, api;
+    const hiSel = new Set(init.hiSel||[]);   // multi-select highlight: "c:L01" / "d:H02" / "p:P01" — tick legend rows to add/remove
     // per-panel candidate filter + editable name
     const selL = new Set(init.selL||[]), selH = new Set(init.selH||[]), selP = new Set(init.selP||[]);
     let name = init.name || null, nameEdited = !!init.name;
@@ -780,14 +785,16 @@ body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
     chart.addEventListener('dblclick',()=>{ zoomX=null; render(); });
 
     dupBtn.onclick=()=>{
-      const p = makePanel(host, { vi, linked:false, gi:curGi(), hidden:curHidden(),
-        name:(name||defaultName())+' (copy)', selL:[...selL], selH:[...selH], selP:[...selP] });
-      panels.push(p); p.render();
+      const p = makePanel({ vi, linked:false, gi:curGi(), hidden:curHidden(), from:id, zoom:zoomX, hiSel:[...hiSel],
+        name:(name||defaultName())+' – Copy', selL:[...selL], selH:[...selH], selP:[...selP] });
+      panels.push(p); p.render(); p.reveal();
     };
     rmBtn.onclick=()=>{ const ix=panels.indexOf(api); if(ix>=0) panels.splice(ix,1); host.remove(); };
 
     syncHeader();
-    api = { render, reset(){ zoomX=null; }, resync(){ syncHeader(); },
+    api = { id, duplicatedFrom: init.from||null, title: () => name||defaultName(), duplicate: () => dupBtn.onclick(),
+            reveal(){ if(host.scrollIntoView) host.scrollIntoView({ behavior:'smooth', block:'center' }); },
+            render, reset(){ zoomX=null; }, resync(){ syncHeader(); },
             followGlobal(){ if(linked){ localGroupSet=false; localGi=gi; syncHeader(); } } };
     return api;
   }
@@ -809,7 +816,7 @@ body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
     };
     let html = '';
     for(let i=0; i<Math.max(1,vis.length); i+=per)
-      html += (printW && vis.length>per ? `<div class="mpart">Candidates ${i+1}–${Math.min(vis.length,i+per)} of ${vis.length}</div>` : '') + tableFor(vis.slice(i,i+per));
+      html += '<div class="mchunk">' + (printW && vis.length>per ? `<div class="mpart">Candidates ${i+1}–${Math.min(vis.length,i+per)} of ${vis.length}</div>` : '') + tableFor(vis.slice(i,i+per)) + '</div>';
     document.getElementById('matrix').innerHTML = html;
     document.querySelectorAll('#matrix thead th.ch').forEach(el=>el.onclick=()=>{ hi = (hi===el.dataset.k? null : el.dataset.k); renderAll(); });
   }
@@ -831,7 +838,7 @@ body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
   } else {
     buildCandKey();
     // one chart by default — name it, filter it (L / H / P), pick its relationship & case; Duplicate clones it.
-    panels.push(makePanel(null, { vi:0, linked:true }));
+    panels.push(makePanel({ vi:0, linked:true }));
   }
 
   sel.onchange=()=>{ gi=+sel.value; hi=null; panels.forEach(p=>{ p.followGlobal(); p.reset(); }); renderAll(); };
@@ -846,9 +853,11 @@ body.pr-on #matrix table{margin:0 0 10px;break-inside:avoid}
   // paper: every chart is redrawn against the sheet — full width, and short enough that the title block, the chart
   // and its legend share one landscape page — and the Source Data Matrix follows the print option
   if(PRINT){ let opened = false; PRINT.register({
-    before: pg => { printW = Math.max(400, pg.contentPx); printH = Math.max(280, Math.min(430, pg.contentHeightPx - 320));
+    before: pg => { printW = Math.max(400, pg.contentPx); printH = Math.max(280, Math.min(460, pg.contentHeightPx - 210));
       opened = PRINT.state.includeSource && mw.hidden && D.groups.length > 0; if(opened) toggleSrc(true); renderAll(); },
     after: () => { printW = 0; if(opened) toggleSrc(false); opened = false; renderAll(); } }); }
+  // handle for scripted checks: the chart list as it stands
+  window.deflectionReport = { charts: () => panels.map(p => ({ id:p.id, duplicatedFrom:p.duplicatedFrom, title:p.title() })), duplicate: i => panels[i].duplicate() };
   renderAll();
 })();
 """;

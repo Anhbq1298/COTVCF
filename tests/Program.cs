@@ -1,4 +1,5 @@
 using COT_VCF.Application;
+using COT_VCF.Configuration;
 using COT_VCF.Domain;
 using COT_VCF.Geometry;
 using COT_VCF.SAP2000;
@@ -26,6 +27,19 @@ internal static class Program
                 LiveStudyCheck.RunAsync(args[liveStudyIndex + 1], liveMatrixIndex >= 0).GetAwaiter().GetResult();
                 return 0;
             }
+            if (args.Contains("--fem-property-read"))
+            {
+                using var sap = new SapGateway();
+                var info = sap.ConnectAsync().GetAwaiter().GetResult();
+                var snapshot = sap.ReadAsync().GetAwaiter().GetResult();
+                var members = snapshot.Geometry.Members
+                    .Where(member => member.Kind is MemberKind.Frame or MemberKind.Cable).ToArray();
+                var properties = sap.GetFemSectionPropertiesAsync(members, info).GetAwaiter().GetResult();
+                var missing = members.Where(member => !properties.ContainsKey(member.Name)).Select(member => member.Name).ToArray();
+                if (missing.Length > 0) throw new InvalidOperationException("FEM properties were not returned for: " + string.Join(", ", missing));
+                Console.WriteLine($"PASS: read FEM section/material properties for {properties.Count} frame/cable members from {info.Name}; no model writes performed.");
+                return 0;
+            }
             if (args.Contains("--study-ui"))
             {
                 var app = new System.Windows.Application();
@@ -36,6 +50,16 @@ internal static class Program
                 PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
 
                 var uiState = StudyComposerChecks.CreateState();
+                var femPoints = uiState.Geometry.Points.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+                femPoints["bot2"] = new("bot2", new(4, 0, 0));
+                femPoints["mid2"] = new("mid2", new(4, 0, 7.5));
+                var femGeometry = new GeometryModel(femPoints, uiState.Geometry.Members.Concat([
+                    new StructuralMember("Column1", "bot", "mid", MemberKind.Frame),
+                    new StructuralMember("Column2", "bot2", "mid2", MemberKind.Frame)
+                ]).ToArray());
+                uiState.Geometry = femGeometry;
+                uiState.Baseline = femGeometry;
+                uiState.SessionBaseline = femGeometry;
                 var uiSap = new FakeSap { Snapshot = new(uiState.Model!, uiState.Geometry, uiState.LoadPatterns.ToArray()) };
                 var uiWorkflow = new WorkflowService(uiSap, uiState);
                 var uiConfig = new COT_VCF.Configuration.ConfigService(uiSap, uiState, uiWorkflow);
@@ -43,6 +67,26 @@ internal static class Program
                 var window = new COT_VCF.Presentation.MainWindow { DataContext = vm, Width = 1400, Height = 810 };
                 window.Show();
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                uiState.Connection = "Disconnected";
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(!FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
+                       !FindVisuals<Button>(window).First(button => ReferenceEquals(button.Command, vm.NewConfig)).IsEnabled,
+                    "Workflow pages and New Config are disabled before SAP connection");
+                uiState.Connection = "Connected";
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
+                       FindVisuals<Button>(window).First(button => ReferenceEquals(button.Command, vm.NewConfig)).IsEnabled,
+                    "Successful SAP connection enables workflow pages and New Config");
+                window.Width = window.MinWidth;
+                window.UpdateLayout();
+                var toolbarCommands = new[] { vm.NewConfig, vm.SaveAllConfig, vm.LoadConfig, vm.RunStudyFromToolbar, vm.Connect, vm.Refresh };
+                Assert(FindVisuals<Button>(window).Where(button => toolbarCommands.Contains(button.Command)).All(button =>
+                {
+                    var position = button.TransformToAncestor(window).Transform(new Point());
+                    return position.X >= 0 && position.X + button.ActualWidth <= window.ActualWidth;
+                }), "Configuration and study toolbar buttons fit the minimum window width");
+                window.Width = 1400;
                 window.UpdateLayout();
                 var loadPatternPickers = FindVisuals<ComboBox>(window)
                     .Where(combo => combo.Items.Cast<object>().OfType<string>().Contains("LIVE"))
@@ -156,6 +200,95 @@ internal static class Program
                        FindVisuals<TextBlock>(window).Any(text => text.Text == "07  CABLE FORCES · kN"),
                     "Post-processing UI lists the result modules 01–07; the shortlist module is gone");
 
+                // Tab 07 FEM sits after 06A Optimization (index 7); its pages are Inputs / Analysis / View / Results
+                vm.SelectedTab = 7;
+                vm.SelectedFemPage = MainViewModel.FemInputsPage;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "07  FEM") &&
+                       FindVisuals<Button>(window).Any(button => Equals(button.Content, "Read from SAP")) &&
+                       vm.ReadFemProperties.CanExecute(null) &&
+                       FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemPropertiesGrid") &&
+                       window.SharedViewerPane.Visibility == Visibility.Visible &&
+                       vm.ShowFemPinLegend && vm.SharedViewerPinSupportPoints?.SequenceEqual(["bot", "bot2"]) == true,
+                    "Tab 07 Inputs renders the SAP property transfer, the property grid, the supports and the shared viewer");
+                vm.SelectedFemPage = MainViewModel.FemAnalysisPage;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                Assert(FindVisuals<Button>(window).Any(button => Equals(button.Content, "Run Analysis")) &&
+                       vm.FemCandidateSummary.Contains("FEM runs", StringComparison.Ordinal) &&
+                       window.SharedViewerPane.Visibility == Visibility.Visible,
+                    "Tab 07 Analysis renders the run controls and the candidate count");
+                var sagBox = FindVisuals<CheckBox>(window).Single(box => Equals(box.Content, "Cable sag"));
+                Assert(vm.FemCableSag && sagBox.IsChecked == true, "Tab 07 Analysis analyses cable sag by default");
+                sagBox.IsChecked = false;
+                Assert(!vm.FemCableSag, "…and the Cable sag switch turns it off for a comparison with straight cables");
+                sagBox.IsChecked = true;
+                var demoFemRun = new FemStudyRun("L01_H01_P01", "L01", "H01", "P01",
+                    new FemAnalysisResult(
+                        [new("bot", 0, 0, 0), new("mid", 0.001, -0.02, 0.001), new("top", 0.002, -0.04, 0.002),
+                         new("bot2", 0, 0, 0), new("mid2", 0.001, -0.02, 0.001)],
+                        [new("bot", 0, 100), new("bot2", 0, 100)],
+                        [new("Column1", 100, 100, -10, 10, 0, 0), new("Column2", 100, 100, -10, 10, 0, 0)],
+                        [new("Cable-A", 100, true)], 4));
+                vm.FemRuns.Add(demoFemRun);
+                vm.SelectedFemRun = demoFemRun;
+                vm.SelectedFemPage = MainViewModel.FemResultsPage;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+                var resultTree = FindVisuals<COT_VCF.Presentation.Controls.FemResultsTree>(window).Single();
+                Assert(resultTree.Items.Count == 6 && resultTree.Items.OfType<TreeViewItem>().All(item => item.Items.Count == 0),
+                    "Result Explorer shows six flat outputs filtered by the candidate and load-case dropdowns");
+                var deflectionNode = resultTree.Items.OfType<TreeViewItem>().Single(item => Equals(item.Header, "Deflection"));
+                deflectionNode.IsSelected = true;
+                Assert(vm.FemResultMode == FemResultMode.DeflectedShape && ReferenceEquals(vm.SelectedFemRun, demoFemRun) &&
+                       resultTree.CanViewResults && !FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemResultRowsGrid") &&
+                       window.SharedViewerPane.Visibility == Visibility.Visible && ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result),
+                    "The combined FEM page uses a candidate/result tree to select the diagram without embedding a result table");
+                FindVisuals<Button>(window).Single(button => Equals(button.Content, "View Results")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                var tableWindow = window.OwnedWindows.OfType<FemResultsWindow>().Single();
+                tableWindow.UpdateLayout();
+                Assert(FindVisuals<DataGrid>(tableWindow).Any(grid => grid.Name == "FemResultRowsGrid" && grid.Items.Count > 0) &&
+                       FindVisuals<ComboBox>(tableWindow).Any(combo => System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result candidate") &&
+                       FindVisuals<ComboBox>(tableWindow).Any(combo => System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM load case or combination"),
+                    "View Results opens a separate populated table with candidate and load-case dropdowns above it");
+                tableWindow.Close();
+                var chartShear = FindVisuals<RadioButton>(window).Single(button => button.GroupName == "ViewerResultMode" && Equals(button.Content, "Shear"));
+                chartShear.IsChecked = true;
+                Assert(vm.FemResultMode == FemResultMode.Shear &&
+                       resultTree.SelectedItem is TreeViewItem { Header: "Shear forces" },
+                    "The floating chart buttons switch the result and keep the result explorer synchronized");
+                    vm.FemResultMode = FemResultMode.AxialForce;
+                    window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                    window.UpdateLayout();
+                    var axialBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                    axialBitmap.Render(window);
+                    var axialEncoder = new PngBitmapEncoder(); axialEncoder.Frames.Add(BitmapFrame.Create(axialBitmap));
+                    using (var stream = File.Create(".work/fem-axial-results.png")) axialEncoder.Save(stream);
+                     vm.FemResultMode = FemResultMode.DeflectedShape;
+                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                     window.UpdateLayout();
+                     var deflectionCanvas = FindVisuals<COT_VCF.Presentation.Controls.ModelCanvas>(window).Single();
+                     var guideToggle = FindVisuals<CheckBox>(window).Single(box => Equals(box.Content, "Undeformed guide"));
+                     Assert(deflectionCanvas.ShowUndeformed && deflectionCanvas.ShowDeflectionContour,
+                         "Deflection shows a contour and an undeformed guide by default");
+                     guideToggle.IsChecked = false;
+                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                     Assert(!deflectionCanvas.ShowUndeformed, "The undeformed guide can be hidden independently of the deflection contour");
+                     guideToggle.IsChecked = true;
+                     var resultsBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                     resultsBitmap.Render(window);
+                     var resultsEncoder = new PngBitmapEncoder(); resultsEncoder.Frames.Add(BitmapFrame.Create(resultsBitmap));
+                     using (var stream = File.Create(".work/fem-results-tab.png")) resultsEncoder.Save(stream);
+                var femBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                femBitmap.Render(window);
+                var femEncoder = new PngBitmapEncoder(); femEncoder.Frames.Add(BitmapFrame.Create(femBitmap));
+                using (var stream = File.Create(".work/fem-tab.png")) femEncoder.Save(stream);
+                vm.SelectedTab = 5;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                window.UpdateLayout();
+
                 // Tab 06 Print Setup: header / footer of the printed reports, and the Module 07 PDF export
                 var printSetup = FindVisuals<Expander>(window).Single(expander =>
                     expander.Header is TextBlock { Text: "PRINT SETUP · HEADER / FOOTER" });
@@ -179,17 +312,20 @@ internal static class Program
                 companyBox.Text = "ACME Structures Pte Ltd";
                 Assert(vm.PrintSettings.CompanyName == "ACME Structures Pte Ltd" && !vm.ClearPrintLogo.CanExecute(null),
                     "typing in the Print Setup card updates the settings immediately");
-                Assert(FindVisuals<Button>(cableModule).Any(button => Equals(button.Content, "Export PDF") && !button.IsEnabled) &&
-                       !vm.ExportCableForcePdf.CanExecute(null),
-                    "Module 07 offers Export PDF, disabled until the cable report exists");
+                Assert(FindVisuals<Button>(cableModule).Any(button => Equals(button.Content, "View Report") && !button.IsEnabled) &&
+                       !FindVisuals<Button>(cableModule).Any(button => Equals(button.Content, "Export PDF")),
+                    "Module 07 offers View Report — printing and PDF happen in the report, not in the application");
                 foreach (var module in FindVisuals<Expander>(window).ToArray()) module.IsExpanded = true;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
-                var exportButtons = FindVisuals<Button>(window).Where(button => Equals(button.Content, "Export PDF")).ToArray();
-                Assert(exportButtons.Length == 7 && exportButtons.All(button => !button.IsEnabled) &&
-                       !vm.ExportDeflectionPdf.CanExecute(null) && !vm.ExportMemberForcePdf.CanExecute(null) &&
-                       !vm.ExportSupportReactionPdf.CanExecute(null),
-                    "every post-processing module (01–07) offers Export PDF, disabled until its report exists");
+                Assert(!FindVisuals<Button>(window).Any(button => button.Content is string label && label.Contains("PDF", StringComparison.OrdinalIgnoreCase)) &&
+                       FindVisuals<Button>(window).Count(button => Equals(button.Content, "View Report")) == 7 &&
+                       typeof(MainViewModel).GetProperties().All(property => !property.Name.Contains("Pdf", StringComparison.OrdinalIgnoreCase)) &&
+                       FindVisuals<TextBlock>(printSetup).Any(text => text.Text.Contains("View Report → Print Report") && text.Text.Contains("Print All Reports")),
+                    "no post-processing module has a PDF button of its own: each one opens its report, and Print Setup says where printing happens");
+                var printAll = FindVisuals<Button>(window).Where(button => Equals(button.Content, "Print All Reports…")).ToArray();
+                Assert(printAll.Length == 1 && !printAll[0].IsEnabled && !vm.PrintAllReports.CanExecute(null) && !vm.PrintAllOptimizedReports.CanExecute(null),
+                    "Tab 06 offers Print All Reports beside Generate Outputs; there is nothing to print before the reports exist");
                 var postBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                 postBitmap.Render(window);
                 var postEncoder = new PngBitmapEncoder(); postEncoder.Frames.Add(BitmapFrame.Create(postBitmap));
@@ -229,6 +365,8 @@ internal static class Program
                            .SequenceEqual(["Iteration", "Load", "Height", "Pretension", "δ [mm]", "Cable util. [%]", "Governing cable", "Status", "Reason"]) &&
                        vm.OptimizedReportsStatus == "No optimized reports generated yet." && vm.OptimizationFilters.Count == 4,
                     "Tab 06A offers Generate Optimized Reports, the report buttons and the candidate table; nothing can be generated without raw data");
+                Assert(FindVisuals<Button>(window).Count(button => Equals(button.Content, "Print All Reports…") && !button.IsEnabled) == 1,
+                    "Tab 06A offers Print All Reports for the optimized set");
                 var optimizationBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                 optimizationBitmap.Render(window);
                 var optimizationEncoder = new PngBitmapEncoder(); optimizationEncoder.Frames.Add(BitmapFrame.Create(optimizationBitmap));
@@ -288,6 +426,33 @@ internal static class Program
                            vm.OptimizedReportsStatus.StartsWith($"Optimized reports are up to date · {expected.Qualified} of 27 candidates") && !vm.OptimizedReportsStale &&
                            vm.Message.Contains($"{expected.Qualified} of 27 candidates qualify"),
                         "Generate Optimized Reports writes the set into Study/Optimized, enables its View buttons and reports it up to date");
+
+                    // Print All Reports: asks where to save, then prints the whole folder as one PDF — no print dialog
+                    string? askedFolder = null, askedName = null, printedFolder = null, printedPdf = null, printedTitle = null, printedCompany = null;
+                    var chosenPdf = Path.Combine(optimizationRoot, "out", "Optimized.pdf");
+                    Directory.CreateDirectory(Path.GetDirectoryName(chosenPdf)!);
+                    vm.AskPdfPath = (folder, name) => { askedFolder = folder; askedName = name; return chosenPdf; };
+                    vm.PrintPackage = (folder, pdf, settings, title) =>
+                    {
+                        printedFolder = folder; printedPdf = pdf; printedTitle = title; printedCompany = settings.CompanyName;
+                        return new COT_VCF.Infrastructure.ReportPdfResult(pdf, "browser", TimeSpan.FromSeconds(1.5), 12);
+                    };
+                    vm.PrintSettings.CompanyName = "Print All & Co";
+                    Assert(vm.PrintAllOptimizedReports.CanExecute(null) && !vm.PrintAllReports.CanExecute(null),
+                        "Print All Reports is available for the optimized set once it exists — and not for a study folder without reports");
+                    vm.PrintAllOptimizedReports.Execute(null);
+                    Pump(() => !vm.IsBusy && printedPdf is not null);
+                    Assert(askedFolder == optimizedFolder && askedName is not null && askedName.EndsWith(" - Optimized Reports.pdf", StringComparison.Ordinal) &&
+                           askedName.IndexOfAny(Path.GetInvalidFileNameChars()) < 0 && printedFolder == optimizedFolder && printedPdf == chosenPdf &&
+                           printedTitle is not null && printedTitle.EndsWith(" - Optimized Reports", StringComparison.Ordinal) && printedCompany == "Print All & Co" &&
+                           vm.Message.Contains("Optimized.pdf written — 12 pages", StringComparison.Ordinal),
+                        "Print All Reports asks only where to save, prints the optimized folder with the current Print Setup and reports the pages written");
+                    printedPdf = null; askedFolder = null;
+                    vm.AskPdfPath = (folder, _) => { askedFolder = folder; return null; };
+                    vm.PrintAllOptimizedReports.Execute(null);
+                    Pump(() => true);
+                    Assert(printedPdf is null && !vm.IsBusy && askedFolder == Path.GetDirectoryName(chosenPdf),
+                        "cancelling the Save dialog prints nothing; the dialog reopens in the folder used last");
                     output.MaxCableUtilization = 0.9;
                     Assert(vm.OptimizedReportsStatus.Contains("out of date") && vm.OptimizedReportsStale, "after a criterion changes the optimized reports are flagged out of date");
                     output.MaxCableUtilization = 0.8;
@@ -297,11 +462,200 @@ internal static class Program
                     liveBitmap.Render(window);
                     var liveEncoder = new PngBitmapEncoder(); liveEncoder.Frames.Add(BitmapFrame.Create(liveBitmap));
                     using (var stream = File.Create(".work/optimization-tab-data.png")) liveEncoder.Save(stream);
+
+                    // Tab 06: a module's Regenerate rebuilds its own report only; Generate Outputs writes everything
+                    var studyWorkbook = Path.Combine(vm.StudyRoot, "Deflection_Results_Source.xlsx");
+                    var studyCable = Path.Combine(vm.StudyRoot, "Cable_Forces_Report.html");
+                    vm.RegenerateCableForceReport.Execute(null);
+                    Pump(() => !vm.IsBusy && vm.HasCableForceReport);
+                    Assert(File.Exists(studyCable) && Directory.GetFiles(vm.StudyRoot, "*.html").Length == 1 && !File.Exists(studyWorkbook) &&
+                           !vm.HasDeflectionReport && !vm.HasMemberForceReport && !vm.HasSupportReactionReport &&
+                           vm.Message.StartsWith("Cable_Forces_Report.html regenerated", StringComparison.Ordinal) && vm.Message.Contains("this report only", StringComparison.Ordinal),
+                        "module 07 Regenerate writes the cable report alone — no workbook, no other report");
+                    // as in the running application: what follows an await returns to the UI thread
+                    SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(window.Dispatcher));
+                    vm.GeneratePostProcessOutputs.Execute(null);
+                    Pump(() => !vm.IsBusy && File.Exists(studyWorkbook));
+                    var studyDeflection = Path.Combine(vm.StudyRoot, "Deflection_Report.html");
+                    Assert(File.Exists(studyWorkbook) && File.Exists(studyDeflection) && File.Exists(Path.Combine(vm.StudyRoot, "Member_Forces_Report.html")) &&
+                           File.Exists(Path.Combine(vm.StudyRoot, "Support_Reactions_Report.html")) && vm.Message.StartsWith("Tab 06 outputs generated", StringComparison.Ordinal),
+                        "Generate Outputs writes the workbook and every report");
+                    var kept = new[] { studyWorkbook, studyCable, Path.Combine(vm.StudyRoot, "Member_Forces_Report.html") }
+                        .ToDictionary(path => path, File.GetLastWriteTimeUtc);
+                    File.SetLastWriteTimeUtc(studyDeflection, new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+                    vm.RegenerateDeflectionReport.Execute(null);
+                    Pump(() => !vm.IsBusy && vm.Message.StartsWith("Deflection_Report.html regenerated", StringComparison.Ordinal));
+                    Assert(File.GetLastWriteTimeUtc(studyDeflection).Year > 2020 && vm.HasDeflectionReport &&
+                           kept.All(file => File.GetLastWriteTimeUtc(file.Key) == file.Value),
+                        "module 01 Regenerate rewrites the deflection report and leaves the workbook and the other reports as they are");
+
+                    // Print Setup travels with the project file: Save All and the card's own save write it, Load Config restores it
+                    var projectFile = Path.Combine(optimizationRoot, "Project.json");
+                    string Setup(string key) => System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(projectFile))!["printSetup"]?[key]?.ToString() ?? "(none)";
+                    vm.PrintSettings.CompanyName = "Meinhardt"; vm.PrintSettings.ProjectName = "City of Tomorrow"; vm.PrintSettings.JobNumber = "J-100";
+                    vm.PrintSettings.PaperSize = ReportPaperSize.A3; vm.PrintSettings.Orientation = ReportPageOrientation.Portrait; vm.PrintSettings.ShowDate = false;
+                    Assert(vm.PrintSetupProjectStatus.StartsWith("No project open", StringComparison.Ordinal) && vm.SavePrintSetup.CanExecute(null),
+                        "without a project the Print Setup card says it is kept for this Windows user only");
+                    var savedAll = uiConfig.SaveAsync(COT_VCF.Configuration.ConfigTabs.All, () => projectFile, vm.PrintSettings).GetAwaiter().GetResult();
+                    Assert(savedAll.Result == COT_VCF.Configuration.SaveResult.Saved && Setup("projectName") == "City of Tomorrow" && Setup("jobNumber") == "J-100" &&
+                           Setup("companyName") == "Meinhardt" && Setup("paperSize") == "A3" && Setup("orientation") == "Portrait" && Setup("showDate") == "false" &&
+                           vm.PrintSetupProjectStatus.StartsWith("Saved in Project.json", StringComparison.Ordinal),
+                        "Save All stores the Print Setup in the project file as printSetup");
+                    vm.PrintSettings.JobNumber = "J-200";
+                    var tabOnly = uiConfig.SaveAsync(COT_VCF.Configuration.ConfigTabs.Loading, null).GetAwaiter().GetResult();
+                    Assert(tabOnly.Result == COT_VCF.Configuration.SaveResult.Saved && Setup("jobNumber") == "J-100" &&
+                           vm.PrintSetupProjectStatus.StartsWith("Modified *", StringComparison.Ordinal),
+                        "a per-tab save keeps the project's Print Setup, and the card shows it as modified");
+                    vm.SavePrintSetup.Execute(null);
+                    Pump(() => !vm.IsBusy && vm.Message.StartsWith("Print Setup saved", StringComparison.Ordinal));
+                    Assert(Setup("jobNumber") == "J-200" && vm.Message == "Print Setup saved · Project.json" &&
+                           vm.PrintSetupProjectStatus.StartsWith("Saved in Project.json", StringComparison.Ordinal),
+                        "Save Print Setup writes the card alone into the active project");
+
+                    vm.PrintSettings.ProjectName = "Something else"; vm.PrintSettings.PaperSize = ReportPaperSize.A4; vm.PrintSettings.ShowDate = true;
+                    vm.OpenProjectFile(projectFile);
+                    Pump(() => !vm.IsBusy && vm.Message.StartsWith("Project Project.json opened", StringComparison.Ordinal));
+                    Assert(vm.PrintSettings.ProjectName == "City of Tomorrow" && vm.PrintSettings.JobNumber == "J-200" && vm.PrintSettings.CompanyName == "Meinhardt" &&
+                           vm.PrintSettings.PaperSize == ReportPaperSize.A3 && vm.PrintSettings.Orientation == ReportPageOrientation.Portrait && !vm.PrintSettings.ShowDate &&
+                           vm.Message.EndsWith("Print Setup", StringComparison.Ordinal) && vm.PrintSetupProjectStatus.StartsWith("Saved in Project.json", StringComparison.Ordinal),
+                        "Load Config restores the Print Setup with the project");
+                    var olderProject = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(projectFile))!.AsObject();
+                    olderProject.Remove("printSetup");
+                    var olderFile = Path.Combine(optimizationRoot, "Older.json");
+                    File.WriteAllText(olderFile, olderProject.ToJsonString());
+                    vm.PrintSettings.ProjectName = "Kept";
+                    vm.OpenProjectFile(olderFile);
+                    Pump(() => !vm.IsBusy && vm.Message.StartsWith("Project Older.json opened", StringComparison.Ordinal));
+                    Assert(vm.PrintSettings.ProjectName == "Kept" && vm.PrintSettings.JobNumber == "J-200" && !vm.Message.Contains("Print Setup", StringComparison.Ordinal) &&
+                           vm.PrintSetupProjectStatus.StartsWith("Not in Older.json yet", StringComparison.Ordinal),
+                        "a project saved before the Print Setup was stored opens as before and leaves the card as it is");
+
+                    // Tab 08 Quantity Take-off: after 07 FEM, on the full width; the connected model live, then the candidates of the baseline's study
+                    QuantityTakeoffChecks.WriteCandidates(vm.BaselineModelPath);
+                    var workflowTabs = FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs");
+                    var quantityPicker = window.QuantityCandidatePicker;
+                    var quantityGrid = window.QuantityGrid;
+                    var (tableReadsBefore, writesBefore) = (uiSap.DatabaseTableReads, uiSap.Writes);
+                    vm.SelectedTab = 8;
+                    Pump(() => vm.QuantityCandidates.Count == 3 && vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy && quantityGrid.Items.Count == 6);
+                    Assert(workflowTabs.Items.Count == 9 && workflowTabs.Items.IndexOf(window.QuantitiesTab) == 8 && ReferenceEquals(workflowTabs.SelectedItem, window.QuantitiesTab) &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text == "08  QUANTITIES") && window.SharedViewerPane.Visibility == Visibility.Collapsed &&
+                           quantityPicker.IsEnabled && quantityPicker.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(["Connected model", "L01_H01_P01", "L01_H02_P01"]) &&
+                           quantityGrid.Columns.Select(column => column.Header as string).SequenceEqual(["Section", "Figure", "Member count", "Total length m", "Concrete volume m³", "Steel mass t"]),
+                        "Tab 08 Quantities follows Tab 07 FEM on the full width: a dropdown of the connected model and the Lxx_Hxx_Pxx candidate models, and the agreed table with its section-figure column");
+                    Assert(quantityPicker.SelectedIndex == 0 && vm.SelectedQuantityCandidate is { IsConnectedModel: true } && quantityGrid.Items.Count == 6 &&
+                           uiSap.DatabaseTableReads == tableReadsBefore + 1 && uiSap.Writes == writesBefore &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text.StartsWith("Connected model · COT_VCF.sdb · read live from the connected SAP2000 at ", StringComparison.Ordinal)) &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text == "Live model") && FindVisuals<TextBlock>(quantityGrid).Any(text => text.Text == "2,862.104"),
+                        "the tab opens on the model that is running in SAP2000, read live through the API without writing anything");
+                    FindVisuals<Button>(window).Single(button => ReferenceEquals(button.Command, vm.ReloadQuantities)).Command.Execute(null);
+                    Pump(() => uiSap.DatabaseTableReads == tableReadsBefore + 2 && vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy);
+                    Assert(uiSap.DatabaseTableReads == tableReadsBefore + 2 && uiSap.Writes == writesBefore && quantityGrid.Items.Count == 6,
+                        "the Refresh button beside the dropdown reads the connected model from SAP2000 again");
+                    quantityPicker.SelectedIndex = 1;
+                    Pump(() => vm.QuantityState == QuantityViewState.Ready && vm.SelectedQuantityCandidate?.Id == "L01_H01_P01" && quantityGrid.Items.Count == 6);
+                    var quantityCells = FindVisuals<TextBlock>(quantityGrid).Select(text => text.Text).ToArray();
+                    Assert(vm.SelectedQuantityCandidate?.Id == "L01_H01_P01" && quantityGrid.Items.Count == 6 && quantityGrid.Items[5] is QuantityRow { IsTotal: true, Section: "Total" } &&
+                           new[] { "Total", "54", "1,090.361", "795.000", "2,862.104", "306.000", "1,365.734", "0.000" }.All(quantityCells.Contains) && !quantityCells.Contains("n/a") &&
+                           window.QuantityProblemText.Visibility == Visibility.Collapsed && window.QuantityNotesList.Items.Count == 0 &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text.StartsWith("L01_H01_P01 · SAP2000 text export", StringComparison.Ordinal)),
+                        "choosing a candidate in the dropdown shows its section breakdown, the total row and where the data came from");
+                    var sectionFigures = FindVisuals<COT_VCF.Presentation.Controls.SectionFigureView>(quantityGrid).Where(view => view.IsVisible).ToArray();
+                    var quantityRowHeights = Enumerable.Range(0, quantityGrid.Items.Count)
+                        .Select(index => ((DataGridRow)quantityGrid.ItemContainerGenerator.ContainerFromIndex(index)).ActualHeight).ToArray();
+                    Assert(sectionFigures.Length == 5 && sectionFigures.All(view => view.Figure is { Shapes.Count: > 0 } && view.ActualWidth == 64 && view.ActualHeight == 42) &&
+                           new[] { "1200 × 2000 mm", "1500 × 3000 mm", "3000 × 2500 mm", "1200 × 1200 mm", "191.5 × 191.5 mm" }
+                               .All(size => FindVisuals<TextBlock>(quantityGrid).Any(text => text.Text == size && text.IsVisible)) &&
+                           sectionFigures.Select(view => view.Figure!.Shapes.Count).SequenceEqual([2, 4, 4, 1, 1]) &&
+                           quantityRowHeights.Take(5).All(height => height >= 50) && quantityRowHeights[5] < 30,
+                        "each section row shows the figure of its section with its overall size in the Figure column; the Total row has none and keeps the compact row height");
+                    var quantityBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                    quantityBitmap.Render(window);
+                    var quantityEncoder = new PngBitmapEncoder(); quantityEncoder.Frames.Add(BitmapFrame.Create(quantityBitmap));
+                    using (var stream = File.Create(".work/quantities-tab.png")) quantityEncoder.Save(stream);
+                    quantityPicker.SelectedIndex = 2;
+                    Pump(() => vm.QuantityState == QuantityViewState.Ready && vm.SelectedQuantityCandidate?.Id == "L01_H02_P01" && quantityGrid.Items.Count == 7);
+                    var unavailableCells = FindVisuals<TextBlock>(quantityGrid).Where(text => text.Text == "n/a").ToArray();
+                    Assert(unavailableCells.Length == 4 && unavailableCells.All(cell => ReferenceEquals(cell.Foreground, window.FindResource("Warning")) &&
+                               cell.ToolTip is string reason && reason.Length > 0) &&
+                           unavailableCells.Count(cell => ((string)cell.ToolTip).Contains("MTrPt005")) == 2 && unavailableCells.Count(cell => ((string)cell.ToolTip).StartsWith("Not a complete total")) == 2 &&
+                           FindVisuals<TextBlock>(quantityGrid).Any(text => text.Text == "FSEC1") && window.QuantityNotesList.Items.Count == 4 &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text == "L01_H02_P01 · incomplete"),
+                        "switching the candidate replaces the table; a quantity that cannot be established reads n/a with its reason, in its row and in the total");
+                    var gapBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                    gapBitmap.Render(window);
+                    var gapEncoder = new PngBitmapEncoder(); gapEncoder.Frames.Add(BitmapFrame.Create(gapBitmap));
+                    using (var stream = File.Create(".work/quantities-tab-unavailable.png")) gapEncoder.Save(stream);
+                    uiState.Connection = "Connection Lost";
+                    Pump(() => vm.QuantityCandidates.Count == 0);
+                    Assert(!workflowTabs.IsEnabled && !quantityPicker.IsEnabled && quantityPicker.Items.Count == 0 && quantityGrid.Items.Count == 0 &&
+                           FindVisuals<TextBlock>(window).Any(text => text.Text == "Connect SAP") && !vm.ReloadQuantities.CanExecute(null),
+                        "without a SAP connection Tab 08 is disabled and holds no candidate and no numbers");
+                    uiState.Connection = "Connected";
+                    Pump(() => vm.QuantityCandidates.Count == 3 && vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy);
+                    Assert(workflowTabs.IsEnabled && quantityPicker.IsEnabled && quantityPicker.Items.Count == 3 && quantityPicker.SelectedIndex == 0 && quantityGrid.Items.Count == 6 &&
+                           vm.ReloadQuantities.CanExecute(null),
+                        "a successful SAP connection enables Tab 08 again and reads the running model");
                 }
                 finally { try { Directory.Delete(optimizationRoot, true); } catch { } }
                 window.Close(); bindingListener.Flush();
                 if (bindingLog.ToString().Length > 0) throw new Exception("WPF binding errors: " + bindingLog);
                 Console.WriteLine("PASS: Tab 5 rendered with no WPF binding errors.");
+                return 0;
+            }
+            if (args.Contains("--fem"))
+            {
+                PlanarFrameChecks.Run();
+                return 0;
+            }
+            // Live: starts its own SAP2000 on a copy of the baseline under .work and checks that cable lengths follow the joints.
+            var cableLengthLive = Array.IndexOf(args, "--cable-length-live");
+            if (cableLengthLive >= 0)
+            {
+                if (cableLengthLive + 2 >= args.Length) throw new ArgumentException("--cable-length-live needs: <baseline .sdb> <project .json> [--analyse].");
+                CableLengthLiveCheck.RunAsync(args[cableLengthLive + 1], args[cableLengthLive + 2], args.Contains("--analyse")).GetAwaiter().GetResult();
+                return 0;
+            }
+            // Tab 08 quantity take-off of every candidate of a study on disk, from the candidates' own text exports. Offline; reads only.
+            var quantityStudy = Array.IndexOf(args, "--quantity-study");
+            if (quantityStudy >= 0)
+            {
+                if (quantityStudy + 1 >= args.Length) throw new ArgumentException("--quantity-study needs: <baseline .sdb>.");
+                QuantityTakeoffChecks.PrintStudy(args[quantityStudy + 1]);
+                return 0;
+            }
+            // Live, read-only: the Tab 08 take-off of the model open in the running SAP2000, through the API. Attaches; opens and writes nothing.
+            if (args.Contains("--quantity-connected"))
+            {
+                QuantityTakeoffChecks.RunConnectedAsync().GetAwaiter().GetResult();
+                return 0;
+            }
+            // Live: the isolated SAP2000 read of one candidate model — a SAP2000 of its own on a private copy; never attaches to the user's.
+            var quantityLive = Array.IndexOf(args, "--quantity-live");
+            if (quantityLive >= 0)
+            {
+                if (quantityLive + 1 >= args.Length) throw new ArgumentException("--quantity-live needs: <candidate .sdb>.");
+                QuantityTakeoffChecks.RunLiveAsync(args[quantityLive + 1]).GetAwaiter().GetResult();
+                return 0;
+            }
+            // Internal FEM against SAP2000 on a real study, like for like. Offline: reads the fixture only.
+            //   --fem-sap [fixture folder]                                   compare (default tests/fem-sap-benchmark)
+            //   --fem-sap-capture <model.$2k> <project.json> <raw results.json> [fixture folder]   refresh the fixture
+            var femSapCapture = Array.IndexOf(args, "--fem-sap-capture");
+            if (femSapCapture >= 0)
+            {
+                if (femSapCapture + 3 >= args.Length)
+                    throw new ArgumentException("--fem-sap-capture needs: <SAP2000 model text .$2k> <project .json> <Study_Raw_Results.json> [fixture folder].");
+                FemSapBenchmark.Capture(args[femSapCapture + 1], args[femSapCapture + 2], args[femSapCapture + 3],
+                    femSapCapture + 4 < args.Length ? args[femSapCapture + 4] : FemSapBenchmark.DefaultFolder);
+                return 0;
+            }
+            var femSap = Array.IndexOf(args, "--fem-sap");
+            if (femSap >= 0)
+            {
+                var fixture = femSap + 1 < args.Length && !args[femSap + 1].StartsWith("--", StringComparison.Ordinal) ? args[femSap + 1] : FemSapBenchmark.DefaultFolder;
+                FemSapBenchmark.Run(fixture, Path.Combine(".work", "fem-vs-sap"));
+                Console.WriteLine("Internal FEM against SAP2000: all like-for-like checks passed.");
                 return 0;
             }
             if (args.Contains("--ui-read"))
@@ -413,9 +767,11 @@ internal static class Program
             try { workflow.RefreshAsync().GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
             Assert(!state.BaselineCaptured && state.Truss.TopPoints.Contains("top") && state.PointLoads.Count == 2, "External geometry changes invalidate baseline but preserve setup");
             NumericInputChecks.Run();
+            CheckNewConfiguration();
             OutputSettingsChecks.Run();
             ReliabilityChecks.Run();
             StudyComposerChecks.Run();
+            PlanarFrameChecks.Run();
             StudyExecutionChecks.Run();
             OptimizationChecks.Run();
             CableForceReportChecks.Run();
@@ -423,10 +779,55 @@ internal static class Program
             MemberForceReportChecks.Run();
             SupportReactionReportChecks.Run();
             GatewayChecks.Run();
+            QuantityTakeoffChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
     }
+    private static void CheckNewConfiguration()
+    {
+        var state = StudyComposerChecks.CreateState();
+        var sap = new FakeSap { Snapshot = new(state.Model!, state.Geometry, state.LoadPatterns.ToArray()) };
+        var workflow = new WorkflowService(sap, state);
+        var config = new ConfigService(sap, state, workflow);
+        var vm = new MainViewModel(state, workflow, new NoSelection(), config);
+        var model = state.Model;
+        var geometry = state.Geometry;
+        var baseline = state.SessionBaseline;
+        state.OutputSettings.DeflectionPoints.Add("top");
+        state.OutputSettings.DeflectionOutputCaseName = "SLS";
+        state.Study.UseCandidateFilters = true;
+        state.Study.MinHeightM = 20;
+        state.Study.SetRunSelected("L01_H01_P01", false);
+        config.SetActiveProject("old-config.json", new CotVcfConfigDto());
+        config.Session.MarkDirty(ConfigTabs.All);
+        foreach (var status in new[] { "Disconnected", "Connecting", "Error", "Connection Lost" })
+        {
+            state.Connection = status;
+            Assert(!vm.HasSapConnection && !vm.NewConfig.CanExecute(null) && !vm.AddLoadDefinition.CanExecute(null) &&
+                   !vm.GeneratePostProcessOutputs.CanExecute(null) && !vm.GenerateOptimizedReports.CanExecute(null),
+                $"Workflow commands are unavailable while SAP is {status}");
+            var count = state.LoadDefinitions.Count;
+            vm.AddLoadDefinition.Execute(null);
+            vm.NewConfig.Execute(null);
+            Assert(state.LoadDefinitions.Count == count && config.Session.HasActiveProject,
+                "Disconnected command execution cannot change configuration");
+            Assert(vm.Connect.CanExecute(null) && vm.Refresh.CanExecute(null), "Reconnect remains available");
+        }
+        state.Connection = "Connected";
+        Assert(vm.NewConfig.CanExecute(null) && vm.AddLoadDefinition.CanExecute(null), "Workflow commands enable after connection");
+        vm.NewConfig.Execute(null);
+        Assert(!config.Session.HasActiveProject && !config.Session.IsDirty(ConfigTabs.All) &&
+               state.AppliedPoints.Count == 0 && state.Cables.Count == 0 && !state.BaselineCaptured &&
+               state.Truss.TopPoints.Count == 0 && !state.OutputSettings.IsConfigured &&
+               !state.Study.UseCandidateFilters && state.Study.MinHeightM is null && state.Study.ExcludedIterationKeys.Count == 0,
+            "New Config clears tab configuration, project file identity, filters and dirty flags");
+        Assert(state.LoadDefinitions.Select(row => row.LoadName).SequenceEqual(new[] { "DL_Above", "LL_Above" }) &&
+               ReferenceEquals(model, state.Model) && ReferenceEquals(geometry, state.Geometry) &&
+               ReferenceEquals(baseline, state.SessionBaseline) && state.IsSapConnected && sap.Writes == 0,
+            "New Config restores loading defaults and preserves SAP connection and baseline without writes");
+    }
+
     private static void Assert(bool condition, string name) { if (!condition) throw new Exception("FAIL: " + name); Console.WriteLine("PASS: " + name); }
     private static T? FindVisual<T>(DependencyObject root) where T : DependencyObject
     {
@@ -450,6 +851,12 @@ internal static class Program
         public required ModelSnapshot Snapshot { get; init; }
         public int Writes { get; private set; }
         public int CableSectionReadCount { get; private set; }
+        public int DatabaseTableReads { get; private set; }
+        public Task<COT_VCF.Application.Quantities.SapTableSet> ReadDatabaseTablesAsync(IReadOnlyList<string> tableNamePrefixes, ModelInfo expected)
+        {
+            DatabaseTableReads++;
+            return Task.FromResult(QuantityTakeoffChecks.FixtureTables(expected));
+        }
         public Task<ModelInfo> ConnectAsync() => Task.FromResult(Snapshot.Info);
         public Task<ModelInfo> OpenModelAsync(string modelPath) => Task.FromResult(Snapshot.Info with { Path = modelPath });
         public Task<ModelInfo> SaveAsAsync(string targetPath, ModelInfo expected) => Task.FromResult(expected with { Path = targetPath, IsLocked = false });

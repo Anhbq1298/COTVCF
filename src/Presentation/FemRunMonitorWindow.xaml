@@ -1,0 +1,64 @@
+<Window x:Class="COT_VCF.Presentation.FemRunMonitorWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls"
+        Title="FEM Analysis — Run Monitor" Icon="{StaticResource AppLogo}" Width="900" Height="720" MinWidth="640" MinHeight="520"
+        Background="{StaticResource Background}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+ <Grid Margin="10">
+  <Grid.RowDefinitions>
+   <RowDefinition Height="Auto"/>
+   <RowDefinition Height="8"/>
+   <RowDefinition Height="3*"/>
+   <RowDefinition Height="8"/>
+   <RowDefinition Height="Auto"/>
+   <RowDefinition Height="Auto"/>
+  </Grid.RowDefinitions>
+
+  <!-- Progress -->
+  <Border Grid.Row="0" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
+   <StackPanel>
+    <DockPanel>
+     <TextBlock Text="INTERNAL 2D FRAME ANALYSIS" Style="{StaticResource Subheading}"/>
+     <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right" Text="{Binding FemMonitorProgressText}" FontFamily="{StaticResource MonoFont}" FontSize="11"/>
+    </DockPanel>
+    <ProgressBar Height="8" Minimum="0" Maximum="{Binding FemMonitorProgressMaximum, Mode=OneWay}" Value="{Binding FemMonitorCompleted, Mode=OneWay}" Margin="0,0,0,4"/>
+    <TextBlock Text="{Binding FemProgressText}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
+   </StackPanel>
+  </Border>
+
+  <!-- Convergence chart -->
+  <Border Grid.Row="2" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
+   <Grid>
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <DockPanel Margin="0,0,0,6">
+     <TextBlock Text="CABLE TARGET-FORCE CONVERGENCE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+     <TextBlock Text="Cable" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+     <ComboBox Width="130" ItemsSource="{Binding FemMonitorCableNames}" SelectedItem="{Binding FemMonitorCable}" VerticalAlignment="Center"
+               ToolTip="Cable whose P_result / P_preset history is charted."/>
+     <TextBlock Text="Loadcase/Loadcomb" FontSize="11" VerticalAlignment="Center" Margin="12,0,4,0"/>
+     <ComboBox Width="140" ItemsSource="{Binding FemLoadSelectionNames}" SelectedItem="{Binding SelectedFemResultName}" VerticalAlignment="Center"
+               ToolTip="Load cases and combinations ticked on FEM → Inputs → Loads. The summary below gives the cable tension under it; the same selection drives the Results page."/>
+     <TextBlock Text="Candidate" FontSize="11" VerticalAlignment="Center" Margin="12,0,4,0"/>
+     <ComboBox Width="120" ItemsSource="{Binding FemRuns}" DisplayMemberPath="Id" SelectedItem="{Binding FemMonitorRun}" VerticalAlignment="Center"
+               ToolTip="Completed L/H/P study candidate to chart. Choosing one stops following the latest."/>
+     <CheckBox Content="Follow latest" IsChecked="{Binding FemMonitorFollowLatest}" VerticalAlignment="Center" Margin="10,0,0,0"
+               ToolTip="Chart each case as soon as it completes."/>
+    </DockPanel>
+    <c:ConvergenceChart Grid.Row="1" Ratios="{Binding FemMonitorRatios}" TolerancePercent="{Binding FemMonitorTolerancePercent}"
+                        EmptyText="No pretension-fitting history for this cable and case yet."/>
+    <TextBlock Grid.Row="2" Text="{Binding FemMonitorChartSummary}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+   </Grid>
+  </Border>
+
+  <!-- Live log -->
+  <Border Grid.Row="4" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
+   <Expander Header="Diagnostic details" IsExpanded="False">
+    <ListBox x:Name="LogList" MaxHeight="150" ItemsSource="{Binding FemLog}" FontFamily="{StaticResource MonoFont}" FontSize="11"
+             ScrollViewer.HorizontalScrollBarVisibility="Auto" VirtualizingPanel.IsVirtualizing="True" BorderThickness="1"/>
+   </Expander>
+  </Border>
+
+  <DockPanel Grid.Row="5" Margin="0,8,0,0" LastChildFill="False">
+   <TextBlock DockPanel.Dock="Left" Text="The linked SAP2000 model is read only; nothing is written." Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+   <Button DockPanel.Dock="Right" Content="Close" Click="CloseWindow" Margin="0"/>
+   <Button DockPanel.Dock="Right" Content="Cancel Analysis" Command="{Binding CancelFemAnalysis}"/>
+  </DockPanel>
+ </Grid>
+</Window>

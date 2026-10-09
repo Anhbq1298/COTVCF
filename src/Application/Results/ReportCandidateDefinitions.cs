@@ -77,36 +77,35 @@ public static class ReportCandidateDefinitions
     }
 
     public const string Markup = """
-<details class="candidate-definitions" open>
+<details id="candKey" data-pr="legend">
   <summary id="candidateDefinitionsSummary">Candidate definitions</summary>
   <div id="candidateDefinitions" class="candidate-definitions-body"></div>
 </details>
 """;
 
     public const string Style = """
-.candidate-definitions{border-top:1px solid #c7ccd2;border-bottom:1px solid #c7ccd2;font-size:11px}
-.candidate-definitions>summary{cursor:pointer;padding:6px 14px;background:#f3f4f6;font-weight:600;color:#1f4788}
+#candKey{border-top:1px solid #c7ccd2;border-bottom:1px solid #c7ccd2;font-size:11px}
+#candKey>summary{cursor:pointer;padding:6px 14px;background:#f3f4f6;font-weight:600;color:#1f4788}
 .candidate-definitions-body{display:grid;grid-template-columns:max-content max-content;gap:12px 28px;padding:10px 14px 14px;align-items:start}
-.candidate-definitions .candidate-section{min-width:210px;break-inside:avoid}
-.candidate-definitions .candidate-pretension{grid-column:1/-1;min-width:0}
-.candidate-definitions h3{margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#666}
-.candidate-definitions h3 span{color:#1f4788;font-size:11px;margin-left:3px}
-.candidate-definitions .candidate-scroll{max-width:100%;overflow:auto}
-.candidate-definitions table{border-collapse:collapse;width:auto;font-size:10.5px;white-space:nowrap}
-.candidate-definitions th{position:static;background:#f3f4f6;color:#666;font-weight:600;text-align:right;padding:3px 7px;border:1px solid #dfe3e8}
-.candidate-definitions td{padding:3px 7px;text-align:right;border:1px solid #e7eaee}
-.candidate-definitions th:first-child,.candidate-definitions td:first-child{text-align:left;font-family:Consolas,monospace;font-weight:600;color:#1a1a1a}
-.candidate-definitions .candidate-labels{display:grid;grid-template-columns:max-content minmax(120px,1fr);gap:3px 9px}
-.candidate-definitions .candidate-labels b{font-family:Consolas,monospace}.candidate-definitions .candidate-labels span{color:#666}
-.candidate-definitions .candidate-note{margin:0 0 5px;color:#666;font-size:10px}
-@media print{
-  .candidate-definitions{break-before:auto;break-inside:auto}
-  .candidate-definitions-body{display:block;padding:6px 0}
-  .candidate-definitions .candidate-section{margin:0 0 8px;break-inside:avoid-page}
-  .candidate-definitions .candidate-scroll{overflow:visible}
-  .candidate-definitions table{font-size:8px;width:auto}
-  .candidate-definitions th,.candidate-definitions td{padding:2px 4px}
-}
+#candKey .candidate-section{min-width:210px;break-inside:avoid}
+#candKey .candidate-pretension{grid-column:1/-1;min-width:0}
+#candKey h3{margin:0 0 5px;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#666}
+#candKey h3 span{color:#1f4788;font-size:11px;margin-left:3px}
+#candKey .candidate-scroll{max-width:100%;overflow:auto}
+#candKey table{border-collapse:collapse;width:auto;font-size:10.5px;white-space:nowrap}
+#candKey th{position:static;background:#f3f4f6;color:#666;font-weight:600;text-align:right;padding:3px 7px;border:1px solid #dfe3e8}
+#candKey td{padding:3px 7px;text-align:right;border:1px solid #e7eaee}
+#candKey th:first-child,#candKey td:first-child{text-align:left;font-family:Consolas,monospace;font-weight:600;color:#1a1a1a}
+#candKey .candidate-labels{display:grid;grid-template-columns:max-content minmax(120px,1fr);gap:3px 9px}
+#candKey .candidate-labels b{font-family:Consolas,monospace}#candKey .candidate-labels span{color:#666}
+#candKey .candidate-note{margin:0 0 5px;color:#666;font-size:10px}
+.pr-sheet #candKey{border:0;break-inside:auto}
+.pr-sheet #candKey>summary{padding:0 0 5px;background:transparent}
+.pr-sheet #candKey .candidate-definitions-body{display:block;padding:0}
+.pr-sheet #candKey .candidate-section{margin:0 0 8px;break-inside:avoid}
+.pr-sheet #candKey .candidate-scroll{overflow:visible}
+.pr-sheet #candKey table{font-size:8px;width:auto}
+.pr-sheet #candKey th,.pr-sheet #candKey td{padding:2px 4px}
 """;
 
     public const string Script = """

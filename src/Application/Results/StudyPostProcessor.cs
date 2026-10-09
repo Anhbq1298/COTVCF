@@ -4,6 +4,22 @@ using COT_VCF.Domain.Results;
 
 namespace COT_VCF.Application.Results;
 
+/// <summary>Which Tab 06 outputs one generation writes. <c>Generate Outputs</c> writes them all; a module's own
+/// <c>Regenerate</c> asks for its report alone — the Excel workbook is by far the slowest output, and a report
+/// does not depend on it.</summary>
+[Flags]
+public enum StudyOutputs
+{
+    None = 0,
+    CandidateDiagnostics = 1,
+    Workbook = 2,
+    DeflectionReport = 4,
+    MemberForceReport = 8,
+    SupportReactionReport = 16,
+    CableForceReport = 32,
+    All = CandidateDiagnostics | Workbook | DeflectionReport | MemberForceReport | SupportReactionReport | CableForceReport,
+}
+
 /// <summary>
 /// Tab 06 boundary: derives user-facing Excel/HTML outputs from raw study files only. This service has no SAP
 /// gateway and can therefore be rerun after post-processing inputs or the raw JSON package are changed.
@@ -17,12 +33,15 @@ public sealed class StudyPostProcessor
     /// cable name. No capacity is ever inferred, borrowed from another cable, or defaulted.</param>
     /// <param name="printSettings">Print Setup (header / footer, logo, sheet) embedded into every report and
     /// candidate diagnostic through the shared print engine. A presentation input only.</param>
+    /// <param name="outputs">What to write. An output that is not asked for is left exactly as it is on disk and
+    /// reported with its existing file, if there is one.</param>
     public StudyArtifactOutcome Generate(
         string studyFolder,
         IReadOnlyDictionary<string, double>? cableCapacities,
         DeflectionLimitBand deflectionBand,
         IReadOnlyCollection<string>? configuredCables = null,
-        ReportPrintSettings? printSettings = null)
+        ReportPrintSettings? printSettings = null,
+        StudyOutputs outputs = StudyOutputs.All)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(studyFolder);
         ArgumentNullException.ThrowIfNull(deflectionBand);
@@ -35,16 +54,25 @@ public sealed class StudyPostProcessor
         var capacitySet = CableCapacityResolver.Resolve(cableCapacities, configuredCables, raw.CableDesignCapacities);
         var validCapacities = capacitySet.Capacities;
 
-        var diagnosticGenerator = new CandidateDiagnosticReportGenerator();
-        foreach (var result in results)
-            diagnosticGenerator.Write(result, CandidateDirectory(root, result.IterationKey), printSettings);
+        string? Existing(string fileName) => Path.Combine(root, fileName) is var path && File.Exists(path) ? path : null;
 
-        var consolidator = new ConsolidatedResultWriter();
-        foreach (var result in results) consolidator.Add(result);
-        var workbook = consolidator.Write(root, raw.DeflectionPoints, raw.DeflectionOutputCase,
-            raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, validCapacities, raw.CableResultCase,
-            raw.MemberGroups, raw.MemberForceResultCase, raw.FoundationLeftPoints,
-            raw.FoundationRightPoints, raw.FoundationReactionResultCase);
+        if (outputs.HasFlag(StudyOutputs.CandidateDiagnostics))
+        {
+            var diagnosticGenerator = new CandidateDiagnosticReportGenerator();
+            foreach (var result in results)
+                diagnosticGenerator.Write(result, CandidateDirectory(root, result.IterationKey), printSettings);
+        }
+
+        var workbook = Existing(ConsolidatedResultWriter.WorkbookFileName);
+        if (outputs.HasFlag(StudyOutputs.Workbook))
+        {
+            var consolidator = new ConsolidatedResultWriter();
+            foreach (var result in results) consolidator.Add(result);
+            workbook = consolidator.Write(root, raw.DeflectionPoints, raw.DeflectionOutputCase,
+                raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, validCapacities, raw.CableResultCase,
+                raw.MemberGroups, raw.MemberForceResultCase, raw.FoundationLeftPoints,
+                raw.FoundationRightPoints, raw.FoundationReactionResultCase);
+        }
 
         var hasCableReport = results.Any(result => (result.CableForces?.Count ?? 0) > 0);
         var hasMemberReport = results.Any(result => (result.MemberForceGroups?.Count ?? 0) > 0);
@@ -53,20 +81,22 @@ public sealed class StudyPostProcessor
         if (hasMemberReport) currentReports.Add("member");
         if (hasSupportReport) currentReports.Add("support");
         if (hasCableReport) currentReports.Add("cable");
-        var deflection = new DeflectionReportGenerator().Generate(root, results,
-            raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, currentReports, deflectionBand,
-            printSettings);
+        var deflection = Existing(DeflectionReportGenerator.ReportFileName);
+        if (outputs.HasFlag(StudyOutputs.DeflectionReport))
+            deflection = new DeflectionReportGenerator().Generate(root, results,
+                raw.BaselineModelName, raw.BaselineModelPath, raw.StudyMode, currentReports, deflectionBand,
+                printSettings);
 
-        string? member = null;
-        if (hasMemberReport)
+        var member = hasMemberReport ? Existing(MemberForceReportGenerator.ReportFileName) : null;
+        if (hasMemberReport && outputs.HasFlag(StudyOutputs.MemberForceReport))
             member = new MemberForceReportGenerator().Generate(root, results,
                 raw.BaselineModelName, raw.StudyMode, currentReports, printSettings);
-        string? support = null;
-        if (hasSupportReport)
+        var support = hasSupportReport ? Existing(SupportReactionReportGenerator.ReportFileName) : null;
+        if (hasSupportReport && outputs.HasFlag(StudyOutputs.SupportReactionReport))
             support = new SupportReactionReportGenerator().Generate(root, results,
                 raw.BaselineModelName, raw.StudyMode, currentReports, printSettings);
-        string? cable = null;
-        if (hasCableReport)
+        var cable = hasCableReport ? Existing(CableForceReportGenerator.ReportFileName) : null;
+        if (hasCableReport && outputs.HasFlag(StudyOutputs.CableForceReport))
             cable = new CableForceReportGenerator().Generate(root, results,
                 raw.BaselineModelName, raw.StudyMode, raw.CableResultCase, validCapacities, currentReports,
                 capacitySet.Sources, printSettings);

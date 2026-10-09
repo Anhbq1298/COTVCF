@@ -1,5 +1,6 @@
 using COT_VCF.Domain;
 using COT_VCF.Domain.Results;
+using COT_VCF.Geometry;
 namespace COT_VCF.Application;
 
 public interface ISapGateway : IDisposable
@@ -26,8 +27,23 @@ public interface ISapGateway : IDisposable
     /// active model. One row per requested cable, in order; a cable whose section can't be read comes back
     /// with <c>AreaM2 == 0</c> and a Problem message rather than throwing.</summary>
     Task<IReadOnlyList<CableSection>> GetCableSectionsAsync(IReadOnlyList<string> cableNames, ModelInfo expected);
+    Task<IReadOnlyDictionary<string, FemSectionProperties>> GetFemSectionPropertiesAsync(
+        IReadOnlyList<StructuralMember> members, ModelInfo expected) =>
+        throw new NotSupportedException("FEM section-property reads are not implemented by this SAP gateway.");
+    /// <summary>Read-only snapshot of load patterns (with self-weight multipliers), the loads assigned to the given
+    /// joints/frames/cables, static load cases and response combinations, for the internal FEM.</summary>
+    Task<SapFemLoading> GetFemLoadingAsync(IReadOnlyList<StructuralMember> members, IReadOnlyDictionary<string, double> localAnglesDeg,
+        ModelInfo expected) =>
+        throw new NotSupportedException("FEM load reads are not implemented by this SAP gateway.");
+    /// <summary>Reads, for display, every database table of the verified active model that holds data and whose
+    /// name starts with one of the given prefixes, in the model's present units. Read-only: nothing is opened for
+    /// editing and units, lock state and model are left as they are.</summary>
+    Task<Quantities.SapTableSet> ReadDatabaseTablesAsync(IReadOnlyList<string> tableNamePrefixes, ModelInfo expected) =>
+        throw new NotSupportedException("Database-table reads are not implemented by this SAP gateway.");
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
+    /// <summary>Moves joints to <paramref name="proposed"/>. A cable object defined by its undeformed length is given
+    /// the same length relative to its chord on the new geometry — SAP2000 would otherwise keep the old length.</summary>
     Task MovePointsAsync(GeometryModel expectedGeometry, GeometryModel proposed, ModelInfo expected);
     /// <summary>Assigns a Cable Loads / Target Force value on an existing load pattern.
     /// Reserved for execution and never called while editing Tab 3.</summary>

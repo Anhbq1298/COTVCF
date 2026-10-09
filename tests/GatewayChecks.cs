@@ -8,6 +8,12 @@ internal static class GatewayChecks
 {
     public static void Run()
     {
+        Check(SapGateway.ResolveEffectiveMaterial("A992", "None", "Frame1", "W14X90") == "A992" &&
+              SapGateway.ResolveEffectiveMaterial("A992", "", "Frame1", "W14X90") == "A992" &&
+              SapGateway.ResolveEffectiveMaterial("A992", "UserSteel", "Frame1", "W14X90") == "UserSteel",
+            "FEM material resolution ignores CSI None overrides and respects explicit member overrides");
+        Throws(() => SapGateway.ResolveEffectiveMaterial("None", "None", "Frame1", "W14X90"));
+
         var fake = new FakeApi();
         using var gateway = new SapGateway(fake.Model);
         var expected = new ModelInfo("test.sdb", "26", 6, "kN", "m", false);
@@ -57,6 +63,8 @@ internal static class GatewayChecks
         Throws(() => gateway.MovePointsAsync(geometry, proposed, expected).GetAwaiter().GetResult());
         Check(fake.WriteCount == calls, "Externally edited coordinates reject stale preview");
 
+        CableLengthsFollowTheJoints(expected);
+
         var lifecycleRoot = Path.Combine(Path.GetTempPath(), "COTVCF-gateway-checks-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(lifecycleRoot);
         try
@@ -95,6 +103,51 @@ internal static class GatewayChecks
         }
         finally { Directory.Delete(lifecycleRoot, true); }
     }
+    /// <summary>A cable object defined by its undeformed length keeps that number when its joints move; the geometry
+    /// write has to carry it over to the new chord, or SAP2000 analyses a cable of the old length.</summary>
+    private static void CableLengthsFollowTheJoints(ModelInfo expected)
+    {
+        var fake = new FakeApi();
+        using var gateway = new SapGateway(fake.Model);
+        GeometryModel Geometry() => new(fake.Points.ToDictionary(p => p.Key, p => new StructuralPoint(p.Key, p.Value)),
+            [new StructuralMember("Cable-A", "p1", "p2", MemberKind.Cable)]);
+        GeometryModel Moved(GeometryModel from, string point, Position to) =>
+            new(from.Points.ToDictionary(p => p.Key, p => p.Key == point ? p.Value with { Position = to } : p.Value), from.Members);
+
+        // 10 m chord, cable 2 % shorter than it, with its own segments, added weight and projected load
+        fake.CableData["Cable-A"] = (8, 3, 0.5, 0.25, 9.8);
+        var flat = Geometry();
+        var taller = Moved(flat, "p2", new(10, 0, 7.5));              // chord 10 → 12.5 m
+        gateway.MovePointsAsync(flat, taller, expected).GetAwaiter().GetResult();
+        var carried = fake.CableData["Cable-A"];
+        Check(fake.Points["p2"] == new Position(10, 0, 7.5) && fake.CableWrites == 1 && Math.Abs(carried.Length - 12.25) < 1e-12 &&
+              (carried.Type, carried.Segments, carried.Weight, carried.Load) == (8, 3, 0.5, 0.25),
+            "Moving a joint gives a cable defined by its undeformed length the same relative length on the new chord (9.8 of 10 m → 12.25 of 12.5 m), and nothing else of its definition changes");
+
+        var shifted = new GeometryModel(taller.Points.ToDictionary(p => p.Key, p => p.Value with { Position = p.Value.Position with { X = p.Value.Position.X + 2 } }), taller.Members);
+        gateway.MovePointsAsync(taller, shifted, expected).GetAwaiter().GetResult();
+        Check(fake.CableWrites == 1 && fake.CableData["Cable-A"].Length == carried.Length, "A move that leaves the chord as long as it was does not rewrite the cable");
+
+        fake.CableData["Cable-A"] = (3, 1, 0, 0, 12.25);              // defined by its tension at the I-end
+        var lower = Moved(shifted, "p2", new(12, 0, 0));
+        gateway.MovePointsAsync(shifted, lower, expected).GetAwaiter().GetResult();
+        Check(fake.CableWrites == 1 && fake.CableData["Cable-A"].Length == 12.25,
+            "A cable defined by a tension, a sag or a relative length is left to SAP2000: only an absolute undeformed length is carried over");
+
+        fake.CableData["Cable-A"] = (8, 1, 0, 0, 10);
+        fake.FailCableName = "Cable-A";
+        var raised = Moved(lower, "p2", new(12, 0, 7.5));
+        Throws(() => gateway.MovePointsAsync(lower, raised, expected).GetAwaiter().GetResult());
+        Check(fake.Points["p2"] == new Position(12, 0, 0) && fake.CableData["Cable-A"].Length == 10,
+            "When a cable does not take its new length, the joints and the cable are put back as they were");
+
+        fake.CableParameterCount = 5;
+        var writes = fake.WriteCount;
+        Throws(() => gateway.MovePointsAsync(lower, raised, expected).GetAwaiter().GetResult());
+        Check(fake.WriteCount == writes && fake.Points["p2"] == new Position(12, 0, 0),
+            "Cable shape data SAP2000 returns in an unexpected layout stops the geometry write before anything is changed");
+    }
+
     private static void Throws(Action action) { try { action(); } catch (InvalidOperationException) { return; } throw new Exception("Expected write rejection."); }
     private static void Check(bool ok, string name) { if (!ok) throw new Exception("FAIL: " + name); Console.WriteLine("PASS: " + name); }
     private sealed class FakeApi
@@ -113,6 +166,11 @@ internal static class GatewayChecks
         public string CurrentPath = "test.sdb";
         public Dictionary<string, Position> Points { get; } = new() { ["p1"] = new(0, 0, 0), ["p2"] = new(10, 0, 0) };
         public Dictionary<string, double[]> Loads { get; } = new() { ["p1"] = [10, 20, 30, 40, 50, 60], ["p2"] = [11, 21, 31, 41, 51, 61] };
+        // cable shape definition: SAP2000 type code (8 = by undeformed length), segments, added weight, projected load, undeformed length
+        public Dictionary<string, (int Type, int Segments, double Weight, double Load, double Length)> CableData { get; } = new() { ["Cable-A"] = (8, 1, 0, 0, 10) };
+        public int CableWrites;
+        public int CableParameterCount = 11;
+        public string? FailCableName;
         public Dictionary<(string Cable, string Pattern), List<(double Force, double Distance)>> TargetForces { get; } = new()
         {
             [("Cable-A", "PRETENSION")] = [(900, 0.25), (1000, 0.75)]
@@ -159,6 +217,24 @@ internal static class GatewayChecks
                 {
                     case "GetNameList": a[0] = 1; a[1] = new[] { "Cable-A" }; return 0;
                     case "GetPoints": a[1] = "p1"; a[2] = "p2"; return 0;
+                    case "GetCableData":
+                    {
+                        var data = CableData[(string)a[0]!];
+                        var (i, j) = (Points["p1"], Points["p2"]);
+                        var chord = Math.Sqrt(Math.Pow(j.X - i.X, 2) + Math.Pow(j.Y - i.Y, 2) + Math.Pow(j.Z - i.Z, 2));
+                        var parameters = new double[CableParameterCount];
+                        if (CableParameterCount > 10) { parameters[9] = data.Length; parameters[10] = data.Length / chord; }
+                        a[1] = data.Type; a[2] = data.Segments; a[3] = data.Weight; a[4] = data.Load; a[5] = false; a[6] = false; a[7] = parameters;
+                        return 0;
+                    }
+                    case "SetCableData":
+                    {
+                        WriteCount++; CableWrites++;
+                        var cableKey = (string)a[0]!;
+                        CableData[cableKey] = ((int)a[1]!, (int)a[2]!, (double)a[3]!, (double)a[4]!, (double)a[5]!);
+                        if (FailCableName == cableKey) { FailCableName = null; return 9; }
+                        return 0;
+                    }
                     case "GetLoadTargetForce":
                         var cableName = (string)a[0]!;
                         var rows = TargetForces

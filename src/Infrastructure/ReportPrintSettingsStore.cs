@@ -6,8 +6,9 @@ using COT_VCF.Domain;
 namespace COT_VCF.Infrastructure;
 
 /// <summary>Keeps the report Print Setup (company, logo, header / footer texts, default sheet) for the current
-/// Windows user, so it follows the engineer from project to project. It is not part of the COT VCF project file
-/// and never touches a study folder.</summary>
+/// Windows user — what the Print Setup card shows when the application starts and what a project without a
+/// Print Setup of its own is printed with. A COT VCF project file can carry its own (<c>printSetup</c>): opening
+/// that project puts it on the card, and so here. Never touches a study folder.</summary>
 public sealed class ReportPrintSettingsStore
 {
     public const string FileName = "ReportPrintSettings.json";

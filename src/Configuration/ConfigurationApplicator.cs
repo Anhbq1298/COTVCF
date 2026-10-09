@@ -10,6 +10,31 @@ namespace COT_VCF.Configuration;
 /// </summary>
 public sealed class ConfigurationApplicator(ApplicationState state, WorkflowService workflow)
 {
+    /// <summary>Reset configuration in place so bindings and event subscriptions remain intact.
+    /// The connected model and immutable session baseline are retained; no SAP calls are made.</summary>
+    public void Reset()
+    {
+        var defaults = new ApplicationState();
+        var extractor = new ConfigurationExtractor();
+        state.BaselineCaptured = false;
+        state.CommittedHeight = 0;
+        state.PointLoads.Clear();
+        ApplyLoading(extractor.ExtractLoadingSection(defaults));
+        ApplyCables(extractor.ExtractCableSection(defaults));
+        state.Truss.TopPoints = [];
+        state.Truss.MiddlePoints = [];
+        state.Truss.BottomPoints = [];
+        state.Truss.Reference = defaults.Truss.Reference;
+        state.Truss.BaselineHeight = defaults.Truss.BaselineHeight;
+        state.Truss.CurrentHeight = defaults.Truss.CurrentHeight;
+        state.Truss.MinimumHeight = defaults.Truss.MinimumHeight;
+        state.Truss.MaximumHeight = defaults.Truss.MaximumHeight;
+        state.Truss.Increment = defaults.Truss.Increment;
+        ApplyOutput(extractor.ExtractOutputSection(defaults));
+        ApplyStudy(extractor.ExtractStudySection(defaults));
+        state.Preview = state.SessionBaselineCaptured ? state.SessionBaseline : state.Geometry;
+    }
+
     /// <summary>Apply only the tabs whose checks passed; skip the rest so a partial file still loads.</summary>
     public void Apply(CotVcfConfigDto cfg, ConfigValidationResult check)
     {
@@ -18,6 +43,25 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
         if (check.Cable.Ok && cfg.Tab04CableForce is { } c) ApplyCables(c);
         if (check.Output.Ok && cfg.Tab05OutputSettings is { } o) ApplyOutput(o);
         if (check.Study.Ok && cfg.Tab05IterationStudy is { } s) ApplyStudy(s);
+    }
+
+    /// <summary>Puts a project's Print Setup onto the card. Presentation only — no validation against the model.
+    /// An unknown paper or orientation in a hand-edited file falls back to the default.</summary>
+    public static void ApplyPrintSetup(PrintSetupConfigDto setup, ReportPrintSettings target)
+    {
+        target.CompanyName = setup.CompanyName ?? "";
+        target.LogoPath = setup.LogoPath ?? "";
+        target.ProjectName = setup.ProjectName ?? "";
+        target.JobNumber = setup.JobNumber ?? "";
+        target.Revision = setup.Revision ?? "";
+        target.PreparedBy = setup.PreparedBy ?? "";
+        target.CheckedBy = setup.CheckedBy ?? "";
+        target.FooterNote = setup.FooterNote ?? "";
+        target.PaperSize = Enum.IsDefined(setup.PaperSize) ? setup.PaperSize : ReportPaperSize.A4;
+        target.Orientation = Enum.IsDefined(setup.Orientation) ? setup.Orientation : ReportPageOrientation.Landscape;
+        target.ShowPageNumbers = setup.ShowPageNumbers;
+        target.ShowDate = setup.ShowDate;
+        target.IncludeSourceData = setup.IncludeSourceData;
     }
 
     private void ApplyLoading(LoadingConfigDto d)

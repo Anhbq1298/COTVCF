@@ -186,6 +186,18 @@ public sealed class StudyRunJournal
         catch { return null; }
     }
 
+    /// <summary>The latest manifest and every earlier one kept in the run history, newest first. A file that cannot
+    /// be read is left out.</summary>
+    public static IReadOnlyList<StudyRunManifest> ReadAll(string studyRoot)
+    {
+        try
+        {
+            return ManifestPaths(Path.GetFullPath(studyRoot)).Where(File.Exists).Select(TryReadPath).OfType<StudyRunManifest>()
+                .DistinctBy(item => item.RunId).OrderByDescending(item => item.StartedAt).ToArray();
+        }
+        catch { return []; }
+    }
+
     public static StudyRunManifest? TryReadLatestCompatible(StudyExecutionSnapshot snapshot)
     {
         try

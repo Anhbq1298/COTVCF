@@ -2,7 +2,7 @@
 
 WPF / .NET 8 desktop application for defining structural-study candidates from an existing SAP2000 model, then building and analyzing one isolated child `.sdb` model per selected combination.
 
-The workflow is sequential:
+The study workflow is sequential:
 
 `SAP baseline -> loading candidates -> truss-height candidates -> cable-pretension candidates -> analyzed and verified child models`
 
@@ -95,13 +95,175 @@ The Tab 5 selector is the **total SAP2000 instance count**, not an additional-wo
 
 The connected instance is worker 1 and processes candidates. The study pool borrows it and does not close it. Calls are sequential inside each worker and parallel across workers; the next available worker receives the next queued candidate.
 
+## Tab 7 — FEM
+
+Tab 7 runs every loading × truss-height × cable-pretension combination configured in Tabs 1–3. It uses the
+existing project configuration loaded through **Load Config**; the file picker starts in the repository
+`tests` folder when available. The example project file in that folder contains the input sections for all three
+candidate dimensions.
+
+The analysis is internal and read-only with respect to SAP2000. **Read Properties** transfers each assigned
+frame/cable section, effective material (including the CSI `None` override sentinel), A, E, in-plane I, frame
+stiffness modifiers, and in-plane end releases into the FEM property grid before running. Isotropic materials use
+SAP's isotropic modulus API; tendon materials use the uniaxial modulus API. The results report peak downward
+joint displacement, axial force, bending moment, and support reaction per candidate. Auto-detected lowest column
+bases are drawn as pin symbols and modeled with X/Z translations fixed and in-plane rotation free.
+
+Tab 07 contains **Analysis** and **Results** subtabs. Results selects a completed internal `Lxx_Hxx_Pxx`
+combination and displays Axial Force, Bending Moment, Shear, Reactions, or Deflected Shape in the shared model
+preview, with a matching numeric table. These are the internal FEM candidate results, not saved SAP2000 load-case
+results; the selected loading combination is assembled from the Tab 1 definitions. Axial, bending, and shear
+results draw filled blue-positive/red-negative diagrams (positive axial force is tension); reactions draw support
+vectors; the deformed shape is visually magnified. Diagram widths are auto-scaled for display, while the adjacent
+table retains calculated values and units.
+
+The active analysis connection is SAP2000. For an ETABS-originated model, open/export that model into SAP2000
+first; this feature does not attach directly to an ETABS process.
+
+The current solver is linear-elastic 2D XZ Euler-Bernoulli frame analysis with axial tension-only cables and
+Tab 3 target forces met like SAP Target Force: the FEM Analysis page's fitting tolerance (default ±10%) and
+max iterations (default 100) control a pretension-only stage in which all cable pretensions are adjusted together
+(finite-difference Newton) until each cable is within tolerance of its target; the Tab 1 loads then act on that
+prestressed state, so loads that alone exceed a target do not block fitting. As in SAP, a frame is split at every
+member-end joint lying on it (within 1 mm), so a full-length chord connects to the verticals and cable anchors
+along it; each piece is then meshed into N equal sub-elements (Analysis → Frame mesh, default 10; cables are not meshed); interior mesh nodes are condensed onto the
+frame joints and recovered as stations for force diagrams and the deflected shape. Cable equilibrium uses damped Newton iterations with a potential-
+energy line search, so cables can transition between taut and slack without a Boolean active-set toggle loop.
+It rejects non-planar geometry, tendons, SAP advanced local axes, axial or in-plane shear releases, and rotated
+local axes with in-plane releases. It does not run SAP2000 analysis cases. The full candidate space is limited to
+50,000 cases.
+
+**Cable sag** (Analysis → Cable sag, on by default) is the one geometric nonlinearity included. A cable that a load
+case loads along its length — its self-weight, typically — hangs in a shallow parabola, and its tension T follows
+`T/k − a/T² = extension + P/k` with `k = EA/L` and `a = (w·cos θ)²·L³/24`. Its stiffness is then Ernst's equivalent
+`k / (1 + (w·cos θ·L)²·EA / 12T³)`, and it never goes fully slack. The cable table reports the sag and the stiffness
+kept. This is the parabolic (Ernst) model, not a full catenary with large displacements: P-Δ and large-displacement
+geometry updates are not modelled.
+
+**Basis of the solver.** It was written for this application and contains no code from OpenSees, SAP2000 or any other
+analysis package (MathNet.Numerics provides the linear algebra). It implements standard formulations: the direct
+stiffness method with Euler–Bernoulli elements (McGuire, Gallagher & Ziemian, *Matrix Structural Analysis*, 2000),
+static condensation (Guyan, AIAA Journal 3(2), 1965), the shallow elastic cable (Irvine, *Cable Structures*, 1981)
+with Ernst's equivalent modulus (Der Bauingenieur 40(2), 1965), and energy minimisation by Newton's method with a
+line search (Nocedal & Wright, *Numerical Optimization*, 2006). `--fem` checks it against closed-form beam results
+and an independent solution of the cable equation.
+
+**Benchmark against SAP2000** (`--fem-sap`, fixture in `tests/fem-sap-benchmark`). The FEM is run on SAP2000's own
+text copy of the COT Framing_V1.2 model and compared, like for like, with the completed SAP2000 study of 135
+candidates: same candidates, cable target forces met in the same case (`Pretension`, self-weight included), same
+staged load cases. The total vertical reaction agrees to 0.002 %; cable forces to within 3.8 % and deflections to
+within 3.2 % of the largest SAP2000 value; reactions to within 1.2 %. The remainder is the difference in theory
+(SAP2000: P-Delta / large displacements, catenary cables, shear-deformable frames). Not compared with OpenSees.
+
+The benchmark found two things that affect a comparison of the FEM tab with a SAP2000 study:
+
+- The FEM's SAP read overstates the self-weight of composite Section Designer sections (base-material unit weight ×
+  transformed area): 150 instead of 105 kN/m for the concrete-filled chords, 4 % more total load on this model.
+- **Fixed — studies run before the fix have to be run again above the baseline height.** The SAP2000 study changes
+  the truss height by moving joints, and a cable object defined by its undeformed length kept the length of the
+  baseline model (SAP2000's own text copies of the child models record it): up to 29 % shorter than the chord it
+  spans, so up to 41 % stiffer, in the tallest candidates. The geometry write now gives every such cable the same
+  length relative to its chord on the new geometry. Verified in SAP2000 27.1 (`--cable-length-live`): on the tallest
+  candidate the peak deflection goes from 93.3 mm to 114.5 mm, and the FEM tab gives 114.7 mm.
+
+## Tab 8 — Quantity Take-off
+
+Tab 8 shows the concrete volume and steel mass of **one model**, grouped by the section assigned to its members.
+The **Candidate** dropdown lists **Connected model** first — the model that is open in the connected SAP2000, read
+**live** — and then the study's candidates (`Lxx_Hxx_Pxx`). The tab opens on the connected model; the breakdown loads
+in the background. Picking another entry is how models are compared, including different truss heights.
+
+**Live means live on request.** The connected model is read from SAP2000 itself through the API each time: when the
+tab is opened, when it is shown again, and when **Refresh** (the icon beside the dropdown, or the top-bar refresh) is
+pressed. Change a section in SAP2000, press Refresh, and the table follows — saved or not. It is not polled in the
+background. A candidate, by contrast, is a saved model: it is read from its own file and shows when that was written.
+
+| Section | Figure | Member count | Total length m | Concrete volume m³ | Steel mass t |
+|---|:-:|---:|---:|---:|---:|
+
+One row per assigned section (frame sections, then cable sections) and a **Total** row. A quantity that cannot be
+established reads **n/a** — never zero — with the reason as its tooltip and in the notes under the table; the total
+of that column is then n/a as well, and its tooltip gives the sum of the sections that could be taken off. `0.000`
+means the section really has none of that material.
+
+**Figure** shows the section's cross-section drawn to scale from the same stored data: the Section Designer shapes
+in their drawing order (concrete grey, steel blue, a tube with its opening), or a standard section from its stored
+dimensions (box/tube, I/wide flange, rectangular, circle, pipe), or a cable as a circle of its stored diameter. Each
+figure is scaled to fit its cell, so its overall width × depth in mm is printed under it; hover over it for a larger
+view. A section whose data does not describe a drawable shape shows `—`. The figure is a picture only — no quantity is
+taken from it.
+
+**Where the candidates come from.** The dropdown lists the candidates of the study that belongs to the connected
+baseline (`<baseline folder>/Study`): every `Lxx_Hxx_Pxx` the run journal (`StudyRun.json` and `RunHistory`) records
+or that has a folder there, provided its model or SAP2000's text copy of it is on disk. A candidate a run failed on is
+listed with a warning. The tab is available only while SAP2000 is connected, like the rest of the workflow.
+
+**Where the data comes from.** Always the selected model's own data — never another model's, and never the Tab 7 FEM
+properties.
+
+*Connected model* — the database tables of the model open in the connected SAP2000 (`GetAvailableTables`,
+`GetTableForDisplayArray`), on the application's own SAP2000 lane and in the model's present units. Read-only: no
+table is opened for editing, units and lock state are not touched, nothing is saved. Like every call to the connected
+SAP2000 it keeps the application busy for the moment it takes, and it waits for a connect, refresh or study that is
+already running. If the model open in SAP2000 is no longer the one that was connected, the read says so — use the
+top-bar refresh. SAP2000 rounds the numbers in these tables for display (a density as 7.849); a material's mass
+density and the area of a frame or cable section are therefore taken from their own getters at full precision, so a
+live take-off equals the one from the saved model. Run against SAP2000 27.1 (`--quantity-connected`): 17 tables in
+about 1.5 s, model, units and lock state unchanged.
+
+*A candidate* — never the connected SAP2000:
+
+1. SAP2000's text copy of the candidate (`<model>.$2k`, written by SAP2000 beside the `.sdb` at every save) is used
+   when it was written for that model, is complete, holds every table the take-off needs, and is not older than the
+   model except by the study run itself (the run saves the child, which writes the export, and the analysis then
+   writes the `.sdb` once more; the run journal accounts for that gap, and without a journal entry up to 15 minutes
+   are accepted). This needs no SAP2000 at all.
+2. Otherwise the model is read through an **isolated, read-only SAP2000 workflow**: the candidate's `.sdb` is copied
+   into a private folder (`%LocalAppData%\COTVCF\QuantityRead`), a separate SAP2000 instance opens the copy, the
+   same tables are read through the database-tables API (`GetAvailableTables`, `GetTableForDisplayArray`), and the
+   instance is closed without saving. SAP2000 never opens the candidate's own files, and the connected SAP2000 — its
+   model, units and lock state — is not involved. The application is busy while this runs; **Cancel** or another
+   selection stops it. The table read itself is the one used for the connected model and has been run against
+   SAP2000 27.1; **starting a separate instance on a private copy has not yet been run live** (it is covered by API
+   doubles) — `--quantity-live` below does that.
+
+The line under the dropdown states which source was used.
+
+**How it is calculated.**
+
+- *Member length* = distance between the member's two end joints in the candidate (frames and cables alike; a
+  cable's sag and stored undeformed length are not applied).
+- *Section areas* are physical areas per material. A Section Designer section is read from its drawn shapes — the
+  shapes found in the stored models: I/wide flange, box/tube, solid rectangle and polygon with straight edges. A shape
+  in front (higher Z-order) replaces what it covers, so an embedded steel shape displaces concrete; a tube's interior
+  is empty unless another shape fills it. Any other frame section and a cable section have the one area of their one
+  material (a member's material overwrite replaces it).
+- *Concrete volume* = concrete area × length. *Steel mass* = steel area × length × that material's own mass density
+  (`UnitMass`). SAP2000 material types Steel, Rebar and Tendon (cable strand) count as steel, Concrete as concrete.
+  Values are converted to m, m³ and t from whatever units the model was saved in.
+- The transformed area SAP2000 reports for a Section Designer section is used only as a check: the shape areas,
+  weighted by their moduli, must reproduce it to 0.1 %, otherwise the section is withheld. It is never a quantity.
+- Each object is counted once. A name the tables list twice is counted once; a member assigned to two different
+  sections is counted with neither; two objects between the same joints with the same section are both counted and
+  pointed out in the notes.
+
+**Not taken off — shown as n/a with the reason, not estimated:** reinforcement (a shape or concrete section that
+carries reinforcement data), Section Designer shapes other than the four above, polygons with rounded corners, shapes
+that overlap at the same Z-order, library (non user-defined) shapes, non-prismatic sections, curved members, a
+material overwrite on a composite section, materials that are neither concrete nor steel, a steel without a mass
+density, and members whose section, joints or coordinates are missing.
+
+On the COT Framing_V1.2 study the candidates differ by height only: 795.0 m³ of concrete and 2,862 t of steel at
+20 m, 837.9 m³ and 3,262 t at 30 m (cable strand included). Charts, exports and further summary tables are not part
+of this tab.
+
 ## Project configuration
 
-The COT VCF project JSON stores the configuration for Tabs 1–5 and their study selections; loading a project never writes to SAP2000. **Save Config** updates the current tab section, while **Save All** validates and saves all sections atomically. Saved configuration is checked against the connected model before it is applied.
+The COT VCF project JSON stores the configuration for Tabs 1–5 and their study selections; loading a project never writes to SAP2000. **New Config** clears the current configuration and active file identity while retaining the connected SAP model and session baseline; the next save asks for a new file. Existing files and Print Setup preferences are retained. **Save Config** updates the current tab section, while **Save All** validates and saves all sections atomically. Saved configuration is checked against the connected model before it is applied. Configuration and workflow controls are enabled only after SAP connects successfully, and disable again if the connection is lost.
 
 ## Build and run
 
-Requirements: Windows x64, .NET 8 Desktop Runtime, and SAP2000 26. `CSiAPIv1.dll` is referenced from the local SAP2000 installation and is not committed.
+Requirements: Windows x64, .NET 8 Desktop Runtime, and a local SAP2000 installation providing `CSiAPIv1.dll` (SAP2000 26 is the project default; the installed SAP2000 27 API also builds). The API DLL is not committed.
 
 ```powershell
 dotnet build COTVCF.sln
@@ -123,9 +285,15 @@ Default executable:
 ```powershell
 dotnet run --project tests\COT_VCF.Checks.csproj
 dotnet run --project tests\COT_VCF.Checks.csproj -- --study-ui
+dotnet run --project tests\COT_VCF.Checks.csproj -- --fem
+dotnet run --project tests\COT_VCF.Checks.csproj -- --fem-sap
+dotnet run --project tests\COT_VCF.Checks.csproj -- --quantity-study "<baseline>.sdb"
+dotnet run --project tests\COT_VCF.Checks.csproj -- --quantity-connected
 ```
 
-The first command runs offline workflow and guarded SAP-write tests using test doubles. The second opens the Tab 5 UI smoke test and checks WPF bindings. Live SAP checks are intentionally separate because they require a running SAP2000 instance.
+The first command runs offline workflow and guarded SAP-write tests using test doubles, including the Tab 8 quantity take-off (calculation, candidate records, source selection, the isolated read against API doubles, and the tab's loading / stale-request / connection behaviour). The second opens the WPF smoke test and checks workflow/FEM/quantity bindings. The third runs the internal FEM analytical and candidate-composition checks. The fourth compares the internal FEM with a completed SAP2000 study, like for like, from the fixture in `tests/fem-sap-benchmark` (offline; report in `.work/fem-vs-sap`). The fifth prints the quantity take-off of every candidate of a study on disk from the candidates' own text exports (offline; reads only). The sixth is live but read-only: it attaches to the running SAP2000, takes off the model open in it through the API exactly as Tab 8's *Connected model* does, prints the values as SAP2000 hands them over, and confirms that the model, its units and its lock state are unchanged. Live SAP checks are intentionally separate because they require SAP2000: `--quantity-live "<candidate>.sdb"` runs the isolated Tab 8 read on one candidate — it starts its own SAP2000 on a private copy, never attaches to a running one — and compares the result with that candidate's text export.
+
+The checks project takes the same `-p:SapInstallDir=...` as the application when SAP2000 26 is not the installed version.
 
 ## Implementation boundaries
 
@@ -133,3 +301,4 @@ The first command runs offline workflow and guarded SAP-write tests using test d
 - All CSI calls live under `src/SAP2000` and execute through dedicated STA lanes.
 - SAP units, model identity, object existence, baseline coordinates, and return codes are verified around writes.
 - Recovery JSON is written before guarded write batches; failed batches attempt rollback.
+- Tab 8 writes nothing: it reads candidate text exports, and where SAP2000 is needed it uses a separate instance on a private copy of the model.

@@ -119,6 +119,6 @@ public sealed class CandidateDiagnosticReportGenerator
     thead th{background:var(--su);color:var(--mu);font-weight:600}.n{text-align:right;font-family:Consolas,monospace}
     table.kv{width:auto}table.kv th{background:var(--su);color:var(--mu);white-space:nowrap}
     tr.bad td{background:#FDECEA}tr.warn td{background:#FFF4E5}.ok{color:var(--ok)}
-    @media print{body{padding:0}header{margin-bottom:10px}h2{margin:14px 0 6px}section{break-inside:avoid}}
+    .pr-sheet header{margin-bottom:10px}.pr-sheet h2{margin:10px 0 6px}
     """;
 }

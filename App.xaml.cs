@@ -1,5 +1,6 @@
 using System.Windows;
 using COT_VCF.Application;
+using COT_VCF.Application.Quantities;
 using COT_VCF.Application.Results;
 using COT_VCF.Application.Workers;
 using COT_VCF.Domain;
@@ -14,6 +15,21 @@ public partial class App : System.Windows.Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // A UI-thread error must not silently close the app (and lose the SAP session): log it, report it, keep running.
+        DispatcherUnhandledException += (_, args) =>
+        {
+            var log = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "COTVCF", "error.log");
+            try
+            {
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(log)!);
+                System.IO.File.AppendAllText(log, $"{DateTime.Now:O}{Environment.NewLine}{args.Exception}{Environment.NewLine}{Environment.NewLine}");
+            }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+            MessageBox.Show(MainWindow, $"{args.Exception.Message}{Environment.NewLine}{Environment.NewLine}Details were written to {log}. " +
+                "The app is still running; save your work.", "COT VCF — unexpected error", MessageBoxButton.OK, MessageBoxImage.Error);
+            args.Handled = true;
+        };
         gateway = new();
         var state = new ApplicationState();
         var workflow = new WorkflowService(gateway, state);
@@ -21,11 +37,15 @@ public partial class App : System.Windows.Application
         var studyExecution = new StudyExecutionCoordinator(
             new ConnectedSapInstanceHostFactory(gateway, new SapInstanceHostFactory()),
             new StudyArtifactPublisher(() => state.OutputSettings.DeflectionLimitBand));
+        // Tab 08 reads a candidate's own text export; where that cannot be used, a private copy of the model in a
+        // SAP2000 instance of its own — never the connected one.
+        var quantityTakeoff = new QuantityTakeoffService(
+            new IsolatedSapTableReader(new SapInstanceHostFactory()));
         var outputDialogs = new OutputSettingsDialogService();
         var outputPreparation = new OutputGroupPreparationService(gateway);
         var viewModel = new MainViewModel(state, workflow, new SelectionService(), config, studyExecution,
             outputDialogs: outputDialogs, outputGroupPreparation: outputPreparation,
-            printStore: new ReportPrintSettingsStore());
+            printStore: new ReportPrintSettingsStore(), quantityTakeoff: quantityTakeoff);
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
     }

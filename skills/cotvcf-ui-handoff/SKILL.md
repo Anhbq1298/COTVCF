@@ -22,6 +22,9 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - If the running desktop app locks `bin/Debug/net8.0-windows/win-x64/COT VCF tools.exe` or `.dll`, close it with `Get-Process -Name 'COT VCF tools' -ErrorAction SilentlyContinue | Stop-Process -Force`, then rebuild.
 - For compile-only checks while the app is open, use `dotnet build COTVCF.csproj -o .work\build-check`.
 - Launch the app from `bin/Debug/net8.0-windows/win-x64/COT VCF tools.exe`.
+- The built application folder is `bin/COT ParametricTools_V2` (version 2.0.0.0). Produce it with
+  `dotnet publish COTVCF.csproj -c Release --self-contained false -o "bin/COT ParametricTools_V2"` — never by
+  copying a build output by hand: the earlier hand-copied `COT VCF Tools V1.0` folder went stale and showed an old app.
 
 ## Compact Engineering Density Pass
 
@@ -61,6 +64,10 @@ earlier tall-header / large-button / blue-block look.
   geometry / load patterns / force sources for the current session.
 - `MainViewModel.StatusLine` feeds the top-bar status text; keep it in the `Update()` notify list.
 - Do not move connection controls into the viewer.
+- Configuration and workflow controls require a successful SAP connection and disable again on connection loss.
+  Connect, Refresh, Help and active-run cancellation remain available. The top-bar **New Config** clears Tabs 01–05
+  and the active file identity in memory, retains the SAP connection and immutable baseline, and makes the next
+  save choose a new file. Saved files and per-user Print Setup are retained.
 
 ## Viewer Behavior
 
@@ -85,28 +92,280 @@ earlier tall-header / large-button / blue-block look.
 
 ## Workflow tabs & shared model preview
 
-- There is **no** standalone "SAP Model" tab. The five workflow tabs (left rail) are **01 Loading, 02 Truss
-  Height, 03 Pretension, 04 Output Settings, 05 Iteration** (`SelectedIndex` 0-4). Connecting is the top-bar
-  `Connect SAP` button only. The `NN` in each header, all doc/help "Tab NN" prose, and the config validation
-  labels use this 01-05 numbering; the DTO property names (`Tab02Loading` … `Tab05IterationStudy`) and JSON keys
-  are **unchanged** legacy v1 identifiers — do not renumber them.
+- There is **no** standalone "SAP Model" tab. The left rail is **01 Loading, 02 Truss Height, 03 Pretension,
+  04 Output Settings, 05 Iteration, 06 Post-Processing, 06A Optimization, 07 FEM, 08 Quantities** (`SelectedIndex`
+  0-8: Optimization is index 6 — `TabOptimization` — FEM is index 7 — `TabFem` — and Quantity Take-off is index 8 —
+  `TabQuantities`). Connecting is the top-bar `Connect SAP` button only. Project JSON stores the Tabs 01-05 inputs and the Print Setup; nothing of
+  the FEM tab is saved in it. DTO property names (`Tab02Loading` … `Tab05IterationStudy`) and JSON keys are
+  unchanged legacy v1 identifiers.
 - There is **one** `Structural2DViewer` (`x:Name="SharedViewer"`), hoisted out of the `TabControl` into a
   three-column grid in `MainWindow.xaml`: `ParamsColumn` (the `TabControl`, params only) | `ViewerSplitterColumn` |
   `ViewerColumn` (the `SharedViewerPane` `DockPanel`). Switching tabs never rebuilds the viewer.
 - `MainWindow.xaml.cs` `ApplyViewerLayout()` (called from `Loaded` and `WorkflowTabs_SelectionChanged`): tabs
-  01-04 (index 0-3) get the resizable ~40/60 params/preview split; tab 05 Iteration (index 4) hides the viewer +
-  splitter and the `TabControl` takes the full width. The user's dragged split is remembered in
+  01-04 (index 0-3) and 07 FEM (index 7) get the resizable ~40/60 params/preview split; tabs 05 Iteration,
+  06 Post-Processing, 06A Optimization (indices 4-6) and 08 Quantities (index 8) hide the viewer + splitter and the
+  `TabControl` takes the full width. The user's dragged split is remembered in
   `paramsColumnWidth` / `viewerColumnWidth`.
 - The viewer's `Model` and every overlay come from `MainViewModel` `SharedViewer*` computed properties gated on
   `selectedTab` (`SharedViewerModel`, `SharedViewerAppliedPoints`, `SharedViewerTopPoints/Middle/Bottom`,
   `SharedViewerCables`, `SharedViewerCaption`, `SharedViewerHint`, `ShowTrussLegend`). `NotifySharedViewer()` is
   called from the `SelectedTab` setter and from `Update()`, so both a tab switch and any state refresh re-raise them.
-- Overlays per tab: Loading → applied-point arrows + selection sync; Truss → Top/Middle/Bottom recoloured joints
+- Overlays per tab: Loading and FEM → applied-point arrows + selection sync; Truss → Top/Middle/Bottom recoloured joints
   + legend chip; Pretension → `State.Cables` highlight/labels + selection sync; Output → `State.Cables`
   highlight/labels plus point labels (so the user can read names to pick deflection points, foundation reactions,
-  member-force groups and monitored cables). Caption (Consolas, top) = `HeightSummary` on Truss,
+  member-force groups and monitored cables). FEM uses the linked geometry and Tab 01 load-point overlays. Caption
+  (Consolas, top) = `HeightSummary` on Truss,
   `CablePreviewSummary` on Pretension, `GeometrySummary` on Output, empty on Loading.
 - Do **not** re-add a per-tab `Structural2DViewer`; the params panels are viewer-free.
+
+## Tab 07 FEM
+
+- Runs every Cartesian Tab 01 × Tab 02 × Tab 03 candidate combination in the internal solver; it does not use
+  Tab 05 study mode/filters and never writes to SAP2000.
+- SAP properties are read on the existing STA gateway lane in kN/m units: assigned frame/cable sections,
+  effective section material, elastic modulus (isotropic getter except SAP `Tendon` materials, which use the
+  uniaxial getter), frame area/in-plane inertia modifiers, and frame end rotation releases. A CSI `None`
+  material-overwrite sentinel means "use the section material"; it is never passed as a material name.
+- `Read Properties` populates the read-only member-property grid before analysis; it does not write SAP data.
+- FEM has nested `Analysis` / `Results` subtabs. Results selects one completed `Lxx_Hxx_Pxx` candidate and offers
+  Axial Force, Bending Moment, Shear, Reactions, and Deflected Shape; the shared viewer draws filled blue-positive /
+  red-negative member diagrams, green support vectors, or the visually magnified deformed shape. The adjacent
+  grid lists values and units; diagram widths are auto-scaled and are not numeric scale. These are internal FEM
+  combinations built from Tab 01 loading rows, not SAP2000 saved analysis cases or combinations.
+- The internal model is linear-elastic 2D XZ Euler-Bernoulli frames plus axial tension-only cables with Tab 03
+  target forces fitted in a pretension-only stage (FEM Analysis: ±% tolerance, default 10, and max iterations,
+  default 100; all cables adjusted together) before the Tab 01 loads act on the prestressed state. FEM page tabs
+  are Inputs (pin supports, "Read from SAP", and sub-tabs Sectional properties — A/E/I/releases plus γ, ρ, w = γ·A·mod w,
+  m = ρ·A·mod m and Mod A/I/m/w — and Loads — editable load patterns (SW multiplier), static load cases (Run, definition
+  "1 DEAD + 1 PT", continues-from) and combinations (Run, factors); read via ISapGateway.GetFemLoadingAsync, never
+  written back; FemLoadPlan resolves them per candidate: Tab 01 loads replace SAP joint forces at applied points in their
+  pattern; each case solved tension-only; pretension fitted in the case whose own definition holds the Tab 03 pattern;
+  linear-additive combos superpose case results; FEM_PT/FEM_TAB01 app rows added when SAP has no such cases) | Analysis (fitting ±%, max iterations, Frame
+  mesh segments per frame (default 10). Like SAP, each frame is first split at every member-end joint lying on it
+  within 1 mm (FrameJoints.Pieces — e.g. full-length chords crossed by verticals and cable anchors), then each piece
+  is meshed; cables are never split or meshed. Interior mesh nodes are statically condensed onto the joints and
+  recovered as stations for diagrams/deflected shape; the viewer splits frames the same way), run controls, cable table:
+  Target / Pretension / Dev. % / Status / Result / Applied P / Iter.) | View (ViewToggle buttons: Frame mesh,
+  Member size, Loading — viewer overlays only while the FEM tab is open) | Results (Load case / combo selector drives the
+  table, viewer, hover and the cable table Result column; Axial force view draws frame
+  axial diagrams and cable tensions together; "Axial values (kN)" checkbox labels each frame piece and each cable
+  ("T n kN", drawn on top) in whole kN; Reactions view draws Rx and Rz as separate arrows with separate whole-kN
+  labels — never a combined resultant). In every result view, hovering within 10 px of a member shows a section
+  read-out: frames → name, x from I-end [m] and %, N/V/M and ux/uz interpolated between mesh stations, with a dashed
+  section-cut marker; cables → tension, slack state, target; supports (priority) → Rx/Rz.
+- Shared viewer projection dropdown has XY / XZ / YZ / 3D. 3D (StructureModel3D + WPF Viewport3D, orthographic,
+  true isometric default) extrudes every frame's SAP section to scale along SAP default local axes rotated by the
+  local-axis angle; shapes from PropFrame type getters (rectangle, box/concrete box, I, channel, tee, angle, circle,
+  pipe/concrete pipe, general) via FemSectionProperties.Shape, else an equivalent solid rectangle with the same A, I33,
+  I22 (SD, filled-tube, built-up…); cables are rods of their gross area; concrete materials are shaded concrete.
+  Drag orbit, right/Shift-drag pan, wheel zoom, double-click / Fit fits. Needs Read from SAP for sizes.
+- FEM deflection viewer colours the magnified shape by displacement magnitude |U| [mm], with a displayed range
+  (maximum 0 = automatic). Undeformed geometry is a light dashed guide, independently hideable; contour can be disabled.
+  Clicking a displayed joint shows only Ux, Uy, Uz [mm]; Uy is zero for the planar solver. These are presentation controls only.
+- FEM uses Inputs / Analysis & Results / View. Candidate and Load case / combo dropdowns live inside Result Explorer.
+  Explorer shows six flat outputs (axial/cables, bending, shear, reactions, deflection, cable target fit), without candidate branches.
+  Dropdowns filter the diagram and tables; View Results opens FemResultsWindow with the same selections.
+  Floating chart controls remain synchronized with the explorer. Solver behavior is unchanged.
+- Run Analysis opens the non-modal FEM Run Monitor (FemRunMonitorWindow; reopen with Analysis → Monitor): progress,
+  live log inside a collapsed Diagnostic details expander (FemLog, one line per step and per case), Cable dropdown (default Cable1a-2) and Case dropdown with
+  Follow latest, and ConvergenceChart of P_result/P_preset per pretension-fitting run (run 0 = 0, line at 1, ±tol
+  band) from FemCableResponse.FitHistoryKN. Help is a window (HelpWindow) with Workflow and FEM procedure topics;
+  the ⓘ next to Monitor and top-bar Help on Tab 07 open the FEM procedure directly. Keep the topic concise:
+  preparation, inputs, run settings, results and main limitations; omit debug logs and algorithm details.
+  Keep the FEM procedure text in sync with the solver. Frame moments use one sign
+  convention at both ends (I-end = -f2), so diagrams are continuous across joints. A case whose targets cannot be met
+  is not an error: it keeps the closest pretension, is marked "Not fitted" (reason in the Status tooltip), and the
+  run continues. A case whose equilibrium solve fails gets one "Failed" row with the reason; the run continues.
+  That row has a **blank Cable cell** (`FemCableFitRow.FailedCase`) — no "(all cables)" or other placeholder; the
+  candidate ID, the Failed status, the reason in the Status tooltip and the `FAILED` line in the run log identify it. Pins are auto-detected at the lowest joints connected to near-vertical frame
+  members, drawn at the base joints in the shared viewer; they restrain X/Z translations and leave rotation free.
+- Tension-only cable equilibrium uses damped Newton iterations with a potential-energy line search, not a Boolean
+  active-set toggle. Failure reports include the final free-DOF residual and active cable count.
+- Unsupported inputs fail explicitly: non-planar geometry, tendon objects, advanced local axes, axial or
+  in-plane shear releases, and rotated local axes combined with in-plane releases. P-Δ, large-displacement
+  geometry updates and SAP analysis settings are not modeled.
+- **Cable sag** (`FemCableSag`, Analysis checkbox `Cable sag`, default on → `FemStudyService.Analyze(…, cableSag)` →
+  `PlanarFrameSolver.SolveCases(…, cableSag)`; the solver API itself defaults to off) is the one geometric
+  nonlinearity. `WithSag` gives each cable the load normal to its chord in the load set being solved (uniform-
+  equivalent; self-weight w → w·cos θ, so a vertical cable or a case without load on the cable stays straight).
+  `SaggingTension` solves `T/k − a/T² = Δℓ + P/k`, `a = w_n²L³/24` (shallow parabola; unique positive root — no
+  slack switch); the tangent is Ernst's `k/(1 + w_n²L²EA/12T³)`; the energy is `T²/2k − 2a/T` (still convex, so
+  one solve per case still gives the staged result). `Assemble` linearizes a sagging cable at the current
+  displacement, so the residual and the reactions are exact. `P_applied` keeps its meaning (lack of fit × EA/L) and
+  is what target-force fitting adjusts. `FemCableResponse.SagM` / `TangentStiffnessRatio` → cable table columns
+  `Sag mm` / `Stiff. %` and the hover read-out; combinations carry neither. The load still reaches the cable's
+  end joints as before.
+- **Provenance and trust**: the solver is this application's own code — nothing from OpenSees or SAP2000;
+  MathNet.Numerics only. The class summary of `PlanarFrameSolver` and the README list the published sources
+  (McGuire/Gallagher/Ziemian, Cook et al., Guyan 1965, Irvine 1981, Ernst 1965,
+  Gimsing & Georgakis, Kanno 2011, Nocedal & Wright, Levenberg 1944, CSI manual for Target Force). Keep those
+  two places in step; omit benchmark and verification references from the concise FEM help. Cite only what the code actually implements, and state only the agreement the benchmark
+  below actually shows. It has not been compared with OpenSees.
+- **Pretension stages** (`FemLoadPlan.FitCases` / `StagesFor`, used by `FemStudyService.Analyze`): every case whose
+  own definition applies the Tab 03 target-force pattern is a stage of its own — SAP2000 meets a Target Force at
+  the end of that case, under that case's loads — and a case takes its pretension from the stage it continues from
+  (`InitialCase` chain). One `SolveCases` call per stage. Do not go back to one fit for all cases: on the real
+  model `Pretension` (target force + self-weight) and `Pretension Only [For Ref]` both apply the pattern, and the
+  staged result cases continue from the first.
+- **FEM against SAP2000** (`tests/FemSapBenchmark.cs`, `--fem-sap`; fixture `tests/fem-sap-benchmark`: `model.s2k`,
+  `project.json`, `sap-results.json`; `--fem-sap-capture` rebuilds it from a study on disk). Offline — never
+  attaches to SAP2000. `tests/SapModelText.cs` reads SAP2000's text copy of the model (`.$2k`) into the same
+  inputs `SapGateway` reads live, and refuses any analysis input it does not map. Like for like means: same
+  candidates (keys, heights, every cable target checked), same supports, same stage (only the cases SAP2000's
+  results were read from are run; the pretension is fitted in `Pretension` with SAP2000's own TFTol), same loads
+  (ΣFz first — independent of stiffness), same cable lengths (below). Result on COT Framing_V1.2, 135 candidates:
+  ΣFz 0.002 %, cable force ≤ 3.8 %, deflection ≤ 3.2 %, Fz ≤ 0.32 %, Fx ≤ 1.2 % of the largest SAP2000 value;
+  the bands in the check (5 / 5 / 5 / 1 / 2 %) are regression bands for this study. Cable sag changes a cable
+  force by ≤ 0.2 % at these tensions (17–51 MN).
+- **Two defects the benchmark found** (the first is open, the second is fixed):
+  1. `SapGateway.GetFemSectionPropertiesAsync` weighs a composite Section Designer section as base-material unit
+     weight × the transformed area SAP2000 reports (CFT chords 149.6 instead of 105.2 kN/m; +4 % total load on
+     this model). SAP2000 weighs each shape with its own material; `SapModelText.CompositeUnitWeight` does that
+     from the Section Designer tables and is confirmed by ΣFz. The live read needs the same (the same tables are
+     available through SAP2000's database-tables API) and must be verified against a running SAP2000.
+  2. **Fixed.** `SapGateway.MovePointsAsync` used to move joints and leave the cable shape data alone. A SAP2000
+     cable object defined by its undeformed length (`CableObj.GetCableData` type 8) keeps that number when its end
+     joints move, so taller candidates were analysed with cables whose undeformed length was up to 29 % shorter
+     than the chord they span — 41 % stiffer (evidence: SAP2000's own `.$2k` copy of every child model of the
+     benchmark study lists `UnDefLength` = the baseline chord and `UnDefRelLen` < 1, 0.707 for Cable2a at the
+     tallest height; ΣFz agrees only with baseline cable weights). **Now** the geometry write reads every such
+     cable before the move and afterwards sets its undeformed length to the same length *relative to its chord*
+     (`SetCableData`, type and every other setting kept), reads it back, and rolls the joints and cables back if it
+     did not take. Other cable definitions (tension, sag, relative length) are left to SAP2000. Constants:
+     type 8 = undeformed length; parameter [9] = undeformed length, [10] = relative length — a reply where
+     [9] / chord ≠ [10] is refused before anything is written. This applies to the study's child models and to
+     Tab 02's own apply. Verified against SAP2000 27.1 by `--cable-length-live <baseline.sdb> <project.json>
+     [--analyse]` (`tests/CableLengthLiveCheck.cs`; starts its own SAP2000 on a copy under `.work`, never attaches
+     to the user's): all 16 cables at relative length 1.000 at the tallest height, and with `--analyse` the
+     tallest candidate through the real study path — SAP2000 peak deflection 93.3 → 114.5 mm, FEM 114.7 mm, cable
+     forces within 1.6 %. **A study run before the fix is wrong above the baseline height and has to be run
+     again**; the committed benchmark fixture is such a study, which is why the benchmark still reproduces the
+     stale lengths from the lengths SAP2000 recorded (it adapts once the fixture is re-captured from a new study).
+- Results are streamed per candidate so cancellation or a later failure retains completed rows. Candidate count
+  is capped at the existing 50,000-row preview limit.
+- The global `Load Config` picker starts in the repository `tests` folder when that folder is available.
+- The connection gateway attaches to SAP2000 only. An ETABS-originated model must be open/exported into SAP2000;
+  direct ETABS process attachment is not part of this FEM workflow.
+
+## Tab 08 Quantity Take-off (`MainViewModel.Quantities.cs`, `src/Application/Quantities/`)
+
+Concrete volume and steel mass of **one model** by assigned section, from that model's own SAP2000 data: the
+**connected model**, read live from the running SAP2000, or a **study candidate**, from its own saved data. Reads
+only: never a write, nothing saved in the project JSON.
+
+- **Connected model = live** (the user asked for this: a table read from a file saved hours ago "is not real time").
+  `QuantityCandidate.Connected(State.Model)` is always the first dropdown entry (`Id` = `Connected model`,
+  `IsConnectedModel`), and the tab opens on it when nothing is selected. It is read through
+  `WorkflowService.ReadDatabaseTablesAsync` → `ISapGateway.ReadDatabaseTablesAsync` on the connected gateway's lane
+  (`QuantityTakeoffService.ReadConnectedAsync`): never cached, never from a file, so an unsaved change in SAP2000 shows.
+  It is re-read on **Refresh** (`ReloadQuantities`, the icon beside the dropdown), every time the tab is shown
+  (`ShowQuantityTab`), and after the top-bar refresh (the session change clears the tab and it opens on the connected
+  model again). It is on request, not polled. `ReadConnectedQuantitiesAsync` runs it under `IsBusy` like every other
+  call to the connected SAP2000 and **waits** while another operation is busy (connect / refresh / study) instead of
+  reading in the middle of it; a `COMException` sets `Connection Lost` as elsewhere. The gateway verifies the active
+  model is still the connected one (`Verify(expected)`) — if not, the error tells the user to reconnect; do not read
+  whatever happens to be open. Read-only: display tables in present units; no unit change, no unlock, no save.
+  Header status `Live model`; source line `Connected model · <file> · read live from the connected SAP2000 at HH:mm:ss`.
+  A candidate never uses the connected SAP2000: its file is the truth, and its source line shows when it was written.
+  **Verified live on SAP2000 27.1** (`--quantity-connected`, 2026-10-07, COT Framing_V1.2): 17 tables in ~1.5 s; table
+  keys in title case, field keys identical to the text export, group `All` accepted (the blank group name is the
+  fallback); model, units and lock state unchanged. SAP2000 rounds display-table numbers to about five figures
+  (`UnitMass` 7.849, a cable `Area` 0.028802), so `SapGateway.Refine` replaces `UnitMass`, the frame-section `Area`
+  and the cable-section `Area` with `PropMaterial.GetWeightAndMass` / `PropFrame.GetSectProps` / `PropCable.GetProp`
+  where the getter agrees with the displayed value to 0.1 % — with that the live take-off equals the saved one.
+
+- **Tab**: `08  QUANTITIES`, index 8, after `07 FEM`, full width (no shared viewer). It sits inside the workflow grid
+  gated by `HasSapConnection`, and the view model gates too: without a connection the candidate list is empty and a
+  selection loads nothing; losing the connection clears the tab and cancels a read in flight. Header status:
+  `Connect SAP` / `No candidate models` / `N candidates` / `Reading…` / `<id>` (+ ` · incomplete`) / `▲ Unavailable` /
+  `× Read failed`.
+- **Layout**: heading `QUANTITY TAKE-OFF · BY ASSIGNED SECTION`; one line with `CANDIDATE` + the dropdown
+  (`QuantityCandidatePicker`, items shown by `Id`), an icon-only `Reload`, a `Cancel` that is visible only while a
+  separate SAP2000 instance is reading, and the status text; a monospace source line; a 2 px progress bar while
+  loading; the problem text (warning colour for unavailable, error colour for a failed read); then the table, a
+  fixed method caption and the notes — all in a 900 px left-aligned column.
+- **The agreed table** — exactly `Section | Figure | Member count | Total length m | Concrete volume m³ | Steel mass t`,
+  one row per assigned section (frames, then cables, natural name order) plus a bold `Total` row (it is the last item
+  of `QuantityRows`, so sorting is off). No portion, grade or height-variation column: choosing another candidate is the
+  comparison between models. Do not add charts, exports or further tables here without being asked.
+- **Figure column** (added on request, right after `Section`): the section drawn to scale by
+  `Controls/SectionFigureView` from `QuantitySectionRow.Figure` (`QuantitySectionFigure`: outlines in metres, X right /
+  Y up, shapes back to front; a second outline is an opening, filled even-odd). It comes from the same stored data as
+  the quantities — the Section Designer shapes in ZOrder; a standard section from `t3` / `t2` / `tf` / `tw` / `t2b` /
+  `tfb` (box/tube, I/wide flange, rectangular, circle, pipe); a cable from its stored `Diameter` — and is null when
+  that data does not describe a drawable shape (cell shows a muted `—`; never a partial or equivalent shape). A
+  section whose quantities are withheld is still drawn as stored. Colours are the theme tokens `SectionConcrete` /
+  `SectionSteel` (steel is edged in its own colour so thin plates read as steel). Every thumbnail (64 × 42) is
+  scaled to fit, so `QuantityRow.FigureSize` prints the overall `W × D mm` under it and the cell tooltip shows a
+  larger view. This grid alone uses `RowHeight="NaN"` / `MinRowHeight="24"`: figure rows are ~60 px, the Total row
+  stays at the compact 24 px. The figure is a picture only — no quantity is taken from it.
+- **Unavailable is never zero**: `QuantityRow` quantities are `double?`; null renders `n/a` in the warning colour
+  with the reason as the cell tooltip, a column total with a null in it is null, and the Total tooltip states the sum
+  of the sections that could be taken off. `0.000` means the section really has none of that material. Do not turn a
+  missing value into 0, and do not show a partial sum as the total.
+- **Candidates** (`QuantityCandidateCatalog.Discover(BaselineModelPath)`): every `Lxx_Hxx_Pxx` named by the run
+  journal (`StudyRunJournal.ReadAll`: `StudyRun.json` + `RunHistory`) or by a folder under `<baseline folder>/Study`,
+  whose model or text export is on disk. The model path is `StudyPathService.GetIterationModelPath`, else the path the
+  journal recorded inside that candidate's folder, else the one `.sdb` in it (a study keeps its children when the
+  baseline is renamed). The record that counts is the latest run that worked on the candidate; a Failed / unfinished
+  one adds a warning note. The list is rescanned when the tab is shown, on Reload and on a session change while the
+  tab is shown; the list object is kept while its contents are equal (`QuantityCandidate` has value equality), so
+  the dropdown keeps its selection. Nothing is selected automatically.
+- **Loading** (`LoadQuantities`): every selection takes a new request number and cancels the previous token; only
+  the latest request may publish (`request != quantityRequest` → drop), so an earlier, slower read can never replace
+  a newer selection. States: `NoCandidate`, `Loading`, `Ready`, `Unavailable` (reason shown, table empty), `Error`.
+- **Data source** (`QuantityTakeoffService`), always the selected candidate's own data:
+  1. `TryTextExportAsync` — SAP2000's text copy `<model>.$2k` (written beside the `.sdb` at every save; read by
+     `SapTableSet.ReadText`). Used when its first line names this file, it ends with `END TABLE DATA`,
+     `QuantityTakeoffCalculator.MissingInputs` is empty, and it is not outdated. **Outdated is not "older than the
+     .sdb"**: the study saves the child (export written) and the analysis then writes the `.sdb` again 5–30 s later
+     on the real study, so a model newer than its export is accepted when a run window of the journal covers both
+     writes, or — with no record — within `UnrecordedAnalysisAllowance` (15 min). Never starts SAP2000.
+  2. `ReadWithSapAsync` → `IsolatedSapTableReader` — the isolated read-only workflow: copy the `.sdb` to
+     `%LocalAppData%\COTVCF\QuantityRead\<guid>`, start a `SapInstanceHost` of its own (id 90) on the copy,
+     `ISapGateway.ReadDatabaseTablesAsync` (`DatabaseTables.GetAvailableTables` + `GetTableForDisplayArray`, group
+     `All`, present units — no unit change, no unlock, no edit, no save), `ApplicationExit(false)`, delete the copy.
+     One at a time (static semaphore); results are kept per model file stamp. The view model runs it under `IsBusy`
+     (so Connect / Refresh / a study run cannot start meanwhile and attach to that instance), chains reads through
+     `quantitySapRead`, and refuses while another operation is busy. Without a reader (checks) the state is
+     `Unavailable`. Signatures verified against CSiAPIv1 2.15 (SAP2000 27) and the table read itself verified
+     live on the connected model; **the separate instance on a private copy has not yet been run live** —
+     `--quantity-live <candidate.sdb>` does that (opt-in, starts its own SAP2000, never attaches).
+- **Calculation** (`QuantityTakeoffCalculator.Calculate(SapTableSet)` — one calculation for both sources; table and
+  field names are matched case-insensitively because the API uses title case):
+  - length = distance between the end joints in `JOINT COORDINATES` (frames and cables; cable sag / `UnDefLength`
+    not applied); section = `AnalSect` / `CableSect` of the assignment tables;
+  - Section Designer sections (`Shape="SD Section"`): physical area per shape from `SECTION DESIGNER PROPERTIES`
+    04 I/wide flange, 09 box/tube, 12 solid rectangle, 16 polygon (01 general, 21 reference line, 30 fiber carry no
+    area). **A shape with a higher `ZOrder` replaces what it covers** (`SectionDesignerGeometry.VisibleAreas`: shapes
+    as convex pieces, exact convex-minus-convex cuts); a tube's interior is empty unless another shape fills it.
+    Established on the stored model: the mega column reports 5.3656 m² = (4.5 − 0.21) + 0.21 × E_s/E_c, i.e. the
+    embedded I-shapes displace concrete. No stored shape has `Reinforcing=Yes`;
+  - any other frame section and a cable section: the section's `Area` with its `Material` (a member's `MatProp`
+    overwrite replaces the material; `Default` / `None` mean none);
+  - material class from `MATERIAL PROPERTIES 01` `Type`: Concrete → volume; Steel, Rebar, Tendon → mass with that
+    material's `UnitMass` from table 02; units from `PROGRAM CONTROL` `CurrUnits` / the model's present units
+    (`SapTableUnits`: force·s²/length⁴ → t/m³);
+  - the transformed `Area` SAP2000 reports for an SD section is **only a check** (Σ A·E/E_base within 0.1 %, else
+    the section is withheld) — never a quantity. Do not substitute it, the baseline's properties, the FEM
+    properties (`FemSectionProperties` areas are transformed), an equivalent shape or a height-derived length;
+  - each object once: a name listed twice is counted once (note); a member assigned to two sections goes to
+    `(no section assigned)`; twin objects on the same joints are both counted and noted.
+- **Withheld with a reason** (row n/a, reason in tooltip and notes): reinforcement (SD shape, or a concrete section
+  with data in another `FRAME SECTION PROPERTIES` table — then concrete is given and steel is n/a), any other SD
+  shape table, rounded polygon corners, shapes overlapping at one Z-order, non user-defined shapes, non-prismatic /
+  auto-select sections, curved members, a material overwrite on an SD section, a material type that is neither
+  concrete nor steel, a steel without `UnitMass`, missing section / joint / coordinates. To support a new shape:
+  add its pieces in `QuantityTakeoff.cs`, a stored example to the checks, and keep the area check.
+- **Checks**: `tests/QuantityTakeoffChecks.cs` in the default run — expected values worked out independently by
+  hand from `tests/fem-sap-benchmark/model.s2k` and derived candidates (joints moved, a section reassigned): units,
+  geometry, composite separation, overlap, grouping, totals, duplicates, every withheld case, the catalog, source
+  selection and freshness, the isolated read against `ApiDouble` API doubles (private copy, candidate folder
+  byte-identical, only read calls), and the view model (gating, switching, stale requests, cancel, failure,
+  connection loss) and the live connected model (opens on it, Refresh and tab re-entry read SAP2000 again, waits
+  while busy, failure, lost connection). `--study-ui` checks the tab, the headers, the live read, Refresh, `n/a` cells
+  and gating. `--quantity-connected` (opt-in, live, read-only) takes off the model open in the running SAP2000. `--quantity-study
+  <baseline.sdb>` prints every candidate of a real study from its exports (offline).
 
 ## Loading Criteria Tab
 
@@ -296,6 +555,14 @@ Study composition plus isolated child-model building, analysis, raw-result extra
 - Tab 06 remains the manual retry/regeneration boundary. `Generate Outputs` / `Regenerate` recreates the same derived
   outputs from raw JSON without a SAP gateway. The CSV is a spreadsheet-friendly raw view; JSON is the canonical
   complete post-processing input and remains available if automatic report generation fails.
+- **`Generate Outputs` writes everything; a module's `Regenerate` writes its own report only**
+  (`StudyPostProcessor.Generate(…, StudyOutputs outputs)`: `RegenerateDeflectionReport` / `…MemberForceReport` /
+  `…SupportReactionReport` / `…CableForceReport` each pass their one flag). The Excel workbook is by far the
+  slowest output (≈ 17 of 20 s on the 135-candidate study; a single report takes 0.6–2 s) and no report depends on
+  it — never put it, the diagnostics or the other reports back behind a module's Regenerate. A report regenerated
+  alone gets its own run-journal entry (`StudyRunJournal.RefreshArtifact`); the other entries stay. If the raw
+  package changed since the outputs were generated (its journal hash no longer matches) every output is stale, so
+  a module's Regenerate then regenerates everything and says so.
 - Capacity and the Tab 06A acceptance criteria are post-processing inputs. Changing `fpu`, `φ`, or a criterion must
   not invalidate reusable analyzed children. Automatic publication and a later explicit Tab 06 / 06A generation use
   the current post-processing values without changing the execution fingerprint.
@@ -369,10 +636,10 @@ change the engineering content, not the identity.
   its embedded data with Jint (test-only package, shared harness `tests/ReportPage.cs`) through the
   `window.cableReport` handle (`setMode`, `setLoad`, `applyGroups`, `autoDetect`, `resetGroups`), including the
   DOM-id regression check.
-- Printing: the report uses the shared print engine below (toolbar `Print report ▾`, Module 07 `Export PDF`). On paper it
-  re-lays its charts out against the sheet, keeps one pretension candidate (Side A + Side B) together per page where
-  it fits, prints a `Printed view:` line (value mode · load · grouping) and leaves the Source Data table out unless
-  asked for.
+- Printing: the report uses the shared print engine below (toolbar `Print Report`). On paper it re-lays its
+  charts out against the sheet, keeps one pretension candidate (Side A + Side B) together per page where it fits,
+  prints a `Printed view:` line (value mode · load · grouping) and leaves the Source Data table out unless asked
+  for.
 
 ## Tab 06 Post-Processing · Modules 02 / 03 / 05 Top Chord, Bottom Chord and Mega Column (`Member_Forces_Report.html`)
 
@@ -426,9 +693,8 @@ the generic views.
   drills into a chord. A URL fragment cannot be passed through the Windows shell, so generation writes tiny
   launcher pages, `Top_Chord_Report.html` / `Bottom_Chord_Report.html` / `Mega_Column_Report.html` (removed when
   the study has no such group). Modules 02 / 03 / 05 `View Report` open the launcher (`OpenTopChordReport` /
-  `OpenBottomChordReport` / `OpenMegaColumnReport`), and their `Export PDF` print that Summary to
-  `Top_Chord_Report.pdf` / `Bottom_Chord_Report.pdf` / `Mega_Column_Report.pdf`; without the group they fall
-  back to the whole member-force report. Module 04 (Vierendeel) is unchanged.
+  `OpenBottomChordReport` / `OpenMegaColumnReport`); without the group they fall back to the whole member-force
+  report. `Print Report` in the report prints the Summary it is showing. Module 04 (Vierendeel) is unchanged.
 - Checks: `tests/MemberForceReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
   `tests/ReportPage.cs`) through `window.memberReport.summary(groupIndex, 'summary' | 'station', pretensionId)`.
 
@@ -484,8 +750,8 @@ legend, chart text, values table); do not fork that CSS per report.
 - **Tooltips / traceability**: candidate · height · side, role · joint, signed MN, behaviour (Fz), source kN and
   result step, iteration key and loading, output case; the net shows `Σ Fx = Fx198 + Fx200 = …`. A collapsed
   `Reaction values` table (optional on paper) lists the kN source of every bar.
-- **Paper**: the Summary re-lays its charts at the sheet width (`reportPrint.register`), two chart rows per sheet;
-  `Export PDF` prints the report as it opens (Summary, Left foundation).
+- **Paper**: the Summary re-lays its charts at the sheet width (`reportPrint.register`); a chart card continues
+  on the next sheet between its rows. `Print Report` prints the view and side the report is showing.
 - **Deep links**: `#group=Right|all`, `#view=supports|totals|matrix`, `#detail=candidate&load=L01&pretension=P03&height=H02`.
 - Checks: `tests/SupportReactionReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
   `tests/ReportPage.cs`) through `window.reactionReport.summary('summary' | 'candidate', { loadId, pretensionId, heightId })`.
@@ -498,7 +764,8 @@ Qualifies the stored candidates against acceptance criteria and writes the exist
 
 - **Tab**: `06A  OPTIMIZATION`, index 6, after `06 POST-PROCESSING`. `IsEnabled` is bound to `HasRawData`; the
   header status reads `Needs raw data` / `Reading raw data…` / `Qualified n / N`. Layout: raw-data strip with
-  `Generate Optimized Reports` and `Open Optimized Folder`; a CRITERIA card and a RESULT card side by side; the
+  `Generate Optimized Reports`, `Print All Reports…` (the optimized set as one PDF — see the print engine) and
+  `Open Optimized Folder`; a CRITERIA card and a RESULT card side by side; the
   CANDIDATES table (virtualised `DataGrid`, status filter) filling the rest.
 - **Metrics once, criteria as often as they change**: `StudyMetricsStore.Load` derives one `CandidateMetrics` row
   per candidate (δ = `DeflectionLimitBand.PeakDownMm` over every monitored point; the final force of every cable)
@@ -540,77 +807,143 @@ Qualifies the stored candidates against acceptance criteria and writes the exist
   set with untouched full reports, identity and NQ marks through the report scripts, staleness, 1,000 candidates)
   and the `--study-ui` Tab 06A block (enabled state, live qualification, filter, generate).
 
-## Report Print Engine (`ReportPrintEngine`, Tab 06 Print Setup, Export PDF)
+## Report Print Engine (`ReportPrintEngine`, Print Report screen, Tab 06 Print Setup)
 
-Reports stay one self-contained HTML file; paper output is produced by the report itself with CSS Paged Media, so
-the browser's Print and the app's PDF export give the same pages. **Every HTML view is on the engine**: Deflection,
-Member Forces, Support Reactions, Cable Forces, the Tab 06A Optimization Summary and the per-candidate diagnostics.
-A new report
-must plug in the same way — do not give a report its own print header / footer.
+Reports stay one self-contained HTML file. **One report** is printed from the report: its `Print Report` button
+opens a composition screen — setup on the left, a live preview of the sheets on the right — and what the preview
+shows is what the browser prints. **Everything at once** is printed by the application: `Print All Reports…` writes
+every report as one PDF. **Every HTML view is on the engine**: Deflection, Member Forces, Support Reactions, Cable
+Forces, the Tab 06A Optimization Summary and the per-candidate diagnostics. A new report must plug in the same way —
+do not give a report its own print header / footer, and do not put a per-module PDF button back (`Export PDF` and
+the `Export*Pdf` commands were removed on purpose).
 
-- **Print Setup** (`ReportPrintSettings`, Tab 06 card `PRINT SETUP · HEADER / FOOTER`, above module 01): company,
-  logo file, project, job no., revision, prepared by, checked by, footer note, default paper (A4 / A3 / Letter),
-  orientation, page numbers, date, include Source Data. It is a **per-user preference**
-  (`ReportPrintSettingsStore` → `%LocalAppData%\COTVCF\ReportPrintSettings.json`), saved on every edit — not part of
-  the COT VCF project file, the study folder or the run fingerprint. Like capacities and criteria it is a
-  post-processing input: applied on the next Generate / Regenerate (`StudyPostProcessor.Generate(…, printSettings)`).
-  `MainViewModel` takes the store as an optional constructor argument; without one (checks) settings stay in memory.
+- **Print All Reports…** (Tab 06 beside `Generate Outputs`: `PrintAllReports`; Tab 06A beside
+  `Generate Optimized Reports`: `PrintAllOptimizedReports`): a Windows Save dialog asks only where to save — no
+  print dialog — then `ReportPdfExporter.ExportPackage` (headless Edge, else Chrome, private profile) writes one
+  PDF and the app opens it. Content, in module order (`StudyReportPackage.Items`): Optimization Summary
+  (optimized set), Deflection, the member-force report once per group Summary it has (Top Chord, Bottom Chord,
+  Mega Column — else once as it opens), Support Reactions, Cable Forces. Module 04 Vierendeel has no view of its
+  own and is not in the package. It prints with the **Print Setup card as it is now** (not the values embedded
+  at generation, and not what a browser remembers), pages numbered through (`Page 12 of 31`).
+  **How**: `StudyReportPackage.Html` is a small page with one frame per report, opened as `#print=package`. Each
+  report composes its own sheets — the same ones its Print Report screen shows — so nothing is drawn twice or
+  differently. Frames talk by `postMessage` (`{ cotvcf: "print", type }`): report `ready` → package `setup` →
+  report `sheets` (count, paper) → package `number` (offset, total). The frame is made exactly count × sheet
+  height tall; in a package a sheet is sized in mm, not px, so the page cuts fall on the sheet edges. Reports
+  generated before this existed are refused with "Regenerate" (`ReportPrintEngine.SupportsPackage`); a report
+  that never answers is named on a first page of the PDF. The 135-candidate study (56 MB member-force report,
+  loaded three times) prints 31 pages in about 10 s.
+
+- **Print Report screen** (`window.reportPrint`, `#pr-screen`): the `Print Report` button — accent-outlined,
+  placed straight after the main toolbar controls in every report, never behind hint or status text — opens the
+  screen; it never calls the browser's print dialog itself. Left (`#pr-setup`): Company, Project, Job No.,
+  Revision, Prepared by, Checked by, Footer note, Logo (`Choose…` / `Remove`), Paper (A4 / A3 / Letter),
+  Orientation, Page numbers, Date, Include source data table, `Print / Save as PDF`, `Use this report's defaults`.
+  Right (`#pr-pages`): the composed sheets, with a page count and a preview size (`Fit width` / `Whole page` /
+  `100 %`). Every edit re-stamps or re-composes the sheets at once. `Print / Save as PDF` is the only thing that
+  opens the browser dialog; `✕ Close` returns to the report and leaves nothing behind (no `pr-*` class on `body`).
+- **Sheets, not paged media**: the preview's `.pr-sheet` elements (`.pr-head` / `.pr-body` / `.pr-foot`, sized
+  from the paper in mm) *are* the printout — `@page{size:W H;margin:0}`, one sheet per page. While printing the
+  live report is clipped to zero height, not `display:none`, so SVG pattern definitions still resolve. Bands:
+  16 mm header (logo at most 7 mm tall), 13 mm footer, 10 mm sides — keep them this slim, the sheet is for the
+  charts. Header: logo (or company) left, report name · model centre, project over `Job No. … · Rev …` right.
+  Footer: company over `Prepared by … · Checked by …` left, note centre, date over `Page N of M` right. Ctrl+P
+  prints the same sheets (`beforeprint` / `afterprint`).
+- **Fixed content order**, whatever the order on screen: information → legends → general notes → summary →
+  charts → source tables. Legends and general notes are stated once, under one `Legend · general notes` heading
+  before the first chart — the same legend under several charts collapses to one (same content = same legend).
+  A note that belongs to one chart stays inside that chart's block and travels with it.
+- **A report marks its blocks**; the engine clones them out of the live DOM, so the report on screen is untouched:
+  - `data-pr="info|legend|note|summary|chart|source"` — one printable block and its place in the order. A block is
+    kept whole on a sheet (title + chart + its notes) and is scaled down only when it is taller than a sheet;
+  - `data-pr-keep` — a heading that stays with the block after it;
+  - `data-pr-split="selector"` — a block that may continue on the next sheet between the matched parts, its frame
+    (title, table head) repeated; a single large table splits between rows anyway;
+  - `data-pr-id` / `data-pr-type` / `data-pr-title` / `data-pr-from` — identity for the report model;
+  - `data-print-controls` on the toolbar(s) + one `data-print-view` element → a `Printed view: Group: … ·
+    Component: … · Loading: all` line; `data-print-fit` on a wide table's wrapper → scaled to the sheet width;
+  - `class="no-print"` / `class="print-only"`. A tagged block nested in another is printed in its own place, not
+    twice; collapsed `<details>` are opened while composing.
+  A document that marks nothing prints its top-level blocks in the order they stand (the diagnostics).
+  Controls never print as controls: `no-print` ones are dropped, and a `select` / text input inside a block
+  becomes plain text (`span.pr-val`), so the sheet records what the chart was showing.
+- **Report model**: `reportPrint.model()` returns `{ metadata, info, legends, generalAnnotations, summary, charts,
+  sourceTables }`, each entry `{ id, type, title, duplicatedFrom, … }` in print order. `charts` is the single
+  ordered list of the chart section — a new chart is appended to it, never inserted.
+- **Paper rules are `.pr-sheet`-scoped CSS**, not `@media print`: the preview is on screen and must look like the
+  paper. Only the engine has an `@media print` block. A report whose charts are drawn against the window width
+  registers `window.reportPrint.register({ before(page), after() })` and re-lays them out for `page.contentPx` /
+  `page.contentHeightPx`. Charts are inline SVG and are never rasterised — text stays text, bars and hatches stay
+  vector, colours print exactly (`print-color-adjust: exact`). Never let content overflow a sheet.
+- **Setup values**: the report embeds the Tab 06 Print Setup as its defaults (`#print-data`). What the user types
+  in the Print Report screen is kept by the browser (`localStorage`, key `cotvcf.printSetup.v1`, shared by every
+  report opened from disk in that browser profile) and wins over the embedded defaults until `Use this report's
+  defaults`. A logo too large for the store is printed for the session and has to be chosen again next time.
+- **Tab 06 Print Setup card** (`ReportPrintSettings`, `PRINT SETUP · HEADER / FOOTER`, above module 01): the
+  starting values of that screen — company, logo file, project, job no., revision, prepared by, checked by, footer
+  note, default paper, orientation, page numbers, date, include Source Data. The card is the one source; it is
+  kept in two places. **Per Windows user** (`ReportPrintSettingsStore` →
+  `%LocalAppData%\COTVCF\ReportPrintSettings.json`), saved on every edit — what the card shows at start-up. **In
+  the project file** as `printSetup` (see Config Project File): written by `Save All` and by the card's
+  `Save Print Setup`, restored onto the card by `Load Config`; the status line under the card reads
+  `Saved in <file>` / `Modified * — differs from <file>` / `Not in <file> yet` / `No project open`
+  (`PrintSetupProjectStatus`). It is never part of the study folder or the run fingerprint. Like capacities and
+  criteria it is a post-processing input: applied on the next Generate / Regenerate
+  (`StudyPostProcessor.Generate(…, printSettings)`). `MainViewModel` takes the store as an optional constructor
+  argument; without one (checks) settings stay in memory.
 - **Logo**: `ReportPrintEngine.LogoDataUri` embeds the file as a data URI (PNG / JPG / SVG / GIF / WEBP / BMP, at
   most `MaxLogoBytes`), so the report needs no external resource. A missing / unsupported / oversized logo is
   reported on the card (`DescribeLogo`) and the company name is printed top-left instead. SVG prints as vector.
   Candidate diagnostics are written once per candidate, so they are described with `embedLogo: false` and print
   the company name top-left — a study with hundreds of candidates must not carry hundreds of logo copies.
-- **Page layout**: the engine script (`window.reportPrint`) builds one `@page` rule into `<style id="pr-page">`:
-  sheet size and orientation, margins (24 mm top, 16 mm bottom, 38 px sides), and the header / footer in the
-  **page-margin boxes** on every page — top-left logo (or company), top-centre project over report name · model,
-  top-right job no. · revision and date, bottom-left company and signatories, bottom-centre note, bottom-right
-  `Page N of M` (`counter(page)` / `counter(pages)`). Side boxes are whole pixels and the centre is a `calc()` of
-  the rest so the three borders print as one unbroken rule. User text goes through a CSS-string escaper; a logo
-  value that is not an embedded image is ignored. Needs Chromium 131+ (Edge / Chrome); the browser's own header and
-  footer are suppressed automatically. Firefox prints the content without the margin header / footer.
-- **Chart quality**: charts are inline SVG and are never rasterised — text stays text, bars and hatches stay
-  vector, colours print exactly (`print-color-adjust: exact`). A report registers
-  `window.reportPrint.register({ before(page), after() })` and re-lays its charts out for `page.contentPx` (the
-  sheet's content width) instead of the window; if the sheet is narrower than a comfortable design width the SVG is
-  laid out wider and scaled down by CSS (`max-width:100%`), never below 80 %.
-- **Triggers**: the report's `Print report ▾` button — accent-outlined, placed straight after the main toolbar
-  controls in every report, never behind hint or status text — opening the panel (paper, orientation, include
-  Source Data, `Print / Save as PDF`),
-  plain Ctrl+P (`beforeprint` / `afterprint`), and the URL fragment `#print[&paper=A3&orientation=portrait&source=1]`
-  which lays the page out for paper on load. Report-specific options ride on the same fragment (Cable Forces:
-  `mode=ut`, `load=L02`).
-- **Export PDF** (`ReportPdfExporter`; an `Export PDF` button on every module 01–08, modules 02–05 sharing the
-  member-force report): runs the installed Edge (else Chrome) headless with a private profile on
-  `report.html#print` and writes `<report>.pdf` beside the report, then opens it. No SAP2000, no network. It prints
-  the report as last generated — change Print Setup, Regenerate, then export.
+- **URL fragment**: `#print[&paper=A3&orientation=portrait&source=1]` composes the sheets on load (what the checks'
+  headless browser prints); `#print=screen` opens the Print Report screen; `#print=package` is one report of
+  Print All Reports (waits for the package's setup). Report-specific options ride on the same fragment (Cable
+  Forces: `mode=ut`, `load=L02`; Member Forces: `summary=top|bottom|mega`, `group`, `component`, `view`,
+  `sampling`, `band`; Support Reactions: `group`, `view`).
 - Engine pieces a report emits: `ReportPrintEngine.Css` (inside its `<style>`), `PageStyle` (in `<head>`),
-  `ToolbarButton` and `Panel` inside its toolbar (or `Bar` when it has none), and `Scripts(dto)` before its own
-  script. Optional hooks the engine acts on while laid out for paper (`body.pr-on`):
-  - `data-print-controls` on the toolbar(s) + one `data-print-view` element → the engine prints a
-    `Printed view: Group: … · Component: … · Loading: all` line from the hidden selects and filter buttons;
-  - `data-print="source"` on an optional data table (hidden unless *Include Source Data* — `body.pr-nosrc`);
-  - `data-print-fit` on a wide table's wrapper → scaled inside its own box to the sheet width (re-measured, floor
-    35 %). Never let content overflow the sheet: Chromium then shrinks the **whole page**. Use `body.pr-on` rules
-    (not only `@media print`) for anything that changes a table's width, so it is measured as it will print;
-  - `class="print-only"` / `class="no-print"`;
-  - `window.reportPrint.register({ before(page), after() })` for charts drawn against the window width.
-  Report-specific `@media print` rules (what to hide, `break-inside: avoid`, legend placement) stay with the report.
-- Per report: **Deflection** redraws each chart at the full sheet width (`preserveAspectRatio="none"`, so it must
-  be redrawn, not stretched), moves the legend under the chart in columns, keeps the per-chart case / view / filter
-  controls as a record, and prints the Source Data Matrix only when asked (`#print&group=N`). **Member Forces** and
-  **Support Reactions** print the current toolbar view — one chart block per page-fit, matrix views paginate with
-  repeating headings (`#print&group=…&component=…&view=…`, plus `sampling` / `band`). The **Optimization
-  Summary** and the **diagnostics** are plain documents with the `Bar`.
-- Checks: `tests/ReportPrintChecks.cs` (settings store, logo embedding, generated page rule and escaping, screen ⇄
-  paper re-layout, `#print` options, every report carries the engine, exporter command line). The chart reports'
-  own scripts need a real browser, so `--report-pdf` (opt-in) prints every report to a real PDF with the installed
-  browser; `--study-ui` renders the Print Setup card and the eight Export PDF buttons with fakes.
+  `ToolbarButton` inside its toolbar (or `Bar` when it has none), and `Scripts(dto)` before its own script.
+- Per report:
+  - **Deflection** — the candidate definitions (`#candKey`, collapsed on screen) are the legend and the warnings
+    the general notes, both above the charts. The charts are one ordered list (`#panels`): each has its own id
+    (`chart_deflection_03`), and **`Duplicate` always appends the copy to the end of the list** with the source's
+    current state (case, view, filters, zoom, highlights) and the title `… – Copy`; the copy is independent from
+    then on. `window.deflectionReport.charts()` lists `{ id, duplicatedFrom, title }`. Each chart is redrawn at the
+    sheet width (`preserveAspectRatio="none"`, so it must be redrawn, not stretched); the Source Data Matrix
+    prints only when asked and continues over sheets by block.
+  - **Cable Forces** — legend and capacity notes once; overview and per-pretension cards as chart blocks, the
+    governing table with them; Source Data when asked.
+  - **Member Forces** — prints the current toolbar view; the chart legend once after the section heading, a
+    missing-result note inside the card it concerns, matrix views continuing over sheets with repeated headings.
+  - **Support Reactions** — KPI cards as the summary, the Inner / Outer / Σ Net legend once, one chart card per
+    P × H block continuing between rows.
+  - **Optimization Summary** — tagged in C#: KPI cards and criteria as the summary, the acceptance map and the
+    qualified-candidates table as charts, the all-candidates table as source.
+    **Diagnostics** — unmarked, printed in document order with the `Bar`.
+- Checks: `tests/ReportPrintChecks.cs` (settings store, logo embedding, sheet composition and order, saved setup,
+  `#print` options, every report carries the engine, the package's items / page / refusal of older reports)
+  through the Jint page in `tests/ReportPage.cs`. Real layout needs a real browser: `--report-pdf` (opt-in) prints
+  every report with `ReportPdfExporter`, prints the package (as many pages as the reports one by one; the setup
+  handed over wins) and drives the Print Report screen of each report through `tests/ReportBrowser.cs` (order, no
+  overflowing sheet, live edits, A3 / portrait, source toggle, saved setup, print called once, clean close).
+  `--study-ui` checks the Print Setup card, the seven `View Report` buttons, that no module has a PDF button, and
+  Print All Reports on both tabs with a fake Save dialog and a fake printer (`AskPdfPath`, `PrintPackage`).
 
 ## Config Project File (`src/Configuration/`)
 
 The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 01–05,
-including the Tab 05 mode/fixed candidate/selection exclusions. Never serialise ViewModels; project save/load
-never mutates SAP.
+including the Tab 05 mode/fixed candidate/selection exclusions, and the Tab 06 Print Setup. Never serialise
+ViewModels; project save/load never mutates SAP.
+
+- **`printSetup`** (`PrintSetupConfigDto`: company, logo path, project, job no., revision, prepared / checked by,
+  footer note, paper, orientation, page numbers, date, include Source Data) is **not a tab section**: no
+  `ConfigTabs` flag, not in `PresentTabs`, never validated against the model. `ConfigService.SaveAsync(uiTabs,
+  pickPath, printSetup)` writes it only when the caller hands the card over — `Save All`
+  (`RunSave(ConfigTabs.All, printSetup: true)`) and the card's `Save Print Setup` (`RunSave(ConfigTabs.None,
+  printSetup: true)`, which changes nothing else). A per-tab save keeps the project's `printSetup`, like every
+  other section it does not own. `OpenProjectFile` applies it with `ConfigurationApplicator.ApplyPrintSetup`; a
+  project saved before it existed has no section and leaves the card as it is. The logo is stored as a path — on
+  a machine without that file the card says so and the company name is printed instead.
 
 - `ConfigProjectSession` (held by `ConfigService`): `FilePath`, in-memory `Project` (`CotVcfConfigDto`),
   `Tab02/03/04Dirty`. Once a project is open the in-memory `Project` is the source of truth; the file is
@@ -653,6 +986,7 @@ never mutates SAP.
 - `src/Presentation/Theme.xaml`: density tokens, palette (chrome + `Viewport*`), button / grid / tab
   styles, and the `AppLogo` Vierendeel-truss `DrawingImage` (window icon + top-bar mark).
 - `src/Presentation/MainViewModel.cs`: command wiring; `StatusLine` for the top-bar status text.
+- `src/Presentation/MainViewModel.Quantities.cs` + `src/Application/Quantities/`: Tab 08 Quantity Take-off.
 - `src/Presentation/Controls/Structural2DViewer.xaml`: dark viewport shell + floating overlay controls.
 - `src/Presentation/Controls/Structural2DViewer.xaml.cs`: canvas drawing (viewport brushes), fit/pan/zoom,
   reset-to-XZ, axis colors, point labels.

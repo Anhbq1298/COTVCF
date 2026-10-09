@@ -15,42 +15,56 @@
        </Style>
       </TextBlock.Style>
      </TextBlock>
-     <TextBlock Text="{Binding StatusLine}" Style="{StaticResource MonoSmall}" Margin="0,0,12,0"/>
+     <TextBlock Text="{Binding StatusLine}" ToolTip="{Binding StatusLine}" Style="{StaticResource MonoSmall}" MaxWidth="260" TextTrimming="CharacterEllipsis" Margin="0,0,12,0"/>
      <Button Content="Connect SAP" Command="{Binding Connect}" Style="{StaticResource Primary}"/>
      <Button Command="{Binding Refresh}" Style="{StaticResource IconButton}" ToolTip="Refresh connection and geometry">
       <Viewbox Width="15" Height="15"><Path Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Data="M14,5 A6,6 0 1 0 16,11 M16,11 L16,6 M16,11 L11,11"/></Viewbox>
      </Button>
-     <Button Content="Help" Click="ShowHelp" Margin="0"/>
+     <Button Content="Help" Click="ShowHelp" Margin="0" ToolTip="Open workflow help, or the FEM procedure when Tab 07 is selected." AutomationProperties.Name="Open help"/>
     </StackPanel>
-    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-     <Image Source="{StaticResource AppLogo}" Width="20" Height="20" Margin="0,0,8,0"/>
-     <TextBlock Text="COT VCF Parametric Automation" Style="{StaticResource BannerTitle}"/>
-     <TextBlock Text="PARAMETRIC STRUCTURAL WORKFLOW" Style="{StaticResource BannerEyebrow}" Margin="12,1,0,0"/>
-     <Border Width="1" Background="{StaticResource Border}" Margin="16,3,14,3"/>
-     <TextBlock Text="{Binding ProjectName}" Style="{StaticResource FieldLabel}" Margin="0,0,12,0"
+    <Grid VerticalAlignment="Center">
+     <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="1.2*" MaxWidth="240"/><ColumnDefinition Width="*" MaxWidth="240"/>
+      <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*" MaxWidth="160"/><ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="*"/>
+     </Grid.ColumnDefinitions>
+     <Grid Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Image Grid.Column="0" Source="{StaticResource AppLogo}" Width="20" Height="20" Margin="0,0,8,0"/>
+      <TextBlock Grid.Column="1" Text="COT VCF Parametric Automation" ToolTip="COT VCF Parametric Automation" Style="{StaticResource BannerTitle}" TextTrimming="CharacterEllipsis"/>
+     </Grid>
+     <TextBlock Grid.Column="1" Text="{Binding ProjectName}" ToolTip="{Binding ProjectName}" Style="{StaticResource FieldLabel}" Margin="12,0,12,0"
                MaxWidth="260" TextTrimming="CharacterEllipsis"/>
+     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
+     <Button Command="{Binding NewConfig}" AutomationProperties.Name="New configuration"
+             ToolTip="Clear the current configuration and start a new file, keeping the connected SAP model" Margin="0,0,6,0">
+      <StackPanel Orientation="Horizontal">
+       <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M3,1 L10,1 L14,5 L14,15 L3,15 Z M10,1 L10,5 L14,5 M6,9 L11,9 M8.5,6.5 L8.5,11.5"/></Viewbox>
+       <TextBlock Text="New Config"/>
+      </StackPanel>
+     </Button>
      <Button Command="{Binding SaveAllConfig}" ToolTip="Save every tab into the active project file (creates it the first time)" Margin="0,0,6,0">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M2,2 L11,2 L14,5 L14,14 L2,14 Z M5,2 L5,6 L11,6 M4.5,14 L4.5,9.5 L11.5,9.5 L11.5,14"/></Viewbox>
        <TextBlock Text="Save All"/>
       </StackPanel>
      </Button>
-     <Button Command="{Binding LoadConfig}" ToolTip="Open a COT VCF project file and restore Tabs 01-05" Margin="0">
+        <Button Command="{Binding LoadConfig}" ToolTip="Open a COT VCF project file (picker starts in the repository tests folder) and restore Tabs 01-05" Margin="0">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="13" Height="13" Margin="0,0,5,0"><Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeLineJoin="Round" Data="M1.5,4 L6,4 L8,6 L14.5,6 L14.5,13 L1.5,13 Z"/></Viewbox>
        <TextBlock Text="Load Config"/>
       </StackPanel>
      </Button>
-     <Border Width="1" Background="{StaticResource Border}" Margin="16,3,12,3"/>
-     <TextBlock Text="{Binding ToolbarStudySummary}" Style="{StaticResource FieldLabel}" Margin="0,0,8,0"/>
-     <Button Command="{Binding RunStudyFromToolbar}" Style="{StaticResource Primary}" Margin="0"
+     </StackPanel>
+     <TextBlock Grid.Column="3" Text="{Binding ToolbarStudySummary}" ToolTip="{Binding ToolbarStudySummary}" Style="{StaticResource FieldLabel}" Margin="12,0,8,0" TextTrimming="CharacterEllipsis"/>
+     <Button Grid.Column="4" Command="{Binding RunStudyFromToolbar}" Style="{StaticResource Primary}" Margin="0,0,12,0"
              ToolTip="Validate and run the study from anywhere — jumps to the Iteration tab for the worker monitor and any validation issues">
       <StackPanel Orientation="Horizontal">
        <Viewbox Width="11" Height="11" Margin="0,0,5,0"><Path Fill="White" Data="M2,1 L13,7 L2,13 Z"/></Viewbox>
        <TextBlock Text="Run study"/>
       </StackPanel>
      </Button>
-    </StackPanel>
+    </Grid>
    </DockPanel>
   </Border>
 
@@ -66,7 +80,7 @@
   </Border>
 
   <!-- ============ WORKFLOW TABS (params) + SHARED MODEL PREVIEW ============ -->
-  <Grid>
+  <Grid IsEnabled="{Binding HasSapConnection}">
    <Grid.ColumnDefinitions>
     <ColumnDefinition x:Name="ParamsColumn" Width="2*" MinWidth="150"/>
     <ColumnDefinition x:Name="ViewerSplitterColumn" Width="Auto"/>
@@ -938,7 +952,9 @@
       <DockPanel Margin="0,3,0,4">
        <WrapPanel DockPanel.Dock="Right" Margin="12,0,0,0">
         <Button Content="Generate Outputs" Command="{Binding GeneratePostProcessOutputs}" Style="{StaticResource Primary}"
-                ToolTip="Read RawData/Study_Raw_Results.json and generate Excel plus all implemented HTML reports — no SAP2000"/>
+                ToolTip="Read RawData/Study_Raw_Results.json and generate everything: the Excel workbook (the slow part), the candidate diagnostics and every HTML report — no SAP2000. To refresh one report only, use its own Regenerate."/>
+        <Button Content="Print All Reports…" Command="{Binding PrintAllReports}"
+                ToolTip="Save every report below as one PDF, pages numbered through — asks only where to save, no print dialog · uses the Print Setup as it is now · runs Microsoft Edge in the background, no SAP2000"/>
         <Button Content="Open Raw Data" Command="{Binding OpenRawDataFolder}" Margin="0"
                 ToolTip="Open the JSON/CSV source folder used by Tab 06"/>
        </WrapPanel>
@@ -959,7 +975,7 @@
        <Expander Style="{StaticResource PpModule}">
         <Expander.Header><TextBlock Text="PRINT SETUP · HEADER / FOOTER" Style="{StaticResource Subheading}" Margin="0"/></Expander.Header>
         <StackPanel>
-         <TextBlock Text="Printed in the page margins of every report page: logo top-left, project and job number in the header, company, note and page numbers in the footer. Saved for this Windows user · applied on the next Generate / Regenerate · charts print as vector graphics." Style="{StaticResource PpDesc}"/>
+         <TextBlock Text="The starting values of each report's own Print Report screen: logo top-left, project and job number in the header, company, note and page numbers in the footer. Saved with the project (Save All / Save Print Setup · restored by Load Config) and remembered for this Windows user · embedded on the next Generate / Regenerate. One report: View Report → Print Report, where every value can still be changed beside a live preview. Everything at once: Print All Reports, which uses the values below as they are now." Style="{StaticResource PpDesc}"/>
          <Grid Margin="0,8,0,0">
           <Grid.Resources>
            <Style x:Key="PrLabel" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="FontSize" Value="11"/><Setter Property="Foreground" Value="{StaticResource Muted}"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,0,8,0"/></Style>
@@ -1013,6 +1029,11 @@
           <CheckBox Content="Date" IsChecked="{Binding PrintSettings.ShowDate}" VerticalAlignment="Center" Margin="0,0,14,0" ToolTip="Header, right: the date the report was generated"/>
           <CheckBox Content="Include Source Data table" IsChecked="{Binding PrintSettings.IncludeSourceData}" VerticalAlignment="Center" ToolTip="Default for the report's print option — the full table adds many pages"/>
          </WrapPanel>
+         <DockPanel Margin="0,8,0,0">
+          <Button DockPanel.Dock="Right" Content="Save Print Setup" Command="{Binding SavePrintSetup}" Margin="8,0,0,0"
+                  ToolTip="Store this Print Setup in the active project file — Save All does the same, and Load Config restores it with the project"/>
+          <TextBlock Text="{Binding PrintSetupProjectStatus}" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding PrintSetupProjectStatus}"/>
+         </DockPanel>
         </StackPanel>
        </Expander>
 
@@ -1056,9 +1077,8 @@
          <Border Height="1" Background="{StaticResource Border}" Margin="0,10,0,8"/>
          <TextBlock Text="{Binding DeflectionReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding DeflectionReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
-          <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Regenerate Tab 06 outputs from RawData/Study_Raw_Results.json — no SAP"/>
-          <Button Content="Export PDF" Command="{Binding ExportDeflectionPdf}" ToolTip="Print Deflection_Report.html to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
+          <Button Content="View Report" Command="{Binding OpenDeflectionReport}" Style="{StaticResource Primary}" ToolTip="Open Deflection_Report.html in your web browser — print or save it as PDF there with Print Report"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateDeflectionReport}" ToolTip="Rebuild Deflection_Report.html alone from Study_Raw_Results.json, with the current limit band and Print Setup — the Excel workbook and the other reports are not touched (Generate Outputs rebuilds everything) · no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1073,8 +1093,7 @@
          <TextBlock Text="{Binding MemberForceReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding MemberForceReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenTopChordReport}" Style="{StaticResource Primary}" ToolTip="Open the Top Chord summary of Member_Forces_Report.html in your web browser"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateMemberForceReport}" ToolTip="Rebuild Member_Forces_Report.html from Study_Raw_Results.json — no SAP"/>
-          <Button Content="Export PDF" Command="{Binding ExportTopChordPdf}" ToolTip="Print the Top Chord summary to Top_Chord_Report.pdf with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateMemberForceReport}" ToolTip="Rebuild Member_Forces_Report.html alone (Top Chord, Bottom Chord, Vierendeel, Mega Column) from Study_Raw_Results.json — the other outputs are not touched · no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1087,7 +1106,6 @@
          <TextBlock Text="Opens the Bottom Chord summary in the member-force report; the other components stay under Display." Style="{StaticResource PpDesc}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenBottomChordReport}" Style="{StaticResource Primary}" ToolTip="Open the Bottom Chord summary of Member_Forces_Report.html in your web browser"/>
-          <Button Content="Export PDF" Command="{Binding ExportBottomChordPdf}" ToolTip="Print the Bottom Chord summary to Bottom_Chord_Report.pdf with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1100,7 +1118,6 @@
          <TextBlock Text="Uses the same member-force report; choose the Vierendeel Members group in the report toolbar." Style="{StaticResource PpDesc}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenMemberForceReport}" Style="{StaticResource Primary}"/>
-          <Button Content="Export PDF" Command="{Binding ExportMemberForcePdf}" ToolTip="Print Member_Forces_Report.html (all groups) to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1113,7 +1130,6 @@
          <TextBlock Text="Opens the Mega Column summary in the member-force report; the other components stay under Display." Style="{StaticResource PpDesc}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenMegaColumnReport}" Style="{StaticResource Primary}" ToolTip="Open the Mega Column summary of Member_Forces_Report.html in your web browser"/>
-          <Button Content="Export PDF" Command="{Binding ExportMegaColumnPdf}" ToolTip="Print the Mega Column summary to Mega_Column_Report.pdf with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
         </StackPanel>
@@ -1127,8 +1143,7 @@
          <TextBlock Text="{Binding SupportReactionReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" Margin="0,6,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding SupportReactionReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenSupportReactionReport}" Style="{StaticResource Primary}" ToolTip="Open Support_Reactions_Report.html in your web browser"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateSupportReactionReport}" ToolTip="Rebuild Support_Reactions_Report.html from Study_Raw_Results.json — no SAP"/>
-          <Button Content="Export PDF" Command="{Binding ExportSupportReactionPdf}" ToolTip="Print the Support Reactions summary (Left foundation, as the report opens) to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateSupportReactionReport}" ToolTip="Rebuild Support_Reactions_Report.html alone from Study_Raw_Results.json — the other outputs are not touched · no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1143,8 +1158,7 @@
          <TextBlock Text="{Binding CableForceReportName}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis" ToolTip="{Binding CableForceReportPath}"/>
          <WrapPanel Margin="0,4,0,0">
           <Button Content="View Report" Command="{Binding OpenCableForceReport}" Style="{StaticResource Primary}" ToolTip="Open Cable_Forces_Report.html in your web browser"/>
-          <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Regenerate Tab 06 outputs from raw JSON using the current fpu / &#966; capacities — no SAP"/>
-          <Button Content="Export PDF" Command="{Binding ExportCableForcePdf}" ToolTip="Print Cable_Forces_Report.html to a vector PDF with the Print Setup header and footer — runs Microsoft Edge in the background, no SAP"/>
+          <Button Content="Regenerate" Command="{Binding RegenerateCableForceReport}" ToolTip="Rebuild Cable_Forces_Report.html alone from the raw JSON using the current fpu / &#966; capacities — the Excel workbook keeps its capacities until Generate Outputs · no SAP"/>
           <Button Content="Open Excel" Command="{Binding OpenResultsWorkbook}"/>
           <Button Content="Open Study Folder" Command="{Binding OpenStudyFolder}" Margin="0"/>
          </WrapPanel>
@@ -1180,6 +1194,8 @@
        <WrapPanel DockPanel.Dock="Right" Margin="12,0,0,0">
         <Button Content="Generate Optimized Reports" Command="{Binding GenerateOptimizedReports}" Style="{StaticResource Primary}"
                 ToolTip="Write the reports for the qualified candidates only into Study/Optimized — the full Tab 06 reports are not touched · no SAP2000"/>
+        <Button Content="Print All Reports…" Command="{Binding PrintAllOptimizedReports}"
+                ToolTip="Save the optimization summary and every optimized report as one PDF, pages numbered through — asks only where to save, no print dialog · uses the Tab 06 Print Setup as it is now"/>
         <Button Content="Open Optimized Folder" Command="{Binding OpenOptimizedFolder}" Margin="0"
                 ToolTip="Open Study/Optimized in File Explorer"/>
        </WrapPanel>
@@ -1313,6 +1329,386 @@
     </Grid>
    </TabItem>
 
+   <!-- 07 FEM -->
+   <TabItem>
+    <TabItem.Header>
+     <StackPanel Width="124">
+      <TextBlock Text="07  FEM" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="{Binding FemStatus}" Style="{StaticResource TabHeaderStatus}"/>
+     </StackPanel>
+    </TabItem.Header>
+    <Grid>
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <TabControl Grid.Row="1" SelectedIndex="{Binding SelectedFemPage}" TabStripPlacement="Top" Background="{StaticResource Background}" BorderThickness="0">
+                 <TabControl.Resources>
+                  <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+                   <Setter Property="Height" Value="26"/>
+                   <Setter Property="Width" Value="90"/>
+                  </Style>
+                 </TabControl.Resources>
+                 <TabItem Header="Inputs">
+                 <Grid Margin="2,2,6,2">
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="8"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+
+     <Border Grid.Row="0" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+      <StackPanel Margin="8">
+       <TextBlock Text="FEM MODEL INPUTS" Style="{StaticResource Subheading}"/>
+       <TextBlock Text="{Binding FemPinSupportSummary}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+       <WrapPanel>
+        <Button Content="Read from SAP" Command="{Binding ReadFemProperties}"
+                ToolTip="Read sections, materials (unit weight / mass), modifiers, end releases, load patterns with their assigned loads, static load cases and combinations from the connected SAP2000 model. Read-only; resets the Loads tables to SAP."/>
+        <TextBlock Text="{Binding FemLoadSummary}" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap"/>
+       </WrapPanel>
+      </StackPanel>
+     </Border>
+
+     <TabControl Grid.Row="2" Background="{StaticResource Background}" BorderThickness="0">
+      <TabControl.Resources>
+       <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}">
+        <Setter Property="Height" Value="26"/>
+        <Setter Property="Width" Value="150"/>
+       </Style>
+      </TabControl.Resources>
+
+      <!-- ============ Sectional properties ============ -->
+      <TabItem Header="Sectional properties">
+       <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+        <Grid Margin="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+         <DockPanel>
+          <TextBlock Text="SAP MEMBER PROPERTIES" Style="{StaticResource Subheading}"/>
+          <TextBlock DockPanel.Dock="Right" Text="Read-only · A and I include modifiers · w = γ·A·mod w (self-weight)" Style="{StaticResource Caption}"/>
+         </DockPanel>
+         <DataGrid x:Name="FemPropertiesGrid" Grid.Row="1" ItemsSource="{Binding FemSectionProperties}" IsReadOnly="True" IsEnabled="{Binding IsIdle}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Auto" FrozenColumnCount="1"
+                   AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single">
+          <DataGrid.Columns>
+           <DataGridTextColumn Header="Member" Binding="{Binding MemberName}" Width="Auto" MinWidth="60"/>
+           <DataGridTextColumn Header="Section" Binding="{Binding SectionName}" Width="Auto" MinWidth="60"/>
+           <DataGridTextColumn Header="Mat." Binding="{Binding MaterialName}" Width="Auto" MinWidth="44"/>
+           <DataGridTextColumn Header="A [m²]" Binding="{Binding AreaM2, StringFormat=F5}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="E [GPa]" Binding="{Binding ElasticModulusGPa, StringFormat=F2}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="I [m⁴]" Binding="{Binding InPlaneInertiaM4, StringFormat=F7}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="Rel." Binding="{Binding EndRotationReleases}" Width="Auto"/>
+           <DataGridTextColumn Header="γ [kN/m³]" Binding="{Binding UnitWeightKNPerM3, StringFormat=F2}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="ρ [t/m³]" Binding="{Binding UnitMassTPerM3, StringFormat=F3}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="w [kN/m]" Binding="{Binding WeightPerLengthKNPerM, StringFormat=F3}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="m [t/m]" Binding="{Binding MassPerLengthTPerM, StringFormat=F4}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="Mod A" Binding="{Binding AreaModifier, StringFormat=0.###}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="Mod I" Binding="{Binding InertiaModifierOrNull, StringFormat=0.###}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="Mod m" Binding="{Binding MassModifier, StringFormat=0.###}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="Mod w" Binding="{Binding WeightModifier, StringFormat=0.###}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+          </DataGrid.Columns>
+         </DataGrid>
+        </Grid>
+       </Border>
+      </TabItem>
+
+      <!-- ============ Load patterns / cases / combinations ============ -->
+      <TabItem Header="Loads">
+       <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+        <Grid Margin="8">
+         <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+          <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+          <RowDefinition Height="Auto"/><RowDefinition Height="*"/>
+          <RowDefinition Height="Auto"/>
+         </Grid.RowDefinitions>
+         <StackPanel>
+          <TextBlock Text="LOAD PATTERNS" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
+          <TextBlock Text="SW mult. editable" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+         </StackPanel>
+         <DataGrid Grid.Row="1" ItemsSource="{Binding FemPatternRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
+                   CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+          <DataGrid.Columns>
+           <DataGridTextColumn Header="Pattern" Binding="{Binding Name}" IsReadOnly="True" Width="Auto" MinWidth="70"/>
+           <DataGridTextColumn Header="Type" Binding="{Binding Type}" IsReadOnly="True" Width="Auto" MinWidth="64"/>
+           <DataGridTextColumn Header="SW mult." Binding="{Binding SelfWeightMultiplier, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat=0.###, ValidatesOnExceptions=True}"
+                               Width="Auto" MinWidth="58" ElementStyle="{StaticResource NumericCell}"/>
+           <DataGridTextColumn Header="Role" Binding="{Binding Role}" IsReadOnly="True" Width="Auto" MinWidth="44"/>
+           <DataGridTextColumn Header="Assigned loads" Binding="{Binding Loads}" IsReadOnly="True" Width="*" MinWidth="100"/>
+          </DataGrid.Columns>
+         </DataGrid>
+
+         <StackPanel Grid.Row="2" Margin="0,8,0,0">
+          <TextBlock Text="LOAD CASES" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
+          <TextBlock Text="Definition editable, e.g. 1 DEAD + 1 PT" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+         </StackPanel>
+         <DataGrid Grid.Row="3" ItemsSource="{Binding FemCaseRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
+                   CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+          <DataGrid.Columns>
+           <DataGridTemplateColumn Header="Run" Width="Auto" MinWidth="36">
+            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+             <CheckBox IsChecked="{Binding Run, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Supported}" HorizontalAlignment="Center"
+                       ToolTip="Solve and show this case for every candidate (cases used by a ticked combination are always solved)."/>
+            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+           </DataGridTemplateColumn>
+           <DataGridTextColumn Header="Case" Binding="{Binding Name}" IsReadOnly="True" Width="Auto" MinWidth="70"/>
+           <DataGridTextColumn Header="Type" Binding="{Binding Type}" IsReadOnly="True" Width="Auto" MinWidth="64"/>
+           <DataGridTextColumn Header="Definition" Binding="{Binding Definition, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Width="*" MinWidth="140"/>
+           <DataGridTextColumn Header="From" Binding="{Binding InitialCase}" IsReadOnly="True" Width="Auto" MinWidth="44"/>
+           <DataGridTextColumn Header="Src" Binding="{Binding Source}" IsReadOnly="True" Width="Auto" MinWidth="36"/>
+           <DataGridTextColumn Header="Note" Binding="{Binding Note}" IsReadOnly="True" Width="Auto" MinWidth="50" MaxWidth="260"/>
+          </DataGrid.Columns>
+         </DataGrid>
+
+         <StackPanel Grid.Row="4" Margin="0,8,0,0">
+          <TextBlock Text="LOAD COMBINATIONS" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
+          <TextBlock Text="Linear additive · e.g. 1.2 DEAD + 1.5 LIVE" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+         </StackPanel>
+         <DataGrid Grid.Row="5" ItemsSource="{Binding FemCombinationRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
+                   CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+          <DataGrid.Columns>
+           <DataGridTemplateColumn Header="Run" Width="Auto" MinWidth="36">
+            <DataGridTemplateColumn.CellTemplate><DataTemplate>
+             <CheckBox IsChecked="{Binding Run, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Supported}" HorizontalAlignment="Center"/>
+            </DataTemplate></DataGridTemplateColumn.CellTemplate>
+           </DataGridTemplateColumn>
+           <DataGridTextColumn Header="Combination" Binding="{Binding Name}" IsReadOnly="True" Width="Auto" MinWidth="80"/>
+           <DataGridTextColumn Header="Type" Binding="{Binding Type}" IsReadOnly="True" Width="Auto" MinWidth="64"/>
+           <DataGridTextColumn Header="Definition" Binding="{Binding Definition, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Width="*" MinWidth="140"/>
+           <DataGridTextColumn Header="Src" Binding="{Binding Source}" IsReadOnly="True" Width="Auto" MinWidth="36"/>
+           <DataGridTextColumn Header="Note" Binding="{Binding Note}" IsReadOnly="True" Width="Auto" MinWidth="50" MaxWidth="260"/>
+          </DataGrid.Columns>
+         </DataGrid>
+
+         <Expander Grid.Row="6" Margin="0,6,0,0">
+          <Expander.Header><TextBlock Text="{Binding FemLoadWarnings.Count, StringFormat='Load assignment warnings ({0})'}"/></Expander.Header>
+          <ListBox ItemsSource="{Binding FemLoadWarnings}" MaxHeight="120" FontSize="11"/>
+         </Expander>
+        </Grid>
+       </Border>
+      </TabItem>
+     </TabControl>
+                 </Grid>
+                 </TabItem>
+                 <TabItem Header="Analysis &amp; Results" Width="150">
+                 <Grid Margin="2,2,6,2">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="8"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+
+     <Border Grid.Row="0" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+      <StackPanel Margin="8">
+       <TextBlock Text="INTERNAL 2D FRAME ANALYSIS" Style="{StaticResource Subheading}"/>
+       <TextBlock Text="{Binding FemCandidateSummary}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="0,0,0,6"/>
+       <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                   ToolTip="Cable pretensions are adjusted together under the target-force case loads to meet Tab 03 targets within this tolerance. Loaded cases then use the fitted pretension.">
+        <TextBlock Text="Target-force fitting ±" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+        <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
+                 IsEnabled="{Binding IsIdle}"
+                 Text="{Binding FemTargetFitPercent, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:0.###}, ValidatesOnExceptions=True}"/>
+        <TextBlock Text="% of target" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
+        <Border Width="1" Background="{StaticResource Border}" Margin="10,1,10,1"/>
+        <TextBlock Text="Max iterations" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"
+                   ToolTip="Maximum pretension adjustments per FEM case. If targets remain outside the tolerance, the closest fit is retained and marked Not fitted."/>
+        <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
+                 IsEnabled="{Binding IsIdle}"
+                 Text="{Binding FemTargetFitIterations, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}"/>
+       </StackPanel>
+       <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+                   ToolTip="Each frame is divided into this many equal sub-elements in the FEM (cables are not meshed). Interior mesh nodes are condensed onto the frame joints, so joint results are unchanged; the mesh gives forces and displacements along each frame for the diagrams and deflected shape.">
+        <TextBlock Text="Frame mesh" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+        <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
+                 IsEnabled="{Binding IsIdle}"
+                 Text="{Binding FemFrameMeshSegments, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}"/>
+        <TextBlock Text="segments per frame" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
+        <Border Width="1" Background="{StaticResource Border}" Margin="10,1,10,1"/>
+        <CheckBox Content="Cable sag" IsChecked="{Binding FemCableSag}" IsEnabled="{Binding IsIdle}" VerticalAlignment="Center" FontSize="11"
+                  AutomationProperties.Name="FEM cable sag"
+                  ToolTip="Geometric nonlinearity of the cables. A cable that a load case loads along its length — its self-weight, when the case includes a pattern with a self-weight multiplier — hangs in a shallow parabola instead of a straight line. Its tension then follows T/k − (w·cos θ)²·L³ / 24T² = extension + P/k, its stiffness drops to Ernst's equivalent EA/L ÷ (1 + (w·cos θ·L)²·EA / 12T³), and it never goes fully slack. Negligible for highly tensioned cables; it matters for long or lightly tensioned ones. Off = straight tension-only cables."/>
+       </StackPanel>
+       <WrapPanel>
+        <Button Content="Run Analysis" Command="{Binding RunFemAnalysis}" Style="{StaticResource Primary}"
+                ToolTip="Analyze every Tab 01 x Tab 02 x Tab 03 combination with a linear-elastic 2D XZ Euler-Bernoulli frame model, tension-only cables (with sag, when Cable sag is on), and pin supports. Reads SAP section/material properties; does not modify SAP2000."/>
+        <Button Content="Cancel" Command="{Binding CancelFemAnalysis}"/>
+        <Button Content="Monitor" Click="OpenFemMonitorClick" Margin="0,0,4,0"
+                ToolTip="Open analysis progress and cable convergence. Diagnostic details are collapsed by default."/>
+        <TextBlock Style="{StaticResource InlineHelpIcon}" MouseLeftButtonUp="ShowFemHelp"
+                   ToolTip="FEM procedure — click to open the documentation under Help."
+                   AutomationProperties.Name="FEM procedure help"/>
+        <TextBlock Text="{Binding FemProgressText}" Foreground="{StaticResource Muted}" FontSize="11" VerticalAlignment="Center" TextWrapping="Wrap"/>
+       </WrapPanel>
+      </StackPanel>
+     </Border>
+
+     <Border Grid.Row="2" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
+      <DockPanel>
+       <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+        <TextBlock Text="RESULT EXPLORER" Style="{StaticResource Subheading}"/>
+        <TextBlock Text="Choose a candidate and load case, select an output, then View Results." Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+                         <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <TextBlock Grid.Row="1" Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,4,10,0"/>
+                                <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
+                                          IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
+                                          ToolTip="Load case or linear-additive combination shown in the table, the viewer and the Cable Target Fit Result column."/>
+                                <TextBlock Text="CANDIDATE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding FemRuns}" SelectedItem="{Binding SelectedFemRun}"
+                                                                        DisplayMemberPath="Id" AutomationProperties.Name="FEM result candidate"
+                                                                        IsEnabled="{Binding IsIdle}" ToolTip="Choose a completed L/H/P internal FEM candidate."/>
+                         </Grid>
+
+       </StackPanel>
+       <TextBlock DockPanel.Dock="Bottom" Text="{Binding SelectedReason, ElementName=FemResultExplorer}" TextWrapping="Wrap" Foreground="{StaticResource Warning}" Margin="0,6,0,0" MaxHeight="90" ToolTip="{Binding SelectedReason, ElementName=FemResultExplorer}" AutomationProperties.Name="Selected FEM candidate issue"/>
+       <Button DockPanel.Dock="Bottom" Content="View Results" Click="OpenFemResultsClick" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,8,0,0" IsEnabled="{Binding ElementName=FemResultExplorer, Path=CanViewResults}"/>
+       <c:FemResultsTree x:Name="FemResultExplorer" Runs="{Binding FemRuns}" FitRows="{Binding FemCableFitRows}" SelectedRun="{Binding SelectedFemRun, Mode=TwoWay}" ResultMode="{Binding FemResultMode, Mode=TwoWay}"/>
+      </DockPanel>
+     </Border>
+                 </Grid>
+                 </TabItem>
+                 <TabItem Header="View">
+                 <Grid Margin="2,2,6,2">
+     <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" VerticalAlignment="Top">
+      <StackPanel Margin="8">
+       <TextBlock Text="VIEW OPTIONS" Style="{StaticResource Subheading}"/>
+       <TextBlock Text="Overlays on the model viewer while the FEM tab is open." Foreground="{StaticResource Muted}" FontSize="11" Margin="0,0,0,8"/>
+       <WrapPanel>
+        <ToggleButton Style="{StaticResource ViewToggle}" Content="Frame mesh" IsChecked="{Binding ShowFemFrameMesh}" MinWidth="96" Margin="0,0,6,6" Padding="10,4"
+                      ToolTip="Draw each frame broken into its FEM mesh segments (Analysis → Frame mesh). Cables are not meshed."/>
+        <ToggleButton Style="{StaticResource ViewToggle}" Content="Member size" IsChecked="{Binding ShowFemMemberSizes}" MinWidth="96" Margin="0,0,6,6" Padding="10,4"
+                      ToolTip="Label each frame and cable with its assigned SAP section."/>
+        <ToggleButton Style="{StaticResource ViewToggle}" Content="Loading" IsChecked="{Binding ShowFemLoads}" MinWidth="96" Margin="0,0,6,6" Padding="10,4"
+                      ToolTip="Show the Tab 01 load arrows; with a completed case selected on Results, each arrow is labelled with its Fz."/>
+       </WrapPanel>
+       <TextBlock Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap">
+        <Run Text="Mesh:"/> <Run Text="{Binding FemFrameMeshSegments, Mode=OneWay}"/> <Run Text="segments per frame · cables unmeshed."/>
+       </TextBlock>
+       <TextBlock Text="{Binding FemMemberSizeHint}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
+      </StackPanel>
+     </Border>
+                 </Grid>
+                 </TabItem>
+
+                </TabControl>
+    </Grid>
+   </TabItem>
+
+   <!-- 08 QUANTITY TAKE-OFF: concrete volume and steel mass of one study candidate by assigned section, from that
+        candidate's own SAP2000 model data. Reads only — never the connected model, never a write. -->
+   <TabItem x:Name="QuantitiesTab">
+    <TabItem.Header>
+     <StackPanel Width="124">
+      <TextBlock Text="08  QUANTITIES" Style="{StaticResource TabHeaderTitle}"/>
+      <TextBlock Text="{Binding QuantityTabStatus}" Style="{StaticResource TabHeaderStatus}"/>
+     </StackPanel>
+    </TabItem.Header>
+    <Grid Margin="2,2,6,2">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+     <Grid.Resources>
+      <!-- An unavailable quantity reads n/a in the warning colour, with the reason as its tooltip — never a zero. -->
+      <Style x:Key="QuantityLength" TargetType="TextBlock" BasedOn="{StaticResource NumericCell}">
+       <Style.Triggers><DataTrigger Binding="{Binding TotalLengthM}" Value="{x:Null}"><Setter Property="Foreground" Value="{StaticResource Warning}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="ToolTip" Value="{Binding Problem}"/></DataTrigger></Style.Triggers>
+      </Style>
+      <Style x:Key="QuantityConcrete" TargetType="TextBlock" BasedOn="{StaticResource NumericCell}">
+       <Style.Triggers><DataTrigger Binding="{Binding ConcreteVolumeM3}" Value="{x:Null}"><Setter Property="Foreground" Value="{StaticResource Warning}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="ToolTip" Value="{Binding Problem}"/></DataTrigger></Style.Triggers>
+      </Style>
+      <Style x:Key="QuantitySteel" TargetType="TextBlock" BasedOn="{StaticResource NumericCell}">
+       <Style.Triggers><DataTrigger Binding="{Binding SteelMassT}" Value="{x:Null}"><Setter Property="Foreground" Value="{StaticResource Warning}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="ToolTip" Value="{Binding Problem}"/></DataTrigger></Style.Triggers>
+      </Style>
+     </Grid.Resources>
+
+     <StackPanel Grid.Row="0" Margin="0,0,0,6">
+      <TextBlock Text="QUANTITY TAKE-OFF · BY ASSIGNED SECTION" Style="{StaticResource Subheading}" Margin="0"/>
+      <DockPanel Margin="0,4,0,0" LastChildFill="True">
+       <TextBlock DockPanel.Dock="Left" Text="CANDIDATE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+       <ComboBox x:Name="QuantityCandidatePicker" DockPanel.Dock="Left" Width="168" ItemsSource="{Binding QuantityCandidates}"
+                 SelectedItem="{Binding SelectedQuantityCandidate}" DisplayMemberPath="Id" AutomationProperties.Name="Quantity take-off candidate model"
+                 ToolTip="Connected model: the model open in SAP2000, read live as it is now. Lxx_Hxx_Pxx: a candidate model of the study, from its own saved data. Either way its own section assignments, member lengths, Section Designer shapes and material densities are read."/>
+       <Button DockPanel.Dock="Left" Command="{Binding ReloadQuantities}" Style="{StaticResource IconButton}" Margin="6,0,4,0"
+               AutomationProperties.Name="Refresh quantities" ToolTip="Refresh: read the connected model from SAP2000 again as it is now (or the selected candidate from its saved data), and look for candidate models again">
+        <Viewbox Width="15" Height="15"><Path Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Data="M14,5 A6,6 0 1 0 16,11 M16,11 L16,6 M16,11 L11,11"/></Viewbox>
+       </Button>
+       <Button DockPanel.Dock="Left" Content="Cancel" Command="{Binding CancelQuantityRead}" Margin="0,0,6,0"
+               Visibility="{Binding QuantitySapReading, Converter={StaticResource BoolVisibility}}"
+               ToolTip="Stop the separate SAP2000 instance that is reading this candidate's model"/>
+       <TextBlock Text="{Binding QuantityStatus}" FontSize="11" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="4,0,0,0"
+                  TextTrimming="CharacterEllipsis" ToolTip="{Binding QuantityStatus}" AutomationProperties.Name="Quantity take-off status" AutomationProperties.LiveSetting="Polite"/>
+      </DockPanel>
+      <TextBlock Text="{Binding QuantitySource}" FontFamily="{StaticResource MonoFont}" FontSize="10.5" Foreground="{StaticResource Muted}" Margin="0,4,0,0"
+                 TextTrimming="CharacterEllipsis" ToolTip="{Binding SelectedQuantityCandidate.ModelPath}" AutomationProperties.Name="Quantity take-off data source"/>
+     </StackPanel>
+
+     <ProgressBar Grid.Row="1" Height="2" IsIndeterminate="True" Margin="0,0,0,6" Visibility="{Binding QuantityLoading, Converter={StaticResource BoolVisibility}}"/>
+
+     <TextBlock x:Name="QuantityProblemText" Grid.Row="2" Text="{Binding QuantityProblem}" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,6"
+                AutomationProperties.Name="Quantity take-off problem" AutomationProperties.LiveSetting="Assertive">
+      <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+       <Setter Property="Foreground" Value="{StaticResource Warning}"/>
+       <Style.Triggers>
+        <DataTrigger Binding="{Binding QuantityProblemIsError}" Value="True"><Setter Property="Foreground" Value="{StaticResource Error}"/></DataTrigger>
+        <DataTrigger Binding="{Binding HasQuantityProblem}" Value="False"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+       </Style.Triggers>
+      </Style></TextBlock.Style>
+     </TextBlock>
+
+     <Grid Grid.Row="3" MaxWidth="980" HorizontalAlignment="Left">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+      <!-- Rows size to their content here: a row with a section figure is taller than the 24 px text rows of the theme. -->
+      <DataGrid x:Name="QuantityGrid" ItemsSource="{Binding QuantityRows}" IsReadOnly="True" AutoGenerateColumns="False" MaxHeight="470" RowHeight="NaN" MinRowHeight="24"
+                CanUserAddRows="False" CanUserDeleteRows="False" CanUserResizeRows="False" CanUserSortColumns="False" HeadersVisibility="Column" RowHeaderWidth="0"
+                SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Quantities by assigned section">
+       <DataGrid.RowStyle>
+        <Style TargetType="DataGridRow" BasedOn="{StaticResource {x:Type DataGridRow}}">
+         <Setter Property="ToolTip" Value="{Binding Detail}"/>
+         <Style.Triggers>
+          <DataTrigger Binding="{Binding IsTotal}" Value="True"><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="Background" Value="{StaticResource Surface}"/></DataTrigger>
+         </Style.Triggers>
+        </Style>
+       </DataGrid.RowStyle>
+       <DataGrid.Columns>
+        <DataGridTextColumn Header="Section" Binding="{Binding Section}" Width="2.4*" MinWidth="210">
+         <DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/></Style></DataGridTextColumn.ElementStyle>
+        </DataGridTextColumn>
+        <!-- The section as its own stored data draws it, to scale; hover for a larger view. A picture only — no quantity comes from it. -->
+        <DataGridTemplateColumn Header="Figure" Width="100" CanUserResize="False">
+         <DataGridTemplateColumn.CellTemplate><DataTemplate>
+          <Grid>
+           <Border x:Name="FigureFrame" Background="Transparent" HorizontalAlignment="Center" Margin="0,3,0,2">
+            <StackPanel>
+             <c:SectionFigureView Figure="{Binding Figure}" Width="64" Height="42" AutomationProperties.Name="Section figure"/>
+             <!-- every figure is scaled to fit, so its real overall size is stated under it -->
+             <TextBlock Text="{Binding FigureSize}" FontFamily="{StaticResource MonoFont}" FontSize="9.5" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,1,0,0"/>
+            </StackPanel>
+            <Border.ToolTip>
+             <ToolTip DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+              <StackPanel>
+               <c:SectionFigureView Figure="{Binding Figure}" Width="260" Height="220" Margin="2,2,2,6"/>
+               <TextBlock Text="{Binding Section}" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold"/>
+               <TextBlock Text="{Binding Detail}" MaxWidth="340" TextWrapping="Wrap" FontSize="11"/>
+              </StackPanel>
+             </ToolTip>
+            </Border.ToolTip>
+           </Border>
+           <TextBlock x:Name="NoFigure" Text="—" Foreground="{StaticResource Muted}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"
+                      ToolTip="The stored data of this section does not describe a shape that can be drawn."/>
+          </Grid>
+          <DataTemplate.Triggers>
+           <DataTrigger Binding="{Binding Figure}" Value="{x:Null}"><Setter TargetName="FigureFrame" Property="Visibility" Value="Collapsed"/></DataTrigger>
+           <MultiDataTrigger>
+            <MultiDataTrigger.Conditions><Condition Binding="{Binding Figure}" Value="{x:Null}"/><Condition Binding="{Binding IsTotal}" Value="False"/></MultiDataTrigger.Conditions>
+            <Setter TargetName="NoFigure" Property="Visibility" Value="Visible"/>
+           </MultiDataTrigger>
+          </DataTemplate.Triggers>
+         </DataTemplate></DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTextColumn Header="Member count" Binding="{Binding MemberCount}" Width="*" MinWidth="96" ElementStyle="{StaticResource NumericCell}"/>
+        <DataGridTextColumn Header="Total length m" Binding="{Binding TotalLengthM, StringFormat={}{0:N3}, TargetNullValue=n/a}" Width="1.2*" MinWidth="104" ElementStyle="{StaticResource QuantityLength}"/>
+        <DataGridTextColumn Header="Concrete volume m³" Binding="{Binding ConcreteVolumeM3, StringFormat={}{0:N3}, TargetNullValue=n/a}" Width="1.3*" MinWidth="128" ElementStyle="{StaticResource QuantityConcrete}"/>
+        <DataGridTextColumn Header="Steel mass t" Binding="{Binding SteelMassT, StringFormat={}{0:N3}, TargetNullValue=n/a}" Width="1.2*" MinWidth="104" ElementStyle="{StaticResource QuantitySteel}"/>
+       </DataGrid.Columns>
+      </DataGrid>
+      <TextBlock Grid.Row="1" Style="{StaticResource Hint}" Margin="0,6,0,4"
+                 Text="Concrete volume = concrete area × member length. Steel mass = steel area × member length × that material's own density. Areas are the physical areas of each material in the assigned section — for a Section Designer section from its drawn shapes, a shape in front replacing what it covers; lengths run between each member's end joints in the selected candidate. Steel counts SAP2000 materials of type Steel, Rebar and Tendon (cable strand). n/a = unavailable, never zero."/>
+      <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+       <ItemsControl x:Name="QuantityNotesList" ItemsSource="{Binding QuantityNotes}" AutomationProperties.Name="Quantity take-off notes">
+        <ItemsControl.ItemTemplate><DataTemplate>
+         <TextBlock Text="{Binding StringFormat='• {0}'}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,3"/>
+        </DataTemplate></ItemsControl.ItemTemplate>
+       </ItemsControl>
+      </ScrollViewer>
+     </Grid>
+    </Grid>
+   </TabItem>
+
   </TabControl>
 
   <GridSplitter x:Name="ViewerSplitter" Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="{StaticResource Border}"/>
@@ -1329,6 +1725,15 @@
                           MiddlePoints="{Binding SharedViewerMiddlePoints}"
                           BottomPoints="{Binding SharedViewerBottomPoints}"
                           Cables="{Binding SharedViewerCables}"
+                          PinSupportPoints="{Binding SharedViewerPinSupportPoints}"
+                          FemResult="{Binding SharedViewerFemResult}"
+                          FemResultMode="{Binding FemResultMode, Mode=TwoWay}"
+                          FrameMeshSegments="{Binding SharedViewerFrameMeshSegments}"
+                          MemberSizes="{Binding SharedViewerMemberSizes}"
+                          ShowLoads="{Binding SharedViewerShowLoads}"
+                          LoadValues="{Binding SharedViewerLoadValues}"
+                          ShowAxialValues="{Binding ShowFemAxialValues}"
+                          MemberSections="{Binding SharedViewerSections}"
                           SelectedCable="{Binding SelectedCable, Mode=TwoWay}"
                           AutomationProperties.Name="Shared structural model preview"/>
     <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,8" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3"
@@ -1337,6 +1742,13 @@
       <Ellipse Width="8" Height="8" Fill="{StaticResource ChordTop}" VerticalAlignment="Center"/><TextBlock Text="Top" Style="{StaticResource Caption}" Margin="4,0,10,0"/>
       <Ellipse Width="8" Height="8" Fill="{StaticResource ChordMiddle}" VerticalAlignment="Center"/><TextBlock Text="Middle" Style="{StaticResource Caption}" Margin="4,0,10,0"/>
       <Ellipse Width="8" Height="8" Fill="{StaticResource ChordBottom}" VerticalAlignment="Center"/><TextBlock Text="Bottom" Style="{StaticResource Caption}" Margin="4,0,0,0"/>
+     </StackPanel>
+    </Border>
+    <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,8" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3"
+            Visibility="{Binding ShowFemPinLegend, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="FEM pin support legend">
+     <StackPanel Orientation="Horizontal">
+      <Path Data="M8,1 L1,11 L15,11 Z M0,13 L16,13 M3,13 L1,16 M8,13 L6,16 M13,13 L11,16" Stroke="{StaticResource Accent}" StrokeThickness="1.2" Fill="{StaticResource ViewportBg}" Width="16" Height="16" Stretch="Fill"/>
+      <TextBlock Text="PIN · X/Z fixed · rotation free" Style="{StaticResource Caption}" Margin="6,0,0,0"/>
      </StackPanel>
     </Border>
    </Grid>

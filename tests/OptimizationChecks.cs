@@ -335,7 +335,7 @@ internal static class OptimizationChecks
         Check(Regex.Matches(Table("qualified"), "<tr data-status=\"Qualified\">").Count == 11 && !Table("qualified").Contains("NotQualified") &&
               Regex.Matches(Table("all"), "<tr data-status=").Count == 27 && Table("all").Contains("<td class=\"st notqualified\">Not qualified</td><td>δ 45 mm is below Min 50 mm</td>") &&
               Table("qualified").Contains("<td>L01_H01_P06</td><td>L01</td><td>H20</td><td>P06</td><td class=\"n\">65</td><td class=\"n\">80.0</td><td>Cable-A</td><td class=\"n\">800</td><td class=\"n\">1,000</td>") &&
-              summary.Contains("data-print=\"source\"><summary>All candidates"),
+              summary.Contains("data-pr=\"source\"><summary>All candidates"),
             "the summary lists the qualified candidates with their governing values, and every candidate with its status and reason");
 
         // traceability and staleness

@@ -33,6 +33,14 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
 
     public bool CanUse => state.IsSapConnected && state.Model is not null;
 
+    public bool NewProject()
+    {
+        if (!CanUse) return false;
+        new ConfigurationApplicator(state, workflow).Reset();
+        Session.Close();
+        return true;
+    }
+
     public string SuggestFileName(ConfigTabs tabs)
     {
         var stem = state.Model is { } m && !string.IsNullOrWhiteSpace(m.Path) ? Path.GetFileNameWithoutExtension(m.Path) : "COTVCF";
@@ -71,7 +79,9 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
     // ---------- save (per-tab or all) ----------
     /// <param name="uiTabs">Which tab sections come from the current UI. All others are kept from the active project.</param>
     /// <param name="pickPath">Returns a Save-As path (or null to cancel) when there is no active project.</param>
-    public async Task<SaveOutcome> SaveAsync(ConfigTabs uiTabs, Func<string?>? pickPath)
+    /// <param name="printSetup">The Print Setup card, when this save writes it (Save All, the card's own save).
+    /// Null keeps what the project already holds — a per-tab save writes its own section only.</param>
+    public async Task<SaveOutcome> SaveAsync(ConfigTabs uiTabs, Func<string?>? pickPath, ReportPrintSettings? printSetup = null)
     {
         if (!CanUse) return new(SaveResult.Blocked, "Connect to a SAP2000 model before saving a configuration.");
         var cases = await sap.GetLoadCaseNamesAsync(state.Model!);
@@ -83,11 +93,15 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         if (uiTabs.HasFlag(ConfigTabs.Cable)) project.Tab04CableForce = extractor.ExtractCableSection(state);
         if (uiTabs.HasFlag(ConfigTabs.Output)) project.Tab05OutputSettings = extractor.ExtractOutputSection(state);
         if (uiTabs.HasFlag(ConfigTabs.Study)) project.Tab05IterationStudy = extractor.ExtractStudySection(state);
+        if (printSetup is not null) project.PrintSetup = extractor.ExtractPrintSetup(printSetup);
 
         var effective = ConfiguredIn(project);
         if (uiTabs == ConfigTabs.Study && !effective.HasFlag(ConfigTabs.Study))
             return new(SaveResult.Blocked, "Save the Loading, Truss Height and Cable Force sections before saving the iteration study.");
-        if (effective == ConfigTabs.None) return new(SaveResult.Cancelled, "Nothing configured to save yet.");
+        if (effective == ConfigTabs.None)
+            return new(SaveResult.Cancelled, uiTabs == ConfigTabs.None && printSetup is not null
+                ? "Configure and save a tab first — the Print Setup is stored with the project's tabs."
+                : "Nothing configured to save yet.");
         project.Model = extractor.RebuildSnapshot(project, state, cases);
 
         // Whole active project must stay compatible with the connected model (§9 / §29 / §16).
