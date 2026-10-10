@@ -1,0 +1,62 @@
+<Window x:Class="COT_VCF.Presentation.DesignResultsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="clr-namespace:COT_VCF.Presentation"
+        Title="Design Results" Icon="{x:Static p:AppIcon.Window}" Width="1080" Height="720" MinWidth="760" MinHeight="480"
+        WindowStartupLocation="CenterOwner" Background="{StaticResource Surface}">
+ <!-- Design → … → Run Design: the summary per member (governing case, actions, utilisations, status) and the detailed
+      calculation of the member selected in the summary. -->
+ <Window.Resources>
+  <Style x:Key="Num" TargetType="TextBlock"><Setter Property="HorizontalAlignment" Value="Right"/><Setter Property="Margin" Value="4,0"/></Style>
+  <Style x:Key="StatusCell" TargetType="TextBlock">
+   <Setter Property="FontWeight" Value="SemiBold"/>
+   <Setter Property="Margin" Value="4,0"/>
+   <Setter Property="Foreground" Value="{StaticResource Success}"/>
+   <Style.Triggers>
+    <DataTrigger Binding="{Binding Status}" Value="FAIL"><Setter Property="Foreground" Value="{StaticResource Error}"/></DataTrigger>
+    <DataTrigger Binding="{Binding Status}" Value="ERROR"><Setter Property="Foreground" Value="{StaticResource Error}"/></DataTrigger>
+    <DataTrigger Binding="{Binding Status}" Value="CHECK"><Setter Property="Foreground" Value="{StaticResource Warning}"/></DataTrigger>
+   </Style.Triggers>
+  </Style>
+ </Window.Resources>
+ <DockPanel Margin="10">
+  <StackPanel DockPanel.Dock="Top" Margin="2,0,0,8">
+   <TextBlock x:Name="HeaderText" Style="{StaticResource BannerTitle}"/>
+   <TextBlock x:Name="BasisText" Style="{StaticResource Hint}" Margin="0,2,0,0"/>
+  </StackPanel>
+  <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+   <TextBlock x:Name="CountText" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+    <Button Content="Copy Report" MinWidth="96" Margin="0,0,10,0" Click="Copy_Click" ToolTip="Copy the summary and every member's calculation to the clipboard"/>
+    <Button Content="Save Report…" MinWidth="96" Margin="0,0,10,0" Click="Save_Click" ToolTip="Save the summary and every member's calculation as a text file"/>
+    <Button Content="Close" MinWidth="80" IsCancel="True" Click="Close_Click"/>
+   </StackPanel>
+  </DockPanel>
+  <Grid>
+   <Grid.RowDefinitions><RowDefinition Height="2*" MinHeight="120"/><RowDefinition Height="6"/><RowDefinition Height="3*" MinHeight="140"/></Grid.RowDefinitions>
+   <GroupBox Header="Summary — governing case per member (NEd compression +; utilisation ≤ 1.00 passes)" BorderBrush="{StaticResource Border}" Background="{StaticResource Raised}" Padding="4">
+    <DataGrid x:Name="SummaryGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" HeadersVisibility="Column"
+              CanUserAddRows="False" SelectionChanged="SummaryGrid_SelectionChanged" AutomationProperties.Name="Design summary">
+     <DataGrid.Columns>
+      <DataGridTextColumn Header="Member" Binding="{Binding Member}" Width="80"/>
+      <DataGridTextColumn Header="Section" Binding="{Binding Section}" Width="*" MinWidth="110"/>
+      <DataGridTextColumn Header="Governing case" Binding="{Binding Governing.Case}" Width="*" MinWidth="110"/>
+      <DataGridTextColumn Header="NEd kN" Binding="{Binding Governing.NEdKN, StringFormat={}{0:0.0}}" Width="78" ElementStyle="{StaticResource Num}"/>
+      <DataGridTextColumn Header="MEd,y kNm" Binding="{Binding Governing.MEdYKNm, StringFormat={}{0:0.0}}" Width="82" ElementStyle="{StaticResource Num}"/>
+      <DataGridTextColumn Header="MEd,z kNm" Binding="{Binding Governing.MEdZKNm, StringFormat={}{0:0.0}}" Width="82" ElementStyle="{StaticResource Num}"/>
+      <DataGridTextColumn Header="VEd kN" Binding="{Binding Governing.VEdKN, StringFormat={}{0:0.0}}" Width="70" ElementStyle="{StaticResource Num}"/>
+      <DataGridTextColumn Header="N" Binding="{Binding Governing.AxialUtilization, StringFormat={}{0:0.00}}" Width="50" ElementStyle="{StaticResource Num}"/>
+      <DataGridTextColumn Header="M-y" Binding="{Binding Governing.MajorUtilization, StringFormat={}{0:0.00}}" Width="50" ElementStyle="{StaticResource Num}"/>
+      <DataGridTextColumn Header="M-z" Binding="{Binding Governing.MinorUtilization, StringFormat={}{0:0.00}}" Width="50" ElementStyle="{StaticResource Num}"/>
+      <DataGridTextColumn Header="V" Binding="{Binding Governing.ShearUtilization, StringFormat={}{0:0.00}}" Width="50" ElementStyle="{StaticResource Num}"/>
+      <DataGridTextColumn Header="Max" Binding="{Binding MaxUtilization, StringFormat={}{0:0.00}}" Width="54" ElementStyle="{StaticResource Num}"/>
+      <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="62" ElementStyle="{StaticResource StatusCell}"/>
+     </DataGrid.Columns>
+    </DataGrid>
+   </GroupBox>
+   <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" Background="Transparent"/>
+   <GroupBox Grid.Row="2" x:Name="DetailBox" Header="Detailed calculation" BorderBrush="{StaticResource Border}" Background="{StaticResource Raised}" Padding="4">
+    <TextBox x:Name="DetailText" IsReadOnly="True" FontFamily="{StaticResource MonoFont}" FontSize="12" BorderThickness="0"
+             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" TextWrapping="NoWrap" AutomationProperties.Name="Detailed calculation"/>
+   </GroupBox>
+  </Grid>
+ </DockPanel>
+</Window>

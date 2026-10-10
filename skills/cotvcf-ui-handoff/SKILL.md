@@ -54,10 +54,24 @@ earlier tall-header / large-button / blue-block look.
   - **Edit**: placeholder (no edit commands yet).
   - **Define**: Sections, Load Patterns, Load Cases / Load Combinations · Result Candidate / Load Case.
   - **Assign**: Joint Restraints (Pin Supports).
-  - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Analysis Options.
+  - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Optimization VCF… ·
+    Analysis Options. **Optimization VCF…** opens the modal `OptimizationVcfWindow`: the Edit → VCF Geometry inputs as a
+    search space — sheet **Geometry** has Min / Max / Step (and the value count n) per parameter (bays, bay width, truss
+    depth, middle chord, clear height, back-span, back-stay height; keys shared with VcfGeometryWindow), sheet **Sections**
+    a check-list drop-down of candidate sections per member role and per cable (none ticked = keep as assigned). Preview
+    at Minimum / Current / Maximum corner; the combination count is shown; invalid ranges or corners grey OK.
+    `Application/VcfOptimization` holds `VcfRange` (Min, Min + Step, … always ending on Max) and
+    `VcfOptimizationSettings`; OK keeps them on `MainViewModel.VcfOptimizationSettings` (memory only, not saved in a
+    file). The working model is never changed and **Run Optimization** is disabled — the run loop is still to be built.
   - **Result**: Axial forces / cables, Bending moments, Shear forces, Support reactions, Deflection, Cable target fit
     (opens the table) · Results Table…; enabled once a candidate has results (`HasFemResults`).
   - **Display**: Frame mesh / Member size / Loading (checkable, bound to the FEM view toggles) · View Options.
+  - **Design**: RC Column Design…, CFT (Concrete Filled Tube) Design…, Steel Encased Composite Column Design…. Each first
+    opens the modal `DesignReferenceWindow` (design code, method, Singapore NA, effective lengths l0,y / l0,z in m — both
+    required, > 0 —, γC / γS / γM0, max. concrete / steel grade,
+    reference list; Reset / Run Design / Cancel). Codes come from `Domain/ColumnDesignCodes`: RC → SS EN 1992-1-1 (EC2);
+    CFT and steel encased → SS EN 1994-1-1 extended by BCA BC4:2025 for high-strength materials. The confirmed basis is
+    kept per type (`MainViewModel.DesignBasis`); the design itself is still a placeholder ("not implemented yet").
   - **Help**: Workflow Help, FEM Procedure.
 - MB, Edit, Define, Assign, Run, Result and Display are enabled with `HasWorkingModel` (connected or offline model);
   File and Help are always open (their commands gate themselves).
@@ -66,7 +80,8 @@ earlier tall-header / large-button / blue-block look.
   `Define › SECTIONS`) with the page status (`PaneStatus`) on the right and, offline, the `OfflineModelSummary` line.
 - The pane header has an **✕** (`ClosePaneButton`, shown while the shared viewer is) that hides the left pane — the
   params column goes to 0 (its MinWidth is dropped too) and the viewer takes the full width. Any MB / Define / Assign /
-  Run / Result / Display item opens the pane again (`OpenPane`). Full-width pages (05, 06, 06A, 08) always show it.
+  Run / Result / Display item opens the pane again (`OpenPane`). At startup the pane is closed (`App.OnStartup` → `ClosePane`), so the app
+  opens on the model view only. Full-width pages (05, 06, 06A, 08) always show it.
 - **Edit → VCF Geometry…** opens `VcfGeometryWindow`: `VcfGeometry.Analyze` (Application) reads the system from the
   02 Truss Height chord groups — bays and bay width, truss depth, middle chord above the bottom chord, clear height
   (ground → bottom chord), back-span (mega column → outer column) and back-stay node height — and the role of every
@@ -89,6 +104,12 @@ earlier tall-header / large-button / blue-block look.
   maps / drops SAP loads, reloads every top point when all were loaded, sets the Tab 02 groups, removes / adds Tab 03 cables
   (a cable that followed a removed one becomes independent and takes over its range) and remaps the Tab 04 lists. The
   window groups Frame and Cable sections under one **Sections** box.
+  The parameters sit on workbook-style sheets (`ParameterTabs`): **Geometry | Cable Force | Storey Force | Sections**. The two
+  force sheets are read-only and follow the preview: **Cable Force** (each cable of the previewed
+  model: Tab 03 load pattern, sync, pretension — fixed value or min … max (count), resolved through the sync graph for
+  followers; a new fan cable shows its template's) and **Storey Force** (each loaded point: X, tributary area = tributary
+  length × B, and per load definition Fz = −qz × area × NStories, a range when qz is a range; totals per definition — the
+  same rule as StudyCompositionService.BuildPointLoads).
 - **Display → View Options…** (and the toolbar eye) opens `ViewOptionsWindow`, titled *Display Options* and laid out like
   SAP2000's: tabs *Object Options* (Labels: point / frame / cable / member size; Show: dimensions, loading arrows, frame
   mesh) and *General Options* (View Type: XY / XZ / YZ / Extrude 3D; Results: axial values, undeformed guide, deflection
@@ -106,6 +127,13 @@ earlier tall-header / large-button / blue-block look.
   is seeded from the member properties (`EnsureMaterials`: cable → tendon, C… concrete, S… steel). OK
   (`CommitMaterials`) writes E, unit weight and unit mass (and a rename) to the FEM members using the material and clears
   FEM results — SAP2000 is never written. The library is saved in the FEM model file (`Materials`, optional).
+- **Material unit cost** (`MaterialProperty.UnitCost` SGD/t + `CostNote`; Material Property Data → *Cost*: SGD/t, the per-m³
+  equivalent for concrete (× mass per volume), the basis, *Suggest Rate*). Defaults (`MaterialCosts`, filled where a
+  material has none; an entered / kept rate survives Get From SAP2000): project rates C80/95 240, 100 / 120 / 150 MPa
+  320 / 450 / 1,200 SGD/m³, HD jumbo S460M 4,860 and built-up S690QL 7,500 SGD/t; BCA 2025 averages ready-mixed Grade 40
+  ≈121 SGD/m³ (for C30/37) and rebar 16–32 mm ≈690 SGD/t (material only); estimates — other concrete interpolated by f'c,
+  S355 / S450 extrapolated by Fy from S460M / S690QL. Tendon / cable strand 12,000 SGD/t (project rate; replaces the
+  earlier ≈1,000 SGD/t estimate in older files, an entered rate is kept).
 - **Define → Section Properties ▸ Frame / Tendon / Cable Sections…** (and *Member Sections Table…*, the former Define →
   Sections member grid) open `SectionListWindow` (modal, like SAP2000's Frame Properties): Find this property (filters and
   selects), the list; Get From SAP2000 (`ISapGateway.GetSectionsAsync`, read-only, attaches without Connect SAP like the
@@ -267,7 +295,8 @@ earlier tall-header / large-button / blue-block look.
 - (Former layout, for reference) FEM used Inputs / Analysis & Results / View, with the Candidate and Load case / combo dropdowns inside Result Explorer.
   Explorer shows six flat outputs (axial/cables, bending, shear, reactions, deflection, cable target fit), without candidate branches.
   Dropdowns filter the diagram and tables; View Results opens FemResultsWindow with the same selections.
-  Floating chart controls remain synchronized with the explorer. Solver behavior is unchanged.
+  There are no floating result buttons on the model view (removed on request): the result type is chosen in Show
+  Results (toolbar) or the Result menu. Solver behavior is unchanged.
 - Run Analysis opens the non-modal FEM Run Monitor (FemRunMonitorWindow; reopen with Analysis → Monitor): progress,
   live log inside a collapsed Diagnostic details expander (FemLog, one line per step and per case), Cable dropdown (default Cable1a-2) and Case dropdown with
   Follow latest, and ConvergenceChart of P_result/P_preset per pretension-fitting run (run 0 = 0, line at 1, ±tol

@@ -23,20 +23,53 @@
   </DockPanel>
 
   <Grid>
-   <Grid.ColumnDefinitions><ColumnDefinition Width="400"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Grid.ColumnDefinitions><ColumnDefinition x:Name="SheetsColumn" Width="440" MinWidth="340"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*" MinWidth="300"/></Grid.ColumnDefinitions>
 
-   <!-- parameters -->
-   <ScrollViewer VerticalScrollBarVisibility="Auto">
-    <StackPanel>
-     <GroupBox Header="Geometry">
+   <!-- parameters: one sheet per subject, like the sheets of a workbook -->
+   <TabControl x:Name="ParameterTabs" Background="{StaticResource Surface}" AutomationProperties.Name="VCF geometry sheets">
+    <TabControl.Resources>
+     <!-- sized to their text (the theme's tabs are a fixed 152 px) so the four sheets sit on one line -->
+     <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}"><Setter Property="Height" Value="26"/><Setter Property="Width" Value="NaN"/><Setter Property="MinWidth" Value="0"/><Setter Property="Padding" Value="12,0"/></Style>
+    </TabControl.Resources>
+    <TabItem Header="Geometry">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
       <StackPanel>
        <Grid x:Name="GeometryGrid">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="96"/><ColumnDefinition Width="22"/></Grid.ColumnDefinitions>
        </Grid>
        <TextBlock x:Name="GeometrySummary" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0"/>
       </StackPanel>
-     </GroupBox>
-     <GroupBox Header="Sections">
+     </ScrollViewer>
+    </TabItem>
+    <TabItem Header="Cable Force">
+     <Border Padding="8">
+      <DockPanel>
+       <TextBlock DockPanel.Dock="Top" Text="Pretension defined on 03 Pretension (target force per cable)" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+       <TextBlock DockPanel.Dock="Bottom" x:Name="CableForceSummary" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+       <DataGrid x:Name="CableForceGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
+                 AutomationProperties.Name="Cable force" SelectionMode="Single">
+        <DataGrid.Columns>
+         <DataGridTextColumn Header="Cable" Binding="{Binding Cable}" Width="Auto" MinWidth="80"/>
+         <DataGridTextColumn Header="Pattern" Binding="{Binding Pattern}" Width="Auto"/>
+         <DataGridTextColumn Header="Sync" Binding="{Binding Sync}" Width="Auto"/>
+         <DataGridTextColumn Header="Pretension [kN]" Binding="{Binding Force}" Width="*" MinWidth="90" ElementStyle="{StaticResource NumericCell}"/>
+        </DataGrid.Columns>
+       </DataGrid>
+      </DockPanel>
+     </Border>
+    </TabItem>
+    <TabItem Header="Storey Force">
+     <Border Padding="8">
+      <DockPanel>
+       <TextBlock DockPanel.Dock="Top" x:Name="StoreyForceCaption" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+       <TextBlock DockPanel.Dock="Bottom" x:Name="StoreyForceSummary" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+       <DataGrid x:Name="StoreyForceGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
+                 AutomationProperties.Name="Storey force" SelectionMode="Single"/>
+      </DockPanel>
+     </Border>
+    </TabItem>
+    <TabItem Header="Sections">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
       <StackPanel>
        <TextBlock Text="FRAME SECTIONS" Style="{StaticResource Subheading}"/>
        <Grid x:Name="FrameGrid">
@@ -49,9 +82,13 @@
        <TextBlock x:Name="SectionHint" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
                   Text="Sections are the ones assigned in the model; a member keeps its own local axis and end releases."/>
       </StackPanel>
-     </GroupBox>
-    </StackPanel>
-   </ScrollViewer>
+     </ScrollViewer>
+    </TabItem>
+   </TabControl>
+
+   <!-- drag to widen or narrow the sheets -->
+   <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
+                 Background="{StaticResource Border}" Cursor="SizeWE" ToolTip="Drag to resize" AutomationProperties.Name="Resize sheets"/>
 
    <!-- live preview -->
    <DockPanel Grid.Column="2">

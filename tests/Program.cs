@@ -72,8 +72,8 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 MenuItem TopMenu(string header) => window.MainMenu.Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == header);
                 Assert(window.MainMenu.Items.OfType<MenuItem>().Select(item => (item.Header as string)!.Replace("_", ""))
-                           .SequenceEqual(["File", "MB", "Edit", "Define", "Assign", "Run", "Result", "Display", "Help"]),
-                    "The menu bar reads File, MB, Edit, Define, Assign, Run, Result, Display, Help");
+                           .SequenceEqual(["File", "MB", "Edit", "Define", "Assign", "Run", "Result", "Display", "Design", "Help"]),
+                    "The menu bar reads File, MB, Edit, Define, Assign, Run, Result, Display, Design, Help");
                 Assert(!FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
                        !vm.NewConfig.CanExecute(null) && !TopMenu("MB").IsEnabled && !TopMenu("Define").IsEnabled && TopMenu("File").IsEnabled,
                     "Workflow pages, the MB/Define menus and New Config are disabled before SAP connection; File stays open");
@@ -282,6 +282,55 @@ internal static class Program
                 Assert(vcfWindow.IsVisible && vcfWindow.Preview.Model.Points.Count == uiState.Geometry.Points.Count,
                     "Edit -> VCF Geometry opens its own window with a preview of the model");
                 vcfWindow.Close();
+                // Cable Force / Storey Force panes on the default model (10 bays of 10 m, B 12 m, 10 storeys)
+                var (defaultVm, _, _, _) = FemModelFileChecks.DefaultModelApp();
+                var forcesWindow = new VcfGeometryWindow(defaultVm) { Owner = window };
+                forcesWindow.Show();
+                forcesWindow.UpdateLayout();
+                var sheetTabs = forcesWindow.ParameterTabs.Items.OfType<TabItem>().ToArray();
+                Assert(sheetTabs.Select(tab => tab.TranslatePoint(new Point(0, 0), forcesWindow).Y).Distinct().Count() == 1 &&
+                       FindVisuals<GridSplitter>(forcesWindow).Any(splitter => System.Windows.Automation.AutomationProperties.GetName(splitter) == "Resize sheets"),
+                    "the four VCF sheets sit on one line, and the sheets / preview split can be dragged");
+                var cableRows = forcesWindow.CableForces;
+                var storeyRows = forcesWindow.StoreyForces;
+                string Kn(double value) => value.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
+                Assert(forcesWindow.ParameterTabs.Items.OfType<TabItem>().Select(tab => tab.Header as string).SequenceEqual(["Geometry", "Cable Force", "Storey Force", "Sections"]) &&
+                       cableRows.Count == 16 && cableRows.Single(row => row.Cable == "Cable1a-2").Force == Kn(100_000) &&
+                       cableRows.Single(row => row.Cable == "Cable2a-2").Force == Kn(30_000) && cableRows.Single(row => row.Cable == "Cable1b-2").Sync.StartsWith("=", StringComparison.Ordinal),
+                    "VCF Geometry has sheets Geometry | Cable Force | Storey Force | Sections, and shows each cable's pretension on Cable Force (Cable1a-2 100,000 kN, Cable2a-2 30,000 kN, Cable1b-2 following Cable1a-2)");
+                Assert(storeyRows.Count == 11 && storeyRows[0].Area == "60" && storeyRows[5].Area == "120" &&
+                       storeyRows[5].Forces[0] == Kn(-12_000) && storeyRows[0].Forces[0] == Kn(-6_000) &&
+                       storeyRows[5].Forces[1].StartsWith(Kn(-12_000), StringComparison.Ordinal) && storeyRows[5].Forces[1].Contains(Kn(-6_000), StringComparison.Ordinal),
+                    "Storey Force shows the force at each loaded point: −10 kPa × 120 m² × 10 storeys = −12,000 kN inside, half at the ends; the LL range per point");
+                forcesWindow.SetInput("Bay", "12");
+                forcesWindow.UpdateLayout();
+                Assert(forcesWindow.StoreyForces[5].Area == "144" && forcesWindow.StoreyForces[5].Forces[0] == Kn(-14_400),
+                    "Storey Force follows the previewed geometry (12 m bays: 144 m², −14,400 kN)");
+                forcesWindow.Close();
+                // Run -> Optimization VCF: min / max / step per geometry input, candidate sections, preview at a corner
+                Assert(new VcfRange(10, 14, 1.5).Values().SequenceEqual([10, 11.5, 13, 14]) && new VcfRange(8, 8, 0).Count == 1 &&
+                       new VcfRange(9, 8, 1).Problem() is not null && new VcfRange(2, 6, 0.5).Problem(whole: true) is not null,
+                    "A VCF range runs Min, Min + Step, … and always ends on Max; Min = Max is one value; Max < Min and fractional bay steps are refused");
+                Assert(TopMenu("Run").Items.OfType<MenuItem>().Any(item => (item.Header as string)?.Replace("_", "") == "Optimization VCF…"),
+                    "Run offers Optimization VCF…");
+                var optimization = new OptimizationVcfWindow(defaultVm) { Owner = window };
+                optimization.Show();
+                optimization.UpdateLayout();
+                var fixedSpace = optimization.FormSettings();
+                optimization.SetRange("Bay", "max", "12");
+                optimization.SetRange("Bay", "step", "1");
+                optimization.SetRange("Bays", "max", "12");
+                optimization.PreviewCorner.SelectedIndex = 2;
+                optimization.UpdateLayout();
+                var space = optimization.FormSettings();
+                Assert(fixedSpace.CombinationCount == 1 && space.GeometryCount == 9 && optimization.OkButton.IsEnabled &&
+                       optimization.ParameterTabs.Items.OfType<TabItem>().Select(tab => tab.Header as string).SequenceEqual(["Geometry", "Sections"]) &&
+                       optimization.Preview.Model.Points.Count > defaultVm.State.Geometry.Points.Count,
+                    "Optimization VCF starts fixed at the model, counts 3 bay widths × 3 bay counts = 9 geometry variants, and previews the maximum corner (12 bays)");
+                optimization.SetRange("Bays", "max", "1");
+                Assert(!optimization.OkButton.IsEnabled && optimization.ProblemText.Text.Length > 0, "An invalid range greys OK and names the problem");
+                optimization.Close();
+                Assert(defaultVm.VcfOptimizationSettings is null, "Optimization VCF does not change the view model before OK");
                 Assert(TopMenu("Define").Items.OfType<MenuItem>().First().Header as string == "_Materials…",
                     "Define starts with Materials…");
                 Assert(TopMenu("Define").Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == "Section Properties").Items.OfType<MenuItem>()
@@ -349,7 +398,7 @@ internal static class Program
                 propertyForm.Show();
                 propertyForm.UpdateLayout();
                 Assert(FindVisuals<GroupBox>(propertyForm).Select(box => box.Header as string)
-                           .SequenceEqual(["General Data", "Weight and Mass", "Isotropic Property Data", "Other Properties For Concrete Materials"]) &&
+                           .SequenceEqual(["General Data", "Weight and Mass", "Isotropic Property Data", "Other Properties For Concrete Materials", "Cost"]) &&
                        propertyForm.ReadForm() is { Fc: 30_000, ElasticModulus: 33_000_000 },
                     "Material Property Data shows General Data, Weight and Mass, Isotropic Property Data and the concrete properties");
                 propertyForm.SetField("E", "-5");
@@ -359,7 +408,7 @@ internal static class Program
                 tendonForm.Show();
                 tendonForm.UpdateLayout();
                 Assert(FindVisuals<GroupBox>(tendonForm).Select(box => box.Header as string)
-                           .SequenceEqual(["General Data", "Weight and Mass", "Uniaxial Property Data", "Other Properties For Tendon Materials", "Advanced"]),
+                           .SequenceEqual(["General Data", "Weight and Mass", "Uniaxial Property Data", "Other Properties For Tendon Materials", "Cost", "Advanced"]),
                     "a tendon shows Uniaxial Property Data and the advanced display when switched on");
                 tendonForm.Close();
                 OpenMenu("Display", "View Options");
@@ -455,10 +504,11 @@ internal static class Program
                        FindVisuals<ComboBox>(tableWindow).Any(combo => System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM load case or combination"),
                     "View Results opens a separate populated table with candidate and load-case dropdowns above it");
                 tableWindow.Close();
-                var chartShear = FindVisuals<RadioButton>(window).Single(button => button.GroupName == "ViewerResultMode" && Equals(button.Content, "Shear"));
-                chartShear.IsChecked = true;
+                Assert(!FindVisuals<RadioButton>(window).Any(button => button.GroupName == "ViewerResultMode"),
+                    "The model view has no floating result buttons — the result type is chosen in Show Results / the Result menu");
+                vm.ShowFemResult(FemResultMode.Shear);
                 Assert(vm.FemResultMode == FemResultMode.Shear && vm.PaneTitle == "SHEAR FORCES",
-                    "The floating chart buttons switch the result and keep the Result pane header synchronized");
+                    "Choosing a result switches the diagram and keeps the Result pane header synchronized");
                     vm.FemResultMode = FemResultMode.AxialForce;
                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                     window.UpdateLayout();
@@ -809,6 +859,11 @@ internal static class Program
                 PlanarFrameChecks.Run();
                 return 0;
             }
+            if (args.Contains("--column-design"))
+            {
+                ColumnDesignChecks.Run();
+                return 0;
+            }
             // Live: starts its own SAP2000 on a copy of the baseline under .work and checks that cable lengths follow the joints.
             var cableLengthLive = Array.IndexOf(args, "--cable-length-live");
             if (cableLengthLive >= 0)
@@ -982,6 +1037,7 @@ internal static class Program
             GatewayChecks.Run();
             QuantityTakeoffChecks.Run();
             FemModelFileChecks.Run();
+            ColumnDesignChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }

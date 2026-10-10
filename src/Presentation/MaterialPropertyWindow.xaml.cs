@@ -24,6 +24,8 @@ public partial class MaterialPropertyWindow : Window
     private Border swatch = null!;
     private string notes;
     private int color;
+    private string costNote;
+    private bool settingCost;
 
     public MaterialProperty? Result { get; private set; }
 
@@ -35,6 +37,7 @@ public partial class MaterialPropertyWindow : Window
         this.taken = taken;
         notes = material.Notes;
         color = material.Color;
+        costNote = material.CostNote;
         AdvancedCheck.IsChecked = advanced;
         Build();
     }
@@ -117,6 +120,31 @@ public partial class MaterialPropertyWindow : Window
                 ((StackPanel)other.Content).Children.Add(new TextBlock { Text = "No design properties for this material type.", Foreground = Brushes.Gray });
                 break;
         }
+
+        // Cost
+        var cost = Group("Cost");
+        static string Money(double? value) => value is { } v ? v.ToString("0.##", CultureInfo.CurrentCulture) : "";
+        var costBox = Field(cost, "Cost", "Unit Cost", material.UnitCost, "SGD/t");
+        costBox.Text = Money(material.UnitCost);
+        var perCubicMetre = material.Kind == MaterialKind.Concrete ? Display(cost, "Unit Cost per Volume", Money(material.UnitCostPerCubicMetre), "SGD/m³") : null;
+        var costText = new TextBlock { Text = costNote, Foreground = Brushes.DimGray, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 4) };
+        ((StackPanel)cost.Content).Children.Add(costText);
+        var suggest = new Button { Content = "Suggest Rate", Width = 120, HorizontalAlignment = HorizontalAlignment.Left,
+            ToolTip = "Fill in the default rate for this material type and grade (project rates, BCA averages, estimates)" };
+        ((StackPanel)cost.Content).Children.Add(suggest);
+        void PerVolume() { if (perCubicMetre is not null) perCubicMetre.Text = Parse(costBox) is { } c && Parse(fields["Weight"]) is { } w ? Money(c * w / MaterialProperty.Gravity) : ""; }
+        costBox.TextChanged += (_, _) => { if (!settingCost) { costNote = costBox.Text.Trim().Length == 0 ? "" : "Entered rate"; costText.Text = costNote; } PerVolume(); };
+        fields["Weight"].TextChanged += (_, _) => PerVolume();
+        suggest.Click += (_, _) =>
+        {
+            var (rate, note) = MaterialCosts.Suggest(ReadForm() ?? material);
+            settingCost = true;
+            costBox.Text = Money(rate);
+            settingCost = false;
+            costNote = note;
+            costText.Text = note;
+            PerVolume();
+        };
 
         // Advanced display
         if (AdvancedCheck.IsChecked == true)
@@ -220,6 +248,7 @@ public partial class MaterialPropertyWindow : Window
         foreach (var (key, box) in fields)
             if (box.IsEnabled && box.Text.Trim().Length > 0 && Parse(box) is null) problems.Add($"{System.Windows.Automation.AutomationProperties.GetName(box)}: enter a number.");
         if (Value("E") is not (> 0)) problems.Add("Modulus of elasticity must be greater than zero.");
+        if (Value("Cost") is < 0) problems.Add("Unit cost must be zero or more.");
         if (Value("Weight") is not (>= 0)) problems.Add("Weight per unit volume must be zero or more.");
         if (!material.IsUniaxial && Value("U") is not (>= 0 and < 0.5)) problems.Add("Poisson's ratio must be from 0 to less than 0.5.");
         ProblemText.Text = string.Join("\n", problems);
@@ -232,6 +261,7 @@ public partial class MaterialPropertyWindow : Window
             PoissonRatio = material.IsUniaxial ? 0 : Value("U")!.Value, ThermalCoefficient = Value("A") ?? 0,
             Fc = Value("Fc"), ExpectedFc = Value("ExpectedFc"), IsLightweight = light, ShearStrengthReductionFactor = light ? Value("Fcs") : null,
             Fy = Value("Fy"), Fu = Value("Fu"), ExpectedFy = Value("ExpectedFy"), ExpectedFu = Value("ExpectedFu"),
+            UnitCost = Value("Cost"), CostNote = costNote,
             Source = isNew || material.Source == "App" ? "App" : material.Source + " (edited)",
         };
     }

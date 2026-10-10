@@ -209,6 +209,23 @@ internal static class FemModelFileChecks
               vm.MaterialUsage("S460") == 30 && vm.Materials.All(material => material.Fc is null && material.Fy is null),
             "without SAP2000 the material library starts from the member properties (C70/85 concrete, S460 steel, the strand as tendon)");
 
+        // unit costs (SGD): project rates, BCA averages, estimates
+        double PerTonne(MaterialProperty material) => MaterialCosts.Suggest(material).PerTonne ?? double.NaN;
+        var concrete = MaterialProperty.Default(MaterialKind.Concrete, "C80/95") with { Fc = 80_000 };
+        var c3037 = MaterialProperty.Default(MaterialKind.Concrete, "C30/37");
+        var c7085 = vm.Materials.Single(material => material.Name == "C70/85");
+        Check(Math.Abs(PerTonne(concrete) * concrete.MassPerVolume - 240) < 1e-9 && Math.Abs(PerTonne(c3037) * c3037.MassPerVolume - 121) < 1e-9 &&
+              Math.Abs(c7085.UnitCost!.Value * c7085.MassPerVolume - (121 + 40 * 119.0 / 50)) < 1e-6 && c7085.CostNote.Contains("interpolated", StringComparison.Ordinal) &&
+              Math.Abs(PerTonne(MaterialProperty.Default(MaterialKind.Concrete, "C100") with { Fc = 100_000 }) * concrete.MassPerVolume - 320) < 1e-9 &&
+              vm.Materials.Single(material => material.Name == "S460").UnitCost == 4860 &&
+              PerTonne(MaterialProperty.Default(MaterialKind.Steel, "S690") with { Fy = 690_000 }) == 7500 &&
+              Math.Abs(PerTonne(MaterialProperty.Default(MaterialKind.Steel, "S355") with { Fy = 355_000 }) - (4860 - 105 * 2640.0 / 230)) < 1e-9 &&
+              PerTonne(MaterialProperty.Default(MaterialKind.Rebar, "Rebar")) == 690 &&
+              vm.Materials.Single(material => material.Kind == MaterialKind.Tendon).UnitCost == 12000 &&
+              MaterialCosts.WithDefaultCost(MaterialProperty.Default(MaterialKind.Tendon, "Old") with { UnitCost = 1000, CostNote = "≈1,000 SGD/t — estimate" }).UnitCost == 12000 &&
+              MaterialCosts.WithDefaultCost(MaterialProperty.Default(MaterialKind.Tendon, "Quoted") with { UnitCost = 9000, CostNote = "Entered rate" }).UnitCost == 9000,
+            "materials carry a unit cost in SGD/t: C80/95 240 and 100 MPa 320 /m³, S460 4,860, S690 7,500 and tendon / cable 12,000 /t (project), C30/37 121 /m³ and rebar 690 /t (BCA), C70/85 / S355 estimated");
+
         var steel = vm.Materials.Single(material => material.Name == "S460");
         var edited = vm.Materials.Select(material => material.Name == "S460"
             ? material with { Name = "S460 mod", ElasticModulus = 200_000_000, WeightPerVolume = 78.5 } : material).ToArray();
@@ -236,7 +253,7 @@ internal static class FemModelFileChecks
             vm.SaveFemModelFileAsync(path).GetAwaiter().GetResult();
             var (reopened, _, _, reopenWarnings) = DefaultModelApp();
             reopened.OpenFemModelFile(path);
-            Check(warnings.Count == 0 && reopenWarnings.Count == 0 && reopened.Materials.Any(material => material.Name == "S460 mod" && material.ElasticModulus == 200_000_000),
+            Check(warnings.Count == 0 && reopenWarnings.Count == 0 && reopened.Materials.Any(material => material.Name == "S460 mod" && material.ElasticModulus == 200_000_000 && material.UnitCost == 4860),
                 "the material library is saved with the model and loaded again");
         }
         finally { if (File.Exists(path)) File.Delete(path); }
@@ -289,7 +306,7 @@ internal static class FemModelFileChecks
 
     private static bool Near(double a, double b) => Math.Abs(a - b) < 1e-6;
 
-    private static (MainViewModel Vm, ApplicationState State, SapDouble Sap, List<string> Warnings) DefaultModelApp()
+    internal static (MainViewModel Vm, ApplicationState State, SapDouble Sap, List<string> Warnings) DefaultModelApp()
     {
         var state = new ApplicationState();
         var silent = SapDouble.Create(null!, GeometryModel.Empty, refuseAll: true);

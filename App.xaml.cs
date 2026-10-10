@@ -48,6 +48,8 @@ public partial class App : System.Windows.Application
         MainWindow.Show();
         // Open on the built-in default FEM model (07 FEM, ready to run); Connect SAP replaces it with the live model.
         viewModel.LoadDefaultFemModel();
+        // The model view opens on its own; the Define / Run / Result … pane appears when a menu item is chosen.
+        ((Presentation.MainWindow)MainWindow).ClosePane();
     }
     protected override void OnExit(ExitEventArgs e) { gateway?.Dispose(); base.OnExit(e); }
 }

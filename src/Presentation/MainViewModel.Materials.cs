@@ -21,6 +21,9 @@ public sealed partial class MainViewModel
     /// E and unit weight the members carry; the type is guessed (cables → tendon, C… → concrete, S… → steel).</summary>
     internal void EnsureMaterials()
     {
+        // a material without a unit cost takes the default rate for its type and grade (MaterialCosts)
+        for (var index = 0; index < Materials.Count; index++)
+            if (MaterialCosts.WithDefaultCost(Materials[index]) is { UnitCost: not null } costed && !ReferenceEquals(costed, Materials[index])) Materials[index] = costed;
         if (Materials.Count > 0) return;
         foreach (var group in FemSectionProperties.Where(property => !string.IsNullOrWhiteSpace(property.MaterialName))
                      .GroupBy(property => property.MaterialName!, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal))
@@ -29,7 +32,7 @@ public sealed partial class MainViewModel
             var kind = group.Any(property => property.IsCable) ? MaterialKind.Tendon
                 : Regex.IsMatch(group.Key, @"^C\d") ? MaterialKind.Concrete
                 : Regex.IsMatch(group.Key, @"^S\d") ? MaterialKind.Steel : MaterialKind.Other;
-            Materials.Add(MaterialProperty.Default(kind, group.Key) with
+            Materials.Add(MaterialCosts.WithDefaultCost(MaterialProperty.Default(kind, group.Key) with
             {
                 Grade = kind is MaterialKind.Concrete or MaterialKind.Steel ? group.Key : "",
                 WeightPerVolume = first.UnitWeightKNPerM3,
@@ -38,7 +41,7 @@ public sealed partial class MainViewModel
                 Fc = null, ExpectedFc = null, Fy = null, Fu = null, ExpectedFy = null, ExpectedFu = null,
                 Notes = "From the model's member properties (E, unit weight) — Get From SAP2000 for the full material data.",
                 Source = "Model",
-            });
+            }));
         }
     }
 
@@ -47,7 +50,7 @@ public sealed partial class MainViewModel
     {
         if (IsBusy) throw new InvalidOperationException("Another operation is running; try again when it has finished.");
         IsBusy = true;
-        try { return await workflow.ReadMaterialsAsync(); }
+        try { return (await workflow.ReadMaterialsAsync()).Select(MaterialCosts.WithDefaultCost).ToArray(); }
         catch (System.Runtime.InteropServices.COMException) when (State.IsSapConnected)
         {
             State.Connection = "Connection Lost";

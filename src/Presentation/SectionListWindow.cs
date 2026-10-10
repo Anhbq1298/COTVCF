@@ -50,14 +50,14 @@ public sealed class SectionListWindow : Window
         Background = (Brush)FindResource("Surface");
 
         var view = CollectionViewSource.GetDefaultView(working);
-        view.Filter = item => find.Text.Trim().Length == 0 || Name(item).Contains(find.Text.Trim(), StringComparison.OrdinalIgnoreCase);
+        view.Filter = item => find.Text.Trim().Length == 0 || SectionName(item).Contains(find.Text.Trim(), StringComparison.OrdinalIgnoreCase);
         list.ItemsSource = view;
         System.Windows.Automation.AutomationProperties.SetName(list, "Sections");
         System.Windows.Automation.AutomationProperties.SetName(find, "Find this property");
         find.TextChanged += (_, _) =>
         {
             view.Refresh();
-            var exact = working.FirstOrDefault(item => Name(item).Equals(find.Text.Trim(), StringComparison.OrdinalIgnoreCase));
+            var exact = working.FirstOrDefault(item => SectionName(item).Equals(find.Text.Trim(), StringComparison.OrdinalIgnoreCase));
             list.SelectedItem = exact ?? list.Items.Cast<object>().FirstOrDefault();
         };
         list.SelectionChanged += (_, _) => UpdateState();
@@ -115,7 +115,7 @@ public sealed class SectionListWindow : Window
     }
 
     private static UIElement Docked(UIElement element, Dock dock) { DockPanel.SetDock(element, dock); return element; }
-    private static string Name(object item) => item switch { FrameSectionProperty frame => frame.Name, StrandSectionProperty strand => strand.Name, _ => "" };
+    private static string SectionName(object item) => item switch { FrameSectionProperty frame => frame.Name, StrandSectionProperty strand => strand.Name, _ => "" };
     private static object Renamed(object item, string name, string source) => item switch
     {
         FrameSectionProperty frame => frame with { Name = name, Source = source },
@@ -126,14 +126,14 @@ public sealed class SectionListWindow : Window
     internal IReadOnlyList<object> Working => working;
     private object? Selected => list.SelectedItem;
     private IReadOnlySet<string> Names(string? except = null) =>
-        working.Select(Name).Where(name => name != except).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        working.Select(SectionName).Where(name => name != except).ToHashSet(StringComparer.OrdinalIgnoreCase);
     private string OriginalName(string current) => renamed.FirstOrDefault(pair => pair.Value == current).Key ?? current;
 
     private void UpdateState()
     {
         var selected = Selected;
         copyButton.IsEnabled = modifyButton.IsEnabled = selected is not null;
-        var usage = selected is null ? 0 : viewModel.SectionUsage(OriginalName(Name(selected)));
+        var usage = selected is null ? 0 : viewModel.SectionUsage(OriginalName(SectionName(selected)));
         deleteButton.IsEnabled = selected is not null && usage == 0;
         deleteButton.ToolTip = usage > 0 ? $"Assigned to {usage} member{(usage == 1 ? "" : "s")} — cannot be deleted" : "Delete the selected section";
         if (status.Tag is "keep") { status.Tag = null; return; }
@@ -159,16 +159,16 @@ public sealed class SectionListWindow : Window
             var library = await viewModel.ReadSectionsFromSapAsync();
             IEnumerable<object> read = kind switch { SectionListKind.Frame => library.Frames, SectionListKind.Cable => library.Cables, _ => library.Tendons };
             var items = read.ToArray();
-            var selected = Selected is { } current ? Name(current) : null;
+            var selected = Selected is { } current ? SectionName(current) : null;
             foreach (var item in items)
             {
-                var index = working.ToList().FindIndex(existing => Name(existing).Equals(Name(item), StringComparison.Ordinal));
+                var index = working.ToList().FindIndex(existing => SectionName(existing).Equals(SectionName(item), StringComparison.Ordinal));
                 if (index >= 0) working[index] = item; else working.Add(item);
             }
-            var sorted = working.OrderBy(Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
+            var sorted = working.OrderBy(SectionName, StringComparer.CurrentCultureIgnoreCase).ToArray();
             working.Clear();
             foreach (var item in sorted) working.Add(item);
-            list.SelectedItem = working.FirstOrDefault(item => Name(item) == selected) ?? working.FirstOrDefault();
+            list.SelectedItem = working.FirstOrDefault(item => SectionName(item) == selected) ?? working.FirstOrDefault();
             status.Text = $"Read {items.Length} {(kind == SectionListKind.Frame ? "frame" : kind == SectionListKind.Cable ? "cable" : "tendon")} section{(items.Length == 1 ? "" : "s")} from SAP2000 (read-only). OK keeps them.";
         }
         catch (Exception ex) { status.Text = "Get From SAP2000 failed: " + ex.Message; }
@@ -192,22 +192,22 @@ public sealed class SectionListWindow : Window
     internal void AddCopy()
     {
         if (Selected is not { } source) return;
-        var copy = Renamed(source, UniqueName(Name(source)), "App");
+        var copy = Renamed(source, UniqueName(SectionName(source)), "App");
         if (EditSection(copy, Names()) is { } created) { working.Add(created); list.SelectedItem = created; }
     }
 
     internal void Modify()
     {
         if (Selected is not { } source) return;
-        if (EditSection(source, Names(except: Name(source))) is not { } edited) return;
+        if (EditSection(source, Names(except: SectionName(source))) is not { } edited) return;
         working[working.IndexOf(source)] = edited;
-        if (Name(edited) != Name(source)) renamed[OriginalName(Name(source))] = Name(edited);
+        if (SectionName(edited) != SectionName(source)) renamed[OriginalName(SectionName(source))] = SectionName(edited);
         list.SelectedItem = edited;
     }
 
     internal void Delete()
     {
-        if (Selected is not { } source || viewModel.SectionUsage(OriginalName(Name(source))) > 0) return;
+        if (Selected is not { } source || viewModel.SectionUsage(OriginalName(SectionName(source))) > 0) return;
         working.Remove(source);
         if (working.Count > 0) list.SelectedIndex = 0;
     }

@@ -70,6 +70,9 @@
     <MenuItem Header="Analysis _Monitor" Click="OpenFemMonitorClick"
               ToolTip="Open analysis progress and cable convergence. Diagnostic details are collapsed by default."/>
     <Separator/>
+    <MenuItem Header="_Optimization VCF…" Click="OptimizationVcf_Click" AutomationProperties.Name="Optimization VCF"
+              ToolTip="Set the VCF search space — min / max / step for bays, bay width, truss depth, middle chord, clear height, back-span and back-stay height, and candidate sections per chord, mega column and cable (run loop not implemented yet)"/>
+    <Separator/>
     <MenuItem Header="Analysis _Options" Tag="5" Click="FemPaneMenu_Click"/>
    </MenuItem>
    <MenuItem x:Name="ResultMenu" Header="Res_ult" IsEnabled="{Binding HasWorkingModel}">
@@ -95,6 +98,14 @@
               ToolTip="Show the Tab 01 load arrows; with a completed case selected, each arrow is labelled with its Fz."/>
     <Separator/>
     <MenuItem Header="_View Options…" Click="ViewOptions_Click"/>
+   </MenuItem>
+   <MenuItem Header="Desi_gn" IsEnabled="{Binding HasWorkingModel}">
+    <MenuItem Header="_RC Column Design…" Tag="ReinforcedConcrete" Click="DesignMenu_Click" AutomationProperties.Name="RC Column Design"
+              ToolTip="Reinforced concrete column design to SS EN 1992-1-1 (EC2) + Singapore NA"/>
+    <MenuItem Header="_CFT (Concrete Filled Tube) Design…" Tag="ConcreteFilledTube" Click="DesignMenu_Click" AutomationProperties.Name="CFT Design"
+              ToolTip="Concrete filled steel tube column design to SS EN 1994-1-1 + Singapore NA and BCA BC4:2025 (high-strength materials)"/>
+    <MenuItem Header="_Steel Encased Composite Column Design…" Tag="SteelEncased" Click="DesignMenu_Click" AutomationProperties.Name="Steel Encased Composite Column Design"
+              ToolTip="Concrete-encased steel section column design to SS EN 1994-1-1 + Singapore NA and BCA BC4:2025 (high-strength materials)"/>
    </MenuItem>
    <MenuItem Header="_Help">
     <MenuItem Header="_Workflow Help" Click="ShowWorkflowHelp"/>

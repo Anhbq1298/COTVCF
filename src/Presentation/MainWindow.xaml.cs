@@ -293,6 +293,13 @@ public partial class MainWindow : Window
         ApplyViewerLayout();
     }
 
+    /// <summary>Hides the left pane (startup: the model view opens on its own; any menu item opens the pane).</summary>
+    internal void ClosePane()
+    {
+        paneClosed = true;
+        ApplyViewerLayout();
+    }
+
     private void OpenPane()
     {
         paneClosed = false;
@@ -361,6 +368,14 @@ public partial class MainWindow : Window
         vcfGeometryWindow.Activate();
     }
 
+    // Run → Optimization VCF: ranges (min / max / step) of the VCF inputs and candidate sections; OK keeps them
+    private void OptimizationVcf_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        var dialog = new OptimizationVcfWindow(vm) { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.Result is { } settings) vm.SetVcfOptimization(settings);
+    }
+
     // Toolbar → Show Results: load case / combo and the output to draw on the model view
     private ShowResultsWindow? showResultsWindow;
     private void ShowResults_Click(object sender, RoutedEventArgs e)
@@ -377,6 +392,33 @@ public partial class MainWindow : Window
     }
 
     private HelpWindow? helpWindow;
+    // Design menu: confirm the design basis, section and members, then design them with the FEM forces and show the results.
+    private void DesignMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm
+            || (sender as FrameworkElement)?.Tag is not string tag
+            || !Enum.TryParse<COT_VCF.Domain.ColumnDesignType>(tag, out var type)) return;
+        var dialog = new DesignReferenceWindow(vm.DesignBasis(type), vm.DesignMemberOptions(type), vm.DesignCaseNames(), vm.DesignDefaultCases(),
+            vm.DesignRunId, member => vm.DesignSectionDefaults(type, member)) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } basis) return;
+        vm.SetDesignBasis(basis);
+        var title = COT_VCF.Domain.ColumnDesignCodes.Title(type);
+        if (vm.DesignRunId is null)
+        {
+            MessageBox.Show(this, "There are no FEM results to design with. Run the FEM analysis (Run → Run FEM Analysis) first; the design basis is kept.",
+                title, MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        IReadOnlyList<COT_VCF.Application.Design.ColumnMemberDesign> results;
+        try { results = vm.RunColumnDesign(basis); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The design could not be completed: " + ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        new DesignResultsWindow(basis, results, vm.DesignRunId) { Owner = this }.Show();
+    }
+
     private void ShowWorkflowHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.Workflow);
 
     private void ShowFemHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.FemProcedure);

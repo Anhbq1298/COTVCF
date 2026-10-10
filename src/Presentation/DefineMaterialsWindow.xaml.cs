@@ -49,7 +49,8 @@ public partial class DefineMaterialsWindow : Window
         GetFromSapButton.IsEnabled = !viewModel.IsBusy;
         GetFromSapButton.ToolTip = "Read every material of the model open in the running SAP2000 (read-only; works without Connect SAP)";
         if (selected is not null && StatusText.Tag is not "keep")
-            StatusText.Text = $"{MaterialProperty.Title(selected.Kind)} · source: {selected.Source}" + (usage > 0 ? $" · used by {usage} member{(usage == 1 ? "" : "s")}" : "");
+            StatusText.Text = $"{MaterialProperty.Title(selected.Kind)} · source: {selected.Source}" + (usage > 0 ? $" · used by {usage} member{(usage == 1 ? "" : "s")}" : "") +
+                (selected.UnitCost is { } cost ? $" · {cost:N0} SGD/t" + (selected.Kind == MaterialKind.Concrete && selected.UnitCostPerCubicMetre is { } m3 ? $" ({m3:N0} SGD/m³)" : "") : " · no unit cost");
         StatusText.Tag = null;
     }
 
@@ -72,7 +73,9 @@ public partial class DefineMaterialsWindow : Window
             foreach (var material in read)
             {
                 var index = working.ToList().FindIndex(item => item.Name.Equals(material.Name, StringComparison.Ordinal));
-                if (index >= 0) working[index] = material; else working.Add(material);
+                // a rate already set here (entered or suggested) is kept; SAP2000 has no costs
+                if (index >= 0) working[index] = working[index].UnitCost is { } cost ? material with { UnitCost = cost, CostNote = working[index].CostNote } : material;
+                else working.Add(material);
             }
             // alphabetical, as SAP2000 lists them; keep the selection (or select the first)
             var sorted = working.OrderBy(material => material.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
@@ -90,7 +93,7 @@ public partial class DefineMaterialsWindow : Window
     internal void AddNew(MaterialKind kind = MaterialKind.Concrete)
     {
         var name = UniqueName(kind == MaterialKind.Concrete ? "C30/37" : MaterialProperty.Title(kind));
-        if (EditMaterial(MaterialProperty.Default(kind, name), true, Names()) is { } created) { working.Add(created); MaterialList.SelectedItem = created; }
+        if (EditMaterial(MaterialCosts.WithDefaultCost(MaterialProperty.Default(kind, name)), true, Names()) is { } created) { working.Add(created); MaterialList.SelectedItem = created; }
     }
 
     internal void AddCopy()

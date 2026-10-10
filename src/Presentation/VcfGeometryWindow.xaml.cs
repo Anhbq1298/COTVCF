@@ -72,7 +72,7 @@ public partial class VcfGeometryWindow : Window
                 var combo = SectionCombo(frames, current.Length == 1 ? current[0] : null);
                 combo.ToolTip = string.Join(", ", members);
                 roleSections[role] = combo;
-                roleCounts[role] = AddRow(FrameGrid, VcfGeometry.Title(role), combo, Count(members.Count));
+                roleCounts[role] = AddRow(FrameGrid, VcfGeometry.Title(role), combo, Count(members.Count))!;   // a note is given, so a TextBlock comes back
             }
             var cables = viewModel.VcfSectionNames(cable: true);
             foreach (var name in Members(VcfMemberRole.Cable).Order(StringComparer.Ordinal))
@@ -202,6 +202,7 @@ public partial class VcfGeometryWindow : Window
         Preview.SpanPoints = model.TopPoints.Concat(model.MiddlePoints).Concat(model.BottomPoints).ToArray();
         Preview.Model = preview;     // geometry and dimensions only — section names would crowd the small preview
         Preview.PinSupportPoints = SafePins(preview);
+        ShowForces(model, preview);
         ProblemText.Text = "";
         var span = form.BayWidth * model.Bays;
         GeometrySummary.Text = $"Span {span:0.###} m between mega columns · overall {span + 2 * (form.BackSpan ?? 0):0.###} m · " +
@@ -210,6 +211,83 @@ public partial class VcfGeometryWindow : Window
             (analysis.UniformBays ? "" : " · the bays are unequal now; Apply makes them equal");
         SetActions(true);
     }
+
+    // ---- Cable Force / Storey Force panes ----
+    internal sealed record CableForceRow(string Cable, string Pattern, string Sync, string Force);
+    internal sealed record StoreyForceRow(string Point, string X, string Area, IReadOnlyList<string> Forces);
+
+    private static string Kn(double value) => value.ToString("N0", CultureInfo.CurrentCulture);
+    private static string Range(IReadOnlyList<double> values) => values.Count == 0 ? "—"
+        : values.Min() == values.Max() ? Kn(values[0]) : $"{Kn(values.Min())} … {Kn(values.Max())} ({values.Count})";
+
+    /// <summary>The pretension of every cable (Tab 03) and the force applied at every loaded point (Tab 01, with the
+    /// tributary lengths of the previewed geometry).</summary>
+    private void ShowForces(VcfGeometryAnalysis model, GeometryModel geometry)
+    {
+        var state = viewModel.State;
+        var cables = state.Cables.ToArray();
+        var rows = new List<CableForceRow>();
+        foreach (var name in geometry.Members.Where(member => member.Kind != MemberKind.Frame).Select(member => member.Name).Order(StringComparer.Ordinal))
+        {
+            var added = topology is not null && topology.AddedCables.TryGetValue(name, out var template) ? template : null;
+            var cable = cables.FirstOrDefault(item => item.CableName == (added ?? name));
+            if (cable is null) { rows.Add(new(name, "", "", "not on 03 Pretension")); continue; }
+            var forces = cable.IsFollower ? CableSyncGraph.ResolvedForces(cable, cables) : cable.GetCandidateForces();
+            rows.Add(new(name, cable.LoadPattern, cable.SyncSummary + (added is null ? "" : $" (new, as {added})"), Range(forces)));
+        }
+        CableForceGrid.ItemsSource = rows;
+        CableForceSummary.Text = $"{rows.Count} cables · {rows.Count(row => row.Force.Contains('…'))} with a range of targets";
+
+        // Storey force: the loaded points (all top chord points stay loaded when every one was), tributary length from the preview
+        var applied = state.AppliedPoints.Select(point => point.PointName).ToArray();
+        var top = state.Truss.TopPoints;
+        var allTop = top.Count > 0 && applied.Length == top.Count && top.All(applied.Contains);
+        IEnumerable<string> candidates = topology is not null && allTop ? model.TopPoints
+            : applied.Select(name => topology is not null && topology.RenamedPoints.TryGetValue(name, out var renamed) ? renamed : name);
+        var names = candidates.Where(geometry.Points.ContainsKey).Distinct(StringComparer.Ordinal)
+            .OrderBy(name => geometry.Points[name].Position.X).ThenBy(name => name, StringComparer.Ordinal).ToArray();
+        var definitions = state.LoadDefinitions.Where(definition => !string.IsNullOrWhiteSpace(definition.LoadName)).ToArray();
+        var stories = double.IsFinite(state.NumberOfStories) && state.NumberOfStories >= 1 ? Math.Truncate(state.NumberOfStories) : 0;
+        var storeyRows = new List<StoreyForceRow>();
+        var totals = new double[definitions.Length, 2];
+        double X(int i) => geometry.Points[names[i]].Position.X;
+        for (var index = 0; index < names.Length; index++)
+        {
+            var length = names.Length switch
+            {
+                1 => 0,
+                _ when index == 0 => Math.Max(0, X(1) - X(0)) / 2,
+                _ when index == names.Length - 1 => Math.Max(0, X(names.Length - 1) - X(names.Length - 2)) / 2,
+                _ => Math.Max(0, X(index + 1) - X(index - 1)) / 2,
+            };
+            var area = length * state.TributaryWidthB;
+            var forces = new List<string>();
+            for (var d = 0; d < definitions.Length; d++)
+            {
+                var values = definitions[d].CandidateValues.Select(qz => -qz * area * stories).ToArray();
+                forces.Add(Range(values));
+                if (values.Length > 0) { totals[d, 0] += values.Min(); totals[d, 1] += values.Max(); }
+            }
+            storeyRows.Add(new(names[index], X(index).ToString("0.###", CultureInfo.CurrentCulture), area.ToString("0.###", CultureInfo.CurrentCulture), forces));
+        }
+        StoreyForceGrid.Columns.Clear();
+        StoreyForceGrid.Columns.Add(new DataGridTextColumn { Header = "Point", Binding = new System.Windows.Data.Binding(nameof(StoreyForceRow.Point)), MinWidth = 70 });
+        StoreyForceGrid.Columns.Add(new DataGridTextColumn { Header = "X [m]", Binding = new System.Windows.Data.Binding(nameof(StoreyForceRow.X)), ElementStyle = (Style)FindResource("NumericCell") });
+        StoreyForceGrid.Columns.Add(new DataGridTextColumn { Header = "Trib. area [m²]", Binding = new System.Windows.Data.Binding(nameof(StoreyForceRow.Area)), ElementStyle = (Style)FindResource("NumericCell") });
+        for (var d = 0; d < definitions.Length; d++)
+            StoreyForceGrid.Columns.Add(new DataGridTextColumn { Header = $"{definitions[d].LoadName} Fz [kN]", MinWidth = 90,
+                Binding = new System.Windows.Data.Binding($"{nameof(StoreyForceRow.Forces)}[{d}]"), ElementStyle = (Style)FindResource("NumericCell") });
+        StoreyForceGrid.ItemsSource = storeyRows;
+        StoreyForceCaption.Text = $"Applied force per point from 01 Loading: Fz = −qz × trib. length × B ({state.TributaryWidthB:0.###} m) × NStories ({stories:0})";
+        StoreyForceSummary.Text = names.Length == 0 ? "No loaded points on 01 Loading."
+            : $"{names.Length} points · total " + string.Join(" · ", definitions.Select((definition, d) =>
+                $"{definition.LoadName} {(totals[d, 0] == totals[d, 1] ? Kn(totals[d, 0]) : $"{Kn(totals[d, 0])} … {Kn(totals[d, 1])}")} kN"));
+    }
+
+    internal IReadOnlyList<CableForceRow> CableForces => (IReadOnlyList<CableForceRow>?)CableForceGrid.ItemsSource ?? [];
+    internal IReadOnlyList<StoreyForceRow> StoreyForces => (IReadOnlyList<StoreyForceRow>?)StoreyForceGrid.ItemsSource ?? [];
+    /// <summary>Types into a geometry input (checks).</summary>
+    internal void SetInput(string key, string text) => inputs[key].Text = text;
 
     private static IEnumerable<string>? SafePins(GeometryModel geometry)
     {
