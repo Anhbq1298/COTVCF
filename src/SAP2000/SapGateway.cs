@@ -880,6 +880,174 @@ public sealed class SapGateway : ISapGateway
         return shape is { Depth: > 0, Width: > 0 } && double.IsFinite(shape.Depth) && double.IsFinite(shape.Width) ? shape : fallback;
     }
 
+    /// <summary>
+    /// Define → Materials → Get From SAP2000. Signatures checked against CSiAPIv1 of SAP2000 27: PropMaterial.GetNameList,
+    /// GetMaterial (type, colour, notes), GetWeightAndMass, GetMPIsotropic / GetMPUniaxial (tendon, rebar), and per type
+    /// GetOConcrete_2 (f'c, expected f'c, lightweight, shear reduction), GetOSteel_1 / GetORebar_1 (Fy, Fu, expected),
+    /// GetOTendon_1 / GetOColdFormed (Fy, Fu). There is no getter for the grade; it comes from the "Material Properties
+    /// 01 - General" display table. Read-only, kN-m units required (like the FEM reads).
+    /// </summary>
+    public Task<IReadOnlyList<MaterialProperty>> GetMaterialsAsync(ModelInfo expected) => worker.Run<IReadOnlyList<MaterialProperty>>(() =>
+    {
+        Verify(expected);
+        if (!Model.GetPresentUnits().ToString().StartsWith("kN_m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Material reads require kN/m units; the model is in {ReadInfo().Units}. Set SAP2000 to kN, m, C and refresh.");
+        int count = 0; string[] names = [];
+        Check(Model.PropMaterial.GetNameList(ref count, ref names), "PropMaterial.GetNameList");
+
+        var grades = new Dictionary<string, string>(StringComparer.Ordinal);
+        string[] requested = [], fields = [], data = []; int version = 0, records = 0;
+        if (Model.DatabaseTables.GetTableForDisplayArray("Material Properties 01 - General", ref requested, "All", ref version, ref fields, ref records, ref data) == 0)
+        {
+            var name = Array.FindIndex(fields, field => field.Equals("Material", StringComparison.OrdinalIgnoreCase));
+            var grade = Array.FindIndex(fields, field => field.Equals("Grade", StringComparison.OrdinalIgnoreCase));
+            if (name >= 0 && grade >= 0)
+                for (var record = 0; record < records && (record + 1) * fields.Length <= data.Length; record++)
+                    grades[data[record * fields.Length + name]] = data[record * fields.Length + grade] ?? "";
+        }
+
+        var materials = new List<MaterialProperty>();
+        foreach (var material in names.Take(count))
+        {
+            var type = eMatType.Steel; int color = 0; string notes = "", guid = "";
+            Check(Model.PropMaterial.GetMaterial(material, ref type, ref color, ref notes, ref guid), "PropMaterial.GetMaterial", material);
+            var (weight, _) = ReadWeightAndMass(material);
+            var kind = type switch
+            {
+                eMatType.Steel => MaterialKind.Steel, eMatType.Concrete => MaterialKind.Concrete, eMatType.NoDesign => MaterialKind.NoDesign,
+                eMatType.Aluminum => MaterialKind.Aluminum, eMatType.ColdFormed => MaterialKind.ColdFormed, eMatType.Rebar => MaterialKind.Rebar,
+                eMatType.Tendon => MaterialKind.Tendon, eMatType.Masonry => MaterialKind.Masonry, _ => MaterialKind.Other,
+            };
+            double e = 0, u = 0, a = 0, g = 0;
+            if (kind is MaterialKind.Tendon or MaterialKind.Rebar) Model.PropMaterial.GetMPUniaxial(material, ref e, ref a, 0);
+            else Model.PropMaterial.GetMPIsotropic(material, ref e, ref u, ref a, ref g, 0);
+            var result = new MaterialProperty
+            {
+                Name = material, Kind = kind, Notes = notes ?? "", Grade = grades.GetValueOrDefault(material, ""),
+                Color = ((color & 0xFF) << 16) | (color & 0xFF00) | ((color >> 16) & 0xFF),   // SAP COLORREF 0x00BBGGRR → 0xRRGGBB
+                WeightPerVolume = weight, ElasticModulus = e, PoissonRatio = u, ThermalCoefficient = a, Source = "SAP2000",
+            };
+            int ssType = 0, ssHys = 0; double s1 = 0, s2 = 0, s3 = 0, slope = 0;
+            switch (kind)
+            {
+                case MaterialKind.Concrete:
+                {
+                    double fc = 0, efc = 0, fcs = 0, friction = 0, dilatation = 0; bool light = false;
+                    if (Model.PropMaterial.GetOConcrete_2(material, ref fc, ref efc, ref light, ref fcs, ref ssType, ref ssHys, ref s1, ref s2, ref slope, ref friction, ref dilatation, 0) == 0)
+                        result = result with { Fc = fc, ExpectedFc = efc, IsLightweight = light, ShearStrengthReductionFactor = light ? fcs : null };
+                    else if (Model.PropMaterial.GetOConcrete_1(material, ref fc, ref light, ref fcs, ref ssType, ref ssHys, ref s1, ref s2, ref slope, ref friction, ref dilatation, 0) == 0)
+                        result = result with { Fc = fc, IsLightweight = light, ShearStrengthReductionFactor = light ? fcs : null };
+                    break;
+                }
+                case MaterialKind.Steel:
+                {
+                    double fy = 0, fu = 0, efy = 0, efu = 0;
+                    if (Model.PropMaterial.GetOSteel_1(material, ref fy, ref fu, ref efy, ref efu, ref ssType, ref ssHys, ref s1, ref s2, ref s3, ref slope, 0) == 0)
+                        result = result with { Fy = fy, Fu = fu, ExpectedFy = efy, ExpectedFu = efu };
+                    break;
+                }
+                case MaterialKind.Rebar:
+                {
+                    double fy = 0, fu = 0, efy = 0, efu = 0; bool caltrans = false;
+                    if (Model.PropMaterial.GetORebar_1(material, ref fy, ref fu, ref efy, ref efu, ref ssType, ref ssHys, ref s1, ref s2, ref slope, ref caltrans, 0) == 0)
+                        result = result with { Fy = fy, Fu = fu, ExpectedFy = efy, ExpectedFu = efu };
+                    break;
+                }
+                case MaterialKind.Tendon:
+                {
+                    double fy = 0, fu = 0;
+                    if (Model.PropMaterial.GetOTendon_1(material, ref fy, ref fu, ref ssType, ref ssHys, ref slope, 0) == 0)
+                        result = result with { Fy = fy, Fu = fu };
+                    break;
+                }
+                case MaterialKind.ColdFormed:
+                {
+                    double fy = 0, fu = 0;
+                    if (Model.PropMaterial.GetOColdFormed(material, ref fy, ref fu, ref ssHys, 0) == 0) result = result with { Fy = fy, Fu = fu };
+                    break;
+                }
+            }
+            materials.Add(result);
+        }
+        Verify(expected);
+        return materials;
+    });
+
+    /// <summary>
+    /// Define → Section Properties → Get From SAP2000. Signatures checked against CSiAPIv1 of SAP2000 27: PropFrame.GetNameList
+    /// (type 0 = all), GetTypeOAPI, GetRectangle / GetTube_1 / GetISection_1 / GetPipe / GetCircle / GetChannel_2 / GetTee_1 /
+    /// GetAngle_1 for the dimensions, GetSectProps (any shape), GetMaterial, GetModifiers; PropCable.GetNameList / GetProp /
+    /// GetModifiers; PropTendon.GetNameList / GetProp. Shapes other than the eight drawn ones (Section Designer, filled tube,
+    /// concrete box, …) are returned as General with the properties SAP2000 reports. Read-only, kN-m units required.
+    /// </summary>
+    public Task<SectionLibrary> GetSectionsAsync(ModelInfo expected) => worker.Run(() =>
+    {
+        Verify(expected);
+        if (!Model.GetPresentUnits().ToString().StartsWith("kN_m", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Section reads require kN/m units; the model is in {ReadInfo().Units}. Set SAP2000 to kN, m, C and refresh.");
+        static int Rgb(int bgr) => ((bgr & 0xFF) << 16) | (bgr & 0xFF00) | ((bgr >> 16) & 0xFF);
+
+        var frames = new List<FrameSectionProperty>();
+        int count = 0; string[] names = [];
+        Check(Model.PropFrame.GetNameList(ref count, ref names, 0), "PropFrame.GetNameList");
+        foreach (var name in names.Take(count))
+        {
+            var type = eFramePropType.I;
+            Check(Model.PropFrame.GetTypeOAPI(name, ref type), "PropFrame.GetTypeOAPI", name);
+            string file = "", mat = "", notes = "", guid = ""; int color = 0;
+            double t3 = 0, t2 = 0, tf = 0, tw = 0, t2b = 0, tfb = 0, radius = 0; bool mirror = false;
+            var shape = type switch
+            {
+                eFramePropType.Rectangular when Model.PropFrame.GetRectangle(name, ref file, ref mat, ref t3, ref t2, ref color, ref notes, ref guid) == 0 => FrameShape.Rectangle,
+                eFramePropType.Box when Model.PropFrame.GetTube_1(name, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref radius, ref color, ref notes, ref guid) == 0 => FrameShape.Box,
+                eFramePropType.I when Model.PropFrame.GetISection_1(name, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref t2b, ref tfb, ref radius, ref color, ref notes, ref guid) == 0 => FrameShape.I,
+                eFramePropType.Pipe when Model.PropFrame.GetPipe(name, ref file, ref mat, ref t3, ref tw, ref color, ref notes, ref guid) == 0 => FrameShape.Pipe,
+                eFramePropType.Circle when Model.PropFrame.GetCircle(name, ref file, ref mat, ref t3, ref color, ref notes, ref guid) == 0 => FrameShape.Circle,
+                eFramePropType.Channel when Model.PropFrame.GetChannel_2(name, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref radius, ref mirror, ref color, ref notes, ref guid) == 0 => FrameShape.Channel,
+                eFramePropType.T when Model.PropFrame.GetTee_1(name, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref radius, ref mirror, ref color, ref notes, ref guid) == 0 => FrameShape.Tee,
+                eFramePropType.Angle when Model.PropFrame.GetAngle_1(name, ref file, ref mat, ref t3, ref t2, ref tf, ref tw, ref radius, ref color, ref notes, ref guid) == 0 => FrameShape.Angle,
+                _ => FrameShape.General,
+            };
+            if (mat.Length == 0) Model.PropFrame.GetMaterial(name, ref mat);
+            double area = 0, as2 = 0, as3 = 0, torsion = 0, i22 = 0, i33 = 0, s22 = 0, s33 = 0, z22 = 0, z33 = 0, r22 = 0, r33 = 0;
+            Model.PropFrame.GetSectProps(name, ref area, ref as2, ref as3, ref torsion, ref i22, ref i33, ref s22, ref s33, ref z22, ref z33, ref r22, ref r33);
+            double[] modifiers = new double[8];
+            if (Model.PropFrame.GetModifiers(name, ref modifiers) != 0 || modifiers.Length < 8) modifiers = [1, 1, 1, 1, 1, 1, 1, 1];
+            frames.Add(new FrameSectionProperty
+            {
+                Name = name, Shape = shape, SapType = type.ToString(), Material = mat, Notes = notes ?? "", Color = Rgb(color),
+                Depth = t3, Width = t2, FlangeThickness = tf, WebThickness = tw,
+                BottomWidth = shape == FrameShape.I ? t2b : 0, BottomFlangeThickness = shape == FrameShape.I ? tfb : 0, CornerRadius = shape == FrameShape.Box ? radius : 0,
+                Modifiers = modifiers.Take(8).ToArray(),
+                Given = new SectionValues(area, i33, i22, torsion, as2, as3), Source = "SAP2000",
+            });
+        }
+
+        var cables = new List<StrandSectionProperty>();
+        count = 0; names = [];
+        if (Model.PropCable.GetNameList(ref count, ref names) == 0)
+            foreach (var name in names.Take(count))
+            {
+                string mat = "", notes = "", guid = ""; double area = 0; int color = 0;
+                Check(Model.PropCable.GetProp(name, ref mat, ref area, ref color, ref notes, ref guid), "PropCable.GetProp", name);
+                double[] modifiers = new double[3];
+                if (Model.PropCable.GetModifiers(name, ref modifiers) != 0 || modifiers.Length < 3) modifiers = [1, 1, 1];
+                cables.Add(new StrandSectionProperty { Name = name, Material = mat, Area = area, Color = Rgb(color), Notes = notes ?? "", Modifiers = modifiers.Take(3).ToArray(), Source = "SAP2000" });
+            }
+
+        var tendons = new List<StrandSectionProperty>();
+        count = 0; names = [];
+        if (Model.PropTendon.GetNameList(ref count, ref names) == 0)
+            foreach (var name in names.Take(count))
+            {
+                string mat = "", notes = "", guid = ""; double area = 0; int color = 0, option = 0;
+                Check(Model.PropTendon.GetProp(name, ref mat, ref option, ref area, ref color, ref notes, ref guid), "PropTendon.GetProp", name);
+                tendons.Add(new StrandSectionProperty { Name = name, IsTendon = true, Material = mat, Area = area, Color = Rgb(color), Notes = notes ?? "", Modifiers = [], Source = "SAP2000" });
+            }
+        Verify(expected);
+        return new SectionLibrary(frames, cables, tendons);
+    });
+
     /// <summary>Material weight per volume [kN/m³] and mass per volume [kN·s²/m⁴ = t/m³] in the kN-m model units.</summary>
     private (double Weight, double Mass) ReadWeightAndMass(string material)
     {

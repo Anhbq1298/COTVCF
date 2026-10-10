@@ -301,6 +301,20 @@ public partial class MainWindow : Window
 
     internal bool IsPaneOpen => ParamsColumn.Width.Value > 0;
 
+    // Define → Materials: the material library (modal, like SAP2000's Define Materials)
+    private void DefineMaterials_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        new DefineMaterialsWindow(vm) { Owner = this }.ShowDialog();
+    }
+
+    // Define → Section Properties → Frame / Tendon / Cable Sections (modal, like SAP2000's Frame Properties)
+    private void SectionList_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || sender is not FrameworkElement { Tag: string tag } || !Enum.TryParse<SectionListKind>(tag, out var kind)) return;
+        new SectionListWindow(vm, kind) { Owner = this }.ShowDialog();
+    }
+
     // Define → Sections: the member-properties table in its own window
     private DefineSectionsWindow? sectionsWindow;
     private void DefineSections_Click(object sender, RoutedEventArgs e)

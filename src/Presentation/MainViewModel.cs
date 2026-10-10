@@ -153,6 +153,8 @@ public sealed partial class MainViewModel : Observable
     public IEnumerable<string>? SharedViewerTopPoints => selectedTab == TabTruss ? State.Truss.TopPoints : null;
     public IEnumerable<string>? SharedViewerMiddlePoints => selectedTab == TabTruss ? State.Truss.MiddlePoints : null;
     public IEnumerable<string>? SharedViewerBottomPoints => selectedTab == TabTruss ? State.Truss.BottomPoints : null;
+    /// <summary>All chord points (any tab): the overall span dimension runs between the mega columns they end at.</summary>
+    public IEnumerable<string> SharedViewerSpanPoints => State.Truss.TopPoints.Concat(State.Truss.MiddlePoints).Concat(State.Truss.BottomPoints).ToArray();
     public IReadOnlyList<string> FemPinSupportPoints
     {
         get
@@ -190,7 +192,7 @@ public sealed partial class MainViewModel : Observable
     {
         Notify(nameof(ShowSharedViewer)); Notify(nameof(ShowTrussLegend));
         Notify(nameof(SharedViewerModel)); Notify(nameof(SharedViewerAppliedPoints));
-        Notify(nameof(SharedViewerTopPoints)); Notify(nameof(SharedViewerMiddlePoints)); Notify(nameof(SharedViewerBottomPoints));
+        Notify(nameof(SharedViewerTopPoints)); Notify(nameof(SharedViewerSpanPoints)); Notify(nameof(SharedViewerMiddlePoints)); Notify(nameof(SharedViewerBottomPoints));
         Notify(nameof(SharedViewerCables)); Notify(nameof(SharedViewerPinSupportPoints)); Notify(nameof(ShowFemPinLegend));
         Notify(nameof(SharedViewerFemResult)); Notify(nameof(SharedViewerFemResultMode));
         Notify(nameof(SharedViewerFrameMeshSegments)); Notify(nameof(SharedViewerMemberSizes));

@@ -20,6 +20,9 @@ public partial class Structural2DViewer : UserControl
     public static readonly DependencyProperty ShowFrameLabelsProperty = DependencyProperty.Register(nameof(ShowFrameLabels), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(false));
     public static readonly DependencyProperty ShowCableLabelsProperty = DependencyProperty.Register(nameof(ShowCableLabels), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(false));
     public static readonly DependencyProperty ShowDimensionsProperty = DependencyProperty.Register(nameof(ShowDimensions), typeof(bool), typeof(Structural2DViewer), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+    public static readonly DependencyProperty SpanPointsProperty = DependencyProperty.Register(nameof(SpanPoints), typeof(IEnumerable<string>), typeof(Structural2DViewer), new PropertyMetadata(null));
+    /// <summary>The truss chord points: the overall span dimension runs between their outermost lines (the mega columns).</summary>
+    public IEnumerable<string>? SpanPoints { get => (IEnumerable<string>?)GetValue(SpanPointsProperty); set => SetValue(SpanPointsProperty, value); }
     public static readonly DependencyProperty AppliedPointsProperty = DependencyProperty.Register(nameof(AppliedPoints), typeof(IEnumerable<AppliedPoint>), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty SelectedAppliedPointProperty = DependencyProperty.Register(nameof(SelectedAppliedPoint), typeof(AppliedPoint), typeof(Structural2DViewer), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
     public static readonly DependencyProperty CablesProperty = DependencyProperty.Register(nameof(Cables), typeof(IEnumerable<CablePretensionConfig>), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -273,6 +276,8 @@ public sealed class ModelCanvas : FrameworkElement
     public static readonly DependencyProperty DeflectionRangeMaxMmProperty = DependencyProperty.Register(nameof(DeflectionRangeMaxMm), typeof(double), typeof(ModelCanvas), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
     public double DeflectionRangeMaxMm { get => (double)GetValue(DeflectionRangeMaxMmProperty); set => SetValue(DeflectionRangeMaxMmProperty, value); }
     public static readonly DependencyProperty ShowDimensionsProperty = DependencyProperty.Register(nameof(ShowDimensions), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty SpanPointsProperty = DependencyProperty.Register(nameof(SpanPoints), typeof(IEnumerable<string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+    public IEnumerable<string>? SpanPoints { get => (IEnumerable<string>?)GetValue(SpanPointsProperty); set => SetValue(SpanPointsProperty, value); }
     public bool ShowDimensions { get => (bool)GetValue(ShowDimensionsProperty); set => SetValue(ShowDimensionsProperty, value); }
     public string Plane { get; set; } = "XZ";
 
@@ -861,13 +866,18 @@ public sealed class ModelCanvas : FrameworkElement
                 var text = Label(Metres(xs[index] - xs[index - 1]));
                 if (b - a >= text.Width + 4) dc.DrawText(text, new Point((a + b) / 2 - text.Width / 2, chainY - text.Height - 1));
             }
-            var left = screen(new Point(minX, minY)).X;
-            var end = screen(new Point(maxX, minY)).X;
+            // Overall span: between the mega columns (the outermost truss chord lines) when the chord points are known,
+            // so the end frames outside them are not counted; otherwise the full extent.
+            var spanXs = (SpanPoints ?? []).Where(Model.Points.ContainsKey).Select(name => Project(Model.Points[name].Position).X).ToArray();
+            var betweenColumns = spanXs.Length > 0 && spanXs.Max() - spanXs.Min() > 1e-3;
+            var (spanFrom, spanTo) = betweenColumns ? (spanXs.Min(), spanXs.Max()) : (minX, maxX);
+            var left = screen(new Point(spanFrom, minY)).X;
+            var end = screen(new Point(spanTo, minY)).X;
             dc.DrawLine(extension, new Point(left, chainY + 4), new Point(left, totalY + 4));
             dc.DrawLine(extension, new Point(end, chainY + 4), new Point(end, totalY + 4));
             dc.DrawLine(pen, new Point(left, totalY), new Point(end, totalY));
             Tick(new Point(left, totalY)); Tick(new Point(end, totalY));
-            var total = Label($"{horizontal} span {Metres(maxX - minX)} m", 11, bold: true);
+            var total = Label(betweenColumns ? $"Span {Metres(spanTo - spanFrom)} m (between mega columns)" : $"{horizontal} span {Metres(spanTo - spanFrom)} m", 11, bold: true);
             dc.DrawText(total, new Point((left + end) / 2 - total.Width / 2, totalY - total.Height - 1));
         }
 

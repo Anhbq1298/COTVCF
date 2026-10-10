@@ -231,18 +231,26 @@ internal static class Program
                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                     window.UpdateLayout();
                 }
+                void OpenSubMenu(string menu, string submenu, string item)
+                {
+                    TopMenu(menu).Items.OfType<MenuItem>().Single(entry => (entry.Header as string)?.Replace("_", "") == submenu).Items.OfType<MenuItem>()
+                        .Single(entry => (entry.Header as string)?.Replace("_", "").StartsWith(item, StringComparison.Ordinal) == true)
+                        .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                    window.UpdateLayout();
+                }
                 OpenMenu("Define", "Load Patterns");
                 Assert(vm.SelectedTab == 7 && vm.SelectedFemPage == MainViewModel.FemInputsPage && vm.PaneMenu == "Define" &&
                        window.SharedViewerPane.Visibility == Visibility.Visible &&
                        vm.ShowFemPinLegend && vm.SharedViewerPinSupportPoints?.SequenceEqual(["bot", "bot2"]) == true,
                     "The FEM inputs panes show the supports in the shared viewer");
-                OpenMenu("Define", "Sections");
+                OpenSubMenu("Define", "Section Properties", "Member Sections Table");
                 var sectionsWindow = window.OwnedWindows.OfType<DefineSectionsWindow>().Single();
                 sectionsWindow.UpdateLayout();
                 Assert(sectionsWindow.IsVisible && FindVisuals<DataGrid>(sectionsWindow).Any(grid => grid.Name == "FemPropertiesGrid" && ReferenceEquals(grid.ItemsSource, vm.FemSectionProperties)) &&
                        !FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemPropertiesGrid") && vm.ReadFemProperties.CanExecute(null),
-                    "Define -> Sections opens the member-property table in its own window, not in the left pane");
-                OpenMenu("Define", "Sections");
+                    "Define -> Section Properties -> Member Sections Table opens the member-property table in its own window, not in the left pane");
+                OpenSubMenu("Define", "Section Properties", "Member Sections Table");
                 Assert(window.OwnedWindows.OfType<DefineSectionsWindow>().Count() == 1, "Define -> Sections again brings the same window forward");
                 sectionsWindow.Close();
                 window.ClosePaneButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
@@ -274,6 +282,86 @@ internal static class Program
                 Assert(vcfWindow.IsVisible && vcfWindow.Preview.Model.Points.Count == uiState.Geometry.Points.Count,
                     "Edit -> VCF Geometry opens its own window with a preview of the model");
                 vcfWindow.Close();
+                Assert(TopMenu("Define").Items.OfType<MenuItem>().First().Header as string == "_Materials…",
+                    "Define starts with Materials…");
+                Assert(TopMenu("Define").Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == "Section Properties").Items.OfType<MenuItem>()
+                           .Select(item => (item.Header as string)?.Replace("_", "")).Where(header => header is not null)
+                           .SequenceEqual(["Frame Sections…", "Tendon Sections…", "Cable Sections…", "Member Sections Table…"]),
+                    "Define -> Section Properties offers Frame, Tendon and Cable Sections (and the member table)");
+                var frameList = new SectionListWindow(vm, SectionListKind.Frame) { Owner = window };
+                frameList.PickShape = () => FrameShape.Box;
+                frameList.EditSection = (section, _) => section;
+                frameList.Show();
+                frameList.UpdateLayout();
+                Assert(frameList.Title == "Frame Properties" &&
+                       new[] { "Get From SAP2000", "Import New Property...", "Add New Property...", "Add Copy of Property...", "Modify/Show Property...", "Delete Property" }
+                           .All(label => FindVisuals<Button>(frameList).Any(button => Equals(button.Content, label))) &&
+                       FindVisuals<TextBox>(frameList).Any(box => System.Windows.Automation.AutomationProperties.GetName(box) == "Find this property"),
+                    "Frame Properties has Find this property and Get From SAP2000, Import / Add New / Add Copy / Modify/Show / Delete Property");
+                var framesBefore = frameList.Working.Count;
+                frameList.AddNew();
+                frameList.Find("FSEC");
+                Assert(frameList.SelectedSection is FrameSectionProperty { Shape: FrameShape.Box } && frameList.Working.Count == framesBefore + 1,
+                    "Add New Property adds a section of the chosen shape; Find this property selects it");
+                frameList.Commit();
+                Assert(vm.FrameSections.Any(section => section.Shape == FrameShape.Box && section.Name.StartsWith("FSEC", StringComparison.Ordinal)), "OK keeps the new frame section");
+                var boxForm = new FrameSectionWindow(vm, FrameSectionProperty.Default(FrameShape.Box, "SHS test", "") with { Depth = 1.2, Width = 1.2, FlangeThickness = 0.12, WebThickness = 0.12 },
+                    new HashSet<string>()) { Owner = window };
+                boxForm.Show();
+                boxForm.UpdateLayout();
+                Assert(boxForm.Title == "Box/Tube Section" &&
+                       FindVisuals<GroupBox>(boxForm).Select(box => box.Header as string).Where(header => header is { Length: > 0 })
+                           .SequenceEqual(["Dimensions", "Material", "Property Modifiers", "Section", "Properties"]) &&
+                       FindVisuals<COT_VCF.Presentation.Controls.SectionSketch>(boxForm).Single().Section is { } drawn && Math.Abs(drawn.Values().Area - 0.5184) < 1e-9 &&
+                       new[] { "Set Modifiers...", "Section Properties...", "Modify/Show Notes..." }.All(label => FindVisuals<Button>(boxForm).Any(button => Equals(button.Content, label))),
+                    "Box/Tube Section shows Dimensions, the Section drawing, Material, Set Modifiers and Section Properties (A = 0.5184 m² for 1200×1200×120)");
+                boxForm.SetField("Tf", "0.7");
+                Assert(boxForm.Read(out _) is null, "the box form refuses flanges thicker than the section");
+                boxForm.Close();
+                var cableForm = new StrandSectionWindow(vm, new StrandSectionProperty { Name = "Strand", Area = 0.01 }, new HashSet<string>()) { Owner = window };
+                cableForm.Show();
+                cableForm.SetArea("0.02");
+                Assert(cableForm.Read(out _) is { Area: 0.02 } && FindVisuals<TextBox>(cableForm).Any(box => System.Windows.Automation.AutomationProperties.GetName(box)!.StartsWith("Diameter", StringComparison.Ordinal) &&
+                           Math.Abs(double.Parse(box.Text, System.Globalization.CultureInfo.CurrentCulture) - Math.Sqrt(0.08 / Math.PI)) < 1e-9),
+                    "Cable Section Data links the area and the diameter");
+                cableForm.Close();
+                var defineMaterials = new DefineMaterialsWindow(vm) { Owner = window };
+                var editedMaterials = new Queue<Func<MaterialProperty, MaterialProperty?>>();
+                defineMaterials.EditMaterial = (material, _, _) => editedMaterials.Count > 0 ? editedMaterials.Dequeue()(material) : material;
+                defineMaterials.Show();
+                defineMaterials.UpdateLayout();
+                Assert(new[] { "Get From SAP2000", "Add New Material...", "Add Copy of Material...", "Modify/Show Material...", "Delete Material" }
+                           .All(label => FindVisuals<Button>(defineMaterials).Any(button => Equals(button.Content, label))) &&
+                       FindVisuals<CheckBox>(defineMaterials).Any(box => Equals(box.Content, "Show Advanced Properties")),
+                    "Define Materials has Get From SAP2000, Add New, Add Copy, Modify/Show, Delete and Show Advanced Properties");
+                var before = defineMaterials.Working.Count;
+                defineMaterials.AddNew(MaterialKind.Steel);
+                defineMaterials.AddCopy();
+                editedMaterials.Enqueue(material => material with { Name = "Edited steel", Fy = 420_000 });
+                defineMaterials.Modify();
+                Assert(defineMaterials.Working.Count == before + 2 && defineMaterials.Working.Any(material => material.Name == "Edited steel" && material.Fy == 420_000),
+                    "Add New, Add Copy and Modify/Show edit the staged list");
+                defineMaterials.Delete();
+                defineMaterials.Commit();
+                Assert(vm.Materials.Count == before + 1 && !vm.Materials.Any(material => material.Name == "Edited steel") && !defineMaterials.IsVisible,
+                    "Delete removes an unused material; OK hands the list to the model");
+                var propertyForm = new MaterialPropertyWindow(MaterialProperty.Default(MaterialKind.Concrete, "C30/37"), isNew: false, advanced: false, new HashSet<string>()) { Owner = window };
+                propertyForm.Show();
+                propertyForm.UpdateLayout();
+                Assert(FindVisuals<GroupBox>(propertyForm).Select(box => box.Header as string)
+                           .SequenceEqual(["General Data", "Weight and Mass", "Isotropic Property Data", "Other Properties For Concrete Materials"]) &&
+                       propertyForm.ReadForm() is { Fc: 30_000, ElasticModulus: 33_000_000 },
+                    "Material Property Data shows General Data, Weight and Mass, Isotropic Property Data and the concrete properties");
+                propertyForm.SetField("E", "-5");
+                Assert(propertyForm.ReadForm() is null, "Material Property Data refuses a modulus of elasticity that is not positive");
+                propertyForm.Close();
+                var tendonForm = new MaterialPropertyWindow(MaterialProperty.Default(MaterialKind.Tendon, "Strand"), isNew: false, advanced: true, new HashSet<string>()) { Owner = window };
+                tendonForm.Show();
+                tendonForm.UpdateLayout();
+                Assert(FindVisuals<GroupBox>(tendonForm).Select(box => box.Header as string)
+                           .SequenceEqual(["General Data", "Weight and Mass", "Uniaxial Property Data", "Other Properties For Tendon Materials", "Advanced"]),
+                    "a tendon shows Uniaxial Property Data and the advanced display when switched on");
+                tendonForm.Close();
                 OpenMenu("Display", "View Options");
                 var viewOptions = window.OwnedWindows.OfType<ViewOptionsWindow>().Single();
                 viewOptions.UpdateLayout();

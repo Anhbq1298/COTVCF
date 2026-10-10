@@ -79,11 +79,52 @@ earlier tall-header / large-button / blue-block look.
   (kept around the re-measured height), the chosen sections (copied from a member that has them; local axis and
   releases kept) and Tab 03 cable section / area / capacity; FEM results are cleared. A connected session becomes an
   offline model (` · VCF geometry`); SAP2000 is never written and Connect SAP restores the SAP model.
+  **Number of bays** is an input too (2–200): `VcfGeometry.ChangeBays` lays the chord lines out again at the old bay width
+  around the truss centre and names chord points by position from their pattern (TTrPt001 … TTrPt0nn — the right-end corner
+  is renamed, `RenamedPoints`); members tied to an end line (full-length chords, mega columns, back-stays, end frames)
+  follow it; per-bay chord members and interior verticals are regenerated (existing names kept by position, new ones
+  continue the numbering); the fan cables keep their pattern — ⌊n/2⌋ per side from each top corner to the bottom chord up
+  to mid-span — new ones continue the cable numbering (Cable9a-2 / 9b-2) and copy their side's nearest fan cable. Anything
+  outside that pattern refuses the change with the member named. Apply then copies member properties from the templates,
+  maps / drops SAP loads, reloads every top point when all were loaded, sets the Tab 02 groups, removes / adds Tab 03 cables
+  (a cable that followed a removed one becomes independent and takes over its range) and remaps the Tab 04 lists. The
+  window groups Frame and Cable sections under one **Sections** box.
 - **Display → View Options…** (and the toolbar eye) opens `ViewOptionsWindow`, titled *Display Options* and laid out like
   SAP2000's: tabs *Object Options* (Labels: point / frame / cable / member size; Show: dimensions, loading arrows, frame
   mesh) and *General Options* (View Type: XY / XZ / YZ / Extrude 3D; Results: axial values, undeformed guide, deflection
   contour); *Reset Form to Default Values*, *Reset Form to Current Window Settings*; OK / Close / Apply. The form is staged:
   Apply / OK write it to the viewer and view model, Close discards. FEM pane 7 is only a card with *Open View Options*.
+- **Define → Materials…** (first Define item) opens `DefineMaterialsWindow` (modal, like SAP2000's Define Materials): material
+  list; *Get From SAP2000* (`ISapGateway.GetMaterialsAsync`, read-only, kN-m; CSiAPIv1 27: PropMaterial.GetNameList,
+  GetMaterial, GetWeightAndMass, GetMPIsotropic / GetMPUniaxial, GetOConcrete_2 (→ _1), GetOSteel_1, GetORebar_1,
+  GetOTendon_1, GetOColdFormed; grade from the "Material Properties 01 - General" display table — there is no grade getter);
+  Add New / Add Copy / Modify/Show / Delete (refused while members use it); Show Advanced Properties; OK / Cancel (staged).
+  `MaterialPropertyWindow` = Material Property Data: General Data (name + colour palette, type — new materials only —,
+  grade, notes dialog), Weight and Mass (mass = W/g), Isotropic or Uniaxial (tendon, rebar) Property Data (G computed),
+  Other Properties per type (concrete f'c / expected / lightweight + shear factor; steel & rebar Fy Fu Fye Fue; tendon &
+  cold formed Fy Fu), Switch To Advanced Property Display. `MaterialProperty` (Domain) is the library entry; without SAP it
+  is seeded from the member properties (`EnsureMaterials`: cable → tendon, C… concrete, S… steel). OK
+  (`CommitMaterials`) writes E, unit weight and unit mass (and a rename) to the FEM members using the material and clears
+  FEM results — SAP2000 is never written. The library is saved in the FEM model file (`Materials`, optional).
+- **Define → Section Properties ▸ Frame / Tendon / Cable Sections…** (and *Member Sections Table…*, the former Define →
+  Sections member grid) open `SectionListWindow` (modal, like SAP2000's Frame Properties): Find this property (filters and
+  selects), the list; Get From SAP2000 (`ISapGateway.GetSectionsAsync`, read-only, attaches without Connect SAP like the
+  materials; CSiAPIv1 27: PropFrame.GetNameList(…, 0 = all), GetTypeOAPI, GetRectangle / GetTube_1 / GetISection_1 / GetPipe /
+  GetCircle / GetChannel_2 / GetTee_1 / GetAngle_1, GetSectProps, GetMaterial, GetModifiers; PropCable.GetNameList /
+  GetProp / GetModifiers; PropTendon.GetNameList / GetProp); Import New Property… (disabled — no section database here);
+  Add New (shape picker) / Add Copy / Modify/Show / Delete (refused while assigned); OK / Cancel (staged).
+  `FrameSectionWindow` = SAP2000's shape form ("Box/Tube Section" …): name, notes, display colour; Dimensions per shape
+  (Rectangle, Box, I, Pipe, Circle, Channel, Tee, Angle; General / Section Designer shows SAP2000's A, I33, I22, J
+  read-only); live `SectionSketch` drawing with the 2 / 3 axes; Material with + (Define Materials); Set Modifiers… (8
+  section modifiers); Section Properties… (A, I33, I22, J, As2, As3 from `FrameSectionProperty.Values()`); Time
+  Dependent disabled. `StrandSectionWindow` = cable / tendon data (material, linked diameter / area, cable modifiers).
+  Libraries `FrameSections` / `CableSections` / `TendonSections` are seeded from the member properties
+  (`EnsureSections`), saved in the FEM model file, offered by VCF Geometry, and OK (`CommitFrameSections` /
+  `CommitStrandSections`) rebuilds the FEM properties of members with a changed / renamed section (`PropertiesFor`: area
+  and I33 / I22 × section modifiers × member modifiers, rotated by the member's local axis; material data from the
+  library; Tab 03 cable area / capacity follow). SAP2000 is never written.
+- The top bar shows only the tool icons, Connect SAP and Refresh (project name, study summary and status line removed on
+  request; the offline model is named in the pane header).
 - **Define → Sections…** opens the member-property table in its own non-modal window (`DefineSectionsWindow`, same
   bindings, one instance brought forward on repeat). FEM pane 0 is only a small card with *Open Sections*; the FEM
   inputs default pane is Load Patterns.

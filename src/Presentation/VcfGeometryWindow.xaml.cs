@@ -14,7 +14,10 @@ public partial class VcfGeometryWindow : Window
 {
     private const string Keep = "(keep as assigned)";
     private readonly MainViewModel viewModel;
-    private VcfGeometryAnalysis? analysis;
+    private VcfGeometryAnalysis? analysis;          // the working model as it is
+    private VcfGeometryAnalysis? working;           // … with the bays in the form (same as analysis when unchanged)
+    private VcfTopology? topology;                  // set when the form changes the number of bays
+    private readonly Dictionary<VcfMemberRole, TextBlock> roleCounts = [];
     private GeometryModel? preview;
     private bool loading;
 
@@ -37,7 +40,8 @@ public partial class VcfGeometryWindow : Window
         try
         {
             GeometryGrid.Children.Clear(); GeometryGrid.RowDefinitions.Clear(); inputs.Clear();
-            FrameGrid.Children.Clear(); FrameGrid.RowDefinitions.Clear(); roleSections.Clear();
+            FrameGrid.Children.Clear(); FrameGrid.RowDefinitions.Clear(); roleSections.Clear(); roleCounts.Clear();
+            working = null; topology = null;
             CableGrid.Children.Clear(); CableGrid.RowDefinitions.Clear(); cableSections.Clear();
             try { analysis = VcfGeometry.Analyze(viewModel.State.Geometry, viewModel.State.Truss); }
             catch (Exception ex)
@@ -50,7 +54,7 @@ public partial class VcfGeometryWindow : Window
             }
 
             var p = analysis.Parameters;
-            AddReadOnly(GeometryGrid, "Bays", analysis.Bays.ToString(CultureInfo.CurrentCulture) + (analysis.UniformBays ? "" : " (unequal — Apply makes them equal)"));
+            AddInput("Bays", "Number of bays", analysis.Bays, unit: "");
             AddInput("Bay", "Bay width (span per bay)", p.BayWidth);
             AddInput("Depth", "Truss depth (bottom → top chord)", p.TrussDepth);
             if (analysis.HasMiddleChord) AddInput("Middle", "Middle chord above bottom chord", p.MiddleChordHeight);
@@ -68,7 +72,7 @@ public partial class VcfGeometryWindow : Window
                 var combo = SectionCombo(frames, current.Length == 1 ? current[0] : null);
                 combo.ToolTip = string.Join(", ", members);
                 roleSections[role] = combo;
-                AddRow(FrameGrid, VcfGeometry.Title(role), combo, $"{members.Count} member{(members.Count == 1 ? "" : "s")}");
+                roleCounts[role] = AddRow(FrameGrid, VcfGeometry.Title(role), combo, Count(members.Count));
             }
             var cables = viewModel.VcfSectionNames(cable: true);
             foreach (var name in Members(VcfMemberRole.Cable).Order(StringComparer.Ordinal))
@@ -86,7 +90,9 @@ public partial class VcfGeometryWindow : Window
     }
 
     private IReadOnlyList<string> Members(VcfMemberRole role) =>
-        analysis!.Roles.Where(pair => pair.Value == role).Select(pair => pair.Key).Order(StringComparer.Ordinal).ToArray();
+        (working ?? analysis)!.Roles.Where(pair => pair.Value == role).Select(pair => pair.Key).Order(StringComparer.Ordinal).ToArray();
+
+    private static string Count(int members) => $"{members} member{(members == 1 ? "" : "s")}";
 
     private ComboBox SectionCombo(IReadOnlyList<string> names, string? current)
     {
@@ -98,7 +104,7 @@ public partial class VcfGeometryWindow : Window
         return combo;
     }
 
-    private void AddInput(string key, string label, double value)
+    private void AddInput(string key, string label, double value, string unit = "m")
     {
         var box = new TextBox { Text = value.ToString("0.###", CultureInfo.CurrentCulture), TextAlignment = TextAlignment.Right,
             FontFamily = (System.Windows.Media.FontFamily)FindResource("MonoFont"), Margin = new Thickness(0, 2, 4, 2) };
@@ -109,7 +115,7 @@ public partial class VcfGeometryWindow : Window
         GeometryGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Place(GeometryGrid, new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap }, row, 0);
         Place(GeometryGrid, box, row, 1);
-        Place(GeometryGrid, new TextBlock { Text = "m", VerticalAlignment = VerticalAlignment.Center, Foreground = (System.Windows.Media.Brush)FindResource("Muted") }, row, 2);
+        Place(GeometryGrid, new TextBlock { Text = unit, VerticalAlignment = VerticalAlignment.Center, Foreground = (System.Windows.Media.Brush)FindResource("Muted") }, row, 2);
     }
 
     private void AddReadOnly(Grid grid, string label, string value)
@@ -122,14 +128,17 @@ public partial class VcfGeometryWindow : Window
         Place(grid, text, row, 1);
     }
 
-    private static void AddRow(Grid grid, string label, ComboBox combo, string? note)
+    private static TextBlock? AddRow(Grid grid, string label, ComboBox combo, string? note)
     {
         var row = grid.RowDefinitions.Count;
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Place(grid, new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center }, row, 0);
         System.Windows.Automation.AutomationProperties.SetName(combo, label + " section");
         Place(grid, combo, row, 1);
-        if (note is not null) Place(grid, new TextBlock { Text = note, FontSize = 11, VerticalAlignment = VerticalAlignment.Center }, row, 2);
+        if (note is null) return null;
+        var text = new TextBlock { Text = note, FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+        Place(grid, text, row, 2);
+        return text;
     }
 
     private static void Place(Grid grid, UIElement element, int row, int column)
@@ -149,10 +158,18 @@ public partial class VcfGeometryWindow : Window
         if (analysis is null) { problems = ["The model is not a VCF system the editor can read."]; return null; }
         var unreadable = inputs.Where(pair => Input(pair.Key) is null).Select(pair => System.Windows.Automation.AutomationProperties.GetName(pair.Value)).ToArray();
         if (unreadable.Length > 0) { problems = unreadable.Select(name => $"{name}: enter a number.").ToArray(); return null; }
+        var bays = Input("Bays")!.Value;
+        if (bays != Math.Floor(bays) || bays < 2 || bays > 200) { problems = ["Number of bays: enter a whole number from 2 to 200."]; return null; }
+        try
+        {
+            topology = (int)bays == analysis.Bays ? null : VcfGeometry.ChangeBays(analysis, (int)bays);
+            working = topology is null ? analysis : VcfGeometry.Analyze(topology);
+        }
+        catch (InvalidOperationException ex) { problems = [ex.Message]; return null; }
         var p = analysis.Parameters;
         var form = new VcfGeometryParameters(Input("Bay")!.Value, Input("Depth")!.Value, Input("Middle") ?? p.MiddleChordHeight, Input("Clear")!.Value,
             Input("BackSpan"), Input("BackStay"));
-        problems = VcfGeometry.Validate(analysis, form);
+        problems = VcfGeometry.Validate(working, form);
         return problems.Count == 0 ? form : null;
     }
 
@@ -163,8 +180,9 @@ public partial class VcfGeometryWindow : Window
         foreach (var (role, combo) in roleSections)
             if (combo.SelectedItem is string section && section != Keep)
                 foreach (var member in Members(role)) sections[member] = section;
+        var existing = (working ?? analysis)!.Geometry.Members.Select(member => member.Name).ToHashSet(StringComparer.Ordinal);
         foreach (var (name, combo) in cableSections)
-            if (combo.SelectedItem is string section && section != Keep) sections[name] = section;
+            if (combo.SelectedItem is string section && section != Keep && existing.Contains(name)) sections[name] = section;
         return sections;
     }
 
@@ -178,13 +196,18 @@ public partial class VcfGeometryWindow : Window
             SetActions(false);
             return;
         }
-        preview = VcfGeometry.Build(analysis, form);
+        var model = working!;
+        preview = VcfGeometry.Build(model, form);
+        foreach (var (role, text) in roleCounts) text.Text = Count(Members(role).Count);
+        Preview.SpanPoints = model.TopPoints.Concat(model.MiddlePoints).Concat(model.BottomPoints).ToArray();
         Preview.Model = preview;     // geometry and dimensions only — section names would crowd the small preview
         Preview.PinSupportPoints = SafePins(preview);
         ProblemText.Text = "";
-        var span = form.BayWidth * analysis.Bays;
-        GeometrySummary.Text = $"Truss span {span:0.###} m · overall {span + 2 * (form.BackSpan ?? 0):0.###} m · " +
-            $"top chord at {form.ClearHeight + form.TrussDepth:0.###} m above ground";
+        var span = form.BayWidth * model.Bays;
+        GeometrySummary.Text = $"Span {span:0.###} m between mega columns · overall {span + 2 * (form.BackSpan ?? 0):0.###} m · " +
+            $"top chord at {form.ClearHeight + form.TrussDepth:0.###} m above ground" +
+            (topology is null ? "" : $" · {model.Geometry.Points.Count} points, {model.Geometry.Members.Count} members ({topology.AddedCables.Count} new fan cables)") +
+            (analysis.UniformBays ? "" : " · the bays are unequal now; Apply makes them equal");
         SetActions(true);
     }
 
@@ -204,7 +227,7 @@ public partial class VcfGeometryWindow : Window
     internal async Task ApplyFormAsync()
     {
         if (analysis is null || FormParameters(out _) is not { } form) return;
-        await viewModel.ApplyVcfGeometryAsync(VcfGeometry.Build(analysis, form), FormSections());
+        await viewModel.ApplyVcfGeometryAsync(VcfGeometry.Build(working!, form), FormSections(), topology);
         LoadFromModel();
     }
 

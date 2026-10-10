@@ -42,7 +42,15 @@
               ToolTip="Edit the VCF system — bay width, truss depth, middle chord, clear height, back-span, back-stay height and the section of each chord, mega column and cable — with a live preview; Apply updates the working model (SAP2000 unchanged)"/>
    </MenuItem>
    <MenuItem Header="_Define" IsEnabled="{Binding HasWorkingModel}">
-    <MenuItem Header="_Sections…" Click="DefineSections_Click"/>
+    <MenuItem Header="_Materials…" Click="DefineMaterials_Click" AutomationProperties.Name="Define Materials"
+              ToolTip="Material library: Get From SAP2000, add, copy, modify or delete materials; changes apply to the FEM members that use them"/>
+    <MenuItem Header="Section _Properties" AutomationProperties.Name="Section Properties">
+     <MenuItem Header="_Frame Sections…" Tag="Frame" Click="SectionList_Click" AutomationProperties.Name="Frame Sections"/>
+     <MenuItem Header="_Tendon Sections…" Tag="Tendon" Click="SectionList_Click" AutomationProperties.Name="Tendon Sections"/>
+     <MenuItem Header="_Cable Sections…" Tag="Cable" Click="SectionList_Click" AutomationProperties.Name="Cable Sections"/>
+     <Separator/>
+     <MenuItem Header="_Member Sections Table…" Click="DefineSections_Click" ToolTip="The section, material and properties of every member the FEM uses"/>
+    </MenuItem>
     <MenuItem Header="Load _Patterns" Tag="1" Click="FemPaneMenu_Click"/>
     <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click"/>
     <Separator/>
@@ -98,17 +106,6 @@
   <Border DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="10,6">
    <DockPanel>
     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-     <TextBlock Text="&#9679;" Margin="0,0,5,0">
-      <TextBlock.Style>
-       <Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
-        <Setter Property="Foreground" Value="{StaticResource Muted}"/>
-        <Style.Triggers>
-         <DataTrigger Binding="{Binding State.IsSapConnected}" Value="True"><Setter Property="Foreground" Value="{StaticResource Success}"/></DataTrigger>
-        </Style.Triggers>
-       </Style>
-      </TextBlock.Style>
-     </TextBlock>
-     <TextBlock Text="{Binding StatusLine}" ToolTip="{Binding StatusLine}" Style="{StaticResource MonoSmall}" MaxWidth="420" TextTrimming="CharacterEllipsis" Margin="0,0,12,0"/>
      <Button Content="Connect SAP" Command="{Binding Connect}" Style="{StaticResource Primary}"/>
      <Button Command="{Binding Refresh}" Style="{StaticResource IconButton}" ToolTip="Refresh connection and geometry">
       <Viewbox Width="15" Height="15"><Path Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Data="M14,5 A6,6 0 1 0 16,11 M16,11 L16,6 M16,11 L11,11"/></Viewbox>
@@ -141,9 +138,6 @@
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE890;" Click="ViewOptions_Click" IsEnabled="{Binding HasWorkingModel}" ToolTip="View Options (Display → View Options)" AutomationProperties.Name="View Options"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE9D2;" Click="ShowResults_Click" IsEnabled="{Binding HasWorkingModel}" ToolTip="Show Results — choose the load case / combo and the output to draw on the model" AutomationProperties.Name="Show Results"/>
      </StackPanel>
-     <TextBlock Grid.Column="2" Text="{Binding ProjectName}" ToolTip="{Binding ProjectName}" Style="{StaticResource FieldLabel}" Margin="12,0,12,0"
-               TextTrimming="CharacterEllipsis"/>
-     <TextBlock Grid.Column="3" Text="{Binding ToolbarStudySummary}" ToolTip="{Binding ToolbarStudySummary}" Style="{StaticResource FieldLabel}" Margin="12,0,8,0" TextTrimming="CharacterEllipsis"/>
     </Grid>
    </DockPanel>
   </Border>
@@ -1789,7 +1783,7 @@
    <TextBlock DockPanel.Dock="Top" Text="{Binding SharedViewerCaption}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
    <TextBlock DockPanel.Dock="Bottom" Text="{Binding SharedViewerHint}" Style="{StaticResource Hint}" Margin="2,6,0,0"/>
    <Grid>
-    <c:Structural2DViewer x:Name="SharedViewer" ShowPointLabels="True" ShowDimensions="{Binding ShowDimensions, Mode=TwoWay}"
+    <c:Structural2DViewer x:Name="SharedViewer" ShowPointLabels="True" ShowDimensions="{Binding ShowDimensions, Mode=TwoWay}" SpanPoints="{Binding SharedViewerSpanPoints}"
                           Model="{Binding SharedViewerModel}"
                           AppliedPoints="{Binding SharedViewerAppliedPoints}"
                           SelectedAppliedPoint="{Binding SelectedAppliedPoint, Mode=TwoWay}"

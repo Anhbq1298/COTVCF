@@ -161,6 +161,23 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         return sap.ReadDatabaseTablesAsync(tableNamePrefixes, state.Model);
     }
 
+    /// <summary>Every material of the active SAP2000 model (Define → Materials → Get From SAP2000). Read-only. When the app
+    /// is not connected it attaches to the running SAP2000 just for this read (attach only — never starts SAP2000) and
+    /// leaves the app's session as it is (an offline model stays offline).</summary>
+    public async Task<IReadOnlyList<MaterialProperty>> ReadMaterialsAsync()
+    {
+        var model = state.IsSapConnected && state.Model is { } connected ? connected : await sap.ConnectAsync();
+        return await sap.GetMaterialsAsync(model);
+    }
+
+    /// <summary>Every section of the active SAP2000 model (Define → Section Properties → Get From SAP2000). Read-only; attaches
+    /// to the running SAP2000 for the read when the app is not connected, like <see cref="ReadMaterialsAsync"/>.</summary>
+    public async Task<SectionLibrary> ReadSectionsAsync()
+    {
+        var model = state.IsSapConnected && state.Model is { } connected ? connected : await sap.ConnectAsync();
+        return await sap.GetSectionsAsync(model);
+    }
+
     public Task<IReadOnlyDictionary<string, FemSectionProperties>> ReadFemSectionPropertiesAsync()
     {
         if (state.Model is null) throw new InvalidOperationException("Connect to SAP2000 before reading FEM section properties.");

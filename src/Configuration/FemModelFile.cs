@@ -31,6 +31,12 @@ public sealed class FemModelFileDto
     public List<string> LoadCaseNames { get; set; } = [];
     public CotVcfConfigDto? Project { get; set; }
     public List<FemSectionProperties> SectionProperties { get; set; } = [];
+    /// <summary>Define → Materials library (optional; older files have none and it is rebuilt from the member properties).</summary>
+    public List<MaterialProperty>? Materials { get; set; }
+    /// <summary>Define → Section Properties libraries (optional, like <see cref="Materials"/>).</summary>
+    public List<FrameSectionProperty>? FrameSections { get; set; }
+    public List<StrandSectionProperty>? CableSections { get; set; }
+    public List<StrandSectionProperty>? TendonSections { get; set; }
     public SapFemLoading? Loading { get; set; }
     public List<FemPatternRowDto> PatternRows { get; set; } = [];
     public List<FemDefinitionRowDto> CaseRows { get; set; } = [];

@@ -21,7 +21,26 @@ public sealed record VcfGeometryAnalysis(
     double? OuterLeft,
     double? OuterRight,
     bool HasMiddleChord,
-    IReadOnlyDictionary<string, VcfMemberRole> Roles);
+    IReadOnlyDictionary<string, VcfMemberRole> Roles,
+    IReadOnlyList<string> TopPoints,
+    IReadOnlyList<string> MiddlePoints,
+    IReadOnlyList<string> BottomPoints);
+
+/// <summary>
+/// A model with another number of bays (<see cref="VcfGeometry.ChangeBays"/>), still at the old bay width and levels.
+/// <see cref="Templates"/> maps every regenerated member to the existing member it copies (section, Tab 03 settings);
+/// <see cref="RenamedPoints"/> maps the old end-line chord points to their new names; <see cref="AddedCables"/> are new fan
+/// cables with their template cable.
+/// </summary>
+public sealed record VcfTopology(
+    GeometryModel Geometry,
+    int Bays,
+    IReadOnlyList<string> TopPoints,
+    IReadOnlyList<string> MiddlePoints,
+    IReadOnlyList<string> BottomPoints,
+    IReadOnlyDictionary<string, string> Templates,
+    IReadOnlyDictionary<string, string> RenamedPoints,
+    IReadOnlyDictionary<string, string> AddedCables);
 
 /// <summary>
 /// Edit → VCF Geometry: reads the system from the model and rebuilds it from a few parameters. The topology and every
@@ -33,8 +52,16 @@ public static class VcfGeometry
 {
     private const double Tolerance = 1e-3;
 
-    public static VcfGeometryAnalysis Analyze(GeometryModel geometry, TrussHeightConfiguration truss)
+    public static VcfGeometryAnalysis Analyze(GeometryModel geometry, TrussHeightConfiguration truss) =>
+        Analyze(geometry, truss.TopPoints, truss.MiddlePoints, truss.BottomPoints);
+
+    public static VcfGeometryAnalysis Analyze(VcfTopology topology) =>
+        Analyze(topology.Geometry, topology.TopPoints, topology.MiddlePoints, topology.BottomPoints);
+
+    public static VcfGeometryAnalysis Analyze(GeometryModel geometry, IReadOnlyList<string> topPoints, IReadOnlyList<string> middlePoints,
+        IReadOnlyList<string> bottomPoints)
     {
+        var truss = new TrussHeightConfiguration { TopPoints = topPoints, MiddlePoints = middlePoints, BottomPoints = bottomPoints };
         if (geometry.Points.Count == 0) throw new InvalidOperationException("The model has no geometry.");
         if (truss.TopPoints.Count == 0 || truss.BottomPoints.Count == 0)
             throw new InvalidOperationException("Define the top, middle and bottom chord point groups on 02 Truss Height first.");
@@ -85,7 +112,8 @@ public static class VcfGeometry
 
         return new VcfGeometryAnalysis(geometry, bays, uniform,
             new VcfGeometryParameters(bay, top - bottom, middle - bottom, bottom - ground, backSpan, backStay),
-            ground, lines, outerLeft, outerRight, hasMiddle, roles);
+            ground, lines, outerLeft, outerRight, hasMiddle, roles,
+            truss.TopPoints.ToArray(), truss.MiddlePoints.ToArray(), truss.BottomPoints.ToArray());
     }
 
     public static IReadOnlyList<string> Validate(VcfGeometryAnalysis analysis, VcfGeometryParameters p)
@@ -161,6 +189,206 @@ public static class VcfGeometry
             if (levels.Count == 0 || value - levels[^1] > Tolerance) levels.Add(value);
         return levels;
     }
+
+    // ---- number of bays ----------------------------------------------------------------------------------------------
+
+    /// <summary>The model with <paramref name="bays"/> bays. Bay lines are added or removed at the old bay width around the
+    /// truss centre; chord points are named by position from the old pattern (TTrPt001 … TTrPt0nn); members tied to an end
+    /// line (full-length chords, mega columns, back-stays, end frames) follow it; per-bay chord members and interior
+    /// verticals are regenerated per bay / line; the fan cables keep their pattern (each top corner to the bottom-chord
+    /// nodes up to mid-span). Existing names are kept where the position still exists; new names continue the numbering.
+    /// Throws for a member the pattern does not cover.</summary>
+    public static VcfTopology ChangeBays(VcfGeometryAnalysis analysis, int bays)
+    {
+        if (bays < 2 || bays > 200) throw new InvalidOperationException("Bays must be a whole number from 2 to 200.");
+        var oldBays = analysis.Bays;
+        var geometry = analysis.Geometry;
+        var lines = analysis.TrussLines;
+        var groups = new[] { analysis.TopPoints, analysis.MiddlePoints, analysis.BottomPoints };   // 0 top, 1 middle, 2 bottom
+        var groupOf = new Dictionary<string, int>(StringComparer.Ordinal);
+        var lineOf = new Dictionary<string, int>(StringComparer.Ordinal);
+        int LineIndex(double x)
+        {
+            for (var index = 0; index < lines.Count; index++) if (Math.Abs(lines[index] - x) < Tolerance) return index;
+            return -1;
+        }
+        var pattern = new (string Prefix, int First, int Width, double Y, double Z)?[3];
+        for (var g = 0; g < 3; g++)
+        {
+            if (groups[g].Count == 0) continue;
+            var byLine = new string?[lines.Count];
+            foreach (var name in groups[g])
+            {
+                var line = LineIndex(geometry.Points[name].Position.X);
+                if (line < 0 || byLine[line] is not null)
+                    throw new InvalidOperationException("Changing the number of bays needs one chord point on every bay line for each chord.");
+                byLine[line] = name; groupOf[name] = g; lineOf[name] = line;
+            }
+            if (byLine.Any(name => name is null))
+                throw new InvalidOperationException("Changing the number of bays needs one chord point on every bay line for each chord.");
+            var match = byLine.Select(name => System.Text.RegularExpressions.Regex.Match(name!, @"^(.*?)(\d+)$")).ToArray();
+            if (match.Any(m => !m.Success) || match.Select(m => m.Groups[1].Value).Distinct().Count() != 1 ||
+                Enumerable.Range(0, lines.Count).Any(i => int.Parse(match[i].Groups[2].Value) != int.Parse(match[0].Groups[2].Value) + i))
+                throw new InvalidOperationException($"The chord point names ({byLine[0]} …) are not numbered along the truss, so new bays cannot be named.");
+            var first = geometry.Points[byLine[0]!].Position;
+            pattern[g] = (match[0].Groups[1].Value, int.Parse(match[0].Groups[2].Value), match[0].Groups[2].Value.Length, first.Y,
+                groups[g].Select(name => geometry.Points[name].Position.Z).Average());
+        }
+        string PointName(int g, int line) => pattern[g]!.Value.Prefix + (pattern[g]!.Value.First + line).ToString(new string('0', pattern[g]!.Value.Width));
+
+        var bay = analysis.Parameters.BayWidth;
+        var centre = (lines[0] + lines[^1]) / 2;
+        double LineX(int line) => centre + (line - bays / 2.0) * bay;
+        var shiftLeft = LineX(0) - lines[0];
+        var shiftRight = LineX(bays) - lines[^1];
+
+        // points: the other points move with their end; the chord points are laid out again
+        var points = new Dictionary<string, StructuralPoint>(StringComparer.Ordinal);
+        foreach (var (name, point) in geometry.Points)
+        {
+            if (groupOf.ContainsKey(name)) continue;
+            var x = point.Position.X;
+            double shift;
+            if (x <= lines[0] + Tolerance) shift = shiftLeft;
+            else if (x >= lines[^1] - Tolerance) shift = shiftRight;
+            else throw new InvalidOperationException($"Point '{name}' lies inside the truss but is not a chord point; the number of bays cannot be changed.");
+            points[name] = point with { Position = point.Position with { X = x + shift } };
+        }
+        for (var g = 0; g < 3; g++)
+            if (pattern[g] is { } chord)
+                for (var line = 0; line <= bays; line++)
+                {
+                    var name = PointName(g, line);
+                    if (points.ContainsKey(name)) throw new InvalidOperationException($"Point name '{name}' is already used by another point.");
+                    points[name] = new StructuralPoint(name, new Position(LineX(line), chord.Y, chord.Z));
+                }
+        var renamed = new Dictionary<string, string>(StringComparer.Ordinal);
+        for (var g = 0; g < 3; g++)
+            if (pattern[g] is not null && PointName(g, oldBays) != PointName(g, bays)) renamed[PointName(g, oldBays)] = PointName(g, bays);
+        string MapEnd(string name) => groupOf.TryGetValue(name, out var g)
+            ? PointName(g, lineOf[name] == 0 ? 0 : bays)
+            : name;
+
+        // members
+        var kept = new List<StructuralMember>();
+        var perBay = new Dictionary<int, SortedDictionary<int, StructuralMember>>();               // group → bay → member
+        var verticals = new Dictionary<(int Lower, int Upper), SortedDictionary<int, StructuralMember>>(); // groups → line → member
+        var fans = new[] { new SortedDictionary<int, StructuralMember>(), new SortedDictionary<int, StructuralMember>() }; // left, right: distance → cable
+        bool IsEnd(int line) => line == 0 || line == oldBays;
+        foreach (var member in geometry.Members)
+        {
+            var aTruss = groupOf.TryGetValue(member.Start, out var ga);
+            var bTruss = groupOf.TryGetValue(member.End, out var gb);
+            var la = aTruss ? lineOf[member.Start] : -1;
+            var lb = bTruss ? lineOf[member.End] : -1;
+            if (!aTruss && !bTruss) { kept.Add(member); continue; }
+            if (aTruss != bTruss)
+            {
+                if (IsEnd(aTruss ? la : lb)) { kept.Add(member with { Start = MapEnd(member.Start), End = MapEnd(member.End) }); continue; }
+                throw Unsupported(member);
+            }
+            if (member.Kind == MemberKind.Frame && ga == gb && Math.Abs(la - lb) == oldBays) { kept.Add(member with { Start = MapEnd(member.Start), End = MapEnd(member.End) }); continue; }
+            if (member.Kind == MemberKind.Frame && ga == gb && Math.Abs(la - lb) == 1)
+            {
+                if (!perBay.TryGetValue(ga, out var bays1)) perBay[ga] = bays1 = [];
+                bays1[Math.Min(la, lb)] = member; continue;
+            }
+            if (member.Kind == MemberKind.Frame && la == lb && ga != gb)
+            {
+                if (IsEnd(la)) { kept.Add(member with { Start = MapEnd(member.Start), End = MapEnd(member.End) }); continue; }
+                var key = (Math.Max(ga, gb), Math.Min(ga, gb));   // bottom = 2 is "lower"
+                if (!verticals.TryGetValue(key, out var byLine)) verticals[key] = byLine = [];
+                byLine[la] = member; continue;
+            }
+            if (member.Kind != MemberKind.Frame)
+            {
+                var (corner, other) = ga == 0 && IsEnd(la) && gb == 2 && !IsEnd(lb) ? (la, lb)
+                    : gb == 0 && IsEnd(lb) && ga == 2 && !IsEnd(la) ? (lb, la) : (-1, -1);
+                if (corner >= 0) { var side = corner == 0 ? 0 : 1; fans[side][Math.Abs(other - corner)] = member; continue; }
+                if (IsEnd(la) && IsEnd(lb)) { kept.Add(member with { Start = MapEnd(member.Start), End = MapEnd(member.End) }); continue; }
+            }
+            throw Unsupported(member);
+        }
+
+        var used = new HashSet<string>(kept.Select(member => member.Name), StringComparer.Ordinal);
+        var members = new List<StructuralMember>(kept);
+        var templates = new Dictionary<string, string>(StringComparer.Ordinal);
+        string NextFrameName(StructuralMember template)
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(template.Name, @"^(.*?)(\d+)$");
+            var prefix = m.Success ? m.Groups[1].Value : template.Name + "_";
+            var width = m.Success ? m.Groups[2].Value.Length : 3;
+            var next = geometry.Members.Concat(members).Select(member => System.Text.RegularExpressions.Regex.Match(member.Name, "^" + System.Text.RegularExpressions.Regex.Escape(prefix) + @"(\d+)$"))
+                .Where(x => x.Success).Select(x => int.Parse(x.Groups[1].Value)).DefaultIfEmpty(0).Max() + 1;
+            string name;
+            do name = prefix + (next++).ToString(new string('0', width)); while (used.Contains(name));
+            return name;
+        }
+        void Add(StructuralMember template, string start, string end, bool reuse)
+        {
+            var name = reuse && !used.Contains(template.Name) ? template.Name : NextFrameName(template);
+            used.Add(name);
+            members.Add(template with { Name = name, Start = start, End = end });
+            templates[name] = template.Name;
+        }
+        foreach (var (g, byBay) in perBay)
+            for (var b = 0; b < bays; b++)
+            {
+                var reuse = byBay.TryGetValue(b, out var existing);
+                var template = existing ?? byBay[byBay.Keys.Where(key => key <= b).DefaultIfEmpty(byBay.Keys.First()).Max()];
+                var forward = lineOf[template.Start] < lineOf[template.End];
+                Add(template, PointName(g, forward ? b : b + 1), PointName(g, forward ? b + 1 : b), reuse);
+            }
+        foreach (var ((lower, upper), byLine) in verticals)
+            for (var line = 1; line < bays; line++)
+            {
+                var reuse = byLine.TryGetValue(line, out var existing);
+                var template = existing ?? byLine[byLine.Keys.Where(key => key <= line).DefaultIfEmpty(byLine.Keys.First()).Max()];
+                var startLower = groupOf[template.Start] == lower;
+                Add(template, PointName(startLower ? lower : upper, line), PointName(startLower ? upper : lower, line), reuse);
+            }
+
+        // fan cables: from each top corner to the bottom-chord nodes up to mid-span
+        var added = new Dictionary<string, string>(StringComparer.Ordinal);
+        var cableNumber = geometry.Members.Where(member => member.Kind != MemberKind.Frame)
+            .Select(member => System.Text.RegularExpressions.Regex.Match(member.Name, @"^(.*?)(\d+)([abAB])(.*)$"))
+            .Where(m => m.Success).Select(m => int.Parse(m.Groups[2].Value)).DefaultIfEmpty(0).Max();
+        // left fan: bottom lines 1 … ⌊n/2⌋; right fan: n−1 … ⌈n/2⌉ — ⌊n/2⌋ cables each (10 bays: 5 + 5, both reaching mid-span)
+        var counts = new[] { bays / 2, bays / 2 };
+        var extra = Math.Max(counts[0] - fans[0].Count, counts[1] - fans[1].Count);
+        var newNumbers = Enumerable.Range(cableNumber + 1, Math.Max(0, extra)).ToArray();
+        for (var side = 0; side < 2; side++)
+        {
+            if (fans[side].Count == 0) continue;
+            var existing = fans[side].Values.ToArray();   // nearest first
+            for (var k = 1; k <= counts[side]; k++)
+            {
+                var target = side == 0 ? k : bays - k;
+                var corner = side == 0 ? 0 : bays;
+                var template = existing[Math.Min(k, existing.Length) - 1];
+                var topFirst = groupOf[template.Start] == 0;
+                var (start, end) = topFirst ? (PointName(0, corner), PointName(2, target)) : (PointName(2, target), PointName(0, corner));
+                string name;
+                if (k <= existing.Length) name = existing[k - 1].Name;
+                else
+                {
+                    var m = System.Text.RegularExpressions.Regex.Match(template.Name, @"^(.*?)(\d+)([abAB])(.*)$");
+                    name = m.Success ? $"{m.Groups[1].Value}{newNumbers[k - existing.Length - 1]}{m.Groups[3].Value}{m.Groups[4].Value}" : $"{template.Name}_{k}";
+                    while (used.Contains(name)) name += "'";
+                    added[name] = template.Name;
+                }
+                used.Add(name);
+                members.Add(template with { Name = name, Start = start, End = end });
+                templates[name] = template.Name;
+            }
+        }
+
+        string[] Group(int g) => pattern[g] is null ? [] : Enumerable.Range(0, bays + 1).Select(line => PointName(g, line)).ToArray();
+        return new VcfTopology(new GeometryModel(points, members), bays, Group(0), Group(1), Group(2), templates, renamed, added);
+    }
+
+    private static InvalidOperationException Unsupported(StructuralMember member) =>
+        new($"Member '{member.Name}' does not follow the VCF pattern (chords, verticals, mega columns, fan cables, end frames), so the number of bays cannot be changed.");
 
     public static string Title(VcfMemberRole role) => role switch
     {

@@ -36,18 +36,20 @@
        <TextBlock x:Name="GeometrySummary" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0"/>
       </StackPanel>
      </GroupBox>
-     <GroupBox Header="Frame sections">
-      <Grid x:Name="FrameGrid">
-       <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-      </Grid>
+     <GroupBox Header="Sections">
+      <StackPanel>
+       <TextBlock Text="FRAME SECTIONS" Style="{StaticResource Subheading}"/>
+       <Grid x:Name="FrameGrid">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       </Grid>
+       <TextBlock Text="CABLE SECTIONS" Style="{StaticResource Subheading}" Margin="0,10,0,6"/>
+       <Grid x:Name="CableGrid">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+       </Grid>
+       <TextBlock x:Name="SectionHint" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"
+                  Text="Sections are the ones assigned in the model; a member keeps its own local axis and end releases."/>
+      </StackPanel>
      </GroupBox>
-     <GroupBox Header="Cable sections">
-      <Grid x:Name="CableGrid">
-       <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      </Grid>
-     </GroupBox>
-     <TextBlock x:Name="SectionHint" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"
-                Text="Sections are the ones assigned in the model; a member keeps its own local axis and end releases."/>
     </StackPanel>
    </ScrollViewer>
 

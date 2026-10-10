@@ -40,6 +40,14 @@ public interface ISapGateway : IDisposable
     /// editing and units, lock state and model are left as they are.</summary>
     Task<Quantities.SapTableSet> ReadDatabaseTablesAsync(IReadOnlyList<string> tableNamePrefixes, ModelInfo expected) =>
         throw new NotSupportedException("Database-table reads are not implemented by this SAP gateway.");
+    /// <summary>Every material of the verified active model (Define → Materials → Get From SAP2000), in kN, m, C.
+    /// Read-only.</summary>
+    Task<IReadOnlyList<MaterialProperty>> GetMaterialsAsync(ModelInfo expected) =>
+        throw new NotSupportedException("Material reads are not implemented by this SAP gateway.");
+    /// <summary>Every frame, cable and tendon section of the verified active model (Define → Section Properties → Get From
+    /// SAP2000), in kN, m. Read-only.</summary>
+    Task<SectionLibrary> GetSectionsAsync(ModelInfo expected) =>
+        throw new NotSupportedException("Section reads are not implemented by this SAP gateway.");
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
     /// <summary>Moves joints to <paramref name="proposed"/>. A cable object defined by its undeformed length is given

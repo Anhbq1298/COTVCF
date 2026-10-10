@@ -1,0 +1,24 @@
+<Window x:Class="COT_VCF.Presentation.MaterialPropertyWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="clr-namespace:COT_VCF.Presentation"
+        Title="Material Property Data" Icon="{x:Static p:AppIcon.Window}" Width="500" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
+ <!-- One material, laid out like SAP2000's Material Property Data; the groups depend on the material type. -->
+ <Window.Resources>
+  <Style TargetType="GroupBox">
+   <Setter Property="Margin" Value="0,0,0,10"/>
+   <Setter Property="Padding" Value="8,6,8,6"/>
+   <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+   <Setter Property="Background" Value="{StaticResource Raised}"/>
+   <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+  </Style>
+ </Window.Resources>
+ <StackPanel Margin="10">
+  <StackPanel x:Name="Groups"/>
+  <TextBlock x:Name="ProblemText" Foreground="{StaticResource Error}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+  <CheckBox x:Name="AdvancedCheck" Content="Switch To Advanced Property Display" Margin="2,0,0,10" Click="Advanced_Click"/>
+  <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+   <Button x:Name="OkButton" Content="OK" MinWidth="90" Margin="0,0,30,0" IsDefault="True" Click="Ok_Click"/>
+   <Button Content="Cancel" MinWidth="90" IsCancel="True"/>
+  </StackPanel>
+ </StackPanel>
+</Window>

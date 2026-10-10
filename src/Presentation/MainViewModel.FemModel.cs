@@ -112,6 +112,10 @@ public sealed partial class MainViewModel
             LoadCaseNames = loadCases.ToList(),
             Project = project,
             SectionProperties = properties.Values.OrderBy(property => property.MemberName, StringComparer.Ordinal).ToList(),
+            Materials = Materials.Count > 0 ? Materials.ToList() : null,
+            FrameSections = FrameSections.Count > 0 ? FrameSections.ToList() : null,
+            CableSections = CableSections.Count > 0 ? CableSections.ToList() : null,
+            TendonSections = TendonSections.Count > 0 ? TendonSections.ToList() : null,
             Loading = femSapLoading,
             PatternRows = FemPatternRows.Select(row => new FemPatternRowDto(row.Name, row.Type, row.SelfWeightMultiplier, row.Role, row.Loads)).ToList(),
             CaseRows = FemCaseRows.Select(row => new FemDefinitionRowDto(row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note)).ToList(),
@@ -203,6 +207,14 @@ public sealed partial class MainViewModel
 
             FemSectionProperties.Clear();
             foreach (var property in file.SectionProperties) FemSectionProperties.Add(property);
+            Materials.Clear();
+            foreach (var material in file.Materials ?? []) Materials.Add(material);
+            EnsureMaterials();
+            FrameSections.Clear(); CableSections.Clear(); TendonSections.Clear();
+            foreach (var section in file.FrameSections ?? []) FrameSections.Add(section);
+            foreach (var section in file.CableSections ?? []) CableSections.Add(section);
+            foreach (var section in file.TendonSections ?? []) TendonSections.Add(section);
+            EnsureSections();
             femSapLoading = file.Loading!;
             RestoreFemLoadRows(file);
             FemTargetFitPercent = file.Settings.TargetFitPercent;
