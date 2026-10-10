@@ -70,22 +70,44 @@ internal static class Program
                 window.UpdateLayout();
                 uiState.Connection = "Disconnected";
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                MenuItem TopMenu(string header) => window.MainMenu.Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == header);
+                Assert(window.MainMenu.Items.OfType<MenuItem>().Select(item => (item.Header as string)!.Replace("_", ""))
+                           .SequenceEqual(["File", "MB", "Edit", "Define", "Assign", "Run", "Result", "Display", "Help"]),
+                    "The menu bar reads File, MB, Edit, Define, Assign, Run, Result, Display, Help");
                 Assert(!FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
-                       !FindVisuals<Button>(window).First(button => ReferenceEquals(button.Command, vm.NewConfig)).IsEnabled,
-                    "Workflow pages and New Config are disabled before SAP connection");
+                       !vm.NewConfig.CanExecute(null) && !TopMenu("MB").IsEnabled && !TopMenu("Define").IsEnabled && TopMenu("File").IsEnabled,
+                    "Workflow pages, the MB/Define menus and New Config are disabled before SAP connection; File stays open");
                 uiState.Connection = "Connected";
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Assert(FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
-                       FindVisuals<Button>(window).First(button => ReferenceEquals(button.Command, vm.NewConfig)).IsEnabled,
-                    "Successful SAP connection enables workflow pages and New Config");
+                       vm.NewConfig.CanExecute(null) && TopMenu("MB").IsEnabled && TopMenu("Define").IsEnabled,
+                    "Successful SAP connection enables workflow pages, the menus and New Config");
+                var mbItems = TopMenu("MB").Items.OfType<MenuItem>().Select(item => (string)item.Header).ToArray();
+                var fileCommands = TopMenu("File").Items.OfType<MenuItem>().Select(item => item.Command).ToArray();
+                var runCommands = TopMenu("Run").Items.OfType<MenuItem>().Select(item => item.Command).ToArray();
+                Assert(mbItems.SequenceEqual(["01  Loading", "02  Truss Height", "03  Pretension", "04  Output Settings", "05  Iteration",
+                           "06  Post-Processing", "06A  Optimization", "08  Quantities"]) &&
+                       new[] { vm.NewConfig, vm.LoadConfig, vm.SaveAllConfig, vm.LoadFemModel, vm.SaveFemModel, vm.ReadFemProperties }.All(fileCommands.Contains) &&
+                       new[] { vm.RunStudyFromToolbar, vm.RunFemAnalysis, vm.CancelFemAnalysis }.All(runCommands.Contains),
+                    "MB lists pages 01-06A and 08; File holds the config and model commands; Run holds the run commands");
+                var workflowTabsRail = FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs");
+                Assert(workflowTabsRail.Items.OfType<TabItem>().All(tab => tab.Visibility == Visibility.Collapsed) &&
+                       vm.PaneMenu == "MB" && vm.PaneTitle == "01  LOADING",
+                    "The left tab rail is hidden; the pane header names the page opened from MB");
                 window.Width = window.MinWidth;
                 window.UpdateLayout();
-                var toolbarCommands = new[] { vm.NewConfig, vm.SaveAllConfig, vm.LoadConfig, vm.RunStudyFromToolbar, vm.Connect, vm.Refresh };
-                Assert(FindVisuals<Button>(window).Where(button => toolbarCommands.Contains(button.Command)).All(button =>
+                var toolbarCommands = new[] { vm.Connect, vm.Refresh };
+                var toolbarButtons = FindVisuals<Button>(window).Where(button => toolbarCommands.Contains(button.Command)).ToArray();
+                var movedCommands = new[] { vm.NewConfig, vm.SaveAllConfig, vm.LoadConfig, vm.RunStudyFromToolbar };
+                Assert(toolbarButtons.Length == 2 && toolbarButtons.All(button =>
                 {
                     var position = button.TransformToAncestor(window).Transform(new Point());
                     return position.X >= 0 && position.X + button.ActualWidth <= window.ActualWidth;
-                }), "Configuration and study toolbar buttons fit the minimum window width");
+                }) && movedCommands.Take(3).All(command => FindVisuals<Button>(window.TopToolbar).Any(button => ReferenceEquals(button.Command, command))) &&
+                       FindVisuals<Button>(window.TopToolbar).Any(button => ReferenceEquals(button.Command, vm.RunFemAnalysis)) &&
+                       FindVisuals<Button>(window.TopToolbar).Select(button => System.Windows.Automation.AutomationProperties.GetName(button)).ToArray() is var toolNames &&
+                       new[] { "Zoom extents", "Zoom in", "Zoom out", "3D view", "XY view", "XZ view", "YZ view", "View Options" }.All(toolNames.Contains),
+                    "The top bar keeps Connect SAP and Refresh within the minimum window width; the tool icons (new/open/save/print, run, zoom, views) sit on the same line");
                 window.Width = 1400;
                 window.UpdateLayout();
                 var loadPatternPickers = FindVisuals<ComboBox>(window)
@@ -200,25 +222,99 @@ internal static class Program
                        FindVisuals<TextBlock>(window).Any(text => text.Text == "07  CABLE FORCES · kN"),
                     "Post-processing UI lists the result modules 01–07; the shortlist module is gone");
 
-                // Tab 07 FEM sits after 06A Optimization (index 7); its pages are Inputs / Analysis / View / Results
-                vm.SelectedTab = 7;
-                vm.SelectedFemPage = MainViewModel.FemInputsPage;
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                window.UpdateLayout();
-                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "07  FEM") &&
-                       FindVisuals<Button>(window).Any(button => Equals(button.Content, "Read from SAP")) &&
-                       vm.ReadFemProperties.CanExecute(null) &&
-                       FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemPropertiesGrid") &&
+                // 07 FEM (index 7) is split into menu panes: Define -> Sections / Load Patterns / Load Cases / Result Candidate,
+                // Assign -> Joint Restraints, Run -> Analysis Options, Result -> outputs, Display -> View Options
+                void OpenMenu(string menu, string item)
+                {
+                    TopMenu(menu).Items.OfType<MenuItem>().Single(entry => (entry.Header as string)?.Replace("_", "").StartsWith(item, StringComparison.Ordinal) == true)
+                        .RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                    window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                    window.UpdateLayout();
+                }
+                OpenMenu("Define", "Load Patterns");
+                Assert(vm.SelectedTab == 7 && vm.SelectedFemPage == MainViewModel.FemInputsPage && vm.PaneMenu == "Define" &&
                        window.SharedViewerPane.Visibility == Visibility.Visible &&
                        vm.ShowFemPinLegend && vm.SharedViewerPinSupportPoints?.SequenceEqual(["bot", "bot2"]) == true,
-                    "Tab 07 Inputs renders the SAP property transfer, the property grid, the supports and the shared viewer");
-                vm.SelectedFemPage = MainViewModel.FemAnalysisPage;
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                    "The FEM inputs panes show the supports in the shared viewer");
+                OpenMenu("Define", "Sections");
+                var sectionsWindow = window.OwnedWindows.OfType<DefineSectionsWindow>().Single();
+                sectionsWindow.UpdateLayout();
+                Assert(sectionsWindow.IsVisible && FindVisuals<DataGrid>(sectionsWindow).Any(grid => grid.Name == "FemPropertiesGrid" && ReferenceEquals(grid.ItemsSource, vm.FemSectionProperties)) &&
+                       !FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemPropertiesGrid") && vm.ReadFemProperties.CanExecute(null),
+                    "Define -> Sections opens the member-property table in its own window, not in the left pane");
+                OpenMenu("Define", "Sections");
+                Assert(window.OwnedWindows.OfType<DefineSectionsWindow>().Count() == 1, "Define -> Sections again brings the same window forward");
+                sectionsWindow.Close();
+                window.ClosePaneButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 window.UpdateLayout();
-                Assert(FindVisuals<Button>(window).Any(button => Equals(button.Content, "Run Analysis")) &&
+                Assert(!window.IsPaneOpen && window.SharedViewerPane.Visibility == Visibility.Visible && window.ParamsColumn.ActualWidth == 0,
+                    "The (x) on the left pane closes it and the model view takes the full width");
+                OpenMenu("Define", "Load Cases");
+                Assert(window.IsPaneOpen && vm.PaneTitle == "LOAD CASES / LOAD COMBINATIONS", "Any menu item opens the left pane again");
+                Button Tool(string name) => FindVisuals<Button>(window.TopToolbar).Single(button => System.Windows.Automation.AutomationProperties.GetName(button) == name);
+                foreach (var (tool, plane) in new[] { ("3D view", "3D"), ("XY view", "XY"), ("YZ view", "YZ"), ("XZ view", "XZ") })
+                {
+                    Tool(tool).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                    Assert(window.SharedViewer.CurrentPlane == plane, $"Toolbar {tool} switches the shared viewer to {plane}");
+                }
+                Tool("Zoom in").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Tool("Zoom out").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Tool("Zoom extents").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert(Tool("Zoom in").IsEnabled && Tool("Zoom extents").IsEnabled, "Toolbar zoom in / out / extents act on the shared viewer while it is shown");
+                var dimensionsItem = TopMenu("Display").Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == "Dimensions");
+                Assert(window.SharedViewer.ShowDimensions && dimensionsItem.IsChecked, "Dimensions (spans, level heights, node elevations) show in the viewer by default and Display -> Dimensions is ticked");
+                dimensionsItem.IsChecked = false;
+                Assert(!window.SharedViewer.ShowDimensions, "Display -> Dimensions turns the dimension overlay off");
+                dimensionsItem.IsChecked = true;
+                Assert(window.Icon is System.Windows.Media.Imaging.BitmapFrame { Decoder.Frames.Count: >= 8 } && ReferenceEquals(window.Icon, AppIcon.Window), "The window icon is the software logo, from the multi-size icon file");
+                OpenMenu("Edit", "VCF Geometry");
+                var vcfWindow = window.OwnedWindows.OfType<VcfGeometryWindow>().Single();
+                vcfWindow.UpdateLayout();
+                Assert(vcfWindow.IsVisible && vcfWindow.Preview.Model.Points.Count == uiState.Geometry.Points.Count,
+                    "Edit -> VCF Geometry opens its own window with a preview of the model");
+                vcfWindow.Close();
+                OpenMenu("Display", "View Options");
+                var viewOptions = window.OwnedWindows.OfType<ViewOptionsWindow>().Single();
+                viewOptions.UpdateLayout();
+                Assert(viewOptions.IsVisible && viewOptions.Title == "Display Options" &&
+                       viewOptions.OptionTabs.Items.OfType<TabItem>().Select(tab => tab.Header as string).SequenceEqual(["Object Options", "General Options"]) &&
+                       viewOptions.Dimensions.IsChecked == true && viewOptions.PlaneXZ.IsChecked == true &&
+                       new[] { viewOptions.ResetDefaultsButton, viewOptions.ResetCurrentButton, viewOptions.OkButton, viewOptions.CloseButton, viewOptions.ApplyButton }.All(button => button is not null),
+                    "Display -> View Options opens a Display Options window (Object / General Options tabs, reset, OK / Close / Apply) showing the current settings");
+                viewOptions.Dimensions.IsChecked = false;
+                viewOptions.FrameLabels.IsChecked = true;
+                Assert(vm.ShowDimensions && !window.SharedViewer.ShowFrameLabels, "Editing the form changes nothing until Apply");
+                viewOptions.ApplyForm();
+                Assert(!vm.ShowDimensions && !window.SharedViewer.ShowDimensions && !dimensionsItem.IsChecked && window.SharedViewer.ShowFrameLabels,
+                    "Apply writes the form: dimensions off in the viewer and the Display menu, frame labels on");
+                viewOptions.ResetToDefaults();
+                Assert(viewOptions.Dimensions.IsChecked == true && viewOptions.FrameLabels.IsChecked == false && !vm.ShowDimensions,
+                    "Reset Form to Default Values fills the form only");
+                viewOptions.ResetToCurrent();
+                Assert(viewOptions.Dimensions.IsChecked == false && viewOptions.FrameLabels.IsChecked == true, "Reset Form to Current Window Settings reads the view back");
+                viewOptions.ResetToDefaults();
+                viewOptions.OkButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(vm.ShowDimensions && !window.SharedViewer.ShowFrameLabels && !viewOptions.IsVisible, "OK applies the form and closes it");
+                OpenMenu("Define", "Load Patterns");
+                Assert(vm.PaneTitle == "LOAD PATTERNS" && FindVisuals<DataGrid>(window).Any(grid => grid.IsVisible && ReferenceEquals(grid.ItemsSource, vm.FemPatternRows)),
+                    "Define -> Load Patterns opens the load-pattern table");
+                OpenMenu("Define", "Load Cases");
+                Assert(vm.PaneTitle == "LOAD CASES / LOAD COMBINATIONS" &&
+                       FindVisuals<DataGrid>(window).Any(grid => grid.IsVisible && ReferenceEquals(grid.ItemsSource, vm.FemCaseRows)) &&
+                       FindVisuals<DataGrid>(window).Any(grid => grid.IsVisible && ReferenceEquals(grid.ItemsSource, vm.FemCombinationRows)),
+                    "Define -> Load Cases / Load Combinations opens the case and combination tables");
+                OpenMenu("Assign", "Joint Restraints");
+                Assert(vm.PaneMenu == "Assign" && vm.FemPane == MainViewModel.FemPaneRestraints &&
+                       FindVisuals<TextBlock>(window).Any(text => text.IsVisible && text.Text == vm.FemPinSupportSummary),
+                    "Assign -> Joint Restraints shows the auto-detected pin supports");
+                OpenMenu("Run", "Analysis Options");
+                Assert(vm.PaneMenu == "Run" && vm.SelectedFemPage == MainViewModel.FemAnalysisPage &&
+                       FindVisuals<Button>(window).Any(button => button.IsVisible && Equals(button.Content, "Run Analysis")) &&
                        vm.FemCandidateSummary.Contains("FEM runs", StringComparison.Ordinal) &&
                        window.SharedViewerPane.Visibility == Visibility.Visible,
-                    "Tab 07 Analysis renders the run controls and the candidate count");
+                    "Run -> Analysis Options holds the internal 2D frame analysis settings, the run controls and the candidate count");
                 var sagBox = FindVisuals<CheckBox>(window).Single(box => Equals(box.Content, "Cable sag"));
                 Assert(vm.FemCableSag && sagBox.IsChecked == true, "Tab 07 Analysis analyses cable sag by default");
                 sagBox.IsChecked = false;
@@ -232,20 +328,37 @@ internal static class Program
                         [new("Column1", 100, 100, -10, 10, 0, 0), new("Column2", 100, 100, -10, 10, 0, 0)],
                         [new("Cable-A", 100, true)], 4));
                 vm.FemRuns.Add(demoFemRun);
-                vm.SelectedFemRun = demoFemRun;
-                vm.SelectedFemPage = MainViewModel.FemResultsPage;
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                window.UpdateLayout();
-                var resultTree = FindVisuals<COT_VCF.Presentation.Controls.FemResultsTree>(window).Single();
-                Assert(resultTree.Items.Count == 6 && resultTree.Items.OfType<TreeViewItem>().All(item => item.Items.Count == 0),
-                    "Result Explorer shows six flat outputs filtered by the candidate and load-case dropdowns");
-                var deflectionNode = resultTree.Items.OfType<TreeViewItem>().Single(item => Equals(item.Header, "Deflection"));
-                deflectionNode.IsSelected = true;
-                Assert(vm.FemResultMode == FemResultMode.DeflectedShape && ReferenceEquals(vm.SelectedFemRun, demoFemRun) &&
-                       resultTree.CanViewResults && !FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemResultRowsGrid") &&
+                vm.Notify(nameof(MainViewModel.HasFemResults));
+                Assert(TopMenu("Result").Items.OfType<MenuItem>().Select(item => (item.Header as string)?.Replace("_", ""))
+                           .SequenceEqual(["Axial forces / cables", "Bending moments", "Shear forces", "Support reactions", "Deflection", "Cable target fit", "Show Results…", "Results Table…"]) &&
+                       TopMenu("Result").Items.OfType<MenuItem>().All(item => item.IsEnabled),
+                    "The Result menu lists the six outputs and the results table, enabled once a candidate has results");
+                OpenMenu("Define", "Result Candidate");
+                Assert(vm.PaneTitle == "RESULT CANDIDATE / LOAD CASE" &&
+                       FindVisuals<ComboBox>(window).Any(combo => combo.IsVisible && System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result candidate") &&
+                       FindVisuals<ComboBox>(window).Any(combo => combo.IsVisible && System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM load case or combination"),
+                    "Define -> Result Candidate / Load Case holds the candidate and load-case dropdowns");
+                OpenMenu("Result", "Deflection");
+                Assert(vm.FemResultMode == FemResultMode.DeflectedShape && ReferenceEquals(vm.SelectedFemRun, demoFemRun) && vm.PaneMenu == "Result" &&
+                       vm.PaneTitle == "DEFLECTION" && !FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemResultRowsGrid") &&
                        window.SharedViewerPane.Visibility == Visibility.Visible && ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result),
-                    "The combined FEM page uses a candidate/result tree to select the diagram without embedding a result table");
-                FindVisuals<Button>(window).Single(button => Equals(button.Content, "View Results")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    "Result -> Deflection selects the first completed candidate and draws the diagram without embedding a result table");
+                Tool("Show Results").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                var showResults = window.OwnedWindows.OfType<ShowResultsWindow>().Single();
+                showResults.UpdateLayout();
+                Assert(showResults.LoadCasePicker.IsVisible && showResults.CandidatePicker.IsVisible &&
+                       showResults.Outputs.Items.OfType<ListBoxItem>().Select(item => (string)item.Content)
+                           .SequenceEqual(["Axial forces / cables", "Bending moments", "Shear forces", "Support reactions", "Deflection", "Cable target fit"]),
+                    "The Show Results tool opens a window with the load case / combo and candidate at the top and the six outputs below");
+                showResults.Outputs.SelectedIndex = 1;
+                showResults.ApplySelection();
+                Assert(vm.FemResultMode == FemResultMode.BendingMoment && vm.PaneTitle == "BENDING MOMENTS" && ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result),
+                    "Show Results → Apply draws the chosen output on the model view");
+                showResults.Outputs.SelectedIndex = 4;
+                showResults.ApplySelection();
+                showResults.Close();
+                FindVisuals<Button>(window).Single(button => button.IsVisible && Equals(button.Content, "View Results")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var tableWindow = window.OwnedWindows.OfType<FemResultsWindow>().Single();
                 tableWindow.UpdateLayout();
@@ -256,9 +369,8 @@ internal static class Program
                 tableWindow.Close();
                 var chartShear = FindVisuals<RadioButton>(window).Single(button => button.GroupName == "ViewerResultMode" && Equals(button.Content, "Shear"));
                 chartShear.IsChecked = true;
-                Assert(vm.FemResultMode == FemResultMode.Shear &&
-                       resultTree.SelectedItem is TreeViewItem { Header: "Shear forces" },
-                    "The floating chart buttons switch the result and keep the result explorer synchronized");
+                Assert(vm.FemResultMode == FemResultMode.Shear && vm.PaneTitle == "SHEAR FORCES",
+                    "The floating chart buttons switch the result and keep the Result pane header synchronized");
                     vm.FemResultMode = FemResultMode.AxialForce;
                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                     window.UpdateLayout();
@@ -334,8 +446,9 @@ internal static class Program
                 // Tab 06A Optimization: only available with raw data; criteria edit the shared output settings
                 var optimizationTab = window.OptimizationTab;
                 Assert(!vm.HasRawData && !optimizationTab.IsEnabled && vm.OptimizationTabStatus == "Needs raw data" &&
-                       FindVisuals<TextBlock>(window).Any(text => text.Text == "06A  OPTIMIZATION"),
-                    "Tab 06A Optimization is listed after Tab 06 and stays disabled until the study has raw data");
+                       TopMenu("MB").Items.OfType<MenuItem>().Single(item => Equals(item.Header, "06A  Optimization")) is { IsEnabled: false } &&
+                       mbItems.ToList().IndexOf("06A  Optimization") == mbItems.ToList().IndexOf("06  Post-Processing") + 1,
+                    "Tab 06A Optimization is listed after Tab 06 under MB and stays disabled until the study has raw data");
                 vm.SelectedTab = 6;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
@@ -539,7 +652,7 @@ internal static class Program
                     vm.SelectedTab = 8;
                     Pump(() => vm.QuantityCandidates.Count == 3 && vm.QuantityState == QuantityViewState.Ready && !vm.IsBusy && quantityGrid.Items.Count == 6);
                     Assert(workflowTabs.Items.Count == 9 && workflowTabs.Items.IndexOf(window.QuantitiesTab) == 8 && ReferenceEquals(workflowTabs.SelectedItem, window.QuantitiesTab) &&
-                           FindVisuals<TextBlock>(window).Any(text => text.Text == "08  QUANTITIES") && window.SharedViewerPane.Visibility == Visibility.Collapsed &&
+                           vm.PaneTitle == "08  QUANTITIES" && window.SharedViewerPane.Visibility == Visibility.Collapsed &&
                            quantityPicker.IsEnabled && quantityPicker.Items.Cast<object>().Select(item => item.ToString()).SequenceEqual(["Connected model", "L01_H01_P01", "L01_H02_P01"]) &&
                            quantityGrid.Columns.Select(column => column.Header as string).SequenceEqual(["Section", "Figure", "Member count", "Total length m", "Concrete volume m³", "Steel mass t"]),
                         "Tab 08 Quantities follows Tab 07 FEM on the full width: a dropdown of the connected model and the Lxx_Hxx_Pxx candidate models, and the agreed table with its section-figure column");
@@ -780,6 +893,7 @@ internal static class Program
             SupportReactionReportChecks.Run();
             GatewayChecks.Run();
             QuantityTakeoffChecks.Run();
+            FemModelFileChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }

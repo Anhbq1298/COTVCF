@@ -46,6 +46,8 @@ public partial class App : System.Windows.Application
             printStore: new ReportPrintSettingsStore(), quantityTakeoff: quantityTakeoff);
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
+        // Open on the built-in default FEM model (07 FEM, ready to run); Connect SAP replaces it with the live model.
+        viewModel.LoadDefaultFemModel();
     }
     protected override void OnExit(ExitEventArgs e) { gateway?.Dispose(); base.OnExit(e); }
 }

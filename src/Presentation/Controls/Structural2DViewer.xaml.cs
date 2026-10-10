@@ -19,6 +19,7 @@ public partial class Structural2DViewer : UserControl
     public static readonly DependencyProperty ShowPointLabelsProperty = DependencyProperty.Register(nameof(ShowPointLabels), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(false));
     public static readonly DependencyProperty ShowFrameLabelsProperty = DependencyProperty.Register(nameof(ShowFrameLabels), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(false));
     public static readonly DependencyProperty ShowCableLabelsProperty = DependencyProperty.Register(nameof(ShowCableLabels), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(false));
+    public static readonly DependencyProperty ShowDimensionsProperty = DependencyProperty.Register(nameof(ShowDimensions), typeof(bool), typeof(Structural2DViewer), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
     public static readonly DependencyProperty AppliedPointsProperty = DependencyProperty.Register(nameof(AppliedPoints), typeof(IEnumerable<AppliedPoint>), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty SelectedAppliedPointProperty = DependencyProperty.Register(nameof(SelectedAppliedPoint), typeof(AppliedPoint), typeof(Structural2DViewer), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
     public static readonly DependencyProperty CablesProperty = DependencyProperty.Register(nameof(Cables), typeof(IEnumerable<CablePretensionConfig>), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -35,6 +36,8 @@ public partial class Structural2DViewer : UserControl
     public bool ShowPointLabels { get => (bool)GetValue(ShowPointLabelsProperty); set => SetValue(ShowPointLabelsProperty, value); }
     public bool ShowFrameLabels { get => (bool)GetValue(ShowFrameLabelsProperty); set => SetValue(ShowFrameLabelsProperty, value); }
     public bool ShowCableLabels { get => (bool)GetValue(ShowCableLabelsProperty); set => SetValue(ShowCableLabelsProperty, value); }
+    /// <summary>Dimension the model: span of each bay and overall span below it, height of each level and node elevations beside it.</summary>
+    public bool ShowDimensions { get => (bool)GetValue(ShowDimensionsProperty); set => SetValue(ShowDimensionsProperty, value); }
     public IEnumerable<AppliedPoint>? AppliedPoints { get => (IEnumerable<AppliedPoint>?)GetValue(AppliedPointsProperty); set => SetValue(AppliedPointsProperty, value); }
     public AppliedPoint? SelectedAppliedPoint { get => (AppliedPoint?)GetValue(SelectedAppliedPointProperty); set => SetValue(SelectedAppliedPointProperty, value); }
     public IEnumerable<CablePretensionConfig>? Cables { get => (IEnumerable<CablePretensionConfig>?)GetValue(CablesProperty); set => SetValue(CablesProperty, value); }
@@ -85,6 +88,20 @@ public partial class Structural2DViewer : UserControl
         if (Is3D) Fit3D();
         else Canvas.Fit();
     }
+    /// <summary>Top-bar tools: zoom extents, zoom in/out about the view centre, and the projection (XY / XZ / YZ / 3D).</summary>
+    public void FitView() => Fit(this, new RoutedEventArgs());
+    public void ZoomBy(double factor)
+    {
+        if (Is3D) { viewWidth = Math.Max(1e-3, viewWidth / factor); UpdateCamera(); }
+        else Canvas.ZoomBy(factor);
+    }
+    public void ShowPlane(string plane)
+    {
+        var item = Plane.Items.OfType<ComboBoxItem>().FirstOrDefault(entry => string.Equals(entry.Content as string, plane, StringComparison.OrdinalIgnoreCase));
+        if (item is not null) Plane.SelectedItem = item;
+    }
+    public string CurrentPlane => (Plane.SelectedItem as ComboBoxItem)?.Content as string ?? "XZ";
+
     private void ResetView(object sender, RoutedEventArgs e)
     {
         Plane.SelectedIndex = 1; // XZ, the workflow default
@@ -255,6 +272,8 @@ public sealed class ModelCanvas : FrameworkElement
     public double DeflectionRangeMinMm { get => (double)GetValue(DeflectionRangeMinMmProperty); set => SetValue(DeflectionRangeMinMmProperty, value); }
     public static readonly DependencyProperty DeflectionRangeMaxMmProperty = DependencyProperty.Register(nameof(DeflectionRangeMaxMm), typeof(double), typeof(ModelCanvas), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
     public double DeflectionRangeMaxMm { get => (double)GetValue(DeflectionRangeMaxMmProperty); set => SetValue(DeflectionRangeMaxMmProperty, value); }
+    public static readonly DependencyProperty ShowDimensionsProperty = DependencyProperty.Register(nameof(ShowDimensions), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
+    public bool ShowDimensions { get => (bool)GetValue(ShowDimensionsProperty); set => SetValue(ShowDimensionsProperty, value); }
     public string Plane { get; set; } = "XZ";
 
     private readonly Dictionary<AppliedPoint, Point> appliedPointLocations = [];
@@ -298,6 +317,15 @@ public sealed class ModelCanvas : FrameworkElement
         InvalidateVisual();
     }
 
+    /// <summary>Zooms about the view centre, like the + / − keys.</summary>
+    public void ZoomBy(double factor)
+    {
+        var old = zoom;
+        zoom = Math.Clamp(zoom * factor, .05, 100);
+        pan *= zoom / old;
+        InvalidateVisual();
+    }
+
     private Point Project(Position position) => Plane == "XY" ? new(position.X, position.Y) : Plane == "YZ" ? new(position.Y, position.Z) : new(position.X, position.Z);
     private Brush Brush(string name) => (Brush)FindResource(name);
 
@@ -323,9 +351,13 @@ public sealed class ModelCanvas : FrameworkElement
             var maxY = projected.Values.Max(point => point.Y);
             double spanX = maxX - minX;
             double spanY = maxY - minY;
-            double scale = Math.Min(Math.Max(1, ActualWidth - 96) / Math.Max(spanX, 1e-9), Math.Max(1, ActualHeight - 96) / Math.Max(spanY, 1e-9)) * zoom;
-            Point Screen(Point point) => new((point.X - (minX + spanX / 2)) * scale + ActualWidth / 2 + pan.X, -(point.Y - (minY + spanY / 2)) * scale + ActualHeight / 2 + pan.Y);
+            // Dimensions sit below and to the right of the model; leave room for them when fitting.
+            double marginX = ShowDimensions ? 96 + DimensionBandX : 96, marginY = ShowDimensions ? 96 + DimensionBandY : 96;
+            double scale = Math.Min(Math.Max(1, ActualWidth - marginX) / Math.Max(spanX, 1e-9), Math.Max(1, ActualHeight - marginY) / Math.Max(spanY, 1e-9)) * zoom;
+            var shift = ShowDimensions ? new Vector(-DimensionBandX / 2, -DimensionBandY / 2) : default;
+            Point Screen(Point point) => new((point.X - (minX + spanX / 2)) * scale + ActualWidth / 2 + pan.X + shift.X, -(point.Y - (minY + spanY / 2)) * scale + ActualHeight / 2 + pan.Y + shift.Y);
             var screenPoints = projected.ToDictionary(item => item.Key, item => Screen(item.Value));
+            if (ShowDimensions) DrawDimensions(dc, projected.Values, Screen);
 
             var deflectionView = FemResult is not null && FemResultMode == FemResultMode.DeflectedShape;
             if (!deflectionView || ShowUndeformed)
@@ -780,6 +812,100 @@ public sealed class ModelCanvas : FrameworkElement
     };
 
     private void Text(DrawingContext dc, string text, Point point, string brush) => Text(dc, text, point, Brush(brush));
+    // ---- Dimensions: a chain of the distinct node positions along each axis of the projection ----
+    private const double DimensionBandX = 150, DimensionBandY = 96;
+
+    private static IReadOnlyList<double> Levels(IEnumerable<double> values)
+    {
+        var levels = new List<double>();
+        foreach (var value in values.OrderBy(value => value))
+            if (levels.Count == 0 || value - levels[^1] > 1e-3) levels.Add(value);
+        return levels;
+    }
+
+    private static string Metres(double value) => value.ToString("0.###", CultureInfo.CurrentCulture);
+
+    private void DrawDimensions(DrawingContext dc, IEnumerable<Point> modelPoints, Func<Point, Point> screen)
+    {
+        var points = modelPoints.ToArray();
+        var xs = Levels(points.Select(point => point.X));
+        var ys = Levels(points.Select(point => point.Y));
+        var brush = Brush("Muted");
+        var pen = new Pen(brush, 1);
+        var extension = new Pen(brush, 0.6) { DashStyle = DashStyles.Dot };
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        FormattedText Label(string text, double size = 10, bool bold = false) => new(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, bold ? FontWeights.SemiBold : FontWeights.Normal, FontStretches.Normal), size, brush, dpi);
+        void Tick(Point at) => dc.DrawLine(pen, at + new Vector(-4, 4), at + new Vector(4, -4));
+        double minY = ys[0], maxY = ys[^1], minX = xs[0], maxX = xs[^1];
+        var bottom = screen(new Point(minX, minY)).Y;
+        var right = screen(new Point(maxX, maxY)).X;
+        var (horizontal, horizontalLabels) = (Plane == "YZ" ? "Y" : "X", Plane == "XY" ? "Y" : "Z");
+
+        // Spans along the bottom: each bay, then the overall span.
+        if (xs.Count > 1)
+        {
+            var chainY = bottom + 46;     // clear of the pin-support symbols below the base joints
+            var totalY = bottom + 74;
+            foreach (var x in xs)
+            {
+                var at = screen(new Point(x, minY));
+                dc.DrawLine(extension, new Point(at.X, bottom + 6), new Point(at.X, chainY + 4));
+                Tick(new Point(at.X, chainY));
+            }
+            dc.DrawLine(pen, new Point(screen(new Point(minX, minY)).X, chainY), new Point(screen(new Point(maxX, minY)).X, chainY));
+            for (var index = 1; index < xs.Count; index++)
+            {
+                var a = screen(new Point(xs[index - 1], minY)).X;
+                var b = screen(new Point(xs[index], minY)).X;
+                var text = Label(Metres(xs[index] - xs[index - 1]));
+                if (b - a >= text.Width + 4) dc.DrawText(text, new Point((a + b) / 2 - text.Width / 2, chainY - text.Height - 1));
+            }
+            var left = screen(new Point(minX, minY)).X;
+            var end = screen(new Point(maxX, minY)).X;
+            dc.DrawLine(extension, new Point(left, chainY + 4), new Point(left, totalY + 4));
+            dc.DrawLine(extension, new Point(end, chainY + 4), new Point(end, totalY + 4));
+            dc.DrawLine(pen, new Point(left, totalY), new Point(end, totalY));
+            Tick(new Point(left, totalY)); Tick(new Point(end, totalY));
+            var total = Label($"{horizontal} span {Metres(maxX - minX)} m", 11, bold: true);
+            dc.DrawText(total, new Point((left + end) / 2 - total.Width / 2, totalY - total.Height - 1));
+        }
+
+        // Heights at the right: each level-to-level height, the overall height, and every node level's elevation.
+        if (ys.Count > 1)
+        {
+            var chainX = right + 34;
+            var totalX = right + 62;
+            foreach (var y in ys)
+            {
+                var at = screen(new Point(maxX, y));
+                dc.DrawLine(extension, new Point(right + 6, at.Y), new Point(chainX + 4, at.Y));
+                Tick(new Point(chainX, at.Y));
+                var level = Label($"{horizontalLabels} {(y - minY >= 0 ? "+" : "")}{Metres(y - minY)}");
+                dc.DrawText(level, new Point(totalX + 8, at.Y - level.Height / 2));
+            }
+            dc.DrawLine(pen, new Point(chainX, screen(new Point(maxX, minY)).Y), new Point(chainX, screen(new Point(maxX, maxY)).Y));
+            for (var index = 1; index < ys.Count; index++)
+            {
+                var a = screen(new Point(maxX, ys[index - 1])).Y;
+                var b = screen(new Point(maxX, ys[index])).Y;
+                var text = Label(Metres(ys[index] - ys[index - 1]));
+                if (a - b < text.Width + 4) continue;
+                dc.PushTransform(new RotateTransform(-90, chainX - 3, (a + b) / 2));
+                dc.DrawText(text, new Point(chainX - 3 - text.Width / 2, (a + b) / 2 - text.Height));
+                dc.Pop();
+            }
+            var top = screen(new Point(maxX, maxY)).Y;
+            var bottomY = screen(new Point(maxX, minY)).Y;
+            dc.DrawLine(pen, new Point(totalX, bottomY), new Point(totalX, top));
+            Tick(new Point(totalX, bottomY)); Tick(new Point(totalX, top));
+            var total = Label($"H {Metres(maxY - minY)} m", 11, bold: true);
+            dc.PushTransform(new RotateTransform(-90, totalX - 3, (top + bottomY) / 2));
+            dc.DrawText(total, new Point(totalX - 3 - total.Width / 2, (top + bottomY) / 2 - total.Height));
+            dc.Pop();
+        }
+    }
+
     private void Text(DrawingContext dc, string text, Point point, Brush brush) => dc.DrawText(new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 12, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip), point);
 
     /// <summary>A frame drawn as its mesh: segments separated by small gaps with a tick at each mesh node.</summary>

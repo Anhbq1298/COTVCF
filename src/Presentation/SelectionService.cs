@@ -12,7 +12,7 @@ public sealed class SelectionService : ISelectionService
         var rows = new ObservableCollection<SelectionRow>(available.Select(n => new SelectionRow(n)));
         var view = CollectionViewSource.GetDefaultView(rows);
         var owner = System.Windows.Application.Current.MainWindow;
-        var dialog = new Window { Title = title, Width = 520, Height = 600, MinWidth = 420, MinHeight = 400, WindowStartupLocation = owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner };
+        var dialog = new Window { Title = title, Icon = AppIcon.Window, Width = 520, Height = 600, MinWidth = 420, MinHeight = 400, WindowStartupLocation = owner is null ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner };
         if (owner is not null && owner != dialog) dialog.Owner = owner;
         var panel = new DockPanel { Margin = new Thickness(24) };
         var heading = new TextBlock { Text = title, Style = (Style)dialog.FindResource("Heading"), Margin = new Thickness(0, 0, 0, 16) }; DockPanel.SetDock(heading, Dock.Top); panel.Children.Add(heading);

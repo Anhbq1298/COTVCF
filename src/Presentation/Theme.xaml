@@ -47,21 +47,8 @@
  <p:NonEmptyStringConverter x:Key="NonEmpty"/>
 
  <!-- ===================== APPLICATION LOGO ========================= -->
- <!-- Vierendeel truss: two chords, four verticals, three open bays.   -->
- <DrawingImage x:Key="AppLogo">
-  <DrawingImage.Drawing>
-   <DrawingGroup>
-    <GeometryDrawing>
-     <GeometryDrawing.Pen>
-      <Pen Brush="#1F4788" Thickness="2.6" StartLineCap="Round" EndLineCap="Round" LineJoin="Round"/>
-     </GeometryDrawing.Pen>
-     <GeometryDrawing.Geometry>
-      <PathGeometry Figures="M3,9 L29,9 M3,23 L29,23 M3,9 L3,23 M11.67,9 L11.67,23 M20.33,9 L20.33,23 M29,9 L29,23"/>
-     </GeometryDrawing.Geometry>
-    </GeometryDrawing>
-   </DrawingGroup>
-  </DrawingImage.Drawing>
- </DrawingImage>
+ <!-- Isometric Vierendeel truss with cable stays (src/Presentation/AppLogo.png, 256 px); the .exe icon is AppIcon.ico from the same image. -->
+ <BitmapImage x:Key="AppLogo" UriSource="pack://application:,,,/COT VCF tools;component/src/Presentation/AppLogo.png"/>
 
  <!-- ======================== TYPOGRAPHY =========================== -->
  <!-- One type system for the whole app. Two families, one size ramp.   -->
@@ -187,6 +174,49 @@
   <Setter Property="MinHeight" Value="28"/>
   <Setter Property="Padding" Value="0"/>
   <Setter Property="Margin" Value="0,0,4,0"/>
+ </Style>
+ <!-- Top-bar tool icons (ETABS-like): borderless 26 px buttons with a Segoe Fluent / MDL2 glyph, or short text such as "xz". -->
+ <Style x:Key="ToolbarButton" TargetType="Button">
+  <Setter Property="Width" Value="26"/>
+  <Setter Property="Height" Value="26"/>
+  <Setter Property="Margin" Value="1,0"/>
+  <Setter Property="Padding" Value="0"/>
+  <Setter Property="FontFamily" Value="Segoe Fluent Icons, Segoe MDL2 Assets"/>
+  <Setter Property="FontSize" Value="15"/>
+  <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+  <Setter Property="Background" Value="Transparent"/>
+  <Setter Property="Cursor" Value="Hand"/>
+  <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+  <Setter Property="Template">
+   <Setter.Value>
+    <ControlTemplate TargetType="Button">
+     <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="3" BorderThickness="1" BorderBrush="Transparent">
+      <!-- own TextBlock: the theme's implicit TextBlock font would replace the icon font of a ContentPresenter -->
+      <TextBlock Text="{TemplateBinding Content}" FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}" FontWeight="{TemplateBinding FontWeight}"
+                 Foreground="{TemplateBinding Foreground}" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+     </Border>
+     <ControlTemplate.Triggers>
+      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#1A2E90FA"/><Setter TargetName="b" Property="BorderBrush" Value="#552E90FA"/></Trigger>
+      <Trigger Property="IsPressed" Value="True"><Setter TargetName="b" Property="Background" Value="#332E90FA"/></Trigger>
+      <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
+     </ControlTemplate.Triggers>
+    </ControlTemplate>
+   </Setter.Value>
+  </Setter>
+ </Style>
+ <Style x:Key="ToolbarTextButton" TargetType="Button" BasedOn="{StaticResource ToolbarButton}">
+  <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
+  <Setter Property="FontSize" Value="12"/>
+  <Setter Property="FontWeight" Value="Bold"/>
+  <Setter Property="Width" Value="Auto"/>
+  <Setter Property="MinWidth" Value="26"/>
+  <Setter Property="Padding" Value="3,0"/>
+ </Style>
+ <Style x:Key="ToolbarSeparator" TargetType="Border">
+  <Setter Property="Width" Value="1"/>
+  <Setter Property="Height" Value="18"/>
+  <Setter Property="Margin" Value="5,0"/>
+  <Setter Property="Background" Value="{StaticResource Border}"/>
  </Style>
  <!-- Faded, independently focusable help target placed beside compact actions. -->
  <Style x:Key="InlineHelpIcon" TargetType="TextBlock">

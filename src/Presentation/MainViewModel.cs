@@ -71,6 +71,7 @@ public sealed partial class MainViewModel : Observable
         {
             if (!Set(ref selectedTab, value)) return;
             NotifySharedViewer();
+            NotifyPaneHeader();
             if (value == TabOptimization) RefreshOptimization();     // also picks up Tab 03 capacity edits made meanwhile
             if (value == TabQuantities) ShowQuantityTab();            // the running model again, and candidates built meanwhile
         }
@@ -202,6 +203,7 @@ public sealed partial class MainViewModel : Observable
         Notify(nameof(SelectedCandidateCableFitRows));
         Notify(nameof(FemResultStartHeader)); Notify(nameof(FemResultEndHeader));
         Notify(nameof(FemResultNames)); Notify(nameof(FemResultDiagramTitle));
+        Notify(nameof(FemResultIssue));
         NotifySharedViewer();
     }
     public bool CanViewTrussCandidates => TrussCandidatesReady(out _);
@@ -687,6 +689,7 @@ public sealed partial class MainViewModel : Observable
     public string SapStatus => State.IsSapConnected ? "Connected" : State.Connection;
     public string StatusLine => State.IsSapConnected
         ? $"{ModelName}  ·  {State.Units}  ·  {(State.Model?.IsLocked == true ? "Locked" : "Unlocked")}"
+        : IsOfflineModel ? $"Offline model  ·  {OfflineModelName}  ·  {State.Units}  ·  SAP2000 not connected"
         : $"SAP2000 — {SapStatus}";
     public string AppliedPointsTitle => $"APPLIED POINTS ({State.AppliedPoints.Count})";
     public bool HasProject => config.Session.HasActiveProject;
@@ -1072,6 +1075,7 @@ public sealed partial class MainViewModel : Observable
         set
         {
             if (!Set(ref selectedFemPage, value)) return;
+            SyncFemPane();
             NotifySharedViewer();
         }
     }
@@ -1082,6 +1086,7 @@ public sealed partial class MainViewModel : Observable
         {
             if (!Set(ref femResultMode, value)) return;
             NotifyFemResultSelection();
+            NotifyPaneHeader();
         }
     }
     public FemStudyRun? SelectedFemRun
@@ -1159,13 +1164,13 @@ public sealed partial class MainViewModel : Observable
     }
     public string FemProgressText { get => femProgressText; private set => Set(ref femProgressText, value); }
     public string FemStatus => isFemRunning ? "RUNNING" : FemRuns.Count > 0 ? $"{FemRuns.Count:N0} cases complete" :
-        State.IsSapConnected && State.BaselineCaptured && femStudy.CandidateCount(State) > 0 ? "READY TO ANALYZE" : "LOAD CONFIG / CONNECT SAP";
+        HasWorkingModel && State.BaselineCaptured && femStudy.CandidateCount(State) > 0 ? (IsOfflineModel ? "OFFLINE · READY" : "READY TO ANALYZE") : "LOAD CONFIG / CONNECT SAP";
     public bool CanRunFemAnalysis
     {
         get
         {
             var count = femStudy.CandidateCount(State);
-            return !IsBusy && State.IsSapConnected && State.Model is not null && State.BaselineCaptured &&
+            return !IsBusy && HasWorkingModel && State.BaselineCaptured &&
                 count > BigInteger.Zero && count <= FemStudyService.MaxCandidates;
         }
     }
@@ -1347,7 +1352,7 @@ public sealed partial class MainViewModel : Observable
         NewConfig = new(_ => StartNewConfiguration(), () => CanUseConfig);
         LoadConfig = new(_ => OpenProject(), () => CanUseConfig);
         ReadFemProperties = new(_ => ReadFemModelProperties(), () => CanReadFemProperties);
-        RunFemAnalysis = new(_ => AnalyzeFem(), () => CanRunFemAnalysis);
+        RunFemAnalysis = new(_ => _ = AnalyzeFemAsync(), () => CanRunFemAnalysis);
         CancelFemAnalysis = new(_ => femCancellation?.Cancel(), () => CanCancelFemAnalysis);
 
         void Dirty(ConfigTabs tab) { if (!applyingProject) config.Session.MarkDirty(tab); }
@@ -1448,9 +1453,14 @@ public sealed partial class MainViewModel : Observable
         foreach (var property in GetType().GetProperties().Where(property => property.PropertyType == typeof(Command)))
         {
             if (property.GetValue(this) is not Command command ||
-                command == Connect || command == Refresh || command == CancelStudy || command == CancelFemAnalysis) continue;
-            command.Availability = () => HasSapConnection;
+                command == Connect || command == Refresh || command == CancelStudy || command == CancelFemAnalysis ||
+                command == LoadFemModel || command == LoadDefaultModel) continue;
+            // A loaded FEM model (Load Model) runs FEM offline; every other command needs the live SAP2000 model.
+            command.Availability = command == RunFemAnalysis || command == SaveFemModel
+                ? () => HasWorkingModel
+                : () => HasSapConnection;
         }
+        PropertyChanged += ForwardPaneStatus;
         RegenerateStudyPreview();
     }
 
@@ -1523,11 +1533,22 @@ public sealed partial class MainViewModel : Observable
 
     private async Task ConnectAndRefreshAsync()
     {
+        if (IsOfflineModel)
+        {
+            // Leaving a loaded FEM model: the live model becomes the session; Tabs 01–05 stay and are re-checked by Refresh.
+            // The built-in default model is only a starting point, so its inputs are cleared for the connected model.
+            var leavingDefault = isDefaultModel;
+            State.Model = null;
+            State.SessionBaselineModel = null;
+            State.SessionBaseline = GeometryModel.Empty;
+            if (leavingDefault) ClearDefaultFemModel();
+        }
         State.Connection = "Connecting";
         try
         {
             await workflow.ConnectAsync();
             await workflow.RefreshAsync();
+            offlineModelPath = null;
             if (State.SessionBaselineModel is { Path.Length: > 0 } baseline)
             {
                 var modelDirectory = System.IO.Path.GetDirectoryName(baseline.Path);
@@ -1826,7 +1847,7 @@ public sealed partial class MainViewModel : Observable
         foreach (var row in failed) FemCableFitRows.Add(row);
     }
 
-    private async void AnalyzeFem()
+    internal async Task AnalyzeFemAsync()
     {
         if (IsBusy || CommitEditors?.Invoke() == false) return;
 
@@ -1834,7 +1855,7 @@ public sealed partial class MainViewModel : Observable
         IReadOnlyList<string> supports;
         try
         {
-            candidates = femStudy.Compose(State);
+            candidates = femStudy.Compose(State, IsOfflineModel);
             supports = FemStudyService.FindPinSupportPoints(State.Baseline);
         }
         catch (Exception ex)
@@ -1853,19 +1874,22 @@ public sealed partial class MainViewModel : Observable
         FemRuns.Clear();
         FemCableFitRows.Clear();
         SelectedFemRun = null;
-        FemSectionProperties.Clear();
-        FemProgressText = $"Reading assigned SAP sections and material properties · {candidates.Count:N0} candidates";
+        var offline = IsOfflineModel;
+        if (!offline) FemSectionProperties.Clear();
+        FemProgressText = offline ? $"Using the loaded FEM model {OfflineModelName} · {candidates.Count:N0} candidates"
+            : $"Reading assigned SAP sections and material properties · {candidates.Count:N0} candidates";
         Notify(nameof(FemStatus));
         Notify(nameof(CanCancelFemAnalysis));
         CommandManager.InvalidateRequerySuggested();
         StartFemMonitor(candidates.Count);
         try
         {
-            FemLogLine("Reading assigned SAP2000 sections, materials, modifiers and end releases (read-only)…");
-            var properties = await ReadAndDisplayFemPropertiesAsync();
+            FemLogLine(offline ? $"Using sections, materials, modifiers, end releases and loading saved in {OfflineModelName} (SAP2000 not connected)…"
+                : "Reading assigned SAP2000 sections, materials, modifiers and end releases (read-only)…");
+            var properties = offline ? OfflineFemProperties() : await ReadAndDisplayFemPropertiesAsync();
             FemLogLine($"Read {properties.Count(pair => pair.Value.InPlaneInertiaM4 is not null):N0} frame and {properties.Count(pair => pair.Value.InPlaneInertiaM4 is null):N0} cable sections " +
                 $"(self-weight from unit weight × gross area × weight modifier).");
-            FemLogLine($"Read SAP loading: {femSapLoading.Patterns.Count} patterns, {femSapLoading.JointLoads.Count} joint, " +
+            FemLogLine($"{(offline ? "Saved" : "Read")} SAP loading: {femSapLoading.Patterns.Count} patterns, {femSapLoading.JointLoads.Count} joint, " +
                 $"{femSapLoading.MemberLoads.Count + femSapLoading.MemberPointLoads.Count + femSapLoading.GravityLoads.Count} member load assignments, " +
                 $"{femSapLoading.Cases.Count} cases, {femSapLoading.Combinations.Count} combinations" +
                 (femSapLoading.Warnings.Count > 0 ? $" · {femSapLoading.Warnings.Count} warning(s), see Inputs → Loads" : "") + ".");
@@ -1922,7 +1946,7 @@ public sealed partial class MainViewModel : Observable
                 (unfitted > 0 ? $" · {unfitted:N0} not fitted within {targetFitPercent:0.###}% (closest pretension used)"
                     : $" · pretension stage within {targetFitPercent:0.###}% of target") +
                 (failed + unfitted > 0 ? " · see Cable Target Fit" : "") +
-                " · linked SAP2000 model unchanged.";
+                (offline ? $" · offline model {OfflineModelName}." : " · linked SAP2000 model unchanged.");
             Message = FemProgressText;
             FemLogLine(FemProgressText);
         }
@@ -3006,9 +3030,15 @@ public sealed partial class MainViewModel : Observable
 
     private string CurrentModelFileName() => State.Model is { } m ? System.IO.Path.GetFileName(m.Path) : "(unknown)";
 
-    private void Warn(string title, string body, bool warning = false) =>
+    /// <summary>Checks replace the message box with this.</summary>
+    internal Action<string, string>? WarningSink { get; set; }
+
+    private void Warn(string title, string body, bool warning = false)
+    {
+        if (WarningSink is { } sink) { sink(title, body); return; }
         MessageBox.Show(body, title, System.Windows.MessageBoxButton.OK,
             warning ? System.Windows.MessageBoxImage.Warning : System.Windows.MessageBoxImage.Information);
+    }
 
     private void Local(Action action)
     {
@@ -3052,9 +3082,9 @@ public sealed partial class MainViewModel : Observable
             nameof(MonitoredPointSummary), nameof(MonitoredPointCaseSummary), nameof(MonitoredPointStatus), nameof(DeflectionLimitSummary), nameof(MemberForceSummary), nameof(MemberForceStatus),
             nameof(FoundationSummary), nameof(FoundationStatus), nameof(CableForceSummary), nameof(CableForceStatus),
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
-            nameof(HasSapConnection), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
+            nameof(HasSapConnection), nameof(HasWorkingModel), nameof(IsOfflineModel), nameof(IsDefaultModel), nameof(OfflineModelSummary), nameof(CanSaveFemModel), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
             nameof(FemCandidateSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus),
-            nameof(CanRunFemAnalysis), nameof(CanCancelFemAnalysis),
+            nameof(CanRunFemAnalysis), nameof(CanCancelFemAnalysis), nameof(PaneStatus), nameof(HasFemResults),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
             nameof(StudyRoot), nameof(RequestedWorkerCount), nameof(MaxWorkerCount),

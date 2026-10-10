@@ -1,0 +1,149 @@
+using COT_VCF.Application;
+
+namespace COT_VCF.Presentation;
+
+// ---- Menu bar navigation (presentation only) ----
+// The left pane shows one workflow page at a time, chosen from the menu bar: MB opens Tabs 01–06A and 08; the FEM page
+// is split into panes opened from Define, Assign, Run, Result and Display. Each FEM pane keeps the FEM page it belongs to
+// (Inputs / Analysis & Results / View), so the shared viewer behaves as before.
+public sealed partial class MainViewModel
+{
+    public const int FemPaneSections = 0, FemPaneLoadPatterns = 1, FemPaneLoadCases = 2, FemPaneRestraints = 3,
+        FemPaneResultSelection = 4, FemPaneAnalysisOptions = 5, FemPaneResults = 6, FemPaneDisplay = 7;
+
+    private int femPane = FemPaneLoadPatterns;
+    private bool showDimensions = true;
+
+    /// <summary>Display → Dimensions / View Options: bay spans, level heights and node elevations on the model viewer.</summary>
+    public bool ShowDimensions { get => showDimensions; set => Set(ref showDimensions, value); }
+    private bool femCableFitView;
+
+    /// <summary>The FEM pane shown in the left column (Define / Assign / Run / Result / Display menus).</summary>
+    public int FemPane
+    {
+        get => femPane;
+        set
+        {
+            if (!Set(ref femPane, value)) return;
+            SelectedFemPage = FemPageOf(value);
+            NotifyPaneHeader();
+        }
+    }
+
+    /// <summary>Result → Cable target fit: the result pane and table show the cable fit instead of a diagram.</summary>
+    public bool FemCableFitView
+    {
+        get => femCableFitView;
+        set { if (Set(ref femCableFitView, value)) NotifyPaneHeader(); }
+    }
+
+    private static int FemPageOf(int pane) => pane switch
+    {
+        <= FemPaneRestraints => FemInputsPage,
+        FemPaneDisplay => FemViewPage,
+        _ => FemAnalysisPage,
+    };
+
+    /// <summary>Keeps the FEM pane on the page when the page is set directly.</summary>
+    private void SyncFemPane()
+    {
+        if (FemPageOf(femPane) == selectedFemPage) return;
+        femPane = selectedFemPage switch
+        {
+            FemInputsPage => FemPaneLoadPatterns,
+            FemViewPage => FemPaneDisplay,
+            _ => FemPaneAnalysisOptions,
+        };
+        Notify(nameof(FemPane));
+        NotifyPaneHeader();
+    }
+
+    /// <summary>Menu of the pane shown in the left column, e.g. "MB" or "Define".</summary>
+    public string PaneMenu => selectedTab != TabFem ? "MB" : femPane switch
+    {
+        FemPaneRestraints => "Assign",
+        FemPaneAnalysisOptions => "Run",
+        FemPaneResults => "Result",
+        FemPaneDisplay => "Display",
+        _ => "Define",
+    };
+
+    public string PaneTitle => selectedTab switch
+    {
+        TabLoading => "01  LOADING",
+        TabTruss => "02  TRUSS HEIGHT",
+        TabPretension => "03  PRETENSION",
+        TabOutput => "04  OUTPUT SETTINGS",
+        TabIteration => "05  ITERATION",
+        5 => "06  POST-PROCESSING",
+        TabOptimization => "06A  OPTIMIZATION",
+        TabQuantities => "08  QUANTITIES",
+        TabFem => femPane switch
+        {
+            FemPaneSections => "SECTIONS",
+            FemPaneLoadPatterns => "LOAD PATTERNS",
+            FemPaneLoadCases => "LOAD CASES / LOAD COMBINATIONS",
+            FemPaneRestraints => "JOINT RESTRAINTS",
+            FemPaneResultSelection => "RESULT CANDIDATE / LOAD CASE",
+            FemPaneAnalysisOptions => "ANALYSIS OPTIONS",
+            FemPaneResults => femCableFitView ? "CABLE TARGET FIT" : FemResultMode switch
+            {
+                FemResultMode.AxialForce => "AXIAL FORCES / CABLES",
+                FemResultMode.BendingMoment => "BENDING MOMENTS",
+                FemResultMode.Shear => "SHEAR FORCES",
+                FemResultMode.Reactions => "SUPPORT REACTIONS",
+                _ => "DEFLECTION",
+            },
+            _ => "VIEW OPTIONS",
+        },
+        _ => "",
+    };
+
+    /// <summary>The status line the left tab rail used to show for this page.</summary>
+    public string PaneStatus => selectedTab switch
+    {
+        TabLoading => LoadStatus,
+        TabTruss => TrussStatus,
+        TabPretension => CableStatus,
+        TabOutput => OutputStatus,
+        TabIteration => StudyBuildStateText,
+        5 => "Raw data → reports",
+        TabOptimization => OptimizationTabStatus,
+        TabQuantities => QuantityTabStatus,
+        TabFem => $"07 FEM · {FemStatus}",
+        _ => "",
+    };
+
+    /// <summary>Why the selected candidate's pretension was not fitted (empty when it was).</summary>
+    public string FemResultIssue => SelectedFemRun?.Result.TargetFitFailure ?? "";
+
+    public bool HasFemResults => FemRuns.Count > 0;
+
+    /// <summary>Re-raises <see cref="PaneStatus"/> when the status of the page it shows changes.</summary>
+    private void ForwardPaneStatus(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(LoadStatus) or nameof(TrussStatus) or nameof(CableStatus) or nameof(OutputStatus) or
+            nameof(StudyBuildStateText) or nameof(OptimizationTabStatus) or nameof(QuantityTabStatus) or nameof(FemStatus))
+            Notify(nameof(PaneStatus));
+        if (e.PropertyName is nameof(FemStatus)) Notify(nameof(HasFemResults));
+    }
+
+    private void NotifyPaneHeader()
+    {
+        Notify(nameof(PaneMenu));
+        Notify(nameof(PaneTitle));
+        Notify(nameof(PaneStatus));
+    }
+
+    /// <summary>Result menu: show <paramref name="mode"/> (or the cable target fit) for the selected candidate on the
+    /// FEM result pane and the shared viewer — what selecting it in the former result tree did.</summary>
+    public void ShowFemResult(FemResultMode? mode)
+    {
+        SelectedTab = TabFem;
+        if (SelectedFemRun is null && FemRuns.Count > 0) SelectedFemRun = FemRuns[0];
+        FemCableFitView = mode is null;
+        if (mode is { } value) FemResultMode = value;
+        FemPane = FemPaneResults;
+        NotifyPaneHeader();
+    }
+}

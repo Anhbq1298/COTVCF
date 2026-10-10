@@ -1,5 +1,5 @@
-<Window x:Class="COT_VCF.Presentation.FemRunMonitorWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls"
-        Title="FEM Analysis — Run Monitor" Icon="{StaticResource AppLogo}" Width="900" Height="720" MinWidth="640" MinHeight="520"
+<Window x:Class="COT_VCF.Presentation.FemRunMonitorWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:COT_VCF.Presentation" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls"
+        Title="FEM Analysis — Run Monitor" Icon="{x:Static p:AppIcon.Window}" Width="900" Height="720" MinWidth="640" MinHeight="520"
         Background="{StaticResource Background}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
  <Grid Margin="10">
   <Grid.RowDefinitions>

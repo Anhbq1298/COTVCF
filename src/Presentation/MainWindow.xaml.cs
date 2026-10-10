@@ -1,3 +1,4 @@
+using COT_VCF.Application;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -12,6 +13,8 @@ public partial class MainWindow : Window
     // Remembers the user's dragged split so it survives visits to the full-width tabs.
     private GridLength paramsColumnWidth = new(2, GridUnitType.Star);
     private GridLength viewerColumnWidth = new(3, GridUnitType.Star);
+    // The left pane's (x) hides it so the model view takes the full width; any menu item opens it again.
+    private bool paneClosed;
 
     public MainWindow()
     {
@@ -47,8 +50,10 @@ public partial class MainWindow : Window
     {
         if (ParamsColumn is null) return;
         bool showViewer = WorkflowTabs.SelectedIndex is >= 0 and <= 3 || WorkflowTabs.SelectedIndex == 7;     // 01-04 and 07 FEM
+        if (!showViewer) paneClosed = false;     // a full-width page is the pane itself
+        bool showPane = !paneClosed;
 
-        if (ViewerSplitter.Visibility == Visibility.Visible && ParamsColumn.Width.IsStar && ViewerColumn.Width.IsStar)
+        if (ViewerSplitter.Visibility == Visibility.Visible && ParamsColumn.Width.IsStar && ParamsColumn.Width.Value > 0 && ViewerColumn.Width.IsStar)
         {
             paramsColumnWidth = ParamsColumn.Width;
             viewerColumnWidth = ViewerColumn.Width;
@@ -57,14 +62,24 @@ public partial class MainWindow : Window
         SharedViewerPane.Visibility = showViewer ? Visibility.Visible : Visibility.Collapsed;
         ViewerSplitter.Visibility = showViewer ? Visibility.Visible : Visibility.Collapsed;
 
-        if (showViewer)
+        if (showViewer && !showPane)
         {
+            ParamsColumn.MinWidth = 0;     // the XAML minimum (150) would keep a strip of the pane
+            ParamsColumn.Width = new GridLength(0);
+            ViewerSplitterColumn.Width = new GridLength(0);
+            ViewerColumn.Width = new GridLength(1, GridUnitType.Star);
+            ViewerSplitter.Visibility = Visibility.Collapsed;
+        }
+        else if (showViewer)
+        {
+            ParamsColumn.MinWidth = 150;
             ParamsColumn.Width = paramsColumnWidth;
             ViewerSplitterColumn.Width = GridLength.Auto;
             ViewerColumn.Width = viewerColumnWidth;
         }
         else
         {
+            ParamsColumn.MinWidth = 150;
             ParamsColumn.Width = new GridLength(1, GridUnitType.Star);
             ViewerSplitterColumn.Width = new GridLength(0);
             ViewerColumn.Width = new GridLength(0);
@@ -124,6 +139,7 @@ public partial class MainWindow : Window
         var dialog = new Window
         {
             Title = "Loading Candidates",
+            Icon = AppIcon.Window,
             Owner = this,
             Width = 920,
             Height = 600,
@@ -181,6 +197,7 @@ public partial class MainWindow : Window
         var dialog = new Window
         {
             Title = "Truss Height Candidates",
+            Icon = AppIcon.Window,
             Owner = this,
             Width = 780,
             Height = 560,
@@ -231,9 +248,122 @@ public partial class MainWindow : Window
         return false;
     }
 
+    // ---- Menu bar: MB opens a workflow page; Define / Assign / Run / Display open an FEM pane; Result shows an output ----
+    private static int MenuTag(object sender) => sender is FrameworkElement { Tag: string tag } && int.TryParse(tag, out var value) ? value : -1;
+
+    private void MbMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && MenuTag(sender) is >= 0 and var tab) vm.SelectedTab = tab;
+        OpenPane();
+    }
+
+    private void FemPaneMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || MenuTag(sender) is not (>= 0 and var pane)) return;
+        vm.SelectedTab = 7;
+        vm.FemPane = pane;
+        OpenPane();
+    }
+
+    private void FemResultMenu_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || sender is not FrameworkElement { Tag: string tag }) return;
+        vm.ShowFemResult(Enum.TryParse<FemResultMode>(tag, out var mode) ? mode : null);
+        OpenPane();
+        if (vm.FemCableFitView) OpenFemResultsClick(sender, e);   // the cable target fit is a table
+    }
+
+    // ---- Top-bar tool icons that act on the shared viewer ----
+    private void ToolbarFit_Click(object sender, RoutedEventArgs e) => SharedViewer.FitView();
+
+    private void ToolbarZoom_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string tag } && double.TryParse(tag, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var factor))
+            SharedViewer.ZoomBy(factor);
+    }
+
+    private void ToolbarPlane_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string plane }) SharedViewer.ShowPlane(plane);
+    }
+
+    private void ClosePane_Click(object sender, RoutedEventArgs e)
+    {
+        paneClosed = true;
+        ApplyViewerLayout();
+    }
+
+    private void OpenPane()
+    {
+        paneClosed = false;
+        ApplyViewerLayout();
+    }
+
+    internal bool IsPaneOpen => ParamsColumn.Width.Value > 0;
+
+    // Define → Sections: the member-properties table in its own window
+    private DefineSectionsWindow? sectionsWindow;
+    private void DefineSections_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (sectionsWindow is null)
+        {
+            sectionsWindow = new DefineSectionsWindow(vm) { Owner = this };
+            sectionsWindow.Closed += (_, _) => sectionsWindow = null;
+            sectionsWindow.Show();
+        }
+        if (sectionsWindow.WindowState == WindowState.Minimized) sectionsWindow.WindowState = WindowState.Normal;
+        sectionsWindow.Activate();
+    }
+
+    // Display → View Options: dimensions and FEM overlays in their own window
+    private ViewOptionsWindow? viewOptionsWindow;
+    private void ViewOptions_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (viewOptionsWindow is null)
+        {
+            viewOptionsWindow = new ViewOptionsWindow(vm, SharedViewer) { Owner = this };
+            viewOptionsWindow.Closed += (_, _) => viewOptionsWindow = null;
+            viewOptionsWindow.Show();
+        }
+        if (viewOptionsWindow.WindowState == WindowState.Minimized) viewOptionsWindow.WindowState = WindowState.Normal;
+        viewOptionsWindow.Activate();
+    }
+
+    // Edit → VCF Geometry: parameters and sections of the VCF system with a live preview
+    private VcfGeometryWindow? vcfGeometryWindow;
+    private void VcfGeometry_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (vcfGeometryWindow is null)
+        {
+            vcfGeometryWindow = new VcfGeometryWindow(vm) { Owner = this };
+            vcfGeometryWindow.Closed += (_, _) => vcfGeometryWindow = null;
+            vcfGeometryWindow.Show();
+        }
+        else vcfGeometryWindow.LoadFromModel();
+        if (vcfGeometryWindow.WindowState == WindowState.Minimized) vcfGeometryWindow.WindowState = WindowState.Normal;
+        vcfGeometryWindow.Activate();
+    }
+
+    // Toolbar → Show Results: load case / combo and the output to draw on the model view
+    private ShowResultsWindow? showResultsWindow;
+    private void ShowResults_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (showResultsWindow is null)
+        {
+            showResultsWindow = new ShowResultsWindow(vm, cableFit => { vm.FemCableFitView = cableFit; OpenFemResultsClick(this, new RoutedEventArgs()); }) { Owner = this };
+            showResultsWindow.Closed += (_, _) => showResultsWindow = null;
+            showResultsWindow.Show();
+        }
+        if (showResultsWindow.WindowState == WindowState.Minimized) showResultsWindow.WindowState = WindowState.Normal;
+        showResultsWindow.Activate();
+    }
+
     private HelpWindow? helpWindow;
-    private void ShowHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(DataContext is MainViewModel { SelectedTab: 7 }
-        ? HelpWindow.Topic.FemProcedure : HelpWindow.Topic.Workflow);
+    private void ShowWorkflowHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.Workflow);
 
     private void ShowFemHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.FemProcedure);
 
@@ -252,14 +382,16 @@ public partial class MainWindow : Window
     private FemResultsWindow? femResultsWindow;
     private void OpenFemResultsClick(object sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel vm || !FemResultExplorer.CanViewResults) return;
+        if (DataContext is not MainViewModel vm) return;
+        if (vm.SelectedFemRun is null && vm.FemRuns.Count > 0) vm.SelectedFemRun = vm.FemRuns[0];
+        if (vm.SelectedFemRun is null) return;
         if (femResultsWindow is null)
         {
             femResultsWindow = new FemResultsWindow(vm) { Owner = this };
             femResultsWindow.Closed += (_, _) => femResultsWindow = null;
             femResultsWindow.Show();
         }
-        femResultsWindow.SelectCableFit(FemResultExplorer.CableFitSelected);
+        femResultsWindow.SelectCableFit(vm.FemCableFitView);
         if (femResultsWindow.WindowState == WindowState.Minimized) femResultsWindow.WindowState = WindowState.Normal;
         femResultsWindow.Activate();
     }

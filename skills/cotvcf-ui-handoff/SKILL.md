@@ -43,12 +43,50 @@ earlier tall-header / large-button / blue-block look.
 - Short button labels: `Connect SAP`, `+ Add`, `- Remove`, `Capture Baseline`, `Reset`, `Apply to SAP`,
   `Validate`. Icon-only actions (refresh, row delete, viewer tools) use borderless buttons.
 
-## Navigation Style
+## Navigation Style — desktop menu bar (ETABS-like)
 
-- Left-side workflow tabs are a compact rail: fixed 152x42 items, `Surface` fill, a 3 px `AccentBright`
-  stripe on the left edge of the selected tab, `Raised` fill when selected. No pill blocks, no angled
-  decorations, no red mark.
-- Tab headers show `NN  NAME` (12 px semibold, `Text`) over a muted 10 px status line.
+- A menu bar (`MainMenu`, top of the window) replaces the left tab rail: **File · MB · Edit · Define · Assign · Run ·
+  Result · Display · Help**. Menu items reuse the existing commands; navigation is presentation only
+  (`MainViewModel.Menu.cs`, click handlers in `MainWindow.xaml.cs`). Do not bring the rail or the toolbar buttons back.
+  - **File**: New Config, Load Config…, Save All · Load Model…, Save Model… · Read FEM Properties from SAP.
+  - **MB**: 01 Loading … 06A Optimization, 08 Quantities (each with its status as the gesture text; 06A disabled
+    without raw data). Choosing one sets `SelectedTab`; the page fills the left pane.
+  - **Edit**: placeholder (no edit commands yet).
+  - **Define**: Sections, Load Patterns, Load Cases / Load Combinations · Result Candidate / Load Case.
+  - **Assign**: Joint Restraints (Pin Supports).
+  - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Analysis Options.
+  - **Result**: Axial forces / cables, Bending moments, Shear forces, Support reactions, Deflection, Cable target fit
+    (opens the table) · Results Table…; enabled once a candidate has results (`HasFemResults`).
+  - **Display**: Frame mesh / Member size / Loading (checkable, bound to the FEM view toggles) · View Options.
+  - **Help**: Workflow Help, FEM Procedure.
+- MB, Edit, Define, Assign, Run, Result and Display are enabled with `HasWorkingModel` (connected or offline model);
+  File and Help are always open (their commands gate themselves).
+- The `WorkflowTabs` TabControl stays (indices unchanged) but its tab strip is hidden (`ItemContainerStyle` →
+  `Collapsed`). A one-line pane header above it shows `PaneMenu  ›  PaneTitle` (e.g. `MB › 01  LOADING`,
+  `Define › SECTIONS`) with the page status (`PaneStatus`) on the right and, offline, the `OfflineModelSummary` line.
+- The pane header has an **✕** (`ClosePaneButton`, shown while the shared viewer is) that hides the left pane — the
+  params column goes to 0 (its MinWidth is dropped too) and the viewer takes the full width. Any MB / Define / Assign /
+  Run / Result / Display item opens the pane again (`OpenPane`). Full-width pages (05, 06, 06A, 08) always show it.
+- **Edit → VCF Geometry…** opens `VcfGeometryWindow`: `VcfGeometry.Analyze` (Application) reads the system from the
+  02 Truss Height chord groups — bays and bay width, truss depth, middle chord above the bottom chord, clear height
+  (ground → bottom chord), back-span (mega column → outer column) and back-stay node height — and the role of every
+  member (top / middle / bottom chord, vertical chord, mega column = vertical frames on the end bay lines, end frames,
+  cables by their own names). The form edits those parameters and the section per role / per cable (from the sections
+  already in the model); a live preview with dimensions redraws on every change; invalid input is shown and greys
+  OK / Apply. `VcfGeometry.Build` moves every node by piecewise-linear maps of X (outer lines, bay lines, centred) and Z
+  (ground, back-stay, bottom / middle / top chord) — names and topology never change. Apply
+  (`ApplyVcfGeometryAsync`) writes geometry, baseline and session baseline, loading-point coordinates, Tab 02 ΔH range
+  (kept around the re-measured height), the chosen sections (copied from a member that has them; local axis and
+  releases kept) and Tab 03 cable section / area / capacity; FEM results are cleared. A connected session becomes an
+  offline model (` · VCF geometry`); SAP2000 is never written and Connect SAP restores the SAP model.
+- **Display → View Options…** (and the toolbar eye) opens `ViewOptionsWindow`, titled *Display Options* and laid out like
+  SAP2000's: tabs *Object Options* (Labels: point / frame / cable / member size; Show: dimensions, loading arrows, frame
+  mesh) and *General Options* (View Type: XY / XZ / YZ / Extrude 3D; Results: axial values, undeformed guide, deflection
+  contour); *Reset Form to Default Values*, *Reset Form to Current Window Settings*; OK / Close / Apply. The form is staged:
+  Apply / OK write it to the viewer and view model, Close discards. FEM pane 7 is only a card with *Open View Options*.
+- **Define → Sections…** opens the member-property table in its own non-modal window (`DefineSectionsWindow`, same
+  bindings, one instance brought forward on repeat). FEM pane 0 is only a small card with *Open Sections*; the FEM
+  inputs default pane is Load Patterns.
 - Avoid setting `Foreground` on the whole `TabItem`; it leaks into page content. Set tab header text
   colors directly in `MainWindow.xaml`.
 - DataGrid selection uses a pale blue background (`Selected`) with dark text and a `SelectedBorder`
@@ -56,10 +94,18 @@ earlier tall-header / large-button / blue-block look.
 
 ## Top Bar Connection Flow
 
-- The top bar is compact (`Padding` 10,6): logo + title on the left; on the right a status dot
+- The top bar is compact (`Padding` 10,6): tool icons on the left (the logo + title block was removed on request; the window title bar still names the app); on the right a status dot
   (green when connected), a monospace `StatusLine` (model / units / lock, or `SAP2000 - <state>`),
-  the `Connect SAP` primary button, an icon-only refresh button (tooltip `Refresh connection and
-  geometry`), and `Help`.
+  the `Connect SAP` primary button and an icon-only refresh button (tooltip `Refresh connection and
+  geometry`). The project name and study summary sit after the title. New Config / Save All / Load Config /
+  Load Model live in **File**, Run study in **Run**, Help in **Help** — not on the top bar.
+- **Tool icons** (`TopToolbar`, after the title, ETABS-like; styles `ToolbarButton` / `ToolbarTextButton` /
+  `ToolbarSeparator` in `Theme.xaml`, Segoe Fluent / MDL2 glyphs drawn by the template's own TextBlock because the
+  implicit TextBlock font would otherwise replace the icon font): New Config · Load Config · Save All · Print All
+  Reports | Run FEM Analysis · Analysis Options · Analysis Monitor | Zoom extents · Zoom in · Zoom out | 3-d · xy · xz ·
+  yz | View Options. Same commands as the menus; the viewer icons call `Structural2DViewer.FitView` / `ZoomBy` /
+  `ShowPlane` and are enabled while the shared viewer is shown. No Undo/Redo, Draw, Lock or Pan icons — the app has no
+  such functions (pan is mouse drag).
 - `Connect SAP` connects and immediately loads geometry. Refresh reconnects and updates
   geometry / load patterns / force sources for the current session.
 - `MainViewModel.StatusLine` feeds the top-bar status text; keep it in the `Update()` notify list.
@@ -81,6 +127,14 @@ earlier tall-header / large-button / blue-block look.
   cables keep their own horizontal `CableLabel` from the overlay and are skipped by the `C` pass.
   `ToolbarContent` still renders (top-left overlay) for contextual controls.
 - Axis overlay sits on a white translucent chip: X red, Y blue, Z green.
+- **Dimensions** (`MainViewModel.ShowDimensions`, default on; viewer toggle `D` after P/F/C, Display → Dimensions, View Options window): in a 2D projection
+  `ModelCanvas.DrawDimensions` draws a chain of the distinct node positions along the horizontal axis below the model
+  (each bay span, then the overall span `X span … m`) and along the vertical axis at its right (each level-to-level
+  height rotated, the overall `H … m`, and `Z +…` elevation of every node level from the lowest). Positions closer than
+  1 mm are one level; a label that does not fit its segment is skipped. Fitting leaves a band for them (`DimensionBandX/Y`).
+- **Logo**: isometric truss with cable stays on a transparent background. `AppIcon.ico` (16–256 px, sharpened small
+  frames) is the .exe icon and, through `AppIcon.Window`, the icon of every window and code-built dialog (title bar,
+  taskbar, Alt-Tab); `AppLogo.png` (256 px, `Theme.xaml` `AppLogo`) is the same picture for in-app use.
 - Still supports wheel zoom, drag pan, double-click fit, `Home` to fit.
 
 ## Engineering Inputs
@@ -96,7 +150,7 @@ earlier tall-header / large-button / blue-block look.
   04 Output Settings, 05 Iteration, 06 Post-Processing, 06A Optimization, 07 FEM, 08 Quantities** (`SelectedIndex`
   0-8: Optimization is index 6 — `TabOptimization` — FEM is index 7 — `TabFem` — and Quantity Take-off is index 8 —
   `TabQuantities`). Connecting is the top-bar `Connect SAP` button only. Project JSON stores the Tabs 01-05 inputs and the Print Setup; nothing of
-  the FEM tab is saved in it. DTO property names (`Tab02Loading` … `Tab05IterationStudy`) and JSON keys are
+  the FEM tab is saved in it (the separate FEM model file from Save Model holds that). DTO property names (`Tab02Loading` … `Tab05IterationStudy`) and JSON keys are
   unchanged legacy v1 identifiers.
 - There is **one** `Structural2DViewer` (`x:Name="SharedViewer"`), hoisted out of the `TabControl` into a
   three-column grid in `MainWindow.xaml`: `ParamsColumn` (the `TabControl`, params only) | `ViewerSplitterColumn` |
@@ -162,7 +216,14 @@ earlier tall-header / large-button / blue-block look.
 - FEM deflection viewer colours the magnified shape by displacement magnitude |U| [mm], with a displayed range
   (maximum 0 = automatic). Undeformed geometry is a light dashed guide, independently hideable; contour can be disabled.
   Clicking a displayed joint shows only Ux, Uy, Uz [mm]; Uy is zero for the planar solver. These are presentation controls only.
-- FEM uses Inputs / Analysis & Results / View. Candidate and Load case / combo dropdowns live inside Result Explorer.
+- **FEM panes** (07 FEM, `SelectedTab` 7; `FemPane` 0–7 selects a pane in the hidden-strip `FemPanes` TabControl): Define →
+  Sections (0) / Load Patterns (1) / Load Cases & Combinations (2) / Result Candidate & Load Case (4), Assign → Joint
+  Restraints (3), Run → Analysis Options (5: the INTERNAL 2D FRAME ANALYSIS card with Run Analysis / Cancel / Monitor),
+  Result → Results (6: diagram title, summary, issue, View Results), Display → View Options (7). Each pane maps onto
+  the former FEM page (`SelectedFemPage`: 0–3 Inputs, 4–6 Analysis & Results, 7 View) so the shared viewer behaves as
+  before; setting `SelectedFemPage` directly moves `FemPane` to that page's default pane. The FemResultsTree is no
+  longer on the page (Result menu replaces it; `ShowFemResult` selects the first completed candidate when none is).
+- (Former layout, for reference) FEM used Inputs / Analysis & Results / View, with the Candidate and Load case / combo dropdowns inside Result Explorer.
   Explorer shows six flat outputs (axial/cables, bending, shear, reactions, deflection, cable target fit), without candidate branches.
   Dropdowns filter the diagram and tables; View Results opens FemResultsWindow with the same selections.
   Floating chart controls remain synchronized with the explorer. Solver behavior is unchanged.
@@ -241,6 +302,24 @@ earlier tall-header / large-button / blue-block look.
      forces within 1.6 %. **A study run before the fix is wrong above the baseline height and has to be run
      again**; the committed benchmark fixture is such a study, which is why the benchmark still reproduces the
      stale lengths from the lengths SAP2000 recorded (it adapts once the fixture is re-captured from a new study).
+- **Save Model / Load Model** (`MainViewModel.FemModel.cs`, `Configuration/FemModelFile.cs`, `*.cotfem.json`): Inputs card
+  buttons `Read from SAP` · `Save Model` · `Load Model`; `Load Model` is also in the top bar after `Load Config`, because
+  the workflow area is disabled before a connection. Save Model (connected, baseline captured) re-reads the FEM
+  properties/loading from SAP (edited Loads rows kept) and writes one file: `ModelInfo`, session baseline / current /
+  truss-baseline geometry, load patterns, load case names, the Tabs 01–05 project (`ConfigurationExtractor.Extract`),
+  member `FemSectionProperties`, `SapFemLoading`, the Loads rows and the FEM Analysis settings. Never writes SAP2000.
+  Load Model restores all of it as an **offline model**: `State.Connection = "Offline model"`, `IsOfflineModel`,
+  `HasWorkingModel` (= connected or offline) enables the workflow grid; command availability stays `HasSapConnection`
+  except `RunFemAnalysis` / `SaveFemModel` (`HasWorkingModel`) and `LoadFemModel` (always, when idle). Offline
+  `AnalyzeFemAsync` uses the saved properties/loading instead of reading SAP; results are identical to the connected run
+  (`tests/FemModelFileChecks.cs`). The model file is not a project file: loading closes the active project session.
+  Connect SAP leaves offline mode (live model becomes the session; Tabs 01–05 are kept and re-checked by Refresh).
+- **Default model**: `src/Resources/DefaultFemModel.cotfem.json` (Save Model of COT Framing_V1.2_100m.sdb, embedded as
+  `COTVCF.DefaultFemModel.cotfem.json`; `FemModelFile.ReadDefault`). `App.OnStartup` calls `LoadDefaultFemModel()`, so the
+  app opens offline on 07 FEM, `OFFLINE · READY` (3 loading × 6 heights × 1 pretension = 18 runs). Connect SAP clears the
+  default's geometry, Tabs 01–05 and FEM inputs (`ClearDefaultFemModel`) — unlike a user-loaded model, which keeps them.
+  Replace the default by saving a new model over that file and rebuilding. Checks construct the view model directly, so
+  they never auto-load it.
 - Results are streamed per candidate so cancellation or a later failure retains completed rows. Candidate count
   is capped at the existing 50,000-row preview limit.
 - The global `Load Config` picker starts in the repository `tests` folder when that folder is available.

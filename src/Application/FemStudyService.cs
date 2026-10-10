@@ -107,9 +107,11 @@ public sealed class FemStudyService
         return loading * heights * pretensions;
     }
 
-    public IReadOnlyList<FemStudyCandidate> Compose(ApplicationState state)
+    /// <param name="offlineModel">True when the model comes from a saved FEM model (Load Model) instead of a live SAP2000 connection.</param>
+    public IReadOnlyList<FemStudyCandidate> Compose(ApplicationState state, bool offlineModel = false)
     {
-        if (state.Model is null || !state.IsSapConnected) throw new InvalidOperationException("Connect to SAP2000 and load a project before running FEM.");
+        if (state.Model is null || !(state.IsSapConnected || offlineModel))
+            throw new InvalidOperationException("Connect to SAP2000 and load a project, or Load Model, before running FEM.");
         if (state.Geometry.Members.Any(member => member.Kind == MemberKind.Tendon))
             throw new InvalidOperationException("The internal FEM solver currently supports SAP frame and cable objects, not tendon objects.");
         if (state.Baseline.Points.Count == 0 || !state.BaselineCaptured)
