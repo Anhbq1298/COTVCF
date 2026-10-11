@@ -102,10 +102,18 @@
               ToolTip="Open the results table for the selected load case and output"/>
    </MenuItem>
    <MenuItem Header="_Post-Processing" IsEnabled="{Binding HasUsableModelGeometry}">
+    <MenuItem Header="Post-Processing (_Optimization)" IsEnabled="False" ToolTipService.ShowOnDisabled="True"
+              AutomationProperties.Name="Post-Processing Optimization"
+              ToolTip="Multi-candidate optimization reports will use the MB study report engine in a later release.">
+     <MenuItem.Icon><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D2;" FontSize="14"/></MenuItem.Icon>
+    </MenuItem>
+    <Separator/>
     <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click"
               ToolTip="Choose result cases, monitored objects and limits for FEM output"/>
     <MenuItem Header="View FEM Results (_HTML)…" Click="OpenFemHtml_Click" IsEnabled="{Binding HasFemResults}"
-              ToolTip="Open the completed load cases and combinations of the current FEM run in your browser"/>
+              ToolTip="Plot deflection, frame forces, support reactions and cable forces for one completed FEM load case or combination in your browser">
+     <MenuItem.Icon><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D9;" FontSize="14"/></MenuItem.Icon>
+    </MenuItem>
     <Separator/>
     <MenuItem Header="Study Reports…" Tag="5" Click="MbMenu_Click"/>
    </MenuItem>

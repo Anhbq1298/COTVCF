@@ -42,6 +42,16 @@ internal static class FemRunReportChecks
         engine.Execute("topics.value='1';topics.selectedIndex=1;topics.onchange();");
         if (!engine.Evaluate("panels[0].hidden && panels[1].hidden && !panels[2].hidden").AsBoolean())
             throw new Exception("Changing HTML result topic must switch the visible results.");
+        var oneCaseHtml = FemRunReport.BuildHtml(run with
+        {
+            Results = new Dictionary<string, FemAnalysisResult> { ["SLS <test>"] = result }
+        }, "Single model", "SLS <test>");
+        if (Regex.Matches(oneCaseHtml, "<svg ").Count != 6 ||
+            !oneCaseHtml.Contains("Vertical deflection by level") ||
+            !oneCaseHtml.Contains(System.Net.WebUtility.HtmlEncode("Bending moment · Frame")) ||
+            !oneCaseHtml.Contains("Support reactions [kN]") ||
+            !oneCaseHtml.Contains("Cable forces / target fit [kN]"))
+            throw new Exception("A single completed FEM case must produce the same deflection, N/V/M, reaction and cable plots.");
         Console.WriteLine("PASS: FEM HTML uses completed cases, converts units, preserves stations and warnings, and switches case/topic without external data.");
     }
 }
