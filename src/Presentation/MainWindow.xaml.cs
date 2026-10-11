@@ -465,7 +465,7 @@ public partial class MainWindow : Window
             || (sender as FrameworkElement)?.Tag is not string tag
             || !Enum.TryParse<COT_VCF.Domain.ColumnDesignType>(tag, out var type)) return;
         var dialog = new DesignReferenceWindow(vm.DesignBasis(type), vm.DesignMemberOptions(type), vm.DesignCaseNames(), vm.DesignDefaultCases(),
-            vm.DesignRunId, member => vm.DesignSectionDefaults(type, member)) { Owner = this };
+            vm.DesignRunId, member => vm.DesignSectionDefaults(type, member), SharedViewer.SelectedMembers) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is not { } basis) return;
         vm.SetDesignBasis(basis);
         var title = COT_VCF.Domain.ColumnDesignCodes.Title(type);

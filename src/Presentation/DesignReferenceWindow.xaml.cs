@@ -65,6 +65,7 @@ public partial class DesignReferenceWindow : Window
     private readonly Dictionary<SectionField, TextBox> fieldBoxes = [];
     private readonly ComboBox tubeBox = new() { ItemsSource = Enum.GetValues<TubeShape>(), Width = 140, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 6) };
     private readonly List<CheckItem> members;
+    private readonly HashSet<string> selection;
     private readonly List<CheckItem> cases;
     private readonly IReadOnlyList<string> defaultCases;
     /// <summary>The section last shown: what the fields do not edit (e.g. the profile name) is kept from it.</summary>
@@ -73,7 +74,8 @@ public partial class DesignReferenceWindow : Window
     public ColumnDesignBasis? Result { get; private set; }
 
     public DesignReferenceWindow(ColumnDesignBasis basis, IReadOnlyList<DesignMemberOption> memberOptions, IReadOnlyList<string> caseNames,
-        IReadOnlyList<string> defaultCases, string? runId, Func<string, ColumnSectionInput> sectionFromMember)
+        IReadOnlyList<string> defaultCases, string? runId, Func<string, ColumnSectionInput> sectionFromMember,
+        IReadOnlyList<string>? viewerSelection = null)
     {
         InitializeComponent();
         type = basis.Type;
@@ -91,11 +93,16 @@ public partial class DesignReferenceWindow : Window
             SteelGradeLabel.Text = "Reinforcement";
         }
         BuildSectionFields();
-        var chosen = basis.Members.ToHashSet(StringComparer.Ordinal);
-        members = memberOptions.Select(option => new CheckItem(option.Member,
+        // frames selected in the viewer are the members to design: ticked alone and listed first
+        selection = (viewerSelection ?? []).Where(name => memberOptions.Any(option => option.Member == name)).ToHashSet(StringComparer.Ordinal);
+        var chosen = selection.Count > 0 ? selection : basis.Members.ToHashSet(StringComparer.Ordinal);
+        members = memberOptions.OrderBy(option => selection.Contains(option.Member) ? 0 : 1).Select(option => new CheckItem(option.Member,
             $"   {option.Section}{(option.Material.Length > 0 ? " · " + option.Material : "")}{(option.LengthM > 0 ? $" · L = {option.LengthM:0.###} m" : "")}",
             chosen.Contains(option.Member), option.Suggested)).ToList();
         MemberList.ItemsSource = members;
+        SelectionButton.Visibility = selection.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SelectionText.Text = selection.Count > 0 ? $"{selection.Count} member(s) ticked from the viewer selection." : "";
+        SelectionText.Visibility = selection.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         var ticked = (basis.LoadCases.Count > 0 ? basis.LoadCases : defaultCases).ToHashSet(StringComparer.Ordinal);
         cases = caseNames.Select(name => new CheckItem(name, "", ticked.Contains(name))).ToList();
         CaseList.ItemsSource = cases;
@@ -170,7 +177,7 @@ public partial class DesignReferenceWindow : Window
     {
         var first = members.FirstOrDefault(member => member.Suggested) ?? members.FirstOrDefault();
         Show(ColumnDesignCodes.Default(type) with { Section = first is null ? new ColumnSectionInput() : sectionFromMember(first.Name) });
-        foreach (var member in members) member.IsChecked = member.Suggested;
+        foreach (var member in members) member.IsChecked = selection.Count > 0 ? selection.Contains(member.Name) : member.Suggested;
         foreach (var item in cases) item.IsChecked = defaultCases.Contains(item.Name);
     }
 
@@ -185,7 +192,8 @@ public partial class DesignReferenceWindow : Window
     private void MemberPick_Click(object sender, RoutedEventArgs e)
     {
         var mode = (string)((FrameworkElement)sender).Tag;
-        foreach (var member in members) member.IsChecked = mode == "all" || mode == "suggested" && member.Suggested;
+        foreach (var member in members)
+            member.IsChecked = mode == "all" || mode == "suggested" && member.Suggested || mode == "selection" && selection.Contains(member.Name);
     }
 
     private void CasePick_Click(object sender, RoutedEventArgs e)
