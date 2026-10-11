@@ -773,11 +773,15 @@ public sealed class ModelCanvas : FrameworkElement
             ? frame.Stations?.Select(station => StationValue(station, mode)) ?? []
             : [])).ToArray();
         var maximumFrame = frameValues.Select(Math.Abs).DefaultIfEmpty().Max();
+        var maximumCable = mode == FemResultMode.AxialForce
+            ? result.Cables.Where(cable => cable.Active).Select(cable => Math.Max(0, cable.AxialForceKN)).DefaultIfEmpty().Max()
+            : 0;
+        var maximumDiagram = Math.Max(maximumFrame, maximumCable);
         var diagramWidth = Math.Clamp(Math.Min(ActualWidth, ActualHeight) * 0.055, 18, 52);
-        if (maximumFrame > 1e-12)
+        if (maximumDiagram > 1e-12)
         {
             var frameByName = result.Frames.ToDictionary(frame => frame.MemberName, StringComparer.Ordinal);
-            var scale = diagramWidth / maximumFrame;
+            var scale = diagramWidth / maximumDiagram;
             foreach (var member in Model.Members.Where(member => member.Kind == MemberKind.Frame))
             {
                 if (!frameByName.TryGetValue(member.Name, out var frame) ||
@@ -803,6 +807,17 @@ public sealed class ModelCanvas : FrameworkElement
         if (mode == FemResultMode.AxialForce)
         {
             var cableByName = result.Cables.ToDictionary(cable => cable.MemberName, StringComparer.Ordinal);
+            if (maximumDiagram > 1e-12)
+            {
+                var accent = (SolidColorBrush)Brush("AccentBright");
+                var cableFill = new SolidColorBrush(Color.FromArgb(100, accent.Color.R, accent.Color.G, accent.Color.B));
+                var cableOutline = new Pen(accent, 1.5);
+                foreach (var member in Model.Members.Where(member => member.Kind == MemberKind.Cable))
+                    if (cableByName.TryGetValue(member.Name, out var cable) && cable.Active && cable.AxialForceKN > 1e-12 &&
+                        screenPoints.TryGetValue(member.Start, out var start) && screenPoints.TryGetValue(member.End, out var end))
+                        DrawCableForceDiagram(dc, start, end, cable.AxialForceKN * diagramWidth / maximumDiagram, cableFill, cableOutline);
+            }
+            // Draw every cable axis after all fills so crossing cables remain legible.
             foreach (var member in Model.Members.Where(member => member.Kind == MemberKind.Cable))
             {
                 if (!cableByName.TryGetValue(member.Name, out var cable) || !screenPoints.TryGetValue(member.Start, out var start) ||
@@ -938,6 +953,23 @@ public sealed class ModelCanvas : FrameworkElement
         var brush = positive ? new SolidColorBrush(Color.FromRgb(0x1F, 0x47, 0x88)) : new SolidColorBrush(Color.FromRgb(0xC6, 0x28, 0x28));
         var fill = new SolidColorBrush(Color.FromArgb(218, positive ? (byte)0x1F : (byte)0xC6, positive ? (byte)0x47 : (byte)0x28, positive ? (byte)0x88 : (byte)0x28));
         dc.DrawGeometry(fill, new Pen(brush, 2), geometry);
+    }
+
+    private static void DrawCableForceDiagram(DrawingContext dc, Point start, Point end, double width, Brush fill, Pen outline)
+    {
+        var direction = end - start;
+        if (direction.Length < 1 || !double.IsFinite(width)) return;
+        var normal = new Vector(-direction.Y, direction.X);
+        normal.Normalize();
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(start, true, true);
+            context.LineTo(end, true, false);
+            context.LineTo(end + normal * width, true, false);
+            context.LineTo(start + normal * width, true, false);
+        }
+        dc.DrawGeometry(fill, outline, geometry);
     }
 
     private static void DrawResultArrow(DrawingContext dc, Point start, Point end, Brush brush)
