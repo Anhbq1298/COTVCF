@@ -222,9 +222,9 @@
               ToolTip="Show Member Forces (F6) — choose load case and N, V or M" AutomationProperties.Name="Show Member Forces F6">
        <Canvas Width="18" Height="18">
         <!-- Filled bending-moment regions of a two-storey planar frame. -->
-        <Path Data="M2,2 C5,2 5,6 9,6 C13,6 13,2 16,2 Z M2,9 C5,9 6,12.5 9,12.5 C12,12.5 13,9 16,9 Z"
+        <Path Data="M2,2 C5,2 5,6 9,6 C13,6 13,2 16,2 Z M2,9 C5,9 6,12.5 9,12.5 C12,12.5 13,9 16,9 Z M2,2 C4,4 4,7 2,9 Z M2,9 C4,11 4,14 2,16 Z M16,2 C14,4 14,7 16,9 Z M16,9 C14,11 14,14 16,16 Z"
               Fill="{StaticResource Warning}" Opacity="0.32"/>
-        <Path Data="M2,2 C5,2 5,6 9,6 C13,6 13,2 16,2 M2,9 C5,9 6,12.5 9,12.5 C12,12.5 13,9 16,9"
+        <Path Data="M2,2 C5,2 5,6 9,6 C13,6 13,2 16,2 M2,9 C5,9 6,12.5 9,12.5 C12,12.5 13,9 16,9 M2,2 C4,4 4,7 2,9 M2,9 C4,11 4,14 2,16 M16,2 C14,4 14,7 16,9 M16,9 C14,11 14,14 16,16"
               Stroke="{StaticResource Warning}" StrokeThickness="1.1" Fill="Transparent"/>
         <Path Data="M2,16 L2,2 L16,2 L16,16 M2,9 L16,9" Stroke="{StaticResource Accent}" StrokeThickness="1.4" Fill="Transparent"/>
        </Canvas>
