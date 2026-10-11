@@ -1,4 +1,9 @@
 <Window x:Class="COT_VCF.Presentation.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:COT_VCF.Presentation" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls" Title="Mcotis — Meinhardt Cities of Tomorrow Integrated Structures" Icon="{x:Static p:AppIcon.Window}" Width="1440" Height="810" MinWidth="1100" MinHeight="660" WindowStartupLocation="Manual">
+ <Window.InputBindings>
+  <!-- File shortcuts: Ctrl+S saves the active configuration, Ctrl+Shift+S asks for another file (File → Save Config / Save Config As…) -->
+  <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveFemModel}"/>
+  <KeyBinding Gesture="Ctrl+Shift+S" Command="{Binding SaveFemModelAs}"/>
+ </Window.InputBindings>
  <DockPanel>
 
   <!-- ============================ MENU BAR ============================
@@ -11,8 +16,10 @@
               ToolTip="Start a blank MCOTiS model. Define materials and frame/cable sections, then create the VCF system under Edit."/>
     <MenuItem Header="_Load Config…" Command="{Binding LoadFemModel}"
               ToolTip="Open one MCOTiS configuration containing the complete analysis model and its current setup"/>
-    <MenuItem Header="_Save Config" Command="{Binding SaveFemModel}"
+    <MenuItem Header="_Save Config" Command="{Binding SaveFemModel}" InputGestureText="Ctrl+S"
               ToolTip="Save geometry, objects, assignments, materials, sections, loads, load cases, analysis and output settings, and the lock state in one MCOTiS configuration file. Save overwrites the active configuration; a new configuration asks for its file name."/>
+    <MenuItem Header="Save Config _As…" Command="{Binding SaveFemModelAs}" InputGestureText="Ctrl+Shift+S"
+              ToolTip="Save the configuration under another file name. That file becomes the active configuration: Save then overwrites it, and the file it came from is left as it was."/>
     <Separator/>
     <MenuItem Header="_Default Model" Command="{Binding LoadDefaultModel}" AutomationProperties.Name="Load default model"
               ToolTip="Set the current model aside and open the built-in default model (COT Framing_V1.2_100m) on 07 FEM, ready to run without SAP2000"/>
@@ -169,7 +176,8 @@
      <StackPanel x:Name="TopToolbar" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" AutomationProperties.Name="Toolbar">
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE8A5;" Command="{Binding NewConfig}" ToolTip="New Config (File → New Config)" AutomationProperties.Name="New Config"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE8E5;" Command="{Binding LoadFemModel}" ToolTip="Open — Load MCOTiS Config (File → Load Config)" AutomationProperties.Name="Load Config"/>
-      <Button Style="{StaticResource ToolbarButton}" Content="&#xE74E;" Command="{Binding SaveFemModel}" ToolTip="Save MCOTiS Config (File → Save Config)" AutomationProperties.Name="Save Config"/>
+      <Button Style="{StaticResource ToolbarButton}" Content="&#xE74E;" Command="{Binding SaveFemModel}" ToolTip="Save MCOTiS Config (File → Save Config · Ctrl+S)" AutomationProperties.Name="Save Config"/>
+      <Button Style="{StaticResource ToolbarButton}" Content="&#xE792;" Command="{Binding SaveFemModelAs}" ToolTip="Save MCOTiS Config As… — under another file name (File → Save Config As · Ctrl+Shift+S)" AutomationProperties.Name="Save Config As"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE749;" Command="{Binding PrintAllReports}" ToolTip="Print All Reports (06 Post-Processing; available once the reports exist)" AutomationProperties.Name="Print All Reports"/>
       <Border Style="{StaticResource ToolbarSeparator}"/>
       <Button Style="{StaticResource ToolbarButton}" Content="{Binding FemLockGlyph}" Command="{Binding ToggleFemModelLock}"

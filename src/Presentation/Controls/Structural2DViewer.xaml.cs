@@ -18,6 +18,7 @@ public partial class Structural2DViewer : UserControl
         InitializeComponent();
         Canvas.SelectionChanged += (_, _) => { Update3DSelection(); Update3DAxes(); };
         Canvas.MemberDoubleClicked += (_, name) => MemberDoubleClicked?.Invoke(this, name);
+        Canvas.MemberInformationRequested += (_, name) => MemberInformationRequested?.Invoke(this, name);
     }
     public static readonly DependencyProperty ModelProperty = DependencyProperty.Register(nameof(Model), typeof(GeometryModel), typeof(Structural2DViewer), new PropertyMetadata(GeometryModel.Empty));
     public static readonly DependencyProperty ToolbarContentProperty = DependencyProperty.Register(nameof(ToolbarContent), typeof(object), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -36,6 +37,9 @@ public partial class Structural2DViewer : UserControl
     /// <summary>Raised when the selected joints or members change.</summary>
     public event EventHandler? SelectionChanged { add => Canvas.SelectionChanged += value; remove => Canvas.SelectionChanged -= value; }
     public event EventHandler<string>? MemberDoubleClicked;
+    /// <summary>Raised with the member a right-click lands on, in the 2D view or the 3D view — as ETABS opens an object's
+    /// information. The member is selected first.</summary>
+    public event EventHandler<string>? MemberInformationRequested;
     /// <summary>The truss chord points: the overall span dimension runs between their outermost lines (the mega columns).</summary>
     public IEnumerable<string>? SpanPoints { get => (IEnumerable<string>?)GetValue(SpanPointsProperty); set => SetValue(SpanPointsProperty, value); }
     public static readonly DependencyProperty AppliedPointsProperty = DependencyProperty.Register(nameof(AppliedPoints), typeof(IEnumerable<AppliedPoint>), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -163,7 +167,17 @@ public partial class Structural2DViewer : UserControl
     {
         base.OnPropertyChanged(e);
         if (e.Property == ModelProperty) Rebuild3D(keepCamera: false);
+        // the 3D view shows the deflected shape too: follow the result, and its options while it is on screen
+        else if (e.Property == FemResultProperty || e.Property == FemResultModeProperty)
+        {
+            if (ShowsDeflected3D || scene3D?.Deflected is not null) Rebuild3D(keepCamera: true);
+        }
+        else if (scene3D?.Deflected is not null && (e.Property == ShowUndeformedProperty || e.Property == ShowDeflectionContourProperty ||
+                 e.Property == DeflectionRangeMinMmProperty || e.Property == DeflectionRangeMaxMmProperty))
+            Rebuild3D(keepCamera: true);
     }
+
+    private bool ShowsDeflected3D => FemResult is not null && FemResultMode == FemResultMode.DeflectedShape;
 
     // ---- 3D view: orthographic camera orbiting the model centre ----
     private double azimuthDeg = -45, elevationDeg = 35.264, viewWidth = 10;
@@ -178,16 +192,28 @@ public partial class Structural2DViewer : UserControl
     private void Rebuild3D(bool keepCamera)
     {
         if (!Is3D || Structure3D is null) return;
-        var scene = StructureModel3D.Build(Model, MemberSections);
+        var scene = ShowsDeflected3D
+            ? StructureModel3D.BuildDeflected(Model, MemberSections, FemResult!, ShowDeflectionContour, DeflectionRangeMinMm, DeflectionRangeMaxMm, ShowUndeformed)
+            : StructureModel3D.Build(Model, MemberSections);
         scene3D = scene;
         Structure3D.Content = scene.Model;
         Update3DSelection();
         Update3DAxes();
-        View3DInfo.Text = MemberSections is null
+        const string gestures = " · click to select · right-click a member for its information · drag rotate · right-drag pan · wheel zoom · double-click fit";
+        View3DInfo.Text = scene.Deflected is { } shape
+            ? $"Deflected shape 3D · largest |U| {shape.MaximumMm:G4} mm, drawn × {shape.Magnification:G3}" + gestures
+            : MemberSections is null
             ? "Isometric 3D · member sizes not read — use Read from SAP (FEM → Inputs) for to-scale sections · drag rotate · right-drag pan · wheel zoom · double-click fit"
             : $"Isometric 3D · to scale · {scene.FramesWithSapShape} frames with SAP section dimensions" +
-              (scene.FramesApproximated > 0 ? $", {scene.FramesApproximated} as equivalent solid (same A, I)" : "") +
-              " · click to select · drag rotate · right-drag pan · wheel zoom · double-click fit";
+              (scene.FramesApproximated > 0 ? $", {scene.FramesApproximated} as equivalent solid (same A, I)" : "") + gestures;
+        // contour legend of the deflected shape, as the 2D view draws it
+        Deflection3DLegend.Visibility = scene.Deflected is { Contour: true } ? Visibility.Visible : Visibility.Collapsed;
+        if (scene.Deflected is { Contour: true } contour)
+        {
+            Deflection3DRange.Text = $"|U| {contour.ContourMinMm:G5} to {contour.ContourMaxMm:G5} mm";
+            Deflection3DBar.Fill ??= new LinearGradientBrush(StructureModel3D.ContourBrush().GradientStops, new Point(0, 0), new Point(1, 0));
+            Deflection3DScale.Text = $"Shape magnified × {contour.Magnification:G3}";
+        }
         if (!keepCamera || scene.Bounds.IsEmpty) Fit3D();
         else UpdateCamera();
     }
@@ -274,10 +300,24 @@ public partial class Structural2DViewer : UserControl
             var hit = Hit3DMember(e.GetPosition(View3D));
             if (hit is not null) Canvas.ToggleMemberSelection(hit);
         }
+        // a right-click that did not drag (a right-drag pans) asks for the information of the member under it
+        var information = e.ChangedButton == MouseButton.Right && !dragged3D && dragOrigin is { } pressed &&
+            (e.GetPosition(View3DHost) - pressed).Length <= 4;
         dragStart = null;
         dragOrigin = null;
         dragged3D = false;
         if (View3DHost.IsMouseCaptured) View3DHost.ReleaseMouseCapture();
+        if (information && RequestInformation3DAt(e.GetPosition(View3D))) e.Handled = true;
+    }
+
+    /// <summary>What a right-click at <paramref name="position"/> of the 3D view does: selects the member there and asks
+    /// for its information. False on empty space.</summary>
+    internal bool RequestInformation3DAt(Point position)
+    {
+        if (Hit3DMember(position) is not { } name) return false;
+        Canvas.SelectMember(name);
+        MemberInformationRequested?.Invoke(this, name);
+        return true;
     }
 
     private string? Hit3DMember(Point position)
@@ -420,6 +460,18 @@ public sealed class ModelCanvas : FrameworkElement
     /// <summary>Raised when the selected joints or members change: a click, a window, a clear.</summary>
     public event EventHandler? SelectionChanged;
     public event EventHandler<string>? MemberDoubleClicked;
+    /// <summary>Raised with the member a right-click lands on (it is selected first).</summary>
+    public event EventHandler<string>? MemberInformationRequested;
+
+    /// <summary>What a right-click at <paramref name="position"/> does: selects the member there and asks for its
+    /// information. False on empty space.</summary>
+    public bool RequestInformationAt(Point position)
+    {
+        if (HitMemberAt(position) is not { } name) return false;
+        SelectMember(name);
+        MemberInformationRequested?.Invoke(this, name);
+        return true;
+    }
 
     public void ClearSelection()
     {
@@ -1614,6 +1666,7 @@ public sealed class ModelCanvas : FrameworkElement
         last = null;
         panning = false;
         if (IsMouseCaptured) ReleaseMouseCapture();
+        if (e.ChangedButton == MouseButton.Right && RequestInformationAt(e.GetPosition(this))) e.Handled = true;
     }
 
     private static double DistanceToSegment(Point point, Point start, Point end)

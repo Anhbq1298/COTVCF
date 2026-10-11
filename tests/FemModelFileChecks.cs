@@ -180,6 +180,26 @@ internal static class FemModelFileChecks
         Check(Math.Abs(Deflection(rotated) / Deflection(before) - before.InPlaneInertiaM4!.Value / rotated.InPlaneInertiaM4!.Value) < 1e-8,
             "the frame FEM deflection changes with the rotated in-plane inertia");
 
+        // the deflected shape in 3D: each member through its stations, enlarged, shaded by |U|; the model as built as a guide
+        static FemFrameStation Station(double fraction, double uz) => new(fraction, 0, 0, 0, 0, uz);
+        var sag = new FemAnalysisResult([new("A", 0, 0, 0), new("B", 0, -0.02, 0), new("C", 0, 0, 0)], [],
+        [
+            new("AB", 0, 0, 0, 0, 0, 0, [Station(0, 0), Station(0.5, -0.012), Station(1, -0.02)]),
+            new("BC", 0, 0, 0, 0, 0, 0, [Station(0, -0.02), Station(0.5, -0.012), Station(1, 0)]),
+        ], [], 0);
+        var beamSections = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["AB"] = before with { MemberName = "AB" }, ["BC"] = before with { MemberName = "BC" } };
+        var deflected = StructureModel3D.BuildDeflected(beam, beamSections, sag, contour: true, 0, 0, undeformedGuide: true);
+        var plain = StructureModel3D.BuildDeflected(beam, beamSections, sag, contour: false, 0, 40, undeformedGuide: false);
+        var shades = ((System.Windows.Media.Media3D.MeshGeometry3D)deflected.MemberVisuals[0].Model.Geometry).TextureCoordinates.Select(point => point.X).ToArray();
+        Check(deflected.Deflected is { Contour: true } shape && Math.Abs(shape.MaximumMm - 20) < 1e-9 && Math.Abs(shape.Magnification - 0.05 * 10 / 0.02) < 1e-6 &&
+              shape.ContourMinMm == 0 && Math.Abs(shape.ContourMaxMm - 20) < 1e-9 &&
+              deflected.MemberVisuals.Select(member => member.Name).SequenceEqual(["AB", "BC"]) && deflected.Model.Children.Count == 3 && plain.Model.Children.Count == 2 &&
+              Math.Abs(deflected.Bounds.Z - (beforeScene.Bounds.Z - 0.5)) < 1e-6 && Math.Abs(deflected.Bounds.SizeX - beforeScene.Bounds.SizeX) < 1e-9 &&
+              shades.Min() == 0 && Math.Abs(shades.Max() - 1) < 1e-9 && shades.Any(value => Math.Abs(value - 0.6) < 1e-9) &&
+              plain.Deflected is { Contour: false, ContourMaxMm: 40 } && beforeScene.Deflected is null,
+            "the 3D deflected shape moves each frame through its stations (mid-span 20 mm drawn × 25 = 0.5 m down), shades it by |U| from 0 to the largest " +
+            "displacement, keeps each member identifiable, and adds the model as built as a guide when asked");
+
         var path = Path.Combine(Path.GetTempPath(), $"cotvcf-axis-{Guid.NewGuid():N}{FemInputDatabase.Extension}");
         try
         {
@@ -305,6 +325,8 @@ internal static class FemModelFileChecks
         RunVcfGeometry(vm, state, silent, warnings);
         RunVcfBays();
         RunVcfOptimization();
+        RunMemberInformation();
+        RunSaveAs();
         RunMaterials();
         RunSections();
         RunCompositeSections();
@@ -938,6 +960,101 @@ internal static class FemModelFileChecks
 
         Check(ReferenceEquals(state.Geometry, geometryBefore) && vm.FemSectionProperties.SequenceEqual(propertiesBefore) && warnings.Count == 0,
             "Run Optimization leaves the working model, its member properties and SAP2000 unchanged" + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
+    }
+
+    /// <summary>Right-click a member → Frame / Cable Information: what the form lists on the default model.</summary>
+    private static void RunMemberInformation()
+    {
+        var (vm, state, silent, warnings) = DefaultModelApp();
+        var previousCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+            static string? Value(IReadOnlyList<InformationTab> tabs, string tab, string section, string row) =>
+                tabs.Single(item => item.Title == tab).Sections.SingleOrDefault(item => item.Title == section)?.Rows.SingleOrDefault(item => item.Name == row)?.Value;
+            StructuralMember Member(string name) => state.Geometry.Members.Single(member => member.Name == name);
+
+            var cable = vm.MemberInformation(Member("Cable1a-2"));
+            var cableProperty = vm.FemSectionProperties.Single(property => property.MemberName == "Cable1a-2");
+            Check(cable.Select(tab => tab.Title).SequenceEqual(["Geometry", "Assignments", "Loads"]) &&
+                  Value(cable, "Geometry", "Identification", "Label") == "Cable1a-2" && Value(cable, "Geometry", "Identification", "Object type") == "Cable" &&
+                  Value(cable, "Geometry", "Geometry", "Length") == "31.623 m" && Value(cable, "Geometry", "End I", "Point") == "TTrPt001" &&
+                  Value(cable, "Geometry", "End I", "Z") == "20 m" && Value(cable, "Geometry", "End J", "Point") == "201" && Value(cable, "Geometry", "End J", "X") == "-60 m" &&
+                  Value(cable, "Assignments", "Section", "Section property") == cableProperty.SectionName && cableProperty.SectionName == "192T15.7" &&
+                  Value(cable, "Assignments", "Analysis properties", "Area A") == "0.028802 m²" && Value(cable, "Assignments", "Analysis properties", "In-plane inertia I") is null &&
+                  Value(cable, "Assignments", "Local axes and releases", "Local-axis angle") is null &&
+                  Value(cable, "Assignments", "Pretension (03 Pretension)", "Target force") == "100,000 … 105,000 kN @ 10,000" &&
+                  Value(cable, "Assignments", "Pretension (03 Pretension)", "Force sync") == "Independent" &&
+                  Value(cable, "Assignments", "Pretension (03 Pretension)", "Design capacity") == "55,992 kN" &&
+                  Value(cable, "Loads", "Target force", "Pretension") == "100,000 … 105,000 kN @ 10,000",
+                "Cable Information lists the cable's geometry (31.623 m, TTrPt001 → 201), its section and analysis properties, and its 03 Pretension target " +
+                "(100,000 … 105,000 kN, capacity 55,992 kN) under Assignments and Loads");
+
+            var chord = vm.MemberInformation(Member("TopChord"));
+            var chordProperty = vm.FemSectionProperties.Single(property => property.MemberName == "TopChord");
+            var selfWeight = vm.FemPatternRows.First(pattern => Math.Abs(pattern.SelfWeightMultiplier) > 1e-12);
+            var weight = Value(chord, "Loads", "Self-weight", selfWeight.Name);
+            Check(Value(chord, "Geometry", "Identification", "Object type") == "Frame" && Value(chord, "Geometry", "Identification", "Role in the VCF system") == "Top chord" &&
+                  Value(chord, "Geometry", "Geometry", "Length") == "100 m" && Value(chord, "Geometry", "Geometry", "Slope from horizontal") == "0°" &&
+                  Value(chord, "Assignments", "Section", "Section property") == chordProperty.SectionName && Value(chord, "Assignments", "Section", "Material") == chordProperty.MaterialName &&
+                  Value(chord, "Assignments", "Analysis properties", "In-plane inertia I") is { Length: > 0 } &&
+                  Value(chord, "Assignments", "Local axes and releases", "Moment release at End I") == (chordProperty.ReleaseStartRotation ? "Released" : "Continuous") &&
+                  Value(chord, "Assignments", "Property modifiers", "Moment of inertia (I33)") is { Length: > 0 } &&
+                  Value(chord, "Assignments", "Pretension (03 Pretension)", "Target force") is null &&
+                  weight is not null && weight.EndsWith("kN/m, gravity", StringComparison.Ordinal) &&
+                  silent.Reads == 0 && warnings.Count == 0,
+                $"Frame Information lists the top chord's role, length (100 m), section ({chordProperty.SectionName}, {chordProperty.MaterialName}), local axes and releases, " +
+                $"and its self-weight in {selfWeight.Name} ({weight}) — without a call to SAP2000");
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = previousCulture; }
+    }
+
+    /// <summary>File → Save Config (Ctrl+S) and Save Config As… (Ctrl+Shift+S), with the Save dialog answered by the check.</summary>
+    private static void RunSaveAs()
+    {
+        var (vm, _, silent, warnings) = DefaultModelApp();
+        var folder = Path.Combine(Path.GetTempPath(), $"cotvcf-saveas-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var first = Path.Combine(folder, "first" + FemInputDatabase.Extension);
+            var second = Path.Combine(folder, "second" + FemInputDatabase.Extension);
+            var asked = new List<(string? Folder, string FileName)>();
+            string? answer = Path.Combine(folder, "first");   // typed without the extension
+            vm.AskFemSavePath = (startFolder, fileName) => { asked.Add((startFolder, fileName)); return answer; };
+
+            vm.SaveFemModel.Execute(null);
+            Check(vm.SaveFemModel.CanExecute(null) && vm.SaveFemModelAs.CanExecute(null) && asked.Count == 1 &&
+                  asked[0].FileName.EndsWith(FemInputDatabase.Extension, StringComparison.Ordinal) && File.Exists(first) &&
+                  vm.FemProgressText.StartsWith("Saved MCOTiS config first" + FemInputDatabase.Extension, StringComparison.Ordinal),
+                "Save on a configuration that has no file yet asks for one (and adds the extension to the name typed)");
+            vm.SaveFemModel.Execute(null);
+            Check(asked.Count == 1 && vm.FemProgressText.StartsWith("Saved MCOTiS config first", StringComparison.Ordinal),
+                "Save again overwrites the active configuration without asking");
+
+            answer = second;
+            var firstWritten = File.GetLastWriteTimeUtc(first);
+            vm.SaveFemModelAs.Execute(null);
+            Check(asked.Count == 2 && asked[1] == (folder, "first" + FemInputDatabase.Extension) && File.Exists(second) &&
+                  File.GetLastWriteTimeUtc(first) == firstWritten && vm.FemProgressText.StartsWith("Saved MCOTiS config second", StringComparison.Ordinal),
+                "Save As asks for a file, starting from the active configuration's folder and name, writes the new file and leaves the old one as it was");
+            vm.SaveFemModel.Execute(null);
+            Check(asked.Count == 2 && File.GetLastWriteTimeUtc(first) == firstWritten && vm.FemProgressText.StartsWith("Saved MCOTiS config second", StringComparison.Ordinal),
+                "after Save As, Save overwrites the new file: it is the active configuration");
+
+            answer = null;
+            var files = Directory.GetFiles(folder).Length;
+            var message = vm.FemProgressText;
+            vm.SaveFemModelAs.Execute(null);
+            Check(asked.Count == 3 && Directory.GetFiles(folder).Length == files && vm.FemProgressText == message && silent.Reads == 0 && warnings.Count == 0,
+                "cancelling Save As writes nothing and keeps the active configuration");
+        }
+        finally
+        {
+            try { Directory.Delete(folder, recursive: true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
     private static VcfOptimizationRow[] Optimize(MainViewModel vm, VcfOptimizationSettings settings)

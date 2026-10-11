@@ -46,6 +46,12 @@ public partial class MainWindow : Window
             if (member is null || !vm.FemSectionProperties.Any(item => item.MemberName == name)) return;
             new MemberAssignmentWindow(vm, member) { Owner = this }.ShowDialog();
         };
+        // right-click a member (2D or 3D): its information, as ETABS shows it
+        SharedViewer.MemberInformationRequested += (_, name) =>
+        {
+            if (DataContext is not MainViewModel vm || SharedViewer.Model.Members.FirstOrDefault(item => item.Name == name) is not { } member) return;
+            new ObjectInformationWindow(vm, member, SharedViewer.Model) { Owner = this }.ShowDialog();
+        };
     }
 
     // The model preview is one shared viewer hoisted out of the TabControl. Tabs 01-04 (Loading, Truss,

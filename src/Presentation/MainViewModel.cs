@@ -1451,7 +1451,7 @@ public sealed partial class MainViewModel : Observable
                 command == LoadFemModel || command == LoadDefaultModel || command == ContinueWithBlankModel || command == NewConfig) continue;
             // A loaded FEM model (Load Model) runs FEM offline, and the 01 Loading add / remove commands only edit what the
             // app holds; every other command needs the live SAP2000 model.
-            command.Availability = command == RunFemAnalysis || command == SaveFemModel || command == UnlockFemModel || command == ToggleFemModelLock || command == AddPoints ||
+            command.Availability = command == RunFemAnalysis || command == SaveFemModel || command == SaveFemModelAs || command == UnlockFemModel || command == ToggleFemModelLock || command == AddPoints ||
                                    command == RemoveAppliedPoints || command == AddLoadDefinition || command == DeleteLoadDefinition
                 ? () => HasWorkingModel
                 : () => HasSapConnection;

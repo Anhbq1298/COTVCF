@@ -20,7 +20,7 @@ public sealed partial class MainViewModel
     /// <summary>The offline model is the built-in default (not a file the user chose).</summary>
     private bool isDefaultModel;
     private IReadOnlyList<string> offlineLoadCaseNames = [];
-    private Command? saveFemModel, loadFemModel, loadDefaultModel, continueWithBlankModel;
+    private Command? saveFemModel, saveFemModelAs, loadFemModel, loadDefaultModel, continueWithBlankModel;
     private bool blankModelChoiceDismissed;
     private FemInputSnapshot? femInputSnapshot;
     private string? femInputDatabasePath;
@@ -65,7 +65,19 @@ public sealed partial class MainViewModel
         State.Geometry.Members.Any(member => member.Kind is MemberKind.Frame or MemberKind.Cable);
     public bool CanLoadFemModel => !IsBusy;
 
-    public Command SaveFemModel => saveFemModel ??= new(_ => SaveFemModelToFile(), () => CanSaveFemModel);
+    /// <summary>File → Save Config (Ctrl+S): overwrites the active configuration; a configuration without a file asks for one.</summary>
+    public Command SaveFemModel => saveFemModel ??= new(_ => SaveFemModelToFile(saveAs: false), () => CanSaveFemModel);
+    /// <summary>File → Save Config As… (Ctrl+Shift+S): always asks for the file; the saved file becomes the active configuration.</summary>
+    public Command SaveFemModelAs => saveFemModelAs ??= new(_ => SaveFemModelToFile(saveAs: true), () => CanSaveFemModel);
+
+    /// <summary>Asks where to save the configuration, starting from a folder (null: the dialog's own) and a file name; null
+    /// cancels. The Windows Save dialog — a check replaces it.</summary>
+    internal Func<string?, string, string?> AskFemSavePath { get; set; } = (folder, fileName) =>
+    {
+        var dialog = new SaveFileDialog { Filter = FemInputDatabase.Filter, FileName = fileName, AddExtension = false };
+        if (folder is not null && Directory.Exists(folder)) dialog.InitialDirectory = folder;
+        return dialog.ShowDialog() == true ? dialog.FileName : null;
+    };
     public Command LoadFemModel => loadFemModel ??= new(_ => LoadFemModelFromFile(), () => CanLoadFemModel);
     /// <summary>File → Default Model: drop the current model (live or loaded) and open the built-in default model.</summary>
     public Command LoadDefaultModel => loadDefaultModel ??= new(_ => LoadDefaultFemModel(replaceCurrent: true), () => CanLoadFemModel);
@@ -134,25 +146,22 @@ public sealed partial class MainViewModel
         }
     }
 
-    private async void SaveFemModelToFile()
+    private async void SaveFemModelToFile(bool saveAs)
     {
         if (IsBusy || CommitEditors?.Invoke() == false) return;
-        if (!string.IsNullOrWhiteSpace(femInputDatabasePath))
+        var active = string.IsNullOrWhiteSpace(femInputDatabasePath) ? null : femInputDatabasePath;
+        if (!saveAs && active is not null)
         {
-            await SaveFemModelFileAsync(femInputDatabasePath);
+            await SaveFemModelFileAsync(active);
             return;
         }
-        var dialog = new SaveFileDialog
-        {
-            Filter = FemInputDatabase.Filter,
-            FileName = SuggestFemDatabaseFileName(),
-            AddExtension = false,
-        };
-        if (offlineModelPath is not null && !isDefaultModel) dialog.InitialDirectory = Path.GetDirectoryName(offlineModelPath);
-        else if (State.Model is { Path.Length: > 0 } model && Directory.Exists(Path.GetDirectoryName(model.Path))) dialog.InitialDirectory = Path.GetDirectoryName(model.Path);
-        if (dialog.ShowDialog() != true) return;
-        var path = dialog.FileName.EndsWith(FemInputDatabase.Extension, StringComparison.OrdinalIgnoreCase)
-            ? dialog.FileName : dialog.FileName.TrimEnd('.') + FemInputDatabase.Extension;
+        // Save As starts from the active configuration's own folder and name; a first save from the model's
+        var folder = active is not null ? Path.GetDirectoryName(active)
+            : offlineModelPath is not null && !isDefaultModel ? Path.GetDirectoryName(offlineModelPath)
+            : State.Model is { Path.Length: > 0 } model ? Path.GetDirectoryName(model.Path) : null;
+        if (AskFemSavePath(folder, active is not null ? Path.GetFileName(active) : SuggestFemDatabaseFileName()) is not { } chosen) return;
+        var path = chosen.EndsWith(FemInputDatabase.Extension, StringComparison.OrdinalIgnoreCase)
+            ? chosen : chosen.TrimEnd('.') + FemInputDatabase.Extension;
         await SaveFemModelFileAsync(path);
     }
 
