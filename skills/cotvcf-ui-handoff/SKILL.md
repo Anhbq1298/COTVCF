@@ -53,12 +53,11 @@ earlier tall-header / large-button / blue-block look.
   - **MB**: 01 Loading … 06A Optimization, 08 Quantities (each with its status as the gesture text; 06A disabled
     without raw data). Choosing one sets `SelectedTab`; the page fills the left pane.
   - **Edit**: placeholder (no edit commands yet).
-  - **Define**: Materials, Section Properties, Loading (Applied Loads), Load Patterns, Load Cases / Load Combinations ·
-    Result Load Case. **Loading** opens the 01 Loading page as the load definition of the model (`DefineLoading_Click`,
-    `MainViewModel.LoadingFromDefine` → header `Define › LOADING`; MB → 01 Loading opens the same page as `MB › 01 LOADING`).
-    Its AddPoints / RemoveAppliedPoints / AddLoadDefinition / DeleteLoadDefinition commands work on an offline model too
-    (they only edit what the app holds); a load row still picks its pattern from `State.LoadPatterns` — the app cannot
-    create a new load pattern yet.
+  - **Define**: Materials, Section Properties, Load Patterns, Load Cases / Load Combinations · Result Load Case.
+    There is no Define → Loading: the loads of the model are entered in Edit → VCF System (Storey Force / Cable Force),
+    one fixed value each — see Tab 07 FEM, "The flow the user set". The 01 Loading page stays under MB with its ranges;
+    its AddPoints / RemoveAppliedPoints / AddLoadDefinition / DeleteLoadDefinition commands work on an offline model too
+    (they only edit what the app holds).
   - **Assign**: Joint Restraints (Pin Supports).
   - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Optimization VCF… ·
     Analysis Options. **Optimization VCF…** opens the modal `OptimizationVcfWindow`: the Edit → VCF Geometry inputs as a
@@ -148,7 +147,8 @@ earlier tall-header / large-button / blue-block look.
   force sheets follow the preview: **Cable Force** (each cable of the previewed
   model: Tab 03 load pattern, sync, pretension — fixed value or min … max (count), resolved through the sync graph for
   followers; a new fan cable shows its template's; the pretension of an independent cable is typed here — see Tab 07 FEM,
-  "The flow the user set") and the read-only **Storey Force** (each loaded point: X, tributary area = tributary
+  "The flow the user set") and **Storey Force** (the load inputs — B, storeys, loaded points, one qz per load pattern —
+  above a read-out of each loaded point: X, tributary area = tributary
   length × B, and per load definition Fz = −qz × area × NStories, a range when qz is a range; totals per definition — the
   same rule as StudyCompositionService.BuildPointLoads).
 - **Display → View Options…** (and the toolbar eye) opens `ViewOptionsWindow`, titled *Display Options* and laid out like
@@ -363,11 +363,24 @@ earlier tall-header / large-button / blue-block look.
     a load case, 01 Loading or 03 Pretension uses it. Only on the app's own model (`CanDefineLoadPatterns`): a connected
     SAP2000 model keeps SAP2000's patterns. **Role / Assigned loads are live** (`RefreshFemPatternRows` →
     `FemLoadPlan.Describe`, from `Update()`), not the text saved with the row.
-  - **Edit → VCF System → Cable Force** is where the target force of a cable is set: the Pretension column takes a
-    value for an independent cable (staged in `cableForceEdits`, written by Apply / OK through
-    `MainViewModel.SetCableTargetForces` before the geometry, so a new fan cable copies the edited value). The model holds
-    one value per cable — a Tab 03 range becomes that fixed value. A follower row and a new-fan-cable row are read-only
-    (a follower shows `follows <cable>` until Apply). Storey Force stays a read-out of Define → Loading.
+  - **The loads and the cable forces are part of the parametric set-up — Edit → VCF System — as one fixed value each**
+    (user, 2026-10-11: "copy them out of the MB tabs because they belong to the parametric set-up; a fixed number only,
+    no range option; the ranges are set later, when an optimization is run"). The sheets edit the same state as 01
+    Loading / 03 Pretension; they never show or offer a range. A value that is a range on the MB tab shows its first
+    value (the one the model is analysed with, tooltip says so) and becomes fixed only when another value is typed.
+    Everything is staged in the window and written by Apply / OK before the geometry, so a change of bays carries it over.
+    - **Cable Force**: the Pretension column takes a value for a cable with a value of its own — an independent cable
+      (→ `ApplyRange = false`, `TargetForce`) or a Same Step follower (→ `MinForce = MaxForce`); staged in
+      `cableForceEdits`, written through `MainViewModel.SetCableTargetForces`. A cable that follows another's value
+      (Same Values / Ratio / Offset) and a new-fan-cable row are read-only (a follower shows `follows <cable>` until Apply).
+    - **Storey Force**: `Trib. width B`, `NStories`, `Loaded Points…` (the point picker, `MainViewModel.ChooseLoadPoints`;
+      disabled while the form changes the number of bays), a grid of loads — Load Pattern (from `State.LoadPatterns`) and
+      qz [kPa] with a delete button — and `+ Add Load`; below it the read-out of Fz per loaded point for the form's
+      values. Written through `MainViewModel.SetStoreyLoads` (a load whose value is unchanged keeps its Tab 01 definition).
+      An invalid input (B ≤ 0, storeys not a whole number ≥ 1, a row without pattern or qz, a pattern twice) is listed
+      under the preview and greys Apply / OK.
+    - Do not add a range, Min / Max / Step or an "Incr?" switch to these sheets: ranges live in Run → Optimization VCF
+      (which already starts each range from these values) and, for the SAP2000 study, on the MB tabs.
   - **Run opens Set Load Cases to Run** (`RunLoadCasesWindow`, as SAP2000's): Case Name | Type | From | Status
     (Finished / Not Run) | Action (Run / Do Not Run); Run/Do Not Run Case (or double-click), Run/Do Not Run All;
     **Run Now** keeps the choice and starts the analysis, **OK** keeps it only, **Cancel** discards it. The action is the

@@ -39,7 +39,7 @@
    </MenuItem>
    <MenuItem Header="_Edit" IsEnabled="{Binding HasWorkingModel}">
     <MenuItem Header="_VCF System…" Click="VcfGeometry_Click" AutomationProperties.Name="VCF System"
-              ToolTip="Edit the VCF system — bay width, truss depth, middle chord, clear height, back-span, back-stay height and the section of each chord, mega column and cable — with a live preview; Apply updates the working model (SAP2000 unchanged)"/>
+              ToolTip="The parametric set-up of the model — geometry (bays, bay width, truss depth, middle chord, clear height, back-span, back-stay height), the target force of each cable, the storey loads (qz per load pattern, B, storeys, loaded points) and the section of each chord, mega column and cable — with a live preview; Apply updates the working model"/>
    </MenuItem>
    <MenuItem Header="_Define" IsEnabled="{Binding HasWorkingModel}">
     <MenuItem Header="_Materials…" Click="DefineMaterials_Click" AutomationProperties.Name="Define Materials"
@@ -51,9 +51,8 @@
      <Separator/>
      <MenuItem Header="_Member Sections Table…" Click="DefineSections_Click" ToolTip="The section, material and properties of every member the FEM uses"/>
     </MenuItem>
-    <MenuItem Header="_Loading (Applied Loads)" Click="DefineLoading_Click" AutomationProperties.Name="Define Loading"
-              ToolTip="The loads of the model: applied points, qz per load pattern, tributary width B and number of storeys (the 01 Loading page). The load cases use them through their load patterns."/>
-    <MenuItem Header="Load _Patterns" Tag="1" Click="FemPaneMenu_Click"/>
+    <MenuItem Header="Load _Patterns" Tag="1" Click="FemPaneMenu_Click"
+              ToolTip="The load patterns of the model. Their loads are part of the VCF system: Edit → VCF System → Storey Force and Cable Force"/>
     <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click"
               ToolTip="Define the load cases: the default staged setup (Pretension → SLS / ULS), the cases saved from SAP2000, or your own"/>
     <Separator/>
@@ -1514,7 +1513,7 @@
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel>
          <TextBlock Text="LOAD PATTERNS" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
-         <TextBlock Text="A pattern carries loads once they are assigned to it: a self-weight multiplier here, the loads of Define → Loading, or the cable target forces. A load case combines patterns."
+         <TextBlock Text="A pattern carries loads once they are assigned to it: a self-weight multiplier here, or a storey load / the cable target forces on Edit → VCF System. A load case combines patterns."
                     Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
          <WrapPanel Margin="0,0,0,5" IsEnabled="{Binding CanDefineLoadPatterns}" ToolTipService.ShowOnDisabled="True"
                     ToolTip="Define the load patterns of the model. While a SAP2000 model is connected its patterns are SAP2000's.">

@@ -118,14 +118,17 @@ A case that continues from another starts with that case's loads and fitted cabl
 carries 1.0 + 0.35 = 1.35 of the self-weight. **Default Setup** builds these from the self-weight pattern, the load
 patterns of Tab 1 (dead or live by pattern type, else by name) and the target-force pattern of Tab 3; the built-in model
 opens on them. **SAP Cases** shows the cases saved from SAP2000 instead, and **+ Add** / **- Remove** with the editable
-Case, Definition and From columns define others. The loads themselves are the ones of Tab 1, also reachable as
-**Define → Loading**.
+Case, Definition and From columns define others.
+
+The loads and the cable forces are part of the parametric set-up of the model, **Edit → VCF System**: the **Storey Force**
+sheet takes the tributary width B, the number of storeys, the loaded points and one qz per load pattern; the **Cable
+Force** sheet takes the target force of each cable. They are the data of Tab 1 and Tab 3 with **one fixed value each** —
+no range there. A range is an input of an optimization run (**Run → Optimization VCF**), set when it is run.
 
 The flow is the one of SAP2000: **Define → Load Patterns** (add or remove patterns of the model — name, type, self-weight
-multiplier), assign their loads (**Define → Loading** for the storey loads, **Edit → VCF System → Cable Force** for the
-target force of each cable), define the load cases, then **Run**. Run first opens **Set Load Cases to Run** — every case
-with its status and its action, Run or Do Not Run — and **Run Now** analyses the model as it is at that moment: its
-geometry, section assignments, loads and cable target forces.
+multiplier), give them their loads in **Edit → VCF System**, define the load cases, then **Run**. Run first opens **Set
+Load Cases to Run** — every case with its status and its action, Run or Do Not Run — and **Run Now** analyses the model
+as it is at that moment: its geometry, section assignments, loads and cable target forces.
 
 The analysis is internal and never calls SAP2000. It uses the sections, materials and loading the model holds: those
 of the default model, of a model opened with **Load Model**, or the ones **File → Read FEM Properties from SAP**

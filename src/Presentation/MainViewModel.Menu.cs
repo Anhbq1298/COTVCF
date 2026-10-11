@@ -59,7 +59,7 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Menu of the pane shown in the left column, e.g. "MB" or "Define".</summary>
-    public string PaneMenu => selectedTab != TabFem ? (selectedTab == TabLoading && LoadingFromDefine ? "Define" : "MB") : femPane switch
+    public string PaneMenu => selectedTab != TabFem ? "MB" : femPane switch
     {
         FemPaneRestraints => "Assign",
         FemPaneAnalysisOptions => "Run",
@@ -70,7 +70,7 @@ public sealed partial class MainViewModel
 
     public string PaneTitle => selectedTab switch
     {
-        TabLoading => LoadingFromDefine ? "LOADING" : "01  LOADING",
+        TabLoading => "01  LOADING",
         TabTruss => "02  TRUSS HEIGHT",
         TabPretension => "03  PRETENSION",
         TabOutput => "04  OUTPUT SETTINGS",

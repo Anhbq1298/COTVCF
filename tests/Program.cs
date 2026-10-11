@@ -299,9 +299,11 @@ internal static class Program
                        cableRows.Single(row => row.Cable == "Cable2a-2").Force == Kn(30_000) && cableRows.Single(row => row.Cable == "Cable1b-2").Sync.StartsWith("=", StringComparison.Ordinal),
                     "VCF Geometry has sheets Geometry | Cable Force | Storey Force | Sections, and shows each cable's pretension on Cable Force (Cable1a-2 100,000 kN, Cable2a-2 30,000 kN, Cable1b-2 following Cable1a-2)");
                 Assert(storeyRows.Count == 11 && storeyRows[0].Area == "60" && storeyRows[5].Area == "120" &&
-                       storeyRows[5].Forces[0] == Kn(-12_000) && storeyRows[0].Forces[0] == Kn(-6_000) &&
-                       storeyRows[5].Forces[1].StartsWith(Kn(-12_000), StringComparison.Ordinal) && storeyRows[5].Forces[1].Contains(Kn(-6_000), StringComparison.Ordinal),
-                    "Storey Force shows the force at each loaded point: −10 kPa × 120 m² × 10 storeys = −12,000 kN inside, half at the ends; the LL range per point");
+                       storeyRows[5].Forces[0] == Kn(-12_000) && storeyRows[0].Forces[0] == Kn(-6_000) && storeyRows[5].Forces[1] == Kn(-6_000) &&
+                       forcesWindow.StoreyLoads.Select(row => (row.Pattern, row.Qz)).SequenceEqual([("DEAD_ABOVE", "10"), ("LL_ABOVE", "5")]) &&
+                       forcesWindow.StoreyWidthBox.Text == "12" && forcesWindow.StoreyCountBox.Text == "10",
+                    "Storey Force holds the loads of the model as one value each — B 12 m, 10 storeys, DEAD_ABOVE 10 kPa, LL_ABOVE 5 kPa (the first value of its 01 Loading range) — " +
+                    "and shows the force at each loaded point: −10 kPa × 120 m² × 10 storeys = −12,000 kN inside, half at the ends");
                 forcesWindow.SetInput("Bay", "12");
                 forcesWindow.UpdateLayout();
                 Assert(forcesWindow.StoreyForces[5].Area == "144" && forcesWindow.StoreyForces[5].Forces[0] == Kn(-14_400),
@@ -325,12 +327,39 @@ internal static class Program
                        forceWindow.CableForces.Single(row => row.Cable == "Cable1b-2").Force == "follows Cable1a-2" &&
                        forceState.Cables.Single(cable => cable.CableName == "Cable1a-2").GetCandidateForces()[0] == 100_000,
                     "Cable Force takes a target force for an independent cable (staged until Apply); a follower and a negative value are refused");
+                // Storey Force is where the loads of the model are set: one qz per load pattern, B, storeys, loaded points
+                var liveRow = forceWindow.StoreyLoads.Single(row => row.Pattern == "LL_ABOVE");
+                var badQz = false;
+                try { liveRow.Qz = "-1"; } catch (ArgumentException) { badQz = true; }
+                liveRow.Qz = "7.5";
+                forceWindow.StoreyWidthBox.Text = "0";
+                var zeroWidth = !forceWindow.ApplyButton.IsEnabled && forceWindow.ProblemText.Text.Contains("tributary width B", StringComparison.Ordinal);
+                forceWindow.StoreyWidthBox.Text = "10";
+                forceWindow.StoreyCountBox.Text = "8";
+                var extra = forceWindow.AddStoreyLoad();
+                var twice = !forceWindow.ApplyButton.IsEnabled || extra.Pattern != "DEAD_ABOVE";
+                extra.Pattern = "DEAD_ABOVE";
+                var repeated = !forceWindow.ApplyButton.IsEnabled && forceWindow.ProblemText.Text.Contains("can be loaded once", StringComparison.Ordinal);
+                forceWindow.RemoveStoreyLoad(extra);
+                forceWindow.SetStoreyPoints(forceState.AppliedPoints.Select(point => point.PointName).Skip(1).ToArray());
+                forceWindow.UpdateLayout();
+                Assert(badQz && zeroWidth && twice && repeated && forceWindow.ApplyButton.IsEnabled && forceWindow.StoreyForces.Count == 10 &&
+                       forceWindow.StoreyForces[5].Forces[1] == Kn(-7.5 * 100 * 8) && forceWindow.StoreyForces[0].Forces[0] == Kn(-10 * 50 * 8) &&
+                       forceState.TributaryWidthB == 12 && forceState.LoadDefinitions.Single(load => load.LoadName == "LL_ABOVE").ApplyIncrementStep,
+                    "Storey Force takes B, the storeys, the loaded points and one qz per load pattern; the forces follow at once (7.5 kPa × 100 m² × 8 storeys = −6,000 kN), " +
+                    "bad input greys Apply, and the model is untouched until Apply");
                 forceWindow.ApplyFormAsync().GetAwaiter().GetResult();
                 forceWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Assert(forceState.Cables.Single(cable => cable.CableName == "Cable1a-2") is { ApplyRange: false, TargetForce: 90_000.0 } &&
                        forceWindow.CableForceEdits.Count == 0 && forceWindow.CableForces.Single(row => row.Cable == "Cable1a-2").Force == Kn(90_000) &&
                        forceWindow.CableForces.Single(row => row.Cable == "Cable1b-2").Force == Kn(90_000),
                     "Apply writes the target force to the model: Cable1a-2 90,000 kN, and Cable1b-2 follows it");
+                Assert(forceState.TributaryWidthB == 10 && forceState.NumberOfStories == 8 && forceState.AppliedPoints.Count == 10 &&
+                       forceState.LoadDefinitions.Single(load => load.LoadName == "LL_ABOVE") is { ApplyIncrementStep: false, Qz: 7.5 } &&
+                       forceState.LoadDefinitions.Single(load => load.LoadName == "DEAD_ABOVE") is { ApplyIncrementStep: false, Qz: 10.0 } && forceState.LoadDefinitions.Count == 2 &&
+                       forceWindow.StoreyLoads.Single(row => row.Pattern == "LL_ABOVE").Qz == "7.5" && forceVm.FemRunSummary.StartsWith("1 FEM run", StringComparison.Ordinal) &&
+                       !forceVm.FemRunSummary.Contains("ranges", StringComparison.Ordinal),
+                    "…and the storey loads: B 10 m, 8 storeys, 10 loaded points, LL_ABOVE fixed at 7.5 kPa — the model has no range left, so Run uses exactly what the sheets show");
                 forceWindow.Close();
                 // Run asks which load cases to analyse (Set Load Cases to Run)
                 var runCases = new RunLoadCasesWindow(forceVm) { Owner = window };
@@ -606,11 +635,6 @@ internal static class Program
                        FindVisuals<Button>(window).Single(button => Equals(button.Content, "SAP Cases")).IsEnabled == vm.HasSapLoadCases &&
                        FindVisuals<ComboBox>(window).All(combo => !combo.IsVisible || !ReferenceEquals(combo.ItemsSource, vm.FemInitialCaseChoices) || combo.DataContext is FemCaseRow),
                     "Define -> Load Cases defines the cases in the app: Default Setup, SAP Cases (when the model holds SAP2000's), + Add and - Remove");
-                OpenMenu("Define", "Loading");
-                Assert(vm.SelectedTab == 0 && vm.PaneMenu == "Define" && vm.PaneTitle == "LOADING",
-                    "Define -> Loading opens the 01 Loading page as the load definition of the model");
-                OpenMenu("MB", "01  Loading");
-                Assert(vm.SelectedTab == 0 && vm.PaneMenu == "MB" && vm.PaneTitle == "01  LOADING", "MB -> 01 Loading opens the same page as the study tab");
                 OpenSubMenu("Assign", "Joint", "Restraints");
                 Assert(vm.PaneMenu == "Assign" && vm.FemPane == MainViewModel.FemPaneRestraints &&
                        FindVisuals<TextBlock>(window).Any(text => text.IsVisible && text.Text == vm.FemPinSupportSummary),

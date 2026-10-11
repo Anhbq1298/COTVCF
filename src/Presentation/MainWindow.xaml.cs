@@ -259,20 +259,7 @@ public partial class MainWindow : Window
 
     private void MbMenu_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel vm && MenuTag(sender) is >= 0 and var tab)
-        {
-            vm.LoadingFromDefine = false;
-            vm.SelectedTab = tab;
-        }
-        OpenPane();
-    }
-
-    // Define → Loading: the loads of the model are the ones of 01 Loading (applied points, qz per load pattern, B, storeys)
-    private void DefineLoading_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel vm) return;
-        vm.LoadingFromDefine = true;
-        vm.SelectedTab = 0;
+        if (DataContext is MainViewModel vm && MenuTag(sender) is >= 0 and var tab) vm.SelectedTab = tab;
         OpenPane();
     }
 

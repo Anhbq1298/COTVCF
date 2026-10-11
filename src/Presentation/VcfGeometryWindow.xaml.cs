@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -62,6 +63,8 @@ public partial class VcfGeometryWindow : Window
             AddInput("Clear", "Clear height (ground → bottom chord)", p.ClearHeight);
             if (p.BackSpan is { } span) AddInput("BackSpan", "Back-span (mega column → outer column)", span);
             if (p.BackStayHeight is { } stay) AddInput("BackStay", "Back-stay node height (above ground)", stay);
+
+            LoadStoreyInputs();
 
             var frames = viewModel.VcfSectionNames(cable: false);
             foreach (var role in new[] { VcfMemberRole.TopChord, VcfMemberRole.MiddleChord, VcfMemberRole.BottomChord,
@@ -204,6 +207,12 @@ public partial class VcfGeometryWindow : Window
         Preview.Model = preview;     // geometry and dimensions only — section names would crowd the small preview
         Preview.PinSupportPoints = SafePins(preview);
         ShowForces(model, preview);
+        if (StoreyInputs(out var storeyProblems) is null)
+        {
+            ProblemText.Text = string.Join("\n", storeyProblems);
+            SetActions(false);
+            return;
+        }
         ProblemText.Text = "";
         var span = form.BayWidth * model.Bays;
         GeometrySummary.Text = $"Span {span:0.###} m between mega columns · overall {span + 2 * (form.BackSpan ?? 0):0.###} m · " +
@@ -214,8 +223,11 @@ public partial class VcfGeometryWindow : Window
     }
 
     // ---- Cable Force / Storey Force panes ----
-    /// <summary>One cable on the Cable Force sheet. An independent cable of 03 Pretension takes a new target force
-    /// here; a follower keeps its sync rule, and a cable that is not on 03 Pretension has no target.</summary>
+    // The loads and the cable forces are part of the parametric set-up of the model, so they are entered here — the same
+    // inputs as 01 Loading and 03 Pretension, but one fixed value each. A range is a matter for Run → Optimization VCF.
+
+    /// <summary>One cable on the Cable Force sheet. A cable with a value of its own takes a new target force here; a
+    /// cable that follows another keeps its sync rule, and a cable that is not on 03 Pretension has no target.</summary>
     internal sealed class CableForceRow(string cable, string pattern, string sync, string force, bool editable, string hint, Action<string, double> edited) : Observable
     {
         private string force = force;
@@ -239,59 +251,136 @@ public partial class VcfGeometryWindow : Window
             }
         }
     }
+
+    /// <summary>One load of the model on the Storey Force sheet: a load pattern with its qz [kPa] — one value, no range.</summary>
+    internal sealed class StoreyLoadRow(string pattern, string qz, string hint, Action changed) : Observable
+    {
+        private string pattern = pattern, qz = qz;
+        public string Hint { get; } = hint;
+        public string Pattern { get => pattern; set { if (Set(ref pattern, value ?? "")) changed(); } }
+        public string Qz
+        {
+            get => qz;
+            set
+            {
+                var text = (value ?? "").Trim();
+                if (text == qz) return;
+                if (Number(text) is null) throw new ArgumentException("Enter qz in kPa, zero or greater.");
+                Set(ref qz, text);
+                changed();
+            }
+        }
+        /// <summary>qz as a number, or null while the cell does not hold one.</summary>
+        public double? Value => Number(qz);
+        private static double? Number(string text) =>
+            double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) && double.IsFinite(value) && value >= 0 ? value : null;
+    }
     internal sealed record StoreyForceRow(string Point, string X, string Area, IReadOnlyList<string> Forces);
 
     /// <summary>Target forces typed on the Cable Force sheet and not applied yet (cable → kN).</summary>
     private readonly Dictionary<string, double> cableForceEdits = new(StringComparer.Ordinal);
     internal IReadOnlyDictionary<string, double> CableForceEdits => cableForceEdits;
 
-    private static string Kn(double value) => value.ToString("#,0.###", CultureInfo.CurrentCulture);
-    private static string Range(IReadOnlyList<double> values) => values.Count == 0 ? "—"
-        : values.Min() == values.Max() ? Kn(values[0]) : $"{Kn(values.Min())} … {Kn(values.Max())} ({values.Count})";
+    /// <summary>The load rows of the Storey Force sheet, and the loaded points chosen there (null: the model's).</summary>
+    private readonly ObservableCollection<StoreyLoadRow> storeyLoads = [];
+    private IReadOnlyList<string>? storeyPoints;
+    internal IReadOnlyList<StoreyLoadRow> StoreyLoads => storeyLoads;
 
-    /// <summary>The pretension of every cable (Tab 03) and the force applied at every loaded point (Tab 01, with the
-    /// tributary lengths of the previewed geometry).</summary>
+    private static string Kn(double value) => value.ToString("#,0.###", CultureInfo.CurrentCulture);
+    private static string Text(double value) => value.ToString("0.###", CultureInfo.CurrentCulture);
+
+    /// <summary>Fills the Storey Force inputs from the model. A load with a range on 01 Loading shows its first value —
+    /// the one the model is analysed with.</summary>
+    private void LoadStoreyInputs()
+    {
+        var state = viewModel.State;
+        StoreyWidthBox.Text = Text(state.TributaryWidthB);
+        StoreyCountBox.Text = Text(state.NumberOfStories);
+        storeyPoints = null;
+        storeyLoads.Clear();
+        foreach (var definition in state.LoadDefinitions)
+            storeyLoads.Add(new(definition.LoadName, definition.CandidateCount > 0 ? Text(definition.CandidateValues[0]) : "",
+                definition.CandidateCount > 1
+                    ? $"A range on 01 Loading ({Text(definition.CandidateValues[0])} … {Text(definition.CandidateValues[^1])} kPa): the model uses its first value. A value typed here makes it fixed."
+                    : "qz [kPa] of this load", Refresh));
+        StoreyLoadGrid.ItemsSource = storeyLoads;
+    }
+
+    /// <summary>The storey loads in the form — tributary width, storeys and one qz per load pattern — or the problems.</summary>
+    internal (double Width, double Stories, IReadOnlyList<(string Pattern, double Qz)> Loads)? StoreyInputs(out IReadOnlyList<string> problems)
+    {
+        var found = new List<string>();
+        static double? Parsed(TextBox box) =>
+            double.TryParse(box.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) && double.IsFinite(value) ? value : null;
+        var width = Parsed(StoreyWidthBox);
+        var stories = Parsed(StoreyCountBox);
+        if (width is not > 0) found.Add("Storey Force · tributary width B: enter a number greater than zero.");
+        if (stories is not >= 1 || stories != Math.Floor(stories.Value)) found.Add("Storey Force · NStories: enter a whole number, at least 1.");
+        foreach (var row in storeyLoads)
+        {
+            if (string.IsNullOrWhiteSpace(row.Pattern)) found.Add("Storey Force: choose the load pattern of every load (or remove the row).");
+            else if (row.Value is null) found.Add($"Storey Force · {row.Pattern}: enter qz in kPa, zero or greater.");
+        }
+        foreach (var repeated in storeyLoads.Where(row => !string.IsNullOrWhiteSpace(row.Pattern))
+                     .GroupBy(row => row.Pattern, StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1))
+            found.Add($"Storey Force · {repeated.Key}: a load pattern can be loaded once.");
+        problems = found.Distinct().ToArray();
+        if (problems.Count > 0) return null;
+        return (width!.Value, stories!.Value, storeyLoads.Select(row => (row.Pattern, row.Value!.Value)).ToArray());
+    }
+
+    /// <summary>The target force of every cable and the force applied at every loaded point, as the form has them now
+    /// (with the tributary lengths of the previewed geometry).</summary>
     private void ShowForces(VcfGeometryAnalysis model, GeometryModel geometry)
     {
         var state = viewModel.State;
         var cables = state.Cables.ToArray();
         var rows = new List<CableForceRow>();
+        var ranged = 0;
         foreach (var name in geometry.Members.Where(member => member.Kind != MemberKind.Frame).Select(member => member.Name).Order(StringComparer.Ordinal))
         {
             var added = topology is not null && topology.AddedCables.TryGetValue(name, out var template) ? template : null;
             var cable = cables.FirstOrDefault(item => item.CableName == (added ?? name));
             if (cable is null) { rows.Add(new(name, "", "", "not on 03 Pretension", false, "Add the cable on 03 Pretension to give it a target force.", StageCableForce)); continue; }
             var sync = cable.SyncSummary + (added is null ? "" : $" (new, as {added})");
+            var forces = cable.IsFollower ? CableSyncGraph.ResolvedForces(cable, cables) : cable.GetCandidateForces();
+            // one value: the first of a 03 Pretension range is the one the model is analysed with
+            var value = forces.Count == 0 ? "—" : Kn(forces[0]);
             if (added is not null)
-                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.TryGetValue(added, out var copied) ? Kn(copied) : Range(Forces(cable)), false,
+                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.TryGetValue(added, out var copied) ? Kn(copied) : value, false,
                     $"A new fan cable: it takes the target force of {added}.", StageCableForce));
-            else if (cable.IsFollower)
-                // a follower's value comes from its reference; once that is edited here the new value shows after Apply
-                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.ContainsKey(cable.ReferenceCableName ?? "") ? $"follows {cable.ReferenceCableName}" : Range(Forces(cable)), false,
+            else if (cable.IsFollower && !cable.IsSameStepFollower)
+                // the value comes from the cable it follows; once that is edited here the new value shows after Apply
+                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.ContainsKey(cable.ReferenceCableName ?? "") ? $"follows {cable.ReferenceCableName}" : value, false,
                     $"Follows {cable.ReferenceCableName}: edit that cable, or change the sync on 03 Pretension.", StageCableForce));
             else
-                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.TryGetValue(name, out var typed) ? Kn(typed) : Range(Forces(cable)), true,
-                    cable.CandidateCount > 1 ? "A range of 03 Pretension: Run Analysis uses its first value. A value typed here makes the target fixed."
+            {
+                var range = forces.Count > 1;
+                if (range) ranged++;
+                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.TryGetValue(name, out var typed) ? Kn(typed) : value, true,
+                    range ? $"A range on 03 Pretension ({Kn(forces.Min())} … {Kn(forces.Max())} kN): the model uses its first value. A value typed here makes the target fixed."
                         : "Target force [kN] of this cable.", StageCableForce));
+            }
         }
         CableForceGrid.ItemsSource = rows;
-        CableForceSummary.Text = $"{rows.Count} cables · {rows.Count(row => row.Force.Contains('…'))} with a range of targets" +
+        CableForceSummary.Text = $"{rows.Count} cables" +
+            (ranged == 0 ? "" : $" · {ranged} with a range on 03 Pretension (the model uses the first value)") +
             (cableForceEdits.Count == 0 ? "" : $" · {cableForceEdits.Count} edited, not applied yet");
 
-        IReadOnlyList<double> Forces(CablePretensionConfig cable) => cable.IsFollower ? CableSyncGraph.ResolvedForces(cable, cables) : cable.GetCandidateForces();
-
         // Storey force: the loaded points (all top chord points stay loaded when every one was), tributary length from the preview
-        var applied = state.AppliedPoints.Select(point => point.PointName).ToArray();
+        var applied = storeyPoints ?? state.AppliedPoints.Select(point => point.PointName).ToArray();
         var top = state.Truss.TopPoints;
-        var allTop = top.Count > 0 && applied.Length == top.Count && top.All(applied.Contains);
+        var allTop = top.Count > 0 && applied.Count == top.Count && top.All(applied.Contains);
         IEnumerable<string> candidates = topology is not null && allTop ? model.TopPoints
             : applied.Select(name => topology is not null && topology.RenamedPoints.TryGetValue(name, out var renamed) ? renamed : name);
         var names = candidates.Where(geometry.Points.ContainsKey).Distinct(StringComparer.Ordinal)
             .OrderBy(name => geometry.Points[name].Position.X).ThenBy(name => name, StringComparer.Ordinal).ToArray();
-        var definitions = state.LoadDefinitions.Where(definition => !string.IsNullOrWhiteSpace(definition.LoadName)).ToArray();
-        var stories = double.IsFinite(state.NumberOfStories) && state.NumberOfStories >= 1 ? Math.Truncate(state.NumberOfStories) : 0;
+        // the form's own values; an input that does not read as a number yet leaves its column empty
+        var width = double.TryParse(StoreyWidthBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var b) && b > 0 ? b : 0;
+        var stories = double.TryParse(StoreyCountBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var n) && n >= 1 ? Math.Truncate(n) : 0;
+        var loads = storeyLoads.Where(row => !string.IsNullOrWhiteSpace(row.Pattern)).ToArray();
         var storeyRows = new List<StoreyForceRow>();
-        var totals = new double[definitions.Length, 2];
+        var totals = new double[loads.Length];
         double X(int i) => geometry.Points[names[i]].Position.X;
         for (var index = 0; index < names.Length; index++)
         {
@@ -302,28 +391,69 @@ public partial class VcfGeometryWindow : Window
                 _ when index == names.Length - 1 => Math.Max(0, X(names.Length - 1) - X(names.Length - 2)) / 2,
                 _ => Math.Max(0, X(index + 1) - X(index - 1)) / 2,
             };
-            var area = length * state.TributaryWidthB;
+            var area = length * width;
             var forces = new List<string>();
-            for (var d = 0; d < definitions.Length; d++)
+            for (var d = 0; d < loads.Length; d++)
             {
-                var values = definitions[d].CandidateValues.Select(qz => -qz * area * stories).ToArray();
-                forces.Add(Range(values));
-                if (values.Length > 0) { totals[d, 0] += values.Min(); totals[d, 1] += values.Max(); }
+                if (loads[d].Value is not { } qz) { forces.Add("—"); continue; }
+                var force = -qz * area * stories;
+                forces.Add(Kn(force));
+                totals[d] += force;
             }
-            storeyRows.Add(new(names[index], X(index).ToString("0.###", CultureInfo.CurrentCulture), area.ToString("0.###", CultureInfo.CurrentCulture), forces));
+            storeyRows.Add(new(names[index], Text(X(index)), Text(area), forces));
         }
         StoreyForceGrid.Columns.Clear();
         StoreyForceGrid.Columns.Add(new DataGridTextColumn { Header = "Point", Binding = new System.Windows.Data.Binding(nameof(StoreyForceRow.Point)), MinWidth = 70 });
         StoreyForceGrid.Columns.Add(new DataGridTextColumn { Header = "X [m]", Binding = new System.Windows.Data.Binding(nameof(StoreyForceRow.X)), ElementStyle = (Style)FindResource("NumericCell") });
         StoreyForceGrid.Columns.Add(new DataGridTextColumn { Header = "Trib. area [m²]", Binding = new System.Windows.Data.Binding(nameof(StoreyForceRow.Area)), ElementStyle = (Style)FindResource("NumericCell") });
-        for (var d = 0; d < definitions.Length; d++)
-            StoreyForceGrid.Columns.Add(new DataGridTextColumn { Header = $"{definitions[d].LoadName} Fz [kN]", MinWidth = 90,
+        for (var d = 0; d < loads.Length; d++)
+            // a TextBlock, so an underscore in the pattern name is shown (a plain header takes it as an access key)
+            StoreyForceGrid.Columns.Add(new DataGridTextColumn { Header = new TextBlock { Text = $"{loads[d].Pattern} Fz [kN]" }, MinWidth = 90,
                 Binding = new System.Windows.Data.Binding($"{nameof(StoreyForceRow.Forces)}[{d}]"), ElementStyle = (Style)FindResource("NumericCell") });
         StoreyForceGrid.ItemsSource = storeyRows;
-        StoreyForceCaption.Text = $"Applied force per point from 01 Loading: Fz = −qz × trib. length × B ({state.TributaryWidthB:0.###} m) × NStories ({stories:0})";
-        StoreyForceSummary.Text = names.Length == 0 ? "No loaded points on 01 Loading."
-            : $"{names.Length} points · total " + string.Join(" · ", definitions.Select((definition, d) =>
-                $"{definition.LoadName} {(totals[d, 0] == totals[d, 1] ? Kn(totals[d, 0]) : $"{Kn(totals[d, 0])} … {Kn(totals[d, 1])}")} kN"));
+        StoreyForceCaption.Text = "The storey loads of the model: one qz per load pattern (a range belongs to Run → Optimization VCF). " +
+            "Force at each loaded point: Fz = −qz × trib. length × B × NStories. Apply / OK writes them to the model.";
+        StoreyPointsButton.IsEnabled = topology is null;
+        StoreyPointsButton.ToolTip = topology is null ? "Choose the points the storey loads act on"
+            : "The number of bays is changed in the form: apply it first, then choose the loaded points of the new model.";
+        StoreyForceSummary.Text = (names.Length == 0 ? "No loaded points — choose them with Loaded Points…"
+            : $"{names.Length} points" + (loads.Length == 0 ? " · no load" : " · total " + string.Join(" · ", loads.Select((load, d) => $"{load.Pattern} {Kn(totals[d])} kN")))) +
+            (storeyPoints is null ? "" : " · points changed, not applied yet");
+    }
+
+    private void StoreyInput_Changed(object sender, TextChangedEventArgs e) => Refresh();
+
+    internal StoreyLoadRow AddStoreyLoad()
+    {
+        var used = storeyLoads.Select(row => row.Pattern).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var row = new StoreyLoadRow(viewModel.State.LoadPatterns.FirstOrDefault(pattern => !used.Contains(pattern)) ?? "", "0", "qz [kPa] of this load", Refresh);
+        storeyLoads.Add(row);
+        Refresh();
+        return row;
+    }
+
+    internal void RemoveStoreyLoad(StoreyLoadRow row)
+    {
+        if (storeyLoads.Remove(row)) Refresh();
+    }
+
+    private void AddStoreyLoad_Click(object sender, RoutedEventArgs e) => AddStoreyLoad();
+    private void RemoveStoreyLoad_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: StoreyLoadRow row }) RemoveStoreyLoad(row);
+    }
+
+    /// <summary>Stages the loaded points (checks call it; the button asks the user through the point picker).</summary>
+    internal void SetStoreyPoints(IReadOnlyList<string> points)
+    {
+        storeyPoints = points.Distinct(StringComparer.Ordinal).ToArray();
+        Refresh();
+    }
+
+    private void StoreyPoints_Click(object sender, RoutedEventArgs e)
+    {
+        var current = storeyPoints ?? viewModel.State.AppliedPoints.Select(point => point.PointName).ToArray();
+        if (viewModel.ChooseLoadPoints(current) is { } chosen) SetStoreyPoints(chosen);
     }
 
     /// <summary>A target force typed on the sheet: kept until Apply / OK, and the rows that depend on it are shown again.</summary>
@@ -358,8 +488,11 @@ public partial class VcfGeometryWindow : Window
     internal async Task ApplyFormAsync()
     {
         if (analysis is null || FormParameters(out _) is not { } form) return;
-        // the cable targets first, so a new fan cable copies the edited value of the cable it is modelled on
+        // the loads and cable targets first, so a change of bays carries them over: a new fan cable copies the edited
+        // value of the cable it is modelled on, and the loaded points follow the new chord
+        if (StoreyInputs(out _) is not { } storey) return;
         viewModel.SetCableTargetForces(cableForceEdits.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
+        viewModel.SetStoreyLoads(storey.Width, storey.Stories, storey.Loads, storeyPoints);
         await viewModel.ApplyVcfGeometryAsync(VcfGeometry.Build(working!, form), FormSections(), topology);
         LoadFromModel();
     }

@@ -94,7 +94,7 @@ internal static class FemModelFileChecks
             Check(vm.RunFemAnalysis.CanExecute(null) && vm.SaveFemModel.CanExecute(null) && !vm.ReadFemProperties.CanExecute(null) &&
                   !vm.LoadConfig.CanExecute(null) && vm.StatusLine.StartsWith("Offline model", StringComparison.Ordinal),
                 "offline: Run Analysis and Save Model are enabled; Read from SAP and Load Config wait for a connection");
-            // Define → Loading: the loads of the model are edited in the app, so its add / remove commands work offline too
+            // 01 Loading only edits what the app holds, so its add / remove commands work on an offline model too
             var loadRows = offline.LoadDefinitions.Count;
             Check(vm.AddPoints.CanExecute(null) && vm.RemoveAppliedPoints.CanExecute(null) && vm.AddLoadDefinition.CanExecute(null), "offline: the 01 Loading add / remove commands are enabled");
             vm.AddLoadDefinition.Execute(null);
@@ -240,7 +240,7 @@ internal static class FemModelFileChecks
               vm.FemProgressText.StartsWith("Default load cases defined", StringComparison.Ordinal),
             "Default Setup puts the default load cases back: " + vm.FemProgressText);
 
-        // The flow: define a load pattern → assign its load (Define → Loading) → use it in a load case → Run
+        // The flow: define a load pattern → give it a load (Edit → VCF System → Storey Force) → use it in a load case → Run
         var sdl = vm.AddFemLoadPattern(" SDL_ABOVE ", "Dead");
         Check(vm.CanDefineLoadPatterns && sdl is { Name: "SDL_ABOVE", Type: "Dead", SelfWeightMultiplier: 0, Role: "", Loads: "none" } &&
               state.LoadPatterns.Contains("SDL_ABOVE") && vm.FemPatternRows.Count == 5 && warnings.Count == 0,
@@ -249,11 +249,14 @@ internal static class FemModelFileChecks
               warnings.Count == 3 && vm.FemPatternRows.Count == 5,
             "a pattern name that is taken, holds ' + ' or is empty is refused: " + string.Join(" | ", warnings));
         warnings.Clear();
-        state.LoadDefinitions.Add(new LoadDefinition { LoadName = "SDL_ABOVE", Qz = 2 });
-        vm.Update();
-        Check(sdl is { Role: "Tab 01 loads", Loads: "+ Tab 01 loads" } && vm.FemPatternRows.Single(row => row.Name == "DEAD") is { Role: "Self-weight", Loads: "self-weight" } &&
+        // Storey Force: one fixed qz per load pattern. A value that is the one the model already uses leaves the row as it
+        // is (LL_ABOVE keeps its 01 Loading range); a new one is fixed.
+        vm.SetStoreyLoads(state.TributaryWidthB, state.NumberOfStories, [("DEAD_ABOVE", 10), ("LL_ABOVE", 5), ("SDL_ABOVE", 2)]);
+        Check(state.LoadDefinitions.Select(load => (load.LoadName, load.ApplyIncrementStep, load.CandidateValues[0])).SequenceEqual([
+                  ("DEAD_ABOVE", false, 10.0), ("LL_ABOVE", true, 5.0), ("SDL_ABOVE", false, 2.0)]) &&
+              sdl is { Role: "Tab 01 loads", Loads: "+ Tab 01 loads" } && vm.FemPatternRows.Single(row => row.Name == "DEAD") is { Role: "Self-weight", Loads: "self-weight" } &&
               vm.FemPatternRows.Single(row => row.Name == "Pretension").Role == "Tab 03 cable target force",
-            "a load row of Define → Loading on the pattern gives it its load; the table says what each pattern carries now");
+            "a storey load on the pattern (VCF System → Storey Force, one qz) gives it its load; the table says what each pattern carries now");
         var sdlCase = vm.AddFemLoadCase()!;
         sdlCase.Name = "SDL";
         sdlCase.Definition = "1 SDL_ABOVE";
@@ -269,7 +272,7 @@ internal static class FemModelFileChecks
         Check(!vm.RemoveFemLoadPattern(sdl) && warnings.Count == 1 && warnings[0].Contains("01 Loading", StringComparison.Ordinal) && warnings[0].Contains("load case", StringComparison.Ordinal),
             "- Remove keeps a load pattern that is in use: " + (warnings.Count > 0 ? warnings[0] : ""));
         warnings.Clear();
-        state.LoadDefinitions.Remove(state.LoadDefinitions.Single(definition => definition.LoadName == "SDL_ABOVE"));
+        vm.SetStoreyLoads(state.TributaryWidthB, state.NumberOfStories, [("DEAD_ABOVE", 10), ("LL_ABOVE", 5)]);
         vm.ApplyDefaultFemLoadCases();
         Check(vm.RemoveFemLoadPattern(sdl) && !state.LoadPatterns.Contains("SDL_ABOVE") && vm.FemPatternRows.Count == 4 && warnings.Count == 0 &&
               vm.FemCaseRows[2].Definition == "0.35 DEAD + 1.35 DEAD_ABOVE + 1.5 LL_ABOVE",
@@ -285,6 +288,13 @@ internal static class FemModelFileChecks
               Math.Abs(Stage("Cable1a-2") - 90_000) < 0.1 * 90_000 && Target("Cable2a-2") == 30_000,
             $"a target force set for a cable is the one Run meets in Pretension (Cable1a-2 {Stage("Cable1a-2"):0} kN for 90,000); its follower Cable1b-2 keeps following, the other cables keep theirs");
         vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable1a-2"] = 100_000 });
+        // a Same Step follower has a value of its own (its end points): it is set to the one number, and stays a follower
+        var stepFollower = state.Cables.Single(cable => cable.CableName == "Cable4a-2");
+        vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable4a-2"] = 42_000 });
+        var stepValue = PretensionCandidates.Enumerate(state.Cables.ToArray()).First().CableForces["Cable4a-2"];
+        vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable4a-2"] = 40_000 });
+        Check(stepFollower is { IsSameStepFollower: true, MinForce: 40_000.0, MaxForce: 40_000.0 } && stepValue == 42_000,
+            "a cable that follows another's step takes one value too (Cable4a-2 42,000 kN) and keeps its sync");
 
         // Run asks which load cases to analyse; without Run Now nothing starts
         var asked = 0;

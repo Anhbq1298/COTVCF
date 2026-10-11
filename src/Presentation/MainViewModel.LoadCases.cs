@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using COT_VCF.Application;
+using COT_VCF.Domain;
 
 namespace COT_VCF.Presentation;
 
@@ -11,7 +12,6 @@ namespace COT_VCF.Presentation;
 public sealed partial class MainViewModel
 {
     private FemCaseRow? selectedFemCaseRow;
-    private bool loadingFromDefine;
 
     /// <summary>The case selected in the Load Cases table (Remove acts on it).</summary>
     public FemCaseRow? SelectedFemCaseRow { get => selectedFemCaseRow; set => Set(ref selectedFemCaseRow, value); }
@@ -22,13 +22,6 @@ public sealed partial class MainViewModel
 
     /// <summary>The model holds load cases read from SAP2000, so the table can show SAP2000's own setup again.</summary>
     public bool HasSapLoadCases => femSapLoading.Cases.Count > 0;
-
-    /// <summary>01 Loading was opened from Define → Loading: the loads of the model are defined there.</summary>
-    public bool LoadingFromDefine
-    {
-        get => loadingFromDefine;
-        set { if (Set(ref loadingFromDefine, value)) NotifyPaneHeader(); }
-    }
 
     /// <summary>Replaces the three load tables, keeping the rows wired to the table's rules.</summary>
     private void SetFemLoadRows(IReadOnlyList<FemPatternRow> patterns, IReadOnlyList<FemCaseRow> cases, IReadOnlyList<FemCombinationRow> combinations)
@@ -68,8 +61,8 @@ public sealed partial class MainViewModel
     /// <summary>Load patterns can be defined here once the model is the app's own; a connected SAP2000 model has SAP2000's.</summary>
     public bool CanDefineLoadPatterns => !IsBusy && HasWorkingModel && !State.IsSapConnected;
 
-    /// <summary>Adds a load pattern to the model. It carries nothing until a load is assigned to it: a row of 01 Loading
-    /// (Define → Loading), the cable target forces of 03 Pretension, or a self-weight multiplier.</summary>
+    /// <summary>Adds a load pattern to the model. It carries nothing until a load is assigned to it: a storey load
+    /// (Edit → VCF System → Storey Force), the cable target forces, or a self-weight multiplier.</summary>
     internal FemPatternRow? AddFemLoadPattern(string? name, string? type)
     {
         if (IsBusy || CommitEditors?.Invoke() == false) return null;
@@ -88,7 +81,7 @@ public sealed partial class MainViewModel
         row.PropertyChanged += PatternRowChanged;
         FemPatternRows.Add(row);
         State.LoadPatterns.Add(name);
-        Message = $"Load pattern '{name}' added. Assign its loads on Define → Loading, then use it in a load case.";
+        Message = $"Load pattern '{name}' added. Give it a load on Edit → VCF System → Storey Force, then use it in a load case.";
         Notify(nameof(FemLoadSummary));
         Update();
         return row;
@@ -132,24 +125,77 @@ public sealed partial class MainViewModel
         _ = AnalyzeFemAsync();
     }
 
-    // ---- Edit → VCF System → Cable Force: the cable target forces of the model ----
+    // ---- Edit → VCF System → Cable Force / Storey Force: the loads of the model ----
+    // The cable forces and the storey loads are part of the parametric set-up of the model: the same data as 03 Pretension
+    // and 01 Loading, entered there as one fixed value each. A range is set for an optimization run, not for the model.
 
-    /// <summary>Sets the target force of independent cables. The model holds one value per cable, so a Tab 03 range
-    /// becomes that fixed value; a follower keeps following its reference.</summary>
+    /// <summary>Sets the target force of cables that have a value of their own. The model holds one value per cable, so a
+    /// Tab 03 range becomes that fixed value; a cable that follows another's value keeps following it.</summary>
     internal void SetCableTargetForces(IReadOnlyDictionary<string, double> forcesKN)
     {
         var changed = 0;
         foreach (var (name, force) in forcesKN)
         {
             if (!double.IsFinite(force) || force < 0) continue;
-            if (State.Cables.FirstOrDefault(cable => cable.CableName == name) is not { IsFollower: false } cable) continue;
-            cable.ApplyRange = false;
-            cable.TargetForce = force;
+            if (State.Cables.FirstOrDefault(item => item.CableName == name) is not { } cable) continue;
+            if (cable.IsSameStepFollower) cable.MinForce = cable.MaxForce = force;     // its own end points, both at the value
+            else if (cable.IsFollower) continue;
+            else { cable.ApplyRange = false; cable.TargetForce = force; }
             changed++;
         }
         if (changed == 0) return;
         ClearFemResults();
         Update();
+    }
+
+    /// <summary>Sets the storey loads of the model: the tributary width, the number of storeys, one qz [kPa] per load
+    /// pattern and — when given — the loaded points. A load whose value is the one the model already uses is left as it
+    /// is; another value makes it fixed (a Tab 01 range ends there).</summary>
+    internal void SetStoreyLoads(double tributaryWidthB, double numberOfStories, IReadOnlyList<(string Pattern, double Qz)> loads,
+        IReadOnlyList<string>? loadedPoints = null)
+    {
+        string Signature() => $"{State.TributaryWidthB:R}|{State.NumberOfStories:R}|" +
+            string.Join(";", State.LoadDefinitions.Select(item => $"{item.LoadName}={(item.CandidateCount > 0 ? item.CandidateValues[0] : double.NaN):R}/{item.CandidateCount}")) + "|" +
+            string.Join(";", State.AppliedPoints.Select(point => point.PointName));
+        var before = Signature();
+        State.TributaryWidthB = tributaryWidthB;
+        State.NumberOfStories = numberOfStories;
+
+        var kept = new HashSet<LoadDefinition>();
+        foreach (var (pattern, qz) in loads)
+        {
+            var definition = State.LoadDefinitions.FirstOrDefault(item => !kept.Contains(item) && item.LoadName.Equals(pattern, StringComparison.OrdinalIgnoreCase));
+            if (definition is null) State.LoadDefinitions.Add(definition = new LoadDefinition { LoadName = pattern });
+            kept.Add(definition);
+            if (definition.CandidateCount > 0 && definition.CandidateValues[0] == qz) continue;
+            definition.ApplyIncrementStep = false;
+            definition.Qz = qz;
+        }
+        foreach (var removed in State.LoadDefinitions.Where(item => !kept.Contains(item)).ToArray()) State.LoadDefinitions.Remove(removed);
+
+        if (loadedPoints is not null)
+        {
+            var wanted = loadedPoints.ToHashSet(StringComparer.Ordinal);
+            foreach (var point in State.AppliedPoints.Where(point => !wanted.Contains(point.PointName)).ToArray())
+            {
+                State.AppliedPoints.Remove(point);
+                if (ReferenceEquals(SelectedAppliedPoint, point)) SelectedAppliedPoint = null;
+            }
+            workflow.AddAppliedPoints(loadedPoints);
+            workflow.SortAppliedPoints();
+        }
+        if (Signature() == before) return;
+        ClearFemResults();
+        Update();
+    }
+
+    /// <summary>The point picker with the model's points, for the loaded points of the Storey Force sheet; null when the
+    /// user backs out.</summary>
+    internal IReadOnlyList<string>? ChooseLoadPoints(IReadOnlyList<string> current)
+    {
+        var available = State.Geometry.Points.Values.OrderBy(point => point.Position.X).ThenBy(point => point.Name, StringComparer.Ordinal)
+            .Select(point => point.Name).ToArray();
+        return selection.Select("Select Loaded Points", available, current);
     }
 
     private void AddCaseRow(FemCaseRow row)
