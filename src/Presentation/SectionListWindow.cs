@@ -83,12 +83,13 @@ public sealed class SectionListWindow : Window
 
         EditSection = (section, taken) => section switch
         {
+            FrameSectionProperty { Shape: FrameShape.FilledTube or FrameShape.Encased or FrameShape.MegaComposite } composite =>
+                new CompositeSectionWindow(viewModel, composite, taken) { Owner = this } is var form && form.ShowDialog() == true ? form.Result : null,
             FrameSectionProperty frame => new FrameSectionWindow(viewModel, frame, taken) { Owner = this } is var form && form.ShowDialog() == true ? form.Result : null,
             StrandSectionProperty strand => new StrandSectionWindow(viewModel, strand, taken) { Owner = this } is var form && form.ShowDialog() == true ? form.Result : null,
             _ => null,
         };
-        PickShape = () => PropertyForm.Pick(this, "Add Frame Section Property", "Select the section shape:",
-            Enum.GetValues<FrameShape>().Where(shape => shape != FrameShape.General).ToArray(), FrameSectionProperty.Title);
+        PickShape = () => PropertyForm.Pick(this, "Add Frame Section Property", "Select the section shape:", ShapeChoices, FrameSectionProperty.Title);
 
         var properties = new GroupBox { Header = "Properties", Padding = new Thickness(8), BorderBrush = Brushes.Gray, Foreground = (Brush)FindResource("Accent"),
             Content = new DockPanel { Children = { Docked(new StackPanel { Children = { new TextBlock { Text = "Find this property:", Foreground = Brushes.Black }, find } }, Dock.Top), list } } };
@@ -124,6 +125,8 @@ public sealed class SectionListWindow : Window
     };
 
     internal IReadOnlyList<object> Working => working;
+    /// <summary>The shapes Add New Property offers: the steel shapes, then CFT and steel encased composite.</summary>
+    internal static IReadOnlyList<FrameShape> ShapeChoices { get; } = Enum.GetValues<FrameShape>().Where(shape => shape != FrameShape.General).ToArray();
     private object? Selected => list.SelectedItem;
     private IReadOnlySet<string> Names(string? except = null) =>
         working.Select(SectionName).Where(name => name != except).ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -139,7 +142,7 @@ public sealed class SectionListWindow : Window
         if (status.Tag is "keep") { status.Tag = null; return; }
         status.Text = selected switch
         {
-            FrameSectionProperty frame => $"{FrameSectionProperty.Title(frame.Shape)} · {frame.Material} · source: {frame.Source}" + (usage > 0 ? $" · {usage} member{(usage == 1 ? "" : "s")}" : ""),
+            FrameSectionProperty frame => $"{FrameSectionProperty.Title(frame.Shape)} · {string.Join(" + ", new[] { frame.Material, frame.SteelMaterial, frame.RebarMaterial }.Where(name => name.Length > 0))} · source: {frame.Source}" + (usage > 0 ? $" · {usage} member{(usage == 1 ? "" : "s")}" : ""),
             StrandSectionProperty strand => $"{strand.Material} · A = {PropertyForm.Number(strand.Area)} m² · source: {strand.Source}" + (usage > 0 ? $" · {usage} member{(usage == 1 ? "" : "s")}" : ""),
             _ => "",
         };
@@ -180,13 +183,26 @@ public sealed class SectionListWindow : Window
     {
         object? fresh = kind switch
         {
-            SectionListKind.Frame => PickShape() is { } shape
-                ? FrameSectionProperty.Default(shape, UniqueName($"FSEC{working.Count + 1}"), viewModel.Materials.FirstOrDefault(item => item.Kind == MaterialKind.Steel)?.Name ?? "")
-                : null,
+            SectionListKind.Frame => PickShape() is { } shape ? NewFrameSection(shape) : null,
             _ => new StrandSectionProperty { Name = UniqueName(kind == SectionListKind.Cable ? $"CAB{working.Count + 1}" : $"TEN{working.Count + 1}"), IsTendon = kind == SectionListKind.Tendon,
                 Area = 0.001, Material = viewModel.Materials.FirstOrDefault(item => item.Kind == MaterialKind.Tendon)?.Name ?? "", Modifiers = kind == SectionListKind.Cable ? [1, 1, 1] : [] },
         };
         if (fresh is not null && EditSection(fresh, Names()) is { } created) { working.Add(created); list.SelectedItem = created; }
+    }
+
+    /// <summary>A new frame section of <paramref name="shape"/>: steel for the steel shapes; a CFT / steel encased section
+    /// takes the strongest concrete, the first steel and the first reinforcement of the library.</summary>
+    private FrameSectionProperty NewFrameSection(FrameShape shape)
+    {
+        string First(MaterialKind kind) => viewModel.Materials.FirstOrDefault(item => item.Kind == kind)?.Name ?? "";
+        if (shape is not (FrameShape.FilledTube or FrameShape.Encased or FrameShape.MegaComposite))
+            return FrameSectionProperty.Default(shape, UniqueName($"FSEC{working.Count + 1}"), First(MaterialKind.Steel));
+        var concrete = viewModel.Materials.Where(item => item.Kind == MaterialKind.Concrete).MaxBy(item => item.Fc ?? 0)?.Name ?? "";
+        var stem = shape switch { FrameShape.FilledTube => "CFT", FrameShape.MegaComposite => "MEGA", _ => "SRC" };
+        return FrameSectionProperty.Default(shape, UniqueName($"{stem}{working.Count + 1}"), concrete) with
+        {
+            SteelMaterial = First(MaterialKind.Steel), RebarMaterial = shape == FrameShape.FilledTube ? "" : First(MaterialKind.Rebar),
+        };
     }
 
     internal void AddCopy()

@@ -71,7 +71,10 @@
               ToolTip="Open analysis progress and cable convergence. Diagnostic details are collapsed by default."/>
     <Separator/>
     <MenuItem Header="_Optimization VCF…" Click="OptimizationVcf_Click" AutomationProperties.Name="Optimization VCF"
-              ToolTip="Set the VCF search space — min / max / step for bays, bay width, truss depth, middle chord, clear height, back-span and back-stay height, and candidate sections per chord, mega column and cable (run loop not implemented yet)"/>
+              ToolTip="Set the VCF search space — min / max / step for bays, bay width, truss depth (middle chord kept at 0.5 × depth), clear height, back-span and back-stay height, and candidate sections per chord, mega column and cable; Run Optimization analyses every combination and lists the max deflection of each case"/>
+    <MenuItem Header="Optimization _Results…" Click="OptimizationResults_Click" AutomationProperties.Name="Optimization Results"
+              ToolTip="Every case of the last Optimization VCF run with its max deflection (sortable)"/>
+    <MenuItem Header="Cancel Optimization" Click="CancelOptimization_Click" IsEnabled="{Binding IsVcfOptimizationRunning}"/>
     <Separator/>
     <MenuItem Header="Analysis _Options" Tag="5" Click="FemPaneMenu_Click"/>
    </MenuItem>
@@ -106,6 +109,8 @@
               ToolTip="Concrete filled steel tube column design to SS EN 1994-1-1 + Singapore NA and BCA BC4:2025 (high-strength materials)"/>
     <MenuItem Header="_Steel Encased Composite Column Design…" Tag="SteelEncased" Click="DesignMenu_Click" AutomationProperties.Name="Steel Encased Composite Column Design"
               ToolTip="Concrete-encased steel section column design to SS EN 1994-1-1 + Singapore NA and BCA BC4:2025 (high-strength materials)"/>
+    <MenuItem Header="_Mega Composite Column Design…" Tag="MegaComposite" Click="DesignMenu_Click" AutomationProperties.Name="Mega Composite Column Design"
+              ToolTip="Several concrete-encased steel profiles: CTBUH / ArcelorMittal (2016) simplified method on SS EN 1994-1-1 6.7.3, high-strength materials per BCA BC4:2025"/>
    </MenuItem>
    <MenuItem Header="_Help">
     <MenuItem Header="_Workflow Help" Click="ShowWorkflowHelp"/>
@@ -1821,13 +1826,7 @@
       <Ellipse Width="8" Height="8" Fill="{StaticResource ChordBottom}" VerticalAlignment="Center"/><TextBlock Text="Bottom" Style="{StaticResource Caption}" Margin="4,0,0,0"/>
      </StackPanel>
     </Border>
-    <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,8" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3"
-            Visibility="{Binding ShowFemPinLegend, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="FEM pin support legend">
-     <StackPanel Orientation="Horizontal">
-      <Path Data="M8,1 L1,11 L15,11 Z M0,13 L16,13 M3,13 L1,16 M8,13 L6,16 M13,13 L11,16" Stroke="{StaticResource Accent}" StrokeThickness="1.2" Fill="{StaticResource ViewportBg}" Width="16" Height="16" Stretch="Fill"/>
-      <TextBlock Text="PIN · X/Z fixed · rotation free" Style="{StaticResource Caption}" Margin="6,0,0,0"/>
-     </StackPanel>
-    </Border>
+    <!-- no pin legend chip on the model view (removed on request); the pins are drawn at the base joints -->
    </Grid>
   </DockPanel>
  </Grid>

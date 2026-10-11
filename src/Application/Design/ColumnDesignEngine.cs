@@ -45,7 +45,12 @@ public static class ColumnDesignEngine
         var length = member.LengthM > 0 ? member.LengthM * 1000 : Math.Max(l0y, l0z);
         if (member.Cases.Count == 0 || member.Cases.All(item => item.Stations.Count == 0))
             return new(member.Member, member.Section, member.LengthM, [], null, [], "", "No FEM forces for this member in the chosen load cases.");
-        ColumnDesigner designer = basis.Type == ColumnDesignType.ReinforcedConcrete ? new RcDesigner(basis) : new CompositeDesigner(basis);
+        ColumnDesigner designer = basis.Type switch
+        {
+            ColumnDesignType.ReinforcedConcrete => new RcDesigner(basis),
+            ColumnDesignType.MegaComposite => new MegaDesigner(basis),
+            _ => new CompositeDesigner(basis),
+        };
         var results = new List<(DesignCaseResult Result, string Log)>();
         foreach (var forces in member.Cases.Where(item => item.Stations.Count > 0))
         {
@@ -375,6 +380,15 @@ internal sealed class RcDesigner : ColumnDesigner
         log.AppendLine();
         log.AppendLine("MINOR AXIS z-z (imperfection only, 5.8.9(2))");
         var (mEdZ, minorUtil) = Axis(nEd, 0, S.Width, S.Depth, l0z, minorCurve, log);
+        if (nEd > 0)
+        {
+            // 5.8.9(4) Eq. 5.39, taken conservatively with the imperfection in both directions
+            var ratio = nEd / majorCurve.MaxN;
+            var a = ratio <= 0.1 ? 1 : ratio <= 0.7 ? 1 + (ratio - 0.1) / 0.6 * 0.5 : Math.Min(2, 1.5 + (ratio - 0.7) / 0.3 * 0.5);
+            var biaxial = Math.Pow(minorUtil, a) + Math.Pow(majorUtil, a);
+            log.AppendLine($"  Biaxial (5.8.9(4), Eq. 5.39): NEd/NRd = {F(ratio, 3)} → a = {F(a, 2)}; (MEd,z/MRd,z)^a + (MEd,y/MRd,y)^a = {F(biaxial, 3)} {Ok(biaxial <= 1)}");
+            minorUtil = Math.Max(minorUtil, biaxial);
+        }
         log.AppendLine();
         var shearUtil = Shear(nEd, vEd, log);
         return new(name, nEd / 1000, m0 / 1e6, mEdY / 1e6, mEdZ / 1e6, vEd / 1000, axial, majorUtil, minorUtil, shearUtil);
@@ -629,10 +643,16 @@ internal sealed class CompositeDesigner : ColumnDesigner
             log.AppendLine($"  NEd / (χmin Npl,Rd) = {F(nEd / 1000)} / ({F(chi, 3)} × {F(nplRd / 1000, 0)}) = {F(axialUtil, 3)} {Ok(axialUtil <= 1)} (6.7.3.5(2))");
             log.AppendLine();
             log.AppendLine("MAJOR AXIS y-y (in-plane, FEM moment) — 6.7.3.4 / 6.7.3.6");
-            (mEdY, majorUtil) = Bending(nEd, m0, length, filled ? 300 : 200, ncrEffY, curveY, log);
+            (mEdY, majorUtil, var kY, var resistanceY) = Bending(nEd, m0, l0y, filled ? 300 : 200, ncrEffY, curveY, log);
             log.AppendLine();
             log.AppendLine("MINOR AXIS z-z (imperfection only)");
-            (mEdZ, minorUtil) = Bending(nEd, 0, length, filled ? 300 : 150, ncrEffZ, minorCurve, log);
+            (mEdZ, minorUtil, _, var resistanceZ) = Bending(nEd, 0, l0z, filled ? 300 : 150, ncrEffZ, minorCurve, log);
+            // 6.7.3.7(2): imperfection in the z plane (the more critical out-of-plane buckling) with the in-plane moment
+            var myNoImperfection = Math.Max(m0, kY * m0);
+            var biaxial = myNoImperfection / resistanceY + mEdZ / resistanceZ;
+            log.AppendLine($"  Biaxial (6.7.3.7(2)): My,Ed/(μdy Mpl,y,Rd) + Mz,Ed/(μdz Mpl,z,Rd) = {F(myNoImperfection / 1e6)} / {F(resistanceY / 1e6)} + " +
+                           $"{F(mEdZ / 1e6)} / {F(resistanceZ / 1e6)} = {F(biaxial, 3)} {Ok(biaxial <= 1)} (My without imperfection)");
+            minorUtil = Math.Max(minorUtil, biaxial);
         }
         else
         {
@@ -666,7 +686,8 @@ internal sealed class CompositeDesigner : ColumnDesigner
         return (chi, ncrEff, lambda);
     }
 
-    private (double MEd, double Utilization) Bending(double nEd, double m0, double length, double imperfectionRatio, double ncrEff, InteractionCurve curve, StringBuilder log)
+    /// <returns>MEd, MEd / (αM μd Mpl,Rd), the amplification k and μd Mpl,Rd.</returns>
+    private (double MEd, double Utilization, double K, double Resistance) Bending(double nEd, double m0, double length, double imperfectionRatio, double ncrEff, InteractionCurve curve, StringBuilder log)
     {
         var e0 = length / imperfectionRatio;
         var k = nEd < ncrEff ? Math.Max(1, 1 / (1 - nEd / ncrEff)) : double.PositiveInfinity;
@@ -675,11 +696,11 @@ internal sealed class CompositeDesigner : ColumnDesigner
         var mplN = curve.MomentAt(nEd);
         var mu = mplRd > 0 ? Math.Min(1, mplN / mplRd) : 0;
         var utilization = mu > 0 ? mEd / (AlphaM * mu * mplRd) : double.PositiveInfinity;
-        log.AppendLine($"  e0 = L / {F(imperfectionRatio, 0)} = {F(e0, 1)} mm (Table 6.5); k = β / (1 − NEd / Ncr,eff) = {F(k, 3)} (β = 1.0, 6.7.3.4(5))");
+        log.AppendLine($"  e0 = l0 / {F(imperfectionRatio, 0)} = {F(e0, 1)} mm (Table 6.5, over the buckling length); k = β / (1 − NEd / Ncr,eff) = {F(k, 3)} (β = 1.0, 6.7.3.4(5))");
         log.AppendLine($"  MEd = k (M0Ed + NEd e0) = {F(k, 3)} × ({F(m0 / 1e6)} + {F(nEd * e0 / 1e6)}) = {F(mEd / 1e6)} kNm");
         log.AppendLine($"  μd = Mpl,N,Rd / Mpl,Rd = {F(mplN / 1e6)} / {F(mplRd / 1e6)} = {F(mu, 3)} (≤ 1.0); αM = {F(AlphaM, 1)} (6.7.3.6(1))");
         log.AppendLine($"  MEd / (αM μd Mpl,Rd) = {F(utilization, 3)} {Ok(utilization <= 1)}");
-        return (mEd, utilization);
+        return (mEd, utilization, k, mu * mplRd);
     }
 
     private double Shear(double vEd, out double rho, StringBuilder log)

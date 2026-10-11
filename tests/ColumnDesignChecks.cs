@@ -60,7 +60,7 @@ internal static class ColumnDesignChecks
         var src = ColumnDesignCodes.Default(ColumnDesignType.SteelEncased) with { EffectiveLengthY = 8, EffectiveLengthZ = 8 };
         var srcResult = ColumnDesignEngine.Design(src, Member("S1", 8, -20000, 300, 1500));
         Check(srcResult.Governing is not null && double.IsFinite(srcResult.MaxUtilization) && srcResult.Detail.Contains("curve b"), "Steel encased column designs with curve b (y-y)");
-        Console.WriteLine(srcResult.Detail); Console.WriteLine(rcResult.Detail);
+        if (Environment.GetEnvironmentVariable("COT_PRINT_DESIGN") == "1") { Console.WriteLine(srcResult.Detail); Console.WriteLine(rcResult.Detail); }
         var none = ColumnDesignEngine.Design(src, new DesignMemberInput("S2", "SRC", 8, []));
         Check(none.Status == "ERROR", "Member without forces reports an error");
     }

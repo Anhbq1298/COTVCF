@@ -308,9 +308,9 @@ internal static class Program
                     "Storey Force follows the previewed geometry (12 m bays: 144 m², −14,400 kN)");
                 forcesWindow.Close();
                 // Run -> Optimization VCF: min / max / step per geometry input, candidate sections, preview at a corner
-                Assert(new VcfRange(10, 14, 1.5).Values().SequenceEqual([10, 11.5, 13, 14]) && new VcfRange(8, 8, 0).Count == 1 &&
+                Assert(new VcfRange(10, 14, 1.5).Values().SequenceEqual([10, 11.5, 13]) && new VcfRange(10, 13, 1.5).Values().SequenceEqual([10, 11.5, 13]) && new VcfRange(8, 8, 0).Count == 1 &&
                        new VcfRange(9, 8, 1).Problem() is not null && new VcfRange(2, 6, 0.5).Problem(whole: true) is not null,
-                    "A VCF range runs Min, Min + Step, … and always ends on Max; Min = Max is one value; Max < Min and fractional bay steps are refused");
+                    "A VCF range runs Min, Min + Step, … up to Max without adding an off-step Max (the Tab 01 / 03 rule); Min = Max is one value; Max < Min and fractional bay steps are refused");
                 Assert(TopMenu("Run").Items.OfType<MenuItem>().Any(item => (item.Header as string)?.Replace("_", "") == "Optimization VCF…"),
                     "Run offers Optimization VCF…");
                 var optimization = new OptimizationVcfWindow(defaultVm) { Owner = window };
@@ -323,10 +323,44 @@ internal static class Program
                 optimization.PreviewCorner.SelectedIndex = 2;
                 optimization.UpdateLayout();
                 var space = optimization.FormSettings();
-                Assert(fixedSpace.CombinationCount == 1 && space.GeometryCount == 9 && optimization.OkButton.IsEnabled &&
-                       optimization.ParameterTabs.Items.OfType<TabItem>().Select(tab => tab.Header as string).SequenceEqual(["Geometry", "Sections"]) &&
+                Assert(fixedSpace.GeometryCount == 1 && fixedSpace.SectionCount == 1 && space.GeometryCount == 9 && optimization.OkButton.IsEnabled &&
+                       optimization.ParameterTabs.Items.OfType<TabItem>().Select(tab => tab.Header as string).SequenceEqual(["Geometry", "Cable Force", "Storey Force", "Sections"]) &&
                        optimization.Preview.Model.Points.Count > defaultVm.State.Geometry.Points.Count,
                     "Optimization VCF starts fixed at the model, counts 3 bay widths × 3 bay counts = 9 geometry variants, and previews the maximum corner (12 bays)");
+                optimization.SetRange("Depth", "min", "16");
+                optimization.SetRange("Depth", "max", "24");
+                optimization.SetRange("Depth", "step", "4");
+                var withDepth = optimization.FormSettings();
+                Assert(optimization.MiddleChordShown == ("8", "12") && !withDepth.Geometry.ContainsKey("Middle") && withDepth.GeometryCount == 27 &&
+                       FindVisuals<TextBox>(optimization).Where(box => System.Windows.Automation.AutomationProperties.GetName(box).StartsWith("Middle chord", StringComparison.Ordinal)).All(box => box.IsReadOnly) &&
+                       VcfOptimization.ParametersAt(VcfGeometry.Analyze(defaultVm.State.Geometry, defaultVm.State.Truss), withDepth, range => range.Max).MiddleChordHeight == 12,
+                    "The middle chord is not an optimization input: read-only at 0.5 × truss depth (depth 16 … 24 → 8 … 12 m) and not counted in the variants");
+                // Cable Force / Storey Force ranges start from Tab 03 / Tab 01; followers stay followers
+                var forceStart = optimization.FormSettings();
+                var independents = defaultVm.State.Cables.Where(cable => !cable.IsFollower).ToArray();
+                Assert(forceStart.CableForces.Count == independents.Length && forceStart.CableForces["Cable1a-2"].Values().SequenceEqual(defaultVm.State.Cables.Single(cable => cable.CableName == "Cable1a-2").GetCandidateForces()) &&
+                       !forceStart.CableForces.ContainsKey("Cable1b-2") &&
+                       forceStart.StoreyLoads[VcfOptimization.StoriesKey].Min == 10 && forceStart.StoreyLoads[VcfOptimization.TributaryKey].Min == 12,
+                    "Cable Force starts each independent cable at its 03 Pretension range, with the same values (Cable1a-2); a follower (Cable1b-2) is not a variable; Storey Force starts at NStories 10, B 12 m");
+                optimization.SetRange("Cable1a-2", "min", "90000", "cable");
+                optimization.SetRange("Cable1a-2", "max", "110000", "cable");
+                optimization.SetRange("Cable1a-2", "step", "10000", "cable");
+                optimization.SetRange(VcfOptimization.StoriesKey, "max", "12", "storey");
+                optimization.SetRange(VcfOptimization.StoriesKey, "step", "2", "storey");
+                var forceSpace = optimization.FormSettings();
+                Assert(forceSpace.ForceCount == forceStart.ForceCount * 3 * 2 && forceSpace.CombinationCount == forceSpace.GeometryCount * forceSpace.ForceCount &&
+                       optimization.StoreyTotals.Contains("kN", StringComparison.Ordinal),
+                    "A cable pretension range (90,000 … 110,000 @ 10,000 → 3) and a storey range (10 … 12 @ 2 → 2) multiply the force variants; the storey totals show");
+                optimization.SetRange(VcfOptimization.TributaryKey, "min", "0", "storey");
+                Assert(!optimization.OkButton.IsEnabled && optimization.ProblemText.Text.Contains("Tributary width B", StringComparison.Ordinal),
+                    "A tributary width of zero is refused");
+                optimization.SetRange(VcfOptimization.TributaryKey, "min", "12", "storey");
+                Assert(optimization.DeflectionResultCombo.SelectedItem as string == "NL SLS001: 1.0DL+1.0LL" && optimization.SpanRatioBox.Text == "250" &&
+                       optimization.FormSettings() is { DeflectionResult: "NL SLS001: 1.0DL+1.0LL", SpanRatio: 250 },
+                    "The deflection check starts on the SLS load case and span / 250");
+                optimization.SpanRatioBox.Text = "0";
+                Assert(!optimization.OkButton.IsEnabled && !optimization.RunButton.IsEnabled, "A span ratio of zero is refused");
+                optimization.SpanRatioBox.Text = "250";
                 optimization.SetRange("Bays", "max", "1");
                 Assert(!optimization.OkButton.IsEnabled && optimization.ProblemText.Text.Length > 0, "An invalid range greys OK and names the problem");
                 optimization.Close();
@@ -367,6 +401,73 @@ internal static class Program
                 boxForm.SetField("Tf", "0.7");
                 Assert(boxForm.Read(out _) is null, "the box form refuses flanges thicker than the section");
                 boxForm.Close();
+                Assert(SectionListWindow.ShapeChoices.Contains(FrameShape.FilledTube) && SectionListWindow.ShapeChoices.Contains(FrameShape.Encased),
+                    "Add New Property offers Concrete Filled Tube (CFT) and Steel Encased Composite");
+                defaultVm.EnsureMaterials();
+                var concreteName = defaultVm.Materials.Where(item => item.Kind == MaterialKind.Concrete).MaxBy(item => item.Fc ?? 0)?.Name ?? "";
+                var steelName = defaultVm.Materials.FirstOrDefault(item => item.Kind == MaterialKind.Steel)?.Name ?? "";
+                var cftForm = new CompositeSectionWindow(defaultVm, FrameSectionProperty.Default(FrameShape.FilledTube, "CFT test", concreteName) with { SteelMaterial = steelName },
+                    new HashSet<string>()) { Owner = window };
+                cftForm.Show();
+                cftForm.UpdateLayout();
+                Assert(cftForm.Title == "Concrete Filled Tube (CFT) Section" &&
+                       FindVisuals<GroupBox>(cftForm).Select(box => box.Header as string).Where(header => header is { Length: > 0 })
+                           .SequenceEqual(["Steel Tube", "Materials", "Design Data (EN 1994-1-1 §6.7.3.3)", "Section Limits", "Property Modifiers", "Section", "Composite Properties", "Material Quantity and Cost (per m)"]) &&
+                       cftForm.Analysis is { Cost.CostPerM: > 0 },
+                    "the CFT form shows the tube, materials, design data, section limits, drawing, composite properties and cost per metre");
+                void SaveForm(Window form, string file)
+                {
+                    var formBitmap = new RenderTargetBitmap((int)form.ActualWidth, (int)form.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                    formBitmap.Render(form);
+                    var formEncoder = new PngBitmapEncoder(); formEncoder.Frames.Add(BitmapFrame.Create(formBitmap));
+                    using var formStream = File.Create(Path.Combine(".work", file)); formEncoder.Save(formStream);
+                }
+                SaveForm(cftForm, "cft-section.png");
+                cftForm.SetField("TubeThickness", "40");
+                var thick = cftForm.Analysis;
+                cftForm.SetTubeShape(TubeShape.Circular);
+                Assert(thick is { Parts.SteelArea: > 0.12 } && cftForm.Read(out _) is { Composite.Tube: TubeShape.Circular, Shape: FrameShape.FilledTube } &&
+                       cftForm.Analysis!.Parts.SteelArea < thick.Parts.SteelArea, "the CFT form recalculates as the wall and the tube shape change");
+                cftForm.SetField("TubeThickness", "500");
+                Assert(cftForm.Read(out _) is null, "the CFT form refuses a wall that does not fit the tube");
+                cftForm.Close();
+                var srcForm = new CompositeSectionWindow(defaultVm, FrameSectionProperty.Default(FrameShape.Encased, "SRC test", concreteName) with
+                    { SteelMaterial = steelName, RebarMaterial = defaultVm.Materials.FirstOrDefault(item => item.Kind == MaterialKind.Rebar)?.Name ?? "" }, new HashSet<string>()) { Owner = window };
+                srcForm.Show();
+                srcForm.UpdateLayout();
+                Assert(FindVisuals<GroupBox>(srcForm).Select(box => box.Header as string).Where(header => header is { Length: > 0 }).Take(3).SequenceEqual(["Concrete Section", "Encased Steel I Section (strong axis in-plane)", "Reinforcement"]) &&
+                       srcForm.Analysis is { Parts.Bars.Count: 16 } && srcForm.Read(out _) is { Composite.Fck: > 0, Given.Area: > 1 },
+                    "the steel encased form takes the concrete outline, the I section and the bars, with strengths from the materials");
+                SaveForm(srcForm, "encased-section.png");
+                srcForm.Close();
+                Assert(SectionListWindow.ShapeChoices.Contains(FrameShape.MegaComposite) && FrameSectionProperty.Title(FrameShape.MegaComposite) == "Mega Composite Column",
+                    "Add New Property offers Mega Composite Column");
+                var megaForm = new CompositeSectionWindow(defaultVm, FrameSectionProperty.Default(FrameShape.MegaComposite, "MEGA test", concreteName) with
+                    { SteelMaterial = steelName }, new HashSet<string>()) { Owner = window };
+                megaForm.Show();
+                megaForm.UpdateLayout();
+                Assert(megaForm.Title == "Mega Composite Column Section" &&
+                       FindVisuals<GroupBox>(megaForm).Select(box => box.Header as string).Where(header => header is { Length: > 0 }).Take(3)
+                           .SequenceEqual(["Concrete Section", "Encased Steel Profiles (each; strong axis in-plane)", "Reinforcement"]) &&
+                       megaForm.Analysis is { Parts.Bars.Count: 64, Cost.CostPerM: > 0 } mega && Math.Abs(mega.Parts.SteelArea - 4 * 65_660e-6) < 1e-9 &&
+                       FindVisuals<TextBlock>(megaForm).Any(text => text.Text.StartsWith("Mpl,y,Rd", StringComparison.Ordinal)),
+                    "the mega column form takes the outline, 4 profiles at ±dsx / ±dsy and the bars, with the CTBUH Mpl and the cost per metre");
+                SaveForm(megaForm, "mega-section.png");
+                megaForm.SetField("ProfileOffsetY", "1000");
+                Assert(megaForm.Read(out _) is null, "the mega column form refuses profiles outside the reinforcement cage");
+                megaForm.Close();
+                Assert(TopMenu("Design").Items.OfType<MenuItem>().Select(item => System.Windows.Automation.AutomationProperties.GetName(item)).Contains("Mega Composite Column Design"),
+                    "Design offers Mega Composite Column Design…");
+                var megaDesign = new DesignReferenceWindow(defaultVm.DesignBasis(ColumnDesignType.MegaComposite), defaultVm.DesignMemberOptions(ColumnDesignType.MegaComposite),
+                    defaultVm.DesignCaseNames(), defaultVm.DesignDefaultCases(), defaultVm.DesignRunId, member => defaultVm.DesignSectionDefaults(ColumnDesignType.MegaComposite, member)) { Owner = window };
+                megaDesign.Show();
+                megaDesign.Tabs.SelectedIndex = 1;
+                megaDesign.UpdateLayout();
+                Assert(megaDesign.Title == "Design Reference — Mega Composite Column Design" &&
+                       new[] { "Number of profiles (4 or 6)", "dsy  offset in-plane", "dsx  offset across", "Bar layers per b face" }
+                           .All(label => FindVisuals<TextBox>(megaDesign).Any(box => System.Windows.Automation.AutomationProperties.GetName(box) == label)),
+                    "the Mega Composite Column Design dialog asks for the profile count, offsets and bar layers");
+                megaDesign.Close();
                 var cableForm = new StrandSectionWindow(vm, new StrandSectionProperty { Name = "Strand", Area = 0.01 }, new HashSet<string>()) { Owner = window };
                 cableForm.Show();
                 cableForm.SetArea("0.02");
@@ -862,6 +963,7 @@ internal static class Program
             if (args.Contains("--column-design"))
             {
                 ColumnDesignChecks.Run();
+                MegaColumnChecks.Run();
                 return 0;
             }
             // Live: starts its own SAP2000 on a copy of the baseline under .work and checks that cable lengths follow the joints.
@@ -1036,6 +1138,7 @@ internal static class Program
             SupportReactionReportChecks.Run();
             GatewayChecks.Run();
             QuantityTakeoffChecks.Run();
+            MegaColumnChecks.Run();
             FemModelFileChecks.Run();
             ColumnDesignChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;

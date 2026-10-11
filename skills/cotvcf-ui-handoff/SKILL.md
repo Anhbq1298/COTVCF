@@ -57,21 +57,49 @@ earlier tall-header / large-button / blue-block look.
   - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Optimization VCF… ·
     Analysis Options. **Optimization VCF…** opens the modal `OptimizationVcfWindow`: the Edit → VCF Geometry inputs as a
     search space — sheet **Geometry** has Min / Max / Step (and the value count n) per parameter (bays, bay width, truss
-    depth, middle chord, clear height, back-span, back-stay height; keys shared with VcfGeometryWindow), sheet **Sections**
+    depth, clear height, back-span, back-stay height; keys shared with VcfGeometryWindow). The middle chord is **not** a
+    variable: it is always `VcfOptimization.MiddleChordRatio` (0.5) × truss depth, shown read-only under Truss depth and
+    not counted in the variants. Sheet **Cable Force**: Min / Max / Step (kN) per independent cable, starting from its
+    03 Pretension value / range (`VcfOptimization.CableRange`); a Tab 03 follower is a read-only row (its sync rule) and not
+    a variable. Sheet **Storey Force**: qz range (kPa, ≥ 0) per 01 Loading load definition, plus NStories (whole, ≥ 1) and
+    tributary width B (> 0), with the total Fz at the min … max corner (−qz × loaded length × B × NStories). Force
+    variants = product of those counts; combinations = geometry × force × section variants. Sheet **Sections**
     a check-list drop-down of candidate sections per member role and per cable (none ticked = keep as assigned). Preview
     at Minimum / Current / Maximum corner; the combination count is shown; invalid ranges or corners grey OK.
-    `Application/VcfOptimization` holds `VcfRange` (Min, Min + Step, … always ending on Max) and
+    `Application/VcfOptimization` holds `VcfRange` (Min, Min + Step, … ≤ Max — the Tab 01 / 03 rule, no off-step Max) and
     `VcfOptimizationSettings`; OK keeps them on `MainViewModel.VcfOptimizationSettings` (memory only, not saved in a
-    file). The working model is never changed and **Run Optimization** is disabled — the run loop is still to be built.
+    file). **Run Optimization** (enabled while valid and ≤ `VcfOptimizationRunner.MaxCases` = 10,000) keeps them, opens
+    `OptimizationResultsWindow` (also Run → Optimization Results…; Run → Cancel Optimization / Cancel Run) and runs
+    `MainViewModel.RunVcfOptimizationAsync`: `VcfOptimizationRunner` walks the axes mixed-radix (last axis fastest) and builds
+    each case in memory — `VcfGeometry.ChangeBays` / `Build` (middle chord 0.5 × depth), member properties (regenerated
+    members copy their template; role / cable sections via `MainViewModel.SectionSwapper`, the same rule as Apply), SAP
+    loading remapped for a bay change, Tab 01 point loads −qz × trib. length × B × NStories, Tab 03 targets (followers keep
+    Same Values / Ratio / Offset / Step; new fan cables copy their template) — then `FemStudyService.Analyze` with the Analysis
+    Options and Define → Load Cases plan. **Deflection check** (dialog bar above the buttons): the result the deflection is
+    read from (`VcfOptimizationSettings.DeflectionResult`, a load case or combination set to run; default the first named
+    SLS — on the default model the nonlinear case `NL SLS001: 1.0DL+1.0LL`) and the limit span / `SpanRatio` (default 250;
+    span = bays × bay width between the mega columns). Each row: the varying inputs, **max downward deflection** in that
+    result and its point, span, limit, δ / limit, Check OK / NG, status (failures such as non-convergence or an unsolved
+    result are listed, not thrown); the summary counts the passing cases and names the least deflection. The working
+    model and SAP2000 never change. Checked: a case equals Run FEM Analysis on the same geometry applied with Edit → VCF
+    Geometry. Note: the default model at its baseline truss height (Tab 02 H01) does not converge in the internal FEM, in Run
+    FEM Analysis as in the optimization.
   - **Result**: Axial forces / cables, Bending moments, Shear forces, Support reactions, Deflection, Cable target fit
     (opens the table) · Results Table…; enabled once a candidate has results (`HasFemResults`).
   - **Display**: Frame mesh / Member size / Loading (checkable, bound to the FEM view toggles) · View Options.
-  - **Design**: RC Column Design…, CFT (Concrete Filled Tube) Design…, Steel Encased Composite Column Design…. Each first
-    opens the modal `DesignReferenceWindow` (design code, method, Singapore NA, effective lengths l0,y / l0,z in m — both
-    required, > 0 —, γC / γS / γM0, max. concrete / steel grade,
-    reference list; Reset / Run Design / Cancel). Codes come from `Domain/ColumnDesignCodes`: RC → SS EN 1992-1-1 (EC2);
-    CFT and steel encased → SS EN 1994-1-1 extended by BCA BC4:2025 for high-strength materials. The confirmed basis is
-    kept per type (`MainViewModel.DesignBasis`); the design itself is still a placeholder ("not implemented yet").
+  - **Design**: RC Column Design…, CFT (Concrete Filled Tube) Design…, Steel Encased Composite Column Design…. Each
+    opens the modal `DesignReferenceWindow` with three tabs: *Design Basis* (code, method, Singapore NA, effective lengths
+    l0,y / l0,z in m — required, > 0 —, γC / γS / γM0, max. concrete / steel grade, references), *Section* (type-specific
+    mm / MPa inputs built from a field table; *From Member Section* fills them from the first ticked member's FEM section
+    and material) and *Members & Loads* (frame members, ticked by default when the section suits the design; load cases /
+    combinations, combinations set to run ticked by default). Reset / Run Design / Cancel. Codes come from
+    `Domain/ColumnDesignCodes`: RC → SS EN 1992-1-1 (EC2); CFT and steel encased → SS EN 1994-1-1 extended by BCA BC4:2025.
+    The basis is kept per type (`MainViewModel.DesignBasis`). Run Design designs each member with the N / V / M stations of
+    the selected FEM candidate (`MainViewModel.RunColumnDesign` → `Application/Design/ColumnDesignEngine`) and opens the
+    non-modal `DesignResultsWindow`: summary grid (governing case, NEd, MEd,y, MEd,z, VEd, N / M-y / M-z+biaxial / V
+    utilisations, max, OK / CHECK (detailing) / FAIL / ERROR) above the selected member's step-by-step calculation;
+    Copy Report / Save Report… (.txt). The 2D FEM moment bends the major axis y-y; z-z carries imperfections only.
+    Offline checks: `dotnet run --project tests/COT_VCF.Checks.csproj -- --column-design`.
   - **Help**: Workflow Help, FEM Procedure.
 - MB, Edit, Define, Assign, Run, Result and Display are enabled with `HasWorkingModel` (connected or offline model);
   File and Help are always open (their commands gate themselves).
@@ -151,6 +179,30 @@ earlier tall-header / large-button / blue-block look.
   `CommitStrandSections`) rebuilds the FEM properties of members with a changed / renamed section (`PropertiesFor`: area
   and I33 / I22 × section modifiers × member modifiers, rotated by the member's local axis; material data from the
   library; Tab 03 cable area / capacity follow). SAP2000 is never written.
+- **Composite frame sections**: Add New Property also offers *Concrete Filled Tube (CFT)* (`FrameShape.FilledTube`,
+  SapType "FilledTube") and *Steel Encased Composite* (`FrameShape.Encased`, SapType "Encased" — both names make the
+  Design menu tick them). `FrameSectionProperty.Composite` is the Design menu's `ColumnSectionInput` (mm / MPa);
+  `Material` = concrete, `SteelMaterial`, `RebarMaterial`. `CompositeSectionWindow` (1010 px, three columns): Steel Tube
+  (rectangular / circular, H/D, B, t) or Concrete Section + Encased Steel I + Reinforcement; Materials (concrete / steel
+  / rebar with +; fck, fy, fyk from the material or its grade name, `MaterialProperty.StrengthMpa`; no rebar material →
+  `MainViewModel.DefaultRebar` B500); Design Data (φt, NG,Ed/NEd); Section Limits (EN 1994-1-1 δ, d/t or h/t, cover,
+  ρs, h/b, BC4 grades); live sketch (steel, concrete, bars); Composite Properties (Ac, Aa, As, transformed A / I33 / I22
+  to Ecm, self-weight, Npl,Rk / Npl,Rd, δ, (EI)eff); Material Quantity and Cost per m (concrete m³ × SGD/m³ + steel and
+  rebar t × SGD/t from the material unit costs). `CompositeSection` (Domain) does the parts / transformation / cost;
+  `MainViewModel.AnalyseComposite` applies the library materials; FEM members take the transformed A / I with E = Ecm
+  and an equivalent γ / ρ so A·γ is the true self-weight.
+- **Mega Composite Column** (`FrameShape.MegaComposite`, SapType "MegaComposite"; `ColumnDesignType.MegaComposite`):
+  the steel encased form with 4 or 6 copies of one I profile at (±dsx, ±dsy) [+ (±dsx, 0)] (`ProfileCount`,
+  `ProfileOffsetY` = dsy in-plane, `ProfileOffsetZ` = dsx, `ProfileName`, `BarLayers` on the b faces;
+  `ColumnSectionInput.MegaDefault` 2200², C100, 4 × I 500×430×60/37 S460, Ø40). Profiles are entered by plates (no
+  catalogue in the repo); the form shows kg/m and compares it with the designation's mass ("HD 400x551" → 551 kg/m).
+  Design → *Mega Composite Column Design…* runs `MegaDesigner`: the major axis by `MegaColumnEngine`, a formula-for-
+  formula C# port of `src/Application/Design/mega-column/engine.ts` (CTBUH / ArcelorMittal 2016 §4, Tables 11–17; only
+  addition: η of EC2 Table 3.1 on 0.85 fcd for high-strength concrete); plus e0 = l0/200 (y), μd ≤ 1.0, minor axis and
+  biaxial by the exact fibre plastic curve (curve c), web shear, tension. The report shows the method's Mpl,y,Rd next
+  to the exact plastic Mpl,y,Rd: the engine's hn equations use fyd / fsd on the steel in the 2hn zone where EC4 Annex C
+  uses (2fyd − fc), so the method is ~19 % conservative on the default section (EC4 form: within 2 % of exact).
+  `tests/MegaColumnChecks.cs` ports `engine.test.ts` and the §4.2.5 worked values.
 - The top bar shows only the tool icons, Connect SAP and Refresh (project name, study summary and status line removed on
   request; the offline model is named in the pane header).
 - **Define → Sections…** opens the member-property table in its own non-modal window (`DefineSectionsWindow`, same
@@ -195,7 +247,8 @@ earlier tall-header / large-button / blue-block look.
   rotated to the element's screen-space direction and kept upright (`ModelCanvas.MemberLabel`); configured
   cables keep their own horizontal `CableLabel` from the overlay and are skipped by the `C` pass.
   `ToolbarContent` still renders (top-left overlay) for contextual controls.
-- Axis overlay sits on a white translucent chip: X red, Y blue, Z green.
+- Axis overlay sits on a white translucent chip: X red, Y blue, Z green. The model view has no pin-legend chip and no
+  "Wheel zoom · Drag pan · … Dotted tendon" hint line (both removed on request); pins are still drawn at the base joints.
 - **Dimensions** (`MainViewModel.ShowDimensions`, default on; viewer toggle `D` after P/F/C, Display → Dimensions, View Options window): in a 2D projection
   `ModelCanvas.DrawDimensions` draws a chain of the distinct node positions along the horizontal axis below the model
   (each bay span, then the overall span `X span … m`) and along the vertical axis at its right (each level-to-level

@@ -27,33 +27,37 @@ public partial class DesignReferenceWindow : Window
     private sealed record SectionField(string Group, string Label, string Unit, ColumnDesignType[] Types,
         Func<ColumnSectionInput, double> Get, Func<ColumnSectionInput, double, ColumnSectionInput> Set, bool Integer = false, bool Positive = true);
 
-    private const ColumnDesignType Rc = ColumnDesignType.ReinforcedConcrete, Cft = ColumnDesignType.ConcreteFilledTube, Src = ColumnDesignType.SteelEncased;
+    private const ColumnDesignType Rc = ColumnDesignType.ReinforcedConcrete, Cft = ColumnDesignType.ConcreteFilledTube, Src = ColumnDesignType.SteelEncased, Mega = ColumnDesignType.MegaComposite;
     private static readonly SectionField[] Fields =
     [
-        new("Concrete outline", "b  width (minor)", "mm", [Rc, Src], s => s.Width, (s, v) => s with { Width = v }),
-        new("Concrete outline", "h  depth (in-plane)", "mm", [Rc, Src], s => s.Depth, (s, v) => s with { Depth = v }),
-        new("Concrete outline", "Cover to links", "mm", [Rc, Src], s => s.Cover, (s, v) => s with { Cover = v }),
+        new("Concrete outline", "b  width (minor)", "mm", [Rc, Src, Mega], s => s.Width, (s, v) => s with { Width = v }),
+        new("Concrete outline", "h  depth (in-plane)", "mm", [Rc, Src, Mega], s => s.Depth, (s, v) => s with { Depth = v }),
+        new("Concrete outline", "Cover to links", "mm", [Rc, Src, Mega], s => s.Cover, (s, v) => s with { Cover = v }),
         new("Steel tube", "H  depth / D diameter", "mm", [Cft], s => s.TubeDepth, (s, v) => s with { TubeDepth = v }),
         new("Steel tube", "B  width (rectangular)", "mm", [Cft], s => s.TubeWidth, (s, v) => s with { TubeWidth = v }),
         new("Steel tube", "t  wall thickness", "mm", [Cft], s => s.TubeThickness, (s, v) => s with { TubeThickness = v }),
-        new("Encased steel I section", "h  steel depth", "mm", [Src], s => s.SteelDepth, (s, v) => s with { SteelDepth = v }),
-        new("Encased steel I section", "b  flange width", "mm", [Src], s => s.SteelWidth, (s, v) => s with { SteelWidth = v }),
-        new("Encased steel I section", "tf  flange", "mm", [Src], s => s.FlangeThickness, (s, v) => s with { FlangeThickness = v }),
-        new("Encased steel I section", "tw  web", "mm", [Src], s => s.WebThickness, (s, v) => s with { WebThickness = v }),
-        new("Reinforcement", "Bar Ø", "mm", [Rc, Src], s => s.BarDiameter, (s, v) => s with { BarDiameter = v }),
-        new("Reinforcement", "Bars per b face (incl. corners)", "no.", [Rc, Src], s => s.BarsAlongWidth, (s, v) => s with { BarsAlongWidth = (int)v }, Integer: true),
-        new("Reinforcement", "Bars per h face (excl. corners)", "no.", [Rc, Src], s => s.BarsAlongDepth, (s, v) => s with { BarsAlongDepth = (int)v }, Integer: true, Positive: false),
-        new("Reinforcement", "Link Ø", "mm", [Rc, Src], s => s.LinkDiameter, (s, v) => s with { LinkDiameter = v }),
-        new("Reinforcement", "Link spacing", "mm", [Rc, Src], s => s.LinkSpacing, (s, v) => s with { LinkSpacing = v }),
-        new("Materials", "fck  concrete (cylinder)", "MPa", [Rc, Cft, Src], s => s.Fck, (s, v) => s with { Fck = v }),
-        new("Materials", "fy  structural steel", "MPa", [Cft, Src], s => s.Fy, (s, v) => s with { Fy = v }),
-        new("Materials", "fyk  reinforcement", "MPa", [Rc, Src], s => s.Fyk, (s, v) => s with { Fyk = v }),
-        new("Materials", "Ea  structural steel", "MPa", [Cft, Src], s => s.Ea, (s, v) => s with { Ea = v }),
-        new("Materials", "Es  reinforcement", "MPa", [Rc, Src], s => s.Es, (s, v) => s with { Es = v }),
+        new("Encased steel I section", "h  steel depth", "mm", [Src, Mega], s => s.SteelDepth, (s, v) => s with { SteelDepth = v }),
+        new("Encased steel I section", "b  flange width", "mm", [Src, Mega], s => s.SteelWidth, (s, v) => s with { SteelWidth = v }),
+        new("Encased steel I section", "tf  flange", "mm", [Src, Mega], s => s.FlangeThickness, (s, v) => s with { FlangeThickness = v }),
+        new("Encased steel I section", "tw  web", "mm", [Src, Mega], s => s.WebThickness, (s, v) => s with { WebThickness = v }),
+        new("Encased steel I section", "Number of profiles (4 or 6)", "no.", [Mega], s => s.ProfileCount, (s, v) => s with { ProfileCount = (int)v }, Integer: true),
+        new("Encased steel I section", "dsy  offset in-plane", "mm", [Mega], s => s.ProfileOffsetY, (s, v) => s with { ProfileOffsetY = v }),
+        new("Encased steel I section", "dsx  offset across", "mm", [Mega], s => s.ProfileOffsetZ, (s, v) => s with { ProfileOffsetZ = v }),
+        new("Reinforcement", "Bar Ø", "mm", [Rc, Src, Mega], s => s.BarDiameter, (s, v) => s with { BarDiameter = v }),
+        new("Reinforcement", "Bars per b face (incl. corners)", "no.", [Rc, Src, Mega], s => s.BarsAlongWidth, (s, v) => s with { BarsAlongWidth = (int)v }, Integer: true),
+        new("Reinforcement", "Bar layers per b face", "no.", [Mega], s => s.BarLayers, (s, v) => s with { BarLayers = (int)v }, Integer: true),
+        new("Reinforcement", "Bars per h face (excl. corners)", "no.", [Rc, Src, Mega], s => s.BarsAlongDepth, (s, v) => s with { BarsAlongDepth = (int)v }, Integer: true, Positive: false),
+        new("Reinforcement", "Link Ø", "mm", [Rc, Src, Mega], s => s.LinkDiameter, (s, v) => s with { LinkDiameter = v }),
+        new("Reinforcement", "Link spacing", "mm", [Rc, Src, Mega], s => s.LinkSpacing, (s, v) => s with { LinkSpacing = v }),
+        new("Materials", "fck  concrete (cylinder)", "MPa", [Rc, Cft, Src, Mega], s => s.Fck, (s, v) => s with { Fck = v }),
+        new("Materials", "fy  structural steel", "MPa", [Cft, Src, Mega], s => s.Fy, (s, v) => s with { Fy = v }),
+        new("Materials", "fyk  reinforcement", "MPa", [Rc, Src, Mega], s => s.Fyk, (s, v) => s with { Fyk = v }),
+        new("Materials", "Ea  structural steel", "MPa", [Cft, Src, Mega], s => s.Ea, (s, v) => s with { Ea = v }),
+        new("Materials", "Es  reinforcement", "MPa", [Rc, Src, Mega], s => s.Es, (s, v) => s with { Es = v }),
         new("Materials", "αcc  (EC2 3.1.6, NA)", "", [Rc], s => s.AlphaCc, (s, v) => s with { AlphaCc = v }),
         new("Long term", "φef  effective creep (5.8.4)", "", [Rc], s => s.CreepRatio, (s, v) => s with { CreepRatio = v }, Positive: false),
-        new("Long term", "φt  creep coefficient (6.7.3.3)", "", [Cft, Src], s => s.CreepRatio, (s, v) => s with { CreepRatio = v }, Positive: false),
-        new("Long term", "NG,Ed / NEd  permanent share", "", [Cft, Src], s => s.PermanentLoadRatio, (s, v) => s with { PermanentLoadRatio = v }, Positive: false),
+        new("Long term", "φt  creep coefficient (6.7.3.3)", "", [Cft, Src, Mega], s => s.CreepRatio, (s, v) => s with { CreepRatio = v }, Positive: false),
+        new("Long term", "NG,Ed / NEd  permanent share", "", [Cft, Src, Mega], s => s.PermanentLoadRatio, (s, v) => s with { PermanentLoadRatio = v }, Positive: false),
     ];
 
     private readonly ColumnDesignType type;
@@ -63,6 +67,8 @@ public partial class DesignReferenceWindow : Window
     private readonly List<CheckItem> members;
     private readonly List<CheckItem> cases;
     private readonly IReadOnlyList<string> defaultCases;
+    /// <summary>The section last shown: what the fields do not edit (e.g. the profile name) is kept from it.</summary>
+    private ColumnSectionInput shownSection = new();
 
     public ColumnDesignBasis? Result { get; private set; }
 
@@ -153,6 +159,7 @@ public partial class DesignReferenceWindow : Window
 
     private void ShowSection(ColumnSectionInput section)
     {
+        shownSection = section;
         foreach (var (field, box) in fieldBoxes) box.Text = Text(field.Get(section));
         tubeBox.SelectedItem = section.Tube;
     }
@@ -194,7 +201,7 @@ public partial class DesignReferenceWindow : Window
         { Fail("Partial factors must be numbers of 1.0 or more.", 0); return; }
         if (!TryLength(LengthYBox.Text, out var lengthY) || !TryLength(LengthZBox.Text, out var lengthZ))
         { Fail("Key in both effective lengths in m (greater than 0).", 0); return; }
-        var section = new ColumnSectionInput { Tube = tubeBox.SelectedItem is TubeShape tube ? tube : TubeShape.Rectangular };
+        var section = shownSection with { Tube = tubeBox.SelectedItem is TubeShape tube ? tube : TubeShape.Rectangular };
         foreach (var (field, box) in fieldBoxes)
         {
             if (!double.TryParse(box.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || value < 0 || field.Positive && value <= 0 ||
@@ -234,6 +241,14 @@ public partial class DesignReferenceWindow : Window
         var inset = s.Cover + s.LinkDiameter + s.BarDiameter / 2;
         if (2 * inset >= Math.Min(s.Width, s.Depth)) return "Cover, link and bar do not fit in the concrete outline.";
         if (s.BarsAlongWidth < 2) return "Use at least 2 bars per b face (the corner bars).";
+        if (type == Mega)
+        {
+            if (s.ProfileCount is not (4 or 6)) return "A mega composite column has 4 or 6 profiles.";
+            if (2 * s.FlangeThickness >= s.SteelDepth || s.WebThickness >= s.SteelWidth) return "The profile needs a web between its flanges.";
+            if (s.ProfileOffsetY + s.SteelDepth / 2 >= s.Depth / 2 || s.ProfileOffsetZ + s.SteelWidth / 2 >= s.Width / 2) return "The profiles must lie inside the concrete outline (dsy + h/2 < h/2 of the column, likewise across).";
+            if (s.BarsAlongDepth < 2) return "Use at least 2 bars per h face for the CTBUH web plates.";
+            if (s.BarLayers < 1) return "Use at least 1 bar layer per b face.";
+        }
         if (type == Src && (s.SteelDepth >= s.Depth || s.SteelWidth >= s.Width || 2 * s.FlangeThickness >= s.SteelDepth || s.WebThickness >= s.SteelWidth))
             return "The encased I section must fit inside the concrete and have a web between its flanges.";
         return null;

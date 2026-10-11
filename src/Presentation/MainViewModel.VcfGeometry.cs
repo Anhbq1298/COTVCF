@@ -43,24 +43,11 @@ public sealed partial class MainViewModel
             // Sections: copy the section data of a member that already has the chosen section; the member keeps its own
             // name, local axis and end releases.
             var byMember = FemSectionProperties.ToDictionary(property => property.MemberName, StringComparer.Ordinal);
+            var swap = SectionSwapper();
             foreach (var (member, section) in sections)
             {
                 if (!byMember.TryGetValue(member, out var current) || current.SectionName == section) continue;
-                // a section from Define → Section Properties that no member has yet: its properties come from the library
-                if (!current.IsCable && FrameSections.FirstOrDefault(item => item.Name == section) is { } frame &&
-                    FemSectionProperties.All(property => property.SectionName != section))
-                { byMember[member] = PropertiesFor(current, frame); continue; }
-                if (current.IsCable && CableSections.FirstOrDefault(item => item.Name == section) is { } strand &&
-                    FemSectionProperties.All(property => property.SectionName != section))
-                { byMember[member] = PropertiesFor(current, strand); continue; }
-                var template = FemSectionProperties.FirstOrDefault(property => property.SectionName == section && property.IsCable == current.IsCable)
-                    ?? throw new InvalidOperationException($"Section '{section}' is not assigned to any {(current.IsCable ? "cable" : "frame")} of the model.");
-                byMember[member] = current with
-                {
-                    AreaM2 = template.AreaM2, ElasticModulusKNPerM2 = template.ElasticModulusKNPerM2, InPlaneInertiaM4 = template.InPlaneInertiaM4,
-                    SectionName = template.SectionName, MaterialName = template.MaterialName, UnitWeightKNPerM3 = template.UnitWeightKNPerM3,
-                    UnitMassTPerM3 = template.UnitMassTPerM3, GrossAreaM2 = template.GrossAreaM2, Modifiers = template.Modifiers, Shape = template.Shape,
-                };
+                byMember[member] = swap(current, section);
             }
             FemSectionProperties.Clear();
             foreach (var property in byMember.Values.OrderBy(value => value.MemberName, StringComparer.Ordinal)) FemSectionProperties.Add(property);
@@ -130,6 +117,32 @@ public sealed partial class MainViewModel
             Notify(nameof(SharedViewerSections));
             Update();
         }
+    }
+
+    /// <summary>A member's properties with another section — copied from a member that has it, or (for a section from
+    /// Define → Section Properties that no member has yet) from the section library; the member keeps its name, local axis,
+    /// end releases and modifiers. Works on a snapshot, so the function may be used off the UI thread.</summary>
+    internal Func<FemSectionProperties, string, FemSectionProperties> SectionSwapper()
+    {
+        var assigned = FemSectionProperties.ToArray();
+        var frames = FrameSections.ToArray();
+        var strands = CableSections.ToArray();
+        return (current, section) =>
+        {
+            if (current.SectionName == section) return current;
+            if (!current.IsCable && frames.FirstOrDefault(item => item.Name == section) is { } frame && assigned.All(property => property.SectionName != section))
+                return PropertiesFor(current, frame);
+            if (current.IsCable && strands.FirstOrDefault(item => item.Name == section) is { } strand && assigned.All(property => property.SectionName != section))
+                return PropertiesFor(current, strand);
+            var template = assigned.FirstOrDefault(property => property.SectionName == section && property.IsCable == current.IsCable)
+                ?? throw new InvalidOperationException($"Section '{section}' is not assigned to any {(current.IsCable ? "cable" : "frame")} of the model.");
+            return current with
+            {
+                AreaM2 = template.AreaM2, ElasticModulusKNPerM2 = template.ElasticModulusKNPerM2, InPlaneInertiaM4 = template.InPlaneInertiaM4,
+                SectionName = template.SectionName, MaterialName = template.MaterialName, UnitWeightKNPerM3 = template.UnitWeightKNPerM3,
+                UnitMassTPerM3 = template.UnitMassTPerM3, GrossAreaM2 = template.GrossAreaM2, Modifiers = template.Modifiers, Shape = template.Shape,
+            };
+        };
     }
 
     /// <summary>A new number of bays: member properties for the regenerated members (from their templates), the SAP loading,

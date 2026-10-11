@@ -42,6 +42,10 @@ public sealed record MaterialProperty
     public double MassPerVolume => WeightPerVolume / Gravity;
     /// <summary>Shear modulus G = E / 2(1 + ν) for an isotropic material; null for a uniaxial one.</summary>
     public double? ShearModulus => IsUniaxial ? null : ElasticModulus / (2 * (1 + PoissonRatio));
+    /// <summary>Characteristic strength [MPa]: f'c of a concrete, Fy otherwise; read from the grade or name ("C70/85",
+    /// "S460") when the value is not set.</summary>
+    public double? StrengthMpa => (Kind == MaterialKind.Concrete ? Fc : Fy) is > 0 and var value ? value / 1000
+        : MaterialCosts.GradeStrength(Grade.Length > 0 ? Grade : Name);
 
     public static string Title(MaterialKind kind) => kind switch
     {
@@ -129,7 +133,7 @@ public static class MaterialCosts
     }
 
     /// <summary>The characteristic strength in a grade name: "C30/37" → 30, "S460" → 460, "100 MPa" → 100.</summary>
-    private static double? GradeStrength(string grade)
+    internal static double? GradeStrength(string grade)
     {
         var match = System.Text.RegularExpressions.Regex.Match(grade, @"(\d+(?:\.\d+)?)");
         return match.Success ? double.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;

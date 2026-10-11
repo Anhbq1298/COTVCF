@@ -45,7 +45,7 @@
       <DataGridTextColumn Header="VEd kN" Binding="{Binding Governing.VEdKN, StringFormat={}{0:0.0}}" Width="70" ElementStyle="{StaticResource Num}"/>
       <DataGridTextColumn Header="N" Binding="{Binding Governing.AxialUtilization, StringFormat={}{0:0.00}}" Width="50" ElementStyle="{StaticResource Num}"/>
       <DataGridTextColumn Header="M-y" Binding="{Binding Governing.MajorUtilization, StringFormat={}{0:0.00}}" Width="50" ElementStyle="{StaticResource Num}"/>
-      <DataGridTextColumn Header="M-z" Binding="{Binding Governing.MinorUtilization, StringFormat={}{0:0.00}}" Width="50" ElementStyle="{StaticResource Num}"/>
+      <DataGridTextColumn Header="M-z/biax" Binding="{Binding Governing.MinorUtilization, StringFormat={}{0:0.00}}" Width="64" ElementStyle="{StaticResource Num}"/>
       <DataGridTextColumn Header="V" Binding="{Binding Governing.ShearUtilization, StringFormat={}{0:0.00}}" Width="50" ElementStyle="{StaticResource Num}"/>
       <DataGridTextColumn Header="Max" Binding="{Binding MaxUtilization, StringFormat={}{0:0.00}}" Width="54" ElementStyle="{StaticResource Num}"/>
       <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="62" ElementStyle="{StaticResource StatusCell}"/>

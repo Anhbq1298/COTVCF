@@ -20,7 +20,7 @@ public sealed partial class MainViewModel
         var first = members.FirstOrDefault(member => member.Suggested);
         return ColumnDesignCodes.Default(type) with
         {
-            Section = first is null ? new ColumnSectionInput() : DesignSectionDefaults(type, first.Member),
+            Section = first is null ? ColumnDesignCodes.Default(type).Section : DesignSectionDefaults(type, first.Member),
             Members = members.Where(member => member.Suggested).Select(member => member.Member).ToArray(),
         };
     }
@@ -53,9 +53,12 @@ public sealed partial class MainViewModel
         var name = section.Name + " " + section.SapType;
         return type switch
         {
-            ColumnDesignType.ConcreteFilledTube => name.Contains("filled", StringComparison.OrdinalIgnoreCase) || name.Contains("CFT", StringComparison.OrdinalIgnoreCase) ||
+            ColumnDesignType.ConcreteFilledTube => section.Shape == FrameShape.FilledTube || name.Contains("filled", StringComparison.OrdinalIgnoreCase) ||
+                                                   name.Contains("CFT", StringComparison.OrdinalIgnoreCase) ||
                                                    section.Shape is FrameShape.Box or FrameShape.Pipe && material?.Kind == MaterialKind.Concrete,
-            ColumnDesignType.SteelEncased => name.Contains("SRC", StringComparison.OrdinalIgnoreCase) || name.Contains("encase", StringComparison.OrdinalIgnoreCase),
+            ColumnDesignType.SteelEncased => section.Shape == FrameShape.Encased || name.Contains("SRC", StringComparison.OrdinalIgnoreCase) ||
+                                             name.Contains("encase", StringComparison.OrdinalIgnoreCase),
+            ColumnDesignType.MegaComposite => section.Shape == FrameShape.MegaComposite || name.Contains("mega", StringComparison.OrdinalIgnoreCase),
             _ => material?.Kind == MaterialKind.Concrete && section.Shape is FrameShape.Rectangle or FrameShape.Circle,
         };
     }
@@ -78,11 +81,17 @@ public sealed partial class MainViewModel
         var concrete = material?.Kind == MaterialKind.Concrete ? material : Materials.FirstOrDefault(item => item.Kind == MaterialKind.Concrete);
         var steel = material?.Kind == MaterialKind.Steel ? material : Materials.FirstOrDefault(item => item.Kind == MaterialKind.Steel);
         var rebar = Materials.FirstOrDefault(item => item.Kind == MaterialKind.Rebar);
-        var input = new ColumnSectionInput();
+        var input = ColumnDesignCodes.Default(type).Section;
         if (concrete?.Fc is > 0 and var fc) input = input with { Fck = fc / 1000 };
         if (steel?.Fy is > 0 and var fy) input = input with { Fy = fy / 1000, Ea = steel.ElasticModulus / 1000 };
         if (rebar?.Fy is > 0 and var fyk) input = input with { Fyk = fyk / 1000 };
         if (section is null) return input;
+        // a composite section defined in the app carries its design input
+        if (section.Composite is { } composite &&
+            (type, section.Shape) is (ColumnDesignType.ConcreteFilledTube, FrameShape.FilledTube) or (ColumnDesignType.SteelEncased, FrameShape.Encased)
+                or (ColumnDesignType.MegaComposite, FrameShape.MegaComposite))
+            return composite;
+        if (type == ColumnDesignType.ConcreteFilledTube && TubeFromName(section) is { } tube) return tube(input);
         double mm(double metres) => Math.Round(metres * 1000, 1);
         return (type, section.Shape) switch
         {
@@ -102,6 +111,34 @@ public sealed partial class MainViewModel
         };
     }
 
+    /// <summary>
+    /// A filled tube read from a Section Designer name such as <c>CFT_SHS[1200x2000x150_S460]</c> (H × B × t, steel and concrete grade) or
+    /// <c>CFT_CHS[1000x25]</c> (D × t): SAP2000 gives such a section no dimensions. The larger side goes in-plane when the
+    /// section is stiffer about its 3-axis (I33 ≥ I22).
+    /// </summary>
+    private static Func<ColumnSectionInput, ColumnSectionInput>? TubeFromName(FrameSectionProperty section)
+    {
+        var grade = System.Text.RegularExpressions.Regex.Match(section.Name, @"S(\d{3})(?!\d)");
+        double? fy = grade.Success ? double.Parse(grade.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;
+        var concreteGrade = System.Text.RegularExpressions.Regex.Match(section.Name, @"C(\d{2,3})/\d{2,3}");
+        double? fck = concreteGrade.Success ? double.Parse(concreteGrade.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;
+        static double N(System.Text.RegularExpressions.Group group) => double.Parse(group.Value, System.Globalization.CultureInfo.InvariantCulture);
+        var three = System.Text.RegularExpressions.Regex.Match(section.Name, @"(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)");
+        if (three.Success && !section.Name.Contains("CHS", StringComparison.OrdinalIgnoreCase))
+        {
+            double first = N(three.Groups[1]), second = N(three.Groups[2]), t = N(three.Groups[3]);
+            var values = section.Values();
+            var largerInPlane = values.I33 >= values.I22;
+            double depth = largerInPlane ? Math.Max(first, second) : Math.Min(first, second);
+            double width = largerInPlane ? Math.Min(first, second) : Math.Max(first, second);
+            return input => input with { Tube = TubeShape.Rectangular, TubeDepth = depth, TubeWidth = width, TubeThickness = t, Fy = fy ?? input.Fy, Fck = fck ?? input.Fck };
+        }
+        var two = System.Text.RegularExpressions.Regex.Match(section.Name, @"(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)");
+        if (two.Success && (section.Name.Contains("CHS", StringComparison.OrdinalIgnoreCase) || section.Name.Contains("pipe", StringComparison.OrdinalIgnoreCase)))
+            return input => input with { Tube = TubeShape.Circular, TubeDepth = N(two.Groups[1]), TubeThickness = N(two.Groups[2]), Fy = fy ?? input.Fy, Fck = fck ?? input.Fck };
+        return null;
+    }
+
     /// <summary>Load cases / combinations of the design candidate, in Results order.</summary>
     internal IReadOnlyList<string> DesignCaseNames()
     {
@@ -111,10 +148,12 @@ public sealed partial class MainViewModel
         return order.Count > 0 ? order : results.Keys.ToArray();
     }
 
-    /// <summary>The cases ticked by default: the combinations set to run, else every case.</summary>
+    /// <summary>The cases ticked by default: the ULS ones (by name), else the combinations set to run, else every case.</summary>
     internal IReadOnlyList<string> DesignDefaultCases()
     {
         var names = DesignCaseNames();
+        var ultimate = names.Where(name => name.Contains("ULS", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (ultimate.Length > 0) return ultimate;
         var combinations = FemCombinationRows.Where(row => row.Run).Select(row => row.Name).Where(names.Contains).ToArray();
         return combinations.Length > 0 ? combinations : names;
     }

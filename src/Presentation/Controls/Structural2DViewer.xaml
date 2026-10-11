@@ -91,8 +91,7 @@
    </Border>
 
    <!-- The result type (axial / bending / shear / deflection / reactions) is chosen in Show Results or the Result menu. -->
-   <TextBlock HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="8,0,0,6" Style="{StaticResource Caption}"
-             Text="Wheel zoom &#183; Drag pan &#183; Dbl-click fit &#183; Solid frame &#183; Dashed cable &#183; Dotted tendon"/>
+   <!-- no hint line under the model (removed on request): wheel zoom, drag pan, double-click fit still work -->
 
    <ContentPresenter Content="{Binding ToolbarContent, ElementName=Root}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,8,0,0"/>
   </Grid>

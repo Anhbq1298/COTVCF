@@ -1,8 +1,9 @@
 namespace COT_VCF.Domain;
 
 /// <summary>Frame section shapes the app can draw and compute; <see cref="General"/> covers Section Designer and any
-/// other SAP2000 shape, whose properties are taken as SAP2000 reports them.</summary>
-public enum FrameShape { Rectangle, Box, I, Pipe, Circle, Channel, Tee, Angle, General }
+/// other SAP2000 shape, whose properties are taken as SAP2000 reports them. <see cref="FilledTube"/> (CFT) and
+/// <see cref="Encased"/> (steel encased composite) and <see cref="MegaComposite"/> (several encased profiles) are defined by their <see cref="FrameSectionProperty.Composite"/> data.</summary>
+public enum FrameShape { Rectangle, Box, I, Pipe, Circle, Channel, Tee, Angle, FilledTube, Encased, MegaComposite, General }
 
 /// <summary>Computed frame section properties [m², m⁴]. I33 is about the 3-axis (bending in the 1-2 plane, depth t3).</summary>
 public sealed record SectionValues(double Area, double I33, double I22, double Torsion, double ShearArea2, double ShearArea3);
@@ -32,12 +33,23 @@ public sealed record FrameSectionProperty
     public IReadOnlyList<double> Modifiers { get; init; } = [1, 1, 1, 1, 1, 1, 1, 1];
     public SectionValues? Given { get; init; }
     public string Source { get; init; } = "App";
+    /// <summary>A CFT / steel encased section's cross-section and design data, in mm and MPa as the Design menu takes them.
+    /// <see cref="Material"/> is then the concrete; <see cref="SteelMaterial"/> the tube / encased steel and
+    /// <see cref="RebarMaterial"/> the reinforcement. <see cref="Given"/> holds its transformed properties.</summary>
+    public ColumnSectionInput? Composite { get; init; }
+    public string SteelMaterial { get; init; } = "";
+    public string RebarMaterial { get; init; } = "";
+
+    public bool IsComposite => Shape is FrameShape.FilledTube or FrameShape.Encased or FrameShape.MegaComposite && Composite is not null;
 
     public static string Title(FrameShape shape) => shape switch
     {
         FrameShape.Box => "Box/Tube",
         FrameShape.I => "I/Wide Flange",
         FrameShape.Tee => "Tee",
+        FrameShape.FilledTube => "Concrete Filled Tube (CFT)",
+        FrameShape.Encased => "Steel Encased Composite",
+        FrameShape.MegaComposite => "Mega Composite Column",
         FrameShape.General => "General / Section Designer",
         _ => shape.ToString(),
     };
@@ -53,13 +65,30 @@ public sealed record FrameSectionProperty
         FrameShape.Tee => new() { Name = name, Shape = shape, Material = material, Depth = 0.4, Width = 0.3, FlangeThickness = 0.025, WebThickness = 0.015 },
         FrameShape.Angle => new() { Name = name, Shape = shape, Material = material, Depth = 0.2, Width = 0.2, FlangeThickness = 0.02, WebThickness = 0.02 },
         FrameShape.General => new() { Name = name, Shape = shape, Material = material, Given = new SectionValues(0.1, 0.001, 0.001, 0.001, 0.08, 0.08) },
+        FrameShape.FilledTube => new FrameSectionProperty { Name = name, Shape = shape, SapType = "FilledTube", Material = material, Composite = new ColumnSectionInput() }.WithCompositeOutline(),
+        FrameShape.Encased => new FrameSectionProperty { Name = name, Shape = shape, SapType = "Encased", Material = material,
+            Composite = new ColumnSectionInput { Width = 1000, Depth = 1000, SteelDepth = 600, SteelWidth = 500 } }.WithCompositeOutline(),
+        FrameShape.MegaComposite => new FrameSectionProperty { Name = name, Shape = shape, SapType = "MegaComposite", Material = material,
+            Composite = ColumnSectionInput.MegaDefault }.WithCompositeOutline(),
         _ => new() { Name = name, Shape = FrameShape.Rectangle, Material = material, Depth = 0.6, Width = 0.3 },
     };
 
-    /// <summary>The section's properties: from the dimensions for a standard shape, as given for a general one.</summary>
+        /// <summary>A composite section with its outline (<see cref="Depth"/>, <see cref="Width"/>, tube wall) taken from
+    /// <see cref="Composite"/>, in m.</summary>
+    public FrameSectionProperty WithCompositeOutline()
+    {
+        if (Composite is not { } c) return this;
+        return Shape == FrameShape.FilledTube
+            ? this with { Depth = c.TubeDepth / 1000, Width = (c.Tube == TubeShape.Circular ? c.TubeDepth : c.TubeWidth) / 1000, FlangeThickness = c.TubeThickness / 1000, WebThickness = c.TubeThickness / 1000 }
+            : this with { Depth = c.Depth / 1000, Width = c.Width / 1000, FlangeThickness = 0, WebThickness = 0 };
+    }
+
+    /// <summary>The section's properties: from the dimensions for a standard shape, as given for a general one; a composite
+    /// section's transformed properties are worked out with its materials (see <see cref="CompositeSection"/>) into
+    /// <see cref="Given"/>.</summary>
     public SectionValues Values() => Shape switch
     {
-        FrameShape.General => Given ?? new SectionValues(0, 0, 0, 0, 0, 0),
+        FrameShape.General or FrameShape.FilledTube or FrameShape.Encased or FrameShape.MegaComposite => Given ?? new SectionValues(0, 0, 0, 0, 0, 0),
         FrameShape.Box => BoxValues(),
         FrameShape.Pipe => PipeValues(Depth, WebThickness),
         FrameShape.Circle => PipeValues(Depth, Depth / 2),

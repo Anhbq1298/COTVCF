@@ -136,8 +136,65 @@ internal static class FemModelFileChecks
             $"the default case runs without SAP2000: {vm.FemProgressText}" + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
         RunVcfGeometry(vm, state, silent, warnings);
         RunVcfBays();
+        RunVcfOptimization();
         RunMaterials();
         RunSections();
+        RunCompositeSections();
+    }
+
+    /// <summary>CFT and steel encased frame sections: parts, transformed properties, cost per metre, the FEM members that take
+    /// them (E = Ecm, true self-weight) and save / load.</summary>
+    private static void RunCompositeSections()
+    {
+        var cft = new ColumnSectionInput { Tube = TubeShape.Rectangular, TubeDepth = 800, TubeWidth = 800, TubeThickness = 20 };
+        var parts = CompositeSection.Parts(FrameShape.FilledTube, cft);
+        var transformed = CompositeSection.Transformed(parts, 35e6, 210e6, 200e6);
+        Check(Math.Abs(parts.ConcreteArea - 0.5776) < 1e-12 && Math.Abs(parts.SteelArea - 0.0624) < 1e-12 &&
+              Math.Abs(transformed.Area - (0.5776 + 6 * 0.0624)) < 1e-12 && Math.Abs(transformed.I33 - (Math.Pow(0.76, 4) / 12 + 6 * (Math.Pow(0.8, 4) - Math.Pow(0.76, 4)) / 12)) < 1e-12,
+            "a CFT 800×800×20 has Ac 0.5776 and Aa 0.0624 m², transformed to the concrete with Ea/Ecm");
+        var circular = CompositeSection.Parts(FrameShape.FilledTube, cft with { Tube = TubeShape.Circular });
+        Check(Math.Abs(circular.ConcreteArea - Math.PI / 4 * 0.76 * 0.76) < 1e-12 && circular.ConcreteI33 == circular.ConcreteI22, "a circular CFT is a filled pipe");
+        var encased = new ColumnSectionInput { Width = 1000, Depth = 1000, Cover = 40, BarDiameter = 32, BarsAlongWidth = 5, BarsAlongDepth = 3, LinkDiameter = 12, LinkSpacing = 300,
+            SteelDepth = 600, SteelWidth = 500, FlangeThickness = 40, WebThickness = 25 };
+        var src = CompositeSection.Parts(FrameShape.Encased, encased);
+        var aa = 2 * 0.5 * 0.04 + 0.52 * 0.025;
+        Check(src.Bars.Count == 16 && Math.Abs(src.SteelArea - aa) < 1e-12 && Math.Abs(src.RebarArea - 16 * Math.PI / 4 * 0.032 * 0.032) < 1e-12 &&
+              Math.Abs(src.ConcreteArea + src.SteelArea + src.RebarArea - 1.0) < 1e-12 && src.LinkAreaPerMetre > 0,
+            "a steel encased 1000×1000 with an I 600×500 and 16 Ø32 shares its area between concrete, steel and bars");
+
+        var (vm, state, _, warnings) = DefaultModelApp();
+        vm.EnsureMaterials();
+        vm.EnsureSections();
+        var concrete = vm.Materials.Where(item => item.Kind == MaterialKind.Concrete).MaxBy(item => item.Fc ?? 0)!;
+        var steel = vm.Materials.First(item => item.Kind == MaterialKind.Steel);
+        var section = FrameSectionProperty.Default(FrameShape.FilledTube, "CFT 800x20", concrete.Name) with { SteelMaterial = steel.Name, Composite = cft };
+        section = section.WithCompositeOutline();
+        var analysis = vm.AnalyseComposite(section)!;
+        section = section with { Given = analysis.Values };
+        var expectedCost = parts.ConcreteArea * concrete.UnitCostPerCubicMetre!.Value + parts.SteelArea * steel.MassPerVolume * steel.UnitCost!.Value;
+        Check(section is { Depth: 0.8, Width: 0.8, WebThickness: 0.02, SapType: "FilledTube" } && analysis.Ecm == concrete.ElasticModulus &&
+              analysis.Cost.CostPerM is { } cost && Math.Abs(cost - expectedCost) < 1e-6 && analysis.Cost.Missing.Count == 0,
+            $"a CFT section costs its concrete volume × SGD/m³ plus its steel mass × SGD/t ({analysis.Cost.CostPerM:0} SGD/m)");
+
+        vm.CommitFrameSections(vm.FrameSections.Append(section).ToArray(), new Dictionary<string, string>(StringComparer.Ordinal));
+        vm.ApplyVcfGeometryAsync(state.Geometry, new Dictionary<string, string>(StringComparer.Ordinal) { ["VRM002"] = section.Name }).GetAwaiter().GetResult();
+        var member = vm.FemSectionProperties.Single(property => property.MemberName == "VRM002");
+        var trueWeight = parts.ConcreteArea * concrete.WeightPerVolume + parts.SteelArea * steel.WeightPerVolume;
+        Check(warnings.Count == 0 && member.SectionName == section.Name && Math.Abs(member.GrossAreaM2 - analysis.Values.Area) < 1e-12 &&
+              member.ElasticModulusKNPerM2 == concrete.ElasticModulus && Math.Abs(member.GrossAreaM2 * member.UnitWeightKNPerM3 - trueWeight) < 1e-9 &&
+              member.Shape is { Kind: SectionShapeKind.Box, Depth: 0.8 },
+            "a member with a CFT section takes the transformed A / I with E = Ecm and its true self-weight" + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
+
+        var path = Path.Combine(Path.GetTempPath(), $"cotvcf-composite-{Guid.NewGuid():N}{FemModelFile.Extension}");
+        try
+        {
+            vm.SaveFemModelFileAsync(path).GetAwaiter().GetResult();
+            var (reopened, _, _, _) = DefaultModelApp();
+            reopened.OpenFemModelFile(path);
+            Check(reopened.FrameSections.SingleOrDefault(item => item.Name == section.Name) is { Shape: FrameShape.FilledTube, Composite: { TubeThickness: 20 } } saved &&
+                  saved.SteelMaterial == steel.Name, "a CFT section is saved with the model and loaded again");
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
     }
 
     /// <summary>Define → Section Properties on the default model: the library, a change reaching the FEM members, a library
@@ -378,6 +435,96 @@ internal static class FemModelFileChecks
               vm8.FemCandidateSummary.Contains("FEM runs", StringComparison.Ordinal) && vm8.RunFemAnalysis.CanExecute(null),
             "8 bays: the outer fan cables (Cable6a/6b) are removed with their Tab 03 rows; cables that followed them become independent; FEM is ready" +
             (warnings8.Count > 0 ? " — " + string.Join(" | ", warnings8) : ""));
+    }
+
+    /// <summary>Run → Optimization VCF → Run Optimization on the default model: every case is analysed with the internal FEM,
+    /// the deflection follows the inputs, the case equal to the model matches Run FEM Analysis, and nothing changes.</summary>
+    private static void RunVcfOptimization()
+    {
+        var (vm, state, _, warnings) = DefaultModelApp();
+        var analysis = VcfGeometry.Analyze(state.Geometry, state.Truss);
+        var current = VcfOptimization.Current(analysis);
+        var cables = state.Cables.Where(cable => !cable.IsFollower).ToDictionary(cable => cable.CableName, cable => VcfOptimization.CableRange(cable)!, StringComparer.Ordinal);
+        var live = state.LoadDefinitions.Single(load => load.ApplyIncrementStep);
+        var dead = state.LoadDefinitions.Single(load => !load.ApplyIncrementStep);
+        // one Tab 02 height step above the baseline (H02): the baseline itself (H01) does not reach equilibrium in the
+        // internal FEM, in Run FEM Analysis as here
+        var depth = VcfRange.Fixed(analysis.Parameters.TrussDepth + state.Truss.Increment, 0.5);
+        VcfOptimizationSettings Settings(VcfRange bays, VcfRange bay, VcfRange liveQz) => current with
+        {
+            Geometry = new Dictionary<string, VcfRange>(current.Geometry) { ["Bays"] = bays, ["Bay"] = bay, ["Depth"] = depth },
+            CableForces = cables,
+            StoreyLoads = new Dictionary<string, VcfRange>(StringComparer.Ordinal)
+            {
+                [dead.LoadName] = VcfOptimization.LoadRange(dead)!, [live.LoadName] = liveQz,
+                [VcfOptimization.StoriesKey] = VcfRange.Fixed(Math.Truncate(state.NumberOfStories), 1),
+                [VcfOptimization.TributaryKey] = VcfRange.Fixed(state.TributaryWidthB, 0.5),
+            },
+        };
+        var geometryBefore = state.Geometry;
+        var propertiesBefore = vm.FemSectionProperties.ToArray();
+
+        // 10 / 12 m bays × LL at its Tab 01 minimum and 0 kPa: 4 cases; the deflection grows with the span and the load
+        var rows = Optimize(vm, Settings(VcfRange.Fixed(10, 1), new VcfRange(10, 12, 2), new VcfRange(0, live.MinQz!.Value, live.MinQz.Value)));
+        double Defl(int caseNumber) => rows.Single(row => row.Case == caseNumber).MaxDeflectionMm!.Value;
+        Check(rows.Length == 4 && rows.All(row => row.MaxDeflectionMm is > 0 && row.Status.StartsWith("Analysed", StringComparison.Ordinal)) &&
+              vm.VcfOptimizationColumns.Select(axis => axis.Label).SequenceEqual(["Bay [m]", $"qz {live.LoadName} [kPa]"]) &&
+              Defl(3) > Defl(1) && Defl(4) > Defl(2) && Defl(2) > Defl(1) && Defl(4) > Defl(3) &&
+              vm.VcfOptimizationBest.Contains("case 1", StringComparison.Ordinal),
+            $"Run Optimization analyses every case (4) and reports its max deflection: wider bays and more live load deflect more ({Defl(1):0.0} … {Defl(4):0.0} mm); the least is named");
+
+        // the same geometry applied with Edit → VCF Geometry and analysed with Run FEM Analysis gives the same deflection
+        var (applied, appliedState, _, _) = DefaultModelApp();
+        var deeper = analysis.Parameters with { TrussDepth = depth.Min, MiddleChordHeight = VcfOptimization.MiddleChordRatio * depth.Min };
+        applied.ApplyVcfGeometryAsync(VcfGeometry.Build(VcfGeometry.Analyze(appliedState.Geometry, appliedState.Truss), deeper),
+            new Dictionary<string, string>(StringComparer.Ordinal)).GetAwaiter().GetResult();
+        var appliedRuns = Analyze(applied);
+        var femMax = appliedRuns.Select(run => (run.Results ?? new Dictionary<string, FemAnalysisResult> { [""] = run.Result }).Values
+            .SelectMany(result => result.Joints).Max(joint => -joint.UZM * 1000)).ToArray();
+        Check(femMax.Any(value => Math.Abs(value - Defl(2)) < 1e-6),
+            $"A case ({Defl(2):0.000} mm) matches Run FEM Analysis on the same geometry applied with Edit -> VCF Geometry " +
+            $"(FEM max deflections {string.Join(", ", femMax.Select(value => value.ToString("0.000")))})");
+
+        // the deflection read from the SLS load case, checked against span / 250
+        const string sls = "NL SLS001: 1.0DL+1.0LL";
+        var (slsCases, slsCombinations) = vm.VcfDeflectionResults();
+        var slsRows = Optimize(vm, Settings(VcfRange.Fixed(10, 1), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1)) with { DeflectionResult = sls, SpanRatio = 250 });
+        var slsFem = appliedRuns.Where(run => run.Results?.ContainsKey(sls) == true)
+            .Select(run => run.Results![sls].Joints.Max(joint => -joint.UZM * 1000)).ToArray();
+        var slsRow = slsRows.Single();
+        Check(VcfOptimization.DefaultDeflectionResult(slsCases, slsCombinations) == sls && slsRow.Governing == sls &&
+              slsFem.Any(value => Math.Abs(value - slsRow.MaxDeflectionMm!.Value) < 1e-6) && slsRow.MaxDeflectionMm < Defl(2) &&
+              slsRow.Span == "100" && slsRow.Limit == (100_000.0 / 250).ToString("0.0") &&
+              slsRow.Check == (slsRow.MaxDeflectionMm <= 400 ? "OK" : "NG") && slsRow.Ratio == (slsRow.MaxDeflectionMm!.Value / 400).ToString("0.00") &&
+              vm.VcfOptimizationBest.Contains("span / 250", StringComparison.Ordinal),
+            $"The deflection is read from '{sls}' (the default) and matches Run FEM Analysis there ({slsRow.Deflection} mm); " +
+            $"checked against span / 250 = 100 m / 250 = {slsRow.Limit} mm → δ / limit {slsRow.Ratio} {slsRow.Check}");
+
+        // another number of bays runs on the regenerated model
+        var bayRows = Optimize(vm, Settings(new VcfRange(8, 12, 4), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1)));
+        Check(bayRows.Length == 2 && bayRows.All(row => row.MaxDeflectionMm is > 0) && bayRows[1].MaxDeflectionMm > bayRows[0].MaxDeflectionMm,
+            $"8 and 12 bays run on the regenerated model; the longer span deflects more ({bayRows[0].Deflection} → {bayRows[1].Deflection} mm)" +
+            (bayRows.Any(row => row.MaxDeflectionMm is null) ? " — " + string.Join(" | ", bayRows.Select(row => row.Status)) : ""));
+
+        Check(ReferenceEquals(state.Geometry, geometryBefore) && vm.FemSectionProperties.SequenceEqual(propertiesBefore) && warnings.Count == 0,
+            "Run Optimization leaves the working model, its member properties and SAP2000 unchanged" + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
+    }
+
+    private static VcfOptimizationRow[] Optimize(MainViewModel vm, VcfOptimizationSettings settings)
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));
+        try
+        {
+            var task = vm.RunVcfOptimizationAsync(settings);
+            var frame = new DispatcherFrame();
+            task.ContinueWith(_ => frame.Continue = false, TaskScheduler.Default);
+            Dispatcher.PushFrame(frame);
+            task.GetAwaiter().GetResult();
+            Dispatcher.CurrentDispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+        return vm.VcfOptimizationRows.ToArray();
     }
 
     /// <summary>Runs the FEM tab's analysis with a dispatcher, so progress reports land as they do in the app.</summary>

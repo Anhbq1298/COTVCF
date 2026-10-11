@@ -4,7 +4,7 @@
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
  <!-- Run → Optimization VCF: the inputs of Edit → VCF Geometry as a search space — min / max / step per geometry parameter
       and candidate sections per member role and cable — with a preview at the minimum, current or maximum corner.
-      OK keeps the settings; the run loop is not built yet. -->
+      OK keeps the settings; Run Optimization keeps them and analyses every combination. -->
  <Window.Resources>
   <Style x:Key="FormButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0"/></Style>
   <Style x:Key="ColumnHeader" TargetType="TextBlock" BasedOn="{StaticResource Caption}"><Setter Property="HorizontalAlignment" Value="Right"/><Setter Property="Margin" Value="0,0,4,2"/></Style>
@@ -15,16 +15,30 @@
    <Button x:Name="ResetButton" DockPanel.Dock="Left" Content="Reset Form to Current Model" MinWidth="220" Click="Reset_Click"/>
    <Button x:Name="CancelButton" DockPanel.Dock="Right" Content="Cancel" Style="{StaticResource FormButton}" IsCancel="True"/>
    <Button x:Name="OkButton" DockPanel.Dock="Right" Content="OK" Style="{StaticResource FormButton}" IsDefault="True" Click="Ok_Click"/>
-   <Button x:Name="RunButton" DockPanel.Dock="Right" Content="Run Optimization" Style="{StaticResource FormButton}" MinWidth="130" IsEnabled="False"
-           ToolTipService.ShowOnDisabled="True" ToolTip="The optimization run loop is not implemented yet — OK keeps the ranges for it"/>
+   <Button x:Name="RunButton" DockPanel.Dock="Right" Content="Run Optimization" Style="{StaticResource FormButton}" MinWidth="130" Click="Run_Click"
+           ToolTipService.ShowOnDisabled="True" ToolTip="Analyse every combination with the internal FEM and list the max deflection of each case (the working model is not changed)"/>
   </DockPanel>
+
+  <!-- deflection check: the result the deflection is read from and the limit span / ratio -->
+  <Border DockPanel.Dock="Bottom" Margin="0,10,0,0" Padding="8,6" Background="{StaticResource Raised}" BorderBrush="{StaticResource Border}" BorderThickness="1">
+   <StackPanel Orientation="Horizontal">
+    <TextBlock Text="DEFLECTION CHECK" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+    <TextBlock Text="max δ in" VerticalAlignment="Center" Margin="0,0,6,0"/>
+    <ComboBox x:Name="DeflectionResultCombo" Width="280" SelectionChanged="DeflectionCheck_Changed" AutomationProperties.Name="Deflection result"
+              ToolTip="The load case / combination the deflection is read from (those set to run on Define → Load Cases / Load Combinations)"/>
+    <TextBlock Text="≤ span /" VerticalAlignment="Center" Margin="10,0,6,0"/>
+    <TextBox x:Name="SpanRatioBox" Width="60" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="DeflectionCheck_Changed"
+             AutomationProperties.Name="Span ratio" ToolTip="Deflection limit = span between the mega columns (bays × bay width) / this ratio"/>
+    <TextBlock x:Name="LimitText" VerticalAlignment="Center" Margin="10,0,0,0" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}"/>
+   </StackPanel>
+  </Border>
 
   <Grid>
    <Grid.ColumnDefinitions><ColumnDefinition Width="500"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
 
    <TabControl x:Name="ParameterTabs" Background="{StaticResource Surface}" AutomationProperties.Name="Optimization VCF sheets">
     <TabControl.Resources>
-     <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}"><Setter Property="Height" Value="26"/><Setter Property="Padding" Value="10,0"/></Style>
+     <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}"><Setter Property="Height" Value="26"/><Setter Property="Width" Value="NaN"/><Setter Property="MinWidth" Value="0"/><Setter Property="Padding" Value="12,0"/></Style>
     </TabControl.Resources>
     <TabItem Header="Geometry">
      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
@@ -36,7 +50,38 @@
         </Grid.ColumnDefinitions>
        </Grid>
        <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
-                  Text="Values run from Min in steps of Step up to Max (Max is always included). Min = Max keeps the parameter fixed. Combinations that fail the geometry rules (e.g. a middle chord above a shallow truss) are skipped by the run."/>
+                  Text="Values run from Min in steps of Step up to Max (as on 01 Loading and 03 Pretension, an off-step Max is not added). Min = Max keeps the parameter fixed. The middle chord is not a variable: it stays at 0.5 × truss depth. Combinations that fail the geometry rules are skipped by the run."/>
+      </StackPanel>
+     </ScrollViewer>
+    </TabItem>
+    <TabItem Header="Cable Force">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+      <StackPanel>
+       <TextBlock Text="Pretension per cable (starts from 03 Pretension)" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+       <Grid x:Name="CableForceGrid">
+        <Grid.ColumnDefinitions>
+         <ColumnDefinition Width="*"/><ColumnDefinition Width="84"/><ColumnDefinition Width="84"/><ColumnDefinition Width="70"/>
+         <ColumnDefinition Width="24"/><ColumnDefinition Width="40"/>
+        </Grid.ColumnDefinitions>
+       </Grid>
+       <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                  Text="A cable that follows another on 03 Pretension (Same Values / Step / Ratio / Offset) keeps following it and is not a variable of its own. New fan cables from a larger number of bays take the range of the cable they copy."/>
+      </StackPanel>
+     </ScrollViewer>
+    </TabItem>
+    <TabItem Header="Storey Force">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+      <StackPanel>
+       <TextBlock x:Name="StoreyForceCaption" Text="Force per loaded point: Fz = −qz × trib. length × B × NStories (starts from 01 Loading)" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+       <Grid x:Name="StoreyForceGrid">
+        <Grid.ColumnDefinitions>
+         <ColumnDefinition Width="*"/><ColumnDefinition Width="84"/><ColumnDefinition Width="84"/><ColumnDefinition Width="70"/>
+         <ColumnDefinition Width="30"/><ColumnDefinition Width="40"/>
+        </Grid.ColumnDefinitions>
+       </Grid>
+       <TextBlock x:Name="StoreyForceSummary" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+       <TextBlock Style="{StaticResource Hint}" Margin="0,6,0,0"
+                  Text="qz is per load definition and acts downward (≥ 0). The tributary length of each point follows the geometry of the combination."/>
       </StackPanel>
      </ScrollViewer>
     </TabItem>

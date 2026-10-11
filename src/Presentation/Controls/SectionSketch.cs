@@ -44,6 +44,42 @@ public sealed class SectionSketch : FrameworkElement
                 dc.DrawGeometry(fill, edge, ring);
                 break;
             }
+            case FrameShape.FilledTube or FrameShape.Encased or FrameShape.MegaComposite when section.Composite is { } c:
+            {
+                var concrete = new SolidColorBrush(Color.FromRgb(0xD9, 0xD4, 0xC7));
+                var steel = new SolidColorBrush(Color.FromRgb(0x5B, 0x6B, 0x7D));
+                const double mm = 0.001;
+                if (section.Shape == FrameShape.FilledTube)
+                {
+                    var t = c.TubeThickness * mm;
+                    if (c.Tube == TubeShape.Circular)
+                    {
+                        dc.DrawEllipse(steel, edge, centre, depth / 2 * scale, depth / 2 * scale);
+                        var inner = Math.Max(0, depth / 2 - t) * scale;
+                        dc.DrawEllipse(concrete, null, centre, inner, inner);
+                    }
+                    else
+                    {
+                        dc.DrawRectangle(steel, edge, new Rect(P(width / 2, depth / 2), P(-width / 2, -depth / 2)));
+                        dc.DrawRectangle(concrete, null, new Rect(P(Math.Max(0, width / 2 - t), Math.Max(0, depth / 2 - t)), P(-Math.Max(0, width / 2 - t), -Math.Max(0, depth / 2 - t))));
+                    }
+                }
+                else
+                {
+                    dc.DrawRectangle(concrete, edge, new Rect(P(width / 2, depth / 2), P(-width / 2, -depth / 2)));
+                    double ha = c.SteelDepth * mm, ba = c.SteelWidth * mm, tf = c.FlangeThickness * mm, tw = c.WebThickness * mm;
+                    IReadOnlyList<(double Y, double Z)> centres = section.Shape == FrameShape.MegaComposite ? CompositeSection.ProfileCentres(c) : [(0, 0)];
+                    foreach (var (cy, cz) in centres)
+                        foreach (var (x, y, w, h) in new[] { (-ba / 2, ha / 2 - tf, ba, tf), (-ba / 2, -ha / 2, ba, tf), (-tw / 2, -ha / 2 + tf, tw, Math.Max(0, ha - 2 * tf)) })
+                            dc.DrawRectangle(steel, null, new Rect(P(x + cy * mm, y + cz * mm), P(x + w + cy * mm, y + h + cz * mm)));
+                    var cover = (c.Cover + c.LinkDiameter / 2) * mm;
+                    dc.DrawRectangle(null, new Pen(Brushes.DarkRed, 1) { DashStyle = DashStyles.Dash },
+                        new Rect(P(width / 2 - cover, depth / 2 - cover), P(-width / 2 + cover, -depth / 2 + cover)));
+                    foreach (var (y, z, diameter) in CompositeSection.Parts(section.Shape, c).Bars)
+                        dc.DrawEllipse(Brushes.Black, null, P(y, z), Math.Max(1.5, diameter * mm / 2 * scale), Math.Max(1.5, diameter * mm / 2 * scale));
+                }
+                break;
+            }
             case FrameShape.General:
             {
                 var dashed = new Pen(Brushes.Black, 1.2) { DashStyle = DashStyles.Dash };

@@ -4,6 +4,12 @@ using System.Collections.ObjectModel;
 
 namespace COT_VCF.Presentation;
 
+/// <summary>A composite section worked out with the library materials (moduli in kN/m², weight kN/m, γ / ρ equivalent on the
+/// transformed area).</summary>
+internal sealed record CompositeAnalysis(CompositeParts Parts, SectionValues Values, double Ecm, double Ea, double Es,
+    double EquivalentUnitWeight, double EquivalentUnitMass, double WeightPerMetre, CompositeCost Cost,
+    MaterialProperty? Concrete, MaterialProperty? Steel, MaterialProperty? Rebar);
+
 // ---- Define → Section Properties: frame, cable and tendon sections of the working model ----
 // Get From SAP2000 reads the active model's sections (read-only). Without it the library starts from the sections the member
 // properties name. A change made here is applied to the FEM member properties of the members with that section (area,
@@ -84,9 +90,41 @@ public sealed partial class MainViewModel
     /// <summary>The FEM properties of <paramref name="member"/> with <paramref name="section"/>: the section's area and
     /// inertia (section modifiers × the member's own, rotated by its local axis), its material's E / γ / ρ from the library
     /// (else the member keeps its own), and its outline for drawing.</summary>
+    /// <summary>A CFT / steel encased section worked out with the library materials: its parts, the properties transformed to
+    /// the concrete (E = Ecm), the equivalent unit weight / mass that give the true self-weight on the transformed area, and
+    /// the cost per metre from the materials' unit costs.</summary>
+    /// <summary>The reinforcement a steel encased section uses when the library has no rebar material (B500, E 200 GPa,
+    /// the rebar rate).</summary>
+    internal static readonly MaterialProperty DefaultRebar = MaterialCosts.WithDefaultCost(MaterialProperty.Default(MaterialKind.Rebar, "B500 (default)") with { Grade = "B500" });
+
+    internal CompositeAnalysis? AnalyseComposite(FrameSectionProperty section)
+    {
+        if (!section.IsComposite) return null;
+        var input = section.Composite!;
+        MaterialProperty? Find(string name) => name.Length > 0 ? Materials.FirstOrDefault(item => item.Name == name) : null;
+        var concrete = Find(section.Material);
+        var steel = Find(section.SteelMaterial);
+        var rebar = section.Shape == FrameShape.FilledTube ? null : Find(section.RebarMaterial) is { Kind: MaterialKind.Rebar } bars ? bars : DefaultRebar;
+        // EN 1992-1-1 Table 3.1 Ecm = 22 [(fck + 8)/10]^0.3 GPa when the concrete has no modulus
+        var ecm = concrete?.ElasticModulus is > 0 and var e ? e : 22e6 * Math.Pow((input.Fck + 8) / 10, 0.3);
+        var ea = steel?.ElasticModulus is > 0 and var eSteel ? eSteel : input.Ea * 1000;
+        var es = rebar?.ElasticModulus is > 0 and var eRebar ? eRebar : input.Es * 1000;
+        var parts = CompositeSection.Parts(section.Shape, input);
+        var values = CompositeSection.Transformed(parts, ecm, ea, es);
+        double gammaC = concrete?.WeightPerVolume ?? 25, gammaA = steel?.WeightPerVolume ?? 76.97, gammaS = rebar?.WeightPerVolume ?? 76.97;
+        double rhoC = concrete?.MassPerVolume ?? gammaC / 9.80665, rhoA = steel?.MassPerVolume ?? gammaA / 9.80665, rhoS = rebar?.MassPerVolume ?? gammaS / 9.80665;
+        var reinforcement = parts.RebarArea + parts.LinkAreaPerMetre;
+        var weight = parts.ConcreteArea * gammaC + parts.SteelArea * gammaA + reinforcement * gammaS;
+        var mass = parts.ConcreteArea * rhoC + parts.SteelArea * rhoA + reinforcement * rhoS;
+        var cost = CompositeSection.Cost(parts, concrete, steel, rebar);
+        return new CompositeAnalysis(parts, values, ecm, ea, es, values.Area > 0 ? weight / values.Area : gammaC, values.Area > 0 ? mass / values.Area : rhoC,
+            weight, cost, concrete, steel, rebar);
+    }
+
     internal FemSectionProperties PropertiesFor(FemSectionProperties member, FrameSectionProperty section)
     {
-        var values = section.Values();
+        var composite = AnalyseComposite(section);
+        var values = composite?.Values ?? section.Values();
         double Mod(IReadOnlyList<double>? list, int index) => list is { } values && index < values.Count ? values[index] : 1;
         var radians = member.LocalAngleDeg * Math.PI / 180;
         var i33 = values.I33 * Mod(section.Modifiers, 5) * Mod(member.Modifiers, 5);
@@ -102,6 +140,9 @@ public sealed partial class MainViewModel
             FrameShape.Channel => new FemSectionShape(SectionShapeKind.Channel, section.Depth, section.Width, section.FlangeThickness, section.WebThickness),
             FrameShape.Tee => new FemSectionShape(SectionShapeKind.Tee, section.Depth, section.Width, section.FlangeThickness, section.WebThickness),
             FrameShape.Angle => new FemSectionShape(SectionShapeKind.Angle, section.Depth, section.Width, section.FlangeThickness, section.WebThickness),
+            FrameShape.FilledTube when section.Composite?.Tube == TubeShape.Circular => new FemSectionShape(SectionShapeKind.Pipe, section.Depth, section.Depth, 0, section.WebThickness),
+            FrameShape.FilledTube => new FemSectionShape(SectionShapeKind.Box, section.Depth, section.Width, section.FlangeThickness, section.WebThickness),
+            FrameShape.Encased or FrameShape.MegaComposite => new FemSectionShape(SectionShapeKind.Rectangle, section.Depth, section.Width),
             _ => FemSectionShape.EquivalentRectangle(values.Area, values.I33, values.I22) ?? member.Shape,
         };
         return member with
@@ -111,9 +152,9 @@ public sealed partial class MainViewModel
             AreaM2 = values.Area * Mod(section.Modifiers, 0) * Mod(member.Modifiers, 0),
             GrossAreaM2 = values.Area,
             InPlaneInertiaM4 = i33 * Math.Cos(radians) * Math.Cos(radians) + i22 * Math.Sin(radians) * Math.Sin(radians),
-            ElasticModulusKNPerM2 = material?.ElasticModulus ?? member.ElasticModulusKNPerM2,
-            UnitWeightKNPerM3 = material?.WeightPerVolume ?? member.UnitWeightKNPerM3,
-            UnitMassTPerM3 = material?.MassPerVolume ?? member.UnitMassTPerM3,
+            ElasticModulusKNPerM2 = composite?.Ecm ?? material?.ElasticModulus ?? member.ElasticModulusKNPerM2,
+            UnitWeightKNPerM3 = composite?.EquivalentUnitWeight ?? material?.WeightPerVolume ?? member.UnitWeightKNPerM3,
+            UnitMassTPerM3 = composite?.EquivalentUnitMass ?? material?.MassPerVolume ?? member.UnitMassTPerM3,
             Shape = shape,
         };
     }

@@ -373,7 +373,27 @@ public partial class MainWindow : Window
     {
         if (DataContext is not MainViewModel vm) return;
         var dialog = new OptimizationVcfWindow(vm) { Owner = this };
-        if (dialog.ShowDialog() == true && dialog.Result is { } settings) vm.SetVcfOptimization(settings);
+        if (dialog.ShowDialog() != true || dialog.Result is not { } settings) return;
+        if (!dialog.RunRequested) { vm.SetVcfOptimization(settings); return; }
+        OptimizationResults_Click(sender, e);
+        _ = vm.RunVcfOptimizationAsync(settings);
+    }
+
+    private void CancelOptimization_Click(object sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.CancelVcfOptimization();
+
+    // Run → Optimization Results: the table of the last (or running) optimization, one instance brought forward on repeat
+    private OptimizationResultsWindow? optimizationResultsWindow;
+    private void OptimizationResults_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (optimizationResultsWindow is null)
+        {
+            optimizationResultsWindow = new OptimizationResultsWindow(vm) { Owner = this };
+            optimizationResultsWindow.Closed += (_, _) => optimizationResultsWindow = null;
+            optimizationResultsWindow.Show();
+        }
+        if (optimizationResultsWindow.WindowState == WindowState.Minimized) optimizationResultsWindow.WindowState = WindowState.Normal;
+        optimizationResultsWindow.Activate();
     }
 
     // Toolbar → Show Results: load case / combo and the output to draw on the model view

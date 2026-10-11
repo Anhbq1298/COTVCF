@@ -1,21 +1,54 @@
-MIT License
+# MEINHARDT PROPRIETARY SOFTWARE LICENSE
+**For Internal Research Use Only**
 
-Copyright (c) [year] [fullname]
+Copyright © 2026 Meinhardt (Singapore) Pte Ltd. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+## 1. Ownership and Purpose
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+This software and its associated source code, algorithms, documentation and related materials (collectively, the "Software") are developed by Meinhardt (Singapore) Pte Ltd ("Meinhardt") for the **Cities of Tomorrow (CoT) Research Programme – Advanced Structural Systems of High Strength Materials for Land Intensification**.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+The Software is proprietary and intended exclusively for internal research, development, analysis and evaluation activities undertaken by Meinhardt in connection with the above research programme.
+
+## 2. Permitted Use
+
+Permission is granted solely to authorised Meinhardt personnel to:
+
+- Use and execute the Software for the designated CoT Research Programme.
+- Access, review and modify the Software for internal research and development purposes.
+- Reproduce and share the Software internally among authorised Meinhardt personnel involved in the research programme.
+
+All permitted use shall remain strictly within Meinhardt and within the scope of the designated research programme.
+
+## 3. Restrictions
+
+Unless expressly authorised in writing by Meinhardt, no person or organisation may:
+
+- Distribute, publish, sublicense, sell, transfer or otherwise make the Software available to external parties.
+- Upload or disclose the Software, including its source code, to public repositories, external platforms or third-party services.
+- Use the Software for commercial purposes or projects unrelated to the designated research programme.
+- Grant access to external consultants, collaborators, contractors or other third parties.
+- Remove or alter any copyright, ownership or licence notices.
+
+## 4. Intellectual Property Rights
+
+All rights, title and interest in the Software shall remain with Meinhardt, subject to any applicable intellectual property ownership, licensing or usage obligations under the CoT Research Programme and associated research agreements.
+
+No ownership rights or external distribution rights are granted under this licence.
+
+## 5. Disclaimer of Warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+THE SOFTWARE IS INTENDED FOR RESEARCH AND DEVELOPMENT PURPOSES ONLY AND SHALL NOT BE RELIED UPON FOR FINAL ENGINEERING DESIGN, STATUTORY SUBMISSIONS OR CONSTRUCTION WITHOUT INDEPENDENT PROFESSIONAL VERIFICATION.
+
+## 6. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, MEINHARDT AND THE SOFTWARE DEVELOPERS SHALL NOT BE LIABLE FOR ANY DAMAGES, LOSSES OR CLAIMS ARISING FROM THE USE, MISUSE OR INABILITY TO USE THE SOFTWARE.
+
+---
+
+**Meinhardt (Singapore) Pte Ltd**
+
+**Cities of Tomorrow (CoT) Research Programme**
+
+**Internal Research Use Only – Not for Public Distribution**
