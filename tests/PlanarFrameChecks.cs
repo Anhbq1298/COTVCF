@@ -169,10 +169,25 @@ internal static class PlanarFrameChecks
         var (_, fallbackCases, _) = FemLoadPlan.RowsFromSap(noStudyCases with { Patterns = [.. noStudyCases.Patterns, new("PT", "Prestress", 0)] }, ["LIVE"], ["PT"]);
         var fallbackPlan = FemLoadPlan.Build(patternRows.Append(new FemPatternRow("PT", "Prestress", 0, "", "")).ToArray(), fallbackCases, [],
             noStudyCases, planSections, geometry, ["LIVE"], ["PT"], ["B"]);
-        Check(fallbackCases.Any(row => row.Name == "FEM_PT" && row.Definition == "1 PT") &&
-              fallbackCases.Any(row => row.Name == "FEM_TAB01" && row.InitialCase == "FEM_PT") &&
-              fallbackPlan.FitCase == "FEM_PT" && fallbackPlan.ForCandidate([]).Cases.Single(item => item.Name == "FEM_TAB01").PretensionFactor == 1,
-            "Without SAP cases for the study patterns, FEM_PT (fit stage) and FEM_TAB01 continuing from it are added");
+        Check(fallbackCases.Select(row => (row.Name, row.Definition, row.InitialCase, row.Source)).Skip(1).SequenceEqual([
+                  (FemLoadPlan.DefaultPretensionCase, "1 PT + 1 DEAD", "", "App"),
+                  (FemLoadPlan.DefaultServiceCase, "1 LIVE", FemLoadPlan.DefaultPretensionCase, "App"),
+                  (FemLoadPlan.DefaultUltimateCase, "0.35 DEAD + 1.5 LIVE", FemLoadPlan.DefaultPretensionCase, "App")]) &&
+              fallbackPlan.FitCase == FemLoadPlan.DefaultPretensionCase &&
+              fallbackPlan.ForCandidate([]).Cases.Single(item => item.Name == FemLoadPlan.DefaultServiceCase).PretensionFactor == 1,
+            "Without SAP cases for the study patterns, the default staged cases are added: Pretension (PT + self-weight, the fit stage), then SLS and ULS continuing from it");
+        // SAP has the pretension case itself, without self-weight: the added cases bring the whole self-weight
+        var ownStage = noStudyCases with
+        {
+            Patterns = [.. noStudyCases.Patterns, new("PT", "Prestress", 0)],
+            Cases = [new("Stress", "Nonlinear Static", true, [("PT", 1)], null, null)]
+        };
+        var (_, ownStageCases, _) = FemLoadPlan.RowsFromSap(ownStage, ["LIVE"], ["PT"]);
+        Check(ownStageCases.Select(row => (row.Name, row.Definition, row.InitialCase)).SequenceEqual([
+                  ("Stress", "1 PT", ""), (FemLoadPlan.DefaultServiceCase, "1 DEAD + 1 LIVE", "Stress"), (FemLoadPlan.DefaultUltimateCase, "1.35 DEAD + 1.5 LIVE", "Stress")]),
+            "…and when SAP's own pretension case has no self-weight, SLS / ULS continue from it with 1.0 / 1.35 of the self-weight");
+
+        DefaultLoadCases(geometry, planSections, weight * spanM);
 
         var chordGeometry = new GeometryModel(new Dictionary<string, StructuralPoint>(StringComparer.Ordinal)
         {
@@ -313,8 +328,76 @@ internal static class PlanarFrameChecks
             "FEM candidate composer enumerates the full deterministic 2×2×2 Tab 01–03 space");
         Check(candidates[0].Loads.All(load => load.FzKN == -5) && candidates[4].Loads.All(load => load.FzKN == -10),
             "FEM candidate loads reuse the Tab 01 tributary-force calculation");
+        // Run FEM Analysis is not that space: one case, the model at its own height, each range at its first value.
+        var model = service.ComposeModel(studyState);
+        Check(service.CanComposeModel(studyState) && model.Id == FemStudyService.ModelRunId &&
+              model.Height is { Height: 5, DeltaH: 0, TopDz: 0, MidDz: 0, BotDz: 0 } && model.Loads.SequenceEqual(candidates[0].Loads) &&
+              model.PretensionTargetsKN.Single() is { Key: "Cable-A", Value: 10 },
+            "Run FEM Analysis composes one case from the same inputs: the model's own height, qz 1 kPa and 10 kN — the first value of each range");
+        // The Tab 02 chord groups and height range belong to the study: without them the model itself still runs.
+        studyState.Truss.TopPoints = [];
+        studyState.Truss.MinimumHeight = 7;
+        var modelProperties = studyState.Baseline.Members.ToDictionary(member => member.Name, member => member.Kind == MemberKind.Cable
+            ? new FemSectionProperties(member.Name, 0.01, modulusKNPerM2, null) : section with { MemberName = member.Name }, StringComparer.Ordinal);
+        var modelRuns = service.Analyze(studyState.Baseline, [], [], [], ["A", "B"], [service.ComposeModel(studyState)], modelProperties);
+        Check(modelRuns.Count == 1 && modelRuns[0].Id == FemStudyService.ModelRunId && modelRuns[0].Result.Joints.Any(joint => joint.UZM < 0),
+            "the run of the model solves its own geometry without the Tab 02 chord groups or a valid height range");
         Check(FemStudyService.FindPinSupportPoints(studyState.Baseline).SequenceEqual(["A", "B"]),
               "Automatic pin supports select lowest vertical column ends and ignore diagonal braces");
+    }
+
+    /// <summary>
+    /// Define → Load Cases → Default Setup: the staging SAP2000 needs for a cable structure, defined by the app from the
+    /// self-weight pattern, the Tab 01 load patterns and the Tab 03 target-force pattern.
+    /// </summary>
+    private static void DefaultLoadCases(GeometryModel geometry, IReadOnlyDictionary<string, FemSectionProperties> sections, double selfWeightKN)
+    {
+        string[] tab01 = ["DEAD_ABOVE", "LL_ABOVE"], pretension = ["Pretension"];
+        FemPatternRow[] model =
+        [
+            new("DEAD", "Dead", 1, "", "self-weight"), new("DEAD_ABOVE", "Dead", 0, "Tab 01 study loads", ""),
+            new("LL_ABOVE", "Live", 0, "Tab 01 study loads", ""), new("Pretension", "Other", 0, "Tab 03 cable target force", "")
+        ];
+        var (patterns, cases) = FemLoadPlan.DefaultSetup(model, tab01, pretension);
+        Check(patterns.SequenceEqual(model) && cases.All(row => row is { Type: "Nonlinear Static", Run: true, Supported: true, Source: "App" }) &&
+              cases.Select(row => (row.Name, row.Definition, row.InitialCase)).SequenceEqual([
+                  ("Pretension", "1 Pretension + 1 DEAD", ""),
+                  ("SLS: 1.0DL+1.0LL", "1 DEAD_ABOVE + 1 LL_ABOVE", "Pretension"),
+                  ("ULS: 1.35DL+1.5LL", "0.35 DEAD + 1.35 DEAD_ABOVE + 1.5 LL_ABOVE", "Pretension")]),
+            "Default load cases copy the SAP2000 staging: Pretension = target force + self-weight, SLS = + DL + LL and ULS = + 0.35 SW + 1.35 DL + 1.5 LL, both continuing from Pretension");
+
+        // the loads each case ends up with: the stage's self-weight is carried into the cases that continue from it
+        var plan = FemLoadPlan.Build(patterns, cases, [], SapFemLoading.Empty, sections, geometry, tab01, pretension, ["B"]);
+        var (fitLoads, planCases) = plan.ForCandidate([new FemAppliedLoad("B", 0, -30, "DEAD_ABOVE"), new FemAppliedLoad("B", 0, -10, "LL_ABOVE")]);
+        var results = new PlanarFrameSolver().SolveCases(geometry, sections, new Dictionary<string, FemSectionProperties>(),
+            new Dictionary<string, double>(), fitLoads, planCases, ["A", "C"], frameMeshSegments: 4);
+        double TotalRz(string name) => results[name].SupportReactions.Sum(reaction => reaction.ReactionZKN);
+        Check(plan.FitCase == "Pretension" && plan.FitCases.SequenceEqual(["Pretension"]) && planCases.All(item => item.PretensionFactor == 1) &&
+              Math.Abs(TotalRz("Pretension") - selfWeightKN) < 1e-6 && Math.Abs(TotalRz("SLS: 1.0DL+1.0LL") - (selfWeightKN + 30 + 10)) < 1e-6 &&
+              Math.Abs(TotalRz("ULS: 1.35DL+1.5LL") - (1.35 * selfWeightKN + 1.35 * 30 + 1.5 * 10)) < 1e-6,
+            "…the cable targets are fitted in Pretension under 1.0 SW, SLS carries 1.0 SW + DL + LL and ULS 1.35 SW + 1.35 DL + 1.5 LL, each with the fitted pretension");
+
+        // a model that lists no pattern yet: the Tab 01 / Tab 03 names become patterns, dead or live by name, and SW is added
+        var (bare, bareCases) = FemLoadPlan.DefaultSetup([], ["DL_Above", "LL_Above"], ["PT"]);
+        Check(bare.Select(row => (row.Name, row.Type, row.SelfWeightMultiplier)).SequenceEqual([("SW", "Dead", 1), ("PT", "Other", 0), ("DL_Above", "Dead", 0), ("LL_Above", "Live", 0)]) &&
+              bareCases.Select(row => row.Definition).SequenceEqual(["1 PT + 1 SW", "1 DL_Above + 1 LL_Above", "0.35 SW + 1.35 DL_Above + 1.5 LL_Above"]),
+            "Without load patterns the default setup defines them: SW (self-weight × 1), the Tab 03 pattern, and DL_Above / LL_Above factored as dead / live by name");
+
+        // no cables: nothing to pre-stress, so the loaded cases start unstressed with the whole self-weight
+        var (_, unstressed) = FemLoadPlan.DefaultSetup(model, tab01, []);
+        Check(unstressed.Select(row => (row.Name, row.Definition, row.InitialCase)).SequenceEqual([
+                  ("SLS: 1.0DL+1.0LL", "1 DEAD + 1 DEAD_ABOVE + 1 LL_ABOVE", ""), ("ULS: 1.35DL+1.5LL", "1.35 DEAD + 1.35 DEAD_ABOVE + 1.5 LL_ABOVE", "")]),
+            "Without a target-force pattern there is no Pretension case: SLS and ULS start unstressed with 1.0 / 1.35 SW");
+
+        // the rows are the app's to edit: a name is checked, and a case cannot continue from itself
+        var edited = cases[1];
+        edited.Name = "SLS";
+        var rejected = 0;
+        foreach (var attempt in new Action[] { () => edited.Name = " ", () => edited.Name = "DL + LL", () => edited.InitialCase = "sls" })
+            try { attempt(); } catch (ArgumentException) { rejected++; }
+        edited.InitialCase = "None";
+        Check(edited is { Name: "SLS", InitialCase: "" } && rejected == 3,
+            "A load case can be renamed and re-staged; an empty name, a name with ' + ' and a case continuing from itself are refused");
     }
 
     /// <summary>

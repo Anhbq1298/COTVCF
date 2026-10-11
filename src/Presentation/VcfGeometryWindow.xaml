@@ -44,15 +44,33 @@
     <TabItem Header="Cable Force">
      <Border Padding="8">
       <DockPanel>
-       <TextBlock DockPanel.Dock="Top" Text="Pretension defined on 03 Pretension (target force per cable)" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+       <TextBlock DockPanel.Dock="Top" Text="Target force per cable — the pretension the analysis meets in the Pretension load case. One value per cable (a range belongs to Run → Optimization VCF); a cable that follows another keeps its sync rule. Apply / OK writes it to the model."
+                  Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
        <TextBlock DockPanel.Dock="Bottom" x:Name="CableForceSummary" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-       <DataGrid x:Name="CableForceGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
+       <DataGrid x:Name="CableForceGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column"
                  AutomationProperties.Name="Cable force" SelectionMode="Single">
         <DataGrid.Columns>
-         <DataGridTextColumn Header="Cable" Binding="{Binding Cable}" Width="Auto" MinWidth="80"/>
-         <DataGridTextColumn Header="Pattern" Binding="{Binding Pattern}" Width="Auto"/>
-         <DataGridTextColumn Header="Sync" Binding="{Binding Sync}" Width="Auto"/>
-         <DataGridTextColumn Header="Pretension [kN]" Binding="{Binding Force}" Width="*" MinWidth="90" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="Cable" Binding="{Binding Cable}" IsReadOnly="True" Width="Auto" MinWidth="80"/>
+         <DataGridTextColumn Header="Pattern" Binding="{Binding Pattern}" IsReadOnly="True" Width="Auto"/>
+         <DataGridTextColumn Header="Sync" Binding="{Binding Sync}" IsReadOnly="True" Width="Auto"/>
+         <DataGridTemplateColumn Header="Pretension [kN]" Width="*" MinWidth="110">
+          <DataGridTemplateColumn.CellTemplate>
+           <DataTemplate>
+            <TextBox Text="{Binding Force, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" IsEnabled="{Binding Editable}"
+                     MinHeight="0" Padding="6,0" BorderThickness="0" FontFamily="{StaticResource MonoFont}" TextAlignment="Right" VerticalContentAlignment="Center"
+                     ToolTip="{Binding Hint}" ToolTipService.ShowOnDisabled="True">
+             <TextBox.Style>
+              <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+               <Setter Property="Background" Value="Transparent"/>
+               <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False"><Setter Property="Background" Value="{StaticResource Surface}"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Trigger>
+               </Style.Triggers>
+              </Style>
+             </TextBox.Style>
+            </TextBox>
+           </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+         </DataGridTemplateColumn>
         </DataGrid.Columns>
        </DataGrid>
       </DockPanel>
@@ -62,6 +80,51 @@
      <Border Padding="8">
       <DockPanel>
        <TextBlock DockPanel.Dock="Top" x:Name="StoreyForceCaption" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+       <!-- the loads of the model: one value each (a range belongs to Run → Optimization VCF) -->
+       <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+        <TextBlock Text="Trib. width B" VerticalAlignment="Center" Margin="0,0,4,0"/>
+        <TextBox x:Name="StoreyWidthBox" Width="66" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="StoreyInput_Changed"
+                 AutomationProperties.Name="Tributary width B" ToolTip="Out-of-plane tributary width B [m]"/>
+        <TextBlock Text="m" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="4,0,12,0"/>
+        <TextBlock Text="NStories" VerticalAlignment="Center" Margin="0,0,4,0"/>
+        <TextBox x:Name="StoreyCountBox" Width="46" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="StoreyInput_Changed"
+                 AutomationProperties.Name="Number of storeys" ToolTip="Number of storeys carried (whole number, at least 1)"/>
+        <Button x:Name="StoreyPointsButton" Content="Loaded Points…" Click="StoreyPoints_Click" Margin="12,0,0,0" ToolTipService.ShowOnDisabled="True"
+                AutomationProperties.Name="Loaded points" ToolTip="Choose the points the storey loads act on"/>
+       </WrapPanel>
+       <DataGrid DockPanel.Dock="Top" x:Name="StoreyLoadGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column"
+                 MaxHeight="150" SelectionMode="Single" AutomationProperties.Name="Storey loads">
+        <DataGrid.Columns>
+         <DataGridTemplateColumn Header="Load Pattern" Width="*" MinWidth="120">
+          <DataGridTemplateColumn.CellTemplate>
+           <DataTemplate>
+            <ComboBox ItemsSource="{Binding DataContext.State.LoadPatterns, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                      SelectedItem="{Binding Pattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" Padding="5,0" Background="Transparent"/>
+           </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+         </DataGridTemplateColumn>
+         <DataGridTemplateColumn Header="qz [kPa]" Width="90">
+          <DataGridTemplateColumn.CellTemplate>
+           <DataTemplate>
+            <TextBox Text="{Binding Qz, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" MinHeight="0" Padding="6,0" BorderThickness="0"
+                     Background="Transparent" FontFamily="{StaticResource MonoFont}" TextAlignment="Right" VerticalContentAlignment="Center" ToolTip="{Binding Hint}"/>
+           </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+         </DataGridTemplateColumn>
+         <DataGridTemplateColumn Width="34" MinWidth="34">
+          <DataGridTemplateColumn.CellTemplate>
+           <DataTemplate>
+            <Button Click="RemoveStoreyLoad_Click" ToolTip="Remove this load" Width="24" Height="22" MinHeight="22" Padding="5" Margin="0" Background="Transparent" BorderThickness="0">
+             <Viewbox Width="11" Height="11"><Path Stroke="{StaticResource Error}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,2 L14,14 M14,2 L2,14"/></Viewbox>
+            </Button>
+           </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+         </DataGridTemplateColumn>
+        </DataGrid.Columns>
+       </DataGrid>
+       <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="0,4,0,6">
+        <Button x:Name="AddStoreyLoadButton" DockPanel.Dock="Left" Content="+ Add Load" Click="AddStoreyLoad_Click" Margin="0" AutomationProperties.Name="Add storey load"/>
+       </DockPanel>
        <TextBlock DockPanel.Dock="Bottom" x:Name="StoreyForceSummary" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
        <DataGrid x:Name="StoreyForceGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
                  AutomationProperties.Name="Storey force" SelectionMode="Single"/>

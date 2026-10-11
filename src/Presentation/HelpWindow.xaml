@@ -29,7 +29,7 @@
       <ListItem><Paragraph>Tab 04: define deflection points, member-force groups, foundation reactions, and monitored cables/result case. No SAP group write occurs while editing.</Paragraph></ListItem>
       <ListItem><Paragraph>Tab 05: select study rows and 1-3 total SAP2000 instances. Run first prepares [O]- groups on the parent baseline and saves it, then workers create children from that prepared parent.</Paragraph></ListItem>
       <ListItem><Paragraph>Each worker is sequential; workers run in parallel and reopen the immutable baseline before every candidate.</Paragraph></ListItem>
-      <ListItem><Paragraph>Tab 07 FEM: an internal 2D analysis of the full Tab 01-03 candidate space without running SAP2000 — see the FEM procedure topic.</Paragraph></ListItem>
+      <ListItem><Paragraph>Run → Run FEM Analysis: one internal 2D analysis of the model as it is defined, without SAP2000 — see the FEM procedure topic. Many cases are the parametric study: Run → Optimization VCF (internal solver) or Run → Run Study (SAP2000).</Paragraph></ListItem>
       <ListItem><Paragraph>Tab 08 Quantities: pick a built candidate (Lxx_Hxx_Pxx) to see its concrete volume and steel mass by assigned section, read from that candidate's own model data — its section assignments, member lengths, Section Designer shapes and material densities. A quantity that cannot be established reads n/a, never zero. Nothing is written to any model.</Paragraph></ListItem>
      </List>
      <Paragraph>Viewer: mouse wheel zooms, drag pans, double-click or Home fits. With FEM results shown, hover over a member to read the section result.</Paragraph>
@@ -43,29 +43,30 @@
   <TabItem Header="FEM procedure">
    <FlowDocumentScrollViewer VerticalScrollBarVisibility="Auto">
     <FlowDocument>
-     <Paragraph Style="{StaticResource H1}">Tab 07 FEM: quick procedure</Paragraph>
-     <Paragraph>Compare loading, height and pretension candidates using the internal 2D XZ solver. Section, material and load data are read from SAP2000; FEM analysis does not change the SAP model.</Paragraph>
+     <Paragraph Style="{StaticResource H1}">FEM analysis: quick procedure</Paragraph>
+     <Paragraph>Run Analysis solves the model once, as it is defined, with the internal 2D XZ solver. It uses the geometry, sections, materials and loading held in the model and does not read or write SAP2000. Comparing many loading, geometry or pretension cases is the parametric study (Run → Optimization VCF), not this run.</Paragraph>
 
-     <Paragraph Style="{StaticResource H2}">1. Prepare the candidates</Paragraph>
-     <Paragraph>Connect to SAP2000 and load geometry. Define loading in Tab 01, height variations in Tab 02 and cable target forces in Tab 03. A candidate such as L02_H03_P05 identifies one combination of those rows.</Paragraph>
+     <Paragraph Style="{StaticResource H2}">1. Prepare the model</Paragraph>
+     <Paragraph>Open a model: the default model, File → Load Model, or Connect SAP followed by File → Read FEM Properties from SAP. Edit → VCF System sets the geometry, the sections and, on its Cable Force sheet, the target force of each cable. Define → Load Patterns holds the load patterns (add your own there) and Define → Loading (the 01 Loading page) assigns the loads to them. A range entered in Tab 01 or Tab 03 is a parametric-study input and enters this run with its first value; the Tab 02 height range is not used — the model is solved at its own truss height. Analysis Options names what the run uses.</Paragraph>
 
      <Paragraph Style="{StaticResource H2}">2. Check the inputs</Paragraph>
-     <Paragraph>In FEM Inputs, use Read from SAP. Review sectional properties, material weights, load patterns, static cases and combinations. Check the geometry and automatically detected base pins in the viewer. Editing FEM inputs affects the internal analysis only.</Paragraph>
+     <Paragraph>Under Define, review the materials, section properties, load patterns, load cases and combinations. Check the geometry and automatically detected base pins in the viewer. Editing them affects the internal analysis only.</Paragraph>
+     <Paragraph>Define → Load Cases holds the cases the run solves. Default Setup defines them as SAP2000 needs them for a cable structure: Pretension, a nonlinear static case with the cable target forces and the self-weight, in which the targets are met; then SLS (1.0 dead + 1.0 live from Loading) and ULS (0.35 self-weight + 1.35 dead + 1.5 live), both continuing from Pretension, so the self-weight reaches 1.0 and 1.35. SAP Cases shows the cases saved from SAP2000 instead. Add or remove cases, and edit a case's name, its definition and the case it continues from (From).</Paragraph>
 
      <Paragraph Style="{StaticResource H2}">3. Set up and run</Paragraph>
-     <Paragraph>In Analysis &amp; Results, choose the frame mesh, target-force fitting tolerance and maximum iterations. Cable sag is enabled by default; switch it off when comparing straight-cable behavior. Click Run Analysis.</Paragraph>
+     <Paragraph>In Run → Analysis Options, choose the frame mesh, target-force fitting tolerance and maximum iterations. Cable sag is enabled by default; switch it off when comparing straight-cable behavior. Click Run Analysis: Set Load Cases to Run lists the load cases — set each to Run or Do Not Run — and Run Now analyses the model as it is at that moment (geometry, sections, loads and cable target forces).</Paragraph>
      <Paragraph>The solver first adjusts applied cable pretension to meet the Tab 03 targets under the target-force case's loads. It then solves the loaded cases using the fitted pretension. Monitor shows progress and the cable target-force convergence chart; a ratio of 1 means the target is met.</Paragraph>
 
      <Paragraph Style="{StaticResource H2}">4. Review the results</Paragraph>
      <List>
       <ListItem><Paragraph><Bold>Cable target fit:</Bold> compare Target, Pretension and Dev. %. Result is the cable tension in the selected load case; Applied P is the fitted pretension input.</Paragraph></ListItem>
       <ListItem><Paragraph><Bold>Status:</Bold> Not fitted means the target tolerance was not met and the closest fit is retained. Failed means equilibrium was not reached. Check the Status tooltip for the reason.</Paragraph></ListItem>
-      <ListItem><Paragraph><Bold>Results:</Bold> choose a candidate and load case in Result Explorer, then select axial forces, bending, shear, reactions or deflection to update the viewer. Click View Results to open a separate table with candidate and Load case / combo dropdowns. Select Cable target fit in the tree to inspect its fitting table.</Paragraph></ListItem>
+      <ListItem><Paragraph><Bold>Results:</Bold> choose the load case under Define → Result Load Case (or Show Results), then select axial forces, bending, shear, reactions or deflection in the Result menu to update the viewer. Results Table opens a separate table with the Load case / combo dropdown. Result → Cable target fit shows the fitting table.</Paragraph></ListItem>
       <ListItem><Paragraph><Bold>Signs and units:</Bold> axial force is positive in tension and negative in compression; Rx is positive along global X and Rz upward. Read the displayed unit labels. The deflected shape is magnified; table displacements are true values.</Paragraph></ListItem>
      </List>
 
      <Paragraph Style="{StaticResource H2}">Main analysis limits</Paragraph>
-     <Paragraph>The solver uses planar, linear-elastic frames, tension-only cables and small joint displacements. Cable sag uses a shallow-parabola approximation. P-Delta, buckling and full large-displacement catenary behavior are not included. Only supported static cases and linear additive combinations are evaluated. Check critical results against the corresponding SAP2000 candidate and load case.</Paragraph>
+     <Paragraph>The solver uses planar, linear-elastic frames, tension-only cables and small joint displacements. Cable sag uses a shallow-parabola approximation. P-Delta, buckling and full large-displacement catenary behavior are not included. Only supported static cases and linear additive combinations are evaluated. Check critical results against a SAP2000 analysis of the same model and load case.</Paragraph>
     </FlowDocument>
    </FlowDocumentScrollViewer>
   </TabItem>

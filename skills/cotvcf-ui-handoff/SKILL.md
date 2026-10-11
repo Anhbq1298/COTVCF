@@ -53,7 +53,12 @@ earlier tall-header / large-button / blue-block look.
   - **MB**: 01 Loading … 06A Optimization, 08 Quantities (each with its status as the gesture text; 06A disabled
     without raw data). Choosing one sets `SelectedTab`; the page fills the left pane.
   - **Edit**: placeholder (no edit commands yet).
-  - **Define**: Sections, Load Patterns, Load Cases / Load Combinations · Result Candidate / Load Case.
+  - **Define**: Materials, Section Properties, Loading (Applied Loads), Load Patterns, Load Cases / Load Combinations ·
+    Result Load Case. **Loading** opens the 01 Loading page as the load definition of the model (`DefineLoading_Click`,
+    `MainViewModel.LoadingFromDefine` → header `Define › LOADING`; MB → 01 Loading opens the same page as `MB › 01 LOADING`).
+    Its AddPoints / RemoveAppliedPoints / AddLoadDefinition / DeleteLoadDefinition commands work on an offline model too
+    (they only edit what the app holds); a load row still picks its pattern from `State.LoadPatterns` — the app cannot
+    create a new load pattern yet.
   - **Assign**: Joint Restraints (Pin Supports).
   - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Optimization VCF… ·
     Analysis Options. **Optimization VCF…** opens the modal `OptimizationVcfWindow`: the Edit → VCF Geometry inputs as a
@@ -78,7 +83,8 @@ earlier tall-header / large-button / blue-block look.
     Same Values / Ratio / Offset / Step; new fan cables copy their template) — then `FemStudyService.Analyze` with the Analysis
     Options and Define → Load Cases plan. **Deflection check** (dialog bar above the buttons): the result the deflection is
     read from (`VcfOptimizationSettings.DeflectionResult`, a load case or combination set to run; default the first named
-    SLS — on the default model the nonlinear case `NL SLS001: 1.0DL+1.0LL`) and the limit span / `SpanRatio` (default 250;
+    SLS — on the default model the default setup's staged `SLS: 1.0DL+1.0LL`, i.e. the prestressed structure; with SAP
+    Cases it is SAP2000's un-prestressed `NL SLS001: 1.0DL+1.0LL`, which deflects about ten times more) and the limit span / `SpanRatio` (default 250;
     span = bays × bay width between the mega columns). Each row: the varying inputs, **max downward deflection** in that
     result and its point, span, limit, δ / limit, Check OK / NG, status (failures such as non-convergence or an unsolved
     result are listed, not thrown), and **Total cost [SGD]** = Σ member cost per metre × member length over every frame and
@@ -86,11 +92,12 @@ earlier tall-header / large-button / blue-block look.
     (concrete m³ + steel / rebar t at their rates); any other member gross area × `MaterialProperty.UnitCostPerCubicMetre`
     (SGD/t × t/m³); a member without a rate leaves the total blank and the status names it). The summary counts the passing
     cases and names the cheapest passing case and the least deflection. The working
-    model and SAP2000 never change. Checked: a case equals Run FEM Analysis on the same geometry applied with Edit → VCF
-    Geometry. Note: the default model at its baseline truss height (Tab 02 H01) does not converge in the internal FEM, in Run
-    FEM Analysis as in the optimization.
+    model and SAP2000 never change. The cases vary the model Mcotis holds (`HeldFemProperties`) — the optimization does
+    not read SAP2000 either. Checked: the case at the model's own values equals Run FEM Analysis, and a case equals Run
+    FEM Analysis on the same geometry applied with Edit → VCF Geometry. This is the parametric study with the internal
+    solver: **many cases belong here, not in Run FEM Analysis** (see Tab 07 FEM).
   - **Result**: Axial forces / cables, Bending moments, Shear forces, Support reactions, Deflection, Cable target fit
-    (opens the table) · Results Table…; enabled once a candidate has results (`HasFemResults`).
+    (opens the table) · Results Table…; enabled once the run has results (`HasFemResults`).
   - **Display**: Frame mesh / Member size / Loading (checkable, bound to the FEM view toggles) · View Options.
   - **Design**: RC Column Design…, CFT (Concrete Filled Tube) Design…, Steel Encased Composite Column Design…. Each
     opens the modal `DesignReferenceWindow` with three tabs: *Design Basis* (code, method, Singapore NA, effective lengths
@@ -100,7 +107,7 @@ earlier tall-header / large-button / blue-block look.
     combinations, combinations set to run ticked by default). Reset / Run Design / Cancel. Codes come from
     `Domain/ColumnDesignCodes`: RC → SS EN 1992-1-1 (EC2); CFT and steel encased → SS EN 1994-1-1 extended by BCA BC4:2025.
     The basis is kept per type (`MainViewModel.DesignBasis`). Run Design designs each member with the N / V / M stations of
-    the selected FEM candidate (`MainViewModel.RunColumnDesign` → `Application/Design/ColumnDesignEngine`) and opens the
+    the FEM run of the model (`MainViewModel.RunColumnDesign` → `Application/Design/ColumnDesignEngine`) and opens the
     non-modal `DesignResultsWindow`: summary grid (governing case, NEd, MEd,y, MEd,z, VEd, N / M-y / M-z+biaxial / V
     utilisations, max, OK / CHECK (detailing) / FAIL / ERROR) above the selected member's step-by-step calculation;
     Copy Report / Save Report… (.txt). The 2D FEM moment bends the major axis y-y; z-z carries imperfections only.
@@ -138,9 +145,10 @@ earlier tall-header / large-button / blue-block look.
   (a cable that followed a removed one becomes independent and takes over its range) and remaps the Tab 04 lists. The
   window groups Frame and Cable sections under one **Sections** box.
   The parameters sit on workbook-style sheets (`ParameterTabs`): **Geometry | Cable Force | Storey Force | Sections**. The two
-  force sheets are read-only and follow the preview: **Cable Force** (each cable of the previewed
+  force sheets follow the preview: **Cable Force** (each cable of the previewed
   model: Tab 03 load pattern, sync, pretension — fixed value or min … max (count), resolved through the sync graph for
-  followers; a new fan cable shows its template's) and **Storey Force** (each loaded point: X, tributary area = tributary
+  followers; a new fan cable shows its template's; the pretension of an independent cable is typed here — see Tab 07 FEM,
+  "The flow the user set") and the read-only **Storey Force** (each loaded point: X, tributary area = tributary
   length × B, and per load definition Fz = −qz × area × NStories, a range when qz is a range; totals per definition — the
   same rule as StudyCompositionService.BuildPointLoads).
 - **Display → View Options…** (and the toolbar eye) opens `ViewOptionsWindow`, titled *Display Options* and laid out like
@@ -301,14 +309,77 @@ earlier tall-header / large-button / blue-block look.
 
 ## Tab 07 FEM
 
-- Runs every Cartesian Tab 01 × Tab 02 × Tab 03 candidate combination in the internal solver; it does not use
-  Tab 05 study mode/filters and never writes to SAP2000.
+- **Who runs what** (decided by the user, 2026-10-11 — do not go back to running candidates here):
+  - **Run → Run FEM Analysis = one run of the model as it is defined** (`FemStudyService.ComposeModel` →
+    `MainViewModel.AnalyzeFemAsync`): the model's own geometry (`State.Baseline`, no Tab 02 height change — the chord
+    groups and the height range are not needed), the Tab 01 loads and the Tab 03 cable targets, with the sections,
+    materials, loading and settings Mcotis holds. The run id is `FemStudyService.ModelRunId` ("Model"); it is not shown.
+  - **A Tab 01 / Tab 03 range is a parametric-study input.** In this run it enters with its **first value** (the first
+    `LoadingCandidates` / `PretensionCandidates` combination, so followers keep their sync rule). `FemRunSummary` on Run →
+    Analysis Options says so by name: `1 FEM run · the model as defined · truss height 20 m · ranges at their first
+    value: LL_ABOVE qz 5 kPa`. The first-value rule is the implementer's choice; change it in `ComposeModel` if the user
+    asks for another (e.g. a separate base value).
+  - **No SAP2000 in the run.** `AnalyzeFemAsync` never calls the gateway — connected or not. It solves
+    `HeldFemProperties()`: what Load Model, File → Read FEM Properties from SAP and the Define / Assign edits put in
+    the model (a connected run used to re-read SAP2000 and overwrite those edits). After Connect / Refresh the held
+    inputs are marked out of date (`femInputsOutdated`) and the run asks for Read FEM Properties from SAP instead of
+    fetching them. Not yet exercised against a live SAP2000 — only against the SAP stand-in of the checks.
+  - **Many cases = the parametric study**: Run → Optimization VCF (internal solver) and Run → Run Study (Tab 05,
+    SAP2000). `FemStudyService.Compose` — the Cartesian Tab 01 × 02 × 03 space — stays for the SAP2000 benchmark
+    (`--fem-sap`); the app does not run it.
+  - No candidate picker anywhere in the FEM results: Run Monitor, Define → Result Load Case, Show Results and the
+    Results Table choose a load case only (`FemRuns` holds the one run, or nothing after a failed run).
+- **Load cases are defined in the app** (Define → Load Cases / Load Combinations, `MainViewModel.LoadCases.cs`,
+  `FemLoadPlan.DefaultSetup`; asked for by the user 2026-10-11: "mimic SAP2000's load case setup with our own solver").
+  - **Default Setup** = SAP2000's staging for a cable structure, three `Nonlinear Static` rows with Src `App`:
+    `Pretension` = `1 <target-force pattern> + 1 <self-weight pattern>` (the cable targets are met here — the fit stage);
+    `SLS: 1.0DL+1.0LL` = `1 <dead> + 1 <live>`, From `Pretension`; `ULS: 1.35DL+1.5LL` = `0.35 <self-weight> + 1.35 <dead>
+    + 1.5 <live>`, From `Pretension` (a case that continues from another carries its loads, so 1.0 + 0.35 = 1.35 SW). The
+    names are constants of `FemLoadPlan`; keep "SLS" / "ULS" in them — the optimization's default deflection result and
+    the design's default cases find them by that.
+  - Built from what the app has: the self-weight pattern (first pattern with a SW multiplier that is not a Tab 01 /
+    Tab 03 pattern; `SW` × 1 is added when no pattern carries self-weight), the Tab 01 load patterns (dead or live by
+    pattern type, else by name — `LL…` / `…LIVE…` is live, 1.5; the rest dead, 1.35) and the Tab 03 target-force
+    pattern. Without a target-force pattern there is no Pretension case and SLS / ULS start unstressed with 1.0 / 1.35 SW.
+  - **The built-in default model opens on it** (`ApplyFemModel` → `UseDefaultFemLoadCases` when `isDefault`); a model
+    opened with Load Model keeps its saved rows, a SAP read gives SAP's rows. **SAP Cases** (`ApplySapFemLoadCases`,
+    enabled with `HasSapLoadCases`) shows the snapshot saved from SAP2000 (`RowsFromSap`); when SAP's cases leave the
+    pretension or the Tab 01 loads out, `RowsFromSap` adds the default cases for the missing part (formerly
+    FEM_PT / FEM_TAB01), continuing from SAP's own pretension case with whatever self-weight that case lacks.
+  - Checked on the default model: the default Pretension / SLS / ULS give the displacements, cable forces and reactions of
+    SAP2000's `Pretension`, `NL SLS001…-staged` and `NL ULS001…-staged` rows (SLS 39.6 mm, ULS 46.3 mm).
+  - **Editing**: `+ Add` (a nonlinear static case with the Tab 01 loads, From the pretension case), `- Remove` (refused
+    while another case continues from it or a combination uses it), and editable **Case** (unique; no ` + ` / ` - ` in a
+    name — they separate definition terms; followers and combinations follow a rename), **Definition** and **From**
+    (dropdown of `FemInitialCaseChoices`, changed in place so a From cell never loses its value; a case cannot continue
+    from itself, longer cycles are refused when the run starts). Default Setup and SAP Cases replace the table (the view
+    asks first) and clear the results; the other edits leave the last results on screen. Rows are saved with Save Model.
+- **The flow the user set (2026-10-11)**: define load patterns → assign loads → define load cases → Run → choose the
+  cases → results. Run always solves the model as it is then: current geometry, section assignments, loads and cable
+  targets (the VCF System window shows all four).
+  - **Define → Load Patterns** (`AddFemLoadPattern` / `RemoveFemLoadPattern`): a name box, a type (Dead / Live / Other,
+    editable in the grid too) and `+ Add` / `- Remove`. A new pattern goes into `FemPatternRows` and `State.LoadPatterns`
+    (so 01 Loading and 03 Pretension can pick it) and carries nothing until a load is assigned. Remove is refused while
+    a load case, 01 Loading or 03 Pretension uses it. Only on the app's own model (`CanDefineLoadPatterns`): a connected
+    SAP2000 model keeps SAP2000's patterns. **Role / Assigned loads are live** (`RefreshFemPatternRows` →
+    `FemLoadPlan.Describe`, from `Update()`), not the text saved with the row.
+  - **Edit → VCF System → Cable Force** is where the target force of a cable is set: the Pretension column takes a
+    value for an independent cable (staged in `cableForceEdits`, written by Apply / OK through
+    `MainViewModel.SetCableTargetForces` before the geometry, so a new fan cable copies the edited value). The model holds
+    one value per cable — a Tab 03 range becomes that fixed value. A follower row and a new-fan-cable row are read-only
+    (a follower shows `follows <cable>` until Apply). Storey Force stays a read-out of Define → Loading.
+  - **Run opens Set Load Cases to Run** (`RunLoadCasesWindow`, as SAP2000's): Case Name | Type | From | Status
+    (Finished / Not Run) | Action (Run / Do Not Run); Run/Do Not Run Case (or double-click), Run/Do Not Run All;
+    **Run Now** keeps the choice and starts the analysis, **OK** keeps it only, **Cancel** discards it. The action is the
+    row's `Run` flag of Define → Load Cases. Wiring: `RunFemAnalysis` → `RunFemAnalysisFromUi` → the view's
+    `MainViewModel.ChooseFemLoadCases` hook (set in `MainWindow`, like `CommitEditors`); without a view (checks)
+    `AnalyzeFemAsync` runs the ticked cases directly. Every Run entry point (menu, toolbar, Analysis Options) goes through it.
 - SAP properties are read on the existing STA gateway lane in kN/m units: assigned frame/cable sections,
   effective section material, elastic modulus (isotropic getter except SAP `Tendon` materials, which use the
   uniaxial getter), frame area/in-plane inertia modifiers, and frame end rotation releases. A CSI `None`
   material-overwrite sentinel means "use the section material"; it is never passed as a material name.
 - `Read Properties` populates the read-only member-property grid before analysis; it does not write SAP data.
-- FEM has nested `Analysis` / `Results` subtabs. Results selects one completed `Lxx_Hxx_Pxx` candidate and offers
+- FEM has nested `Analysis` / `Results` subtabs. Results offers, for the run and the selected load case,
   Axial Force, Bending Moment, Shear, Reactions, and Deflected Shape; the shared viewer draws filled blue-positive /
   red-negative member diagrams, green support vectors, or the visually magnified deformed shape. The adjacent
   grid lists values and units; diagram widths are auto-scaled and are not numeric scale. These are internal FEM
@@ -321,7 +392,7 @@ earlier tall-header / large-button / blue-block look.
   "1 DEAD + 1 PT", continues-from) and combinations (Run, factors); read via ISapGateway.GetFemLoadingAsync, never
   written back; FemLoadPlan resolves them per candidate: Tab 01 loads replace SAP joint forces at applied points in their
   pattern; each case solved tension-only; pretension fitted in the case whose own definition holds the Tab 03 pattern;
-  linear-additive combos superpose case results; FEM_PT/FEM_TAB01 app rows added when SAP has no such cases) | Analysis (fitting ±%, max iterations, Frame
+  linear-additive combos superpose case results; the default staged cases are added for what SAP's own cases leave out — see **Load cases** below) | Analysis (fitting ±%, max iterations, Frame
   mesh segments per frame (default 10). Like SAP, each frame is first split at every member-end joint lying on it
   within 1 mm (FrameJoints.Pieces — e.g. full-length chords crossed by verticals and cable anchors), then each piece
   is meshed; cables are never split or meshed. Interior mesh nodes are statically condensed onto the joints and
@@ -344,32 +415,40 @@ earlier tall-header / large-button / blue-block look.
   (maximum 0 = automatic). Undeformed geometry is a light dashed guide, independently hideable; contour can be disabled.
   Clicking a displayed joint shows only Ux, Uy, Uz [mm]; Uy is zero for the planar solver. These are presentation controls only.
 - **FEM panes** (07 FEM, `SelectedTab` 7; `FemPane` 0–7 selects a pane in the hidden-strip `FemPanes` TabControl): Define →
-  Sections (0) / Load Patterns (1) / Load Cases & Combinations (2) / Result Candidate & Load Case (4), Assign → Joint
+  Sections (0) / Load Patterns (1) / Load Cases & Combinations (2) / Result Load Case (4), Assign → Joint
   Restraints (3), Run → Analysis Options (5: the INTERNAL 2D FRAME ANALYSIS card with Run Analysis / Cancel / Monitor),
   Result → Results (6: diagram title, summary, issue, View Results), Display → View Options (7). Each pane maps onto
   the former FEM page (`SelectedFemPage`: 0–3 Inputs, 4–6 Analysis & Results, 7 View) so the shared viewer behaves as
   before; setting `SelectedFemPage` directly moves `FemPane` to that page's default pane. The FemResultsTree is no
-  longer on the page (Result menu replaces it; `ShowFemResult` selects the first completed candidate when none is).
+  longer on the page (Result menu replaces it; `ShowFemResult` shows the run).
 - (Former layout, for reference) FEM used Inputs / Analysis & Results / View, with the Candidate and Load case / combo dropdowns inside Result Explorer.
   Explorer shows six flat outputs (axial/cables, bending, shear, reactions, deflection, cable target fit), without candidate branches.
   Dropdowns filter the diagram and tables; View Results opens FemResultsWindow with the same selections.
   There are no floating result buttons on the model view (removed on request): the result type is chosen in Show
   Results (toolbar) or the Result menu. Solver behavior is unchanged.
-- Run Analysis opens the non-modal FEM Run Monitor (FemRunMonitorWindow; reopen with Analysis → Monitor): progress,
-  live log inside a collapsed Diagnostic details expander (FemLog, one line per step and per case), Cable dropdown (default Cable1a-2) and Case dropdown with
-  Follow latest, and ConvergenceChart of P_result/P_preset per pretension-fitting run (run 0 = 0, line at 1, ±tol
+- Run Analysis — after Run Now in Set Load Cases to Run — opens the non-modal FEM Run Monitor (FemRunMonitorWindow; reopen with Analysis → Monitor): status
+  (Running — indeterminate bar — / Finished / No result), live log inside a collapsed Diagnostic details expander
+  (FemLog, one line per step), Cable dropdown (default Cable1a-2) and Loadcase/Loadcomb dropdown — no Candidate
+  dropdown and no Follow latest, there is one run — and ConvergenceChart of P_result/P_preset per pretension-fitting run (run 0 = 0, line at 1, ±tol
   band) from FemCableResponse.FitHistoryKN. Help is a window (HelpWindow) with Workflow and FEM procedure topics;
   the ⓘ next to Monitor and top-bar Help on Tab 07 open the FEM procedure directly. Keep the topic concise:
   preparation, inputs, run settings, results and main limitations; omit debug logs and algorithm details.
   Keep the FEM procedure text in sync with the solver. Frame moments use one sign
-  convention at both ends (I-end = -f2), so diagrams are continuous across joints. A case whose targets cannot be met
-  is not an error: it keeps the closest pretension, is marked "Not fitted" (reason in the Status tooltip), and the
-  run continues. A case whose equilibrium solve fails gets one "Failed" row with the reason; the run continues.
-  That row has a **blank Cable cell** (`FemCableFitRow.FailedCase`) — no "(all cables)" or other placeholder; the
-  candidate ID, the Failed status, the reason in the Status tooltip and the `FAILED` line in the run log identify it. Pins are auto-detected at the lowest joints connected to near-vertical frame
+  convention at both ends (I-end = -f2), so diagrams are continuous across joints. Targets that cannot be met
+  are not an error: the run keeps the closest pretension and is marked "Not fitted" (reason in the Status tooltip).
+  A run whose equilibrium solve fails has no results (`FemRuns` empty, Result menu disabled): the progress text reads
+  `Analysis failed · <reason>` and `FemCableFitRows` holds one "Failed" row with the reason.
+  That row has a **blank Cable cell** (`FemCableFitRow.FailedCase`) — no "(all cables)" or other placeholder. Pins are auto-detected at the lowest joints connected to near-vertical frame
   members, drawn at the base joints in the shared viewer; they restrain X/Z translations and leave rotation free.
 - Tension-only cable equilibrium uses damped Newton iterations with a potential-energy line search, not a Boolean
   active-set toggle. Failure reports include the final free-DOF residual and active cable count.
+  **Round-off next to equilibrium** (fixed 2026-10-11): the energy test cannot confirm a step whose energy change is
+  below the round-off of the energy sum, and used to end in "line search stalled" although the Newton step was right.
+  Measured on the default model at its own truss height, in a case without pretension: residual 7.1e-4 kN against a
+  2.1e-4 kN tolerance, slope −1.2e-12, energy noise ≈ 4e-11, and the full step takes the residual to 3e-10 kN. Now,
+  when the energy search accepts nothing, a full step that at least halves the residual is taken (`SolveEquilibrium`);
+  convergence is still judged by the residual alone, and runs that converged before are bit-identical (`--fem-sap`
+  unchanged). This is what made the default model fail at its baseline height — do not remove it.
 - Unsupported inputs fail explicitly: non-planar geometry, tendon objects, advanced local axes, axial or
   in-plane shear releases, and rotated local axes combined with in-plane releases. P-Δ, large-displacement
   geometry updates and SAP analysis settings are not modeled.
@@ -438,18 +517,20 @@ earlier tall-header / large-button / blue-block look.
   member `FemSectionProperties`, `SapFemLoading`, the Loads rows and the FEM Analysis settings. Never writes SAP2000.
   Load Model restores all of it as an **offline model**: `State.Connection = "Offline model"`, `IsOfflineModel`,
   `HasWorkingModel` (= connected or offline) enables the workflow grid; command availability stays `HasSapConnection`
-  except `RunFemAnalysis` / `SaveFemModel` (`HasWorkingModel`) and `LoadFemModel` (always, when idle). Offline
-  `AnalyzeFemAsync` uses the saved properties/loading instead of reading SAP; results are identical to the connected run
+  except `RunFemAnalysis` / `SaveFemModel` and the 01 Loading add / remove commands (`HasWorkingModel`) and `LoadFemModel` (always, when idle).
+  `AnalyzeFemAsync` solves the properties/loading the model holds — offline and connected alike, never a SAP call; the
+  offline run equals the connected run of the same model
   (`tests/FemModelFileChecks.cs`). The model file is not a project file: loading closes the active project session.
-  Connect SAP leaves offline mode (live model becomes the session; Tabs 01–05 are kept and re-checked by Refresh).
+  Connect SAP leaves offline mode (live model becomes the session; Tabs 01–05 are kept and re-checked by Refresh; the
+  FEM inputs held are then out of date until Read FEM Properties from SAP).
 - **Default model**: `src/Resources/DefaultFemModel.cotfem.json` (Save Model of COT Framing_V1.2_100m.sdb, embedded as
   `COTVCF.DefaultFemModel.cotfem.json`; `FemModelFile.ReadDefault`). `App.OnStartup` calls `LoadDefaultFemModel()`, so the
-  app opens offline on 07 FEM, `OFFLINE · READY` (3 loading × 6 heights × 1 pretension = 18 runs). Connect SAP clears the
+  app opens offline on 07 FEM, `OFFLINE · READY`. Its Tabs 01–03 span 3 loadings × 6 heights × 1 pretension — the
+  parametric study's space; Run Analysis is one run at its own 20 m truss height with LL_ABOVE at 5 kPa, the first value
+  of its 5 … 10 range. Connect SAP clears the
   default's geometry, Tabs 01–05 and FEM inputs (`ClearDefaultFemModel`) — unlike a user-loaded model, which keeps them.
   Replace the default by saving a new model over that file and rebuilding. Checks construct the view model directly, so
   they never auto-load it.
-- Results are streamed per candidate so cancellation or a later failure retains completed rows. Candidate count
-  is capped at the existing 50,000-row preview limit.
 - The global `Load Config` picker starts in the repository `tests` folder when that folder is available.
 - The connection gateway attaches to SAP2000 only. An ETABS-originated model must be open/exported into SAP2000;
   direct ETABS process attachment is not part of this FEM workflow.

@@ -2,15 +2,10 @@
  <Grid Margin="10"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                          <Grid Margin="0,0,0,6">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                <TextBlock Grid.Row="1" Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,4,10,0"/>
-                                <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
+                                <TextBlock Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
                                           IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
                                           ToolTip="Load case or linear-additive combination shown in the table, the viewer and the Cable Target Fit Result column."/>
-                                <TextBlock Text="CANDIDATE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                                <ComboBox Grid.Column="1" ItemsSource="{Binding FemRuns}" SelectedItem="{Binding SelectedFemRun}"
-                                                                        DisplayMemberPath="Id" AutomationProperties.Name="FEM result candidate"
-                                                                        IsEnabled="{Binding IsIdle}" ToolTip="Choose a completed L/H/P internal FEM candidate."/>
                          </Grid>
   <TabControl x:Name="ResultTopics" Grid.Row="1">
    <TabItem Header="Member / joint results">
@@ -67,11 +62,10 @@
         <TextBlock Text="CABLE TARGET FIT" Style="{StaticResource Subheading}"/>
         <TextBlock Text="kN · pretension stage fitted to target, then loaded · sag and stiffness of the result shown" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
        </StackPanel>
-       <DataGrid Grid.Row="1" ItemsSource="{Binding SelectedCandidateCableFitRows}" IsReadOnly="True"
+       <DataGrid Grid.Row="1" ItemsSource="{Binding FemRunCableFitRows}" IsReadOnly="True"
                  ScrollViewer.HorizontalScrollBarVisibility="Auto" EnableRowVirtualization="True"
                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single">
         <DataGrid.Columns>
-         <DataGridTextColumn Header="Case" Binding="{Binding RunId}" Width="1*" MinWidth="80"/>
          <DataGridTextColumn Header="Cable" Binding="{Binding CableName}" Width=".9*" MinWidth="60"/>
          <DataGridTextColumn Header="Target" Binding="{Binding TargetForceKN, StringFormat=F1}" Width=".8*" MinWidth="62" ElementStyle="{StaticResource NumericCell}"/>
          <DataGridTextColumn Header="Pretension" Binding="{Binding PretensionStageForceKN, StringFormat=F1}" Width=".8*" MinWidth="62" ElementStyle="{StaticResource NumericCell}"/>

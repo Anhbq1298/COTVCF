@@ -8,7 +8,7 @@ public sealed record DesignMemberOption(string Member, string Section, string Ma
 
 // ---- Design → RC Column / CFT / Steel Encased Composite ----
 // The design basis confirmed in the Design Reference dialog is kept per column type, so reopening a design shows the
-// last code, method, section, members and factors used. The design runs on the forces of the selected FEM candidate.
+// last code, method, section, members and factors used. The design runs on the forces of the FEM run of the model.
 public sealed partial class MainViewModel
 {
     private readonly Dictionary<ColumnDesignType, ColumnDesignBasis> designBases = [];
@@ -27,7 +27,7 @@ public sealed partial class MainViewModel
 
     internal void SetDesignBasis(ColumnDesignBasis basis) => designBases[basis.Type] = basis;
 
-    /// <summary>The FEM candidate whose forces the design uses.</summary>
+    /// <summary>The FEM run whose forces the design uses (null before Run FEM Analysis).</summary>
     internal string? DesignRunId => (SelectedFemRun ?? FemRuns.FirstOrDefault())?.Id;
 
     /// <summary>Every frame member, ticked when its section suits <paramref name="type"/> (box / pipe or filled tube for CFT,
@@ -139,7 +139,7 @@ public sealed partial class MainViewModel
         return null;
     }
 
-    /// <summary>Load cases / combinations of the design candidate, in Results order.</summary>
+    /// <summary>Load cases / combinations of the FEM run, in Results order.</summary>
     internal IReadOnlyList<string> DesignCaseNames()
     {
         var run = SelectedFemRun ?? FemRuns.FirstOrDefault();
@@ -158,7 +158,7 @@ public sealed partial class MainViewModel
         return combinations.Length > 0 ? combinations : names;
     }
 
-    /// <summary>Designs every member of <paramref name="basis"/> with the FEM forces of the design candidate.</summary>
+    /// <summary>Designs every member of <paramref name="basis"/> with the forces of the FEM run.</summary>
     internal IReadOnlyList<ColumnMemberDesign> RunColumnDesign(ColumnDesignBasis basis)
     {
         var run = SelectedFemRun ?? FemRuns.FirstOrDefault();

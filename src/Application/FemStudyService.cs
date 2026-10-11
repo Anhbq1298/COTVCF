@@ -107,26 +107,58 @@ public sealed class FemStudyService
         return loading * heights * pretensions;
     }
 
+    /// <summary>Id of the run of <see cref="ComposeModel"/>: the model itself, not an L/H/P study candidate.</summary>
+    public const string ModelRunId = "Model";
+
+    /// <summary>The model has what one FEM run needs: its geometry, the Tab 01 loads and the Tab 03 cable targets.</summary>
+    public bool CanComposeModel(ApplicationState state) => state.BaselineCaptured &&
+        LoadingCandidates.TotalCount(state.LoadDefinitions) > 0 && PretensionCandidates.TotalCount(state.Cables.ToArray()) > 0;
+
+    /// <summary>
+    /// The model as it stands, as the one case Run → Run FEM Analysis solves: its own geometry (no Tab 02 height change),
+    /// the Tab 01 loads and the Tab 03 cable targets. A Tab 01 / Tab 03 range is an input of the parametric study, not of
+    /// this run; it enters with its first value. <see cref="Compose"/> is the study's candidate space.
+    /// </summary>
     /// <param name="offlineModel">True when the model comes from a saved FEM model (Load Model) instead of a live SAP2000 connection.</param>
-    public IReadOnlyList<FemStudyCandidate> Compose(ApplicationState state, bool offlineModel = false)
+    public FemStudyCandidate ComposeModel(ApplicationState state, bool offlineModel = false)
+    {
+        RequireModel(state, offlineModel);
+        var loading = LoadingCandidates.Enumerate(state.LoadDefinitions.ToArray()).First();
+        var loads = StudyCompositionService.BuildPointLoads(state, loading)
+            .Select(row => new FemAppliedLoad(row.AppliedPt, 0, row.FzKn, row.Case)).ToArray();
+        var pretension = PretensionCandidates.Enumerate(state.Cables.ToArray()).First();
+        var height = state.Truss.BaselineHeight;
+        return new FemStudyCandidate(ModelRunId, "", "", "",
+            new TrussCandidate(1, height, 0, state.Truss.Reference.ToString(), 0, 0, 0), loads, pretension.CableForces);
+    }
+
+    /// <summary>What every FEM run needs of the model and of Tabs 01 and 03, whatever the number of cases.</summary>
+    private static void RequireModel(ApplicationState state, bool offlineModel)
     {
         if (state.Model is null || !(state.IsSapConnected || offlineModel))
-            throw new InvalidOperationException("Connect to SAP2000 and load a project, or Load Model, before running FEM.");
+            throw new InvalidOperationException("Open a model before running FEM: File → Default Model or Load Model, or Connect SAP and load a project.");
         if (state.Geometry.Members.Any(member => member.Kind == MemberKind.Tendon))
-            throw new InvalidOperationException("The internal FEM solver currently supports SAP frame and cable objects, not tendon objects.");
+            throw new InvalidOperationException("The internal FEM solver currently supports frame and cable objects, not tendon objects.");
         if (state.Baseline.Points.Count == 0 || !state.BaselineCaptured)
-            throw new InvalidOperationException("Load a project with Tab 02 truss-height groups and capture its baseline before running FEM.");
-        var trussIssues = geometryBuilder.Validate(state.Baseline, state.Truss);
-        if (trussIssues.Count > 0) throw new InvalidOperationException(string.Join("\n", trussIssues.Select(issue => issue.Message)));
+            throw new InvalidOperationException("Set the Tab 02 truss-height groups and capture the baseline before running FEM.");
         if (state.AppliedPoints.Count < 2) throw new InvalidOperationException("Tab 01 needs at least two applied load locations to calculate tributary widths.");
         if (state.LoadDefinitions.Count == 0 || state.LoadDefinitions.Any(definition =>
                 definition.CandidateCount <= 0 || !state.LoadPatterns.Contains(definition.LoadName, StringComparer.OrdinalIgnoreCase)))
-            throw new InvalidOperationException("Complete every Tab 01 load definition and confirm its load pattern exists in the linked SAP2000 model.");
+            throw new InvalidOperationException("Complete every Tab 01 load definition and confirm its load pattern exists in the model.");
         if (state.Cables.Count == 0 || state.Cables.Any(cable => cable.Missing || cable.Status != "Configured" ||
                 !state.LoadPatterns.Contains(cable.LoadPattern, StringComparer.OrdinalIgnoreCase)))
-            throw new InvalidOperationException("Complete Tab 03 cable target-force definitions and confirm each cable/load pattern exists in SAP2000.");
+            throw new InvalidOperationException("Complete the Tab 03 cable target-force definitions and confirm each cable and load pattern exists in the model.");
         if (state.AppliedPoints.Any(point => !state.Baseline.Points.ContainsKey(point.PointName)))
-            throw new InvalidOperationException("A Tab 01 loading location is absent from the baseline geometry. Refresh and review the project.");
+            throw new InvalidOperationException("A Tab 01 loading location is absent from the model geometry. Review Tab 01.");
+    }
+
+    /// <summary>The study's candidate space: every Tab 01 × Tab 02 × Tab 03 combination (the SAP2000 benchmark runs it).</summary>
+    /// <param name="offlineModel">True when the model comes from a saved FEM model (Load Model) instead of a live SAP2000 connection.</param>
+    public IReadOnlyList<FemStudyCandidate> Compose(ApplicationState state, bool offlineModel = false)
+    {
+        RequireModel(state, offlineModel);
+        var trussIssues = geometryBuilder.Validate(state.Baseline, state.Truss);
+        if (trussIssues.Count > 0) throw new InvalidOperationException(string.Join("\n", trussIssues.Select(issue => issue.Message)));
 
         var total = CandidateCount(state);
         if (total <= 0) throw new InvalidOperationException("Tabs 01–03 do not produce a complete FEM candidate space.");
@@ -226,7 +258,9 @@ public sealed class FemStudyService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var candidate = candidates[index];
-            var geometry = geometryBuilder.BuildCandidateGeometry(baseline, topPoints, middlePoints, bottomPoints, candidate.Height);
+            // Without a height change the case is the model geometry itself; the Tab 02 chord groups are not needed.
+            var geometry = candidate.Height is { TopDz: 0, MidDz: 0, BotDz: 0 } ? baseline
+                : geometryBuilder.BuildCandidateGeometry(baseline, topPoints, middlePoints, bottomPoints, candidate.Height);
             FemAnalysisResult result;
             IReadOnlyDictionary<string, FemAnalysisResult>? results = null;
             try

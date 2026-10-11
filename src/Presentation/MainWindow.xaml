@@ -51,10 +51,13 @@
      <Separator/>
      <MenuItem Header="_Member Sections Table…" Click="DefineSections_Click" ToolTip="The section, material and properties of every member the FEM uses"/>
     </MenuItem>
+    <MenuItem Header="_Loading (Applied Loads)" Click="DefineLoading_Click" AutomationProperties.Name="Define Loading"
+              ToolTip="The loads of the model: applied points, qz per load pattern, tributary width B and number of storeys (the 01 Loading page). The load cases use them through their load patterns."/>
     <MenuItem Header="Load _Patterns" Tag="1" Click="FemPaneMenu_Click"/>
-    <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click"/>
+    <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click"
+              ToolTip="Define the load cases: the default staged setup (Pretension → SLS / ULS), the cases saved from SAP2000, or your own"/>
     <Separator/>
-    <MenuItem Header="_Result Candidate / Load Case" Tag="4" Click="FemPaneMenu_Click"/>
+    <MenuItem Header="_Result Load Case" Tag="4" Click="FemPaneMenu_Click"/>
    </MenuItem>
    <MenuItem Header="_Assign" IsEnabled="{Binding HasWorkingModel}">
     <MenuItem Header="_Joint">
@@ -75,7 +78,7 @@
     <MenuItem Header="Cancel Study" Command="{Binding CancelStudy}"/>
     <Separator/>
     <MenuItem Header="Run _FEM Analysis" Command="{Binding RunFemAnalysis}"
-              ToolTip="Analyze every Tab 01 x Tab 02 x Tab 03 combination with the internal 2D frame model. Does not modify SAP2000."/>
+              ToolTip="Solve the model as it is defined — one run of the internal 2D frame model. SAP2000 is not read or written. Many cases belong to the parametric study (Optimization VCF)."/>
     <MenuItem Header="Cancel FEM Analysis" Command="{Binding CancelFemAnalysis}"/>
     <MenuItem Header="Analysis _Monitor" Click="OpenFemMonitorClick"
               ToolTip="Open analysis progress and cable convergence. Diagnostic details are collapsed by default."/>
@@ -98,7 +101,7 @@
     <Separator/>
     <MenuItem Header="Show _Results…" Click="ShowResults_Click" ToolTip="Choose the load case / combo and the output to draw on the model"/>
     <MenuItem Header="Results _Table…" Click="OpenFemResultsClick" IsEnabled="{Binding HasFemResults}"
-              ToolTip="Open the results table for the selected candidate, load case and output"/>
+              ToolTip="Open the results table for the selected load case and output"/>
    </MenuItem>
    <MenuItem Header="Di_splay" IsEnabled="{Binding HasWorkingModel}">
     <MenuItem Header="Show _Undeformed Shape" InputGestureText="F4" Click="ShowUndeformed_Click" AutomationProperties.Name="Show Undeformed Shape menu"
@@ -1479,7 +1482,7 @@
    </TabItem>
 
    <!-- 07 FEM: one pane at a time, opened from the menu bar (MainViewModel.FemPane):
-        Define → Sections / Load Patterns / Load Cases / Result Candidate, Assign → Joint Restraints,
+        Define → Sections / Load Patterns / Load Cases / Result Load Case, Assign → Joint Restraints,
         Run → Analysis Options, Result → outputs, Display → View Options. -->
    <TabItem>
     <TabItem.Header>
@@ -1511,13 +1514,26 @@
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <StackPanel>
          <TextBlock Text="LOAD PATTERNS" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
-         <TextBlock Text="SW mult. editable" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+         <TextBlock Text="A pattern carries loads once they are assigned to it: a self-weight multiplier here, the loads of Define → Loading, or the cable target forces. A load case combines patterns."
+                    Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+         <WrapPanel Margin="0,0,0,5" IsEnabled="{Binding CanDefineLoadPatterns}" ToolTipService.ShowOnDisabled="True"
+                    ToolTip="Define the load patterns of the model. While a SAP2000 model is connected its patterns are SAP2000's.">
+          <TextBox x:Name="NewPatternName" Width="130" Margin="0,0,4,0" VerticalContentAlignment="Center" AutomationProperties.Name="New load pattern name"
+                   ToolTip="Name of the new load pattern, e.g. DL_Above"/>
+          <ComboBox x:Name="NewPatternType" Width="78" Margin="0,0,4,0" IsEditable="True" Text="Dead" AutomationProperties.Name="New load pattern type"
+                    ToolTip="Dead, Live or Other. The default load cases factor a loading pattern by it: dead 1.35, live 1.5.">
+           <ComboBoxItem Content="Dead"/><ComboBoxItem Content="Live"/><ComboBoxItem Content="Other"/>
+          </ComboBox>
+          <Button Content="+ Add" Click="AddLoadPattern_Click" AutomationProperties.Name="Add load pattern"/>
+          <Button Content="- Remove" Click="RemoveLoadPattern_Click" AutomationProperties.Name="Remove load pattern"
+                  ToolTip="Remove the selected pattern (one that a load case, 01 Loading or 03 Pretension uses stays)"/>
+         </WrapPanel>
         </StackPanel>
-        <DataGrid Grid.Row="1" ItemsSource="{Binding FemPatternRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
+        <DataGrid x:Name="FemPatternRowsGrid" Grid.Row="1" ItemsSource="{Binding FemPatternRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
                   CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
          <DataGrid.Columns>
           <DataGridTextColumn Header="Pattern" Binding="{Binding Name}" IsReadOnly="True" Width="Auto" MinWidth="70"/>
-          <DataGridTextColumn Header="Type" Binding="{Binding Type}" IsReadOnly="True" Width="Auto" MinWidth="64"/>
+          <DataGridTextColumn Header="Type" Binding="{Binding Type, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Width="Auto" MinWidth="64"/>
           <DataGridTextColumn Header="SW mult." Binding="{Binding SelfWeightMultiplier, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat=0.###, ValidatesOnExceptions=True}"
                               Width="Auto" MinWidth="58" ElementStyle="{StaticResource NumericCell}"/>
           <DataGridTextColumn Header="Role" Binding="{Binding Role}" IsReadOnly="True" Width="Auto" MinWidth="44"/>
@@ -1544,21 +1560,46 @@
         </Grid.RowDefinitions>
         <StackPanel>
          <TextBlock Text="LOAD CASES" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
-         <TextBlock Text="Definition editable, e.g. 1 DEAD + 1 PT" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+         <TextBlock Text="Default setup, as in SAP2000 for a cable structure: Pretension (target forces + self-weight) first, then SLS and ULS continue from it with the Tab 01 loads. Case, Definition (e.g. 1 DEAD + 1 PT) and From are editable."
+                    Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+         <WrapPanel Margin="0,0,0,5">
+          <Button Content="Default Setup" Click="DefaultLoadCases_Click" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="Default load cases"
+                  ToolTip="Define the default load cases: Pretension = cable target forces + self-weight (nonlinear static, the targets are met here); SLS = + 1.0 dead + 1.0 live from Tab 01, continuing from Pretension; ULS = + 0.35 self-weight + 1.35 dead + 1.5 live, continuing from Pretension. Replaces the table."/>
+          <Button Content="SAP Cases" Click="SapLoadCases_Click" AutomationProperties.Name="SAP2000 load cases" ToolTipService.ShowOnDisabled="True"
+                  ToolTip="Show the load cases and combinations as saved from SAP2000 with this model. Replaces the table.">
+           <Button.Style>
+            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+             <Setter Property="IsEnabled" Value="{Binding IsIdle}"/>
+             <Style.Triggers><DataTrigger Binding="{Binding HasSapLoadCases}" Value="False"><Setter Property="IsEnabled" Value="False"/></DataTrigger></Style.Triggers>
+            </Style>
+           </Button.Style>
+          </Button>
+          <Button Content="+ Add" Click="AddLoadCase_Click" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="Add load case"
+                  ToolTip="Add a nonlinear static case with the Tab 01 loads, continuing from the pretension case"/>
+          <Button Content="- Remove" Click="RemoveLoadCase_Click" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="Remove load case"
+                  ToolTip="Remove the selected case (a case others continue from, or a combination uses, stays)"/>
+         </WrapPanel>
         </StackPanel>
-        <DataGrid Grid.Row="1" ItemsSource="{Binding FemCaseRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
+        <DataGrid x:Name="FemCaseRowsGrid" Grid.Row="1" ItemsSource="{Binding FemCaseRows}" SelectedItem="{Binding SelectedFemCaseRow, Mode=TwoWay}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
                   CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
          <DataGrid.Columns>
           <DataGridTemplateColumn Header="Run" Width="Auto" MinWidth="36">
            <DataGridTemplateColumn.CellTemplate><DataTemplate>
             <CheckBox IsChecked="{Binding Run, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Supported}" HorizontalAlignment="Center"
-                      ToolTip="Solve and show this case for every candidate (cases used by a ticked combination are always solved)."/>
+                      ToolTip="Solve and show this case (cases used by a ticked combination are always solved; a case that a ticked case continues from is always part of it)."/>
            </DataTemplate></DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTextColumn Header="Case" Binding="{Binding Name}" IsReadOnly="True" Width="Auto" MinWidth="70"/>
+          <DataGridTextColumn Header="Case" Binding="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Width="Auto" MinWidth="118"/>
+          <DataGridTextColumn Header="Definition" Binding="{Binding Definition, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Width="*" MinWidth="270"/>
+          <DataGridTemplateColumn Header="From" Width="Auto" MinWidth="98">
+           <DataGridTemplateColumn.CellTemplate><DataTemplate>
+            <ComboBox ItemsSource="{Binding DataContext.FemInitialCaseChoices, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                      SelectedItem="{Binding InitialCase, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, ValidatesOnExceptions=True}"
+                      IsEnabled="{Binding Supported}" BorderThickness="0" Padding="5,0" Background="Transparent"
+                      ToolTip="The case this one continues from — its loads and its fitted cable pretension are already on the structure. Blank = starts unstressed."/>
+           </DataTemplate></DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
           <DataGridTextColumn Header="Type" Binding="{Binding Type}" IsReadOnly="True" Width="Auto" MinWidth="64"/>
-          <DataGridTextColumn Header="Definition" Binding="{Binding Definition, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Width="*" MinWidth="140"/>
-          <DataGridTextColumn Header="From" Binding="{Binding InitialCase}" IsReadOnly="True" Width="Auto" MinWidth="44"/>
           <DataGridTextColumn Header="Src" Binding="{Binding Source}" IsReadOnly="True" Width="Auto" MinWidth="36"/>
           <DataGridTextColumn Header="Note" Binding="{Binding Note}" IsReadOnly="True" Width="Auto" MinWidth="50" MaxWidth="260"/>
          </DataGrid.Columns>
@@ -1600,26 +1641,21 @@
       </Border>
      </TabItem>
 
-     <!-- ============ Define → Result Candidate / Load Case ============ -->
-     <TabItem Header="Result Candidate">
+     <!-- ============ Define → Result Load Case ============ -->
+     <TabItem Header="Result Load Case">
       <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" VerticalAlignment="Top">
        <StackPanel Margin="8">
         <TextBlock Text="RESULT SELECTION" Style="{StaticResource Subheading}"/>
-        <TextBlock Text="The candidate and load case shown by the Result menu, the viewer and the results table." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+        <TextBlock Text="The load case shown by the Result menu, the viewer and the results table." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,6"/>
         <Grid>
          <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-         <TextBlock Text="CANDIDATE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-         <ComboBox Grid.Column="1" ItemsSource="{Binding FemRuns}" SelectedItem="{Binding SelectedFemRun}"
-                   DisplayMemberPath="Id" AutomationProperties.Name="FEM result candidate"
-                   IsEnabled="{Binding IsIdle}" ToolTip="Choose a completed L/H/P internal FEM candidate."/>
-         <TextBlock Grid.Row="1" Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,4,10,0"/>
-         <ComboBox Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
+         <TextBlock Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+         <ComboBox Grid.Column="1" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
                    IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
                    ToolTip="Load case or linear-additive combination shown in the table, the viewer and the Cable Target Fit Result column."/>
         </Grid>
         <TextBlock Text="{Binding FemResultIssue}" TextWrapping="Wrap" Foreground="{StaticResource Warning}" Margin="0,6,0,0" MaxHeight="90"
-                   ToolTip="{Binding FemResultIssue}" AutomationProperties.Name="Selected FEM candidate issue"/>
+                   ToolTip="{Binding FemResultIssue}" AutomationProperties.Name="FEM result issue"/>
        </StackPanel>
       </Border>
      </TabItem>
@@ -1629,7 +1665,8 @@
       <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" VerticalAlignment="Top">
        <StackPanel Margin="8">
         <TextBlock Text="INTERNAL 2D FRAME ANALYSIS" Style="{StaticResource Subheading}"/>
-        <TextBlock Text="{Binding FemCandidateSummary}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="0,0,0,6"/>
+        <TextBlock Text="{Binding FemRunSummary}" FontFamily="{StaticResource MonoFont}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
+                   ToolTip="Run Analysis solves the model once, as it is defined. A Tab 01 / Tab 03 range is an input of the parametric study (Run → Optimization VCF) and enters this run with its first value."/>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                     ToolTip="Cable pretensions are adjusted together under the target-force case loads to meet Tab 03 targets within this tolerance. Loaded cases then use the fitted pretension.">
          <TextBlock Text="Target-force fitting ±" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
@@ -1658,7 +1695,7 @@
         </StackPanel>
         <WrapPanel>
          <Button Content="Run Analysis" Command="{Binding RunFemAnalysis}" Style="{StaticResource Primary}"
-                 ToolTip="Analyze every Tab 01 x Tab 02 x Tab 03 combination with a linear-elastic 2D XZ Euler-Bernoulli frame model, tension-only cables (with sag, when Cable sag is on), and pin supports. Reads SAP section/material properties; does not modify SAP2000."/>
+                 ToolTip="Solve the model as it is defined, once: a linear-elastic 2D XZ Euler-Bernoulli frame model, tension-only cables (with sag, when Cable sag is on), and pin supports. Uses the sections, materials and loading held in the model; SAP2000 is not read or written."/>
          <Button Content="Cancel" Command="{Binding CancelFemAnalysis}"/>
          <Button Content="Monitor" Click="OpenFemMonitorClick" Margin="0,0,4,0"
                  ToolTip="Open analysis progress and cable convergence. Diagnostic details are collapsed by default."/>
@@ -1677,12 +1714,12 @@
        <StackPanel Margin="8">
         <TextBlock Text="{Binding FemResultDiagramTitle}" FontFamily="{StaticResource MonoFont}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
         <TextBlock Text="{Binding FemResultSummary}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
-        <TextBlock Text="Change the candidate or load case under Define → Result Candidate / Load Case; choose another output from the Result menu."
+        <TextBlock Text="Change the load case under Define → Result Load Case; choose another output from the Result menu."
                    Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
         <TextBlock Text="{Binding FemResultIssue}" TextWrapping="Wrap" Foreground="{StaticResource Warning}" Margin="0,6,0,0" MaxHeight="90"
                    ToolTip="{Binding FemResultIssue}"/>
         <Button Content="View Results" Click="OpenFemResultsClick" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,8,0,0"
-                IsEnabled="{Binding HasFemResults}" ToolTip="Open the results table for this candidate, load case and output"/>
+                IsEnabled="{Binding HasFemResults}" ToolTip="Open the results table for this load case and output"/>
         <TextBlock Text="{Binding FemProgressText}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"/>
        </StackPanel>
       </Border>

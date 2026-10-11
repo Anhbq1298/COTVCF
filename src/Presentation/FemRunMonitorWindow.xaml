@@ -18,7 +18,7 @@
      <TextBlock Text="INTERNAL 2D FRAME ANALYSIS" Style="{StaticResource Subheading}"/>
      <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right" Text="{Binding FemMonitorProgressText}" FontFamily="{StaticResource MonoFont}" FontSize="11"/>
     </DockPanel>
-    <ProgressBar Height="8" Minimum="0" Maximum="{Binding FemMonitorProgressMaximum, Mode=OneWay}" Value="{Binding FemMonitorCompleted, Mode=OneWay}" Margin="0,0,0,4"/>
+    <ProgressBar Height="8" Minimum="0" Maximum="1" Value="{Binding FemMonitorProgress, Mode=OneWay}" IsIndeterminate="{Binding FemMonitorRunning, Mode=OneWay}" Margin="0,0,0,4"/>
     <TextBlock Text="{Binding FemProgressText}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
    </StackPanel>
   </Border>
@@ -27,22 +27,17 @@
   <Border Grid.Row="2" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
    <Grid>
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <DockPanel Margin="0,0,0,6">
+    <DockPanel Margin="0,0,0,6" LastChildFill="False">
      <TextBlock Text="CABLE TARGET-FORCE CONVERGENCE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,12,0"/>
      <TextBlock Text="Cable" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
      <ComboBox Width="130" ItemsSource="{Binding FemMonitorCableNames}" SelectedItem="{Binding FemMonitorCable}" VerticalAlignment="Center"
                ToolTip="Cable whose P_result / P_preset history is charted."/>
      <TextBlock Text="Loadcase/Loadcomb" FontSize="11" VerticalAlignment="Center" Margin="12,0,4,0"/>
-     <ComboBox Width="140" ItemsSource="{Binding FemLoadSelectionNames}" SelectedItem="{Binding SelectedFemResultName}" VerticalAlignment="Center"
-               ToolTip="Load cases and combinations ticked on FEM → Inputs → Loads. The summary below gives the cable tension under it; the same selection drives the Results page."/>
-     <TextBlock Text="Candidate" FontSize="11" VerticalAlignment="Center" Margin="12,0,4,0"/>
-     <ComboBox Width="120" ItemsSource="{Binding FemRuns}" DisplayMemberPath="Id" SelectedItem="{Binding FemMonitorRun}" VerticalAlignment="Center"
-               ToolTip="Completed L/H/P study candidate to chart. Choosing one stops following the latest."/>
-     <CheckBox Content="Follow latest" IsChecked="{Binding FemMonitorFollowLatest}" VerticalAlignment="Center" Margin="10,0,0,0"
-               ToolTip="Chart each case as soon as it completes."/>
+     <ComboBox Width="240" ItemsSource="{Binding FemLoadSelectionNames}" SelectedItem="{Binding SelectedFemResultName}" VerticalAlignment="Center"
+               ToolTip="Load cases and combinations ticked on Define → Load Cases / Load Combinations. The summary below gives the cable tension under it; the same selection drives the Results page."/>
     </DockPanel>
     <c:ConvergenceChart Grid.Row="1" Ratios="{Binding FemMonitorRatios}" TolerancePercent="{Binding FemMonitorTolerancePercent}"
-                        EmptyText="No pretension-fitting history for this cable and case yet."/>
+                        EmptyText="No pretension-fitting history for this cable yet."/>
     <TextBlock Grid.Row="2" Text="{Binding FemMonitorChartSummary}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
    </Grid>
   </Border>
@@ -56,7 +51,7 @@
   </Border>
 
   <DockPanel Grid.Row="5" Margin="0,8,0,0" LastChildFill="False">
-   <TextBlock DockPanel.Dock="Left" Text="The linked SAP2000 model is read only; nothing is written." Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+   <TextBlock DockPanel.Dock="Left" Text="One run of the model as it is defined. SAP2000 is not read or written." Style="{StaticResource Caption}" VerticalAlignment="Center"/>
    <Button DockPanel.Dock="Right" Content="Close" Click="CloseWindow" Margin="0"/>
    <Button DockPanel.Dock="Right" Content="Cancel Analysis" Command="{Binding CancelFemAnalysis}"/>
   </DockPanel>

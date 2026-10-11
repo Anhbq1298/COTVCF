@@ -100,7 +100,7 @@ public sealed partial class MainViewModel
         }
         if (State.Model is null || !(State.IsSapConnected || IsOfflineModel))
         {
-            VcfOptimizationProgress = "Connect to SAP2000 or Load Model before running the optimization.";
+            VcfOptimizationProgress = "Open a model before running the optimization: File → Default Model or Load Model, or Connect SAP.";
             Warn("Optimization VCF", VcfOptimizationProgress);
             return;
         }
@@ -112,8 +112,9 @@ public sealed partial class MainViewModel
         var analysed = 0;
         try
         {
-            VcfOptimizationProgress = IsOfflineModel ? "Preparing the cases from the loaded model…" : "Reading sections and loading from SAP2000 (read-only)…";
-            var properties = IsOfflineModel ? OfflineFemProperties() : await ReadAndDisplayFemPropertiesAsync();
+            // The cases vary the model Mcotis holds — the same one Run FEM Analysis solves; SAP2000 is not read.
+            VcfOptimizationProgress = "Preparing the cases from the model…";
+            var properties = HeldFemProperties();
             var inputs = new VcfOptimizationInputs(
                 VcfGeometry.Analyze(State.Geometry, State.Truss), properties, SectionSwapper(), femSapLoading,
                 FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), Tab01Patterns, PretensionPatterns,

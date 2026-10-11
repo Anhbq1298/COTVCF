@@ -5,8 +5,8 @@ using COT_VCF.Application;
 namespace COT_VCF.Presentation;
 
 /// <summary>
-/// Toolbar → Show Results: candidate and load case / combination at the top, the six outputs below. Apply / OK draws the
-/// chosen output on the model view (as the Result menu does); Cable target fit opens the results table.
+/// Toolbar → Show Results: the load case / combination at the top, the six outputs below. Apply / OK draws the chosen
+/// output on the model view (as the Result menu does); Cable target fit opens the results table.
 /// </summary>
 public partial class ShowResultsWindow : Window
 {

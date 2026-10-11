@@ -1,0 +1,51 @@
+<Window x:Class="COT_VCF.Presentation.RunLoadCasesWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="clr-namespace:COT_VCF.Presentation"
+        Title="Set Load Cases to Run" Icon="{x:Static p:AppIcon.Window}" Width="700" Height="430" MinWidth="560" MinHeight="300"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
+ <!-- Run → Run FEM Analysis: choose the load cases to analyse (as SAP2000's Set Load Cases to Run), then Run Now. The
+      choice is staged: Run Now and OK keep it, Cancel discards it. -->
+ <Window.Resources>
+  <Style x:Key="FormButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0,0,0"/></Style>
+  <Style x:Key="SideButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="Margin" Value="0,0,0,6"/><Setter Property="HorizontalAlignment" Value="Stretch"/></Style>
+ </Window.Resources>
+ <DockPanel Margin="10">
+  <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0" LastChildFill="True">
+   <Button x:Name="CancelButton" DockPanel.Dock="Right" Content="Cancel" Style="{StaticResource FormButton}" IsCancel="True"/>
+   <Button x:Name="OkButton" DockPanel.Dock="Right" Content="OK" Style="{StaticResource FormButton}" Click="Ok_Click"
+           ToolTip="Keep the choice without running"/>
+   <Button x:Name="RunNowButton" DockPanel.Dock="Right" Content="Run Now" IsDefault="True" Click="RunNow_Click"
+           ToolTip="Analyse the cases set to Run with the model as it is now: geometry, sections and loads">
+    <Button.Style><Style TargetType="Button" BasedOn="{StaticResource Primary}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0,0,0"/></Style></Button.Style>
+   </Button>
+   <TextBlock x:Name="Hint" VerticalAlignment="Center" FontSize="11" TextWrapping="Wrap" Foreground="{StaticResource Muted}"/>
+  </DockPanel>
+  <StackPanel DockPanel.Dock="Right" Width="150" Margin="10,22,0,0">
+   <Button x:Name="ToggleCaseButton" Content="Run/Do Not Run Case" Style="{StaticResource SideButton}" Click="ToggleCase_Click"/>
+   <Button x:Name="ToggleAllButton" Content="Run/Do Not Run All" Style="{StaticResource SideButton}" Click="ToggleAll_Click"/>
+  </StackPanel>
+  <TextBlock DockPanel.Dock="Top" Text="LOAD CASES" Style="{StaticResource Subheading}" Margin="0,0,0,4"/>
+  <DataGrid x:Name="CaseGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single"
+            HeadersVisibility="Column" ScrollViewer.HorizontalScrollBarVisibility="Auto" MouseDoubleClick="CaseGrid_DoubleClick"
+            AutomationProperties.Name="Load cases to run">
+   <DataGrid.Columns>
+    <DataGridTextColumn Header="Case Name" Binding="{Binding Name}" Width="1.5*" MinWidth="120"/>
+    <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="Auto" MinWidth="96"/>
+    <DataGridTextColumn Header="From" Binding="{Binding From}" Width="Auto" MinWidth="72"/>
+    <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="Auto" MinWidth="68"/>
+    <DataGridTemplateColumn Header="Action" Width="Auto" MinWidth="86">
+     <DataGridTemplateColumn.CellTemplate>
+      <DataTemplate>
+       <TextBlock x:Name="ActionText" Text="{Binding Action}" VerticalAlignment="Center" Margin="4,0" FontWeight="SemiBold"/>
+       <DataTemplate.Triggers>
+        <DataTrigger Binding="{Binding Run}" Value="False">
+         <Setter TargetName="ActionText" Property="Foreground" Value="{StaticResource Muted}"/>
+         <Setter TargetName="ActionText" Property="FontWeight" Value="Normal"/>
+        </DataTrigger>
+       </DataTemplate.Triggers>
+      </DataTemplate>
+     </DataGridTemplateColumn.CellTemplate>
+    </DataGridTemplateColumn>
+   </DataGrid.Columns>
+  </DataGrid>
+ </DockPanel>
+</Window>

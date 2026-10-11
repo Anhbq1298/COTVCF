@@ -59,7 +59,7 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Menu of the pane shown in the left column, e.g. "MB" or "Define".</summary>
-    public string PaneMenu => selectedTab != TabFem ? "MB" : femPane switch
+    public string PaneMenu => selectedTab != TabFem ? (selectedTab == TabLoading && LoadingFromDefine ? "Define" : "MB") : femPane switch
     {
         FemPaneRestraints => "Assign",
         FemPaneAnalysisOptions => "Run",
@@ -70,7 +70,7 @@ public sealed partial class MainViewModel
 
     public string PaneTitle => selectedTab switch
     {
-        TabLoading => "01  LOADING",
+        TabLoading => LoadingFromDefine ? "LOADING" : "01  LOADING",
         TabTruss => "02  TRUSS HEIGHT",
         TabPretension => "03  PRETENSION",
         TabOutput => "04  OUTPUT SETTINGS",
@@ -84,7 +84,7 @@ public sealed partial class MainViewModel
             FemPaneLoadPatterns => "LOAD PATTERNS",
             FemPaneLoadCases => "LOAD CASES / LOAD COMBINATIONS",
             FemPaneRestraints => "JOINT RESTRAINTS",
-            FemPaneResultSelection => "RESULT CANDIDATE / LOAD CASE",
+            FemPaneResultSelection => "RESULT LOAD CASE",
             FemPaneAnalysisOptions => "ANALYSIS OPTIONS",
             FemPaneResults => femCableFitView ? "CABLE TARGET FIT" : FemResultMode switch
             {
@@ -114,7 +114,7 @@ public sealed partial class MainViewModel
         _ => "",
     };
 
-    /// <summary>Why the selected candidate's pretension was not fitted (empty when it was).</summary>
+    /// <summary>Why the run's pretension was not fitted (empty when it was).</summary>
     public string FemResultIssue => SelectedFemRun?.Result.TargetFitFailure ?? "";
 
     public bool HasFemResults => FemRuns.Count > 0;
@@ -158,8 +158,8 @@ public sealed partial class MainViewModel
         Message = "Undeformed shape — Show Results draws a result again.";
     }
 
-    /// <summary>Result menu: show <paramref name="mode"/> (or the cable target fit) for the selected candidate on the
-    /// FEM result pane and the shared viewer — what selecting it in the former result tree did.</summary>
+    /// <summary>Result menu: show <paramref name="mode"/> (or the cable target fit) of the run on the FEM result pane
+    /// and the shared viewer — what selecting it in the former result tree did.</summary>
     public void ShowFemResult(FemResultMode? mode)
     {
         ShowUndeformed = false;

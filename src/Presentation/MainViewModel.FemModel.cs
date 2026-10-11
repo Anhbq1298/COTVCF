@@ -26,8 +26,8 @@ public sealed partial class MainViewModel
     public string OfflineModelName => offlineModelPath is null ? "" : Path.GetFileName(offlineModelPath);
     public bool IsDefaultModel => IsOfflineModel && isDefaultModel;
     public string OfflineModelSummary => IsOfflineModel
-        ? $"{(isDefaultModel ? "Default model" : "Offline model")} {OfflineModelName} · from {State.Model?.Name} · SAP2000 not connected — " +
-          "Run Analysis uses the saved data; Connect SAP to work live."
+        ? $"{(isDefaultModel ? "Default model" : "Offline model")} {OfflineModelName} · from {State.Model?.Name} — " +
+          "Run Analysis solves this model as defined; SAP2000 is not used."
         : "";
 
     public bool CanSaveFemModel => !IsBusy && HasWorkingModel && State.BaselineCaptured &&
@@ -67,7 +67,7 @@ public sealed partial class MainViewModel
             IReadOnlyList<string> loadCases;
             if (IsOfflineModel)
             {
-                properties = OfflineFemProperties();
+                properties = HeldFemProperties();
                 loadCases = offlineLoadCaseNames;
             }
             else
@@ -79,7 +79,7 @@ public sealed partial class MainViewModel
             var file = BuildFemModelFile(properties, loadCases);
             FemModelFile.Write(path, file);
             FemProgressText = $"Saved FEM model {Path.GetFileName(path)} · {file.SectionProperties.Count:N0} members, {file.CaseRows.Count} load cases, " +
-                $"{file.CombinationRows.Count} combinations · {FemCandidateSummary}. Load Model reopens it without SAP2000.";
+                $"{file.CombinationRows.Count} combinations. Load Model reopens it without SAP2000.";
             Message = FemProgressText;
         }
         catch (Exception ex)
@@ -218,6 +218,8 @@ public sealed partial class MainViewModel
             EnsureSections();
             femSapLoading = file.Loading!;
             RestoreFemLoadRows(file);
+            // The built-in model starts on the app's default load cases; SAP Cases shows the ones saved with it.
+            if (isDefault) UseDefaultFemLoadCases();
             FemTargetFitPercent = file.Settings.TargetFitPercent;
             FemTargetFitIterations = file.Settings.TargetFitIterations;
             FemFrameMeshSegments = file.Settings.FrameMeshSegments;
@@ -230,8 +232,8 @@ public sealed partial class MainViewModel
             RegenerateStudyPreview();
             SelectedTab = TabFem;
             SelectedFemPage = FemInputsPage;
-            FemProgressText = $"Loaded {(isDefault ? "default " : "")}FEM model {Path.GetFileName(path)} (saved {file.SavedUtc.ToLocalTime():yyyy-MM-dd HH:mm}) · " +
-                $"{FemCandidateSummary}. Run Analysis works without SAP2000; connect SAP for every other tab.";
+            FemProgressText = $"Loaded {(isDefault ? "default " : "")}FEM model {Path.GetFileName(path)} (saved {file.SavedUtc.ToLocalTime():yyyy-MM-dd HH:mm}). " +
+                "Run Analysis solves this model as defined, without SAP2000; Connect SAP for the SAP2000 study tabs.";
             Message = $"{(isDefault ? "Default FEM model" : "FEM model")} {Path.GetFileName(path)} loaded offline from {file.Model!.Name} — SAP2000 not connected.";
         }
         catch (Exception ex)
@@ -252,41 +254,15 @@ public sealed partial class MainViewModel
         }
     }
 
-    /// <summary>The section properties saved in the loaded FEM model, checked against its geometry like a SAP read.</summary>
-    private IReadOnlyDictionary<string, FemSectionProperties> OfflineFemProperties()
-    {
-        var properties = FemSectionProperties.GroupBy(property => property.MemberName, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-        var missing = State.Geometry.Members.FirstOrDefault(member =>
-            member.Kind is MemberKind.Frame or MemberKind.Cable && !properties.ContainsKey(member.Name));
-        if (missing is not null)
-            throw new InvalidOperationException($"The loaded FEM model has no section/material properties for '{missing.Name}'.");
-        return properties;
-    }
-
     private void RestoreFemLoadRows(FemModelFileDto file)
     {
-        foreach (var row in FemCaseRows) row.PropertyChanged -= LoadRowChanged;
-        foreach (var row in FemCombinationRows) row.PropertyChanged -= LoadRowChanged;
-        FemPatternRows.Clear(); FemCaseRows.Clear(); FemCombinationRows.Clear();
-        foreach (var row in file.PatternRows)
-            FemPatternRows.Add(new FemPatternRow(row.Name, row.Type, row.SelfWeightMultiplier, row.Role, row.Loads));
-        foreach (var row in file.CaseRows)
-        {
-            var item = new FemCaseRow(row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note);
-            item.PropertyChanged += LoadRowChanged;
-            FemCaseRows.Add(item);
-        }
-        foreach (var row in file.CombinationRows)
-        {
-            var item = new FemCombinationRow(row.Name, row.Type, row.Definition, row.Run, row.Supported, row.Source, row.Note);
-            item.PropertyChanged += LoadRowChanged;
-            FemCombinationRows.Add(item);
-        }
+        SetFemLoadRows(
+            file.PatternRows.Select(row => new FemPatternRow(row.Name, row.Type, row.SelfWeightMultiplier, row.Role, row.Loads)).ToArray(),
+            file.CaseRows.Select(row => new FemCaseRow(row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note)).ToArray(),
+            file.CombinationRows.Select(row => new FemCombinationRow(row.Name, row.Type, row.Definition, row.Run, row.Supported, row.Source, row.Note)).ToArray());
         FemLoadWarnings.Clear();
         foreach (var warning in femSapLoading.Warnings) FemLoadWarnings.Add(warning);
         Notify(nameof(FemLoadSummary));
-        Notify(nameof(FemLoadSelectionNames));
         var names = FemLoadSelectionNames;
         SelectedFemResultName = FemCombinationRows.FirstOrDefault(row => row.Run)?.Name ?? names.LastOrDefault();
     }
@@ -305,9 +281,7 @@ public sealed partial class MainViewModel
         ClearFemResults();
         FemSectionProperties.Clear();
         femSapLoading = SapFemLoading.Empty;
-        foreach (var row in FemCaseRows) row.PropertyChanged -= LoadRowChanged;
-        foreach (var row in FemCombinationRows) row.PropertyChanged -= LoadRowChanged;
-        FemPatternRows.Clear(); FemCaseRows.Clear(); FemCombinationRows.Clear();
+        SetFemLoadRows([], [], []);
         FemLoadWarnings.Clear();
         offlineModelPath = null;
         isDefaultModel = false;
@@ -320,8 +294,6 @@ public sealed partial class MainViewModel
         FemCableFitRows.Clear();
         FemLog.Clear();
         FemProgressText = "";
-        FemMonitorRun = null;
-        FemMonitorTotal = 0;
-        FemMonitorCompleted = 0;
+        NotifyFemMonitorChart();
     }
 }

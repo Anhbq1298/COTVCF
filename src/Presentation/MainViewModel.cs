@@ -202,7 +202,7 @@ public sealed partial class MainViewModel : Observable
     private void NotifyFemResultSelection()
     {
         Notify(nameof(FemResultRows)); Notify(nameof(FemResultSummary));
-        Notify(nameof(SelectedCandidateCableFitRows));
+        Notify(nameof(FemRunCableFitRows));
         Notify(nameof(FemResultStartHeader)); Notify(nameof(FemResultEndHeader));
         Notify(nameof(FemResultNames)); Notify(nameof(FemResultDiagramTitle));
         Notify(nameof(FemResultIssue));
@@ -866,7 +866,7 @@ public sealed partial class MainViewModel : Observable
     private readonly FemStudyService femStudy = new();
     private CancellationTokenSource? femCancellation;
     private bool isFemRunning;
-    private string femProgressText = "Load a Mcotis project, then run the full Tab 01-03 candidate space.";
+    private string femProgressText = "Open a model, then Run Analysis solves it as defined.";
     private FemStudyRun? selectedFemRun;
     private FemResultMode femResultMode;
     private int selectedFemPage;
@@ -899,8 +899,9 @@ public sealed partial class MainViewModel : Observable
     /// hangs in a shallow parabola and its tension and stiffness follow the sag. Off = straight tension-only bars.</summary>
     public bool FemCableSag { get => femCableSag; set => Set(ref femCableSag, value); }
     public ObservableCollection<FemSectionProperties> FemSectionProperties { get; } = [];
+    /// <summary>The run of the model: empty before Run Analysis, and after a run that did not reach equilibrium.</summary>
     public ObservableCollection<FemStudyRun> FemRuns { get; } = [];
-    /// <summary>One row per completed FEM case and cable: Tab 03 target vs final FEM tension.</summary>
+    /// <summary>One row per cable of the run: Tab 03 target vs final FEM tension — or the one Failed row of a run without results.</summary>
     public ObservableCollection<FemCableFitRow> FemCableFitRows { get; } = [];
     // ---- FEM run monitor (pop-up window opened by Run Analysis) ----
     public const string DefaultMonitorCable = "Cable1a-2";
@@ -908,41 +909,19 @@ public sealed partial class MainViewModel : Observable
     /// <summary>Raised when a FEM run starts so the view can open the run monitor window.</summary>
     public event EventHandler? FemAnalysisStarted;
     public ObservableCollection<string> FemLog { get; } = [];
-    private int femMonitorTotal;
-    private int femMonitorCompleted;
     private bool femMonitorRunning;
-    private bool femMonitorFollowLatest = true;
-    private FemStudyRun? femMonitorRun;
     private string? femMonitorCable;
     private double femMonitorTolerancePercent;
-    public int FemMonitorTotal { get => femMonitorTotal; private set { if (Set(ref femMonitorTotal, value)) { Notify(nameof(FemMonitorProgressText)); Notify(nameof(FemMonitorProgressMaximum)); } } }
-    /// <summary>Progress-bar maximum; 1 before any run so an empty bar is not drawn as complete.</summary>
-    public int FemMonitorProgressMaximum => Math.Max(1, FemMonitorTotal);
-    public int FemMonitorCompleted { get => femMonitorCompleted; private set { if (Set(ref femMonitorCompleted, value)) Notify(nameof(FemMonitorProgressText)); } }
-    public bool FemMonitorRunning { get => femMonitorRunning; private set { if (Set(ref femMonitorRunning, value)) Notify(nameof(FemMonitorProgressText)); } }
-    public string FemMonitorProgressText => FemMonitorTotal == 0 ? "No FEM run yet." :
-        $"{(FemMonitorRunning ? "Running" : "Finished")} · {FemMonitorCompleted:N0} / {FemMonitorTotal:N0} cases";
+    public bool FemMonitorRunning
+    {
+        get => femMonitorRunning;
+        private set { if (Set(ref femMonitorRunning, value)) { Notify(nameof(FemMonitorProgressText)); Notify(nameof(FemMonitorProgress)); } }
+    }
+    /// <summary>Progress bar of the one run: full once it has results (the bar is indeterminate while it runs).</summary>
+    public double FemMonitorProgress => !FemMonitorRunning && FemRuns.Count > 0 ? 1 : 0;
+    public string FemMonitorProgressText => FemMonitorRunning ? "Running" : FemRuns.Count > 0 ? "Finished"
+        : FemLog.Count > 0 ? "No result" : "No FEM run yet.";
     public double FemMonitorTolerancePercent { get => femMonitorTolerancePercent; private set => Set(ref femMonitorTolerancePercent, value); }
-    /// <summary>While on, the chart follows each case as it completes; picking a case turns it off.</summary>
-    public bool FemMonitorFollowLatest
-    {
-        get => femMonitorFollowLatest;
-        set { if (Set(ref femMonitorFollowLatest, value) && value && FemRuns.Count > 0) FemMonitorRun = FemRuns[^1]; }
-    }
-    public FemStudyRun? FemMonitorRun
-    {
-        get => femMonitorRun;
-        set
-        {
-            if (!Set(ref femMonitorRun, value)) return;
-            if (value is not null && FemRuns.Count > 0 && !ReferenceEquals(value, FemRuns[^1]) && femMonitorFollowLatest)
-            {
-                femMonitorFollowLatest = false;
-                Notify(nameof(FemMonitorFollowLatest));
-            }
-            NotifyFemMonitorChart();
-        }
-    }
     public IReadOnlyList<string> FemMonitorCableNames => State.Cables.Select(cable => cable.CableName)
         .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.Ordinal).ToArray();
     public string? FemMonitorCable
@@ -950,21 +929,21 @@ public sealed partial class MainViewModel : Observable
         get => femMonitorCable;
         set { if (Set(ref femMonitorCable, value)) NotifyFemMonitorChart(); }
     }
-    private FemCableResponse? FemMonitorCableResult => FemMonitorRun?.Result.Cables
+    private FemCableResponse? FemMonitorCableResult => SelectedFemRun?.Result.Cables
         .FirstOrDefault(cable => cable.MemberName.Equals(FemMonitorCable, StringComparison.Ordinal));
     public IReadOnlyList<double> FemMonitorRatios => FemMonitorCableResult?.FitRatios ?? [];
     public string FemMonitorChartSummary
     {
         get
         {
-            if (FemMonitorRun is not { } run) return "Waiting for the first completed case…";
-            if (FemMonitorCableResult is not { } cable) return $"{run.Id}: cable '{FemMonitorCable}' is not in this FEM model.";
-            if (cable.TargetForceKN <= 0 || cable.FitHistoryKN is null) return $"{run.Id} · {cable.MemberName}: no target force to fit.";
+            if (SelectedFemRun is not { } run) return FemMonitorRunning ? "Solving the model…" : "No FEM result yet.";
+            if (FemMonitorCableResult is not { } cable) return $"Cable '{FemMonitorCable}' is not in this FEM model.";
+            if (cable.TargetForceKN <= 0 || cable.FitHistoryKN is null) return $"{cable.MemberName}: no target force to fit.";
             var ratio = cable.PretensionStageForceKN / cable.TargetForceKN;
             var loaded = SelectedFemResultName is { } loadName && run.Results?.ContainsKey(loadName) == true
                 ? run.ResultFor(loadName).Cables.FirstOrDefault(item => item.MemberName == cable.MemberName)
                 : null;
-            return $"{run.Id} · {cable.MemberName} · P_preset {cable.TargetForceKN:0} kN → P_result {cable.PretensionStageForceKN:0} kN " +
+            return $"{cable.MemberName} · P_preset {cable.TargetForceKN:0} kN → P_result {cable.PretensionStageForceKN:0} kN " +
                 $"(ratio {ratio:0.000}) after {cable.FitHistoryKN.Count} run(s) · applied pretension {cable.AppliedPretensionKN:0} kN · " +
                 (run.Result.TargetFitConverged ? $"within ±{FemMonitorTolerancePercent:0.###}%" : "NOT fitted") +
                 (loaded is not null ? $" · under {SelectedFemResultName}: T = {loaded.AxialForceKN:0} kN (ratio {loaded.AxialForceKN / cable.TargetForceKN:0.000})" : "");
@@ -975,18 +954,14 @@ public sealed partial class MainViewModel : Observable
     {
         Notify(nameof(FemMonitorRatios));
         Notify(nameof(FemMonitorChartSummary));
+        Notify(nameof(FemMonitorProgress));
+        Notify(nameof(FemMonitorProgressText));
     }
 
-    private void StartFemMonitor(int total)
+    private void StartFemMonitor()
     {
         FemLog.Clear();
-        FemMonitorTotal = total;
-        FemMonitorCompleted = 0;
         FemMonitorRunning = true;
-        femMonitorRun = null;
-        femMonitorFollowLatest = true;
-        Notify(nameof(FemMonitorFollowLatest));
-        Notify(nameof(FemMonitorRun));
         PrepareFemMonitor();
         FemAnalysisStarted?.Invoke(this, EventArgs.Empty);
     }
@@ -998,7 +973,6 @@ public sealed partial class MainViewModel : Observable
         var names = FemMonitorCableNames;
         if (FemMonitorCable is null || !names.Contains(FemMonitorCable, StringComparer.Ordinal))
             FemMonitorCable = names.FirstOrDefault(name => name.Equals(DefaultMonitorCable, StringComparison.OrdinalIgnoreCase)) ?? names.FirstOrDefault();
-        if (femMonitorRun is null && FemRuns.Count > 0) FemMonitorRun = FemRuns[^1];
         NotifyFemMonitorChart();
     }
 
@@ -1008,16 +982,16 @@ public sealed partial class MainViewModel : Observable
         while (FemLog.Count > MaximumFemLogLines) FemLog.RemoveAt(0);
     }
 
-    private static string DescribeFemRun(FemStudyRun run, int completed, int total)
+    private static string DescribeFemRun(FemStudyRun run)
     {
         var result = run.Result;
         var fitted = result.Cables.Where(cable => cable.TargetForceKN > 0 && cable.PretensionStageForceKN is not null).ToArray();
         var worst = fitted.Select(cable => Math.Abs(cable.PretensionStageForceKN!.Value / cable.TargetForceKN - 1) * 100).DefaultIfEmpty().Max();
-        var fit = result.TargetFitIterations == 0 ? "no target fitting"
-            : result.TargetFitConverged ? $"pretension fitted in {result.TargetFitIterations} run(s), max deviation {worst:0.##}%"
-            : $"NOT fitted after {result.TargetFitIterations} run(s), max deviation {worst:0.##}%";
+        var fit = result.TargetFitIterations == 0 ? "No target fitting"
+            : result.TargetFitConverged ? $"Pretension fitted in {result.TargetFitIterations} run(s), max deviation {worst:0.##}%"
+            : $"Pretension NOT fitted after {result.TargetFitIterations} run(s), max deviation {worst:0.##}%";
         var slack = result.Cables.Count(cable => !cable.Active);
-        return $"[{completed}/{total}] {run.Id} · {fit} · loaded equilibrium in {result.NonlinearIterations} Newton iteration(s)" +
+        return $"{fit} · loaded equilibrium in {result.NonlinearIterations} Newton iteration(s)" +
             (slack > 0 ? $" · {slack} slack cable(s)" : "") +
             $" · max |N| {result.MaximumAbsoluteAxialKN:0} kN · max deflection {result.MaximumDownwardDeflectionMm:0.#} mm";
     }
@@ -1098,9 +1072,11 @@ public sealed partial class MainViewModel : Observable
         {
             if (!Set(ref selectedFemRun, value)) return;
             NotifyFemResultSelection();
+            NotifyFemMonitorChart();
         }
     }
-    public IEnumerable<FemCableFitRow> SelectedCandidateCableFitRows => SelectedFemRun is { } run
+    /// <summary>The cable target fit of the run, with the tension under the load case / combination shown.</summary>
+    public IEnumerable<FemCableFitRow> FemRunCableFitRows => SelectedFemRun is { } run
         ? FemCableFitRow.FromRun(run, SelectedFemResultName) : [];
     public IReadOnlyList<FemResultRow> FemResultRows => FemResultTable.Build(SelectedFemResult, FemResultMode);
     public FemAnalysisResult? SharedViewerFemResult =>
@@ -1124,12 +1100,12 @@ public sealed partial class MainViewModel : Observable
                 FemResultMode.DeflectedShape => "mm",
                 _ => "kN"
             };
-            return SelectedFemRun is { } run ? $"{name} ({run.Id}{(SelectedFemResultName is { } loadName ? " · " + loadName : "")}) [{unit}]" : $"{name} [no results]";
+            return SelectedFemRun is null ? $"{name} [no results]"
+                : $"{name}{(SelectedFemResultName is { } loadName ? $" ({loadName})" : "")} [{unit}]";
         }
     }
-    public string FemResultSummary => SelectedFemRun is { } run
-        ? $"{run.Id} · {SelectedFemResultName ?? "result"} · {FemResultMode} · {FemResultRows.Count:N0} results"
-        : "No completed FEM combination selected.";
+    public string FemResultSummary => SelectedFemRun is null ? "No FEM results yet — Run → Run FEM Analysis."
+        : $"{SelectedFemResultName ?? "result"} · {FemResultMode} · {FemResultRows.Count:N0} results";
     public string FemResultStartHeader => FemResultMode switch
     {
         FemResultMode.Reactions => "Fx [kN]",
@@ -1142,14 +1118,21 @@ public sealed partial class MainViewModel : Observable
         FemResultMode.DeflectedShape => "UZ [m]",
         _ => "J-End"
     };
-    public string FemCandidateSummary
+    /// <summary>What Run Analysis solves: the model as it stands, once. A Tab 01 / Tab 03 range is an input of the parametric
+    /// study; it enters this run with its first value, named here so the run never hides what it used.</summary>
+    public string FemRunSummary
     {
         get
         {
-            var loads = LoadingCandidates.TotalCount(State.LoadDefinitions);
-            var heights = State.BaselineCaptured ? State.Truss.CandidateCount : 0;
-            var pretensions = PretensionCandidates.TotalCount(State.Cables.ToArray());
-            return $"Loading {loads:N0} x height {heights:N0} x pretension {pretensions:N0} = {femStudy.CandidateCount(State):N0} FEM runs";
+            if (!femStudy.CanComposeModel(State)) return "Not ready — complete 01 Loading, the 02 Truss Height baseline and 03 Pretension.";
+            var cables = State.Cables.ToArray();
+            var ranges = State.LoadDefinitions.Where(load => load.CandidateCount > 1)
+                .Select(load => $"{load.LoadName} qz {load.CandidateValues[0]:0.###} kPa")
+                .Concat(cables.Where(cable => cable.CandidateCount > 1 && !PretensionCandidates.IsFollower(cable, cables))
+                    .Select(cable => $"{cable.CableName} {cable.GetCandidateForces()[0]:0.###} kN")).ToArray();
+            return $"1 FEM run · the model as defined · truss height {State.Truss.BaselineHeight:0.###} {LengthUnit}" +
+                (ranges.Length == 0 ? "" : $" · ranges at their first value: {string.Join(", ", ranges.Take(3))}" +
+                    (ranges.Length > 3 ? $" (+{ranges.Length - 3} more)" : ""));
         }
     }
     public string FemPinSupportSummary
@@ -1165,17 +1148,9 @@ public sealed partial class MainViewModel : Observable
         }
     }
     public string FemProgressText { get => femProgressText; private set => Set(ref femProgressText, value); }
-    public string FemStatus => isFemRunning ? "RUNNING" : FemRuns.Count > 0 ? $"{FemRuns.Count:N0} cases complete" :
-        HasWorkingModel && State.BaselineCaptured && femStudy.CandidateCount(State) > 0 ? (IsOfflineModel ? "OFFLINE · READY" : "READY TO ANALYZE") : "LOAD CONFIG / CONNECT SAP";
-    public bool CanRunFemAnalysis
-    {
-        get
-        {
-            var count = femStudy.CandidateCount(State);
-            return !IsBusy && HasWorkingModel && State.BaselineCaptured &&
-                count > BigInteger.Zero && count <= FemStudyService.MaxCandidates;
-        }
-    }
+    public string FemStatus => isFemRunning ? "RUNNING" : FemRuns.Count > 0 ? "ANALYSIS COMPLETE" :
+        HasWorkingModel && femStudy.CanComposeModel(State) ? (IsOfflineModel ? "OFFLINE · READY" : "READY TO ANALYZE") : "LOAD CONFIG / CONNECT SAP";
+    public bool CanRunFemAnalysis => !IsBusy && HasWorkingModel && femStudy.CanComposeModel(State);
     public bool CanReadFemProperties => !IsBusy && State.IsSapConnected && State.Model is not null &&
         State.Geometry.Members.Any(member => member.Kind is MemberKind.Frame or MemberKind.Cable);
     public bool CanCancelFemAnalysis => isFemRunning;
@@ -1227,7 +1202,8 @@ public sealed partial class MainViewModel : Observable
 
         Connect = new(_ => Run("Connecting to SAP2000...", ConnectAndRefreshAsync, "Connected. Geometry loaded."), () => !IsBusy);
         Refresh = new(_ => Run("Refreshing SAP2000 connection and geometry...", ConnectAndRefreshAsync, "Connection refreshed. Geometry updated."), () => !IsBusy);
-        AddPoints = new(_ => SelectLoadLocations(), GeometryReady);
+        // The load locations come from the model's own geometry: a loaded FEM model has them too.
+        AddPoints = new(_ => SelectLoadLocations(), () => !IsBusy && HasWorkingModel && State.Geometry.Points.Count > 0);
         RemoveAppliedPoints = new(p =>
         {
             if (p is not IList list) return;
@@ -1354,7 +1330,7 @@ public sealed partial class MainViewModel : Observable
         NewConfig = new(_ => StartNewConfiguration(), () => CanUseConfig);
         LoadConfig = new(_ => OpenProject(), () => CanUseConfig);
         ReadFemProperties = new(_ => ReadFemModelProperties(), () => CanReadFemProperties);
-        RunFemAnalysis = new(_ => _ = AnalyzeFemAsync(), () => CanRunFemAnalysis);
+        RunFemAnalysis = new(_ => RunFemAnalysisFromUi(), () => CanRunFemAnalysis);
         CancelFemAnalysis = new(_ => femCancellation?.Cancel(), () => CanCancelFemAnalysis);
 
         void Dirty(ConfigTabs tab) { if (!applyingProject) config.Session.MarkDirty(tab); }
@@ -1457,8 +1433,10 @@ public sealed partial class MainViewModel : Observable
             if (property.GetValue(this) is not Command command ||
                 command == Connect || command == Refresh || command == CancelStudy || command == CancelFemAnalysis ||
                 command == LoadFemModel || command == LoadDefaultModel) continue;
-            // A loaded FEM model (Load Model) runs FEM offline; every other command needs the live SAP2000 model.
-            command.Availability = command == RunFemAnalysis || command == SaveFemModel
+            // A loaded FEM model (Load Model) runs FEM offline and takes its loads from 01 Loading (Define → Loading), which
+            // only edits what the app holds; every other command needs the live SAP2000 model.
+            command.Availability = command == RunFemAnalysis || command == SaveFemModel || command == AddPoints ||
+                                   command == RemoveAppliedPoints || command == AddLoadDefinition || command == DeleteLoadDefinition
                 ? () => HasWorkingModel
                 : () => HasSapConnection;
         }
@@ -1551,6 +1529,7 @@ public sealed partial class MainViewModel : Observable
             await workflow.ConnectAsync();
             await workflow.RefreshAsync();
             offlineModelPath = null;
+            femInputsOutdated = true;
             if (State.SessionBaselineModel is { Path.Length: > 0 } baseline)
             {
                 var modelDirectory = System.IO.Path.GetDirectoryName(baseline.Path);
@@ -1772,10 +1751,33 @@ public sealed partial class MainViewModel : Observable
         Notify(nameof(FemMemberSizeHint));
 
         femSapLoading = await workflow.ReadFemLoadingAsync(properties);
+        femInputsOutdated = false;
         if (resetLoadRows || FemPatternRows.Count == 0) ResetFemLoadRows();
         FemLoadWarnings.Clear();
         foreach (var warning in femSapLoading.Warnings) FemLoadWarnings.Add(warning);
         Notify(nameof(FemLoadSummary));
+        return properties;
+    }
+
+    /// <summary>Connect / Refresh made SAP2000's model the working model, and its sections and loading are not in Mcotis
+    /// until Read FEM Properties from SAP brings them in. What was held before belongs to another state of the model.</summary>
+    private bool femInputsOutdated;
+
+    /// <summary>The section and material properties the model holds — from Load Model, Read FEM Properties from SAP and the
+    /// Define / Assign edits — checked against its geometry. Run Analysis and the optimization solve these; neither reads
+    /// SAP2000.</summary>
+    private IReadOnlyDictionary<string, FemSectionProperties> HeldFemProperties()
+    {
+        const string read = "File → Read FEM Properties from SAP brings them in (read-only); the analysis then solves the model held here.";
+        if (State.IsSapConnected && femInputsOutdated)
+            throw new InvalidOperationException("The sections, materials and loading of the connected SAP2000 model are not in Mcotis yet. " + read);
+        var properties = FemSectionProperties.GroupBy(property => property.MemberName, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var missing = State.Geometry.Members.FirstOrDefault(member =>
+            member.Kind is MemberKind.Frame or MemberKind.Cable && !properties.ContainsKey(member.Name));
+        if (missing is not null)
+            throw new InvalidOperationException($"The model has no section/material properties for '{missing.Name}'." +
+                (State.IsSapConnected ? " " + read : ""));
         return properties;
     }
 
@@ -1786,7 +1788,7 @@ public sealed partial class MainViewModel : Observable
     public ObservableCollection<FemCombinationRow> FemCombinationRows { get; } = [];
     public ObservableCollection<string> FemLoadWarnings { get; } = [];
     public string FemLoadSummary => FemPatternRows.Count == 0
-        ? "Not read yet — use Read from SAP on the Inputs page (also read automatically when the analysis runs)."
+        ? "Not read yet — File → Read FEM Properties from SAP brings the load patterns, cases and combinations into the model."
         : $"{FemPatternRows.Count} patterns · {FemCaseRows.Count(row => row.Run)} of {FemCaseRows.Count} cases and " +
           $"{FemCombinationRows.Count(row => row.Run)} of {FemCombinationRows.Count} combinations ticked to run" +
           (FemLoadWarnings.Count > 0 ? $" · {FemLoadWarnings.Count} load assignment warning(s)" : "");
@@ -1795,17 +1797,12 @@ public sealed partial class MainViewModel : Observable
     private IReadOnlyList<string> PretensionPatterns => State.Cables.Select(cable => cable.LoadPattern)
         .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
+    /// <summary>The load rows as SAP2000 has them (the snapshot the model holds), with the default cases for what SAP's
+    /// own cases leave out.</summary>
     private void ResetFemLoadRows()
     {
         var (patterns, cases, combinations) = FemLoadPlan.RowsFromSap(femSapLoading, Tab01Patterns, PretensionPatterns);
-        foreach (var row in FemCaseRows) row.PropertyChanged -= LoadRowChanged;
-        foreach (var row in FemCombinationRows) row.PropertyChanged -= LoadRowChanged;
-        FemPatternRows.Clear(); FemCaseRows.Clear(); FemCombinationRows.Clear();
-        foreach (var row in patterns) FemPatternRows.Add(row);
-        foreach (var row in cases) { row.PropertyChanged += LoadRowChanged; FemCaseRows.Add(row); }
-        foreach (var row in combinations) { row.PropertyChanged += LoadRowChanged; FemCombinationRows.Add(row); }
-        Notify(nameof(FemLoadSummary));
-        Notify(nameof(FemLoadSelectionNames));
+        SetFemLoadRows(patterns, cases, combinations);
         // Default view: the first combination, else the last case (typically the loaded stage).
         var names = FemLoadSelectionNames;
         if (SelectedFemResultName is null || !names.Contains(SelectedFemResultName, StringComparer.OrdinalIgnoreCase))
@@ -1849,16 +1846,28 @@ public sealed partial class MainViewModel : Observable
         foreach (var row in failed) FemCableFitRows.Add(row);
     }
 
+    /// <summary>Takes the solver's report on the solver's own thread (Progress&lt;T&gt; would post it after the run returned).</summary>
+    private sealed class FemFailureReport : IProgress<FemProgress>
+    {
+        public string? Reason { get; private set; }
+        public void Report(FemProgress value) => Reason = value.Failure ?? Reason;
+    }
+
+    /// <summary>Run → Run FEM Analysis: solves the model as it stands, once — the geometry, sections, loading and settings
+    /// Mcotis holds. It never reads or writes SAP2000, and it is not the parametric study: varying the Tab 01–03 ranges or
+    /// the VCF system over many cases is Run → Optimization VCF.</summary>
     internal async Task AnalyzeFemAsync()
     {
         if (IsBusy || CommitEditors?.Invoke() == false) return;
 
-        IReadOnlyList<FemStudyCandidate> candidates;
+        FemStudyCandidate model;
         IReadOnlyList<string> supports;
+        IReadOnlyDictionary<string, FemSectionProperties> properties;
         try
         {
-            candidates = femStudy.Compose(State, IsOfflineModel);
+            model = femStudy.ComposeModel(State, IsOfflineModel);
             supports = FemStudyService.FindPinSupportPoints(State.Baseline);
+            properties = HeldFemProperties();
         }
         catch (Exception ex)
         {
@@ -1876,28 +1885,24 @@ public sealed partial class MainViewModel : Observable
         FemRuns.Clear();
         FemCableFitRows.Clear();
         SelectedFemRun = null;
-        var offline = IsOfflineModel;
-        if (!offline) FemSectionProperties.Clear();
-        FemProgressText = offline ? $"Using the loaded FEM model {OfflineModelName} · {candidates.Count:N0} candidates"
-            : $"Reading assigned SAP sections and material properties · {candidates.Count:N0} candidates";
+        var modelName = IsOfflineModel ? OfflineModelName : State.Model?.Name ?? "the model";
+        FemProgressText = $"Solving {modelName} as defined…";
         Notify(nameof(FemStatus));
         Notify(nameof(CanCancelFemAnalysis));
         CommandManager.InvalidateRequerySuggested();
-        StartFemMonitor(candidates.Count);
+        StartFemMonitor();
         try
         {
-            FemLogLine(offline ? $"Using sections, materials, modifiers, end releases and loading saved in {OfflineModelName} (SAP2000 not connected)…"
-                : "Reading assigned SAP2000 sections, materials, modifiers and end releases (read-only)…");
-            var properties = offline ? OfflineFemProperties() : await ReadAndDisplayFemPropertiesAsync();
-            FemLogLine($"Read {properties.Count(pair => pair.Value.InPlaneInertiaM4 is not null):N0} frame and {properties.Count(pair => pair.Value.InPlaneInertiaM4 is null):N0} cable sections " +
+            FemLogLine($"Solving the model held in Mcotis ({modelName}) — SAP2000 is not read or written. {FemRunSummary}.");
+            FemLogLine($"{properties.Count(pair => pair.Value.InPlaneInertiaM4 is not null):N0} frame and {properties.Count(pair => pair.Value.InPlaneInertiaM4 is null):N0} cable sections " +
                 $"(self-weight from unit weight × gross area × weight modifier).");
-            FemLogLine($"{(offline ? "Saved" : "Read")} SAP loading: {femSapLoading.Patterns.Count} patterns, {femSapLoading.JointLoads.Count} joint, " +
+            FemLogLine($"Loading: {femSapLoading.Patterns.Count} patterns, {femSapLoading.JointLoads.Count} joint, " +
                 $"{femSapLoading.MemberLoads.Count + femSapLoading.MemberPointLoads.Count + femSapLoading.GravityLoads.Count} member load assignments, " +
                 $"{femSapLoading.Cases.Count} cases, {femSapLoading.Combinations.Count} combinations" +
                 (femSapLoading.Warnings.Count > 0 ? $" · {femSapLoading.Warnings.Count} warning(s), see Inputs → Loads" : "") + ".");
             var loadPlan = FemLoadPlan.Build(FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), femSapLoading,
                 properties, State.Baseline, Tab01Patterns, PretensionPatterns, State.AppliedPoints.Select(point => point.PointName).ToArray());
-            FemLogLine($"Load cases solved per candidate: {string.Join(", ", loadPlan.CaseNames)}" +
+            FemLogLine($"Load cases solved: {string.Join(", ", loadPlan.CaseNames)}" +
                 (loadPlan.CombinationNames.Count > 0 ? $" · combinations: {string.Join(", ", loadPlan.CombinationNames)}" : "") +
                 (loadPlan.FitCases.Count > 0 ? $" · cable target forces fitted in {string.Join(", ", loadPlan.FitCases.Select(name => $"'{name}'"))}" +
                     (loadPlan.FitCases.Count > 1 ? " (each case uses the stage it continues from)" : "") : "") + ".");
@@ -1906,9 +1911,6 @@ public sealed partial class MainViewModel : Observable
             SelectedFemResultName = loadPlan.CombinationNames.FirstOrDefault() ?? loadPlan.CaseNames[^1];
 
             var baseline = State.Baseline;
-            var topPoints = State.Truss.TopPoints.ToArray();
-            var middlePoints = State.Truss.MiddlePoints.ToArray();
-            var bottomPoints = State.Truss.BottomPoints.ToArray();
             var targetFitPercent = FemTargetFitPercent;
             var targetFitIterations = FemTargetFitIterations;
             var frameMeshSegments = FemFrameMeshSegments;
@@ -1917,44 +1919,35 @@ public sealed partial class MainViewModel : Observable
             FemLogLine($"Pin supports: {string.Join(", ", supports)}.");
             FemLogLine($"Settings: target-force fitting ±{targetFitPercent:0.###}% · max {targetFitIterations:N0} fitting runs · frame mesh {frameMeshSegments} segments (cables unmeshed) · " +
                 (cableSag ? "cable sag ON (parabolic cable under the load each case puts on it)." : "cable sag OFF (straight tension-only cables)."));
-            FemLogLine($"Analyzing {candidates.Count:N0} cases ({FemCandidateSummary}). Per case: build height geometry → split frames at joints and mesh → " +
-                "fit cable pretension (no loads) → apply Tab 01 loads → tension-only equilibrium → recover member forces.");
-            var progress = new Progress<FemProgress>(value =>
+            FemLogLine("Split frames at joints and mesh → fit cable pretension in its stage → apply the loads → tension-only equilibrium → recover member forces.");
+            var failure = new FemFailureReport();
+            // The model's own geometry: no Tab 02 height change, so the chord groups are not passed.
+            var results = await Task.Run(() => femStudy.Analyze(baseline, [], [], [], supports, [model], properties, failure,
+                cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan, cableSag), cancellationToken);
+            if (results.Count == 0)
             {
-                if (!isFemRunning) return;
-                if (value.CompletedRun is { } completedRun)
-                {
-                    FemRuns.Add(completedRun);
-                    foreach (var row in FemCableFitRow.FromRun(completedRun, SelectedFemResultName)) FemCableFitRows.Add(row);
-                    SelectedFemRun ??= completedRun;
-                    FemLogLine(DescribeFemRun(completedRun, value.Completed, value.Total));
-                    if (FemMonitorFollowLatest) FemMonitorRun = completedRun;
-                }
-                if (value.Failure is { } failure)
-                {
-                    FemCableFitRows.Add(FemCableFitRow.FailedCase(value.CandidateId, failure));
-                    FemLogLine($"[{value.Completed}/{value.Total}] {value.CandidateId} · FAILED · {failure}");
-                }
-                FemMonitorCompleted = value.Completed;
-                FemProgressText = $"Analyzing {value.Completed:N0} / {value.Total:N0} · {value.CandidateId}";
-                Notify(nameof(FemStatus));
-            });
-            var results = await Task.Run(() => femStudy.Analyze(baseline, topPoints, middlePoints, bottomPoints,
-                supports, candidates, properties, progress, cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan, cableSag), cancellationToken);
-            var unfitted = results.Count(run => !run.Result.TargetFitConverged);
-            var failed = candidates.Count - results.Count;
-            FemProgressText = $"Completed {results.Count:N0} of {candidates.Count:N0} FEM cases" +
-                (failed > 0 ? $" · {failed:N0} failed to reach equilibrium" : "") +
-                (unfitted > 0 ? $" · {unfitted:N0} not fitted within {targetFitPercent:0.###}% (closest pretension used)"
-                    : $" · pretension stage within {targetFitPercent:0.###}% of target") +
-                (failed + unfitted > 0 ? " · see Cable Target Fit" : "") +
-                (offline ? $" · offline model {OfflineModelName}." : " · linked SAP2000 model unchanged.");
+                var reason = failure.Reason ?? "The model did not reach equilibrium.";
+                FemCableFitRows.Add(FemCableFitRow.FailedCase(model.Id, reason));
+                FemProgressText = $"Analysis failed · {reason}";
+            }
+            else
+            {
+                var run = results[0];
+                FemRuns.Add(run);
+                foreach (var row in FemCableFitRow.FromRun(run, SelectedFemResultName)) FemCableFitRows.Add(row);
+                SelectedFemRun = run;
+                FemLogLine(DescribeFemRun(run));
+                FemProgressText = "Analysis complete" +
+                    (run.Result.TargetFitConverged ? $" · pretension stage within {targetFitPercent:0.###}% of target"
+                        : $" · pretension not fitted within {targetFitPercent:0.###}% (closest pretension used) · see Cable Target Fit") +
+                    $" · {modelName}.";
+            }
             Message = FemProgressText;
             FemLogLine(FemProgressText);
         }
         catch (OperationCanceledException)
         {
-            FemProgressText = $"Cancelled after {FemRuns.Count:N0} completed cases.";
+            FemProgressText = "Analysis cancelled.";
             Message = FemProgressText;
             FemLogLine(FemProgressText);
         }
@@ -2857,14 +2850,7 @@ public sealed partial class MainViewModel : Observable
         finally { applyingProject = false; }
         SelectedAppliedPoint = null;
         SelectedCable = null;
-        SelectedFemRun = null;
-        FemRuns.Clear();
-        FemCableFitRows.Clear();
-        FemLog.Clear();
-        FemProgressText = "";
-        FemMonitorRun = null;
-        FemMonitorTotal = 0;
-        FemMonitorCompleted = 0;
+        ClearFemResults();
         PreviewMessage = "New configuration — select loading points, truss groups and cables.";
         SelectedTab = TabLoading;
         RegenerateStudyPreview();
@@ -3067,6 +3053,8 @@ public sealed partial class MainViewModel : Observable
 
     public void Update()
     {
+        RefreshFemPatternRows();
+        Notify(nameof(CanDefineLoadPatterns));
         Notify(nameof(GroupWarning));
         foreach (var name in new[]
         {
@@ -3085,7 +3073,7 @@ public sealed partial class MainViewModel : Observable
             nameof(FoundationSummary), nameof(FoundationStatus), nameof(CableForceSummary), nameof(CableForceStatus),
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
             nameof(HasSapConnection), nameof(HasWorkingModel), nameof(IsOfflineModel), nameof(IsDefaultModel), nameof(OfflineModelSummary), nameof(CanSaveFemModel), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
-            nameof(FemCandidateSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus),
+            nameof(FemRunSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus),
             nameof(CanRunFemAnalysis), nameof(CanCancelFemAnalysis), nameof(PaneStatus), nameof(HasFemResults),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),

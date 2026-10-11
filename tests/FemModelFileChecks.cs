@@ -34,7 +34,7 @@ internal static class FemModelFileChecks
         onlineVm.OpenProjectFile(Path.Combine(folder, "project.json"));
         Check(warnings.Count == 0 && online.BaselineCaptured && online.Cables.Count > 0, "the benchmark project loads into the connected app" +
             (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
-        online.Truss.MaximumHeight = online.Truss.MinimumHeight + online.Truss.Increment; // two heights keep the run short
+        online.Truss.MaximumHeight = online.Truss.MinimumHeight + online.Truss.Increment; // an edited range, to see it saved
         onlineVm.SelectedTab = 7;
         Check(onlineVm.SaveFemModel.CanExecute(null) && onlineVm.LoadFemModel.CanExecute(null),
             "Save Model and Load Model are enabled once SAP is connected and the config is loaded");
@@ -42,7 +42,14 @@ internal static class FemModelFileChecks
         var path = Path.Combine(Path.GetTempPath(), $"cotvcf-fem-{Guid.NewGuid():N}{FemModelFile.Extension}");
         try
         {
+            // Run Analysis solves what Mcotis holds: it does not fetch the sections and loading from SAP2000 itself.
             var reads = sap.Reads;
+            var refused = Analyze(onlineVm);
+            Check(refused.Count == 0 && sap.Reads == reads && sap.Writes == 0 && warnings.Count == 1 &&
+                  warnings[0].Contains("Read FEM Properties from SAP", StringComparison.Ordinal),
+                "connected, before the FEM properties are read: Run Analysis makes no call to SAP2000 and points to Read FEM Properties from SAP" +
+                (warnings.Count > 0 ? " — " + warnings[0] : ""));
+            warnings.Clear();
             onlineVm.SaveFemModelFileAsync(path).GetAwaiter().GetResult();
             var saved = FemModelFile.Read(path);
             Check(warnings.Count == 0 && File.Exists(path) && sap.Writes == 0 && sap.Reads > reads,
@@ -60,8 +67,11 @@ internal static class FemModelFileChecks
                   sapMaterials.Single(material => material.Kind == MaterialKind.Concrete).Fc == 70_000,
                 "Define Materials → Get From SAP2000 reads the connected model's materials (read-only)");
 
+            reads = sap.Reads;
             var onlineRuns = Analyze(onlineVm);
-            Check(onlineRuns.Count > 0 && warnings.Count == 0, $"connected FEM run completes ({onlineRuns.Count} candidates) · {onlineVm.FemProgressText} · {string.Join(" | ", warnings)}");
+            Check(onlineRuns.Count == 1 && onlineRuns[0].Id == FemStudyService.ModelRunId && warnings.Count == 0 && sap.Reads == reads && sap.Writes == 0 &&
+                  onlineVm.FemRunSummary.StartsWith("1 FEM run", StringComparison.Ordinal),
+                $"connected: Run Analysis is one run of the model held, without a call to SAP2000 · {onlineVm.FemRunSummary} · {onlineVm.FemProgressText} · {string.Join(" | ", warnings)}");
 
             // A fresh, disconnected app: nothing may reach SAP2000.
             var offline = new ApplicationState();
@@ -79,15 +89,23 @@ internal static class FemModelFileChecks
                   offline.Cables.Count == online.Cables.Count && offline.Truss.CandidateCount == online.Truss.CandidateCount &&
                   vm.FemSectionProperties.Count == onlineVm.FemSectionProperties.Count &&
                   vm.FemCaseRows.Select(row => (row.Name, row.Definition, row.Run)).SequenceEqual(onlineVm.FemCaseRows.Select(row => (row.Name, row.Definition, row.Run))) &&
-                  vm.FemCandidateSummary == onlineVm.FemCandidateSummary,
-                "Tabs 01–03, the member properties, the Loads rows and the candidate space are restored");
+                  vm.FemRunSummary == onlineVm.FemRunSummary,
+                "Tabs 01–03, the member properties, the Loads rows and what Run Analysis solves are restored");
             Check(vm.RunFemAnalysis.CanExecute(null) && vm.SaveFemModel.CanExecute(null) && !vm.ReadFemProperties.CanExecute(null) &&
                   !vm.LoadConfig.CanExecute(null) && vm.StatusLine.StartsWith("Offline model", StringComparison.Ordinal),
                 "offline: Run Analysis and Save Model are enabled; Read from SAP and Load Config wait for a connection");
+            // Define → Loading: the loads of the model are edited in the app, so its add / remove commands work offline too
+            var loadRows = offline.LoadDefinitions.Count;
+            Check(vm.AddPoints.CanExecute(null) && vm.RemoveAppliedPoints.CanExecute(null) && vm.AddLoadDefinition.CanExecute(null), "offline: the 01 Loading add / remove commands are enabled");
+            vm.AddLoadDefinition.Execute(null);
+            var extraLoad = offline.LoadDefinitions[^1];
+            Check(offline.LoadDefinitions.Count == loadRows + 1 && vm.DeleteLoadDefinition.CanExecute(extraLoad), "offline: + Add Load adds a load row to the model");
+            vm.DeleteLoadDefinition.Execute(extraLoad);
+            Check(offline.LoadDefinitions.Count == loadRows && silent.Reads == 0, "offline: the row is removed again, without a call to SAP2000");
 
             var offlineRuns = Analyze(vm);
-            Check(warnings.Count == 0 && silent.Reads == 0 && silent.Writes == 0 && offlineRuns.Count == onlineRuns.Count,
-                $"the offline FEM run completes all {offlineRuns.Count} candidates without calling SAP2000");
+            Check(warnings.Count == 0 && silent.Reads == 0 && silent.Writes == 0 && offlineRuns.Count == 1,
+                "the offline FEM run solves the model without calling SAP2000");
             var same = offlineRuns.Zip(onlineRuns).All(pair => pair.First.Id == pair.Second.Id &&
                 pair.First.Result.Joints.Zip(pair.Second.Result.Joints).All(joint =>
                     Math.Abs(joint.First.UZM - joint.Second.UZM) < 1e-12 && Math.Abs(joint.First.UXM - joint.Second.UXM) < 1e-12) &&
@@ -125,21 +143,156 @@ internal static class FemModelFileChecks
               vm.FemSectionProperties.Count == file.SectionProperties.Count && state.Cables.Count == 16 && state.AppliedPoints.Count == 11,
             $"the default model {FemModelFile.DefaultModelName} opens offline on 07 FEM with its geometry, properties and Tabs 01–05" +
             (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
-        Check(vm.RunFemAnalysis.CanExecute(null) && vm.FemStatus == "OFFLINE · READY",
-            $"the default model is ready to run ({vm.FemCandidateSummary})");
+        // Tabs 01–03 of the default model span 3 loadings × 6 heights × 1 pretension. That is the parametric study's space;
+        // Run Analysis is one run of the model itself: its own truss height, LL_ABOVE at the first value of its 5 … 10 kPa range.
+        Check(vm.RunFemAnalysis.CanExecute(null) && vm.FemStatus == "OFFLINE · READY" && state.Truss.CandidateCount == 6 &&
+              vm.FemRunSummary.StartsWith("1 FEM run", StringComparison.Ordinal) && vm.FemRunSummary.Contains("truss height 20 m", StringComparison.Ordinal) &&
+              vm.FemRunSummary.Contains("LL_ABOVE qz 5 kPa", StringComparison.Ordinal),
+            $"the default model is ready to run ({vm.FemRunSummary})");
         var runs = Analyze(vm);
-        // Every candidate is attempted offline; a candidate whose equilibrium does not solve is reported, as in a connected run.
-        var failed = vm.FemLog.Where(line => line.Contains(" · FAILED · ", StringComparison.Ordinal)).ToArray();
-        foreach (var line in failed) Console.WriteLine("  default model: " + line[10..]);
-        Check(warnings.Count == 0 && silent.Reads == 0 && runs.Count > 0 && runs.Count + failed.Length == 18 &&
-              vm.FemProgressText.StartsWith($"Completed {runs.Count} of 18", StringComparison.Ordinal),
-            $"the default case runs without SAP2000: {vm.FemProgressText}" + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
+        var midSpan = runs.SelectMany(run => run.Loads ?? []).Where(load => load.PointName == "TTrPt006").Select(load => load.FzKN).Order().ToArray();
+        Check(warnings.Count == 0 && silent.Reads == 0 && runs.Count == 1 && runs[0].Id == FemStudyService.ModelRunId && vm.FemCableFitRows.All(row => !row.Failed) &&
+              midSpan.SequenceEqual([-12000.0, -6000.0]) && vm.FemStatus == "ANALYSIS COMPLETE" && vm.FemMonitorProgressText == "Finished" &&
+              vm.FemProgressText.StartsWith("Analysis complete", StringComparison.Ordinal),
+            $"Run Analysis on the default model is one run of the model as defined, without SAP2000 (mid-span Fz {string.Join(" / ", midSpan)} kN): " +
+            vm.FemProgressText + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
+        RunLoadCases(vm, state, runs[0], warnings);
         RunVcfGeometry(vm, state, silent, warnings);
         RunVcfBays();
         RunVcfOptimization();
         RunMaterials();
         RunSections();
         RunCompositeSections();
+    }
+
+    /// <summary>Define → Load Cases on the default model: it opens on the app's default setup — SAP2000's staging for a cable
+    /// structure — which gives what the staged cases saved from SAP2000 give, and the cases can be defined in the app.</summary>
+    private static void RunLoadCases(MainViewModel vm, ApplicationState state, FemStudyRun defaultRun, List<string> warnings)
+    {
+        const string pretension = FemLoadPlan.DefaultPretensionCase, sls = FemLoadPlan.DefaultServiceCase, uls = FemLoadPlan.DefaultUltimateCase;
+        Check(vm.FemCaseRows.Select(row => (row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Source)).SequenceEqual([
+                  (pretension, "Nonlinear Static", "1 Pretension + 1 DEAD", "", true, "App"),
+                  (sls, "Nonlinear Static", "1 DEAD_ABOVE + 1 LL_ABOVE", pretension, true, "App"),
+                  (uls, "Nonlinear Static", "0.35 DEAD + 1.35 DEAD_ABOVE + 1.5 LL_ABOVE", pretension, true, "App")]) &&
+              vm.FemCombinationRows.Count == 0 && vm.FemPatternRows.Select(row => row.Name).SequenceEqual(["DEAD", "DEAD_ABOVE", "LL_ABOVE", "Pretension"]) &&
+              vm.HasSapLoadCases && vm.FemInitialCaseChoices.SequenceEqual(["", pretension, sls, uls]),
+            "the default model opens on the default load cases: Pretension = target force + SW, then SLS = + DL + LL and ULS = + 0.35 SW + 1.35 DL + 1.5 LL continue from it");
+        Check(defaultRun.Results!.Keys.SequenceEqual([pretension, sls, uls]) && defaultRun.Results.Values.All(result => result.TargetFitConverged) &&
+              defaultRun.Results[pretension].Cables.All(cable => cable.TargetForceKN <= 0 || Math.Abs(cable.AxialForceKN - cable.PretensionStageForceKN!.Value) < 1e-3) &&
+              defaultRun.Results[uls].MaximumDownwardDeflectionMm > defaultRun.Results[sls].MaximumDownwardDeflectionMm,
+            $"Run Analysis solves them staged: the cable targets are met in {pretension}, and δ grows from SLS to ULS " +
+            $"({defaultRun.Results[sls].MaximumDownwardDeflectionMm:0.0} → {defaultRun.Results[uls].MaximumDownwardDeflectionMm:0.0} mm)");
+
+        // SAP Cases: the load cases saved from SAP2000. Its staged cases are the ones the default setup copies.
+        vm.ApplySapFemLoadCases();
+        Check(vm.FemRuns.Count == 0 && vm.FemCaseRows.Count == 11 && vm.FemCaseRows.All(row => row.Source == "SAP") &&
+              vm.FemCaseRows.Single(row => row.Name == "NL ULS001: 1.35DL+1.5LL-staged") is { Definition: "1.35 DEAD_ABOVE + 1.5 LL_ABOVE + 0.35 DEAD", InitialCase: "Pretension" },
+            "SAP Cases shows the load cases saved from SAP2000 again (11, with its own staged cases) and clears the results");
+        var sapRun = Analyze(vm).Single();
+        bool Same(string appCase, string sapCase) =>
+            defaultRun.Results[appCase].Joints.Zip(sapRun.Results![sapCase].Joints).All(pair => Math.Abs(pair.First.UZM - pair.Second.UZM) < 1e-7 && Math.Abs(pair.First.UXM - pair.Second.UXM) < 1e-7) &&
+            defaultRun.Results[appCase].Cables.Zip(sapRun.Results[sapCase].Cables).All(pair => Math.Abs(pair.First.AxialForceKN - pair.Second.AxialForceKN) < 0.05) &&
+            defaultRun.Results[appCase].SupportReactions.Zip(sapRun.Results[sapCase].SupportReactions).All(pair => Math.Abs(pair.First.ReactionZKN - pair.Second.ReactionZKN) < 0.05);
+        Check(Same(pretension, "Pretension") && Same(sls, "NL SLS001: 1.0DL+1.0LL-staged") && Same(uls, "NL ULS001: 1.35DL+1.5LL-staged"),
+            "the default setup mimics SAP2000's: Pretension, SLS and ULS give the displacements, cable forces and reactions of SAP2000's Pretension and staged SLS / ULS cases");
+
+        // Default Setup again, then cases of one's own
+        vm.ApplyDefaultFemLoadCases();
+        var added = vm.AddFemLoadCase()!;
+        Check(vm.FemCaseRows.Count == 4 && ReferenceEquals(vm.SelectedFemCaseRow, added) && vm.FemInitialCaseChoices[^1] == "Case 1" &&
+              added is { Name: "Case 1", Type: "Nonlinear Static", Definition: "1 DEAD_ABOVE + 1 LL_ABOVE", InitialCase: pretension, Run: true, Source: "App" },
+            "+ Add defines a nonlinear static case with the Tab 01 loads, continuing from the pretension case");
+        added.Name = "Half live";
+        added.Definition = "1 DEAD_ABOVE + 0.5 LL_ABOVE";
+        var refusedName = false;
+        try { added.Name = sls; } catch (ArgumentException) { refusedName = true; }
+        var stage = vm.FemCaseRows[0];
+        stage.Name = "PT+SW stage";
+        Check(refusedName && added.Name == "Half live" && vm.FemCaseRows.Skip(1).All(row => row.InitialCase == "PT+SW stage") &&
+              vm.FemInitialCaseChoices.SequenceEqual(["", "PT+SW stage", sls, uls, "Half live"]),
+            "a case is renamed in the table (a name already taken is refused), and the cases that continue from a renamed case follow it");
+        Check(!vm.RemoveFemLoadCase(stage) && warnings.Count == 1 && warnings[0].Contains("is used by", StringComparison.Ordinal) && vm.FemCaseRows.Count == 4,
+            "- Remove keeps a case that others continue from: " + (warnings.Count > 0 ? warnings[0] : ""));
+        warnings.Clear();
+        var ownRun = Analyze(vm).Single();
+        double Peak(string name) => ownRun.Results![name].MaximumDownwardDeflectionMm;
+        Check(ownRun.Results!.Keys.SequenceEqual(["PT+SW stage", sls, uls, "Half live"]) && Peak("Half live") < Peak(sls) && Peak("Half live") > Peak("PT+SW stage") &&
+              Math.Abs(Peak(sls) - defaultRun.Results[sls].MaximumDownwardDeflectionMm) < 1e-6,
+            $"a case defined in the app is solved with the others: half the live load deflects less than SLS ({Peak("Half live"):0.0} < {Peak(sls):0.0} mm)");
+
+        var path = Path.Combine(Path.GetTempPath(), $"cotvcf-cases-{Guid.NewGuid():N}{FemModelFile.Extension}");
+        try
+        {
+            vm.SaveFemModelFileAsync(path).GetAwaiter().GetResult();
+            var (reopened, _, _, reopenWarnings) = DefaultModelApp();
+            reopened.OpenFemModelFile(path);
+            Check(reopenWarnings.Count == 0 && reopened.FemCaseRows.Select(row => (row.Name, row.Definition, row.InitialCase, row.Source))
+                      .SequenceEqual(vm.FemCaseRows.Select(row => (row.Name, row.Definition, row.InitialCase, row.Source))) &&
+                  reopened.FemInitialCaseChoices.SequenceEqual(["", "PT+SW stage", sls, uls, "Half live"]),
+                "the load cases defined in the app are saved with the model and loaded again");
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+
+        Check(vm.RemoveFemLoadCase(added) && vm.FemCaseRows.Count == 3 && !vm.FemInitialCaseChoices.Contains("Half live") && warnings.Count == 0,
+            "- Remove deletes a case nothing depends on");
+        vm.ApplyDefaultFemLoadCases();
+        Check(vm.FemCaseRows.Select(row => row.Name).SequenceEqual([pretension, sls, uls]) && vm.FemRuns.Count == 0 &&
+              vm.FemProgressText.StartsWith("Default load cases defined", StringComparison.Ordinal),
+            "Default Setup puts the default load cases back: " + vm.FemProgressText);
+
+        // The flow: define a load pattern → assign its load (Define → Loading) → use it in a load case → Run
+        var sdl = vm.AddFemLoadPattern(" SDL_ABOVE ", "Dead");
+        Check(vm.CanDefineLoadPatterns && sdl is { Name: "SDL_ABOVE", Type: "Dead", SelfWeightMultiplier: 0, Role: "", Loads: "none" } &&
+              state.LoadPatterns.Contains("SDL_ABOVE") && vm.FemPatternRows.Count == 5 && warnings.Count == 0,
+            "Define → Load Patterns adds a load pattern to the model; it carries nothing until a load is assigned to it");
+        Check(vm.AddFemLoadPattern("sdl_above", "Dead") is null && vm.AddFemLoadPattern("A + B", "Dead") is null && vm.AddFemLoadPattern("", "Dead") is null &&
+              warnings.Count == 3 && vm.FemPatternRows.Count == 5,
+            "a pattern name that is taken, holds ' + ' or is empty is refused: " + string.Join(" | ", warnings));
+        warnings.Clear();
+        state.LoadDefinitions.Add(new LoadDefinition { LoadName = "SDL_ABOVE", Qz = 2 });
+        vm.Update();
+        Check(sdl is { Role: "Tab 01 loads", Loads: "+ Tab 01 loads" } && vm.FemPatternRows.Single(row => row.Name == "DEAD") is { Role: "Self-weight", Loads: "self-weight" } &&
+              vm.FemPatternRows.Single(row => row.Name == "Pretension").Role == "Tab 03 cable target force",
+            "a load row of Define → Loading on the pattern gives it its load; the table says what each pattern carries now");
+        var sdlCase = vm.AddFemLoadCase()!;
+        sdlCase.Name = "SDL";
+        sdlCase.Definition = "1 SDL_ABOVE";
+        var sdlRun = Analyze(vm).Single();
+        double Rz(string name) => sdlRun.Results![name].SupportReactions.Sum(reaction => reaction.ReactionZKN);
+        var sdlTotal = 2.0 * (100 * 12) * 10;     // qz 2 kPa × (100 m × B 12 m) × 10 storeys
+        Check(sdlCase.InitialCase == pretension && Math.Abs(Rz("SDL") - Rz(pretension) - sdlTotal) < 1e-3 * sdlTotal,
+            $"a load case with the new pattern, continuing from Pretension, carries its load: ΣRz grows by {Rz("SDL") - Rz(pretension):0} kN = 2 kPa × 1,200 m² × 10 storeys");
+        vm.ApplyDefaultFemLoadCases();
+        Check(vm.FemCaseRows.Select(row => row.Definition).SequenceEqual(["1 Pretension + 1 DEAD", "1 DEAD_ABOVE + 1 LL_ABOVE + 1 SDL_ABOVE",
+                  "0.35 DEAD + 1.35 DEAD_ABOVE + 1.5 LL_ABOVE + 1.35 SDL_ABOVE"]),
+            "Default Setup takes the new pattern into SLS and ULS, factored as dead load by its type");
+        Check(!vm.RemoveFemLoadPattern(sdl) && warnings.Count == 1 && warnings[0].Contains("01 Loading", StringComparison.Ordinal) && warnings[0].Contains("load case", StringComparison.Ordinal),
+            "- Remove keeps a load pattern that is in use: " + (warnings.Count > 0 ? warnings[0] : ""));
+        warnings.Clear();
+        state.LoadDefinitions.Remove(state.LoadDefinitions.Single(definition => definition.LoadName == "SDL_ABOVE"));
+        vm.ApplyDefaultFemLoadCases();
+        Check(vm.RemoveFemLoadPattern(sdl) && !state.LoadPatterns.Contains("SDL_ABOVE") && vm.FemPatternRows.Count == 4 && warnings.Count == 0 &&
+              vm.FemCaseRows[2].Definition == "0.35 DEAD + 1.35 DEAD_ABOVE + 1.5 LL_ABOVE",
+            "once nothing uses it the pattern is removed, and the default cases are the three again");
+
+        // Edit → VCF System → Cable Force: the target force of the model's cables
+        var leader = state.Cables.Single(cable => cable.CableName == "Cable1a-2");
+        vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable1a-2"] = 90_000, ["Cable1b-2"] = 1 });
+        var forceRun = Analyze(vm).Single();
+        double Target(string cable) => forceRun.Results![pretension].Cables.Single(item => item.MemberName == cable).TargetForceKN;
+        double Stage(string cable) => forceRun.Results![pretension].Cables.Single(item => item.MemberName == cable).AxialForceKN;
+        Check(leader is { ApplyRange: false, TargetForce: 90_000.0 } && Target("Cable1a-2") == 90_000 && Target("Cable1b-2") == 90_000 &&
+              Math.Abs(Stage("Cable1a-2") - 90_000) < 0.1 * 90_000 && Target("Cable2a-2") == 30_000,
+            $"a target force set for a cable is the one Run meets in Pretension (Cable1a-2 {Stage("Cable1a-2"):0} kN for 90,000); its follower Cable1b-2 keeps following, the other cables keep theirs");
+        vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable1a-2"] = 100_000 });
+
+        // Run asks which load cases to analyse; without Run Now nothing starts
+        var asked = 0;
+        vm.ChooseFemLoadCases = () => { asked++; return false; };
+        vm.RunFemAnalysis.Execute(null);
+        Check(asked == 1 && vm.FemRuns.Count == 0 && vm.RunFemAnalysis.CanExecute(null),
+            "Run opens the choice of load cases first; leaving it without Run Now starts no analysis");
+        vm.ChooseFemLoadCases = null;
     }
 
     /// <summary>CFT and steel encased frame sections: parts, transformed properties, cost per metre, the FEM members that take
@@ -355,7 +508,7 @@ internal static class FemModelFileChecks
               VcfGeometry.Validate(analysis, edited with { BayWidth = 0 }).Count == 1,
             "VCF Geometry refuses a middle chord outside the truss, a back-stay above the bottom chord and a zero bay");
 
-        var candidates = vm.FemCandidateSummary;
+        var heights = state.Truss.CandidateCount;
         var megaColumn = vm.FemSectionProperties.First(property => property.MemberName == "170");
         vm.ApplyVcfGeometryAsync(geometry, new Dictionary<string, string>(StringComparer.Ordinal) { ["VRM001"] = megaColumn.SectionName! })
             .GetAwaiter().GetResult();
@@ -363,13 +516,14 @@ internal static class FemModelFileChecks
         Check(warnings.Count == 0 && Near(state.Geometry.Points["TTrPt001"].Position.Z, 27) && Near(state.Baseline.Points["TTrPt001"].Position.X, -55) &&
               state.AppliedPoints.Single(point => point.PointName == "TTrPt001") is { } loaded && Near(loaded.X, -55) && Near(loaded.Z, 27) &&
               vrm001.SectionName == megaColumn.SectionName && Near(vrm001.AreaM2, megaColumn.AreaM2) && vrm001.EndRotationReleases == "None" &&
-              state.BaselineCaptured && vm.FemCandidateSummary == candidates && vm.FemRuns.Count == 0 && vm.IsOfflineModel,
-            "Apply writes the geometry, the loading points and the chosen section to the working model; the candidate space is kept" +
+              state.BaselineCaptured && state.Truss.CandidateCount == heights && vm.FemRuns.Count == 0 && vm.IsOfflineModel &&
+              vm.FemRunSummary.Contains("truss height 25 m", StringComparison.Ordinal),
+            "Apply writes the geometry, the loading points and the chosen section to the working model; the Tab 02 height range follows the new height" +
             (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
         var runs = Analyze(vm);
-        Check(warnings.Count == 0 && silent.Reads == 0 && runs.Count > 0 &&
+        Check(warnings.Count == 0 && silent.Reads == 0 && runs.Count == 1 &&
               runs[0].Result.Joints.Any(joint => joint.PointName == "TTrPt001"),
-            $"FEM runs on the edited VCF geometry without SAP2000 ({runs.Count} candidates)");
+            $"Run Analysis solves the edited VCF geometry without SAP2000 · {vm.FemProgressText}");
     }
 
     private static bool Near(double a, double b) => Math.Abs(a - b) < 1e-6;
@@ -421,8 +575,8 @@ internal static class FemModelFileChecks
             "Apply with 12 bays of 12.5 m: loading points, chord groups, Tab 03 cables (new fan cables copy their template), member properties and output lists follow" +
             (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
         var runs = Analyze(vm);
-        Check(warnings.Count == 0 && silent.Reads == 0 && runs.Count > 0 && runs[0].Result.Cables.Any(cable => cable.MemberName == "Cable9a-2"),
-            $"FEM runs on 12 bays ({runs.Count} candidates, the new fan cables carry force) · {vm.FemCandidateSummary}");
+        Check(warnings.Count == 0 && silent.Reads == 0 && runs.Count == 1 && runs[0].Result.Cables.Any(cable => cable.MemberName == "Cable9a-2"),
+            $"Run Analysis solves the 12-bay model (the new fan cables carry force) · {vm.FemRunSummary} · {vm.FemProgressText}");
         var path = Path.Combine(Path.GetTempPath(), $"cotvcf-bays-{Guid.NewGuid():N}{FemModelFile.Extension}");
         try
         {
@@ -443,7 +597,7 @@ internal static class FemModelFileChecks
         Check(warnings8.Count == 0 && state8.Geometry.Points.ContainsKey("TTrPt009") && !state8.Geometry.Points.ContainsKey("TTrPt010") &&
               state8.Cables.Count == 14 && state8.Cables.All(c => c.CableName is not ("Cable6a-2" or "Cable6b-2")) &&
               state8.Cables.Where(c => c.ReferenceCableName is not null).All(c => state8.Cables.Any(other => other.CableName == c.ReferenceCableName)) &&
-              vm8.FemCandidateSummary.Contains("FEM runs", StringComparison.Ordinal) && vm8.RunFemAnalysis.CanExecute(null),
+              vm8.FemRunSummary.StartsWith("1 FEM run", StringComparison.Ordinal) && vm8.RunFemAnalysis.CanExecute(null),
             "8 bays: the outer fan cables (Cable6a/6b) are removed with their Tab 03 rows; cables that followed them become independent; FEM is ready" +
             (warnings8.Count > 0 ? " — " + string.Join(" | ", warnings8) : ""));
     }
@@ -458,12 +612,11 @@ internal static class FemModelFileChecks
         var cables = state.Cables.Where(cable => !cable.IsFollower).ToDictionary(cable => cable.CableName, cable => VcfOptimization.CableRange(cable)!, StringComparer.Ordinal);
         var live = state.LoadDefinitions.Single(load => load.ApplyIncrementStep);
         var dead = state.LoadDefinitions.Single(load => !load.ApplyIncrementStep);
-        // one Tab 02 height step above the baseline (H02): the baseline itself (H01) does not reach equilibrium in the
-        // internal FEM, in Run FEM Analysis as here
+        // a truss one Tab 02 height step deeper than the model, so the cases differ from the working model
         var depth = VcfRange.Fixed(analysis.Parameters.TrussDepth + state.Truss.Increment, 0.5);
-        VcfOptimizationSettings Settings(VcfRange bays, VcfRange bay, VcfRange liveQz) => current with
+        VcfOptimizationSettings Settings(VcfRange bays, VcfRange bay, VcfRange liveQz, VcfRange? trussDepth = null) => current with
         {
-            Geometry = new Dictionary<string, VcfRange>(current.Geometry) { ["Bays"] = bays, ["Bay"] = bay, ["Depth"] = depth },
+            Geometry = new Dictionary<string, VcfRange>(current.Geometry) { ["Bays"] = bays, ["Bay"] = bay, ["Depth"] = trussDepth ?? depth },
             CableForces = cables,
             StoreyLoads = new Dictionary<string, VcfRange>(StringComparer.Ordinal)
             {
@@ -484,6 +637,14 @@ internal static class FemModelFileChecks
               vm.VcfOptimizationBest.Contains("case 1", StringComparison.Ordinal),
             $"Run Optimization analyses every case (4) and reports its max deflection: wider bays and more live load deflect more ({Defl(1):0.0} … {Defl(4):0.0} mm); the least is named");
 
+        // the study case that takes every input at the model's own value is the run of Run FEM Analysis: one model, two entries
+        var modelRun = Analyze(vm).Single();
+        var modelMax = modelRun.Results!.Values.SelectMany(result => result.Joints).Max(joint => -joint.UZM * 1000);
+        var modelCase = Optimize(vm, Settings(VcfRange.Fixed(10, 1), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1),
+            VcfRange.Fixed(analysis.Parameters.TrussDepth, 0.5))).Single();
+        Check(modelCase.MaxDeflectionMm is { } caseMax && Math.Abs(caseMax - modelMax) < 1e-6 && modelCase.Status.StartsWith("Analysed", StringComparison.Ordinal),
+            $"Run FEM Analysis is the one run of the model ({modelMax:0.000} mm); the Optimization VCF case at the model's own values gives the same ({modelCase.Deflection} mm)");
+
         // the same geometry applied with Edit → VCF Geometry and analysed with Run FEM Analysis gives the same deflection
         var (applied, appliedState, _, _) = DefaultModelApp();
         var deeper = analysis.Parameters with { TrussDepth = depth.Min, MiddleChordHeight = VcfOptimization.MiddleChordRatio * depth.Min };
@@ -496,8 +657,8 @@ internal static class FemModelFileChecks
             $"A case ({Defl(2):0.000} mm) matches Run FEM Analysis on the same geometry applied with Edit -> VCF Geometry " +
             $"(FEM max deflections {string.Join(", ", femMax.Select(value => value.ToString("0.000")))})");
 
-        // the deflection read from the SLS load case, checked against span / 250
-        const string sls = "NL SLS001: 1.0DL+1.0LL";
+        // the deflection read from the SLS load case — the default setup's staged SLS — checked against span / 250
+        const string sls = FemLoadPlan.DefaultServiceCase;
         var (slsCases, slsCombinations) = vm.VcfDeflectionResults();
         var slsRows = Optimize(vm, Settings(VcfRange.Fixed(10, 1), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1)) with { DeflectionResult = sls, SpanRatio = 250 });
         var slsFem = appliedRuns.Where(run => run.Results?.ContainsKey(sls) == true)

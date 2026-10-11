@@ -29,11 +29,13 @@ public partial class MainWindow : Window
 
         DataContextChanged += (_, e) =>
         {
-            if (e.OldValue is MainViewModel old) old.FemAnalysisStarted -= OpenFemMonitor;
+            if (e.OldValue is MainViewModel old) { old.FemAnalysisStarted -= OpenFemMonitor; old.ChooseFemLoadCases = null; }
             if (DataContext is MainViewModel vm)
             {
                 vm.CommitEditors = CommitEditors;
                 vm.FemAnalysisStarted += OpenFemMonitor;
+                // Run opens Set Load Cases to Run first; the analysis starts on Run Now
+                vm.ChooseFemLoadCases = () => new RunLoadCasesWindow(vm) { Owner = this }.ShowDialog() == true;
             }
         };
         Loaded += (_, _) => ApplyViewerLayout();
@@ -96,7 +98,11 @@ public partial class MainWindow : Window
         bool valid = LoadDefinitionsGrid.CommitEdit(DataGridEditingUnit.Cell, true) &&
             LoadDefinitionsGrid.CommitEdit(DataGridEditingUnit.Row, true) &&
             Cables.CommitEdit(DataGridEditingUnit.Cell, true) &&
-            Cables.CommitEdit(DataGridEditingUnit.Row, true);
+            Cables.CommitEdit(DataGridEditingUnit.Row, true) &&
+            FemPatternRowsGrid.CommitEdit(DataGridEditingUnit.Cell, true) &&
+            FemPatternRowsGrid.CommitEdit(DataGridEditingUnit.Row, true) &&
+            FemCaseRowsGrid.CommitEdit(DataGridEditingUnit.Cell, true) &&
+            FemCaseRowsGrid.CommitEdit(DataGridEditingUnit.Row, true);
         bool hiddenErrors = WorkflowTabs.Items.OfType<TabItem>().Any(tab => tab.Content is DependencyObject content && HasErrors(content));
         if (valid && !HasErrors(this) && !hiddenErrors) return true;
         MessageBox.Show(this, "Correct the highlighted numeric inputs before continuing.", "Review inputs", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -253,8 +259,67 @@ public partial class MainWindow : Window
 
     private void MbMenu_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is MainViewModel vm && MenuTag(sender) is >= 0 and var tab) vm.SelectedTab = tab;
+        if (DataContext is MainViewModel vm && MenuTag(sender) is >= 0 and var tab)
+        {
+            vm.LoadingFromDefine = false;
+            vm.SelectedTab = tab;
+        }
         OpenPane();
+    }
+
+    // Define → Loading: the loads of the model are the ones of 01 Loading (applied points, qz per load pattern, B, storeys)
+    private void DefineLoading_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        vm.LoadingFromDefine = true;
+        vm.SelectedTab = 0;
+        OpenPane();
+    }
+
+    // Define → Load Cases: Default Setup / SAP Cases replace the table, so they ask first when it holds something else
+    private void DefaultLoadCases_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (vm.FemCaseRows.Count > 0 && MessageBox.Show(this,
+                "Replace the load cases and combinations with the default setup?\n\n" +
+                "Pretension (cable target forces + self-weight) first, then SLS and ULS continuing from it with the Tab 01 loads.",
+                "Default Load Cases", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        vm.ApplyDefaultFemLoadCases();
+    }
+
+    private void SapLoadCases_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (vm.FemCaseRows.Count > 0 && MessageBox.Show(this,
+                "Replace the load cases and combinations with the ones saved from SAP2000?",
+                "SAP2000 Load Cases", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        vm.ApplySapFemLoadCases();
+    }
+
+    private void AddLoadCase_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || vm.AddFemLoadCase() is not { } row) return;
+        FemCaseRowsGrid.UpdateLayout();
+        FemCaseRowsGrid.ScrollIntoView(row);
+    }
+
+    private void RemoveLoadCase_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm) vm.RemoveFemLoadCase(vm.SelectedFemCaseRow);
+    }
+
+    // Define → Load Patterns: the name and type typed beside + Add become a pattern of the model
+    private void AddLoadPattern_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || vm.AddFemLoadPattern(NewPatternName.Text, NewPatternType.Text) is not { } row) return;
+        NewPatternName.Clear();
+        FemPatternRowsGrid.SelectedItem = row;
+        FemPatternRowsGrid.ScrollIntoView(row);
+    }
+
+    private void RemoveLoadPattern_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm) vm.RemoveFemLoadPattern(FemPatternRowsGrid.SelectedItem as FemPatternRow);
     }
 
     private void FemPaneMenu_Click(object sender, RoutedEventArgs e)

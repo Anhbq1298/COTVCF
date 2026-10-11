@@ -39,8 +39,18 @@ public sealed record SapFemLoading(
 public sealed class FemPatternRow(string name, string type, double selfWeightMultiplier, string role, string loads) : Observable
 {
     private double selfWeightMultiplier = selfWeightMultiplier;
+    private string type = type, role = role, loads = loads;
     public string Name { get; } = name;
-    public string Type { get; } = type;
+    /// <summary>Dead, Live, Other … — the default load cases factor a Tab 01 pattern as dead or live by it.</summary>
+    public string Type
+    {
+        get => type;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value)) throw new ArgumentException("Enter a type, e.g. Dead, Live or Other.");
+            Set(ref type, value.Trim());
+        }
+    }
     /// <summary>Factor on member self-weight (γ·A·weight modifier) applied as gravity in this pattern.</summary>
     public double SelfWeightMultiplier
     {
@@ -51,15 +61,33 @@ public sealed class FemPatternRow(string name, string type, double selfWeightMul
             Set(ref selfWeightMultiplier, value);
         }
     }
-    public string Role { get; } = role;
-    public string Loads { get; } = loads;
+    /// <summary>What the pattern is used for now, and the loads it carries (<see cref="FemLoadPlan.Describe"/>).</summary>
+    public string Role { get => role; set => Set(ref role, value); }
+    public string Loads { get => loads; set => Set(ref loads, value); }
 }
 
 public abstract class FemDefinitionRow(string name, string type, string definition, bool run, bool supported, string source, string note) : Observable
 {
+    private string name = name;
     private string definition = definition;
     private bool run = run && supported;
-    public string Name { get; } = name;
+    /// <summary>Set by the owner of the table: what is wrong with a new name for this row (taken, …), or null.</summary>
+    public Func<FemDefinitionRow, string, string?>? NameProblem { get; set; }
+    /// <summary>Set by the owner of the table: called after a rename with the previous name, so references can follow.</summary>
+    public Action<FemDefinitionRow, string>? Renamed { get; set; }
+    public string Name
+    {
+        get => name;
+        set
+        {
+            var next = (value ?? "").Trim();
+            if (next == name) return;
+            if ((FemLoadPlan.NameProblem(next) ?? NameProblem?.Invoke(this, next)) is { } problem) throw new ArgumentException(problem);
+            var previous = name;
+            Set(ref name, next);
+            Renamed?.Invoke(this, previous);
+        }
+    }
     public string Type { get; } = type;
     /// <summary>Factored list, e.g. "1.2 DEAD + 1.5 LIVE". Names are checked when the FEM run starts.</summary>
     public string Definition
@@ -81,8 +109,18 @@ public abstract class FemDefinitionRow(string name, string type, string definiti
 public sealed class FemCaseRow(string name, string type, string definition, string? initialCase, bool run, bool supported, string source, string note)
     : FemDefinitionRow(name, type, definition, run, supported, source, note)
 {
+    private string initialCase = FemLoadPlan.IsNoInitialCase(initialCase) ? "" : initialCase!.Trim();
     /// <summary>Nonlinear static case it continues from (its loads are included cumulatively); empty when it starts unstressed.</summary>
-    public string InitialCase { get; } = FemLoadPlan.IsNoInitialCase(initialCase) ? "" : initialCase!.Trim();
+    public string InitialCase
+    {
+        get => initialCase;
+        set
+        {
+            var next = FemLoadPlan.IsNoInitialCase(value) ? "" : value.Trim();
+            if (next.Equals(Name, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("A case cannot continue from itself.");
+            Set(ref initialCase, next);
+        }
+    }
 }
 
 public sealed class FemCombinationRow(string name, string type, string definition, bool run, bool supported, string source, string note)
@@ -387,10 +425,133 @@ public sealed class FemLoadPlan
         return all;
     }
 
+    // ---- Default setup: the load cases SAP2000 needs for a cable structure, defined by the app ----
+    public const string DefaultPretensionCase = "Pretension";
+    public const string DefaultServiceCase = "SLS: 1.0DL+1.0LL";
+    public const string DefaultUltimateCase = "ULS: 1.35DL+1.5LL";
+    public const string DefaultSelfWeightPattern = "SW";
+    public const string StagedCaseType = "Nonlinear Static";
+    public const double UltimateDeadFactor = 1.35, UltimateLiveFactor = 1.5;
+    private const string Tab01Role = "Tab 01 loads", PretensionRole = "Tab 03 cable target force", SelfWeightRole = "Self-weight";
+
+    /// <summary>The problem with a name for a load pattern or case, or null. ' + ' and ' - ' separate definition terms.</summary>
+    public static string? NameProblem(string? name) =>
+        string.IsNullOrWhiteSpace(name) ? "Enter a name."
+        : name.Contains(" + ", StringComparison.Ordinal) || name.Contains(" - ", StringComparison.Ordinal)
+            ? "A name cannot contain ' + ' or ' - ': they separate the terms of a definition."
+        : null;
+
     /// <summary>
-    /// Editable rows from a SAP read. If no SAP case includes the Tab 03 target-force pattern, an app case FEM_PT (that
-    /// pattern alone) is added; if none includes a Tab 01 pattern, FEM_TAB01 is added continuing from the pretension
-    /// case, so the study loads always reach the results on the prestressed structure.
+    /// The load case setup of a SAP2000 model of a cable structure, as the app's own default — the same staging, solved by
+    /// the internal FEM. The cables come first: <c>Pretension</c> is a nonlinear static case with the cable target forces
+    /// and the self-weight, where the targets are met. The loaded cases continue from that state: <c>SLS</c> adds the
+    /// Tab 01 loads (1.0 each), <c>ULS</c> adds them factored (1.35 dead, 1.5 live) plus 0.35 of the self-weight, which
+    /// takes the 1.0 already on the structure to 1.35. Patterns the table does not list yet are added: the Tab 01 and
+    /// Tab 03 patterns, and a self-weight pattern when none carries self-weight.
+    /// </summary>
+    public static (IReadOnlyList<FemPatternRow> Patterns, IReadOnlyList<FemCaseRow> Cases) DefaultSetup(
+        IReadOnlyList<FemPatternRow> patterns, IReadOnlyCollection<string> tab01PatternNames, IReadOnlyCollection<string> pretensionPatternNames)
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var rows = patterns.ToList();
+        bool Listed(string name) => rows.Any(row => comparer.Equals(row.Name, name));
+        foreach (var name in pretensionPatternNames.Where(name => !Listed(name)).ToArray())
+            rows.Add(new FemPatternRow(name, "Other", 0, PretensionRole, "target forces"));
+        foreach (var name in tab01PatternNames.Where(name => !Listed(name)).ToArray())
+            rows.Add(new FemPatternRow(name, IsLive("", name) ? "Live" : "Dead", 0, Tab01Role, "Tab 01 loads"));
+        if (rows.All(row => row.SelfWeightMultiplier == 0))
+            rows.Insert(0, new FemPatternRow(Unique(DefaultSelfWeightPattern, rows.Select(row => row.Name)), "Dead", 1, SelfWeightRole, "self-weight"));
+
+        var cases = new List<FemCaseRow>();
+        var stage = PretensionCase(rows, tab01PatternNames, pretensionPatternNames, []);
+        if (stage is not null) cases.Add(stage);
+        cases.AddRange(LoadedCases(rows, tab01PatternNames, pretensionPatternNames, stage?.Name, stage is null ? 0 : 1, cases.Select(row => row.Name)));
+        return (rows, cases);
+    }
+
+    /// <summary>What a load pattern is used for and the loads it carries now: the loads saved with the model (joint,
+    /// member), the self-weight, the loads of 01 Loading and the cable target forces of 03 Pretension.</summary>
+    public static (string Role, string Loads) Describe(SapFemLoading saved, string pattern, double selfWeightMultiplier,
+        IReadOnlyCollection<string> tab01PatternNames, IReadOnlyCollection<string> pretensionPatternNames)
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var tab01 = tab01PatternNames.Contains(pattern, comparer);
+        var pretension = pretensionPatternNames.Contains(pattern, comparer);
+        var joints = saved.JointLoads.Count(item => comparer.Equals(item.Pattern, pattern));
+        var members = saved.MemberLoads.Count(item => comparer.Equals(item.Pattern, pattern)) +
+            saved.MemberPointLoads.Count(item => comparer.Equals(item.Pattern, pattern)) +
+            saved.GravityLoads.Count(item => comparer.Equals(item.Pattern, pattern));
+        var loads = string.Join(" · ", new[]
+        {
+            joints > 0 ? $"{joints} joint" : null, members > 0 ? $"{members} member" : null,
+            selfWeightMultiplier != 0 ? "self-weight" : null, tab01 ? "+ Tab 01 loads" : null, pretension ? "target forces" : null
+        }.Where(item => item is not null));
+        return (tab01 ? Tab01Role : pretension ? PretensionRole : selfWeightMultiplier != 0 ? SelfWeightRole : "", loads.Length == 0 ? "none" : loads);
+    }
+
+    /// <summary>The pattern that carries the self-weight (not a Tab 01 or Tab 03 pattern), or null.</summary>
+    private static FemPatternRow? SelfWeightPattern(IReadOnlyList<FemPatternRow> patterns, IReadOnlyCollection<string> tab01, IReadOnlyCollection<string> pretension) =>
+        patterns.FirstOrDefault(row => row.SelfWeightMultiplier != 0 &&
+            !tab01.Contains(row.Name, StringComparer.OrdinalIgnoreCase) && !pretension.Contains(row.Name, StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>Live load by the pattern type, else by its name (LL…, …LIVE…); anything else is factored as dead load.</summary>
+    private static bool IsLive(string type, string name) =>
+        type.Contains("Live", StringComparison.OrdinalIgnoreCase) ||
+        !type.Contains("Dead", StringComparison.OrdinalIgnoreCase) &&
+        (name.StartsWith("LL", StringComparison.OrdinalIgnoreCase) || name.Contains("LIVE", StringComparison.OrdinalIgnoreCase));
+
+    private static string Unique(string name, IEnumerable<string> taken)
+    {
+        var used = taken.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unique = name;
+        for (var number = 2; used.Contains(unique); number++) unique = $"{name} ({number})";
+        return unique;
+    }
+
+    /// <summary>The pretension stage: the target-force patterns with the self-weight, or null without such a pattern.</summary>
+    private static FemCaseRow? PretensionCase(IReadOnlyList<FemPatternRow> patterns, IReadOnlyCollection<string> tab01,
+        IReadOnlyCollection<string> pretension, IEnumerable<string> takenNames)
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var terms = patterns.Where(row => pretension.Contains(row.Name, comparer)).Select(row => (row.Name, 1.0)).ToList();
+        if (terms.Count == 0) return null;
+        if (SelfWeightPattern(patterns, tab01, pretension) is { } selfWeight) terms.Add((selfWeight.Name, 1.0));
+        return new FemCaseRow(Unique(DefaultPretensionCase, takenNames), StagedCaseType, FemLoadDefinition.Format(terms), null, true, true, "App",
+            "Cable target forces met here, under the self-weight.");
+    }
+
+    /// <summary>SLS and ULS with the Tab 01 loads, continuing from <paramref name="stage"/> (the pretension case), which
+    /// already has <paramref name="carriedSelfWeight"/> × the self-weight on the structure.</summary>
+    private static IEnumerable<FemCaseRow> LoadedCases(IReadOnlyList<FemPatternRow> patterns, IReadOnlyCollection<string> tab01,
+        IReadOnlyCollection<string> pretension, string? stage, double carriedSelfWeight, IEnumerable<string> takenNames)
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var loads = patterns.Where(row => tab01.Contains(row.Name, comparer)).ToArray();
+        var selfWeight = SelfWeightPattern(patterns, tab01, pretension);
+        var taken = takenNames.ToList();
+        FemCaseRow? Case(string name, double total, double dead, double live, string limitState)
+        {
+            var own = Math.Round(total - carriedSelfWeight, 9);
+            var terms = new List<(string, double)>();
+            if (selfWeight is not null && own != 0) terms.Add((selfWeight.Name, own));
+            terms.AddRange(loads.Select(row => (row.Name, IsLive(row.Type, row.Name) ? live : dead)));
+            if (terms.Count == 0) return null;
+            var unique = Unique(name, taken);
+            taken.Add(unique);
+            var weight = selfWeight is null || own == 0 || carriedSelfWeight == 0 ? ""
+                : $" · self-weight {carriedSelfWeight:0.##} + {own:0.##} = {total:0.##}";
+            return new FemCaseRow(unique, StagedCaseType, FemLoadDefinition.Format(terms), stage, true, true, "App",
+                (stage is null ? limitState : $"{limitState}, continues from {stage}") + weight);
+        }
+        if (Case(DefaultServiceCase, 1, 1, 1, "Service") is { } service) yield return service;
+        if (Case(DefaultUltimateCase, UltimateDeadFactor, UltimateDeadFactor, UltimateLiveFactor, "Ultimate") is { } ultimate) yield return ultimate;
+    }
+
+    /// <summary>
+    /// Editable rows from a SAP read. What SAP's own cases leave out is added as in <see cref="DefaultSetup"/>: when no
+    /// SAP case includes the Tab 03 target-force pattern, the <c>Pretension</c> case (that pattern with the self-weight);
+    /// when none includes a Tab 01 pattern, <c>SLS</c> and <c>ULS</c> continuing from the pretension case — SAP's or the
+    /// added one — so the Tab 01 loads always reach the results on the prestressed structure.
     /// </summary>
     public static (IReadOnlyList<FemPatternRow> Patterns, IReadOnlyList<FemCaseRow> Cases, IReadOnlyList<FemCombinationRow> Combinations)
         RowsFromSap(SapFemLoading sap, IReadOnlyCollection<string> tab01PatternNames, IReadOnlyCollection<string> pretensionPatternNames)
@@ -400,18 +561,8 @@ public sealed class FemLoadPlan
         var pretension = pretensionPatternNames.ToHashSet(comparer);
         var patterns = sap.Patterns.Select(pattern =>
         {
-            var role = tab01.Contains(pattern.Name) ? "Tab 01 study loads" : pretension.Contains(pattern.Name) ? "Tab 03 cable target force" : "";
-            var joints = sap.JointLoads.Count(item => comparer.Equals(item.Pattern, pattern.Name));
-            var members = sap.MemberLoads.Count(item => comparer.Equals(item.Pattern, pattern.Name)) +
-                sap.MemberPointLoads.Count(item => comparer.Equals(item.Pattern, pattern.Name)) +
-                sap.GravityLoads.Count(item => comparer.Equals(item.Pattern, pattern.Name));
-            var summary = string.Join(" · ", new[]
-            {
-                joints > 0 ? $"{joints} joint" : null, members > 0 ? $"{members} member" : null,
-                pattern.SelfWeightMultiplier != 0 ? "self-weight" : null, tab01.Contains(pattern.Name) ? "+ Tab 01 per case" : null,
-                pretension.Contains(pattern.Name) ? "target forces" : null
-            }.Where(item => item is not null));
-            return new FemPatternRow(pattern.Name, pattern.Type, pattern.SelfWeightMultiplier, role, summary.Length == 0 ? "none" : summary);
+            var (role, loads) = Describe(sap, pattern.Name, pattern.SelfWeightMultiplier, tab01, pretension);
+            return new FemPatternRow(pattern.Name, pattern.Type, pattern.SelfWeightMultiplier, role, loads);
         }).ToList();
         var cases = sap.Cases.Select(item => new FemCaseRow(item.Name, item.Type,
             item.Loads.Count > 0 ? FemLoadDefinition.Format(item.Loads) : "", item.InitialCase,
@@ -421,27 +572,21 @@ public sealed class FemLoadPlan
 
         SapLoadCase? FirstCaseWith(HashSet<string> names) =>
             sap.Cases.FirstOrDefault(item => item.Supported && item.Loads.Any(load => names.Contains(load.Pattern)));
-        var existing = sap.Patterns.Select(pattern => pattern.Name).ToHashSet(comparer);
-        // Pretension stage: SAP's own case with the target-force pattern, or an app case with that pattern alone.
-        var pretensionCase = pretension.Count > 0 ? FirstCaseWith(pretension)?.Name : null;
-        if (pretension.Count > 0 && pretensionCase is null)
+        // Pretension stage: SAP's own case with the target-force pattern, or the default one (that pattern + self-weight).
+        var sapStage = pretension.Count > 0 ? FirstCaseWith(pretension) : null;
+        var stage = sapStage?.Name;
+        var selfWeight = SelfWeightPattern(patterns, tab01, pretension);
+        var carried = sapStage is null || selfWeight is null ? 0
+            : sapStage.Loads.Where(load => comparer.Equals(load.Pattern, selfWeight.Name)).Sum(load => load.Factor);
+        if (sapStage is null && PretensionCase(patterns, tab01, pretension, cases.Select(row => row.Name)) is { } added)
         {
-            var terms = pretension.Where(existing.Contains).Select(name => (name, 1.0)).ToArray();
-            if (terms.Length > 0)
-            {
-                cases.Add(new FemCaseRow("FEM_PT", "Nonlinear Static", FemLoadDefinition.Format(terms), null, true, true, "App",
-                    "Added: no SAP case includes the Tab 03 target-force pattern; the pretension is fitted here."));
-                pretensionCase = "FEM_PT";
-            }
+            cases.Add(added);
+            stage = added.Name;
+            carried = selfWeight is null ? 0 : 1;
         }
-        // Study loads continue from the pretension stage (prestressed, then loaded), as a staged nonlinear case.
+        // Tab 01 loads continue from the pretension stage (prestressed, then loaded), as staged nonlinear cases.
         if (tab01.Count > 0 && FirstCaseWith(tab01) is null)
-        {
-            var terms = tab01.Where(existing.Contains).Select(name => (name, 1.0)).ToArray();
-            if (terms.Length > 0)
-                cases.Add(new FemCaseRow("FEM_TAB01", "Nonlinear Static", FemLoadDefinition.Format(terms), pretensionCase, true, true, "App",
-                    "Added: no SAP case includes the Tab 01 load pattern; continues from the pretension stage."));
-        }
+            cases.AddRange(LoadedCases(patterns, tab01, pretension, stage, carried, cases.Select(row => row.Name)).ToArray());
         return (patterns, cases, combinations);
     }
 }

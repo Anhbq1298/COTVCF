@@ -2,8 +2,8 @@
         xmlns:p="clr-namespace:COT_VCF.Presentation"
         Title="Show Results" Icon="{x:Static p:AppIcon.Window}" Width="520" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
- <!-- Toolbar → Show Results: choose the candidate and load case / combination, then the output to draw on the model
-      view (same as the Result menu). Cable target fit is a table and opens the results table. -->
+ <!-- Toolbar → Show Results: choose the load case / combination, then the output to draw on the model view (same as
+      the Result menu). Cable target fit is a table and opens the results table. -->
  <Window.Resources>
   <Style TargetType="GroupBox">
    <Setter Property="Margin" Value="0,0,0,10"/>
@@ -17,15 +17,10 @@
   <GroupBox Header="Case">
    <Grid>
     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <TextBlock Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
     <ComboBox x:Name="LoadCasePicker" Grid.Column="1" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
               IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
               ToolTip="Load case or linear-additive combination shown on the model view and in the results table."/>
-    <TextBlock Grid.Row="1" Text="CANDIDATE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,6,10,0"/>
-    <ComboBox x:Name="CandidatePicker" Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" ItemsSource="{Binding FemRuns}" SelectedItem="{Binding SelectedFemRun}"
-              DisplayMemberPath="Id" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM result candidate"
-              ToolTip="A completed L/H/P internal FEM candidate."/>
    </Grid>
   </GroupBox>
   <GroupBox Header="Output">

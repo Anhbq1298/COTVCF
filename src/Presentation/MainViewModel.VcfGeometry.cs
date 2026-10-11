@@ -30,7 +30,7 @@ public sealed partial class MainViewModel
         IsBusy = true;
         try
         {
-            if (State.IsSapConnected && (FemSectionProperties.Count == 0 || FemPatternRows.Count == 0))
+            if (State.IsSapConnected && (femInputsOutdated || FemSectionProperties.Count == 0 || FemPatternRows.Count == 0))
             {
                 Message = "Reading sections and loading from SAP2000 before applying the VCF system (read-only)…";
                 await ReadAndDisplayFemPropertiesAsync(resetLoadRows: true);
@@ -100,7 +100,7 @@ public sealed partial class MainViewModel
 
             ClearFemResults();
             RegenerateStudyPreview();
-            FemProgressText = $"VCF system applied · {FemCandidateSummary}. Run Analysis uses the edited model; SAP2000 is unchanged.";
+            FemProgressText = "VCF system applied. Run Analysis solves the edited model; SAP2000 is unchanged.";
             Message = "VCF system applied to the working model (SAP2000 unchanged; Connect SAP restores the SAP model).";
         }
         catch (Exception ex)

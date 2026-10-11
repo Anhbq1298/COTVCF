@@ -28,7 +28,7 @@ public partial class DesignResultsWindow : Window
         Title = "Design Results — " + title;
         HeaderText.Text = title;
         BasisText.Text = $"{basis.DesignCode} · {basis.Method} · l0,y = {basis.EffectiveLengthY:0.###} m, l0,z = {basis.EffectiveLengthZ:0.###} m · " +
-                         $"FEM candidate {runId ?? "—"} · {basis.LoadCases.Count} load case(s)";
+                         $"{(runId is null ? "no FEM results" : "FEM analysis of the model")} · {basis.LoadCases.Count} load case(s)";
         var failed = results.Count(result => result.Status is "FAIL" or "ERROR");
         var check = results.Count(result => result.Status == "CHECK");
         CountText.Text = $"{results.Count} member(s): {results.Count - failed - check} OK · {check} detailing to check · {failed} failing";

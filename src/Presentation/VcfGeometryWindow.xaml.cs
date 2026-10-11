@@ -42,6 +42,7 @@ public partial class VcfGeometryWindow : Window
             GeometryGrid.Children.Clear(); GeometryGrid.RowDefinitions.Clear(); inputs.Clear();
             FrameGrid.Children.Clear(); FrameGrid.RowDefinitions.Clear(); roleSections.Clear(); roleCounts.Clear();
             working = null; topology = null;
+            cableForceEdits.Clear();
             CableGrid.Children.Clear(); CableGrid.RowDefinitions.Clear(); cableSections.Clear();
             try { analysis = VcfGeometry.Analyze(viewModel.State.Geometry, viewModel.State.Truss); }
             catch (Exception ex)
@@ -213,10 +214,38 @@ public partial class VcfGeometryWindow : Window
     }
 
     // ---- Cable Force / Storey Force panes ----
-    internal sealed record CableForceRow(string Cable, string Pattern, string Sync, string Force);
+    /// <summary>One cable on the Cable Force sheet. An independent cable of 03 Pretension takes a new target force
+    /// here; a follower keeps its sync rule, and a cable that is not on 03 Pretension has no target.</summary>
+    internal sealed class CableForceRow(string cable, string pattern, string sync, string force, bool editable, string hint, Action<string, double> edited) : Observable
+    {
+        private string force = force;
+        public string Cable { get; } = cable;
+        public string Pattern { get; } = pattern;
+        public string Sync { get; } = sync;
+        public bool Editable { get; } = editable;
+        public string Hint { get; } = hint;
+        /// <summary>The target force shown [kN]; typing a number stages it for Apply / OK.</summary>
+        public string Force
+        {
+            get => force;
+            set
+            {
+                if (value == force) return;
+                if (!Editable) throw new ArgumentException(Hint);
+                if (!double.TryParse(value, NumberStyles.Number, CultureInfo.CurrentCulture, out var kn) || !double.IsFinite(kn) || kn < 0)
+                    throw new ArgumentException("Enter the target force in kN, zero or greater.");
+                edited(Cable, kn);
+                Set(ref force, Kn(kn));
+            }
+        }
+    }
     internal sealed record StoreyForceRow(string Point, string X, string Area, IReadOnlyList<string> Forces);
 
-    private static string Kn(double value) => value.ToString("N0", CultureInfo.CurrentCulture);
+    /// <summary>Target forces typed on the Cable Force sheet and not applied yet (cable → kN).</summary>
+    private readonly Dictionary<string, double> cableForceEdits = new(StringComparer.Ordinal);
+    internal IReadOnlyDictionary<string, double> CableForceEdits => cableForceEdits;
+
+    private static string Kn(double value) => value.ToString("#,0.###", CultureInfo.CurrentCulture);
     private static string Range(IReadOnlyList<double> values) => values.Count == 0 ? "—"
         : values.Min() == values.Max() ? Kn(values[0]) : $"{Kn(values.Min())} … {Kn(values.Max())} ({values.Count})";
 
@@ -231,12 +260,25 @@ public partial class VcfGeometryWindow : Window
         {
             var added = topology is not null && topology.AddedCables.TryGetValue(name, out var template) ? template : null;
             var cable = cables.FirstOrDefault(item => item.CableName == (added ?? name));
-            if (cable is null) { rows.Add(new(name, "", "", "not on 03 Pretension")); continue; }
-            var forces = cable.IsFollower ? CableSyncGraph.ResolvedForces(cable, cables) : cable.GetCandidateForces();
-            rows.Add(new(name, cable.LoadPattern, cable.SyncSummary + (added is null ? "" : $" (new, as {added})"), Range(forces)));
+            if (cable is null) { rows.Add(new(name, "", "", "not on 03 Pretension", false, "Add the cable on 03 Pretension to give it a target force.", StageCableForce)); continue; }
+            var sync = cable.SyncSummary + (added is null ? "" : $" (new, as {added})");
+            if (added is not null)
+                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.TryGetValue(added, out var copied) ? Kn(copied) : Range(Forces(cable)), false,
+                    $"A new fan cable: it takes the target force of {added}.", StageCableForce));
+            else if (cable.IsFollower)
+                // a follower's value comes from its reference; once that is edited here the new value shows after Apply
+                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.ContainsKey(cable.ReferenceCableName ?? "") ? $"follows {cable.ReferenceCableName}" : Range(Forces(cable)), false,
+                    $"Follows {cable.ReferenceCableName}: edit that cable, or change the sync on 03 Pretension.", StageCableForce));
+            else
+                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.TryGetValue(name, out var typed) ? Kn(typed) : Range(Forces(cable)), true,
+                    cable.CandidateCount > 1 ? "A range of 03 Pretension: Run Analysis uses its first value. A value typed here makes the target fixed."
+                        : "Target force [kN] of this cable.", StageCableForce));
         }
         CableForceGrid.ItemsSource = rows;
-        CableForceSummary.Text = $"{rows.Count} cables · {rows.Count(row => row.Force.Contains('…'))} with a range of targets";
+        CableForceSummary.Text = $"{rows.Count} cables · {rows.Count(row => row.Force.Contains('…'))} with a range of targets" +
+            (cableForceEdits.Count == 0 ? "" : $" · {cableForceEdits.Count} edited, not applied yet");
+
+        IReadOnlyList<double> Forces(CablePretensionConfig cable) => cable.IsFollower ? CableSyncGraph.ResolvedForces(cable, cables) : cable.GetCandidateForces();
 
         // Storey force: the loaded points (all top chord points stay loaded when every one was), tributary length from the preview
         var applied = state.AppliedPoints.Select(point => point.PointName).ToArray();
@@ -284,6 +326,17 @@ public partial class VcfGeometryWindow : Window
                 $"{definition.LoadName} {(totals[d, 0] == totals[d, 1] ? Kn(totals[d, 0]) : $"{Kn(totals[d, 0])} … {Kn(totals[d, 1])}")} kN"));
     }
 
+    /// <summary>A target force typed on the sheet: kept until Apply / OK, and the rows that depend on it are shown again.</summary>
+    private void StageCableForce(string cable, double forceKN)
+    {
+        cableForceEdits[cable] = forceKN;
+        // redraw after the cell has finished its edit: followers and new fan cables of this cable change with it
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+        {
+            if (working is not null && preview is not null) ShowForces(working, preview);
+        }));
+    }
+
     internal IReadOnlyList<CableForceRow> CableForces => (IReadOnlyList<CableForceRow>?)CableForceGrid.ItemsSource ?? [];
     internal IReadOnlyList<StoreyForceRow> StoreyForces => (IReadOnlyList<StoreyForceRow>?)StoreyForceGrid.ItemsSource ?? [];
     /// <summary>Types into a geometry input (checks).</summary>
@@ -305,6 +358,8 @@ public partial class VcfGeometryWindow : Window
     internal async Task ApplyFormAsync()
     {
         if (analysis is null || FormParameters(out _) is not { } form) return;
+        // the cable targets first, so a new fan cable copies the edited value of the cable it is modelled on
+        viewModel.SetCableTargetForces(cableForceEdits.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
         await viewModel.ApplyVcfGeometryAsync(VcfGeometry.Build(working!, form), FormSections(), topology);
         LoadFromModel();
     }

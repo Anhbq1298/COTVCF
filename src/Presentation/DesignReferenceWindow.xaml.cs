@@ -106,7 +106,7 @@ public partial class DesignReferenceWindow : Window
         var ticked = (basis.LoadCases.Count > 0 ? basis.LoadCases : defaultCases).ToHashSet(StringComparer.Ordinal);
         cases = caseNames.Select(name => new CheckItem(name, "", ticked.Contains(name))).ToList();
         CaseList.ItemsSource = cases;
-        RunText.Text = runId is null ? "No FEM results — run the FEM analysis first." : $"Forces from FEM candidate {runId} (Result → Result Candidate).";
+        RunText.Text = runId is null ? "No FEM results — run the FEM analysis first." : "Forces from the FEM analysis of the model (Run → Run FEM Analysis).";
         Show(basis);
     }
 

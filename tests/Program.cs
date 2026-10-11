@@ -222,7 +222,7 @@ internal static class Program
                        FindVisuals<TextBlock>(window).Any(text => text.Text == "07  CABLE FORCES · kN"),
                     "Post-processing UI lists the result modules 01–07; the shortlist module is gone");
 
-                // 07 FEM (index 7) is split into menu panes: Define -> Sections / Load Patterns / Load Cases / Result Candidate,
+                // 07 FEM (index 7) is split into menu panes: Define -> Sections / Load Patterns / Load Cases / Result Load Case,
                 // Assign -> Joint Restraints, Run -> Analysis Options, Result -> outputs, Display -> View Options
                 void OpenMenu(string menu, string item)
                 {
@@ -307,6 +307,54 @@ internal static class Program
                 Assert(forcesWindow.StoreyForces[5].Area == "144" && forcesWindow.StoreyForces[5].Forces[0] == Kn(-14_400),
                     "Storey Force follows the previewed geometry (12 m bays: 144 m², −14,400 kN)");
                 forcesWindow.Close();
+                // Cable Force is where the target force of the model's cables is set: typed there, written on Apply
+                var (forceVm, forceState, _, _) = FemModelFileChecks.DefaultModelApp();
+                var forceWindow = new VcfGeometryWindow(forceVm) { Owner = window };
+                forceWindow.Show();
+                forceWindow.UpdateLayout();
+                var leaderRow = forceWindow.CableForces.Single(row => row.Cable == "Cable1a-2");
+                var followerRow = forceWindow.CableForces.Single(row => row.Cable == "Cable1b-2");
+                var followerRefused = false;
+                try { followerRow.Force = "1"; } catch (ArgumentException) { followerRefused = true; }
+                var badNumber = false;
+                try { leaderRow.Force = "-5"; } catch (ArgumentException) { badNumber = true; }
+                leaderRow.Force = "90000";
+                forceWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(leaderRow.Editable && !followerRow.Editable && followerRefused && badNumber && leaderRow.Force == Kn(90_000) &&
+                       forceWindow.CableForceEdits.Count == 1 && forceWindow.CableForceEdits["Cable1a-2"] == 90_000 &&
+                       forceWindow.CableForces.Single(row => row.Cable == "Cable1b-2").Force == "follows Cable1a-2" &&
+                       forceState.Cables.Single(cable => cable.CableName == "Cable1a-2").GetCandidateForces()[0] == 100_000,
+                    "Cable Force takes a target force for an independent cable (staged until Apply); a follower and a negative value are refused");
+                forceWindow.ApplyFormAsync().GetAwaiter().GetResult();
+                forceWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(forceState.Cables.Single(cable => cable.CableName == "Cable1a-2") is { ApplyRange: false, TargetForce: 90_000.0 } &&
+                       forceWindow.CableForceEdits.Count == 0 && forceWindow.CableForces.Single(row => row.Cable == "Cable1a-2").Force == Kn(90_000) &&
+                       forceWindow.CableForces.Single(row => row.Cable == "Cable1b-2").Force == Kn(90_000),
+                    "Apply writes the target force to the model: Cable1a-2 90,000 kN, and Cable1b-2 follows it");
+                forceWindow.Close();
+                // Run asks which load cases to analyse (Set Load Cases to Run)
+                var runCases = new RunLoadCasesWindow(forceVm) { Owner = window };
+                runCases.Show();
+                runCases.UpdateLayout();
+                var runItems = runCases.Items;
+                Assert(runItems.Select(item => (item.Name, item.From, item.Status, item.Action)).SequenceEqual([
+                           (FemLoadPlan.DefaultPretensionCase, "", "Not Run", "Run"), (FemLoadPlan.DefaultServiceCase, FemLoadPlan.DefaultPretensionCase, "Not Run", "Run"),
+                           (FemLoadPlan.DefaultUltimateCase, FemLoadPlan.DefaultPretensionCase, "Not Run", "Run")]) &&
+                       runCases.RunNowButton.IsEnabled && FindVisuals<DataGrid>(runCases).Single().Items.Count == 3,
+                    "Set Load Cases to Run lists the load cases — Pretension, then SLS and ULS continuing from it — with their status and action");
+                runCases.Toggle(runItems[1]);
+                var oneOff = runItems.Select(item => item.Action).ToArray();
+                runCases.ToggleAll();
+                var allOn = runItems.All(item => item.Run);
+                runCases.ToggleAll();
+                var noneOn = runItems.All(item => !item.Run) && !runCases.RunNowButton.IsEnabled && !runCases.RunNow();
+                Assert(oneOff.SequenceEqual(["Run", "Do Not Run", "Run"]) && allOn && noneOn && forceVm.FemCaseRows.All(row => row.Run),
+                    "Run/Do Not Run Case and Run/Do Not Run All change the action; nothing is kept until Run Now or OK, and Run Now needs a case set to Run");
+                runCases.Toggle(runItems[0]);
+                runCases.Toggle(runItems[2]);
+                Assert(runCases.RunNow() && forceVm.FemCaseRows.Select(row => row.Run).SequenceEqual([true, false, true]),
+                    "Run Now keeps the choice: the cases set to Run are the ones the analysis solves");
+                runCases.Close();
                 // Run -> Optimization VCF: min / max / step per geometry input, candidate sections, preview at a corner
                 Assert(new VcfRange(10, 14, 1.5).Values().SequenceEqual([10, 11.5, 13]) && new VcfRange(10, 13, 1.5).Values().SequenceEqual([10, 11.5, 13]) && new VcfRange(8, 8, 0).Count == 1 &&
                        new VcfRange(9, 8, 1).Problem() is not null && new VcfRange(2, 6, 0.5).Problem(whole: true) is not null,
@@ -355,9 +403,9 @@ internal static class Program
                 Assert(!optimization.OkButton.IsEnabled && optimization.ProblemText.Text.Contains("Tributary width B", StringComparison.Ordinal),
                     "A tributary width of zero is refused");
                 optimization.SetRange(VcfOptimization.TributaryKey, "min", "12", "storey");
-                Assert(optimization.DeflectionResultCombo.SelectedItem as string == "NL SLS001: 1.0DL+1.0LL" && optimization.SpanRatioBox.Text == "250" &&
-                       optimization.FormSettings() is { DeflectionResult: "NL SLS001: 1.0DL+1.0LL", SpanRatio: 250 },
-                    "The deflection check starts on the SLS load case and span / 250");
+                Assert(optimization.DeflectionResultCombo.SelectedItem as string == FemLoadPlan.DefaultServiceCase && optimization.SpanRatioBox.Text == "250" &&
+                       optimization.FormSettings() is { DeflectionResult: FemLoadPlan.DefaultServiceCase, SpanRatio: 250 },
+                    "The deflection check starts on the SLS load case of the default setup and span / 250");
                 optimization.SpanRatioBox.Text = "0";
                 Assert(!optimization.OkButton.IsEnabled && !optimization.RunButton.IsEnabled, "A span ratio of zero is refused");
                 optimization.SpanRatioBox.Text = "250";
@@ -544,11 +592,25 @@ internal static class Program
                 OpenMenu("Define", "Load Patterns");
                 Assert(vm.PaneTitle == "LOAD PATTERNS" && FindVisuals<DataGrid>(window).Any(grid => grid.IsVisible && ReferenceEquals(grid.ItemsSource, vm.FemPatternRows)),
                     "Define -> Load Patterns opens the load-pattern table");
+                Assert(window.NewPatternName.IsVisible && window.NewPatternType.IsVisible && window.NewPatternType.Text == "Dead" &&
+                       new[] { "Add load pattern", "Remove load pattern" }.All(name => FindVisuals<Button>(window).Any(button => button.IsVisible &&
+                           System.Windows.Automation.AutomationProperties.GetName(button) == name)) &&
+                       window.NewPatternName.IsEnabled == vm.CanDefineLoadPatterns,
+                    "Define -> Load Patterns defines the patterns of the model: a name, a type, + Add and - Remove (the model's own, not while SAP2000 is connected)");
                 OpenMenu("Define", "Load Cases");
                 Assert(vm.PaneTitle == "LOAD CASES / LOAD COMBINATIONS" &&
                        FindVisuals<DataGrid>(window).Any(grid => grid.IsVisible && ReferenceEquals(grid.ItemsSource, vm.FemCaseRows)) &&
                        FindVisuals<DataGrid>(window).Any(grid => grid.IsVisible && ReferenceEquals(grid.ItemsSource, vm.FemCombinationRows)),
                     "Define -> Load Cases / Load Combinations opens the case and combination tables");
+                Assert(new[] { "Default Setup", "SAP Cases", "+ Add", "- Remove" }.All(label => FindVisuals<Button>(window).Any(button => button.IsVisible && Equals(button.Content, label))) &&
+                       FindVisuals<Button>(window).Single(button => Equals(button.Content, "SAP Cases")).IsEnabled == vm.HasSapLoadCases &&
+                       FindVisuals<ComboBox>(window).All(combo => !combo.IsVisible || !ReferenceEquals(combo.ItemsSource, vm.FemInitialCaseChoices) || combo.DataContext is FemCaseRow),
+                    "Define -> Load Cases defines the cases in the app: Default Setup, SAP Cases (when the model holds SAP2000's), + Add and - Remove");
+                OpenMenu("Define", "Loading");
+                Assert(vm.SelectedTab == 0 && vm.PaneMenu == "Define" && vm.PaneTitle == "LOADING",
+                    "Define -> Loading opens the 01 Loading page as the load definition of the model");
+                OpenMenu("MB", "01  Loading");
+                Assert(vm.SelectedTab == 0 && vm.PaneMenu == "MB" && vm.PaneTitle == "01  LOADING", "MB -> 01 Loading opens the same page as the study tab");
                 OpenSubMenu("Assign", "Joint", "Restraints");
                 Assert(vm.PaneMenu == "Assign" && vm.FemPane == MainViewModel.FemPaneRestraints &&
                        FindVisuals<TextBlock>(window).Any(text => text.IsVisible && text.Text == vm.FemPinSupportSummary),
@@ -556,15 +618,15 @@ internal static class Program
                 OpenMenu("Run", "Analysis Options");
                 Assert(vm.PaneMenu == "Run" && vm.SelectedFemPage == MainViewModel.FemAnalysisPage &&
                        FindVisuals<Button>(window).Any(button => button.IsVisible && Equals(button.Content, "Run Analysis")) &&
-                       vm.FemCandidateSummary.Contains("FEM runs", StringComparison.Ordinal) &&
+                       FindVisuals<TextBlock>(window).Any(text => text.IsVisible && text.Text == vm.FemRunSummary) &&
                        window.SharedViewerPane.Visibility == Visibility.Visible,
-                    "Run -> Analysis Options holds the internal 2D frame analysis settings, the run controls and the candidate count");
+                    "Run -> Analysis Options holds the internal 2D frame analysis settings, the run controls and what the one run solves");
                 var sagBox = FindVisuals<CheckBox>(window).Single(box => Equals(box.Content, "Cable sag"));
                 Assert(vm.FemCableSag && sagBox.IsChecked == true, "Tab 07 Analysis analyses cable sag by default");
                 sagBox.IsChecked = false;
                 Assert(!vm.FemCableSag, "…and the Cable sag switch turns it off for a comparison with straight cables");
                 sagBox.IsChecked = true;
-                var demoFemRun = new FemStudyRun("L01_H01_P01", "L01", "H01", "P01",
+                var demoFemRun = new FemStudyRun(FemStudyService.ModelRunId, "", "", "",
                     new FemAnalysisResult(
                         [new("bot", 0, 0, 0), new("mid", 0.001, -0.02, 0.001), new("top", 0.002, -0.04, 0.002),
                          new("bot2", 0, 0, 0), new("mid2", 0.001, -0.02, 0.001)],
@@ -576,25 +638,27 @@ internal static class Program
                 Assert(TopMenu("Result").Items.OfType<MenuItem>().Select(item => (item.Header as string)?.Replace("_", ""))
                            .SequenceEqual(["Axial forces / cables", "Bending moments", "Shear forces", "Support reactions", "Deflection", "Cable target fit", "Show Results…", "Results Table…"]) &&
                        TopMenu("Result").Items.OfType<MenuItem>().All(item => item.IsEnabled),
-                    "The Result menu lists the six outputs and the results table, enabled once a candidate has results");
-                OpenMenu("Define", "Result Candidate");
-                Assert(vm.PaneTitle == "RESULT CANDIDATE / LOAD CASE" &&
-                       FindVisuals<ComboBox>(window).Any(combo => combo.IsVisible && System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result candidate") &&
+                    "The Result menu lists the six outputs and the results table, enabled once the run has results");
+                // Run Analysis is one run of the model: nowhere in the FEM results is there a candidate to choose
+                bool HasCandidatePicker(DependencyObject root) => FindVisuals<ComboBox>(root).Any(combo => ReferenceEquals(combo.ItemsSource, vm.FemRuns));
+                OpenMenu("Define", "Result Load Case");
+                Assert(vm.PaneTitle == "RESULT LOAD CASE" && !HasCandidatePicker(window) &&
                        FindVisuals<ComboBox>(window).Any(combo => combo.IsVisible && System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM load case or combination"),
-                    "Define -> Result Candidate / Load Case holds the candidate and load-case dropdowns");
+                    "Define -> Result Load Case holds the load-case dropdown and no candidate dropdown");
                 OpenMenu("Result", "Deflection");
                 Assert(vm.FemResultMode == FemResultMode.DeflectedShape && ReferenceEquals(vm.SelectedFemRun, demoFemRun) && vm.PaneMenu == "Result" &&
                        vm.PaneTitle == "DEFLECTION" && !FindVisuals<DataGrid>(window).Any(grid => grid.Name == "FemResultRowsGrid") &&
-                       window.SharedViewerPane.Visibility == Visibility.Visible && ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result),
-                    "Result -> Deflection selects the first completed candidate and draws the diagram without embedding a result table");
+                       window.SharedViewerPane.Visibility == Visibility.Visible && ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result) &&
+                       !vm.FemResultDiagramTitle.Contains(demoFemRun.Id, StringComparison.Ordinal),
+                    "Result -> Deflection draws the diagram of the run without embedding a result table");
                 Tool("Show Results").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var showResults = window.OwnedWindows.OfType<ShowResultsWindow>().Single();
                 showResults.UpdateLayout();
-                Assert(showResults.LoadCasePicker.IsVisible && showResults.CandidatePicker.IsVisible &&
+                Assert(showResults.LoadCasePicker.IsVisible && !HasCandidatePicker(showResults) &&
                        showResults.Outputs.Items.OfType<ListBoxItem>().Select(item => (string)item.Content)
                            .SequenceEqual(["Axial forces / cables", "Bending moments", "Shear forces", "Support reactions", "Deflection", "Cable target fit"]),
-                    "The Show Results tool opens a window with the load case / combo and candidate at the top and the six outputs below");
+                    "The Show Results tool opens a window with the load case / combo at the top and the six outputs below");
                 showResults.Outputs.SelectedIndex = 1;
                 showResults.ApplySelection();
                 Assert(vm.FemResultMode == FemResultMode.BendingMoment && vm.PaneTitle == "BENDING MOMENTS" && ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result),
@@ -645,10 +709,9 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var tableWindow = window.OwnedWindows.OfType<FemResultsWindow>().Single();
                 tableWindow.UpdateLayout();
-                Assert(FindVisuals<DataGrid>(tableWindow).Any(grid => grid.Name == "FemResultRowsGrid" && grid.Items.Count > 0) &&
-                       FindVisuals<ComboBox>(tableWindow).Any(combo => System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM result candidate") &&
+                Assert(FindVisuals<DataGrid>(tableWindow).Any(grid => grid.Name == "FemResultRowsGrid" && grid.Items.Count > 0) && !HasCandidatePicker(tableWindow) &&
                        FindVisuals<ComboBox>(tableWindow).Any(combo => System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM load case or combination"),
-                    "View Results opens a separate populated table with candidate and load-case dropdowns above it");
+                    "View Results opens a separate populated table with the load-case dropdown above it");
                 tableWindow.Close();
                 Assert(!FindVisuals<RadioButton>(window).Any(button => button.GroupName == "ViewerResultMode"),
                     "The model view has no floating result buttons — the result type is chosen in Show Results / the Result menu");

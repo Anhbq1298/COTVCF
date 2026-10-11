@@ -700,6 +700,30 @@ public sealed class PlanarFrameSolver
                 if (accepted) break;
             }
             if (!accepted)
+            {
+                // Next to the equilibrium a step changes the energy by less than the round-off of the energy sum, so the
+                // test above cannot confirm a Newton step that is right. The energy is convex — one equilibrium — so a
+                // full step that at least halves the residual is progress; convergence is still judged by the residual.
+                foreach (var shift in LevenbergShifts)
+                {
+                    var tangent = RegularizedTangent(stiffness, cableElements, activeCables, freeDofs, shift * maxDiagonal);
+                    double[] increment;
+                    try { increment = SolveSystem(tangent, residual.Select(value => -value).ToArray(), restrained); }
+                    catch (InvalidOperationException) { continue; }
+                    for (var index = 0; index < dofCount; index++) candidate[index] = displacement[index] + increment[index];
+                    if (candidate.Any(value => !double.IsFinite(value))) continue;
+                    var candidateActive = cableElements.Where(cable => CableForce(cable, candidate) > CableForceToleranceKN)
+                        .Select(cable => cable.Member.Name).ToHashSet(StringComparer.Ordinal);
+                    var (candidateStiffness, candidateRightHandSide) = Assemble(dofCount, frameElements, cableElements, candidateActive, external, candidate);
+                    var candidateResidual = Residual(candidateStiffness, candidateRightHandSide, candidate);
+                    if (freeDofs.Select(index => Math.Abs(candidateResidual[index])).DefaultIfEmpty().Max() <= 0.5 * residualNorm)
+                    {
+                        accepted = true;
+                        break;
+                    }
+                }
+            }
+            if (!accepted)
                 throw new InvalidOperationException($"Cable tension-only FEM line search stalled with residual {residualNorm:0.###} kN and {activeCables.Count} active cables.");
             displacement = candidate;
         }

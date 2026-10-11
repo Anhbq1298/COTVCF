@@ -99,22 +99,47 @@ The connected instance is worker 1 and processes candidates. The study pool borr
 
 ## Tab 7 — FEM
 
-Tab 7 runs every loading × truss-height × cable-pretension combination configured in Tabs 1–3. It uses the
-existing project configuration loaded through **Load Config**; the file picker starts in the repository
-`tests` folder when available. The example project file in that folder contains the input sections for all three
-candidate dimensions.
+**Run → Run FEM Analysis** solves the model once, as it is defined: its own geometry (no Tab 2 height change), the
+Tab 1 loads and the Tab 3 cable target forces. A range entered in Tab 1 or Tab 3 is an input of the parametric study,
+not of this run; it enters with its first value, and Run → Analysis Options names what the run uses. Many cases —
+other loadings, geometries, pretensions or sections — are the parametric study: **Run → Optimization VCF** with the
+internal solver, or the Tab 5 study with SAP2000.
 
-The analysis is internal and read-only with respect to SAP2000. **Read Properties** transfers each assigned
-frame/cable section, effective material (including the CSI `None` override sentinel), A, E, in-plane I, frame
-stiffness modifiers, and in-plane end releases into the FEM property grid before running. Isotropic materials use
-SAP's isotropic modulus API; tendon materials use the uniaxial modulus API. The results report peak downward
-joint displacement, axial force, bending moment, and support reaction per candidate. Auto-detected lowest column
+**Load cases are defined in the app** (Define → Load Cases / Load Combinations), with SAP2000's setup for a cable
+structure as the default — the same staging, solved by the internal FEM:
+
+| Case | Type | Definition | Continues from |
+| --- | --- | --- | --- |
+| `Pretension` | Nonlinear Static | 1 × target-force pattern + 1 × self-weight — the cable targets are met here | — |
+| `SLS: 1.0DL+1.0LL` | Nonlinear Static | 1 × dead + 1 × live (the Tab 1 loads) | `Pretension` |
+| `ULS: 1.35DL+1.5LL` | Nonlinear Static | 0.35 × self-weight + 1.35 × dead + 1.5 × live | `Pretension` |
+
+A case that continues from another starts with that case's loads and fitted cable pretension on the structure, so ULS
+carries 1.0 + 0.35 = 1.35 of the self-weight. **Default Setup** builds these from the self-weight pattern, the load
+patterns of Tab 1 (dead or live by pattern type, else by name) and the target-force pattern of Tab 3; the built-in model
+opens on them. **SAP Cases** shows the cases saved from SAP2000 instead, and **+ Add** / **- Remove** with the editable
+Case, Definition and From columns define others. The loads themselves are the ones of Tab 1, also reachable as
+**Define → Loading**.
+
+The flow is the one of SAP2000: **Define → Load Patterns** (add or remove patterns of the model — name, type, self-weight
+multiplier), assign their loads (**Define → Loading** for the storey loads, **Edit → VCF System → Cable Force** for the
+target force of each cable), define the load cases, then **Run**. Run first opens **Set Load Cases to Run** — every case
+with its status and its action, Run or Do Not Run — and **Run Now** analyses the model as it is at that moment: its
+geometry, section assignments, loads and cable target forces.
+
+The analysis is internal and never calls SAP2000. It uses the sections, materials and loading the model holds: those
+of the default model, of a model opened with **Load Model**, or the ones **File → Read FEM Properties from SAP**
+brings in from a connected model — each assigned frame/cable section, effective material (including the CSI `None`
+override sentinel), A, E, in-plane I, frame stiffness modifiers, and in-plane end releases. Isotropic materials use
+SAP's isotropic modulus API; tendon materials use the uniaxial modulus API. After Connect SAP or Refresh the run asks
+for that read first; it does not fetch the data itself. The results report peak downward
+joint displacement, axial force, bending moment, and support reaction of the run. Auto-detected lowest column
 bases are drawn as pin symbols and modeled with X/Z translations fixed and in-plane rotation free.
 
-Tab 07 contains **Analysis** and **Results** subtabs. Results selects a completed internal `Lxx_Hxx_Pxx`
-combination and displays Axial Force, Bending Moment, Shear, Reactions, or Deflected Shape in the shared model
-preview, with a matching numeric table. These are the internal FEM candidate results, not saved SAP2000 load-case
-results; the selected loading combination is assembled from the Tab 1 definitions. Axial, bending, and shear
+The Result menu displays Axial Force, Bending Moment, Shear, Reactions, or Deflected Shape of the run for the selected
+load case or combination in the shared model
+preview, with a matching numeric table. These are the internal FEM results, not saved SAP2000 load-case
+results; the Tab 1 loads are assembled from the Tab 1 definitions. Axial, bending, and shear
 results draw filled blue-positive/red-negative diagrams (positive axial force is tension); reactions draw support
 vectors; the deformed shape is visually magnified. Diagram widths are auto-scaled for display, while the adjacent
 table retains calculated values and units.
@@ -130,10 +155,11 @@ prestressed state, so loads that alone exceed a target do not block fitting. As 
 member-end joint lying on it (within 1 mm), so a full-length chord connects to the verticals and cable anchors
 along it; each piece is then meshed into N equal sub-elements (Analysis → Frame mesh, default 10; cables are not meshed); interior mesh nodes are condensed onto the
 frame joints and recovered as stations for force diagrams and the deflected shape. Cable equilibrium uses damped Newton iterations with a potential-
-energy line search, so cables can transition between taut and slack without a Boolean active-set toggle loop.
+energy line search, so cables can transition between taut and slack without a Boolean active-set toggle loop. Next to
+the equilibrium, where a step changes the energy by less than the round-off of the energy sum, a full Newton step is
+accepted when it at least halves the residual; convergence is always judged by the residual.
 It rejects non-planar geometry, tendons, SAP advanced local axes, axial or in-plane shear releases, and rotated
-local axes with in-plane releases. It does not run SAP2000 analysis cases. The full candidate space is limited to
-50,000 cases.
+local axes with in-plane releases. It does not run SAP2000 analysis cases.
 
 **Cable sag** (Analysis → Cable sag, on by default) is the one geometric nonlinearity included. A cable that a load
 case loads along its length — its self-weight, typically — hangs in a shallow parabola, and its tension T follows
