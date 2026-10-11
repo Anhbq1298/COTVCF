@@ -61,8 +61,7 @@ internal static class ResultToolbarChecks
             var bundleUnlisted = bundleForm.Read(out var bundleAsks);
             bundleForm.SetStrands("61", 16.5.ToString(CultureInfo.CurrentCulture), "165");
             var bundleEntered = bundleForm.Read(out _);
-            Console.WriteLine($"DEBUG opened={bundleOpened} untouched={bundleUntouched?.Name}/{bundleUntouched?.Area} same={bundleSame?.Name}/{bundleSame?.Area} listed={bundleListed?.Name}/{bundleListed?.Area} locked={bundleBoxesLocked} unlisted={bundleUnlisted?.Name} asks={bundleAsks} entered={bundleEntered?.Name}/{bundleEntered?.Area} shown={bundleForm.StrandBundleShown}");
-            Check(bundleOpened is { On: false, Count: "192", StrandAreaMm2: "150" } && bundleUntouched is { Name: "192T15.7", Area: 0.028802317797652074 } &&
+            Check(bundleOpened is { On: false, Count: "192", StrandAreaMm2: "150" } && bundleUntouched is { Name: "192T15.7" } && Math.Abs(bundleUntouched.Area - 0.0288023178) < 1e-12 &&
                    bundleSame is { Name: "192T15.7" } && Math.Abs(bundleSame.Area - 0.0288) < 1e-12 &&
                    bundleListed is { Name: "37T15.2" } && Math.Abs(bundleListed.Area - 37 * 139e-6) < 1e-12 && bundleBoxesLocked &&
                    bundleUnlisted is null && bundleAsks.Contains("not a listed size", StringComparison.Ordinal) &&

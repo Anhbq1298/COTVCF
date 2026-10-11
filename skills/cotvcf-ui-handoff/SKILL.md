@@ -23,7 +23,7 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - If the running desktop app locks `bin/Debug/net8.0-windows/win-x64/Mcotis.exe` or `.dll`, close it with `Get-Process -Name 'Mcotis' -ErrorAction SilentlyContinue | Stop-Process -Force`, then rebuild.
 - For compile-only checks while the app is open, use `dotnet build COTVCF.csproj -o .work\build-check`.
 - Launch the app from `bin/Debug/net8.0-windows/win-x64/Mcotis.exe`.
-- **Brand:** the product is **Mcotis** (Meinhardt Cities of Tomorrow Integrated Structures) — main window title `Mcotis — Meinhardt Cities of Tomorrow Integrated Structures`, exe / assembly `Mcotis` (pack URIs `/Mcotis;component/…`). Internal identifiers keep the old name for compatibility: namespaces `COT_VCF`, `CotVcfConfigDto`, the FEM file format `COTVCF.FemModel` / `.cotfem.json`, `%LOCALAPPDATA%\COTVCF`, report storage keys.
+- **Brand:** the product is **Mcotis** (Meinhardt Cities of Tomorrow Integrated Structures) — main window title `Mcotis — Meinhardt Cities of Tomorrow Integrated Structures — <file>` (`MainViewModel.WindowTitle`, bound in `MainWindow.xaml`; asked for by the user 2026-10-12: the file name beside the title. `<file>` = `CurrentFileName`: the active configuration's file name — the one Save overwrites — else `Default model`, the name of a model opened from an older file / SAP2000, or `Untitled`), exe / assembly `Mcotis` (pack URIs `/Mcotis;component/…`). Internal identifiers keep the old name for compatibility: namespaces `COT_VCF`, `CotVcfConfigDto`, the FEM file format `COTVCF.FemModel` / `.cotfem.json`, `%LOCALAPPDATA%\COTVCF`, report storage keys.
 - The built application folder is `bin/COT ParametricTools_V2` (version 2.0.0.0). Produce it with
   `dotnet publish COTVCF.csproj -c Release --self-contained false -o "bin/COT ParametricTools_V2"` — never by
   copying a build output by hand: the earlier hand-copied `COT VCF Tools V1.0` folder went stale and showed an old app.
@@ -249,6 +249,14 @@ earlier tall-header / large-button / blue-block look.
   read-only); live `SectionSketch` drawing with the 2 / 3 axes; Material with + (Define Materials); Set Modifiers… (8
   section modifiers); Section Properties… (A, I33, I22, J, As2, As3 from `FrameSectionProperty.Values()`); Time
   Dependent disabled. `StrandSectionWindow` = cable / tendon data (material, linked diameter / area, cable modifiers).
+  Its **Strand Bundle** group (asked for by the user, 2026-10-12) works the section out from its strands: tick
+  *Calculate the section from its strands*, enter the number of strands, the strand diameter (editable list) and the
+  steel area of one strand → Area = n × strand area (the Diameter box follows as the solid round of that area; both are
+  read-only while ticked) and the name follows the convention `{n}T{diameter}` — `192T15.7` (`Domain.StrandBundle`) —
+  unless a name is typed by hand afterwards. The steel area of a 7-wire strand is **tabulated, not computed** from the
+  diameter (`StrandBundle.StandardStrands`, nominal areas of EN 10138-3: 12.5 → 93, 12.9 → 100, 15.2 → 139, 15.3 → 140,
+  15.7 → 150 mm²); any other diameter clears the area and the form asks for it — do not estimate it. A section already
+  named by the convention opens with the inputs filled in but unticked: nothing changes until the user ticks.
   Libraries `FrameSections` / `CableSections` / `TendonSections` are seeded from the member properties
   (`EnsureSections`), saved in the FEM model file, offered by VCF Geometry, and OK (`CommitFrameSections` /
   `CommitStrandSections`) rebuilds the FEM properties of members with a changed / renamed section (`PropertiesFor`: area
