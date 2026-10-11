@@ -298,6 +298,21 @@ public sealed partial class MainViewModel
         return changed;
     }
 
+    /// <summary>Assigns the in-plane end moment releases of one frame to its FEM member properties.</summary>
+    internal bool AssignFrameEndReleases(string memberName, bool start, bool end)
+    {
+        if (!CanEditFemModel) throw new InvalidOperationException("Unlock the model before changing frame releases.");
+        var index = FemSectionProperties.ToList().FindIndex(property => property.MemberName == memberName && !property.IsCable);
+        if (index < 0) throw new InvalidOperationException($"Frame '{memberName}' is not in the FEM model.");
+        var current = FemSectionProperties[index];
+        if (current.ReleaseStartRotation == start && current.ReleaseEndRotation == end) return false;
+        FemSectionProperties[index] = current with { ReleaseStartRotation = start, ReleaseEndRotation = end };
+        ClearFemResults();
+        Message = $"Updated end moment releases for {memberName} (FEM results cleared).";
+        Update();
+        return true;
+    }
+
     private void ApplySectionChanges<T>(Func<FemSectionProperties, bool> applies, IReadOnlyDictionary<string, string> renamed,
         Func<string, T?> find, Func<string, T, bool> unchanged, Func<FemSectionProperties, T, FemSectionProperties> build) where T : class
     {

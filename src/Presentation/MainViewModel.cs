@@ -1041,6 +1041,31 @@ public sealed partial class MainViewModel : Observable
         : FemSectionProperties.GroupBy(property => property.MemberName, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
+    /// <summary>The real cross-section per frame member where its plain shape is not it — a composite section of the library
+    /// (CFT, steel encased, mega composite) or a Section Designer section whose outline its name states and its properties
+    /// confirm (<see cref="SectionDrawings"/>) — for the 3D view. Follows <see cref="SharedViewerSections"/>.</summary>
+    public IReadOnlyDictionary<string, SectionDrawing>? SharedViewerSectionDrawings
+    {
+        get
+        {
+            var drawings = new Dictionary<string, SectionDrawing>(StringComparer.Ordinal);
+            var bySection = new Dictionary<string, SectionDrawing?>(StringComparer.Ordinal);
+            foreach (var property in FemSectionProperties.Where(property => !property.IsCable && !string.IsNullOrWhiteSpace(property.SectionName)))
+            {
+                if (!bySection.TryGetValue(property.SectionName!, out var drawing))
+                    bySection[property.SectionName!] = drawing = SectionDrawingOf(property.SectionName!);
+                if (drawing is not null) drawings[property.MemberName] = drawing;
+            }
+            return drawings.Count == 0 ? null : drawings;
+        }
+    }
+
+    /// <summary>The drawing of the library frame section <paramref name="sectionName"/>, or null when it has none.</summary>
+    internal SectionDrawing? SectionDrawingOf(string sectionName) =>
+        FrameSections.FirstOrDefault(section => section.Name == sectionName) is { } section
+            ? SectionDrawings.For(section, material => Materials.FirstOrDefault(item => item.Name == material)?.ElasticModulus / 1e6)
+            : null;
+
     public int SharedViewerFrameMeshSegments => selectedTab == TabFem && ShowFemFrameMesh ? FemFrameMeshSegments : 0;
     public IReadOnlyDictionary<string, string>? SharedViewerMemberSizes =>
         selectedTab == TabFem && ShowFemMemberSizes && FemSectionProperties.Count > 0
@@ -1451,12 +1476,14 @@ public sealed partial class MainViewModel : Observable
                 command == LoadFemModel || command == LoadDefaultModel || command == ContinueWithBlankModel || command == NewConfig) continue;
             // A loaded FEM model (Load Model) runs FEM offline, and the 01 Loading add / remove commands only edit what the
             // app holds; every other command needs the live SAP2000 model.
-            command.Availability = command == RunFemAnalysis || command == SaveFemModel || command == UnlockFemModel || command == ToggleFemModelLock || command == AddPoints ||
+            command.Availability = command == RunFemAnalysis || command == SaveFemModel || command == SaveFemModelAs || command == UnlockFemModel || command == ToggleFemModelLock || command == AddPoints ||
                                    command == RemoveAppliedPoints || command == AddLoadDefinition || command == DeleteLoadDefinition
                 ? () => HasWorkingModel
                 : () => HasSapConnection;
         }
         PropertyChanged += ForwardPaneStatus;
+        // the section drawings of the 3D view are worked out from the same members and library as the viewer's sections
+        PropertyChanged += (_, e) => { if (e.PropertyName == nameof(SharedViewerSections)) Notify(nameof(SharedViewerSectionDrawings)); };
         RegenerateStudyPreview();
     }
 
@@ -3109,7 +3136,7 @@ public sealed partial class MainViewModel : Observable
             nameof(MonitoredPointSummary), nameof(MonitoredPointCaseSummary), nameof(MonitoredPointStatus), nameof(DeflectionLimitSummary), nameof(MemberForceSummary), nameof(MemberForceStatus),
             nameof(FoundationSummary), nameof(FoundationStatus), nameof(CableForceSummary), nameof(CableForceStatus),
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
-            nameof(HasSapConnection), nameof(HasWorkingModel), nameof(IsOfflineModel), nameof(IsDefaultModel), nameof(OfflineModelSummary), nameof(CanSaveFemModel), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
+            nameof(HasSapConnection), nameof(HasWorkingModel), nameof(IsOfflineModel), nameof(IsDefaultModel), nameof(OfflineModelSummary), nameof(WindowTitle), nameof(CanSaveFemModel), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
             nameof(FemRunSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus), nameof(IsFemModelLocked),
             nameof(CanDefineFemModel), nameof(HasModelGeometry), nameof(HasUsableModelGeometry), nameof(ShowBlankModelChoice), nameof(CanEditFemModel), nameof(CanEditVcfGeometry),
             nameof(CanUnlockFemModel), nameof(CanToggleFemModelLock), nameof(FemLockGlyph), nameof(FemLockActionText), nameof(FemModelEditState), nameof(FemDatabaseSummary),

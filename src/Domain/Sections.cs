@@ -174,5 +174,38 @@ public sealed record StrandSectionProperty
     public double Diameter => Math.Sqrt(4 * Area / Math.PI);
 }
 
+/// <summary>
+/// A cable or tendon made of parallel 7-wire strands, as one equivalent section: area = number of strands × the steel area
+/// of one strand, named by the convention the models use — <c>192T15.7</c> = 192 strands of 15.7 mm.
+/// </summary>
+public static partial class StrandBundle
+{
+    /// <summary>Nominal diameter [mm] and nominal steel area [mm²] of the common 7-wire prestressing strands (EN 10138-3). The
+    /// area is the steel of the seven wires — less than the circle of the strand's diameter — so it is tabulated, not
+    /// computed; a strand that is not listed has no area here and the user enters it.</summary>
+    public static IReadOnlyList<(double DiameterMm, double AreaMm2)> StandardStrands { get; } = [(12.5, 93), (12.9, 100), (15.2, 139), (15.3, 140), (15.7, 150)];
+
+    /// <summary>The nominal steel area [mm²] of a standard strand of <paramref name="diameterMm"/>, or null when it is not one.</summary>
+    public static double? StandardArea(double diameterMm) =>
+        StandardStrands.Where(strand => Math.Abs(strand.DiameterMm - diameterMm) < 1e-6).Select(strand => (double?)strand.AreaMm2).FirstOrDefault();
+
+    /// <summary>The section area [m²] of <paramref name="count"/> strands of <paramref name="strandAreaMm2"/> each.</summary>
+    public static double Area(int count, double strandAreaMm2) => count * strandAreaMm2 * 1e-6;
+
+    /// <summary>The section name by convention: number of strands, T, strand diameter [mm] — <c>192T15.7</c>.</summary>
+    public static string Name(int count, double diameterMm) =>
+        $"{count.ToString(System.Globalization.CultureInfo.InvariantCulture)}T{diameterMm.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)}";
+
+    /// <summary>The strands a name written by the convention states, or null for any other name.</summary>
+    public static (int Count, double DiameterMm)? Parse(string name) =>
+        Convention().Match(name.Trim()) is { Success: true } match &&
+        int.TryParse(match.Groups[1].Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var count) && count > 0 &&
+        double.TryParse(match.Groups[2].Value, System.Globalization.NumberStyles.AllowDecimalPoint, System.Globalization.CultureInfo.InvariantCulture, out var diameter) && diameter > 0
+            ? (count, diameter) : null;
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^(\d+)T(\d+(?:\.\d+)?)$")]
+    private static partial System.Text.RegularExpressions.Regex Convention();
+}
+
 /// <summary>Everything Get From SAP2000 reads for Define → Section Properties.</summary>
 public sealed record SectionLibrary(IReadOnlyList<FrameSectionProperty> Frames, IReadOnlyList<StrandSectionProperty> Cables, IReadOnlyList<StrandSectionProperty> Tendons);

@@ -1493,7 +1493,7 @@ internal static class Program
                 blankWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var fileMenu = (MenuItem)blankWindow.MainMenu.Items[0];
                 var defineMenu = (MenuItem)blankWindow.MainMenu.Items[2];
-                Assert(blankWindow.Title == "Mcotis — Meinhardt Cities of Tomorrow Integrated Structures" &&
+                Assert(blankWindow.Title == "Mcotis — Meinhardt Cities of Tomorrow Integrated Structures — Untitled" &&
                        fileMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Load Config…")) &&
                        defineMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Materials…")) &&
                        templateButton.IsVisible && templateButton.IsEnabled && continueButton.IsVisible && continueButton.IsEnabled &&

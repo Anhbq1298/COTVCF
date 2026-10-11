@@ -149,6 +149,25 @@ public sealed partial class MainViewModel
         Update();
     }
 
+    internal bool AssignCableTarget(string memberName, string pattern, double forceKN)
+    {
+        if (!CanEditFemModel) throw new InvalidOperationException("Unlock the model before changing cable loads.");
+        if (!double.IsFinite(forceKN) || forceKN < 0) throw new ArgumentOutOfRangeException(nameof(forceKN), "Target force must be a finite, nonnegative value in kN.");
+        var cable = State.Cables.FirstOrDefault(item => item.CableName == memberName)
+            ?? throw new InvalidOperationException($"Cable '{memberName}' has no target-force assignment.");
+        if (cable.IsFollower) throw new InvalidOperationException("This cable follows another cable. Edit its Sync assignment in 03 Pretension.");
+        if (!State.LoadPatterns.Contains(pattern, StringComparer.Ordinal))
+            throw new InvalidOperationException($"Load pattern '{pattern}' is not defined.");
+        if (cable.LoadPattern == pattern && !cable.ApplyRange && cable.TargetForce == forceKN) return false;
+        cable.LoadPattern = pattern;
+        cable.ApplyRange = false;
+        cable.TargetForce = forceKN;
+        ClearFemResults();
+        Message = $"Updated {memberName} target force to {forceKN:0.###} kN in {pattern} (FEM results cleared).";
+        Update();
+        return true;
+    }
+
     /// <summary>Sets the storey loads of the model: the tributary width, the number of storeys, one qz [kPa] per load
     /// pattern and — when given — the loaded points. A load whose value is the one the model already uses is left as it
     /// is; another value makes it fixed (a Tab 01 range ends there).</summary>

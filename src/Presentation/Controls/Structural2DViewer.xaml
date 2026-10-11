@@ -26,9 +26,10 @@
   <Grid>
     <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" PanMode="{Binding PanMode, ElementName=Root, Mode=TwoWay}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" ShowFrameLabels="{Binding ShowFrameLabels, ElementName=Root}" ShowCableLabels="{Binding ShowCableLabels, ElementName=Root}" ShowFrameLocalAxes="{Binding ShowFrameLocalAxes, ElementName=Root}" MemberSections="{Binding MemberSections, ElementName=Root}" ShowDimensions="{Binding ShowDimensions, ElementName=Root}" SpanPoints="{Binding SpanPoints, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}" Cables="{Binding Cables, ElementName=Root}" SelectedCable="{Binding SelectedCable, ElementName=Root, Mode=TwoWay}" TopPoints="{Binding TopPoints, ElementName=Root}" MiddlePoints="{Binding MiddlePoints, ElementName=Root}" BottomPoints="{Binding BottomPoints, ElementName=Root}" PinSupportPoints="{Binding PinSupportPoints, ElementName=Root}" FemResult="{Binding FemResult, ElementName=Root}" FemResultMode="{Binding FemResultMode, ElementName=Root}" FrameMeshSegments="{Binding FrameMeshSegments, ElementName=Root}" MemberSizes="{Binding MemberSizes, ElementName=Root}" ShowLoads="{Binding ShowLoads, ElementName=Root}" LoadValues="{Binding LoadValues, ElementName=Root}" MemberNotes="{Binding MemberNotes, ElementName=Root}" JointNotes="{Binding JointNotes, ElementName=Root}" HighlightedMembers="{Binding HighlightedMembers, ElementName=Root}" ShowAxialValues="{Binding ShowAxialValues, ElementName=Root}" ShowUndeformed="{Binding ShowUndeformed, ElementName=Root}" ShowDeflectionContour="{Binding ShowDeflectionContour, ElementName=Root}" DeflectionRangeMinMm="{Binding DeflectionRangeMinMm, ElementName=Root}" DeflectionRangeMaxMm="{Binding DeflectionRangeMaxMm, ElementName=Root}"/>
 
-   <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,32,8,0" Padding="6" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1">
+   <!-- deflected shape options: shared by the 2D and the 3D view (drawn above the 3D host) -->
+   <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,32,8,0" Padding="6" Panel.ZIndex="1" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1">
     <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
-     <MultiDataTrigger><MultiDataTrigger.Conditions><Condition Binding="{Binding FemResultMode, ElementName=Root}" Value="DeflectedShape"/><Condition Binding="{Binding Visibility, ElementName=Canvas}" Value="Visible"/></MultiDataTrigger.Conditions><Setter Property="Visibility" Value="Visible"/></MultiDataTrigger>
+     <DataTrigger Binding="{Binding FemResultMode, ElementName=Root}" Value="DeflectedShape"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
     </Style.Triggers></Style></Border.Style>
     <WrapPanel>
      <CheckBox Content="Undeformed guide" IsChecked="{Binding ShowUndeformed, ElementName=Root}" Margin="0,0,10,0"/>
@@ -61,11 +62,23 @@
      <ModelVisual3D x:Name="LocalAxes3D"/>
     </Viewport3D>
     <TextBlock x:Name="View3DInfo" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,12,0,0" Style="{StaticResource Caption}"/>
-    <Border x:Name="FrameAxisLegend" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,36,0,0" Padding="5,2" Background="{StaticResource Overlay}" Visibility="Collapsed">
+    <Border x:Name="FrameAxisLegend" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="5,2" Background="{StaticResource Overlay}" Visibility="Collapsed">
+     <!-- below the deflected shape options while those show -->
+     <Border.Style><Style TargetType="Border"><Setter Property="Margin" Value="16,36,0,0"/><Style.Triggers>
+      <DataTrigger Binding="{Binding FemResultMode, ElementName=Root}" Value="DeflectedShape"><Setter Property="Margin" Value="16,78,0,0"/></DataTrigger>
+     </Style.Triggers></Style></Border.Style>
      <StackPanel Orientation="Horizontal" TextElement.FontSize="11">
       <TextBlock Text="1" Foreground="#C62828" FontWeight="Bold" Margin="0,0,8,0" ToolTip="Local 1: member I to J"/>
       <TextBlock Text="2" Foreground="#2E7D32" FontWeight="Bold" Margin="0,0,8,0" ToolTip="Local 2: section depth direction"/>
       <TextBlock Text="3" Foreground="#2563EB" FontWeight="Bold" ToolTip="Local 3: section width direction"/>
+     </StackPanel>
+    </Border>
+    <!-- |U| contour legend of the 3D deflected shape (filled and shown by Rebuild3D) -->
+    <Border x:Name="Deflection3DLegend" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,18,18" Padding="6,4" Background="{StaticResource Overlay}" Visibility="Collapsed">
+     <StackPanel>
+      <TextBlock x:Name="Deflection3DRange" FontFamily="{StaticResource MonoFont}" FontSize="11"/>
+      <Rectangle x:Name="Deflection3DBar" Width="160" Height="10" Margin="0,3,0,3" HorizontalAlignment="Left"/>
+      <TextBlock x:Name="Deflection3DScale" Style="{StaticResource Caption}"/>
      </StackPanel>
     </Border>
    </Grid>
