@@ -273,8 +273,9 @@ public sealed class FemStudyService
                     // Load cases from the SAP model (as edited), then linear-additive combinations of their results.
                     // One solve per pretension stage: a case carries the pretension fitted in the stage it continues from.
                     var caseResults = new Dictionary<string, FemAnalysisResult>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var (_, fitLoads, cases) in loadPlan.StagesFor(candidate.Loads))
-                    foreach (var (name, caseResult) in solver.SolveCases(geometry, frameProperties, cableProperties, candidate.PretensionTargetsKN,
+                    foreach (var (fitStage, fitLoads, cases) in loadPlan.StagesFor(candidate.Loads))
+                    foreach (var (name, caseResult) in solver.SolveCases(geometry, frameProperties, cableProperties,
+                                 fitStage is null ? new Dictionary<string, double>() : candidate.PretensionTargetsKN,
                                  fitLoads, cases, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments, cableSag))
                         caseResults[name] = caseResult;
                     results = loadPlan.Complete(caseResults);

@@ -118,7 +118,7 @@ public sealed partial class MainViewModel
             TendonSections = TendonSections.Count > 0 ? TendonSections.ToList() : null,
             Loading = femSapLoading,
             PatternRows = FemPatternRows.Select(row => new FemPatternRowDto(row.Name, row.Type, row.SelfWeightMultiplier, row.Role, row.Loads)).ToList(),
-            CaseRows = FemCaseRows.Select(row => new FemDefinitionRowDto(row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note)).ToList(),
+            CaseRows = FemCaseRows.Select(row => new FemDefinitionRowDto(row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note, row.CableTargetForces)).ToList(),
             CombinationRows = FemCombinationRows.Select(row => new FemDefinitionRowDto(row.Name, row.Type, row.Definition, null, row.Run, row.Supported, row.Source, row.Note)).ToList(),
             Settings = new FemSettingsDto
             {
@@ -258,7 +258,12 @@ public sealed partial class MainViewModel
     {
         SetFemLoadRows(
             file.PatternRows.Select(row => new FemPatternRow(row.Name, row.Type, row.SelfWeightMultiplier, row.Role, row.Loads)).ToArray(),
-            file.CaseRows.Select(row => new FemCaseRow(row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note)).ToArray(),
+            file.CaseRows.Select(row =>
+            {
+                var restored = new FemCaseRow(row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note);
+                restored.CableTargetForces = row.CableTargetForces ?? Terms(restored).Any(term => PretensionPatterns.Contains(term.Name, StringComparer.OrdinalIgnoreCase));
+                return restored;
+            }).ToArray(),
             file.CombinationRows.Select(row => new FemCombinationRow(row.Name, row.Type, row.Definition, row.Run, row.Supported, row.Source, row.Note)).ToArray());
         FemLoadWarnings.Clear();
         foreach (var warning in femSapLoading.Warnings) FemLoadWarnings.Add(warning);

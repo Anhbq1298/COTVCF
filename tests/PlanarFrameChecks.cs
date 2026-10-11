@@ -132,6 +132,16 @@ internal static class PlanarFrameChecks
             "Load definitions parse factors, minus terms, unit factors and hyphenated names");
 
         // Load plan: self-weight (γ·A·weight modifier), SAP loads, Tab 01 replacement at applied points, combination.
+        var normalTargetPattern = new FemCaseRow("Normal", "Nonlinear Static", "1 PT", null, true, true, "App", "");
+        var purposePlan = FemLoadPlan.Build([new("PT", "Other", 0, "", "")], [normalTargetPattern], [], SapFemLoading.Empty,
+            new Dictionary<string, FemSectionProperties>(), geometry, [], ["PT"], []);
+        Check(purposePlan.FitCases.Count == 0 && purposePlan.ForCandidate([]).Cases.All(item => item.PretensionFactor == 0),
+            "Normal case never fits or applies cable targets merely because its definition includes the target pattern");
+        normalTargetPattern.CableTargetForces = true;
+        purposePlan = FemLoadPlan.Build([new("PT", "Other", 0, "", "")], [normalTargetPattern], [], SapFemLoading.Empty,
+            new Dictionary<string, FemSectionProperties>(), geometry, [], ["PT"], []);
+        Check(purposePlan.FitCases.SequenceEqual(["Normal"]) && purposePlan.ForCandidate([]).Cases.Single().PretensionFactor == 1,
+            "Explicit Cable Target Forces classification creates the fitting stage");
         var weightedSection = section with { UnitWeightKNPerM3 = 78.5, GrossAreaM2 = 0.01, Modifiers = [1, 1, 1, 1, 1, 1, 1, 2] };
         var planSections = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal)
         {

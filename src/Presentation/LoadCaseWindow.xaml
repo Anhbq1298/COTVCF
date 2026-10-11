@@ -18,7 +18,11 @@
 
   <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <TextBlock Grid.Row="2" Text="Purpose" VerticalAlignment="Center" Margin="0,6,8,0"/>
+   <ComboBox x:Name="PurposeBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" SelectionChanged="Input_Changed" AutomationProperties.Name="Load case purpose">
+    <ComboBoxItem Content="Normal"/><ComboBoxItem Content="Cable Target Forces"/>
+   </ComboBox>
    <TextBlock Text="Load Case Name" VerticalAlignment="Center" Margin="0,0,8,0"/>
    <TextBox x:Name="NameBox" Grid.Column="1" VerticalContentAlignment="Center" TextChanged="Input_Changed" AutomationProperties.Name="Load case name"/>
    <TextBlock Grid.Column="2" Text="Type" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="12,0,6,0"/>

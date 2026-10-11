@@ -35,6 +35,7 @@ public sealed class CompositeSectionWindow : Window
     private readonly ComboBox concreteBox = new() { Width = 150 }, steelBox = new() { Width = 150 }, rebarBox = new() { Width = 150 };
     private readonly SectionSketch sketch = new() { Width = 250, Height = 210 };
     private readonly StackPanel propertyRows = new(), costRows = new(), checkRows = new();
+    private readonly List<TextBox> sectionPropertyValues = [];
     private readonly TextBlock materialData = new() { Foreground = Brushes.DimGray, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
     private readonly TextBlock problem = new() { Foreground = Brushes.Firebrick, FontSize = 11, TextWrapping = TextWrapping.Wrap };
     private readonly InteractionChart chart = new() { Width = 318, Height = 330 };
@@ -81,7 +82,32 @@ public sealed class CompositeSectionWindow : Window
         var left = new StackPanel(); var middle = new StackPanel(); var right = new StackPanel(); var interaction = new StackPanel();
         Grid.SetColumn(middle, 2); Grid.SetColumn(right, 4); Grid.SetColumn(interaction, 6);
         columns.Children.Add(left); columns.Children.Add(middle); columns.Children.Add(right); columns.Children.Add(interaction);
-        root.Children.Add(columns);
+        var tabs = new TabControl { Margin = new Thickness(0, 6, 0, 0) };
+        tabs.Items.Add(new TabItem { Header = "Section Data", Content = columns, Width = double.NaN, Height = 28 });
+        var propertySheet = new StackPanel { Margin = new Thickness(10), Width = 470, HorizontalAlignment = HorizontalAlignment.Left };
+        var propertyGroup = Group(propertySheet, "Properties");
+        foreach (var (label, unit) in new[] {
+            ("Cross-section (axial) area", "m²"), ("Moment of Inertia about 3 axis", "m⁴"),
+            ("Moment of Inertia about 2 axis", "m⁴"), ("Torsional constant", "m⁴"),
+            ("Shear area in 2 direction", "m²"), ("Shear area in 3 direction", "m²") })
+        {
+            var row = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(125) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
+            row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+            var value = new TextBox { IsReadOnly = true, TextAlignment = TextAlignment.Right, BorderThickness = new Thickness(0),
+                Background = (Brush)FindResource("Background"), Foreground = (Brush)FindResource("Muted"),
+                Padding = new Thickness(5, 2, 5, 2), MinHeight = 24 };
+            System.Windows.Automation.AutomationProperties.SetName(value, label);
+            Grid.SetColumn(value, 1); row.Children.Add(value); sectionPropertyValues.Add(value);
+            var suffix = new TextBlock { Text = unit, Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(suffix, 2); row.Children.Add(suffix);
+            ((StackPanel)propertyGroup.Content).Children.Add(row);
+        }
+        propertySheet.Children.Add(Hint("Composite A and I are transformed to concrete Ecm; values are before modifiers."));
+        tabs.Items.Add(new TabItem { Header = "Show Section Properties", Content = propertySheet, Width = double.NaN, Height = 28 });
+        root.Children.Add(tabs);
 
         // ---- N–M interaction from the Design menu's algorithm, with its partial factors ----
         designType = tube ? ColumnDesignType.ConcreteFilledTube : mega ? ColumnDesignType.MegaComposite : ColumnDesignType.SteelEncased;
@@ -171,7 +197,10 @@ public sealed class CompositeSectionWindow : Window
         setModifiers.Click += (_, _) =>
         {
             if (EditModifiers(this, "Frame Property/Stiffness Modification Factors", ModifierLabels, this.section.Modifiers) is { } values)
+            {
                 this.section = this.section with { Modifiers = values };
+                Recalculate();
+            }
         };
         ((StackPanel)modifiers.Content).Children.Add(setModifiers);
 
@@ -305,13 +334,16 @@ public sealed class CompositeSectionWindow : Window
     private void Recalculate()
     {
         if (!IsInitializedForm) return;
-        if (Read(out var message) is not { } current) { problem.Text = message; Analysis = null; return; }
+        if (Read(out var message) is not { } current) { problem.Text = message; Analysis = null; foreach (var box in sectionPropertyValues) box.Text = ""; return; }
         problem.Text = "";
         sketch.Section = current;
         var a = viewModel.AnalyseComposite(current)!;
         Analysis = a;
         var c = current.Composite!;
         var p = a.Parts;
+        var values = new[] { a.Values.Area, a.Values.I33, a.Values.I22, a.Values.Torsion, a.Values.ShearArea2, a.Values.ShearArea3 };
+        for (var index = 0; index < values.Length; index++)
+            sectionPropertyValues[index].Text = values[index].ToString("0.########", CultureInfo.CurrentCulture);
 
         static string F(double value, string format) => value.ToString(format, CultureInfo.CurrentCulture);
         // EN 1994-1-1 §6.7.3.2: Npl,Rk = Aa fy + μc η Ac fck + As fsk (μc = 1.0 for a filled section, 0.85 encased; η of EC2 Table 3.1 above C50/60, BC4)

@@ -55,7 +55,8 @@ public sealed partial class MainViewModel
         if (FemPatternRows.Count == 0) return;
         var (tab01, pretension) = (Tab01Patterns, PretensionPatterns);
         foreach (var row in FemPatternRows)
-            (row.Role, row.Loads) = FemLoadPlan.Describe(femSapLoading, row.Name, row.SelfWeightMultiplier, tab01, pretension);
+            (row.Role, row.Loads) = FemLoadPlan.Describe(femSapLoading, row.Name, row.SelfWeightMultiplier, tab01, pretension,
+                State.AppliedPoints.Select(point => point.PointName).ToArray());
     }
 
     /// <summary>Load patterns can be defined here once the model is the app's own; a connected SAP2000 model has SAP2000's.</summary>
@@ -296,7 +297,7 @@ public sealed partial class MainViewModel
         var name = "Case 1";
         for (var number = 2; CaseNameProblem(null, name) is not null; number++) name = $"Case {number}";
         var pretension = PretensionPatterns;
-        var stage = FemCaseRows.FirstOrDefault(row => row.Supported && Terms(row).Any(term => pretension.Contains(term.Name, StringComparer.OrdinalIgnoreCase)));
+        var stage = FemCaseRows.FirstOrDefault(row => row.Supported && row.CableTargetForces && Terms(row).Any(term => pretension.Contains(term.Name, StringComparer.OrdinalIgnoreCase)));
         var patterns = FemPatternRows.Select(row => row.Name).ToArray();
         var loads = Tab01Patterns.Where(pattern => patterns.Contains(pattern, StringComparer.OrdinalIgnoreCase)).ToArray();
         var terms = (loads.Length > 0 ? loads : patterns.Take(1)).Select(pattern => (pattern, 1.0)).ToArray();
@@ -368,7 +369,7 @@ public sealed partial class MainViewModel
 
     /// <summary>Load Case Data → OK: writes the case — its name, the case it continues from and its loads, a load pattern
     /// with a scale factor each. A case that is not in the table yet (null, or the one + Add proposed) is added.</summary>
-    internal FemCaseRow? SaveFemLoadCase(FemCaseRow? row, string? name, string? initialCase, IReadOnlyList<(string Pattern, double Factor)> loads)
+    internal FemCaseRow? SaveFemLoadCase(FemCaseRow? row, string? name, string? initialCase, IReadOnlyList<(string Pattern, double Factor)> loads, bool cableTargetForces = false)
     {
         if (IsBusy || CommitEditors?.Invoke() == false) return null;
         if (row is not null && !FemCaseRows.Contains(row)) row = null;
@@ -389,6 +390,7 @@ public sealed partial class MainViewModel
             row.InitialCase = previous;
         }
         SelectedFemCaseRow = row;
+        row.CableTargetForces = cableTargetForces;
         LoadRowChanged(row, new(nameof(FemCaseRow.Definition)));
         Message = $"Load case '{row.Name}': {row.Definition}" + (row.InitialCase.Length == 0 ? "." : $", continuing from '{row.InitialCase}'.");
         return row;

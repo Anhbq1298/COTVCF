@@ -32,9 +32,9 @@
      <TextBlock Text="Cable" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
      <ComboBox Width="130" ItemsSource="{Binding FemMonitorCableNames}" SelectedItem="{Binding FemMonitorCable}" VerticalAlignment="Center"
                ToolTip="Cable whose P_result / P_preset history is charted."/>
-     <TextBlock Text="Loadcase/Loadcomb" FontSize="11" VerticalAlignment="Center" Margin="12,0,4,0"/>
-     <ComboBox Width="240" ItemsSource="{Binding FemLoadSelectionNames}" SelectedItem="{Binding SelectedFemResultName}" VerticalAlignment="Center"
-               ToolTip="Load cases and combinations ticked on Define → Load Cases / Load Combinations. The summary below gives the cable tension under it; the same selection drives the Results page."/>
+     <TextBlock Text="Target stage" FontSize="11" VerticalAlignment="Center" Margin="12,0,4,0"/>
+     <ComboBox Width="240" ItemsSource="{Binding FemMonitorTargetStages}" SelectedItem="{Binding FemMonitorTargetStage}" VerticalAlignment="Center"
+               ToolTip="Only stages that fit the specified cable target forces. Subsequent load cases are viewed under Results."/>
     </DockPanel>
     <c:ConvergenceChart Grid.Row="1" Ratios="{Binding FemMonitorRatios}" TolerancePercent="{Binding FemMonitorTolerancePercent}"
                         EmptyText="No pretension-fitting history for this cable yet."/>

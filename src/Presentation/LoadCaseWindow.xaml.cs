@@ -59,6 +59,7 @@ public partial class LoadCaseWindow : Window
 
         NameBox.Text = row.Name;
         TypeText.Text = row.Type;
+        PurposeBox.SelectedIndex = row.CableTargetForces ? 1 : 0;
         var cases = viewModel.InitialCaseChoicesFor(existing).Skip(1).ToArray();
         FromBox.ItemsSource = new[] { NoCase }.Concat(cases).ToArray();
         FromBox.SelectedIndex = Array.FindIndex(cases, name => comparer.Equals(name, row.InitialCase)) + 1;
@@ -128,7 +129,7 @@ public partial class LoadCaseWindow : Window
     {
         Refresh();
         if (Problem is not null) return false;
-        Saved = viewModel.SaveFemLoadCase(existing, NameBox.Text, From, loads.Select(row => (row.Pattern, row.Value!.Value)).ToArray());
+        Saved = viewModel.SaveFemLoadCase(existing, NameBox.Text, From, loads.Select(row => (row.Pattern, row.Value!.Value)).ToArray(), PurposeBox.SelectedIndex == 1);
         return Saved is not null;
     }
 

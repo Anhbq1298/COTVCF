@@ -263,6 +263,12 @@ public partial class MainWindow : Window
         OpenPane();
     }
 
+    private void MainMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (e.OriginalSource is MenuItem item && ItemsControl.ItemsControlFromItemContainer(item) == MainMenu)
+            SapConnectionControls.Visibility = Equals(item.Header, "_MB") ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     // Define → Load Cases: Default Setup / SAP Cases replace the table, so they ask first when it holds something else
     private void DefaultLoadCases_Click(object sender, RoutedEventArgs e)
     {
@@ -313,7 +319,7 @@ public partial class MainWindow : Window
             System.IO.Directory.CreateDirectory(folder);
             var path = System.IO.Path.Combine(folder, $"FEM_Results_{Guid.NewGuid():N}.html");
             COT_VCF.Infrastructure.AtomicFile.WriteAllText(path,
-                COT_VCF.Application.Results.FemRunReport.BuildHtml(run, vm.State.Model?.Name ?? "Model", vm.SelectedFemResultName, vm.PrintSettings));
+                COT_VCF.Application.Results.FemRunReport.BuildHtml(run, vm.State.Model?.Name ?? "Model", vm.SelectedFemResultName, vm.PrintSettings, vm.State.Baseline));
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "FEM Results", MessageBoxButton.OK, MessageBoxImage.Warning); }

@@ -8,12 +8,23 @@ internal static class FemRunReportChecks
 {
     public static void Run()
     {
+        var saved = SapFemLoading.Empty with { JointLoads = [new("DL", new("P1", 0, -1)), new("DL", new("P2", 0, -1))] };
+        var carried = FemLoadPlan.Describe(saved, "DL", 0, ["DL"], [], ["P1", "P2", "P3"]);
+        if (carried.Loads != "VCF storey loads: 3 joints")
+            throw new Exception("Replaced SAP assignments must not be counted as extra VCF joint loads.");
+        var changed = FemLoadPlan.Describe(saved, "DL", 0, ["DL"], [], ["P1"]);
+        if (!changed.Loads.Contains("VCF storey loads: 1 joints") || !changed.Loads.Contains("1 SAP joint assignments"))
+            throw new Exception("Load descriptions must track changed VCF points and retained SAP assignments.");
         var result = new FemAnalysisResult([new("P<1", 0.001, -0.012, 0.002)], [new("Pin", 45, 100)],
             [new("Frame", 1, 2, 3, 4, 5, 6, [new(0.5, 7, 8, 999, 0, 0)])],
             [new("Cable", 120, true, 100, 90, 95)], 3, 2, "target < tolerance");
         var run = new FemStudyRun("Model", "", "", "", result, Results: new Dictionary<string, FemAnalysisResult>
             { ["SLS <test>"] = result, ["ULS"] = result });
         var html = FemRunReport.BuildHtml(run, "Model <script>", "ULS");
+        if (Regex.Matches(html, "<svg ").Count != 12 || !html.Contains("Vertical deflection by level") ||
+            !html.Contains(System.Net.WebUtility.HtmlEncode("Bending moment · Frame")) || !html.Contains("Support reactions [kN]") ||
+            !html.Contains("Cable forces / target fit [kN]") || !html.Contains(System.Net.WebUtility.HtmlEncode("M [kN·m]") + " 999</title>"))
+            throw new Exception("Every completed case must have deflection, N/V/M, support and cable SVG charts, including interior station extrema.");
         if (!html.Contains("value=\"1\" selected") || !html.Contains("SLS &lt;test&gt;") ||
             !html.Contains("P&lt;1") || !html.Contains("<td>-12</td>") || !html.Contains("<td>999</td>") ||
             !html.Contains("Not fitted: target &lt; tolerance") || html.Contains("Model <script>"))

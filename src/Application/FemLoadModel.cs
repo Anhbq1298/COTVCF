@@ -110,6 +110,8 @@ public sealed class FemCaseRow(string name, string type, string definition, stri
     : FemDefinitionRow(name, type, definition, run, supported, source, note)
 {
     private string initialCase = FemLoadPlan.IsNoInitialCase(initialCase) ? "" : initialCase!.Trim();
+    private bool cableTargetForces;
+    public bool CableTargetForces { get => cableTargetForces; set => Set(ref cableTargetForces, value); }
     /// <summary>Nonlinear static case it continues from (its loads are included cumulatively); empty when it starts unstressed.</summary>
     public string InitialCase
     {
@@ -334,7 +336,7 @@ public sealed class FemLoadPlan
         if (neededCases.Count == 0) throw new InvalidOperationException("Tick at least one load case or combination to run on FEM → Inputs → Loads.");
         foreach (var name in neededCases) Resolve(name, new HashSet<string>(comparer));
 
-        foreach (var name in neededCases)
+        foreach (var name in neededCases.Where(name => caseRows[name].CableTargetForces))
         {
             var factors = resolved[name].Where(term => pretension.Contains(term.Item1)).Select(term => term.Item2).Distinct().ToArray();
             if (factors.Length > 1)
@@ -344,7 +346,7 @@ public sealed class FemLoadPlan
         // is the case whose own definition holds that pattern (with whatever other loads that case has); cases that
         // continue from it carry the fitted pretension cumulatively. Prefer the one with the fewest other loads.
         var fitCase = resolved.Keys
-            .Where(name => ownTerms[name].Any(term => pretension.Contains(term.Pattern)))
+            .Where(name => caseRows[name].CableTargetForces && ownTerms[name].Any(term => pretension.Contains(term.Pattern)))
             .OrderBy(name => ownTerms[name].Count(term => !pretension.Contains(term.Pattern)))
             .ThenBy(name => neededCases.FindIndex(needed => comparer.Equals(needed, name)) is var index && index >= 0 ? index : int.MaxValue)
             .FirstOrDefault();
@@ -360,7 +362,9 @@ public sealed class FemLoadPlan
         {
             if (stages.TryGetValue(name, out var known)) return known;
             var row = caseRows[name];
-            return stages[name] = ownTerms[name].Any(term => pretension.Contains(term.Pattern)) ? row.Name
+            if (row.CableTargetForces && !ownTerms[name].Any(term => pretension.Contains(term.Pattern)))
+                throw new InvalidOperationException($"Cable Target Forces case '{name}' must include a cable target-force load pattern.");
+            return stages[name] = row.CableTargetForces ? row.Name
                 : IsNoInitialCase(row.InitialCase) ? null : StageOf(row.InitialCase);
         }
         foreach (var name in resolved.Keys.ToArray()) StageOf(name);
@@ -408,7 +412,7 @@ public sealed class FemLoadPlan
         FemLoadSet CaseSet(string name) => FemLoadSet.Sum(resolvedCases[name]
             .Where(term => !pretensionPatterns.Contains(term.Pattern))
             .Select(term => PatternSet(term.Pattern).Scaled(term.Factor)));
-        double PretensionFactor(string name) => resolvedCases[name].Where(term => pretensionPatterns.Contains(term.Pattern))
+        double PretensionFactor(string name) => fitStageOf[name] is not { } stage ? 0 : resolvedCases[stage].Where(term => pretensionPatterns.Contains(term.Pattern))
             .Select(term => term.Factor).FirstOrDefault();
 
         var fit = fitCase is null ? FemLoadSet.Empty : CaseSet(fitCase);
@@ -472,19 +476,23 @@ public sealed class FemLoadPlan
     /// <summary>What a load pattern is used for and the loads it carries now: the loads saved with the model (joint,
     /// member), the self-weight, the loads of 01 Loading and the cable target forces of 03 Pretension.</summary>
     public static (string Role, string Loads) Describe(SapFemLoading saved, string pattern, double selfWeightMultiplier,
-        IReadOnlyCollection<string> tab01PatternNames, IReadOnlyCollection<string> pretensionPatternNames)
+        IReadOnlyCollection<string> tab01PatternNames, IReadOnlyCollection<string> pretensionPatternNames,
+        IReadOnlyCollection<string>? appliedPointNames = null)
     {
         var comparer = StringComparer.OrdinalIgnoreCase;
         var tab01 = tab01PatternNames.Contains(pattern, comparer);
         var pretension = pretensionPatternNames.Contains(pattern, comparer);
-        var joints = saved.JointLoads.Count(item => comparer.Equals(item.Pattern, pattern));
+        var joints = saved.JointLoads.Count(item => comparer.Equals(item.Pattern, pattern) &&
+            !(tab01 && appliedPointNames?.Contains(item.Load.PointName, StringComparer.Ordinal) == true));
         var members = saved.MemberLoads.Count(item => comparer.Equals(item.Pattern, pattern)) +
             saved.MemberPointLoads.Count(item => comparer.Equals(item.Pattern, pattern)) +
             saved.GravityLoads.Count(item => comparer.Equals(item.Pattern, pattern));
         var loads = string.Join(" · ", new[]
         {
-            joints > 0 ? $"{joints} joint" : null, members > 0 ? $"{members} member" : null,
-            selfWeightMultiplier != 0 ? "self-weight" : null, tab01 ? "+ Tab 01 loads" : null, pretension ? "target forces" : null
+            joints > 0 ? $"{joints} SAP joint assignments" : null, members > 0 ? $"{members} member assignments" : null,
+            selfWeightMultiplier != 0 ? "self-weight" : null,
+            tab01 ? appliedPointNames is null ? "VCF storey loads" : $"VCF storey loads: {appliedPointNames.Count} joints" : null,
+            pretension ? "cable target forces" : null
         }.Where(item => item is not null));
         return (tab01 ? Tab01Role : pretension ? PretensionRole : selfWeightMultiplier != 0 ? SelfWeightRole : "", loads.Length == 0 ? "none" : loads);
     }
@@ -517,7 +525,7 @@ public sealed class FemLoadPlan
         if (terms.Count == 0) return null;
         if (SelfWeightPattern(patterns, tab01, pretension) is { } selfWeight) terms.Add((selfWeight.Name, 1.0));
         return new FemCaseRow(Unique(DefaultPretensionCase, takenNames), StagedCaseType, FemLoadDefinition.Format(terms), null, true, true, "App",
-            "Cable target forces met here, under the self-weight.");
+            "Cable target forces met here, under the self-weight.") { CableTargetForces = true };
     }
 
     /// <summary>SLS and ULS with the Tab 01 loads, continuing from <paramref name="stage"/> (the pretension case), which
@@ -566,7 +574,8 @@ public sealed class FemLoadPlan
         }).ToList();
         var cases = sap.Cases.Select(item => new FemCaseRow(item.Name, item.Type,
             item.Loads.Count > 0 ? FemLoadDefinition.Format(item.Loads) : "", item.InitialCase,
-            run: item.Supported && item.Loads.Count > 0, item.Supported && item.Loads.Count > 0, "SAP", item.Note ?? "")).ToList();
+            run: item.Supported && item.Loads.Count > 0, item.Supported && item.Loads.Count > 0, "SAP", item.Note ?? "")
+            { CableTargetForces = item.Loads.Any(load => pretension.Contains(load.Pattern)) }).ToList();
         var combinations = sap.Combinations.Select(item => new FemCombinationRow(item.Name, item.Type,
             FemLoadDefinition.Format(item.Items.Select(term => (term.Name, term.Factor))), run: item.Supported, item.Supported, "SAP", item.Note ?? "")).ToList();
 

@@ -929,7 +929,17 @@ public sealed partial class MainViewModel : Observable
         get => femMonitorCable;
         set { if (Set(ref femMonitorCable, value)) NotifyFemMonitorChart(); }
     }
-    private FemCableResponse? FemMonitorCableResult => SelectedFemRun?.Result.Cables
+    private IReadOnlyList<string> femMonitorTargetStages = [];
+    private string? femMonitorTargetStage;
+    public IReadOnlyList<string> FemMonitorTargetStages => femMonitorTargetStages;
+    public string? FemMonitorTargetStage
+    {
+        get => femMonitorTargetStage;
+        set { if (Set(ref femMonitorTargetStage, value)) NotifyFemMonitorChart(); }
+    }
+    private FemAnalysisResult? FemMonitorStageResult => FemMonitorTargetStage is { } name &&
+        SelectedFemRun?.Results?.TryGetValue(name, out var result) == true ? result : null;
+    private FemCableResponse? FemMonitorCableResult => FemMonitorStageResult?.Cables
         .FirstOrDefault(cable => cable.MemberName.Equals(FemMonitorCable, StringComparison.Ordinal));
     public IReadOnlyList<double> FemMonitorRatios => FemMonitorCableResult?.FitRatios ?? [];
     public string FemMonitorChartSummary
@@ -940,13 +950,10 @@ public sealed partial class MainViewModel : Observable
             if (FemMonitorCableResult is not { } cable) return $"Cable '{FemMonitorCable}' is not in this FEM model.";
             if (cable.TargetForceKN <= 0 || cable.FitHistoryKN is null) return $"{cable.MemberName}: no target force to fit.";
             var ratio = cable.PretensionStageForceKN / cable.TargetForceKN;
-            var loaded = SelectedFemResultName is { } loadName && run.Results?.ContainsKey(loadName) == true
-                ? run.ResultFor(loadName).Cables.FirstOrDefault(item => item.MemberName == cable.MemberName)
-                : null;
             return $"{cable.MemberName} · P_preset {cable.TargetForceKN:0} kN → P_result {cable.PretensionStageForceKN:0} kN " +
                 $"(ratio {ratio:0.000}) after {cable.FitHistoryKN.Count} run(s) · applied pretension {cable.AppliedPretensionKN:0} kN · " +
-                (run.Result.TargetFitConverged ? $"within ±{FemMonitorTolerancePercent:0.###}%" : "NOT fitted") +
-                (loaded is not null ? $" · under {SelectedFemResultName}: T = {loaded.AxialForceKN:0} kN (ratio {loaded.AxialForceKN / cable.TargetForceKN:0.000})" : "");
+                (FemMonitorStageResult?.TargetFitConverged == true ? $"within ±{FemMonitorTolerancePercent:0.###}%" : "NOT fitted") +
+                $" · target stage: {FemMonitorTargetStage}";
         }
     }
 
@@ -1908,6 +1915,9 @@ public sealed partial class MainViewModel : Observable
                     (loadPlan.FitCases.Count > 1 ? " (each case uses the stage it continues from)" : "") : "") + ".");
             foreach (var note in loadPlan.Notes) FemLogLine("Note: " + note);
             femResultOrder = loadPlan.ResultNames;
+            femMonitorTargetStages = loadPlan.FitCases.ToArray();
+            Notify(nameof(FemMonitorTargetStages));
+            FemMonitorTargetStage = femMonitorTargetStages.FirstOrDefault();
             SelectedFemResultName = loadPlan.CombinationNames.FirstOrDefault() ?? loadPlan.CaseNames[^1];
 
             var baseline = State.Baseline;

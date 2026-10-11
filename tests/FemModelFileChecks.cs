@@ -254,7 +254,7 @@ internal static class FemModelFileChecks
         vm.SetStoreyLoads(state.TributaryWidthB, state.NumberOfStories, [("DEAD_ABOVE", 10), ("LL_ABOVE", 5), ("SDL_ABOVE", 2)]);
         Check(state.LoadDefinitions.Select(load => (load.LoadName, load.ApplyIncrementStep, load.CandidateValues[0])).SequenceEqual([
                   ("DEAD_ABOVE", false, 10.0), ("LL_ABOVE", true, 5.0), ("SDL_ABOVE", false, 2.0)]) &&
-              sdl is { Role: "Tab 01 loads", Loads: "+ Tab 01 loads" } && vm.FemPatternRows.Single(row => row.Name == "DEAD") is { Role: "Self-weight", Loads: "self-weight" } &&
+              sdl is { Role: "Tab 01 loads" } && sdl.Loads == $"VCF storey loads: {state.AppliedPoints.Count} joints" && vm.FemPatternRows.Single(row => row.Name == "DEAD") is { Role: "Self-weight", Loads: "self-weight" } &&
               vm.FemPatternRows.Single(row => row.Name == "Pretension").Role == "Tab 03 cable target force",
             "a storey load on the pattern (VCF System → Storey Force, one qz) gives it its load; the table says what each pattern carries now");
         var sdlCase = vm.AddFemLoadCase()!;

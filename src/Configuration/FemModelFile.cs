@@ -45,7 +45,7 @@ public sealed class FemModelFileDto
 }
 
 public sealed record FemPatternRowDto(string Name, string Type, double SelfWeightMultiplier, string Role, string Loads);
-public sealed record FemDefinitionRowDto(string Name, string Type, string Definition, string? InitialCase, bool Run, bool Supported, string Source, string Note);
+public sealed record FemDefinitionRowDto(string Name, string Type, string Definition, string? InitialCase, bool Run, bool Supported, string Source, string Note, bool? CableTargetForces = null);
 
 public sealed class FemSettingsDto
 {

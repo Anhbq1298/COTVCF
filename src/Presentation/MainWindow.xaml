@@ -5,7 +5,7 @@
        Desktop-style menus (ETABS-like). MB opens workflow pages 01–06A and 08 in the left pane; the FEM page is split
        into panes opened from Define, Assign, Run, Result and Display. Menu items reuse the existing commands. -->
   <Menu x:Name="MainMenu" DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1"
-        Padding="6,2" FontSize="12" AutomationProperties.Name="Main menu">
+        Padding="6,2" FontSize="12" AutomationProperties.Name="Main menu" MenuItem.SubmenuOpened="MainMenu_SubmenuOpened">
    <MenuItem Header="_File">
     <MenuItem Header="_New Config" Command="{Binding NewConfig}"
               ToolTip="Clear the current configuration and start a new file, keeping the connected SAP model"/>
@@ -54,8 +54,6 @@
               ToolTip="The load patterns of the model. Their loads are part of the VCF system: Edit → VCF System → Storey Force and Cable Force"/>
     <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click"
               ToolTip="Define the load cases: the default staged setup (Pretension → SLS / ULS), the cases saved from SAP2000, or your own"/>
-    <Separator/>
-    <MenuItem Header="_Result Load Case" Tag="4" Click="FemPaneMenu_Click"/>
    </MenuItem>
    <MenuItem Header="_Assign" IsEnabled="{Binding HasWorkingModel}">
     <MenuItem Header="_Joint">
@@ -141,7 +139,7 @@
   <!-- ============================ TOP BAR ============================ -->
   <Border DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1" Padding="10,6">
    <DockPanel>
-    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+    <StackPanel x:Name="SapConnectionControls" Visibility="Collapsed" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
      <Button Content="Connect SAP" Command="{Binding Connect}" Style="{StaticResource Primary}"/>
      <Button Command="{Binding Refresh}" Style="{StaticResource IconButton}" ToolTip="Refresh connection and geometry">
       <Viewbox Width="15" Height="15"><Path Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Data="M14,5 A6,6 0 1 0 16,11 M16,11 L16,6 M16,11 L11,11"/></Viewbox>
@@ -1629,6 +1627,7 @@
            </DataTemplate></DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="Type" Binding="{Binding Type}" IsReadOnly="True" Width="Auto" MinWidth="64"/>
+          <DataGridCheckBoxColumn Header="Cable Target Forces" Binding="{Binding CableTargetForces, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="Auto"/>
           <DataGridTextColumn Header="Src" Binding="{Binding Source}" IsReadOnly="True" Width="Auto" MinWidth="36"/>
           <DataGridTextColumn Header="Note" Binding="{Binding Note}" IsReadOnly="True" Width="Auto" MinWidth="50" MaxWidth="260"/>
          </DataGrid.Columns>
@@ -1743,7 +1742,7 @@
        <StackPanel Margin="8">
         <TextBlock Text="{Binding FemResultDiagramTitle}" FontFamily="{StaticResource MonoFont}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
         <TextBlock Text="{Binding FemResultSummary}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
-        <TextBlock Text="Change the load case under Define → Result Load Case; choose another output from the Result menu."
+        <TextBlock Text="Choose the load case and output in Result → Show Results."
                    Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,0"/>
         <TextBlock Text="{Binding FemResultIssue}" TextWrapping="Wrap" Foreground="{StaticResource Warning}" Margin="0,6,0,0" MaxHeight="90"
                    ToolTip="{Binding FemResultIssue}"/>
