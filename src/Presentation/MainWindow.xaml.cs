@@ -39,6 +39,13 @@ public partial class MainWindow : Window
             }
         };
         Loaded += (_, _) => ApplyViewerLayout();
+        SharedViewer.MemberDoubleClicked += (_, name) =>
+        {
+            if (DataContext is not MainViewModel vm) return;
+            var member = SharedViewer.Model.Members.FirstOrDefault(item => item.Name == name);
+            if (member is null || !vm.FemSectionProperties.Any(item => item.MemberName == name)) return;
+            new MemberAssignmentWindow(vm, member) { Owner = this }.ShowDialog();
+        };
     }
 
     // The model preview is one shared viewer hoisted out of the TabControl. Tabs 01-04 (Loading, Truss,

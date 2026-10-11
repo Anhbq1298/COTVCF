@@ -17,6 +17,7 @@ public partial class Structural2DViewer : UserControl
     {
         InitializeComponent();
         Canvas.SelectionChanged += (_, _) => { Update3DSelection(); Update3DAxes(); };
+        Canvas.MemberDoubleClicked += (_, name) => MemberDoubleClicked?.Invoke(this, name);
     }
     public static readonly DependencyProperty ModelProperty = DependencyProperty.Register(nameof(Model), typeof(GeometryModel), typeof(Structural2DViewer), new PropertyMetadata(GeometryModel.Empty));
     public static readonly DependencyProperty ToolbarContentProperty = DependencyProperty.Register(nameof(ToolbarContent), typeof(object), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -34,6 +35,7 @@ public partial class Structural2DViewer : UserControl
     public IReadOnlyList<string> SelectedJoints => Canvas.SelectedJoints;
     /// <summary>Raised when the selected joints or members change.</summary>
     public event EventHandler? SelectionChanged { add => Canvas.SelectionChanged += value; remove => Canvas.SelectionChanged -= value; }
+    public event EventHandler<string>? MemberDoubleClicked;
     /// <summary>The truss chord points: the overall span dimension runs between their outermost lines (the mega columns).</summary>
     public IEnumerable<string>? SpanPoints { get => (IEnumerable<string>?)GetValue(SpanPointsProperty); set => SetValue(SpanPointsProperty, value); }
     public static readonly DependencyProperty AppliedPointsProperty = DependencyProperty.Register(nameof(AppliedPoints), typeof(IEnumerable<AppliedPoint>), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -217,7 +219,19 @@ public partial class Structural2DViewer : UserControl
 
     private void View3DMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount == 2) { Fit3D(); return; }
+        if (e.ClickCount == 2 && e.ChangedButton == MouseButton.Left && !PanMode &&
+            !Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            if (Hit3DMember(e.GetPosition(View3D)) is { } name)
+            {
+                Canvas.SelectMember(name);
+                MemberDoubleClicked?.Invoke(this, name);
+            }
+            else Fit3D();
+            e.Handled = true;
+            return;
+        }
+        if (e.ClickCount == 2) { Fit3D(); e.Handled = true; return; }
         dragStart = e.GetPosition(View3DHost);
         dragOrigin = dragStart;
         dragged3D = false;
@@ -257,23 +271,30 @@ public partial class Structural2DViewer : UserControl
         if (e.ChangedButton == MouseButton.Left && !panning && !dragged3D && dragOrigin is { } origin &&
             (e.GetPosition(View3DHost) - origin).Length <= 4 && scene3D is { } scene)
         {
-            string? hit = null;
-            VisualTreeHelper.HitTest(View3D, null, result =>
-            {
-                if (result is RayMeshGeometry3DHitTestResult { ModelHit: GeometryModel3D model } &&
-                    scene.MemberVisuals.FirstOrDefault(item => ReferenceEquals(item.Model, model)) is { } member)
-                {
-                    hit = member.Name;
-                    return HitTestResultBehavior.Stop;
-                }
-                return HitTestResultBehavior.Continue;
-            }, new PointHitTestParameters(e.GetPosition(View3D)));
+            var hit = Hit3DMember(e.GetPosition(View3D));
             if (hit is not null) Canvas.ToggleMemberSelection(hit);
         }
         dragStart = null;
         dragOrigin = null;
         dragged3D = false;
         if (View3DHost.IsMouseCaptured) View3DHost.ReleaseMouseCapture();
+    }
+
+    private string? Hit3DMember(Point position)
+    {
+        if (scene3D is not { } scene) return null;
+        string? hit = null;
+        VisualTreeHelper.HitTest(View3D, null, result =>
+        {
+            if (result is RayMeshGeometry3DHitTestResult { ModelHit: GeometryModel3D model } &&
+                scene.MemberVisuals.FirstOrDefault(item => ReferenceEquals(item.Model, model)) is { } member)
+            {
+                hit = member.Name;
+                return HitTestResultBehavior.Stop;
+            }
+            return HitTestResultBehavior.Continue;
+        }, new PointHitTestParameters(position));
+        return hit;
     }
 
     private void Update3DSelection()
@@ -398,6 +419,7 @@ public sealed class ModelCanvas : FrameworkElement
 
     /// <summary>Raised when the selected joints or members change: a click, a window, a clear.</summary>
     public event EventHandler? SelectionChanged;
+    public event EventHandler<string>? MemberDoubleClicked;
 
     public void ClearSelection()
     {
@@ -416,6 +438,22 @@ public sealed class ModelCanvas : FrameworkElement
         InvalidateVisual();
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    public void SelectMember(string name)
+    {
+        if (!Model.Members.Any(member => member.Name == name)) return;
+        selectedMembers.Clear();
+        selectedJoints.Clear();
+        selectedMembers.Add(name);
+        InvalidateVisual();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal string? HitMemberAt(Point position) => memberLocations
+        .Where(item => DistanceToSegment(position, item.Value.Start, item.Value.End) <= 7)
+        .OrderBy(item => DistanceToSegment(position, item.Value.Start, item.Value.End))
+        .ThenBy(item => item.Value.Kind != MemberKind.Frame)
+        .Select(item => item.Key).FirstOrDefault();
 
     /// <summary>Selects (or deselects) what lies at <paramref name="position"/>, as a click does (checks).</summary>
     public bool SelectAt(Point position)
@@ -1352,7 +1390,16 @@ public sealed class ModelCanvas : FrameworkElement
             panning = true; last = position; CaptureMouse(); e.Handled = true; return;
         }
         if (e.ChangedButton != MouseButton.Left) return;
-        if (e.ClickCount == 2) return;   // a double click selects twice; Home / Zoom extents fit the view
+        if (e.ClickCount == 2)
+        {
+            if (HitMemberAt(position) is { } name)
+            {
+                SelectMember(name);
+                MemberDoubleClicked?.Invoke(this, name);
+                e.Handled = true;
+            }
+            return;
+        }
 
         if (FemResultMode == FemResultMode.DeflectedShape && FemResult is not null)
         {
