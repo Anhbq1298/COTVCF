@@ -72,7 +72,7 @@ public partial class Structural2DViewer : UserControl
     /// <summary>Point name → vertical load Fz [kN] labelled at the load arrows.</summary>
     public IReadOnlyDictionary<string, double>? LoadValues { get => (IReadOnlyDictionary<string, double>?)GetValue(LoadValuesProperty); set => SetValue(LoadValuesProperty, value); }
     public static readonly DependencyProperty ShowAxialValuesProperty = DependencyProperty.Register(nameof(ShowAxialValues), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
-    /// <summary>In the axial-force result view, label frame axial forces and cable tensions in whole kN.</summary>
+    /// <summary>Label frame N/V/M values and cable tensions in the active result view.</summary>
     public bool ShowAxialValues { get => (bool)GetValue(ShowAxialValuesProperty); set => SetValue(ShowAxialValuesProperty, value); }
 
     public static readonly DependencyProperty MemberSectionsProperty = DependencyProperty.Register(nameof(MemberSections),
@@ -559,7 +559,7 @@ public sealed class ModelCanvas : FrameworkElement
                 DrawLoadArrow(dc, point);
                 DrawAppliedPoint(dc, point, ReferenceEquals(applied, SelectedAppliedPoint));
                 if (LoadValues is { } loads && loads.TryGetValue(applied.PointName, out var fz))
-                    CableLabel(dc, $"{fz:0.##} kN", point + new Vector(6, -62), false);
+                    CableLabel(dc, ResultDisplayText.Force(fz), point + new Vector(6, -62), false);
             }
 
             foreach (var name in PinSupportPoints ?? [])
@@ -703,7 +703,7 @@ public sealed class ModelCanvas : FrameworkElement
                     var head = point + new Vector(0, up ? 20 : 20 + length);
                     var tail = point + new Vector(0, up ? 20 + length : 20);
                     DrawResultArrow(dc, tail, head, brush);
-                    ValueLabel(dc, $"Rz {reaction.ReactionZKN:0} kN", point + new Vector(0, 20 + length + 9), "Text");
+                    ValueLabel(dc, $"Rz {ResultDisplayText.Force(reaction.ReactionZKN)}", point + new Vector(0, 20 + length + 9), "Text");
                 }
                 if (Math.Abs(reaction.ReactionXKN) > 1e-9)
                 {
@@ -713,7 +713,7 @@ public sealed class ModelCanvas : FrameworkElement
                     var head = point + new Vector(-direction * 12, 8);
                     var tail = head + new Vector(-direction * length, 0);
                     DrawResultArrow(dc, tail, head, brush);
-                    ValueLabel(dc, $"Rx {reaction.ReactionXKN:0} kN", tail + new Vector(-direction * 34, 0), "Text");
+                    ValueLabel(dc, $"Rx {ResultDisplayText.Force(reaction.ReactionXKN)}", tail + new Vector(-direction * 34, 0), "Text");
                 }
             }
             return;
@@ -735,10 +735,10 @@ public sealed class ModelCanvas : FrameworkElement
             ? frame.Stations?.Select(station => StationValue(station, mode)) ?? []
             : [])).ToArray();
         var maximumFrame = frameValues.Select(Math.Abs).DefaultIfEmpty().Max();
+        var diagramWidth = Math.Clamp(Math.Min(ActualWidth, ActualHeight) * 0.055, 18, 52);
         if (maximumFrame > 1e-12)
         {
             var frameByName = result.Frames.ToDictionary(frame => frame.MemberName, StringComparer.Ordinal);
-            var diagramWidth = Math.Clamp(Math.Min(ActualWidth, ActualHeight) * 0.055, 18, 52);
             var scale = diagramWidth / maximumFrame;
             foreach (var member in Model.Members.Where(member => member.Kind == MemberKind.Frame))
             {
@@ -773,25 +773,47 @@ public sealed class ModelCanvas : FrameworkElement
                 { DashStyle = cable.Active ? DashStyles.Solid : DashStyles.Dash };
                 dc.DrawLine(pen, start, end);
             }
+        }
 
-            if (ShowAxialValues)
+        if (!ShowAxialValues || mode is not (FemResultMode.AxialForce or FemResultMode.BendingMoment or FemResultMode.Shear)) return;
+        if (mode != FemResultMode.AxialForce && maximumFrame <= 1e-12) return;
+
+        // Each label is located at a frame-piece midpoint and follows that frame's projected axis.
+        // The force at that location is interpolated from the actual FEM stations.
+        var labelledFrames = result.Frames.ToDictionary(frame => frame.MemberName, StringComparer.Ordinal);
+        foreach (var member in Model.Members.Where(member => member.Kind == MemberKind.Frame))
+        {
+            if (!labelledFrames.TryGetValue(member.Name, out var frame) ||
+                !screenPoints.TryGetValue(member.Start, out var start) || !screenPoints.TryGetValue(member.End, out var end)) continue;
+            foreach (var (fraction, axial) in AxialPieces(frame))
             {
-                // Frame axial force per piece (a frame split at intermediate joints can change force at each joint).
-                var frameByName = result.Frames.ToDictionary(frame => frame.MemberName, StringComparer.Ordinal);
-                foreach (var member in Model.Members.Where(member => member.Kind == MemberKind.Frame))
+                var section = mode == FemResultMode.AxialForce ? null : SectionAt(frame, fraction);
+                var value = mode switch
                 {
-                    if (!frameByName.TryGetValue(member.Name, out var frame) ||
-                        !screenPoints.TryGetValue(member.Start, out var start) || !screenPoints.TryGetValue(member.End, out var end)) continue;
-                    foreach (var (fraction, axial) in AxialPieces(frame))
-                        ValueLabel(dc, $"{axial:0} kN", start + (end - start) * fraction, axial >= 0 ? "Accent" : "Error");
-                }
-                // Cable tensions last so they sit on top; placed 65% along from the I-end, away from shared anchors.
-                foreach (var member in Model.Members.Where(member => member.Kind == MemberKind.Cable))
-                    if (cableByName.TryGetValue(member.Name, out var cable) && screenPoints.TryGetValue(member.Start, out var start) &&
-                        screenPoints.TryGetValue(member.End, out var end))
-                        ValueLabel(dc, $"T {cable.AxialForceKN:0} kN", start + (end - start) * 0.65, cable.Active ? "AccentBright" : "Muted");
+                    FemResultMode.AxialForce => axial,
+                    FemResultMode.BendingMoment => section!.MomentKNm,
+                    _ => section!.ShearKN
+                };
+                var text = mode switch
+                {
+                    FemResultMode.AxialForce => $"N {ResultDisplayText.Force(value)}",
+                    FemResultMode.BendingMoment => $"M {ResultDisplayText.Moment(value)}",
+                    _ => $"V {ResultDisplayText.Force(value)}"
+                };
+                var offset = mode == FemResultMode.AxialForce ? 0 :
+                    (value < 0 ? -1 : 1) * (Math.Min(Math.Abs(value) * diagramWidth / maximumFrame, diagramWidth) + 9);
+                MemberValueLabel(dc, text, start, end, fraction, offset, value >= 0 ? "Accent" : "Error");
             }
         }
+
+        if (mode != FemResultMode.AxialForce) return;
+        // Cable tensions last so they sit on top; 65% along avoids their shared anchors.
+        var labelledCables = result.Cables.ToDictionary(cable => cable.MemberName, StringComparer.Ordinal);
+        foreach (var member in Model.Members.Where(member => member.Kind == MemberKind.Cable))
+            if (labelledCables.TryGetValue(member.Name, out var cable) && screenPoints.TryGetValue(member.Start, out var start) &&
+                screenPoints.TryGetValue(member.End, out var end))
+                MemberValueLabel(dc, $"T {ResultDisplayText.Force(cable.AxialForceKN)}", start, end, 0.65, 12,
+                    cable.Active ? "AccentBright" : "Muted");
     }
 
     /// <summary>Mid-fraction and mean axial force of each piece of a frame; pieces start where a station repeats.</summary>
@@ -831,6 +853,18 @@ public sealed class ModelCanvas : FrameworkElement
         dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(225, 255, 255, 255)), new Pen(Brush("Border"), 1),
             new Rect(origin.X - 3, origin.Y - 1, label.Width + 6, label.Height + 2), 2, 2);
         dc.DrawText(label, origin);
+    }
+
+    private void MemberValueLabel(DrawingContext dc, string text, Point start, Point end, double fraction, double offset, string brush)
+    {
+        var direction = end - start;
+        var length = direction.Length;
+        if (length < 1) return;
+        var normal = new Vector(-direction.Y / length, direction.X / length);
+        var center = start + direction * fraction + normal * offset;
+        dc.PushTransform(new RotateTransform(ResultDisplayText.UprightAngle(direction.X, direction.Y), center.X, center.Y));
+        ValueLabel(dc, text, center, brush);
+        dc.Pop();
     }
 
     private static void DrawResultDiagram(DrawingContext dc, Point start, Point end, double valueI, double valueJ, double scale)
@@ -1072,9 +1106,7 @@ public sealed class ModelCanvas : FrameworkElement
     {
         var dir = b - a;
         if (dir.Length < 8) return;
-        var angle = Math.Atan2(dir.Y, dir.X) * 180 / Math.PI;
-        if (angle > 90) angle -= 180;
-        else if (angle < -90) angle += 180;
+        var angle = ResultDisplayText.UprightAngle(dir.X, dir.Y);
         var mid = new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
         var normal = new Vector(-dir.Y, dir.X);
         if (normal.Length > 0) normal.Normalize();
@@ -1217,7 +1249,8 @@ public sealed class ModelCanvas : FrameworkElement
         {
             HoverMarker(dc, support.Point);
             HoverBox(dc, cursor, $"Support {support.Result.PointName}",
-                [$"Rx  {support.Result.ReactionXKN,10:0.0} kN", $"Rz  {support.Result.ReactionZKN,10:0.0} kN"]);
+                [$"Rx  {ResultDisplayText.Force(support.Result.ReactionXKN, "0.0")}",
+                 $"Rz  {ResultDisplayText.Force(support.Result.ReactionZKN, "0.0")}"]);
             return;
         }
         var nearest = hoverTargets
@@ -1238,9 +1271,9 @@ public sealed class ModelCanvas : FrameworkElement
                 DrawSectionCut(dc, frame.Start, frame.End, nearest.Hit.Point);
                 HoverBox(dc, cursor, $"{frame.Member.Name}  x = {nearest.Hit.Fraction * frame.LengthM:0.000} m  ({nearest.Hit.Fraction * 100:0}%)",
                 [
-                    $"N   {section.AxialKN,10:0.0} kN",
-                    $"V   {section.ShearKN,10:0.0} kN",
-                    $"M   {section.MomentKNm,10:0.0} kN·m",
+                    $"N   {ResultDisplayText.Force(section.AxialKN, "0.0")}",
+                    $"V   {ResultDisplayText.Force(section.ShearKN, "0.0")}",
+                    $"M   {ResultDisplayText.Moment(section.MomentKNm, "0.0")}",
                     $"ux  {section.UXM * 1000,10:0.00} mm",
                     $"uz  {section.UZM * 1000,10:0.00} mm"
                 ]);
@@ -1250,8 +1283,8 @@ public sealed class ModelCanvas : FrameworkElement
                 HoverMarker(dc, nearest.Hit.Point);
                 HoverBox(dc, cursor, $"{cable.Member.Name} (cable)",
                 [
-                    $"T   {cable.Result.AxialForceKN,10:0.0} kN" + (cable.Result.Active ? "" : "  slack"),
-                    .. cable.Result.TargetForceKN > 0 ? new[] { $"Target {cable.Result.TargetForceKN,7:0.0} kN" } : [],
+                    $"T   {ResultDisplayText.Force(cable.Result.AxialForceKN, "0.0")}" + (cable.Result.Active ? "" : "  slack"),
+                    .. cable.Result.TargetForceKN > 0 ? new[] { $"Target {ResultDisplayText.Force(cable.Result.TargetForceKN, "0.0")}" } : [],
                     .. cable.Result is { SagM: double sag, TangentStiffnessRatio: double ratio }
                         ? new[] { $"Sag {sag * 1000,10:0.0} mm", $"Stiffness {ratio * 100,5:0.0} % of EA/L" } : []
                 ]);

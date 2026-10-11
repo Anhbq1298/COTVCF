@@ -865,6 +865,7 @@ public sealed partial class MainViewModel : Observable
     public Command RunFemAnalysis { get; }
     public Command CancelFemAnalysis { get; }
     public Command UnlockFemModel { get; }
+    public Command ToggleFemModelLock { get; }
 
     private readonly FemStudyService femStudy = new();
     private CancellationTokenSource? femCancellation;
@@ -1032,7 +1033,7 @@ public sealed partial class MainViewModel : Observable
     public bool ShowFemLoads { get => showFemLoads; set { if (Set(ref showFemLoads, value)) { Notify(nameof(SharedViewerShowLoads)); Notify(nameof(SharedViewerLoadValues)); } } }
 
     private bool showFemAxialValues = true;
-    /// <summary>Label frame axial forces and cable tensions (whole kN) in the Axial force result view.</summary>
+    /// <summary>Label N/V/M along frames and tensions along cables in their result views.</summary>
     public bool ShowFemAxialValues { get => showFemAxialValues; set => Set(ref showFemAxialValues, value); }
 
     /// <summary>SAP section data (shape, local-axis angle, area) per member once read, for the to-scale 3D view.</summary>
@@ -1049,7 +1050,7 @@ public sealed partial class MainViewModel : Observable
     public string FemMemberSizeHint => ShowFemMemberSizes && FemSectionProperties.Count == 0
         ? "No sections read yet — use Read Properties on the Inputs page."
         : "Section name labelled along each frame and cable.";
-    public bool SharedViewerShowLoads => selectedTab != TabFem || ShowFemLoads;
+    public bool SharedViewerShowLoads { get => ShowFemLoads; set => ShowFemLoads = value; }
     /// <summary>Vertical load per point of the selected FEM case, labelled at the load arrows.</summary>
     public IReadOnlyDictionary<string, double>? SharedViewerLoadValues =>
         selectedTab == TabFem && ShowFemLoads && SelectedFemRun?.Loads is { } loads
@@ -1346,6 +1347,7 @@ public sealed partial class MainViewModel : Observable
         RunFemAnalysis = new(_ => RunFemAnalysisFromUi(), () => CanRunFemAnalysis);
         CancelFemAnalysis = new(_ => femCancellation?.Cancel(), () => CanCancelFemAnalysis);
         UnlockFemModel = new(_ => UnlockFemModelForEditing(), () => CanUnlockFemModel);
+        ToggleFemModelLock = new(_ => ToggleFemModelLockFromUi(), () => CanToggleFemModelLock);
 
         void Dirty(ConfigTabs tab) { if (!applyingProject) config.Session.MarkDirty(tab); }
 
@@ -1446,10 +1448,10 @@ public sealed partial class MainViewModel : Observable
         {
             if (property.GetValue(this) is not Command command ||
                 command == Connect || command == Refresh || command == CancelStudy || command == CancelFemAnalysis ||
-                command == LoadFemModel || command == LoadDefaultModel || command == NewConfig) continue;
+                command == LoadFemModel || command == LoadDefaultModel || command == ContinueWithBlankModel || command == NewConfig) continue;
             // A loaded FEM model (Load Model) runs FEM offline, and the 01 Loading add / remove commands only edit what the
             // app holds; every other command needs the live SAP2000 model.
-            command.Availability = command == RunFemAnalysis || command == SaveFemModel || command == UnlockFemModel || command == AddPoints ||
+            command.Availability = command == RunFemAnalysis || command == SaveFemModel || command == UnlockFemModel || command == ToggleFemModelLock || command == AddPoints ||
                                    command == RemoveAppliedPoints || command == AddLoadDefinition || command == DeleteLoadDefinition
                 ? () => HasWorkingModel
                 : () => HasSapConnection;
@@ -3109,7 +3111,7 @@ public sealed partial class MainViewModel : Observable
             nameof(HasSapConnection), nameof(HasWorkingModel), nameof(IsOfflineModel), nameof(IsDefaultModel), nameof(OfflineModelSummary), nameof(CanSaveFemModel), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
             nameof(FemRunSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus), nameof(IsFemModelLocked),
             nameof(CanDefineFemModel), nameof(HasModelGeometry), nameof(HasUsableModelGeometry), nameof(ShowBlankModelChoice), nameof(CanEditFemModel), nameof(CanEditVcfGeometry),
-            nameof(CanUnlockFemModel), nameof(FemModelEditState), nameof(FemDatabaseSummary),
+            nameof(CanUnlockFemModel), nameof(CanToggleFemModelLock), nameof(FemLockGlyph), nameof(FemLockActionText), nameof(FemModelEditState), nameof(FemDatabaseSummary),
             nameof(FemOutputCaseChoices), nameof(FemDeflectionOutputCase), nameof(FemMemberForceOutputCase), nameof(FemFoundationOutputCase), nameof(FemCableOutputCase),
             nameof(FemDeflectionJointNames), nameof(FemFoundationLeftJointNames), nameof(FemFoundationRightJointNames), nameof(FemCableObjectNames), nameof(FemFrameObjectNames),
             nameof(FemDeflectionLimitMinMm), nameof(FemDeflectionLimitMaxMm), nameof(FemMaximumCableUtilization), nameof(FemOutputSettingsStatus),

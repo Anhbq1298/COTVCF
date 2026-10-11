@@ -76,7 +76,7 @@
      <StackPanel Grid.Column="2">
       <GroupBox Header="Results">
        <StackPanel>
-        <CheckBox x:Name="AxialValues" Content="Axial force values (kN)" ToolTip="Label each frame piece and cable with its axial force on the Axial force view."/>
+        <CheckBox x:Name="AxialValues" Content="Frame / cable result values" ToolTip="Show N, V or M along each frame, and cable tension along each cable. Values above 1000 kN or kN·m display in MN or MN·m."/>
         <CheckBox x:Name="Undeformed" Content="Undeformed shape guide" ToolTip="Light dashed undeformed geometry under the deflected shape."/>
         <CheckBox x:Name="DeflectionContour" Content="Deflection contour |U|" ToolTip="Colour the deflected shape by displacement magnitude."/>
        </StackPanel>

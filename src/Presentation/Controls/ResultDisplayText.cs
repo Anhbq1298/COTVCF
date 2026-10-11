@@ -1,0 +1,27 @@
+using System.Globalization;
+
+namespace COT_VCF.Presentation.Controls;
+
+/// <summary>Compact display units for values drawn on the FEM viewport; the stored results remain in kN and kN·m.</summary>
+internal static class ResultDisplayText
+{
+    internal static string Force(double kilonewtons, string smallFormat = "0.##") =>
+        Format(kilonewtons, smallFormat, "kN", "MN");
+
+    internal static string Moment(double kilonewtonMetres, string smallFormat = "0.##") =>
+        Format(kilonewtonMetres, smallFormat, "kN·m", "MN·m");
+
+    private static string Format(double value, string smallFormat, string smallUnit, string largeUnit) =>
+        Math.Abs(value) > 1000
+            ? $"{(value / 1000).ToString("0.####", CultureInfo.CurrentCulture)} {largeUnit}"
+            : $"{value.ToString(smallFormat, CultureInfo.CurrentCulture)} {smallUnit}";
+
+    /// <summary>Screen-space member direction, flipped as needed so numeric labels never appear upside down.</summary>
+    internal static double UprightAngle(double deltaX, double deltaY)
+    {
+        var angle = Math.Atan2(deltaY, deltaX) * 180 / Math.PI;
+        if (angle > 90) angle -= 180;
+        else if (angle < -90) angle += 180;
+        return angle;
+    }
+}

@@ -451,6 +451,18 @@ public partial class MainWindow : Window
 
     protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
     {
+        if (System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.None &&
+            DataContext is MainViewModel { HasUsableModelGeometry: true })
+        {
+            var picker = e.Key switch
+            {
+                System.Windows.Input.Key.F5 => ShowResultPickerKind.Deflection,
+                System.Windows.Input.Key.F6 => ShowResultPickerKind.MemberForces,
+                System.Windows.Input.Key.F7 => ShowResultPickerKind.Reactions,
+                _ => (ShowResultPickerKind?)null
+            };
+            if (picker is { } kind) { OpenResultPicker(kind); e.Handled = true; return; }
+        }
         if (e.Key == System.Windows.Input.Key.F4 && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.None &&
             DataContext is MainViewModel { HasWorkingModel: true } vm)
         {
@@ -531,15 +543,21 @@ public partial class MainWindow : Window
 
     // Toolbar → Show Results: load case / combo and the output to draw on the model view
     private ShowResultsWindow? showResultsWindow;
-    private void ShowResults_Click(object sender, RoutedEventArgs e)
+    private void ShowResults_Click(object sender, RoutedEventArgs e) => OpenResultPicker(ShowResultPickerKind.All);
+    private void ShowDeformedShape_Click(object sender, RoutedEventArgs e) => OpenResultPicker(ShowResultPickerKind.Deflection);
+    private void ShowMemberForces_Click(object sender, RoutedEventArgs e) => OpenResultPicker(ShowResultPickerKind.MemberForces);
+    private void ShowJointReactions_Click(object sender, RoutedEventArgs e) => OpenResultPicker(ShowResultPickerKind.Reactions);
+
+    private void OpenResultPicker(ShowResultPickerKind kind)
     {
         if (DataContext is not MainViewModel vm) return;
         if (showResultsWindow is null)
         {
-            showResultsWindow = new ShowResultsWindow(vm, cableFit => { vm.FemCableFitView = cableFit; OpenFemResultsClick(this, new RoutedEventArgs()); }) { Owner = this };
+            showResultsWindow = new ShowResultsWindow(vm, cableFit => { vm.FemCableFitView = cableFit; OpenFemResultsClick(this, new RoutedEventArgs()); }, kind) { Owner = this };
             showResultsWindow.Closed += (_, _) => showResultsWindow = null;
             showResultsWindow.Show();
         }
+        else showResultsWindow.Configure(kind);
         if (showResultsWindow.WindowState == WindowState.Minimized) showResultsWindow.WindowState = WindowState.Normal;
         showResultsWindow.Activate();
     }

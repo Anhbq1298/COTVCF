@@ -36,6 +36,13 @@ internal static class Program
                 CheckBlankTemplateUi();
                 return 0;
             }
+            if (args.Contains("--result-tools-ui"))
+            {
+                var app = new System.Windows.Application();
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/src/Presentation/Theme.xaml", UriKind.Relative) });
+                ResultToolbarChecks.Run();
+                return 0;
+            }
             var liveMatrixIndex = Array.IndexOf(args, "--study-live-matrix");
             var liveStudyIndex = liveMatrixIndex >= 0 ? liveMatrixIndex : Array.IndexOf(args, "--study-live");
             if (liveStudyIndex >= 0)
@@ -714,7 +721,7 @@ internal static class Program
                 vm.FemRuns.Add(demoFemRun);
                 vm.Notify(nameof(MainViewModel.HasFemResults));
                 Assert(TopMenu("Result").Items.OfType<MenuItem>().Select(item => (item.Header as string)?.Replace("_", ""))
-                           .SequenceEqual(["Axial forces / cables", "Bending moments", "Shear forces", "Support reactions", "Deflection", "Cable target fit", "Show Results…", "Results Table…"]) &&
+                           .SequenceEqual(["Show Deformed Shape…", "Show Member Forces…", "Show Joint Reactions…", "Axial forces / cables", "Bending moments", "Shear forces", "Support reactions", "Deflection", "Cable target fit", "Show Results…", "Results Table…"]) &&
                        TopMenu("Result").Items.OfType<MenuItem>().All(item => item.IsEnabled),
                     "The Result menu lists the six outputs and the results table, enabled once the run has results");
                 // Run Analysis is one run of the model: nowhere in the FEM results is there a candidate to choose
@@ -1316,6 +1323,7 @@ internal static class Program
             ReliabilityChecks.Run();
             StudyComposerChecks.Run();
             PlanarFrameChecks.Run();
+            ViewerResultDisplayChecks.Run();
             StudyExecutionChecks.Run();
             OptimizationChecks.Run();
             CableForceReportChecks.Run();
@@ -1374,18 +1382,39 @@ internal static class Program
             var blankWorkflow = new WorkflowService(blankSap, blankState);
             var blankVm = new MainViewModel(blankState, blankWorkflow, new NoSelection(), new ConfigService(blankSap, blankState, blankWorkflow),
                 femSessionStore: new COT_VCF.Infrastructure.FemWorkingSessionStore(blankRoot));
+            blankVm.LoadDefaultFemModel();
             var blankWindow = new COT_VCF.Presentation.MainWindow { DataContext = blankVm, Width = 1100, Height = 700 };
             if (owner is not null) blankWindow.Owner = owner;
             try
             {
                 blankWindow.Show();
-                blankVm.InitializeBlankMcotisConfiguration();
                 blankWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 blankWindow.UpdateLayout();
                 var templateButton = FindVisuals<Button>(blankWindow).Single(button =>
                     System.Windows.Automation.AutomationProperties.GetName(button) == "Load default template");
-                Assert(templateButton.IsVisible && templateButton.IsEnabled && !blankWindow.WorkflowTabs.IsEnabled,
-                    "The blank viewport offers an enabled Load Default Template button while model workflow pages are disabled");
+                var continueButton = FindVisuals<Button>(blankWindow).Single(button =>
+                    System.Windows.Automation.AutomationProperties.GetName(button) == "Continue with blank model");
+                Assert(blankVm.IsDefaultModel && blankVm.HasModelGeometry && !templateButton.IsVisible &&
+                       !continueButton.IsVisible && blankWindow.WorkflowTabs.IsEnabled,
+                    "Opening with the default model shows geometry without a blank-model choice");
+                blankVm.InitializeBlankMcotisConfiguration();
+                blankWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                var fileMenu = (MenuItem)blankWindow.MainMenu.Items[0];
+                var defineMenu = (MenuItem)blankWindow.MainMenu.Items[2];
+                Assert(blankWindow.Title == "Mcotis — Meinhardt Cities of Tomorrow Integrated Structures" &&
+                       fileMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Load Config…")) &&
+                       defineMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Materials…")) &&
+                       templateButton.IsVisible && templateButton.IsEnabled && continueButton.IsVisible && continueButton.IsEnabled &&
+                       !blankWindow.WorkflowTabs.IsEnabled,
+                    "The correctly labelled blank viewport offers both template and blank-model choices");
+                var continuePeer = new System.Windows.Automation.Peers.ButtonAutomationPeer(continueButton);
+                ((System.Windows.Automation.Provider.IInvokeProvider)continuePeer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Invoke))
+                    .Invoke();
+                blankWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(!blankVm.HasModelGeometry && !templateButton.IsVisible && !continueButton.IsVisible && blankVm.CanDefineFemModel,
+                    "Continue with Blank Model dismisses the chooser without creating geometry");
+                blankVm.InitializeBlankMcotisConfiguration();
+                blankWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var templatePeer = new System.Windows.Automation.Peers.ButtonAutomationPeer(templateButton);
                 ((System.Windows.Automation.Provider.IInvokeProvider)templatePeer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Invoke))
                     .Invoke();
@@ -1416,7 +1445,7 @@ internal static class Program
     {
         public IReadOnlyList<string>? Select(string title, IReadOnlyList<string> available, IReadOnlyList<string> selected) => null;
     }
-    private sealed class FakeSap : ISapGateway
+    internal sealed class FakeSap : ISapGateway
     {
         public required ModelSnapshot Snapshot { get; init; }
         public int Writes { get; private set; }

@@ -44,11 +44,10 @@ public partial class App : System.Windows.Application
         var viewModel = new MainViewModel(state, workflow, new SelectionService(), config, studyExecution,
             outputDialogs: outputDialogs, outputGroupPreparation: outputPreparation,
             printStore: new ReportPrintSettingsStore(), quantityTakeoff: quantityTakeoff);
+        // Open the built-in model before showing the window so startup never displays the blank chooser.
+        viewModel.LoadDefaultFemModel();
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
-        // Restore an unfinished user session. With no session, start from a blank MCOTiS model: definitions come
-        // first, then Edit creates the parametric VCF geometry. The sample model is opened only on explicit request.
-        if (!viewModel.TryRestoreFemWorkingSession()) viewModel.InitializeBlankMcotisConfiguration();
         // The model view opens on its own; the Define / Run / Result … pane appears when a menu item is chosen.
         ((Presentation.MainWindow)MainWindow).ClosePane();
     }

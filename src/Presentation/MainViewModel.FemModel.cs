@@ -20,7 +20,8 @@ public sealed partial class MainViewModel
     /// <summary>The offline model is the built-in default (not a file the user chose).</summary>
     private bool isDefaultModel;
     private IReadOnlyList<string> offlineLoadCaseNames = [];
-    private Command? saveFemModel, loadFemModel, loadDefaultModel;
+    private Command? saveFemModel, loadFemModel, loadDefaultModel, continueWithBlankModel;
+    private bool blankModelChoiceDismissed;
     private FemInputSnapshot? femInputSnapshot;
     private string? femInputDatabasePath;
     private string? femWorkingDatabasePath;
@@ -33,9 +34,14 @@ public sealed partial class MainViewModel
     public bool CanDefineFemModel => !IsBusy && !IsFemModelLocked;
     public bool HasModelGeometry => State.Geometry.Points.Count > 0 && State.Geometry.Members.Count > 0;
     public bool HasUsableModelGeometry => HasWorkingModel && HasModelGeometry;
-    public bool ShowBlankModelChoice => IsOfflineModel && !HasModelGeometry;
+    public bool ShowBlankModelChoice => IsOfflineModel && !HasModelGeometry && !blankModelChoiceDismissed;
     public bool CanEditFemModel => !IsBusy && HasUsableModelGeometry && !IsFemModelLocked;
     public bool CanUnlockFemModel => !IsBusy && IsFemModelLocked;
+    public bool CanToggleFemModelLock => !IsBusy && HasUsableModelGeometry;
+    public string FemLockGlyph => IsFemModelLocked ? "\uE72E" : "\uE785";
+    public string FemLockActionText => IsFemModelLocked
+        ? "Unlock model — delete this revision's output databases and enable editing"
+        : "Lock model — freeze the current FEM inputs before analysis";
     public string FemModelEditState => isFemRunning ? "RUNNING" : IsFemModelLocked
         ? $"LOCKED · REV {femInputSnapshot!.LockedRevision ?? femInputSnapshot.Revision}"
         : femWorkingDirty ? "UNLOCKED · MODIFIED" : "UNLOCKED";
@@ -63,6 +69,12 @@ public sealed partial class MainViewModel
     public Command LoadFemModel => loadFemModel ??= new(_ => LoadFemModelFromFile(), () => CanLoadFemModel);
     /// <summary>File → Default Model: drop the current model (live or loaded) and open the built-in default model.</summary>
     public Command LoadDefaultModel => loadDefaultModel ??= new(_ => LoadDefaultFemModel(replaceCurrent: true), () => CanLoadFemModel);
+    public Command ContinueWithBlankModel => continueWithBlankModel ??= new(_ =>
+    {
+        blankModelChoiceDismissed = true;
+        Notify(nameof(ShowBlankModelChoice));
+        Message = "Blank model ready. Define materials and frame/cable sections, then Edit → VCF System.";
+    }, () => ShowBlankModelChoice && !IsBusy);
 
     /// <summary>Fresh application / File → New Config: an unsaved, offline model with no geometry or definitions.</summary>
     internal void InitializeBlankMcotisConfiguration()
@@ -100,6 +112,7 @@ public sealed partial class MainViewModel
             offlineLoadCaseNames = [];
             offlineModelPath = "Untitled";
             isDefaultModel = false;
+            blankModelChoiceDismissed = false;
             femInputSnapshot = null;
             femInputDatabasePath = null;
             femWorkingDatabasePath = null;
@@ -532,6 +545,18 @@ public sealed partial class MainViewModel
         NotifyFemDatabaseState();
     }
 
+    private void ToggleFemModelLockFromUi()
+    {
+        if (!CanToggleFemModelLock) return;
+        if (IsFemModelLocked) { UnlockFemModelForEditing(); return; }
+        try
+        {
+            LockFemModelForRun();
+            Message = "FEM model locked. Run Analysis to generate output databases.";
+        }
+        catch (Exception ex) { Warn("Lock FEM Model", ex.Message); }
+    }
+
     private void UnlockFemModelForEditing()
     {
         if (!CanUnlockFemModel || femInputSnapshot is null) return;
@@ -622,6 +647,9 @@ public sealed partial class MainViewModel
         Notify(nameof(IsFemModelLocked));
         Notify(nameof(CanEditFemModel));
         Notify(nameof(CanUnlockFemModel));
+        Notify(nameof(CanToggleFemModelLock));
+        Notify(nameof(FemLockGlyph));
+        Notify(nameof(FemLockActionText));
         Notify(nameof(FemModelEditState));
         Notify(nameof(FemDatabaseSummary));
         Notify(nameof(FemStatus));

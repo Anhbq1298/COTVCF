@@ -12,13 +12,14 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - Main solution: `COTVCF.sln`.
 - Main app project: `COTVCF.csproj`.
 - The old `ConsoleApp1.csproj` identity was removed; everything user-facing should be treated as COTVCF.
-- `COTVCF.sln` intentionally includes only `COTVCF.csproj`. Do not add `tests/COT_VCF.Checks.csproj` back to the solution unless the user asks.
+- `COTVCF.sln` currently includes the app and `tests/COT_VCF.Checks.csproj`; the desktop build script targets the app project directly.
 - `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/`, `.work/`, `tests/bin/`, and `tests/obj/`.
 - The app is a WPF app targeting `net8.0-windows`, `x64`, with SAP2000 API reference `CSiAPIv1.dll`.
 
 ## Build And Run
 
-- Build the app with `dotnet build COTVCF.sln`.
+- Build the app and checks together with `dotnet build COTVCF.sln -m:1`; when this machine has only SAP2000 27,
+  add `-p:SapInstallDir="C:\Program Files\Computers and Structures\SAP2000 27"`.
 - If the running desktop app locks `bin/Debug/net8.0-windows/win-x64/Mcotis.exe` or `.dll`, close it with `Get-Process -Name 'Mcotis' -ErrorAction SilentlyContinue | Stop-Process -Force`, then rebuild.
 - For compile-only checks while the app is open, use `dotnet build COTVCF.csproj -o .work\build-check`.
 - Launch the app from `bin/Debug/net8.0-windows/win-x64/Mcotis.exe`.
@@ -26,9 +27,14 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - The built application folder is `bin/COT ParametricTools_V2` (version 2.0.0.0). Produce it with
   `dotnet publish COTVCF.csproj -c Release --self-contained false -o "bin/COT ParametricTools_V2"` — never by
   copying a build output by hand: the earlier hand-copied `COT VCF Tools V1.0` folder went stale and showed an old app.
-- The solution also has a `FreshBuild` configuration. `dotnet build COTVCF.sln -c FreshBuild` writes the app directly
-  to the separate `bin/MCOTiS_FreshBuild/` folder. The configuration is registered in `COTVCF.sln`; its output path is
-  set in `COTVCF.csproj`, so it does not replace files held by an existing Debug or V2 app instance.
+- The solution also has a `FreshBuild` configuration. `dotnet build COTVCF.sln -c FreshBuild` deletes the existing
+  `bin/` directory and builds a complete app directly into a newly created `bin/` directory (`bin/Mcotis.exe`).
+  Close any running Mcotis instance from `bin/` first; this build also removes any Debug or published outputs there.
+- To rebuild and create the **Mcotis desktop icon**, run `./build-desktop.ps1`. The script checks for a running app,
+  performs `FreshBuild`, and creates `Desktop/Mcotis.lnk` pointing to `bin/Mcotis.exe`. Keep the DLLs in `bin/` beside
+  the executable; a standalone `.exe` on the desktop cannot run without them.
+- `src/Presentation/MainWindow.xaml` is UTF-8. A previous encoding error turned em dashes, ellipses and engineering
+  symbols into broken multi-character text; do not re-encode this XAML through Windows-1252.
 
 ## Compact Engineering Density Pass
 
@@ -101,7 +107,8 @@ earlier tall-header / large-button / blue-block look.
     not read SAP2000 either. Checked: the case at the model's own values equals Run FEM Analysis, and a case equals Run
     FEM Analysis on the same geometry applied with Edit → VCF Geometry. This is the parametric study with the internal
     solver: **many cases belong here, not in Run FEM Analysis** (see Tab 07 FEM).
-  - **Result**: Axial forces / cables, Bending moments, Shear forces, Support reactions, Deflection, Cable target fit
+  - **Result**: Show Deformed Shape… (F5), Show Member Forces… (F6), Show Joint Reactions… (F7);
+    Axial forces / cables, Bending moments, Shear forces, Support reactions, Deflection, Cable target fit
     (opens the table) · Results Table…; enabled once the run has results (`HasFemResults`).
   - **Display**: Frame mesh / Member size / Loading (checkable, bound to the FEM view toggles) · View Options.
   - **Design**: RC Column Design…, CFT (Concrete Filled Tube) Design…, Steel Encased Composite Column Design…. Each
@@ -118,11 +125,12 @@ earlier tall-header / large-button / blue-block look.
     Copy Report / Save Report… (.txt). The 2D FEM moment bends the major axis y-y; z-z carries imperfections only.
     Offline checks: `dotnet run --project tests/COT_VCF.Checks.csproj -- --column-design`.
   - **Help**: Workflow Help, FEM Procedure.
-- A fresh session restores an unfinished working database when one exists; otherwise it starts with a blank, unsaved
-  MCOTiS model. The creation flow is **Define materials/sections → Edit VCF System → Define loads/cases → Run**.
-  Define remains available on the blank model. MB, Assign, Run, Result, Post-Processing, Display and Design require model
-  geometry. The blank viewer shows **Load Default Template**, bound to the same command as File → Default Model; it is never
-  loaded automatically. New Config clears the active working-session manifest so the prior model does not reopen.
+- Every launch opens the built-in default model before the window is shown; no blank viewport or choice appears at startup.
+  File → New Config still starts an unsaved blank model. Its creation flow is
+  **Define materials/sections → Edit VCF System → Define loads/cases → Run**. Define remains available on that blank model;
+  MB, Assign, Run, Result, Post-Processing, Display and Design require geometry. The New Config blank viewer offers
+  **Load Default Template** and **Continue with Blank Model**. The template uses File → Default Model; Continue hides
+  the choice and keeps the model empty. New Config clears the active working-session manifest.
 - The `WorkflowTabs` TabControl stays (indices unchanged) but its tab strip is hidden (`ItemContainerStyle` →
   `Collapsed`). A one-line pane header above it shows `PaneMenu  ›  PaneTitle` (e.g. `MB › 01  LOADING`,
   `Define › SECTIONS`) with the page status (`PaneStatus`) on the right and, offline, the `OfflineModelSummary` line.
@@ -162,7 +170,7 @@ earlier tall-header / large-button / blue-block look.
   same rule as StudyCompositionService.BuildPointLoads).
 - **Display → View Options…** (and the toolbar eye) opens `ViewOptionsWindow`, titled *Display Options* and laid out like
   SAP2000's: tabs *Object Options* (Labels: point / frame / cable / member size; Show: dimensions, loading arrows, frame
-  mesh) and *General Options* (View Type: XY / XZ / YZ / Extrude 3D; Results: axial values, undeformed guide, deflection
+  mesh) and *General Options* (View Type: XY / XZ / YZ / Extrude 3D; Results: frame/cable result values, undeformed guide, deflection
   contour); *Reset Form to Default Values*, *Reset Form to Current Window Settings*; OK / Close / Apply. The form is staged:
   Apply / OK write it to the viewer and view model, Close discards. FEM pane 7 is only a card with *Open View Options*.
 - **Define → Materials…** (first Define item) opens `DefineMaterialsWindow` (modal, like SAP2000's Define Materials): material
@@ -245,10 +253,12 @@ earlier tall-header / large-button / blue-block look.
 - **Tool icons** (`TopToolbar`, after the title, ETABS-like; styles `ToolbarButton` / `ToolbarTextButton` /
   `ToolbarSeparator` in `Theme.xaml`, Segoe Fluent / MDL2 glyphs drawn by the template's own TextBlock because the
   implicit TextBlock font would otherwise replace the icon font): New Config · Load Config · Save All · Print All
-  Reports | Run FEM Analysis · Analysis Options · Analysis Monitor | Zoom extents · Zoom in · Zoom out | 3-d · xy · xz ·
-  yz | View Options. Same commands as the menus; the viewer icons call `Structural2DViewer.FitView` / `ZoomBy` /
-  `ShowPlane` and are enabled while the shared viewer is shown. No Undo/Redo, Draw, Lock or Pan icons — the app has no
-  such functions (pan is mouse drag).
+  Reports | Lock/Unlock · Run FEM Analysis · Analysis Options · Analysis Monitor | Deformed Shape (F5) · Member Forces
+  (F6) · Joint Reactions (F7) | Select · Pan · Clear Selection | Zoom extents · Zoom in · Zoom out | 3-d · xy · xz ·
+  yz | Show Undeformed Shape · View Options · Show Results. The lock icon reflects `IsFemModelLocked`; unlocking uses
+  the existing output cleanup and requires another run. F5/F6/F7 share a WPF result picker with a load-case/combo
+  selector: F5 fixes Deflected Shape, F6 offers N/V/M, F7 fixes Reactions. The general Show Results picker still offers
+  all outputs. The viewer icons call `Structural2DViewer.FitView` / `ZoomBy` / `ShowPlane`.
 - `Connect SAP` connects and immediately loads geometry. Refresh reconnects and updates
   geometry / load patterns / force sources for the current session.
 - `MainViewModel.StatusLine` feeds the top-bar status text; keep it in the `Update()` notify list.
@@ -264,7 +274,8 @@ earlier tall-header / large-button / blue-block look.
   Geometry is dark: frames `ViewportGeom`, cables/tendons `AccentBright` (dashed / dotted),
   joints hollow with a white ring.
 - Viewer controls are a small light floating panel at the top-right of the canvas: projection combo,
-  Fit, Reset view (returns to XZ), and three label toggles `P` / `F` / `C` bound to `ShowPointLabels` /
+  Fit, Reset view (returns to XZ), the `L` toggle to hide/show applied loads (two-way bound to Display → Loading),
+  and three label toggles `P` / `F` / `C` bound to `ShowPointLabels` /
   `ShowFrameLabels` / `ShowCableLabels`. Frame and cable/tendon labels are drawn along the member,
   rotated to the element's screen-space direction and kept upright (`ModelCanvas.MemberLabel`); configured
   cables keep their own horizontal `CableLabel` from the overlay and are skipped by the `C` pass.
@@ -430,9 +441,11 @@ earlier tall-header / large-button / blue-block look.
   Target / Pretension / Dev. % / Status / Result / Applied P / Iter.) | View (ViewToggle buttons: Frame mesh,
   Member size, Loading — viewer overlays only while the FEM tab is open) | Results (Load case / combo selector drives the
   table, viewer, hover and the cable table Result column; Axial force view draws frame
-  axial diagrams and cable tensions together; "Axial values (kN)" checkbox labels each frame piece and each cable
-  ("T n kN", drawn on top) in whole kN; Reactions view draws Rx and Rz as separate arrows with separate whole-kN
-  labels — never a combined resultant). In every result view, hovering within 10 px of a member shows a section
+  axial diagrams and cable tensions together. *Result values* labels N/V/M at frame-piece midpoints and cable tension
+  near each cable's I-end, rotated to the projected member axis and kept upright. Force values with magnitude above
+  1000 kN display in MN; moments above 1000 kN·m display in MN·m. Loading, reaction and hover labels use the same
+  display conversion; stored FEM values remain in kN and kN·m. Reactions view draws Rx and Rz as separate arrows
+  with separate labels — never a combined resultant). In every result view, hovering within 10 px of a member shows a section
   read-out: frames → name, x from I-end [m] and %, N/V/M and ux/uz interpolated between mesh stations, with a dashed
   section-cut marker; cables → tension, slack state, target; supports (priority) → Rx/Rz.
 - Shared viewer projection dropdown has XY / XZ / YZ / 3D. 3D (StructureModel3D + WPF Viewport3D, orthographic,

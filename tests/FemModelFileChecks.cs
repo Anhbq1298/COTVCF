@@ -141,10 +141,22 @@ internal static class FemModelFileChecks
             var vm = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(silent.Gateway, state, workflow),
                 femSessionStore: sessionStore);
 
+            vm.LoadDefaultFemModel();
+            Check(vm.IsDefaultModel && vm.HasModelGeometry && !vm.ShowBlankModelChoice &&
+                  sessionStore.TryReadManifest() is not null && silent.Reads == 0,
+                "startup opens the built-in default model without a SAP2000 read or blank-model choice");
+
             vm.InitializeBlankMcotisConfiguration();
             Check(vm.IsOfflineModel && vm.HasWorkingModel && !vm.HasModelGeometry && vm.CanDefineFemModel &&
                   vm.ShowBlankModelChoice && !vm.CanEditVcfGeometry && state.Model?.Name == "Unsaved model" && silent.Reads == 0,
-                "a fresh MCOTiS session opens as a blank unsaved model with Define available and no SAP2000 read");
+                "New Config opens a blank unsaved model with Define available and no SAP2000 read");
+
+            vm.ContinueWithBlankModel.Execute(null);
+            Check(!vm.ShowBlankModelChoice && !vm.HasModelGeometry && vm.CanDefineFemModel && !vm.IsDefaultModel,
+                "Continue with Blank Model dismisses the choice and keeps the empty model editable");
+            vm.InitializeBlankMcotisConfiguration();
+            Check(vm.ShowBlankModelChoice && !vm.HasModelGeometry,
+                "New Config offers the template and blank-model choices again");
 
             vm.LoadDefaultModel.Execute(null);
             Check(vm.IsDefaultModel && vm.HasModelGeometry && !vm.ShowBlankModelChoice && sessionStore.TryReadManifest() is not null,

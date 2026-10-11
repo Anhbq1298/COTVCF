@@ -22,9 +22,8 @@
                                                                                  IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=Reactions}"/>
                                 <RadioButton Content="Deflection" GroupName="FemResultMode"
                                                                                  IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=DeflectedShape}"/>
-                                <CheckBox Content="Axial values (kN)" Margin="16,0,0,0" IsChecked="{Binding ShowFemAxialValues}"
-                                          IsEnabled="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=AxialForce}"
-                                          ToolTip="In Axial force view, label every frame and cable tension in the viewer with its axial force in whole kN (+ tension, − compression)."/>
+                                <CheckBox Content="Result values" Margin="16,0,0,0" IsChecked="{Binding ShowFemAxialValues}"
+                                          ToolTip="Label N, V or M along each frame and tension along each cable. Large values use MN or MN·m; hover for the value at an exact station."/>
                          </WrapPanel>
                          <TextBlock Grid.Row="2" Text="{Binding FemResultSummary}" Style="{StaticResource Caption}" Margin="0,0,0,6"/>
                          <DataGrid x:Name="FemResultRowsGrid" Grid.Row="3" ItemsSource="{Binding FemResultRows}" IsReadOnly="True" IsEnabled="{Binding IsIdle}"

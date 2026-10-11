@@ -23,7 +23,7 @@
               ToolTip="Load case or linear-additive combination shown on the model view and in the results table."/>
    </Grid>
   </GroupBox>
-  <GroupBox Header="Output">
+  <GroupBox x:Name="OutputGroup" Header="Output">
    <StackPanel>
     <ListBox x:Name="Outputs" BorderThickness="0" Background="Transparent" AutomationProperties.Name="FEM result outputs" MouseDoubleClick="Outputs_DoubleClick">
      <ListBoxItem Content="Axial forces / cables" Tag="AxialForce"/>

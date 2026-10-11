@@ -48,16 +48,21 @@
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
 
-  <!-- Select FreshBuild in COTVCF.sln to produce a complete app in a separate folder. -->
+  <!-- FreshBuild replaces bin with a complete app at its root. -->
   <PropertyGroup Condition="'$(Configuration)' == 'FreshBuild'">
     <DebugSymbols>false</DebugSymbols>
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <DefineConstants>TRACE</DefineConstants>
-    <OutputPath>bin\MCOTiS_FreshBuild\</OutputPath>
+    <OutputPath>bin\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
+
+  <Target Name="ClearFreshBuildOutput" BeforeTargets="PrepareForBuild"
+          Condition="'$(Configuration)' == 'FreshBuild' and '$(DesignTimeBuild)' != 'true'">
+    <RemoveDir Directories="$(MSBuildProjectDirectory)\bin" />
+  </Target>
 
   <ItemGroup>
     <Reference Include="CSiAPIv1"><HintPath>$(SapInstallDir)\CSiAPIv1.dll</HintPath><Private>true</Private></Reference>
