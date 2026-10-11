@@ -162,6 +162,7 @@ public partial class Structural2DViewer : UserControl
     private Point3D target;
     private Point? dragStart;
     private Point? dragOrigin;
+    private bool dragged3D;
     private bool panning;
     private StructureModel3D.Scene? scene3D;
     private static readonly Material Selected3DMaterial = new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x00)));
@@ -212,6 +213,7 @@ public partial class Structural2DViewer : UserControl
         if (e.ClickCount == 2) { Fit3D(); return; }
         dragStart = e.GetPosition(View3DHost);
         dragOrigin = dragStart;
+        dragged3D = false;
         panning = e.ChangedButton == MouseButton.Right || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) || PanMode;
         View3DHost.CaptureMouse();
     }
@@ -220,7 +222,8 @@ public partial class Structural2DViewer : UserControl
     {
         if (dragStart is not { } start || !View3DHost.IsMouseCaptured) return;
         var now = e.GetPosition(View3DHost);
-        if (dragOrigin is { } origin && (now - origin).Length <= 4) return;
+        if (!dragged3D && dragOrigin is { } origin && (now - origin).Length <= 4) return;
+        dragged3D = true;
         var delta = now - start;
         dragStart = now;
         if (panning)
@@ -244,7 +247,7 @@ public partial class Structural2DViewer : UserControl
 
     private void View3DMouseUp(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton == MouseButton.Left && !panning && dragOrigin is { } origin &&
+        if (e.ChangedButton == MouseButton.Left && !panning && !dragged3D && dragOrigin is { } origin &&
             (e.GetPosition(View3DHost) - origin).Length <= 4 && scene3D is { } scene)
         {
             string? hit = null;
@@ -262,6 +265,7 @@ public partial class Structural2DViewer : UserControl
         }
         dragStart = null;
         dragOrigin = null;
+        dragged3D = false;
         if (View3DHost.IsMouseCaptured) View3DHost.ReleaseMouseCapture();
     }
 
