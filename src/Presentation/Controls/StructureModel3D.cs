@@ -1,19 +1,25 @@
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
+using COT_VCF.Application;
 using COT_VCF.Domain;
 using COT_VCF.Geometry;
 
 namespace COT_VCF.Presentation.Controls;
 
 /// <summary>
-/// Builds a to-scale 3D model of the structure: every frame is its SAP cross-section extruded along the member, oriented
-/// by SAP's default local axes and the member's local-axis angle; every cable is a rod of its section area. Section
+/// Builds a to-scale 3D model of the structure: every frame is its cross-section extruded along the member, oriented
+/// by SAP's default local axes and the member's local-axis angle; every cable is a rod of its section area. A frame with
+/// a <see cref="SectionDrawing"/> is drawn as that — each material in its own colour, and the enclosing material of a
+/// composite section see-through so the one inside shows; any other frame by its <see cref="FemSectionShape"/>. Section
 /// outlines are split into convex pieces (I = 3 plates, box = 4 walls, pipe = ring segments…) so each piece is a simple
 /// prism with flat-shaded faces. Coordinates are SAP global (m), Z up.
 /// </summary>
 public static class StructureModel3D
 {
-    public sealed record MemberVisual(string Name, GeometryModel3D Model, System.Windows.Media.Media3D.Material BaseMaterial);
+    /// <summary>One drawn piece of a member (a composite section has one per material) with the materials it returns to
+    /// when it is no longer selected; a see-through piece has no back material — only its front faces are drawn.</summary>
+    public sealed record MemberVisual(string Name, GeometryModel3D Model, System.Windows.Media.Media3D.Material BaseMaterial,
+        System.Windows.Media.Media3D.Material? BackMaterial);
     public sealed record Scene(Model3DGroup Model, Rect3D Bounds, int FramesWithSapShape, int FramesApproximated,
         IReadOnlyList<MemberVisual> MemberVisuals)
     {
@@ -26,6 +32,8 @@ public static class StructureModel3D
     private const int CircleSegments = 20;
     /// <summary>The largest displacement of a deflected shape is drawn as this share of the model's largest dimension.</summary>
     private const double DeflectedShare = 0.05;
+    /// <summary>Opacity of the enclosing material of a composite section (0 = invisible, 1 = solid).</summary>
+    public const double CompositeShellOpacity = 0.55;
     private static readonly Color[] ContourColors = [Colors.RoyalBlue, Colors.Cyan, Colors.LimeGreen, Colors.Gold, Colors.Red];
 
     /// <summary>The |U| contour of the deflected shape, low to high — the colours the 2D deflected shape uses. Mapped by
@@ -48,7 +56,7 @@ public static class StructureModel3D
     /// displacements are in X and Z.
     /// </summary>
     public static Scene BuildDeflected(GeometryModel model, IReadOnlyDictionary<string, FemSectionProperties>? sections, FemAnalysisResult result,
-        bool contour, double rangeMinMm, double rangeMaxMm, bool undeformedGuide)
+        bool contour, double rangeMinMm, double rangeMaxMm, bool undeformedGuide, IReadOnlyDictionary<string, SectionDrawing>? drawings = null)
     {
         static double Magnitude(double ux, double uz) => Math.Sqrt(ux * ux + uz * uz) * 1000;
         var joints = result.Joints.GroupBy(joint => joint.PointName, StringComparer.Ordinal).ToDictionary(same => same.Key, same => same.First(), StringComparer.Ordinal);
@@ -79,9 +87,10 @@ public static class StructureModel3D
             if (undeformedGuide) Extrude(guide, Circle(span * 0.0012, 0, 6), start, end, 0);
             if (!joints.TryGetValue(member.Start, out var u1) || !joints.TryGetValue(member.End, out var u2)) continue;
             var section = sections?.GetValueOrDefault(member.Name);
+            var drawing = member.Kind == MemberKind.Frame ? drawings?.GetValueOrDefault(member.Name) : null;
             if (member.Kind == MemberKind.Frame)
             {
-                if (section?.Shape is not { } shape || shape.Kind == SectionShapeKind.Equivalent) approximated++;
+                if (drawing is null && (section?.Shape is not { } shape || shape.Kind == SectionShapeKind.Equivalent)) approximated++;
                 else withShape++;
             }
             var path = member.Kind == MemberKind.Frame && stations.TryGetValue(member.Name, out var along)
@@ -91,11 +100,12 @@ public static class StructureModel3D
             // the section keeps the axes of the member as built: at these rotations the cross-sections stay parallel, and
             // consecutive stations share one outline, so a bent member has no gaps
             var (_, l2, l3) = LocalAxes(start, end, member.Kind == MemberKind.Frame ? section?.LocalAngleDeg ?? 0 : 0);
-            ExtrudeAlong(mesh, MemberOutline(member, section, span), path, l2, l3);
+            // every material of the real section in the one contour colour: shaded solid, nothing shows through
+            ExtrudeAlong(mesh, drawing?.Regions.SelectMany(region => region.Polygons).ToArray() ?? MemberOutline(member, section, span), path, l2, l3);
             if (!mesh.HasGeometry) continue;
             var visual = new GeometryModel3D(mesh.ToMesh(), shaded) { BackMaterial = shaded };
             group.Children.Add(visual);
-            memberVisuals.Add(new MemberVisual(member.Name, visual, shaded));
+            memberVisuals.Add(new MemberVisual(member.Name, visual, shaded, shaded));
         }
         if (guide.HasGeometry)
         {
@@ -105,11 +115,17 @@ public static class StructureModel3D
         return new Scene(group, group.Bounds, withShape, approximated, memberVisuals) { Deflected = new(magnification, maximum, min, max, contour) };
     }
 
-    public static Scene Build(GeometryModel model, IReadOnlyDictionary<string, FemSectionProperties>? sections)
+    public static Scene Build(GeometryModel model, IReadOnlyDictionary<string, FemSectionProperties>? sections,
+        IReadOnlyDictionary<string, SectionDrawing>? drawings = null)
     {
         var group = new Model3DGroup();
         var steel = Material(Color.FromRgb(0x7D, 0x8A, 0x99));
         var concrete = Material(Color.FromRgb(0xB9, 0xB3, 0xA8));
+        var shell = (byte)Math.Round(255 * CompositeShellOpacity);
+        var steelShell = Material(Color.FromArgb(shell, 0x5B, 0x6B, 0x7D));
+        var concreteShell = Material(Color.FromArgb(shell, 0xB9, 0xB3, 0xA8));
+        // see-through pieces go in after everything solid: WPF blends a piece only over what is already drawn
+        var seeThrough = new List<GeometryModel3D>();
         var cable = Material(Color.FromRgb(0x2E, 0x90, 0xFA));
         var unknown = Material(Color.FromRgb(0xA0, 0xA6, 0xAE));
         var memberVisuals = new List<MemberVisual>();
@@ -123,6 +139,24 @@ public static class StructureModel3D
             var end = new Point3D(b.Position.X, b.Position.Y, b.Position.Z);
             if ((end - start).Length < 1e-9) continue;
             var section = sections?.GetValueOrDefault(member.Name);
+            if (member.Kind == MemberKind.Frame && drawings?.GetValueOrDefault(member.Name) is { } drawing)
+            {
+                // the real section: one piece per material, the enclosing one of a composite section see-through
+                withShape++;
+                foreach (var region in drawing.Regions)
+                {
+                    var piece = new MeshBuilder();
+                    Extrude(piece, region.Polygons, start, end, section?.LocalAngleDeg ?? 0);
+                    if (!piece.HasGeometry) continue;
+                    var glass = drawing.Composite && region.Shell;
+                    var paint = region.Material == SectionMaterial.Steel ? glass ? steelShell : steel : glass ? concreteShell : concrete;
+                    // front faces only when see-through, so the look does not depend on the order the faces are drawn in
+                    var part = new GeometryModel3D(piece.ToMesh(), paint) { BackMaterial = glass ? null : paint };
+                    if (glass) seeThrough.Add(part); else group.Children.Add(part);
+                    memberVisuals.Add(new MemberVisual(member.Name, part, paint, part.BackMaterial));
+                }
+                continue;
+            }
             var mesh = new MeshBuilder();
             System.Windows.Media.Media3D.Material material;
             if (member.Kind == MemberKind.Frame)
@@ -142,8 +176,9 @@ public static class StructureModel3D
             if (!mesh.HasGeometry) continue;
             var visual = new GeometryModel3D(mesh.ToMesh(), material) { BackMaterial = material };
             group.Children.Add(visual);
-            memberVisuals.Add(new MemberVisual(member.Name, visual, material));
+            memberVisuals.Add(new MemberVisual(member.Name, visual, material, material));
         }
+        foreach (var part in seeThrough) group.Children.Add(part);
         return new Scene(group, group.Bounds, withShape, approximated, memberVisuals);
     }
 

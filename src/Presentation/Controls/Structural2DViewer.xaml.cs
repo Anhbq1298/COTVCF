@@ -105,6 +105,17 @@ public partial class Structural2DViewer : UserControl
         set => SetValue(MemberSectionsProperty, value);
     }
 
+    public static readonly DependencyProperty SectionDrawingsProperty = DependencyProperty.Register(nameof(SectionDrawings),
+        typeof(IReadOnlyDictionary<string, SectionDrawing>), typeof(Structural2DViewer),
+        new PropertyMetadata(null, (d, _) => ((Structural2DViewer)d).Rebuild3D(keepCamera: true)));
+    /// <summary>Member name → the real cross-section where the plain shape is not it (a composite section, a recovered
+    /// Section Designer outline): the 3D view extrudes these, each material in its own colour.</summary>
+    public IReadOnlyDictionary<string, SectionDrawing>? SectionDrawings
+    {
+        get => (IReadOnlyDictionary<string, SectionDrawing>?)GetValue(SectionDrawingsProperty);
+        set => SetValue(SectionDrawingsProperty, value);
+    }
+
     public static readonly DependencyProperty ShowFrameLocalAxesProperty = DependencyProperty.Register(nameof(ShowFrameLocalAxes),
         typeof(bool), typeof(Structural2DViewer), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
             (d, _) => ((Structural2DViewer)d).Update3DAxes()));
@@ -193,8 +204,8 @@ public partial class Structural2DViewer : UserControl
     {
         if (!Is3D || Structure3D is null) return;
         var scene = ShowsDeflected3D
-            ? StructureModel3D.BuildDeflected(Model, MemberSections, FemResult!, ShowDeflectionContour, DeflectionRangeMinMm, DeflectionRangeMaxMm, ShowUndeformed)
-            : StructureModel3D.Build(Model, MemberSections);
+            ? StructureModel3D.BuildDeflected(Model, MemberSections, FemResult!, ShowDeflectionContour, DeflectionRangeMinMm, DeflectionRangeMaxMm, ShowUndeformed, SectionDrawings)
+            : StructureModel3D.Build(Model, MemberSections, SectionDrawings);
         scene3D = scene;
         Structure3D.Content = scene.Model;
         Update3DSelection();
@@ -204,8 +215,9 @@ public partial class Structural2DViewer : UserControl
             ? $"Deflected shape 3D · largest |U| {shape.MaximumMm:G4} mm, drawn × {shape.Magnification:G3}" + gestures
             : MemberSections is null
             ? "Isometric 3D · member sizes not read — use Read from SAP (FEM → Inputs) for to-scale sections · drag rotate · right-drag pan · wheel zoom · double-click fit"
-            : $"Isometric 3D · to scale · {scene.FramesWithSapShape} frames with SAP section dimensions" +
-              (scene.FramesApproximated > 0 ? $", {scene.FramesApproximated} as equivalent solid (same A, I)" : "") + gestures;
+            : $"Isometric 3D · to scale · {scene.FramesWithSapShape} frames with their section dimensions" +
+              (scene.FramesApproximated > 0 ? $", {scene.FramesApproximated} as equivalent solid (same A, I)" : "") +
+              (SectionDrawings?.Values.Any(drawing => drawing.Composite) == true ? " · composite sections see-through" : "") + gestures;
         // contour legend of the deflected shape, as the 2D view draws it
         Deflection3DLegend.Visibility = scene.Deflected is { Contour: true } ? Visibility.Visible : Visibility.Collapsed;
         if (scene.Deflected is { Contour: true } contour)
@@ -342,7 +354,11 @@ public partial class Structural2DViewer : UserControl
         if (scene3D is null) return;
         var selected = Canvas.SelectedMembers.ToHashSet(StringComparer.Ordinal);
         foreach (var member in scene3D.MemberVisuals)
-            member.Model.Material = member.Model.BackMaterial = selected.Contains(member.Name) ? Selected3DMaterial : member.BaseMaterial;
+        {
+            var picked = selected.Contains(member.Name);
+            member.Model.Material = picked ? Selected3DMaterial : member.BaseMaterial;
+            member.Model.BackMaterial = picked ? Selected3DMaterial : member.BackMaterial;   // a see-through piece has none
+        }
     }
 
     private void Update3DAxes()

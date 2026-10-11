@@ -235,6 +235,7 @@ internal static class FemModelFileChecks
                 "startup opens the built-in default model without a SAP2000 read or blank-model choice");
 
             vm.InitializeBlankMcotisConfiguration();
+            Check(vm.CurrentFileName == "Untitled" && vm.WindowTitle.EndsWith(" — Untitled", StringComparison.Ordinal), "a new configuration is 'Untitled' in the window title");
             Check(vm.IsOfflineModel && vm.HasWorkingModel && !vm.HasModelGeometry && vm.CanDefineFemModel &&
                   vm.ShowBlankModelChoice && !vm.CanEditVcfGeometry && state.Model?.Name == "Unsaved model" && silent.Reads == 0,
                 "New Config opens a blank unsaved model with Define available and no SAP2000 read");
@@ -327,6 +328,8 @@ internal static class FemModelFileChecks
         RunVcfOptimization();
         RunMemberInformation();
         RunSaveAs();
+        RunSectionDrawings();
+        RunStrandBundle();
         RunMaterials();
         RunSections();
         RunCompositeSections();
@@ -1009,6 +1012,97 @@ internal static class FemModelFileChecks
         finally { System.Globalization.CultureInfo.CurrentCulture = previousCulture; }
     }
 
+    /// <summary>The 3D view extrudes the real sections: composite sections of the library, and Section Designer sections whose
+    /// outline their name states and their stored properties confirm; a composite section's enclosing material is see-through.</summary>
+    private static void RunSectionDrawings()
+    {
+        var (vm, state, silent, warnings) = DefaultModelApp();
+        static (double Depth, double Width) Size(SectionRegion region) =>
+            (region.Polygons.SelectMany(polygon => polygon).Max(point => point.X2) - region.Polygons.SelectMany(polygon => polygon).Min(point => point.X2),
+             region.Polygons.SelectMany(polygon => polygon).Max(point => point.X3) - region.Polygons.SelectMany(polygon => polygon).Min(point => point.X3));
+        static bool Is((double Depth, double Width) size, double depth, double width) => Math.Abs(size.Depth - depth) < 1e-9 && Math.Abs(size.Width - width) < 1e-9;
+        string SectionOf(string member) => vm.FemSectionProperties.Single(property => property.MemberName == member).SectionName!;
+
+        // the default model holds its composite sections as Section Designer properties only: the names give the outlines back
+        var drawings = vm.SharedViewerSectionDrawings!;
+        var chord = drawings["TopChord"];
+        var narrow = drawings.Values.First(drawing => drawing.Description.StartsWith("Concrete 3000 × 1500", StringComparison.Ordinal));
+        var wide = drawings.Values.First(drawing => drawing.Description.StartsWith("Concrete 2500 × 3000", StringComparison.Ordinal));
+        Check(SectionOf("TopChord") == "CFT_SHS[1200x2000x150_S460]_C70/85" && chord is { Recovered: true, Composite: true, Description: "Concrete filled tube 2000 × 1200 × 150 mm" } &&
+              chord.Regions.Select(region => (region.Material, region.Shell)).SequenceEqual([(SectionMaterial.Concrete, false), (SectionMaterial.Steel, true)]) &&
+              Is(Size(chord.Regions[0]), 1.7, 0.9) && Is(Size(chord.Regions[1]), 2.0, 1.2) && chord.Regions[1].Polygons.Count == 4 &&
+              SectionOf("170") == "MegaCol_1.5x3_C70/85-1" && ReferenceEquals(drawings["170"], narrow) && narrow is { Recovered: true, Composite: false } && Is(Size(narrow.Regions[0]), 3.0, 1.5) &&
+              wide is { Recovered: true, Composite: false } && Is(Size(wide.Regions[0]), 2.5, 3.0) &&
+              SectionOf("VRM001") == "SHS_1200x1200x120_S460" && !drawings.ContainsKey("VRM001") && !drawings.ContainsKey("Cable1a-2"),
+            "Section Designer sections get their real outline back from their name once it reproduces their A, I33 and I22: the chords a 2000 × 1200 × 150 tube with its " +
+            "concrete core (not the 2274 × 1450 equivalent solid), the mega columns 3000 × 1500 and 2500 × 3000 concrete, each with the depth where the inertias put it; " +
+            "a plain box (SHS 1200 × 1200 × 120) needs no drawing");
+
+        var stored = vm.FrameSections.Single(section => section.Name == "CFT_SHS[1200x2000x150_S460]_C70/85");
+        double? Modulus(string material) => vm.Materials.FirstOrDefault(item => item.Name == material)?.ElasticModulus / 1e6;
+        var given = stored.Given!;
+        Check(SectionDrawings.Recover(stored, Modulus) is { Composite: true } &&
+              SectionDrawings.Recover(stored with { Given = given with { Area = given.Area * 1.03 } }, Modulus) is null &&
+              SectionDrawings.Recover(stored with { Given = given with { I33 = given.I33 * 0.97 } }, Modulus) is null &&
+              SectionDrawings.Recover(stored with { Name = "CFT chord" }, Modulus) is null &&
+              SectionDrawings.Recover(stored with { Name = "CFT_SHS[1000x2000x150_S460]_C70/85" }, Modulus) is null &&
+              SectionDrawings.Recover(stored with { Name = "SHS_1200x2000x150", Material = "S460", Given = new SectionValues(0.87, 0.431525, 0.184725, 0, 0, 0) }, Modulus)
+                  is { Composite: false, Description: "Steel tube 2000 × 1200 × 150 mm" },
+            "An outline is taken from a name only when it reproduces the stored properties within 1 %: 3 % off in area or inertia, other dimensions in the name or no " +
+            "dimensions at all leave the section as its equivalent solid; a hollow tube is told from a filled one by the same check");
+
+        // the composite sections of the library are drawn as defined
+        SectionDrawing Defined(FrameShape shape, Func<ColumnSectionInput, ColumnSectionInput>? change = null)
+        {
+            var section = FrameSectionProperty.Default(shape, "S", "C50/60");
+            return SectionDrawings.For(change is null ? section : section with { Composite = change(section.Composite!) }, Modulus)!;
+        }
+        var (tube, round, encased, mega) = (Defined(FrameShape.FilledTube), Defined(FrameShape.FilledTube, c => c with { Tube = TubeShape.Circular }),
+            Defined(FrameShape.Encased), Defined(FrameShape.MegaComposite));
+        Check(tube is { Composite: true, Recovered: false } && Is(Size(tube.Regions[0]), 0.76, 0.76) && Is(Size(tube.Regions[1]), 0.8, 0.8) && tube.Regions[1] is { Material: SectionMaterial.Steel, Shell: true } &&
+              round.Regions[1].Polygons.Count == 24 && Is(Size(round.Regions[1]), 0.8, 0.8) && round.Regions[0] is { Material: SectionMaterial.Concrete, Shell: false } &&
+              encased.Regions.Select(region => (region.Material, region.Shell, region.Polygons.Count)).SequenceEqual([(SectionMaterial.Steel, false, 3), (SectionMaterial.Concrete, true, 1)]) &&
+              Is(Size(encased.Regions[0]), 0.6, 0.5) && Is(Size(encased.Regions[1]), 1.0, 1.0) &&
+              mega.Regions[0].Polygons.Count == 12 && Is(Size(mega.Regions[0]), 1.4 + 0.5, 1.4 + 0.43) && Is(Size(mega.Regions[1]), 2.2, 2.2) &&
+              SectionDrawings.For(FrameSectionProperty.Default(FrameShape.Box, "B", "S355"), Modulus) is null,
+            "Library composite sections are drawn as defined: a CFT as its tube around the concrete core (rectangular or round), a steel encased section as its I profile " +
+            "inside the concrete, a mega composite column with its four profiles; the enclosing material is the shell");
+
+        // 3D: one piece per material, the shell of a composite section see-through and drawn after everything solid
+        var real = StructureModel3D.Build(state.Geometry, vm.SharedViewerSections, drawings);
+        var equivalent = StructureModel3D.Build(state.Geometry, vm.SharedViewerSections);
+        var pieces = real.Model.Children.OfType<System.Windows.Media.Media3D.GeometryModel3D>().ToArray();
+        var chordPieces = real.MemberVisuals.Where(visual => visual.Name == "TopChord").ToArray();
+        static byte Alpha(System.Windows.Media.Media3D.Material material) =>
+            ((System.Windows.Media.SolidColorBrush)((System.Windows.Media.Media3D.DiffuseMaterial)material).Brush).Color.A;
+        var firstShell = Array.FindIndex(pieces, piece => piece.BackMaterial is null);
+        Check(chordPieces.Length == 2 && chordPieces[0].BackMaterial is not null && Alpha(chordPieces[0].BaseMaterial) == 255 &&
+              chordPieces[1].BackMaterial is null && chordPieces[1].Model.BackMaterial is null &&
+              Alpha(chordPieces[1].BaseMaterial) == (byte)Math.Round(255 * StructureModel3D.CompositeShellOpacity) &&
+              firstShell > 0 && pieces.Skip(firstShell).All(piece => piece.BackMaterial is null) &&
+              real.MemberVisuals.Count(visual => visual.Name == "170") == 1 && real.MemberVisuals.Single(visual => visual.Name == "170").BackMaterial is not null &&
+              Math.Abs(real.Bounds.Z + real.Bounds.SizeZ - 21.0) < 1e-9 && equivalent.Bounds.Z + equivalent.Bounds.SizeZ > 21.1 &&
+              real.FramesApproximated == 0 && equivalent.FramesApproximated > 0 && silent.Reads == 0 && warnings.Count == 0,
+            "The 3D model extrudes the real sections: a CFT chord as a solid concrete core inside a see-through steel tube (front faces only, drawn after everything " +
+            $"solid, opacity {StructureModel3D.CompositeShellOpacity:0.##}); the truss tops out at Z +21.0 with the 2.0 m deep tube, not +{equivalent.Bounds.Z + equivalent.Bounds.SizeZ:0.00} " +
+            "with the equivalent solid; no frame is left as an equivalent solid");
+    }
+
+    /// <summary>A cable as a bundle of strands: area = number × steel area of one strand, named by the convention.</summary>
+    private static void RunStrandBundle()
+    {
+        Check(StrandBundle.Name(192, 15.7) == "192T15.7" && StrandBundle.Name(37, 15.2) == "37T15.2" && StrandBundle.Name(12, 18) == "12T18" &&
+              StrandBundle.Parse("192T15.7") == (192, 15.7) && StrandBundle.Parse(" 7T12.9 ") == (7, 12.9) &&
+              StrandBundle.Parse("192T15.7-A") is null && StrandBundle.Parse("Cable1") is null && StrandBundle.Parse("0T15.7") is null,
+            "A strand bundle is named number, T, strand diameter (192T15.7); only a name written that way is read back as strands");
+        Check(StrandBundle.StandardArea(15.7) == 150 && StrandBundle.StandardArea(15.3) == 140 && StrandBundle.StandardArea(15.2) == 139 &&
+              StrandBundle.StandardArea(12.9) == 100 && StrandBundle.StandardArea(12.5) == 93 && StrandBundle.StandardArea(16) is null &&
+              Math.Abs(StrandBundle.Area(192, 150) - 0.0288) < 1e-15 &&
+              Math.Abs(new StrandSectionProperty { Name = "192T15.7", Area = StrandBundle.Area(192, 150) }.Diameter - 0.19149) < 1e-5,
+            "The listed 7-wire strands carry their nominal steel area (15.7 mm: 150 mm²; an unlisted diameter has none): 192 × 150 mm² = 0.0288 m², " +
+            "a solid round of 191.5 mm — the model's 192T15.7 cable");
+    }
+
     /// <summary>File → Save Config (Ctrl+S) and Save Config As… (Ctrl+Shift+S), with the Save dialog answered by the check.</summary>
     private static void RunSaveAs()
     {
@@ -1023,7 +1117,11 @@ internal static class FemModelFileChecks
             string? answer = Path.Combine(folder, "first");   // typed without the extension
             vm.AskFemSavePath = (startFolder, fileName) => { asked.Add((startFolder, fileName)); return answer; };
 
+            const string product = "Mcotis — Meinhardt Cities of Tomorrow Integrated Structures — ";
+            var untitled = vm.WindowTitle;
             vm.SaveFemModel.Execute(null);
+            Check(untitled == product + "Default model" && vm.WindowTitle == product + "first" + FemInputDatabase.Extension && vm.CurrentFileName == "first" + FemInputDatabase.Extension,
+                "The window title names the file beside the product: 'Default model' until the configuration is saved, then its file name");
             Check(vm.SaveFemModel.CanExecute(null) && vm.SaveFemModelAs.CanExecute(null) && asked.Count == 1 &&
                   asked[0].FileName.EndsWith(FemInputDatabase.Extension, StringComparison.Ordinal) && File.Exists(first) &&
                   vm.FemProgressText.StartsWith("Saved MCOTiS config first" + FemInputDatabase.Extension, StringComparison.Ordinal),
@@ -1035,6 +1133,7 @@ internal static class FemModelFileChecks
             answer = second;
             var firstWritten = File.GetLastWriteTimeUtc(first);
             vm.SaveFemModelAs.Execute(null);
+            Check(vm.WindowTitle == product + "second" + FemInputDatabase.Extension, "Save As puts the new file name in the window title");
             Check(asked.Count == 2 && asked[1] == (folder, "first" + FemInputDatabase.Extension) && File.Exists(second) &&
                   File.GetLastWriteTimeUtc(first) == firstWritten && vm.FemProgressText.StartsWith("Saved MCOTiS config second", StringComparison.Ordinal),
                 "Save As asks for a file, starting from the active configuration's folder and name, writes the new file and leaves the old one as it was");

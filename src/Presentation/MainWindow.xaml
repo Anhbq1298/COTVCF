@@ -1,4 +1,4 @@
-<Window x:Class="COT_VCF.Presentation.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:COT_VCF.Presentation" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls" Title="Mcotis — Meinhardt Cities of Tomorrow Integrated Structures" Icon="{x:Static p:AppIcon.Window}" Width="1440" Height="810" MinWidth="1100" MinHeight="660" WindowStartupLocation="Manual">
+<Window x:Class="COT_VCF.Presentation.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:COT_VCF.Presentation" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls" Title="{Binding WindowTitle, FallbackValue='Mcotis — Meinhardt Cities of Tomorrow Integrated Structures'}" Icon="{x:Static p:AppIcon.Window}" Width="1440" Height="810" MinWidth="1100" MinHeight="660" WindowStartupLocation="Manual">
  <Window.InputBindings>
   <!-- File shortcuts: Ctrl+S saves the active configuration, Ctrl+Shift+S asks for another file (File → Save Config / Save Config As…) -->
   <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveFemModel}"/>
@@ -2033,6 +2033,7 @@
                           LoadValues="{Binding SharedViewerLoadValues}"
                           ShowAxialValues="{Binding ShowFemAxialValues}"
                           MemberSections="{Binding SharedViewerSections}"
+                          SectionDrawings="{Binding SharedViewerSectionDrawings}"
                           SelectedCable="{Binding SelectedCable, Mode=TwoWay}"
                           AutomationProperties.Name="Shared structural model preview"/>
     <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="390" MaxWidth="390" Padding="18,14"

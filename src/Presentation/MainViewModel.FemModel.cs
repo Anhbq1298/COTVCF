@@ -53,6 +53,17 @@ public sealed partial class MainViewModel
     /// <summary>The workflow pages have a model to work on: the live SAP2000 model or a loaded FEM model.</summary>
     public bool HasWorkingModel => HasSapConnection || IsOfflineModel;
     public string OfflineModelName => offlineModelPath is null ? "" : Path.GetFileName(offlineModelPath);
+
+    public const string ProductTitle = "Mcotis — Meinhardt Cities of Tomorrow Integrated Structures";
+    /// <summary>The main window's title: the product, then the file the configuration is in (<see cref="CurrentFileName"/>).</summary>
+    public string WindowTitle => $"{ProductTitle} — {CurrentFileName}";
+    /// <summary>The file name of the active configuration — the one Save overwrites. While it has no file: "Default model"
+    /// for the built-in model, the name of a model opened from an older file or from SAP2000, else "Untitled".</summary>
+    public string CurrentFileName =>
+        !string.IsNullOrWhiteSpace(femInputDatabasePath) ? Path.GetFileName(femInputDatabasePath)
+        : IsDefaultModel ? "Default model"
+        : IsOfflineModel ? OfflineModelName is { Length: > 0 } offline ? offline : "Untitled"
+        : State.Model?.Name is { Length: > 0 } model ? model : "Untitled";
     public bool IsDefaultModel => IsOfflineModel && isDefaultModel;
     public string OfflineModelSummary => IsOfflineModel
         ? !HasModelGeometry
@@ -671,6 +682,7 @@ public sealed partial class MainViewModel
         Notify(nameof(FemModelEditState));
         Notify(nameof(FemDatabaseSummary));
         Notify(nameof(FemStatus));
+        Notify(nameof(WindowTitle));
         Notify(nameof(CanRunFemAnalysis));
         CommandManager.InvalidateRequerySuggested();
     }

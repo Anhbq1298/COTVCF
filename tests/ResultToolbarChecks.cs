@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Automation;
@@ -43,6 +44,34 @@ internal static class ResultToolbarChecks
             Check(resultTools.All(button => button.Visibility == Visibility.Visible && !button.IsEnabled) &&
                   window.ResultMenu.Items.OfType<MenuItem>().Take(3).All(item => !item.IsEnabled),
                 "F5/F6/F7 stay visible but disabled before analysis has results");
+            Check(window.Title == MainViewModel.ProductTitle + " — Default model" && window.Title == vm.WindowTitle,
+                "the window title shows the product and, beside it, what is open: the default model");
+            // Strand Bundle: the section from its strands — number × steel area of one — named by the convention
+            var bundleForm = new StrandSectionWindow(vm, new StrandSectionProperty { Name = "192T15.7", Area = 0.028802317797652074 }, new HashSet<string>()) { Owner = window };
+            bundleForm.Show();
+            var bundleOpened = bundleForm.StrandBundleShown;
+            var bundleUntouched = bundleForm.Read(out _);
+            bundleForm.SetStrands("192", 15.7.ToString(CultureInfo.CurrentCulture));
+            var bundleSame = bundleForm.Read(out _);
+            bundleForm.SetStrands("37", 15.2.ToString(CultureInfo.CurrentCulture));
+            var bundleListed = bundleForm.Read(out _);
+            var bundleBoxesLocked = Descendants<TextBox>(bundleForm).Where(box => System.Windows.Automation.AutomationProperties.GetName(box) is { } name &&
+                (name.StartsWith("Diameter", StringComparison.Ordinal) || name == "Area")).All(box => !box.IsEnabled);
+            bundleForm.SetStrands("61", 16.5.ToString(CultureInfo.CurrentCulture));
+            var bundleUnlisted = bundleForm.Read(out var bundleAsks);
+            bundleForm.SetStrands("61", 16.5.ToString(CultureInfo.CurrentCulture), "165");
+            var bundleEntered = bundleForm.Read(out _);
+            Console.WriteLine($"DEBUG opened={bundleOpened} untouched={bundleUntouched?.Name}/{bundleUntouched?.Area} same={bundleSame?.Name}/{bundleSame?.Area} listed={bundleListed?.Name}/{bundleListed?.Area} locked={bundleBoxesLocked} unlisted={bundleUnlisted?.Name} asks={bundleAsks} entered={bundleEntered?.Name}/{bundleEntered?.Area} shown={bundleForm.StrandBundleShown}");
+            Check(bundleOpened is { On: false, Count: "192", StrandAreaMm2: "150" } && bundleUntouched is { Name: "192T15.7", Area: 0.028802317797652074 } &&
+                   bundleSame is { Name: "192T15.7" } && Math.Abs(bundleSame.Area - 0.0288) < 1e-12 &&
+                   bundleListed is { Name: "37T15.2" } && Math.Abs(bundleListed.Area - 37 * 139e-6) < 1e-12 && bundleBoxesLocked &&
+                   bundleUnlisted is null && bundleAsks.Contains("not a listed size", StringComparison.Ordinal) &&
+                   bundleEntered is { Name: "61T16.5" } && Math.Abs(bundleEntered.Area - 61 * 165e-6) < 1e-12 &&
+                   bundleForm.StrandBundleShown.Summary.Contains("61T16.5", StringComparison.Ordinal),
+                "Cable Section Data → Strand Bundle: a section named 192T15.7 opens with its strands filled in and nothing changed; ticked, the area is " +
+                "number × steel area of one strand (192 × 150 mm² = 0.0288 m²; 37 × 139 for 15.2 mm) and the name follows the convention (37T15.2); " +
+                "a strand that is not listed asks for its steel area (61 × 165 mm² → 61T16.5)");
+            bundleForm.Close();
             var toolNames = toolButtons.Select(AutomationProperties.GetName).ToArray();
             var fileItems = ((MenuItem)window.MainMenu.Items[0]).Items.OfType<MenuItem>().ToArray();
             ICommand? Shortcut(ModifierKeys modifiers) => window.InputBindings.OfType<KeyBinding>()
@@ -97,6 +126,21 @@ internal static class ResultToolbarChecks
             Check(!vm.ShowFrameLocalAxes && axesVisual.Content is null,
                 "turning off the A toggle removes the local-axis overlay");
             window.SharedViewer.ClearSelection();
+            Idle();
+            // the 3D view extrudes the real sections; a composite section's enclosing material is see-through (front faces only)
+            var structure3D = (ModelVisual3D)window.SharedViewer.FindName("Structure3D")!;
+            int SeeThrough() => ((Model3DGroup)structure3D.Content).Children.OfType<GeometryModel3D>().Count(piece => piece.BackMaterial is null);
+            var shells = SeeThrough();
+            window.SharedViewer.Canvas.ToggleMemberSelection("TopChord");
+            Idle();
+            var shellsWhileSelected = SeeThrough();
+            window.SharedViewer.ClearSelection();
+            Idle();
+            Check(window.SharedViewer.SectionDrawings is { Count: > 0 } && shells > 0 && shellsWhileSelected == shells - 1 && SeeThrough() == shells &&
+                  Math.Abs(structure3D.Content.Bounds.Z + structure3D.Content.Bounds.SizeZ - 21.0) < 1e-6 &&
+                  ((TextBlock)window.SharedViewer.FindName("View3DInfo")!).Text.Contains("composite sections see-through", StringComparison.Ordinal),
+                "the 3D view shows the real sections of the default model (CFT chords 2.0 m deep, see-through tube around the concrete core); " +
+                "selecting a composite member highlights it whole and deselecting it makes its shell see-through again");
             window.SharedViewer.ShowPlane("XZ");
             Idle();
 

@@ -69,7 +69,10 @@ public sealed partial class MainViewModel
         else
         {
             var section = new List<InformationRow> { Row("Section property", property.SectionName ?? "—") };
-            if (property.Shape is { } shape) section.Add(Row("Shape", ShapeText(shape, Number)));
+            // the real section where the model has it or its name and properties give it; else the shape the properties stand for
+            if (!cable && property.SectionName is { } sectionName && SectionDrawingOf(sectionName) is { } drawing)
+                section.Add(Row("Shape", drawing.Description + (drawing.Recovered ? " — from the section name, checked against A, I33 and I22" : "")));
+            else if (property.Shape is { } shape) section.Add(Row("Shape", ShapeText(shape, Number)));
             section.Add(Row("Material", property.MaterialName ?? "—"));
             assignments.Add(new("Section", section));
 
