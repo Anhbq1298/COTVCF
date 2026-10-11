@@ -495,22 +495,33 @@ public partial class OptimizationVcfWindow : Window
         CableForceNote.Text = "The rows follow Preview at. A cable that takes another's value on 03 Pretension (Same Values) is not listed." +
             (valid && forces.Steps == 1 && forces.Varies ? " With 1 step every cable stays at its Min — set 2 or more steps to reach Max." : "");
 
+        // the preview: a fan cable's force under the bottom-chord node it is anchored at (a bay apart — along the cables the
+        // labels would run into each other at the corner), any other cable's along it; the cables the bays add emphasised
         Preview.HighlightedMembers = added.Keys.ToArray();
-        Dictionary<string, string>? notes = null;
+        Dictionary<string, string>? memberNotes = null, jointNotes = null;
         if (first is not null && last is not null)
         {
-            notes = new(StringComparer.Ordinal);
-            foreach (var (name, low) in first)
-                if (last.TryGetValue(name, out var high)) notes[name] = Controls.ResultDisplayText.ForceRange(low, high);
+            (memberNotes, jointNotes) = (new(StringComparer.Ordinal), new(StringComparer.Ordinal));
+            var bottom = model.BottomPoints.ToHashSet(StringComparer.Ordinal);
+            foreach (var member in geometry.Members)
+            {
+                if (!first.TryGetValue(member.Name, out var low) || !last.TryGetValue(member.Name, out var high)) continue;
+                var note = Controls.ResultDisplayText.MeganewtonRange(low, high);
+                if (!fanSet.Contains(member.Name)) { memberNotes[member.Name] = note; continue; }
+                var anchor = bottom.Contains(member.End) ? member.End : member.Start;
+                jointNotes[anchor] = jointNotes.TryGetValue(anchor, out var other) && other != note ? $"{other} / {note}" : note;   // the mid-span node holds a cable of each side
+            }
         }
-        Preview.MemberNotes = notes;
+        Preview.MemberNotes = memberNotes;
+        Preview.JointNotes = jointNotes;
 
         var gone = Members(VcfMemberRole.Cable).Where(name => !model.Roles.ContainsKey(name)).ToArray();
         var sides = fans.GroupBy(cable => cable.Side).Select(side => side.Count().ToString(culture));
         PreviewCaption.Text = $"{model.Bays} bays · span {span.ToString("0.###", culture)} m" +
             (fans.Count > 0 ? " · fan cables " + string.Join(" + ", sides) : "") +
             (added.Count > 0 ? " · new: " + string.Join(", ", fans.Select(cable => cable.Name).Where(added.ContainsKey)) : "") +
-            (gone.Length > 0 ? " · not in this variant: " + string.Join(", ", gone) : "");
+            (gone.Length > 0 ? " · not in this variant: " + string.Join(", ", gone) : "") +
+            (memberNotes is { Count: > 0 } || jointNotes is { Count: > 0 } ? " · labels: pretension [MN]" + (forces.StepCount > 1 ? ", first–last step" : "") : "");
     }
 
     private void BuildCableRows(Grid grid, IReadOnlyList<(string Name, string Tag, SpanRow? Inputs)> rows)
