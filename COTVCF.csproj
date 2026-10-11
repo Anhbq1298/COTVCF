@@ -67,5 +67,7 @@
     <!-- Tab 06 only: derive consolidated .xlsx and HTML reports from the study's raw JSON package. -->
     <PackageReference Include="ClosedXML" Version="0.104.2" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+    <!-- Portable FEM input/working/output databases. The app checkpoints to a single file before atomic Save. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.12" />
   </ItemGroup>
 </Project>

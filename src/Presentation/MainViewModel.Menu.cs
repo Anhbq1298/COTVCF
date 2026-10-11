@@ -9,7 +9,7 @@ namespace COT_VCF.Presentation;
 public sealed partial class MainViewModel
 {
     public const int FemPaneSections = 0, FemPaneLoadPatterns = 1, FemPaneLoadCases = 2, FemPaneRestraints = 3,
-        FemPaneResultSelection = 4, FemPaneAnalysisOptions = 5, FemPaneResults = 6, FemPaneDisplay = 7;
+        FemPaneResultSelection = 4, FemPaneAnalysisOptions = 5, FemPaneResults = 6, FemPaneDisplay = 7, FemPaneOutputSettings = 8;
 
     private int femPane = FemPaneLoadPatterns;
     private bool showDimensions = true;
@@ -39,7 +39,7 @@ public sealed partial class MainViewModel
 
     private static int FemPageOf(int pane) => pane switch
     {
-        <= FemPaneRestraints => FemInputsPage,
+        <= FemPaneRestraints or FemPaneOutputSettings => FemInputsPage,
         FemPaneDisplay => FemViewPage,
         _ => FemAnalysisPage,
     };
@@ -83,6 +83,7 @@ public sealed partial class MainViewModel
             FemPaneSections => "SECTIONS",
             FemPaneLoadPatterns => "LOAD PATTERNS",
             FemPaneLoadCases => "LOAD CASES / LOAD COMBINATIONS",
+            FemPaneOutputSettings => "OUTPUT SETTINGS",
             FemPaneRestraints => "JOINT RESTRAINTS",
             FemPaneResultSelection => "RESULT LOAD CASE",
             FemPaneAnalysisOptions => "ANALYSIS OPTIONS",

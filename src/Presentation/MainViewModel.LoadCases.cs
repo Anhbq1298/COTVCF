@@ -60,7 +60,7 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Load patterns can be defined here once the model is the app's own; a connected SAP2000 model has SAP2000's.</summary>
-    public bool CanDefineLoadPatterns => !IsBusy && HasWorkingModel && !State.IsSapConnected;
+    public bool CanDefineLoadPatterns => !IsBusy && !IsFemModelLocked && HasWorkingModel && !State.IsSapConnected;
 
     /// <summary>Adds a load pattern to the model. It carries nothing until a load is assigned to it: a storey load
     /// (Edit → VCF System → Storey Force), the cable target forces, or a self-weight multiplier.</summary>

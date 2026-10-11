@@ -16,9 +16,9 @@
     <Separator/>
     <MenuItem Header="_Default Model" Command="{Binding LoadDefaultModel}" AutomationProperties.Name="Load default model"
               ToolTip="Set the current model aside and open the built-in default model (COT Framing_V1.2_100m) on 07 FEM, ready to run without SAP2000"/>
-    <MenuItem Header="Load _Model…" Command="{Binding LoadFemModel}"
+    <MenuItem Header="Load _Model Database…" Command="{Binding LoadFemModel}"
               ToolTip="Open a saved FEM model and run FEM without connecting SAP2000 or loading a config"/>
-    <MenuItem Header="Sa_ve Model…" Command="{Binding SaveFemModel}"
+    <MenuItem Header="Sa_ve Model Database…" Command="{Binding SaveFemModel}"
               ToolTip="Save the geometry, Tabs 01–05, SAP sections/materials, loading, the Loads tables and FEM settings to one file, so Load Model can run FEM later without SAP2000. Reads SAP2000 first when connected; never writes to it."/>
     <Separator/>
     <MenuItem Header="_Read FEM Properties from SAP" Command="{Binding ReadFemProperties}"
@@ -54,6 +54,8 @@
               ToolTip="The load patterns of the model. Their loads are part of the VCF system: Edit → VCF System → Storey Force and Cable Force"/>
     <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click"
               ToolTip="Define the load cases: the default staged setup (Pretension → SLS / ULS), the cases saved from SAP2000, or your own"/>
+    <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click"
+              ToolTip="Choose result cases, monitored objects, limits and default result visualization for FEM output"/>
    </MenuItem>
    <MenuItem Header="_Assign" IsEnabled="{Binding HasWorkingModel}">
     <MenuItem Header="_Joint">
@@ -75,6 +77,8 @@
     <Separator/>
     <MenuItem Header="Run _FEM Analysis" Command="{Binding RunFemAnalysis}"
               ToolTip="Solve the model as it is defined — one run of the internal 2D frame model. SAP2000 is not read or written. Many cases belong to the parametric study (Optimization VCF)."/>
+    <MenuItem Header="_Unlock FEM Model" Command="{Binding UnlockFemModel}"
+              ToolTip="Delete this revision's FEM output databases, clear Post-Processing and enable editing"/>
     <MenuItem Header="Cancel FEM Analysis" Command="{Binding CancelFemAnalysis}"/>
     <MenuItem Header="Analysis _Monitor" Click="OpenFemMonitorClick"
               ToolTip="Open analysis progress and cable convergence. Diagnostic details are collapsed by default."/>
@@ -1531,7 +1535,7 @@
                   ToolTip="Remove the selected pattern (one that a load case, 01 Loading or 03 Pretension uses stays)"/>
          </WrapPanel>
         </StackPanel>
-        <DataGrid x:Name="FemPatternRowsGrid" Grid.Row="1" ItemsSource="{Binding FemPatternRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
+        <DataGrid x:Name="FemPatternRowsGrid" Grid.Row="1" ItemsSource="{Binding FemPatternRows}" IsEnabled="{Binding CanEditFemModel}" AutoGenerateColumns="False"
                   CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
          <DataGrid.Columns>
           <DataGridTextColumn Header="Pattern" Binding="{Binding Name}" IsReadOnly="True" Width="Auto" MinWidth="70"/>
@@ -1563,7 +1567,7 @@
          <TextBlock Text="Select a case and click Modify to edit its load components in Load Case Data. Add or remove load patterns and set their scale factors. New cases use Nonlinear Static."
                     Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
          <WrapPanel Margin="0,0,0,5">
-          <Button Content="Default Setup" Click="DefaultLoadCases_Click" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="Default load cases"
+          <Button Content="Default Setup" Click="DefaultLoadCases_Click" IsEnabled="{Binding CanEditFemModel}" AutomationProperties.Name="Default load cases"
                   ToolTip="Define the default load cases: Pretension = cable target forces + self-weight (nonlinear static, the targets are met here); SLS = + 1.0 dead + 1.0 live from Tab 01, continuing from Pretension; ULS = + 0.35 self-weight + 1.35 dead + 1.5 live, continuing from Pretension. Replaces the table."/>
           <Button Content="SAP Cases" Click="SapLoadCases_Click" AutomationProperties.Name="SAP2000 load cases" ToolTipService.ShowOnDisabled="True"
                   ToolTip="Show the load cases and combinations as saved from SAP2000 with this model. Replaces the table.">
@@ -1574,7 +1578,7 @@
             </Style>
            </Button.Style>
           </Button>
-          <Button Content="+ Add" Click="AddLoadCase_Click" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="Add load case"
+          <Button Content="+ Add" Click="AddLoadCase_Click" IsEnabled="{Binding CanEditFemModel}" AutomationProperties.Name="Add load case"
                   ToolTip="Add a load case: choose its load patterns and their scale factors, and the case it continues from (Load Case Data)"/>
           <Button Content="Modify" Click="ModifyLoadCase_Click" AutomationProperties.Name="Modify load case" ToolTipService.ShowOnDisabled="True"
                   ToolTip="Load Case Data of the selected case: add or remove its load patterns, set their scale factors, its name and the case it continues from">
@@ -1588,11 +1592,11 @@
             </Style>
            </Button.Style>
           </Button>
-          <Button Content="- Remove" Click="RemoveLoadCase_Click" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="Remove load case"
+          <Button Content="- Remove" Click="RemoveLoadCase_Click" IsEnabled="{Binding CanEditFemModel}" AutomationProperties.Name="Remove load case"
                   ToolTip="Remove the selected case (a case others continue from, or a combination uses, stays)"/>
          </WrapPanel>
         </StackPanel>
-        <DataGrid x:Name="FemCaseRowsGrid" Grid.Row="1" ItemsSource="{Binding FemCaseRows}" SelectedItem="{Binding SelectedFemCaseRow, Mode=TwoWay}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
+        <DataGrid x:Name="FemCaseRowsGrid" Grid.Row="1" ItemsSource="{Binding FemCaseRows}" SelectedItem="{Binding SelectedFemCaseRow, Mode=TwoWay}" IsEnabled="{Binding CanEditFemModel}" AutoGenerateColumns="False"
                   CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
          <DataGrid.Columns>
           <DataGridTemplateColumn Header="Run" Width="Auto" MinWidth="36">
@@ -1637,7 +1641,7 @@
          <TextBlock Text="LOAD COMBINATIONS" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
          <TextBlock Text="Linear additive · e.g. 1.2 DEAD + 1.5 LIVE" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
         </StackPanel>
-        <DataGrid Grid.Row="3" ItemsSource="{Binding FemCombinationRows}" IsEnabled="{Binding IsIdle}" AutoGenerateColumns="False"
+        <DataGrid Grid.Row="3" ItemsSource="{Binding FemCombinationRows}" IsEnabled="{Binding CanEditFemModel}" AutoGenerateColumns="False"
                   CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" ScrollViewer.HorizontalScrollBarVisibility="Auto">
          <DataGrid.Columns>
           <DataGridTemplateColumn Header="Run" Width="Auto" MinWidth="36">
@@ -1693,31 +1697,41 @@
       <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" VerticalAlignment="Top">
        <StackPanel Margin="8">
         <TextBlock Text="INTERNAL 2D FRAME ANALYSIS" Style="{StaticResource Subheading}"/>
+        <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Background}" Padding="6" Margin="0,4,0,6">
+         <DockPanel>
+          <Button DockPanel.Dock="Right" Content="Unlock" Command="{Binding UnlockFemModel}" Margin="8,0,0,0"
+                  ToolTip="Delete this locked revision's output databases and enable model editing"/>
+          <StackPanel>
+           <TextBlock Text="{Binding FemModelEditState}" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+           <TextBlock Text="{Binding FemDatabaseSummary}" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}"/>
+          </StackPanel>
+         </DockPanel>
+        </Border>
         <TextBlock Text="{Binding FemRunSummary}" FontFamily="{StaticResource MonoFont}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
                    ToolTip="Run Analysis solves the model once, as it is defined. A Tab 01 / Tab 03 range is an input of the parametric study (Run → Optimization VCF) and enters this run with its first value."/>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                     ToolTip="Cable pretensions are adjusted together under the target-force case loads to meet Tab 03 targets within this tolerance. Loaded cases then use the fitted pretension.">
          <TextBlock Text="Target-force fitting ±" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
          <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
-                  IsEnabled="{Binding IsIdle}"
+                  IsEnabled="{Binding CanEditFemModel}"
                   Text="{Binding FemTargetFitPercent, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat={}{0:0.###}, ValidatesOnExceptions=True}"/>
          <TextBlock Text="% of target" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
          <Border Width="1" Background="{StaticResource Border}" Margin="10,1,10,1"/>
          <TextBlock Text="Max iterations" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"
                     ToolTip="Maximum pretension adjustments per FEM case. If targets remain outside the tolerance, the closest fit is retained and marked Not fitted."/>
          <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
-                  IsEnabled="{Binding IsIdle}"
+                  IsEnabled="{Binding CanEditFemModel}"
                   Text="{Binding FemTargetFitIterations, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
                     ToolTip="Each frame is divided into this many equal sub-elements in the FEM (cables are not meshed). Interior mesh nodes are condensed onto the frame joints, so joint results are unchanged; the mesh gives forces and displacements along each frame for the diagrams and deflected shape.">
          <TextBlock Text="Frame mesh" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
          <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
-                  IsEnabled="{Binding IsIdle}"
+                  IsEnabled="{Binding CanEditFemModel}"
                   Text="{Binding FemFrameMeshSegments, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}"/>
          <TextBlock Text="segments per frame" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
          <Border Width="1" Background="{StaticResource Border}" Margin="10,1,10,1"/>
-         <CheckBox Content="Cable sag" IsChecked="{Binding FemCableSag}" IsEnabled="{Binding IsIdle}" VerticalAlignment="Center" FontSize="11"
+         <CheckBox Content="Cable sag" IsChecked="{Binding FemCableSag}" IsEnabled="{Binding CanEditFemModel}" VerticalAlignment="Center" FontSize="11"
                    AutomationProperties.Name="FEM cable sag"
                    ToolTip="Geometric nonlinearity of the cables. A cable that a load case loads along its length — its self-weight, when the case includes a pattern with a self-weight multiplier — hangs in a shallow parabola instead of a straight line. Its tension then follows T/k − (w·cos θ)²·L³ / 24T² = extension + P/k, its stiffness drops to Ernst's equivalent EA/L ÷ (1 + (w·cos θ·L)²·EA / 12T³), and it never goes fully slack. Negligible for highly tensioned cables; it matters for long or lightly tensioned ones. Off = straight tension-only cables."/>
         </StackPanel>
@@ -1762,6 +1776,58 @@
         <Button Content="Open View Options" Click="ViewOptions_Click" HorizontalAlignment="Left"/>
        </StackPanel>
       </Border>
+     </TabItem>
+
+     <!-- ============ Define → FEM Output Settings ============ -->
+     <TabItem Header="Output Settings">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+       <StackPanel Margin="8" IsEnabled="{Binding CanEditFemModel}">
+        <TextBlock Text="FEM OUTPUT SETTINGS" Style="{StaticResource Subheading}"/>
+        <TextBlock Text="Choose the cases and model objects written into the result views. Names accept comma-separated joint, frame or cable objects."
+                   Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+        <Grid>
+         <Grid.ColumnDefinitions><ColumnDefinition Width="132"/><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+         </Grid.RowDefinitions>
+         <TextBlock Grid.Row="0" Text="Result family" Style="{StaticResource Subheading}"/>
+         <TextBlock Grid.Row="0" Grid.Column="1" Text="Case / combination" Style="{StaticResource Subheading}"/>
+         <TextBlock Grid.Row="0" Grid.Column="2" Text="Monitored objects" Style="{StaticResource Subheading}"/>
+
+         <TextBlock Grid.Row="1" Text="Deflection joints" VerticalAlignment="Center"/>
+         <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding FemOutputCaseChoices}" SelectedItem="{Binding FemDeflectionOutputCase, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,6,2"/>
+         <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding FemDeflectionJointNames, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Margin="0,2" ToolTip="Joint names, comma-separated"/>
+
+         <TextBlock Grid.Row="2" Text="Frame forces" VerticalAlignment="Center"/>
+         <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding FemOutputCaseChoices}" SelectedItem="{Binding FemMemberForceOutputCase, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,6,2"/>
+         <TextBox Grid.Row="2" Grid.Column="2" Text="{Binding FemFrameObjectNames, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Margin="0,2" ToolTip="Frame object names for axial, shear, moment and station diagrams"/>
+
+         <TextBlock Grid.Row="3" Text="Left supports" VerticalAlignment="Center"/>
+         <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding FemOutputCaseChoices}" SelectedItem="{Binding FemFoundationOutputCase, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,6,2"/>
+         <TextBox Grid.Row="3" Grid.Column="2" Text="{Binding FemFoundationLeftJointNames, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Margin="0,2" ToolTip="Left support joint names"/>
+
+         <TextBlock Grid.Row="4" Text="Right supports" VerticalAlignment="Center"/>
+         <TextBlock Grid.Row="4" Grid.Column="1" Text="same case" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="4,0"/>
+         <TextBox Grid.Row="4" Grid.Column="2" Text="{Binding FemFoundationRightJointNames, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Margin="0,2" ToolTip="Right support joint names"/>
+
+         <TextBlock Grid.Row="5" Text="Cable forces" VerticalAlignment="Center"/>
+         <ComboBox Grid.Row="5" Grid.Column="1" ItemsSource="{Binding FemOutputCaseChoices}" SelectedItem="{Binding FemCableOutputCase, UpdateSourceTrigger=PropertyChanged}" Margin="0,2,6,2"/>
+         <TextBox Grid.Row="5" Grid.Column="2" Text="{Binding FemCableObjectNames, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Margin="0,2" ToolTip="Cable object names; target convergence is shown only for Cable Target Forces cases"/>
+        </Grid>
+
+        <WrapPanel Margin="0,10,0,4">
+         <TextBlock Text="Downward deflection band" VerticalAlignment="Center" Margin="0,0,6,0"/>
+         <TextBox Width="64" Text="{Binding FemDeflectionLimitMinMm, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"/>
+         <TextBlock Text=" to " VerticalAlignment="Center"/>
+         <TextBox Width="64" Text="{Binding FemDeflectionLimitMaxMm, Converter={StaticResource NullableDouble}, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"/>
+         <TextBlock Text=" mm" VerticalAlignment="Center" Margin="4,0,14,0"/>
+         <TextBlock Text="Max cable utilization" VerticalAlignment="Center" Margin="0,0,6,0"/>
+         <TextBox Width="64" Text="{Binding FemMaximumCableUtilization, UpdateSourceTrigger=LostFocus, StringFormat={}{0:0.###}, ValidatesOnExceptions=True}" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"/>
+        </WrapPanel>
+        <TextBlock Text="{Binding FemOutputSettingsStatus}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+       </StackPanel>
+      </ScrollViewer>
      </TabItem>
     </TabControl>
    </TabItem>

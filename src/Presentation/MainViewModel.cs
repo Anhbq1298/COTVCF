@@ -29,6 +29,7 @@ public sealed partial class MainViewModel : Observable
     private readonly IOutputSettingsDialogService? outputDialogs;
     private readonly OutputGroupPreparationService? outputGroupPreparation;
     private readonly ReportPrintSettingsStore? printStore;
+    private readonly FemWorkingSessionStore femSessionStore;
     private bool busy;
     private int selectedTab;
     private AppliedPoint? selectedAppliedPoint;
@@ -862,6 +863,7 @@ public sealed partial class MainViewModel : Observable
     public Command ReadFemProperties { get; }
     public Command RunFemAnalysis { get; }
     public Command CancelFemAnalysis { get; }
+    public Command UnlockFemModel { get; }
 
     private readonly FemStudyService femStudy = new();
     private CancellationTokenSource? femCancellation;
@@ -1175,7 +1177,8 @@ public sealed partial class MainViewModel : Observable
         IOutputSettingsDialogService? outputDialogs = null,
         OutputGroupPreparationService? outputGroupPreparation = null,
         ReportPrintSettingsStore? printStore = null,
-        QuantityTakeoffService? quantityTakeoff = null)
+        QuantityTakeoffService? quantityTakeoff = null,
+        FemWorkingSessionStore? femSessionStore = null)
     {
         State = state;
         // Without a service (checks) Tab 08 reads candidate text exports only; it can never start SAP2000.
@@ -1188,6 +1191,7 @@ public sealed partial class MainViewModel : Observable
         this.outputDialogs = outputDialogs;
         this.outputGroupPreparation = outputGroupPreparation;
         this.printStore = printStore;
+        this.femSessionStore = femSessionStore ?? new FemWorkingSessionStore();
         // Print Setup is a per-user preference: loaded once, saved on every edit. Without a store (checks) it is
         // simply held in memory.
         PrintSettings = printStore?.Load() ?? new();
@@ -1339,6 +1343,7 @@ public sealed partial class MainViewModel : Observable
         ReadFemProperties = new(_ => ReadFemModelProperties(), () => CanReadFemProperties);
         RunFemAnalysis = new(_ => RunFemAnalysisFromUi(), () => CanRunFemAnalysis);
         CancelFemAnalysis = new(_ => femCancellation?.Cancel(), () => CanCancelFemAnalysis);
+        UnlockFemModel = new(_ => UnlockFemModelForEditing(), () => CanUnlockFemModel);
 
         void Dirty(ConfigTabs tab) { if (!applyingProject) config.Session.MarkDirty(tab); }
 
@@ -1885,6 +1890,20 @@ public sealed partial class MainViewModel : Observable
             return;
         }
 
+        try
+        {
+            if (IsFemModelLocked) DeleteRegisteredFemOutputs();
+            LockFemModelForRun();
+        }
+        catch (Exception ex)
+        {
+            FemProgressText = $"Run could not lock the model: {ex.Message}";
+            Message = FemProgressText;
+            Warn("FEM Analysis", FemProgressText);
+            Update();
+            return;
+        }
+
         IsBusy = true;
         isFemRunning = true;
         femCancellation = new CancellationTokenSource();
@@ -1947,6 +1966,8 @@ public sealed partial class MainViewModel : Observable
                 foreach (var row in FemCableFitRow.FromRun(run, SelectedFemResultName)) FemCableFitRows.Add(row);
                 SelectedFemRun = run;
                 FemLogLine(DescribeFemRun(run));
+                var outputDatabase = WriteFemOutput(run);
+                FemLogLine($"Output database: {outputDatabase}");
                 FemProgressText = "Analysis complete" +
                     (run.Result.TargetFitConverged ? $" · pretension stage within {targetFitPercent:0.###}% of target"
                         : $" · pretension not fitted within {targetFitPercent:0.###}% (closest pretension used) · see Cable Target Fit") +
@@ -3083,7 +3104,11 @@ public sealed partial class MainViewModel : Observable
             nameof(FoundationSummary), nameof(FoundationStatus), nameof(CableForceSummary), nameof(CableForceStatus),
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
             nameof(HasSapConnection), nameof(HasWorkingModel), nameof(IsOfflineModel), nameof(IsDefaultModel), nameof(OfflineModelSummary), nameof(CanSaveFemModel), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
-            nameof(FemRunSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus),
+            nameof(FemRunSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus), nameof(IsFemModelLocked),
+            nameof(CanEditFemModel), nameof(CanUnlockFemModel), nameof(FemModelEditState), nameof(FemDatabaseSummary),
+            nameof(FemOutputCaseChoices), nameof(FemDeflectionOutputCase), nameof(FemMemberForceOutputCase), nameof(FemFoundationOutputCase), nameof(FemCableOutputCase),
+            nameof(FemDeflectionJointNames), nameof(FemFoundationLeftJointNames), nameof(FemFoundationRightJointNames), nameof(FemCableObjectNames), nameof(FemFrameObjectNames),
+            nameof(FemDeflectionLimitMinMm), nameof(FemDeflectionLimitMaxMm), nameof(FemMaximumCableUtilization), nameof(FemOutputSettingsStatus),
             nameof(CanRunFemAnalysis), nameof(CanCancelFemAnalysis), nameof(PaneStatus), nameof(HasFemResults),
             nameof(LoadingCandidateCount), nameof(HeightCandidateCount),
             nameof(StudyModeLabel), nameof(StudyNeedsFixedHeight), nameof(StudyNeedsFixedPretension),
@@ -3097,6 +3122,7 @@ public sealed partial class MainViewModel : Observable
         }) Notify(name);
         NotifySharedViewer();
         NotifyStudyPresentation();
+        ScheduleFemWorkingSave();
         CommandManager.InvalidateRequerySuggested();
     }
 }

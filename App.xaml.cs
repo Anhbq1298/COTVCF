@@ -46,10 +46,15 @@ public partial class App : System.Windows.Application
             printStore: new ReportPrintSettingsStore(), quantityTakeoff: quantityTakeoff);
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
-        // Open on the built-in default FEM model (07 FEM, ready to run); Connect SAP replaces it with the live model.
-        viewModel.LoadDefaultFemModel();
+        // Restore the autosaved FEM working database first. A fresh installation opens the built-in default model.
+        if (!viewModel.TryRestoreFemWorkingSession()) viewModel.LoadDefaultFemModel();
         // The model view opens on its own; the Define / Run / Result … pane appears when a menu item is chosen.
         ((Presentation.MainWindow)MainWindow).ClosePane();
     }
-    protected override void OnExit(ExitEventArgs e) { gateway?.Dispose(); base.OnExit(e); }
+    protected override void OnExit(ExitEventArgs e)
+    {
+        if (MainWindow?.DataContext is MainViewModel viewModel) viewModel.FlushFemWorkingSession();
+        gateway?.Dispose();
+        base.OnExit(e);
+    }
 }

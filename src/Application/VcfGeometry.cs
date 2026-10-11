@@ -1,4 +1,5 @@
 using COT_VCF.Domain;
+using COT_VCF.Geometry.Handlers;
 
 namespace COT_VCF.Application;
 
@@ -51,6 +52,7 @@ public sealed record VcfTopology(
 public static class VcfGeometry
 {
     private const double Tolerance = 1e-3;
+    private static readonly GeometryNamingService Naming = new();
 
     public static VcfGeometryAnalysis Analyze(GeometryModel geometry, TrussHeightConfiguration truss) =>
         Analyze(geometry, truss.TopPoints, truss.MiddlePoints, truss.BottomPoints);
@@ -234,7 +236,8 @@ public static class VcfGeometry
             pattern[g] = (match[0].Groups[1].Value, int.Parse(match[0].Groups[2].Value), match[0].Groups[2].Value.Length, first.Y,
                 groups[g].Select(name => geometry.Points[name].Position.Z).Average());
         }
-        string PointName(int g, int line) => pattern[g]!.Value.Prefix + (pattern[g]!.Value.First + line).ToString(new string('0', pattern[g]!.Value.Width));
+        string PointName(int g, int line) => Naming.IncrementTrailingNumber(
+            pattern[g]!.Value.Prefix + pattern[g]!.Value.First.ToString(new string('0', pattern[g]!.Value.Width)), line);
 
         var bay = analysis.Parameters.BayWidth;
         var centre = (lines[0] + lines[^1]) / 2;
@@ -315,14 +318,7 @@ public static class VcfGeometry
         var templates = new Dictionary<string, string>(StringComparer.Ordinal);
         string NextFrameName(StructuralMember template)
         {
-            var m = System.Text.RegularExpressions.Regex.Match(template.Name, @"^(.*?)(\d+)$");
-            var prefix = m.Success ? m.Groups[1].Value : template.Name + "_";
-            var width = m.Success ? m.Groups[2].Value.Length : 3;
-            var next = geometry.Members.Concat(members).Select(member => System.Text.RegularExpressions.Regex.Match(member.Name, "^" + System.Text.RegularExpressions.Regex.Escape(prefix) + @"(\d+)$"))
-                .Where(x => x.Success).Select(x => int.Parse(x.Groups[1].Value)).DefaultIfEmpty(0).Max() + 1;
-            string name;
-            do name = prefix + (next++).ToString(new string('0', width)); while (used.Contains(name));
-            return name;
+            return Naming.NextSequentialName(template.Name, geometry.Members.Concat(members).Select(member => member.Name));
         }
         void Add(StructuralMember template, string start, string end, bool reuse)
         {
@@ -372,9 +368,8 @@ public static class VcfGeometry
                 if (k <= existing.Length) name = existing[k - 1].Name;
                 else
                 {
-                    var m = System.Text.RegularExpressions.Regex.Match(template.Name, @"^(.*?)(\d+)([abAB])(.*)$");
-                    name = m.Success ? $"{m.Groups[1].Value}{newNumbers[k - existing.Length - 1]}{m.Groups[3].Value}{m.Groups[4].Value}" : $"{template.Name}_{k}";
-                    while (used.Contains(name)) name += "'";
+                    name = Naming.SymmetricCableName(template.Name, newNumbers[k - existing.Length - 1], side == 0 ? 'A' : 'B');
+                    if (used.Contains(name)) throw new InvalidOperationException($"Generated cable name '{name}' is already used.");
                     added[name] = template.Name;
                 }
                 used.Add(name);
@@ -384,6 +379,8 @@ public static class VcfGeometry
         }
 
         string[] Group(int g) => pattern[g] is null ? [] : Enumerable.Range(0, bays + 1).Select(line => PointName(g, line)).ToArray();
+        Naming.EnsureUnique(points.Keys);
+        Naming.EnsureUnique(members.Select(member => member.Name));
         return new VcfTopology(new GeometryModel(points, members), bays, Group(0), Group(1), Group(2), templates, renamed, added);
     }
 

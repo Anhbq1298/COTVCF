@@ -11,6 +11,7 @@ public static class AppDataPaths
 
     public static string RecoveryDirectory => Path.Combine(RootDirectory, "Recovery");
     public static string LogsDirectory => Path.Combine(RootDirectory, "Logs");
+    public static string SessionsDirectory => Path.Combine(RootDirectory, "Sessions");
 
     public static string EnsureDirectory(string path)
     {
