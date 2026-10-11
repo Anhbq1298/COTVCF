@@ -81,19 +81,6 @@ public static class FemModelFile
 
     public static FemModelFileDto Read(string path) => Parse(File.ReadAllText(path));
 
-    /// <summary>Name shown for the built-in default model (embedded in the app, see COTVCF.csproj).</summary>
-    public const string DefaultModelName = "COT Framing_V1.2_100m_FEM.cotfem.json";
-    private const string DefaultResource = "COTVCF.DefaultFemModel.cotfem.json";
-
-    /// <summary>The built-in default FEM model the app opens with when SAP2000 is not connected.</summary>
-    public static FemModelFileDto ReadDefault()
-    {
-        using var stream = typeof(FemModelFile).Assembly.GetManifestResourceStream(DefaultResource)
-            ?? throw new InvalidDataException("The built-in default FEM model is missing from the application.");
-        using var reader = new StreamReader(stream);
-        return Parse(reader.ReadToEnd());
-    }
-
     public static FemModelFileDto Parse(string text)
     {
         FemModelFileDto? model;

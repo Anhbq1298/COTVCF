@@ -73,11 +73,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The default FEM model (07 FEM → Save Model of COT Framing_V1.2_100m): loaded at startup so FEM runs without SAP2000. -->
+    <!-- The default MCOTiS configuration is a bundled SQLite input database, loaded at startup without SAP2000. -->
     <!-- The software logo: window icons (Theme.xaml AppLogo); AppIcon.ico is made from the same picture. -->
     <Resource Include="src\Presentation\AppLogo.png" />
     <Resource Include="src\Presentation\AppIcon.ico" />
-    <EmbeddedResource Include="src\Resources\DefaultFemModel.cotfem.json" LogicalName="COTVCF.DefaultFemModel.cotfem.json" />
+    <EmbeddedResource Include="src\Resources\Default.cotfem.db" LogicalName="COTVCF.Default.cotfem.db" />
   </ItemGroup>
 
   <ItemGroup>

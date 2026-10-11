@@ -131,6 +131,8 @@ public static class FemInputDatabase
     public const string Extension = ".cotfem.db";
     public const string Filter = "MCOTiS Config (*.cotfem.db)|*.cotfem.db";
     public const string OpenFilter = Filter + "|Legacy FEM Config (*.cotfem.json)|*.cotfem.json";
+    public const string DefaultModelName = "Default.cotfem.db";
+    private const string DefaultResource = "COTVCF.Default.cotfem.db";
 
     internal static readonly JsonSerializerOptions Json = new()
     {
@@ -173,6 +175,21 @@ public static class FemInputDatabase
                 DateTime.Parse(reader.GetString(5), null, System.Globalization.DateTimeStyles.RoundtripKind), reader.GetInt64(6) != 0,
                 reader.IsDBNull(7) ? null : reader.GetString(7)));
         return new(snapshot, outputs);
+    }
+
+    /// <summary>Reads the SQLite configuration bundled with the app. SQLite needs a file path, so the embedded bytes
+    /// are copied to a unique temporary file for this read only; callers never save back to the bundled template.</summary>
+    public static FemInputDatabaseRead ReadDefault()
+    {
+        using var resource = typeof(FemInputDatabase).Assembly.GetManifestResourceStream(DefaultResource)
+            ?? throw new InvalidDataException("The built-in default MCOTiS database is missing from the application.");
+        var path = Path.Combine(Path.GetTempPath(), $"mcotis-default-{Guid.NewGuid():N}{Extension}");
+        try
+        {
+            using (var file = File.Create(path)) resource.CopyTo(file);
+            return Read(path);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
     }
 
     public static string RevisionHash(FemInputSnapshot snapshot)

@@ -263,20 +263,30 @@ public sealed partial class MainViewModel
         if (dialog.ShowDialog() == true) OpenFemModelFile(dialog.FileName);
     }
 
-    /// <summary>Opens the built-in default FEM model: 07 FEM ready to run. At startup it only opens while SAP2000 is not
+    /// <summary>Opens the bundled MCOTiS database as a fresh editable model. At startup it only opens while SAP2000 is not
     /// connected; with <paramref name="replaceCurrent"/> (File → Default Model) it replaces whatever model is open.</summary>
     internal void LoadDefaultFemModel(bool replaceCurrent = false)
     {
         if (IsBusy || (State.IsSapConnected && !replaceCurrent)) return;
         if (CommitEditors?.Invoke() == false) return;
-        FemModelFileDto file;
-        try { file = FemModelFile.ReadDefault(); }
+        FemInputSnapshot snapshot;
+        try
+        {
+            snapshot = FemInputDatabase.ReadDefault().Snapshot;
+            // The bundled database is a template, not the working file. Its saved lock and output registrations
+            // belong to the authoring session; a fresh default model starts editable and requires a new analysis.
+            snapshot.DatabaseId = Guid.NewGuid();
+            snapshot.Revision = 1;
+            snapshot.IsLocked = false;
+            snapshot.LockedRevision = null;
+            snapshot.Model = snapshot.Model! with { IsLocked = false };
+        }
         catch (Exception ex)
         {
             Message = $"Default FEM model unavailable: {ex.Message}";
             return;
         }
-        ApplyFemModel(file, FemModelFile.DefaultModelName, isDefault: true);
+        ApplyFemModel(snapshot.ToLegacy(), FemInputDatabase.DefaultModelName, isDefault: true, databaseSnapshot: snapshot);
     }
 
     /// <summary>Restores a saved FEM model as an offline model — what Load Model does once the file is chosen.</summary>
@@ -353,8 +363,7 @@ public sealed partial class MainViewModel
             EnsureSections();
             femSapLoading = file.Loading!;
             RestoreFemLoadRows(file);
-            // The built-in model starts on the app's default load cases; SAP Cases shows the ones saved with it.
-            if (isDefault) UseDefaultFemLoadCases();
+            // Keep the load patterns and case definitions saved in the bundled database.
             FemTargetFitPercent = file.Settings.TargetFitPercent;
             FemTargetFitIterations = file.Settings.TargetFitIterations;
             FemFrameMeshSegments = file.Settings.FrameMeshSegments;
@@ -363,7 +372,7 @@ public sealed partial class MainViewModel
             offlineModelPath = path;
             isDefaultModel = isDefault;
             femInputSnapshot = databaseSnapshot ?? FemInputSnapshot.FromLegacy(file);
-            femInputDatabasePath = databaseSnapshot is null ? null : path;
+            femInputDatabasePath = isDefault || databaseSnapshot is null ? null : path;
             femOutputRegistrations.Clear();
             femOutputRegistrations.AddRange(outputs ?? []);
             femWorkingDirty = false;

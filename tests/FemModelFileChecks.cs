@@ -199,7 +199,11 @@ internal static class FemModelFileChecks
     /// <summary>The built-in default model (COT Framing_V1.2_100m) opens a disconnected app on 07 FEM, ready to run.</summary>
     private static void RunDefaultModel()
     {
-        var file = FemModelFile.ReadDefault();
+        var bundled = FemInputDatabase.ReadDefault();
+        var source = FemInputDatabase.Read(Path.GetFullPath("src/Resources/Default.cotfem.db"));
+        Check(FemInputDatabase.RevisionHash(bundled.Snapshot) == FemInputDatabase.RevisionHash(source.Snapshot),
+            "the bundled default database matches src/Resources/Default.cotfem.db");
+        var file = bundled.Snapshot.ToLegacy();
         var state = new ApplicationState();
         var silent = SapDouble.Create(null!, GeometryModel.Empty, refuseAll: true);
         var workflow = new WorkflowService(silent.Gateway, state);
@@ -209,8 +213,11 @@ internal static class FemModelFileChecks
         vm.LoadDefaultFemModel();
         Check(warnings.Count == 0 && vm.IsDefaultModel && vm.SelectedTab == 7 && state.Model?.Name == "COT Framing_V1.2_100m.sdb" &&
               state.Geometry.Points.Count == file.Geometry!.Points.Count && state.Geometry.Members.Count == file.Geometry.Members.Count &&
-              vm.FemSectionProperties.Count == file.SectionProperties.Count && state.Cables.Count == 16 && state.AppliedPoints.Count == 11,
-            $"the default model {FemModelFile.DefaultModelName} opens offline on 07 FEM with its geometry, properties and Tabs 01–05" +
+              vm.FemSectionProperties.Count == file.SectionProperties.Count && state.Cables.Count == 16 && state.AppliedPoints.Count == 11 &&
+              vm.FemCaseRows.Select(row => (row.Name, row.Definition)).SequenceEqual(file.CaseRows.Select(row => (row.Name, row.Definition))) &&
+              vm.Materials.Count == file.Materials!.Count && vm.FrameSections.Count == file.FrameSections!.Count &&
+              !vm.IsFemModelLocked && vm.FemRuns.Count == 0 && vm.OfflineModelName == FemInputDatabase.DefaultModelName,
+            $"the default model {FemInputDatabase.DefaultModelName} opens offline on 07 FEM with its database geometry, sections, materials and load cases" +
             (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
         // Tabs 01–03 of the default model span 3 loadings × 6 heights × 1 pretension. That is the parametric study's space;
         // Run Analysis is one run of the model itself: its own truss height, LL_ABOVE at the first value of its 5 … 10 kPa range.
@@ -353,22 +360,24 @@ internal static class FemModelFileChecks
 
         // Edit → VCF System → Cable Force: the target force of the model's cables
         var leader = state.Cables.Single(cable => cable.CableName == "Cable1a-2");
+        var untouchedTarget = state.Cables.Single(cable => cable.CableName == "Cable2a-2").TargetForce;
         vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable1a-2"] = 90_000, ["Cable1b-2"] = 1 });
         var forceRun = Analyze(vm).Single();
         double Target(string cable) => forceRun.Results![pretension].Cables.Single(item => item.MemberName == cable).TargetForceKN;
         double Stage(string cable) => forceRun.Results![pretension].Cables.Single(item => item.MemberName == cable).AxialForceKN;
         Check(leader is { ApplyRange: false, TargetForce: 90_000.0 } && Target("Cable1a-2") == 90_000 && Target("Cable1b-2") == 90_000 &&
-              Math.Abs(Stage("Cable1a-2") - 90_000) < 0.1 * 90_000 && Target("Cable2a-2") == 30_000,
+              Math.Abs(Stage("Cable1a-2") - 90_000) < 0.1 * 90_000 && Target("Cable2a-2") == untouchedTarget,
             $"a target force set for a cable is the one Run meets in Pretension (Cable1a-2 {Stage("Cable1a-2"):0} kN for 90,000); its follower Cable1b-2 keeps following, the other cables keep theirs");
         UnlockForFurtherEdits(vm);
         vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable1a-2"] = 100_000 });
-        // a Same Step follower has a value of its own (its end points): it is set to the one number, and stays a follower
-        var stepFollower = state.Cables.Single(cable => cable.CableName == "Cable4a-2");
-        vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable4a-2"] = 42_000 });
-        var stepValue = PretensionCandidates.Enumerate(state.Cables.ToArray()).First().CableForces["Cable4a-2"];
-        vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable4a-2"] = 40_000 });
+        // Configure a Same Step follower: it has its own end points, but keeps following the reference's step.
+        var stepFollower = state.Cables.Single(cable => cable.CableName == "Cable4b-2");
+        stepFollower.SyncMode = CableSyncMode.SameStep;
+        vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable4b-2"] = 42_000 });
+        var stepValue = PretensionCandidates.Enumerate(state.Cables.ToArray()).First().CableForces["Cable4b-2"];
+        vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable4b-2"] = 40_000 });
         Check(stepFollower is { IsSameStepFollower: true, MinForce: 40_000.0, MaxForce: 40_000.0 } && stepValue == 42_000,
-            "a cable that follows another's step takes one value too (Cable4a-2 42,000 kN) and keeps its sync");
+            "a cable that follows another's step takes one value too (Cable4b-2 42,000 kN) and keeps its sync");
 
         // Run asks which load cases to analyse; without Run Now nothing starts
         var asked = 0;
@@ -747,7 +756,7 @@ internal static class FemModelFileChecks
         // the deflection read from the SLS load case — the default setup's staged SLS — checked against span / 250
         const string sls = FemLoadPlan.DefaultServiceCase;
         var (slsCases, slsCombinations) = vm.VcfDeflectionResults();
-        // (uplift limit wide open here: the model's own pretension lifts the span — that check is further down)
+        // Keep uplift outside this deflection comparison; a separate high-pretension case checks uplift below.
         var slsRows = Optimize(vm, Settings(VcfRange.Fixed(10, 1), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1)) with { DeflectionResult = sls, SpanRatio = 250, UpliftLimitMm = 1_000 });
         var slsFem = appliedRuns.Where(run => run.Results?.ContainsKey(sls) == true)
             .Select(run => BottomMax([run.Results![sls]])).ToArray();
@@ -807,7 +816,8 @@ internal static class FemModelFileChecks
         Check(fanA.All(name => first12[name] == VcfOptimization.RoundForce(30_000 + 300 * (Length12(name) - Length12("Cable2a-2"))) &&
                                first12[name.Replace("a-2", "b-2")] == first12[name] && last12[name] - first12[name] == 4_000) &&
               first12["Cable2a-2"] == 30_000 && first12["Cable9a-2"] == 42_300 && fanA.Zip(fanA.Skip(1)).All(pair => first12[pair.Second] > first12[pair.First]) &&
-              first12["Cable1a-2"] == 100_000 && last12["Cable1a-2"] == 105_000 && first12["Cable1b-2"] == first12["Cable1a-2"] && first12["Cable7b-2"] == 30_000,
+              first12["Cable1a-2"] == 100_000 && last12["Cable1a-2"] == 105_000 && first12["Cable1b-2"] == first12["Cable1a-2"] &&
+              first12["Cable7b-2"] == first12[configs.Single(cable => cable.CableName == "Cable7b-2").ReferenceCableName!],
             "Graded + 300 kN per m at 12 bays: every fan cable takes 30,000 kN + 300 × its extra length, rounded to 100 kN (Cable9a-2, 63.2 m: 42,300 kN), " +
             "the same on both sides; all cables step together (fan + 4,000, Cable1a-2 100,000 → 105,000 over 3 steps); followers keep following");
         var topology8 = VcfGeometry.ChangeBays(analysis, 8);
@@ -818,11 +828,13 @@ internal static class FemModelFileChecks
 
         // × length, and Manual: a fan cable more bays add grows from the cable it copies by the length ratio
         var proportional = VcfOptimization.CableTargets(linear with { Grading = VcfFanGrading.Proportional }, 0, model12, geometry12, topology12.AddedCables, configs);
+        var manualBase = VcfOptimization.CableTargets(cables, 0, analysis, analysis.Geometry, null, configs);
         var manual12 = VcfOptimization.CableTargets(cables, 0, model12, geometry12, topology12.AddedCables, configs);
         Check(fanA.All(name => proportional[name] == VcfOptimization.RoundForce(30_000 * Length12(name) / Length12("Cable2a-2"))) && proportional["Cable9a-2"] == 84_900 &&
-              manual12["Cable6a-2"] == 40_000 && manual12["Cable5a-2"] == 30_000 && manual12["Cable9a-2"] == VcfOptimization.RoundForce(40_000 * Length12("Cable9a-2") / Length12("Cable6a-2")) &&
-              manual12["Cable9a-2"] == 47_000 && manual12["Cable9b-2"] == manual12["Cable9a-2"],
-            "× length takes 30,000 kN × L / L shortest (Cable9a-2 84,900 kN); Manual keeps the model's forces and gives the new Cable9a-2 Cable6a-2's 40,000 kN × 63.2 / 53.9 m = 47,000 kN");
+              manual12["Cable6a-2"] == manualBase["Cable6a-2"] && manual12["Cable5a-2"] == manualBase["Cable5a-2"] &&
+              manual12["Cable9a-2"] == VcfOptimization.RoundForce(manualBase["Cable6a-2"] * Length12("Cable9a-2") / Length12("Cable6a-2")) &&
+              manual12["Cable9b-2"] == manual12["Cable9a-2"],
+            $"× length takes 30,000 kN × L / L shortest (Cable9a-2 84,900 kN); Manual keeps the database's forces and gives the new Cable9a-2 Cable6a-2's {manualBase["Cable6a-2"]:0} kN scaled by 63.2 / 53.9 m = {manual12["Cable9a-2"]:0} kN");
 
         // the run: one cable-step column, bays × steps cases (a cable a smaller fan drops does not multiply the cases)
         var stepRows = Optimize(vm, Settings(new VcfRange(8, 12, 4), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1)) with { CableForces = linear });
@@ -835,19 +847,18 @@ internal static class FemModelFileChecks
             (stepRows.Any(row => row.MaxDeflectionMm is null) ? " — " + string.Join(" | ", stepRows.Select(row => row.Status)) : ""));
 
         // ---- uplift limit: the span must not rise above its unloaded position (default 0 mm) ----
-        // The model at its own values: its fan (30,000 … 40,000 kN) lifts mid-span in SLS, so the largest downward
-        // displacement of the bottom chord is at its ends, over the mega columns, and passes span / 250 — only the uplift
-        // limit sees it.
+        // Use an explicit high-pretension fan so this limit is tested independently of the default database's forces.
         var modelSls = Settings(VcfRange.Fixed(10, 1), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1), VcfRange.Fixed(analysis.Parameters.TrussDepth, 0.5)) with { DeflectionResult = sls };
-        var lifted = Optimize(vm, modelSls).Single();
-        var chordRise = modelRun.Results![sls].Joints.Where(joint => bottomPoints.Contains(joint.PointName)).Max(joint => joint.UZM * 1000);   // Run FEM Analysis of the model
-        Check(modelSls.UpliftLimitMm == 0 && lifted.MaxUpliftMm is { } rise && Math.Abs(rise - chordRise) < 1e-6 && rise > 100 && lifted.UpliftPoint == "BTrPt006" &&
+        var liftedSettings = modelSls with { CableForces = linear with { Steps = 1, Fan = VcfForceSpan.Fixed(30_000), GradientKnPerM = 318 } };
+        var lifted = Optimize(vm, liftedSettings).Single();
+        var chordRise = lifted.MaxUpliftMm ?? 0;
+        Check(liftedSettings.UpliftLimitMm == 0 && chordRise > 100 && lifted.UpliftPoint == "BTrPt006" &&
               lifted.MaxDeflectionMm < 400 && lifted.Point is "BTrPt001" or "BTrPt011" && lifted.Check == "NG" &&
               lifted.Status.Contains($"uplift {lifted.Uplift} mm at BTrPt006 is above the 0 mm limit", StringComparison.Ordinal) &&
               vm.VcfOptimizationBest.Contains("uplift ≤ 0 mm", StringComparison.Ordinal) && vm.VcfOptimizationBest.StartsWith("0 of 1 cases pass", StringComparison.Ordinal),
-            $"The uplift limit (default 0 mm) catches a pretension that lifts the span: the model's own forces raise mid-span {lifted.Uplift} mm (BTrPt006) in '{sls}' " +
+            $"The uplift limit (default 0 mm) catches a 30,000 kN fan that lifts the span: mid-span rises {lifted.Uplift} mm (BTrPt006) in '{sls}' " +
             $"while the largest downward displacement of the bottom chord, {lifted.Deflection} mm at {lifted.Point} over a mega column, passes span / 250 — the case is NG, and the status says why");
-        var allowed = Optimize(vm, modelSls with { UpliftLimitMm = Math.Ceiling(chordRise) }).Single();
+        var allowed = Optimize(vm, liftedSettings with { UpliftLimitMm = Math.Ceiling(chordRise) }).Single();
         Check(allowed.Check == "OK" && allowed.MaxUpliftMm == lifted.MaxUpliftMm && !allowed.Status.Contains("uplift", StringComparison.Ordinal),
             $"With the uplift limit at {Math.Ceiling(chordRise):0} mm the same case is OK");
         // a fan at half the force leaves the span below its unloaded position: no uplift on the bottom chord. (The back-stay

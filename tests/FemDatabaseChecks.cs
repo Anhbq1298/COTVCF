@@ -14,7 +14,7 @@ internal static class FemDatabaseChecks
         Directory.CreateDirectory(root);
         try
         {
-            var source = FemModelFile.ReadDefault();
+            var source = FemInputDatabase.ReadDefault().Snapshot.ToLegacy();
             var sourceGeometry = source.Geometry ?? throw new InvalidOperationException("The default FEM model has no geometry.");
             var snapshot = FemInputSnapshot.FromLegacy(source);
             var inputPath = Path.Combine(root, "model" + FemInputDatabase.Extension);

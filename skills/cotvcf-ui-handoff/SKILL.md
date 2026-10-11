@@ -606,13 +606,14 @@ earlier tall-header / large-button / blue-block look.
   (`tests/FemModelFileChecks.cs`). The model file is not a project file: loading closes the active project session.
   Connect SAP leaves offline mode (live model becomes the session; Tabs 01–05 are kept and re-checked by Refresh; the
   FEM inputs held are then out of date until Read FEM Properties from SAP).
-- **Default model**: `src/Resources/DefaultFemModel.cotfem.json` (Save Model of COT Framing_V1.2_100m.sdb, embedded as
-  `COTVCF.DefaultFemModel.cotfem.json`; `FemModelFile.ReadDefault`). `App.OnStartup` calls `LoadDefaultFemModel()`, so the
+- **Default model**: `src/Resources/Default.cotfem.db` (MCOTiS input database for COT Framing_V1.2_100m.sdb, embedded as
+  `COTVCF.Default.cotfem.db`; `FemInputDatabase.ReadDefault`). `App.OnStartup` calls `LoadDefaultFemModel()`, so the
   app opens offline on 07 FEM, `OFFLINE · READY`. Its Tabs 01–03 span 3 loadings × 6 heights × 1 pretension — the
   parametric study's space; Run Analysis is one run at its own 20 m truss height with LL_ABOVE at 5 kPa, the first value
-  of its 5 … 10 range. Connect SAP clears the
+  of its 5 … 10 range. The bundled database's geometry, materials, sections, loading and load cases are the default setup;
+  startup creates a fresh unlocked session without carrying over its saved output registrations. Connect SAP clears the
   default's geometry, Tabs 01–05 and FEM inputs (`ClearDefaultFemModel`) — unlike a user-loaded model, which keeps them.
-  Replace the default by saving a new model over that file and rebuilding. Checks construct the view model directly, so
+  Replace the default by saving a new database over that file and rebuilding. Checks construct the view model directly, so
   they never auto-load it.
 - The global `Load Config` picker starts in the repository `tests` folder when that folder is available.
 - The connection gateway attaches to SAP2000 only. An ETABS-originated model must be open/exported into SAP2000;

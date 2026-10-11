@@ -30,7 +30,7 @@ public sealed partial class MainViewModel
         if (HasModelGeometry) return VcfGeometry.Analyze(State.Geometry, State.Truss);
         if (FrameSections.Count == 0 || CableSections.Count == 0)
             throw new InvalidOperationException("Define at least one frame section and one cable section before creating the VCF system.");
-        var template = FemModelFile.ReadDefault();
+        var template = FemInputDatabase.ReadDefault().Snapshot.ToLegacy();
         var setup = template.Project?.Tab03TrussHeight
             ?? throw new InvalidDataException("The built-in VCF topology has no chord definition.");
         var truss = new TrussHeightConfiguration
@@ -145,7 +145,7 @@ public sealed partial class MainViewModel
     private void SeedBlankVcfModel(IReadOnlyDictionary<string, string> sections)
     {
         if (HasModelGeometry) return;
-        var template = FemModelFile.ReadDefault();
+        var template = FemInputDatabase.ReadDefault().Snapshot.ToLegacy();
         var geometry = template.Geometry ?? throw new InvalidDataException("The built-in VCF topology is missing.");
         var setup = template.Project?.Tab03TrussHeight
             ?? throw new InvalidDataException("The built-in VCF topology has no chord definition.");
