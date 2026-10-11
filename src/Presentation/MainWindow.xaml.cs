@@ -446,6 +446,21 @@ public partial class MainWindow : Window
         new AssignSectionWindow(vm, chosen, cable) { Owner = this }.ShowDialog();
     }
 
+    private void AssignFrameAxes_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        var frames = vm.FemSectionProperties.Where(property => !property.IsCable)
+            .Select(property => property.MemberName).ToHashSet(StringComparer.Ordinal);
+        var chosen = SharedViewer.SelectedMembers.Where(frames.Contains).ToArray();
+        if (chosen.Length == 0)
+        {
+            MessageBox.Show(this, "Select one or more frames on the model view first, then choose Assign → Frame → Local Axes.",
+                "Assign Frame Local Axes", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        new AssignFrameAxisWindow(vm, chosen) { Owner = this }.ShowDialog();
+    }
+
     // Select tool: always returns to selecting (clicking it while on must not switch to pan)
     private void SelectTool_Click(object sender, RoutedEventArgs e) => SharedViewer.PanMode = false;
 

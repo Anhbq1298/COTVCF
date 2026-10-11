@@ -254,6 +254,50 @@ public sealed partial class MainViewModel
         return changed;
     }
 
+    /// <summary>Assigns an absolute local-axis rotation about each selected frame's 1-axis. The same section
+    /// calculation used by section assignment updates its in-plane bending inertia for the 2D FEM.</summary>
+    internal int AssignFrameLocalAxis(IReadOnlyCollection<string> members, double angleDeg)
+    {
+        if (!CanEditFemModel) throw new InvalidOperationException("Unlock the model before changing frame axes.");
+        if (!double.IsFinite(angleDeg)) throw new ArgumentOutOfRangeException(nameof(angleDeg), "Enter a finite angle in degrees.");
+        var names = members.ToHashSet(StringComparer.Ordinal);
+        if (names.Count == 0) throw new ArgumentException("Select one or more frames first.", nameof(members));
+        EnsureMaterials();
+        EnsureSections();
+        var frames = FemSectionProperties.Where(property => names.Contains(property.MemberName) && !property.IsCable).ToArray();
+        if (frames.Length != names.Count) throw new InvalidOperationException("The selection includes a member that is not a frame in the FEM model.");
+        var sections = FrameSections.ToDictionary(section => section.Name, StringComparer.Ordinal);
+        if (frames.FirstOrDefault(frame => frame.SectionName is null || !sections.ContainsKey(frame.SectionName)) is { } missing)
+            throw new InvalidOperationException($"Frame '{missing.MemberName}' has no defined section to rotate.");
+
+        var normalized = angleDeg % 360;
+        if (normalized < 0) normalized += 360;
+        var properties = FemSectionProperties.ToArray();
+        var changed = 0;
+        for (var index = 0; index < properties.Length; index++)
+        {
+            var member = properties[index];
+            if (!names.Contains(member.MemberName)) continue;
+            var updated = PropertiesFor(member with { LocalAngleDeg = normalized }, sections[member.SectionName!]);
+            if (updated == member) continue;
+            properties[index] = updated;
+            changed++;
+        }
+        if (changed > 0)
+        {
+            FemSectionProperties.Clear();
+            foreach (var property in properties) FemSectionProperties.Add(property);
+            ClearFemResults();
+            Notify(nameof(SharedViewerSections));
+            Notify(nameof(SharedViewerMemberSizes));
+        }
+        Message = changed > 0
+            ? $"Set local axes to {normalized:0.###}° on {changed} frame{(changed == 1 ? "" : "s")} (FEM results cleared; SAP2000 unchanged)."
+            : $"The selected frames already have local axes at {normalized:0.###}°.";
+        Update();
+        return changed;
+    }
+
     private void ApplySectionChanges<T>(Func<FemSectionProperties, bool> applies, IReadOnlyDictionary<string, string> renamed,
         Func<string, T?> find, Func<string, T, bool> unchanged, Func<FemSectionProperties, T, FemSectionProperties> build) where T : class
     {

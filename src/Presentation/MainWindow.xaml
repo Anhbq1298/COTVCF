@@ -58,6 +58,8 @@
     <MenuItem Header="_Frame">
      <MenuItem Header="Frame _Sections…" Tag="Frame" Click="AssignSections_Click" AutomationProperties.Name="Assign Frame Sections"
                ToolTip="Assign a frame section to the frames selected on the model view (select them first, as in SAP2000)"/>
+     <MenuItem Header="_Local Axes…" Click="AssignFrameAxes_Click" AutomationProperties.Name="Assign Frame Local Axes"
+               ToolTip="Rotate the local 2/3 axes of the selected frames and update their in-plane FEM stiffness"/>
     </MenuItem>
     <MenuItem Header="_Cable">
      <MenuItem Header="Cable _Sections…" Tag="Cable" Click="AssignSections_Click" AutomationProperties.Name="Assign Cable Sections"

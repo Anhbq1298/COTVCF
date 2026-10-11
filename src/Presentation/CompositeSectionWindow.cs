@@ -60,11 +60,17 @@ public sealed class CompositeSectionWindow : Window
         var c = section.Composite ?? new ColumnSectionInput();
         Title = $"{FrameSectionProperty.Title(section.Shape)} Section";
         Icon = AppIcon.Window;
-        Width = 1360; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
+        Width = Math.Min(1360, SystemParameters.WorkArea.Width - 40);
+        Height = Math.Min(900, SystemParameters.WorkArea.Height - 40);
+        MinWidth = 760; MinHeight = 480;
+        ResizeMode = ResizeMode.CanResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner; ShowInTaskbar = false;
         Background = (Brush)FindResource("Surface");
 
-        var root = new StackPanel { Margin = new Thickness(10) };
+        var root = new Grid { Margin = new Thickness(10) };
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var head = new StackPanel();
         var header = Group(head, "");
         nameBox = new TextBox { Text = section.Name, Width = 260 };
@@ -107,7 +113,14 @@ public sealed class CompositeSectionWindow : Window
         }
         propertySheet.Children.Add(Hint("Composite A and I are transformed to concrete Ecm; values are before modifiers."));
         tabs.Items.Add(new TabItem { Header = "Show Section Properties", Content = propertySheet, Width = double.NaN, Height = 28 });
-        root.Children.Add(tabs);
+        var form = new ScrollViewer
+        {
+            Content = tabs,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+        };
+        Grid.SetRow(form, 1);
+        root.Children.Add(form);
 
         // ---- N–M interaction from the Design menu's algorithm, with its partial factors ----
         designType = tube ? ColumnDesignType.ConcreteFilledTube : mega ? ColumnDesignType.MegaComposite : ColumnDesignType.SteelEncased;
@@ -212,11 +225,14 @@ public sealed class CompositeSectionWindow : Window
         var cost = Group(right, "Material Quantity and Cost (per m)");
         ((StackPanel)cost.Content).Children.Add(costRows);
 
-        root.Children.Add(problem);
+        var footer = new StackPanel();
+        footer.Children.Add(problem);
         var ok = new Button { Content = "OK", MinWidth = 90, IsDefault = true, Margin = new Thickness(0, 6, 30, 0) };
         ok.Click += (_, _) => { if (Read(out var message) is { } result) { Result = result; DialogResult = true; } else problem.Text = message; };
-        root.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center,
+        footer.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center,
             Children = { ok, new Button { Content = "Cancel", MinWidth = 90, IsCancel = true, Margin = new Thickness(0, 6, 0, 0) } } });
+        Grid.SetRow(footer, 2);
+        root.Children.Add(footer);
         Content = root;
         Recalculate();
     }
