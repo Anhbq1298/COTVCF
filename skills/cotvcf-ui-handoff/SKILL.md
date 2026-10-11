@@ -76,13 +76,43 @@ earlier tall-header / large-button / blue-block look.
     search space — sheet **Geometry** has Min / Max / Step (and the value count n) per parameter (bays, bay width, truss
     depth, clear height, back-span, back-stay height; keys shared with VcfGeometryWindow). The middle chord is **not** a
     variable: it is always `VcfOptimization.MiddleChordRatio` (0.5) × truss depth, shown read-only under Truss depth and
-    not counted in the variants. Sheet **Cable Force**: Min / Max / Step (kN) per independent cable, starting from its
-    03 Pretension value / range (`VcfOptimization.CableRange`); a Tab 03 follower is a read-only row (its sync rule) and not
-    a variable. Sheet **Storey Force**: qz range (kPa, ≥ 0) per 01 Loading load definition, plus NStories (whole, ≥ 1) and
+    not counted in the variants. Sheet **Cable Force** (decided by the user, 2026-10-11 — see "Cable Force sheet" below):
+    one shared **Steps** count for every cable, a Min / Max (kN) per cable and the fan cables by their length.
+    Sheet **Storey Force**: qz range (kPa, ≥ 0) per 01 Loading load definition, plus NStories (whole, ≥ 1) and
     tributary width B (> 0), with the total Fz at the min … max corner (−qz × loaded length × B × NStories). Force
-    variants = product of those counts; combinations = geometry × force × section variants. Sheet **Sections**
+    variants = cable steps × the storey counts; combinations = geometry × force × section variants. Sheet **Sections**
     a check-list drop-down of candidate sections per member role and per cable (none ticked = keep as assigned). Preview
     at Minimum / Current / Maximum corner; the combination count is shown; invalid ranges or corners grey OK.
+    **Cable Force sheet** (`VcfCableForces`, `VcfOptimization.CableTargets` — the one function the runner, the rows and
+    the preview all use, so they cannot disagree):
+    - **All cables step together.** `Steps` = n values; at step j every cable is at Min + (Max − Min) × j / (n − 1)
+      (`VcfForceSpan`), so the cables add n force variants, never a product per cable. With 1 step every cable is at its
+      Min. Do not bring back a step or an independent axis per cable. The form starts from 03 Pretension: each cable with
+      a force of its own (independent, or a Same Step follower — `VcfOptimization.CableSpan`) at its value / range, Steps
+      at the most values a Tab 03 range has. A cable that takes another's value on Tab 03 keeps following it.
+    - **Fan cables by length** (`VcfFanGrading`; fan cables = `VcfGeometry.FanCables`: top corner → interior bottom-chord
+      node, by side, the nearest first). A longer cable needs more force and the number of fan cables follows the bays,
+      so the form **opens on `+ kN per m`** (Linear): the user types the Min / Max of the shortest fan cable and an
+      increase per metre; every fan cable of a case takes T shortest + increase × (L − L shortest) with the lengths of
+      that case — both sides, whatever the bays, bay width and depth. The increase starts at the model's own slope from
+      its shortest to its longest fan cable (`FitGradient`, whole kN/m, ≥ 0). `× length` (Proportional) is T shortest ×
+      L / L shortest. `Manual` gives each fan cable its own Min / Max; a fan cable more bays add then takes the force
+      of the cable it copies × its length ratio. **Forces a length rule works out are rounded to 100 kN**
+      (`VcfOptimization.ForceRoundingKn`) — typed values are not.
+    - **Rows follow Preview at.** `ShowCables` lists the cables of the previewed corner: FAN CABLES (L, Model = the
+      model's own force, Min, Max, Step; the shortest tagged `shortest` with the inputs, a cable the bays add tagged
+      `new`, the others read-only) and OTHER CABLES (inputs). A cable that takes another's value (Same Values; the far
+      side of a graded fan) is not listed. The inputs are created once (`SpanBoxes`) and the rows rebuilt only when
+      their set changes, so typing keeps the caret.
+    - **Preview at** names its corners after the fan when the bays range leaves the model's: `Less cables · 6 bays` /
+      `Current · 8 bays` / `More cables · 12 bays` (plain `Minimum · n bays` / `Maximum · n bays` when that corner has
+      the model's fan). The caption under it reads `12 bays · span 120 m · fan cables 6 + 6 · new: … · not in this
+      variant: … · labels: pretension [MN]`. The viewer writes each fan cable's force under the bottom-chord node it is
+      anchored at (`Structural2DViewer.JointNotes` — along the cables the labels collide at the corner), any other
+      cable's along it (`MemberNotes`; two that cross at mid-length move towards their upper ends) and emphasises the
+      cables the bays add (`HighlightedMembers`).
+    - Results: one column for the cable steps, named after the first cable that varies (the shortest fan cable when the
+      fan is graded) and showing its force (`VcfCableStep`).
     `Application/VcfOptimization` holds `VcfRange` (Min, Min + Step, … ≤ Max — the Tab 01 / 03 rule, no off-step Max) and
     `VcfOptimizationSettings`; OK keeps them on `MainViewModel.VcfOptimizationSettings` (memory only, not saved in a
     file). **Run Optimization** (enabled while valid and ≤ `VcfOptimizationRunner.MaxCases` = 10,000) keeps them, opens
@@ -90,8 +120,8 @@ earlier tall-header / large-button / blue-block look.
     `MainViewModel.RunVcfOptimizationAsync`: `VcfOptimizationRunner` walks the axes mixed-radix (last axis fastest) and builds
     each case in memory — `VcfGeometry.ChangeBays` / `Build` (middle chord 0.5 × depth), member properties (regenerated
     members copy their template; role / cable sections via `MainViewModel.SectionSwapper`, the same rule as Apply), SAP
-    loading remapped for a bay change, Tab 01 point loads −qz × trib. length × B × NStories, Tab 03 targets (followers keep
-    Same Values / Ratio / Offset / Step; new fan cables copy their template) — then `FemStudyService.Analyze` with the Analysis
+    loading remapped for a bay change, Tab 01 point loads −qz × trib. length × B × NStories, the cable targets of the case's
+    step (`VcfOptimization.CableTargets`; followers keep Same Values / Ratio / Offset / Step) — then `FemStudyService.Analyze` with the Analysis
     Options and Define → Load Cases plan. **Deflection check** (dialog bar above the buttons): the result the deflection is
     read from (`VcfOptimizationSettings.DeflectionResult`, a load case or combination set to run; default the first named
     SLS — on the default model the default setup's staged `SLS: 1.0DL+1.0LL`, i.e. the prestressed structure; with SAP

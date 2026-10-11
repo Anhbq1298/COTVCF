@@ -174,28 +174,6 @@
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE713;" Tag="5" Click="FemPaneMenu_Click" IsEnabled="{Binding HasUsableModelGeometry}" ToolTip="Analysis Options (Run → Analysis Options)" AutomationProperties.Name="Analysis Options"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE9D9;" Click="OpenFemMonitorClick" ToolTip="Analysis Monitor (Run → Analysis Monitor)" AutomationProperties.Name="Analysis Monitor"/>
       <Border Style="{StaticResource ToolbarSeparator}"/>
-      <Button Style="{StaticResource ToolbarDrawingButton}" Click="ShowDeformedShape_Click" IsEnabled="{Binding HasUsableModelGeometry}"
-              ToolTip="Show Deformed Shape (F5) — choose load case" AutomationProperties.Name="Show Deformed Shape F5">
-       <Canvas Width="16" Height="16">
-        <Path Data="M2,13 L2,3 L14,3 L14,13" Stroke="{StaticResource ViewportEdge}" StrokeThickness="1" StrokeDashArray="2,2"/>
-        <Path Data="M2,13 C3,7 4,5 8,4 C12,4 13,8 14,13" Stroke="{StaticResource AccentBright}" StrokeThickness="1.8" Fill="Transparent"/>
-       </Canvas>
-      </Button>
-      <Button Style="{StaticResource ToolbarDrawingButton}" Click="ShowMemberForces_Click" IsEnabled="{Binding HasUsableModelGeometry}"
-              ToolTip="Show Member Forces (F6) — choose load case and N, V or M" AutomationProperties.Name="Show Member Forces F6">
-       <Canvas Width="16" Height="16">
-        <Path Data="M1,12 L15,12" Stroke="{StaticResource Accent}" StrokeThickness="1.4"/>
-        <Path Data="M2,11 L2,5 L8,3 L14,7 L14,11 Z" Stroke="{StaticResource Error}" StrokeThickness="1" Fill="#44C62828"/>
-       </Canvas>
-      </Button>
-      <Button Style="{StaticResource ToolbarDrawingButton}" Click="ShowJointReactions_Click" IsEnabled="{Binding HasUsableModelGeometry}"
-              ToolTip="Show Joint Reactions (F7) — choose load case" AutomationProperties.Name="Show Joint Reactions F7">
-       <Canvas Width="16" Height="16">
-        <Path Data="M2,13 L8,7 L14,13 Z M1,14 L15,14" Stroke="{StaticResource Accent}" StrokeThickness="1.3" Fill="Transparent"/>
-        <Path Data="M8,7 L8,1 M8,1 L5.5,4 M8,1 L10.5,4" Stroke="{StaticResource AccentBright}" StrokeThickness="1.6" Fill="Transparent"/>
-       </Canvas>
-      </Button>
-      <Border Style="{StaticResource ToolbarSeparator}"/>
       <!-- SAP2000-style tools: Select (default — a click selects joints / members, a drag draws a window) and Pan -->
       <ToggleButton Style="{StaticResource ToolbarDrawingToggle}" IsEnabled="{Binding ShowSharedViewer}"
                     IsChecked="{Binding PanMode, ElementName=SharedViewer, Converter={x:Static p:InverseBoolConverter.Instance}}"
@@ -232,6 +210,32 @@
       </Button>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE890;" Click="ViewOptions_Click" IsEnabled="{Binding HasUsableModelGeometry}" ToolTip="View Options (Display → View Options)" AutomationProperties.Name="View Options"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE9D2;" Click="ShowResults_Click" IsEnabled="{Binding HasUsableModelGeometry}" ToolTip="Show Results — choose the load case / combo and the output to draw on the model" AutomationProperties.Name="Show Results"/>
+      <Border Style="{StaticResource ToolbarSeparator}"/>
+      <Button Style="{StaticResource ToolbarDrawingButton}" Click="ShowDeformedShape_Click" IsEnabled="{Binding HasUsableModelGeometry}"
+              ToolTip="Show Deformed Shape (F5) — choose load case" AutomationProperties.Name="Show Deformed Shape F5">
+       <Canvas Width="16" Height="16">
+        <Path Data="M2,13 L2,3 L14,3 L14,13" Stroke="{StaticResource ViewportEdge}" StrokeThickness="1" StrokeDashArray="2,2"/>
+        <Path Data="M2,13 C3,7 4,5 8,4 C12,4 13,8 14,13" Stroke="{StaticResource AccentBright}" StrokeThickness="1.8" Fill="Transparent"/>
+       </Canvas>
+      </Button>
+      <Button Style="{StaticResource ToolbarDrawingButton}" Click="ShowMemberForces_Click" IsEnabled="{Binding HasUsableModelGeometry}"
+              ToolTip="Show Member Forces (F6) — choose load case and N, V or M" AutomationProperties.Name="Show Member Forces F6">
+       <Canvas Width="18" Height="18">
+        <!-- Filled bending-moment regions of a two-storey planar frame. -->
+        <Path Data="M2,2 C5,2 5,6 9,6 C13,6 13,2 16,2 Z M2,9 C5,9 6,12.5 9,12.5 C12,12.5 13,9 16,9 Z"
+              Fill="{StaticResource Warning}" Opacity="0.32"/>
+        <Path Data="M2,2 C5,2 5,6 9,6 C13,6 13,2 16,2 M2,9 C5,9 6,12.5 9,12.5 C12,12.5 13,9 16,9"
+              Stroke="{StaticResource Warning}" StrokeThickness="1.1" Fill="Transparent"/>
+        <Path Data="M2,16 L2,2 L16,2 L16,16 M2,9 L16,9" Stroke="{StaticResource Accent}" StrokeThickness="1.4" Fill="Transparent"/>
+       </Canvas>
+      </Button>
+      <Button Style="{StaticResource ToolbarDrawingButton}" Click="ShowJointReactions_Click" IsEnabled="{Binding HasUsableModelGeometry}"
+              ToolTip="Show Joint Reactions (F7) — choose load case" AutomationProperties.Name="Show Joint Reactions F7">
+       <Canvas Width="16" Height="16">
+        <Path Data="M2,13 L8,7 L14,13 Z M1,14 L15,14" Stroke="{StaticResource Accent}" StrokeThickness="1.3" Fill="Transparent"/>
+        <Path Data="M8,7 L8,1 M8,1 L5.5,4 M8,1 L10.5,4" Stroke="{StaticResource AccentBright}" StrokeThickness="1.6" Fill="Transparent"/>
+       </Canvas>
+      </Button>
      </StackPanel>
     </Grid>
    </DockPanel>
