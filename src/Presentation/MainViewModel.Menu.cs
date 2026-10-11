@@ -59,7 +59,7 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Menu of the pane shown in the left column, e.g. "MB" or "Define".</summary>
-    public string PaneMenu => selectedTab != TabFem ? "MB" : femPane switch
+    public string PaneMenu => selectedTab == 5 ? "Post-Processing" : selectedTab != TabFem ? "MB" : femPane switch
     {
         FemPaneRestraints => "Assign",
         FemPaneAnalysisOptions => "Run",

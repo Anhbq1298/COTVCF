@@ -324,9 +324,26 @@ internal static class Program
                 forceWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Assert(leaderRow.Editable && !followerRow.Editable && followerRefused && badNumber && leaderRow.Force == Kn(90_000) &&
                        forceWindow.CableForceEdits.Count == 1 && forceWindow.CableForceEdits["Cable1a-2"] == 90_000 &&
-                       forceWindow.CableForces.Single(row => row.Cable == "Cable1b-2").Force == "follows Cable1a-2" &&
+                       forceWindow.CableForces.Single(row => row.Cable == "Cable1b-2").Force == Kn(90_000) &&
                        forceState.Cables.Single(cable => cable.CableName == "Cable1a-2").GetCandidateForces()[0] == 100_000,
                     "Cable Force takes a target force for an independent cable (staged until Apply); a follower and a negative value are refused");
+                Assert(!forceWindow.CableForces.Single(row => row.Cable == "Cable1a-2").SyncChoices.Contains("Cable1b-2"),
+                    "Cable Sync excludes dependencies that would create a cycle");
+                forceWindow.CableForces.Single(row => row.Cable == "Cable1b-2").SyncSelection = "Independent";
+                forceWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                var independent = forceWindow.CableForces.Single(row => row.Cable == "Cable1b-2");
+                independent.Force = "80000";
+                Assert(independent.Editable && forceState.Cables.Single(cable => cable.CableName == "Cable1b-2").IsFollower,
+                    "Cable Sync stages Independent and unlocks its force without changing the model");
+                independent.SyncSelection = "Cable1a-2";
+                forceWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                forceWindow.SetInput("Bays", "12");
+                Assert(forceWindow.CableForces.Single(row => row.Cable == "Cable9a-2").Editable &&
+                       forceWindow.CableForces.Single(row => row.Cable == "Cable9b-2").SyncSelection == "Cable9a-2",
+                    "Additional bays create an editable sequenced symmetric cable pair with its matching dependency");
+                forceWindow.SetInput("Bays", "10");
+                Assert(forceWindow.CableForces.All(row => row.Cable != "Cable9a-2" && row.Cable != "Cable9b-2"),
+                    "Reducing bays removes the extra symmetric cable pair from the form");
                 // Storey Force is where the loads of the model are set: one qz per load pattern, B, storeys, loaded points
                 var liveRow = forceWindow.StoreyLoads.Single(row => row.Pattern == "LL_ABOVE");
                 var badQz = false;
@@ -1284,6 +1301,7 @@ internal static class Program
             OptimizationChecks.Run();
             CableForceReportChecks.Run();
             ReportPrintChecks.Run();
+            FemRunReportChecks.Run();
             MemberForceReportChecks.Run();
             SupportReactionReportChecks.Run();
             GatewayChecks.Run();

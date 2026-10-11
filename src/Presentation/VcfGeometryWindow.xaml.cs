@@ -45,6 +45,7 @@ public partial class VcfGeometryWindow : Window
             FrameGrid.Children.Clear(); FrameGrid.RowDefinitions.Clear(); roleSections.Clear(); roleCounts.Clear();
             working = null; topology = null;
             cableForceEdits.Clear();
+            cableSyncEdits.Clear();
             CableGrid.Children.Clear(); CableGrid.RowDefinitions.Clear(); cableSections.Clear();
             try { analysis = VcfGeometry.Analyze(viewModel.State.Geometry, viewModel.State.Truss); }
             catch (Exception ex)
@@ -235,6 +236,10 @@ public partial class VcfGeometryWindow : Window
         public string Cable { get; } = cable;
         public string Pattern { get; } = pattern;
         public string Sync { get; } = sync;
+        public IReadOnlyList<string> SyncChoices { get; init; } = [];
+        private string selection = "Independent";
+        public Action<string>? SyncEdited { get; init; }
+        public string SyncSelection { get => selection; set { if (Set(ref selection, value)) SyncEdited?.Invoke(value); } }
         public bool Editable { get; } = editable;
         public string Hint { get; } = hint;
         /// <summary>The target force shown [kN]; typing a number stages it for Apply / OK.</summary>
@@ -280,6 +285,7 @@ public partial class VcfGeometryWindow : Window
 
     /// <summary>Target forces typed on the Cable Force sheet and not applied yet (cable → kN).</summary>
     private readonly Dictionary<string, double> cableForceEdits = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> cableSyncEdits = new(StringComparer.Ordinal);
     internal IReadOnlyDictionary<string, double> CableForceEdits => cableForceEdits;
 
     /// <summary>The load rows of the Storey Force sheet, and the loaded points chosen there (null: the model's).</summary>
@@ -335,25 +341,21 @@ public partial class VcfGeometryWindow : Window
     private void ShowForces(VcfGeometryAnalysis model, GeometryModel geometry)
     {
         var state = viewModel.State;
-        var cables = state.Cables.ToArray();
+        var cables = PreviewCableConfigs(geometry);
         var rows = new List<CableForceRow>();
         var ranged = 0;
         foreach (var name in geometry.Members.Where(member => member.Kind != MemberKind.Frame).Select(member => member.Name).Order(StringComparer.Ordinal))
         {
-            var added = topology is not null && topology.AddedCables.TryGetValue(name, out var template) ? template : null;
-            var cable = cables.FirstOrDefault(item => item.CableName == (added ?? name));
+            var cable = cables.FirstOrDefault(item => item.CableName == name);
             if (cable is null) { rows.Add(new(name, "", "", "not on 03 Pretension", false, "Add the cable on 03 Pretension to give it a target force.", StageCableForce)); continue; }
-            var sync = cable.SyncSummary + (added is null ? "" : $" (new, as {added})");
+            var sync = cable.SyncSummary;
             var forces = cable.IsFollower ? CableSyncGraph.ResolvedForces(cable, cables) : cable.GetCandidateForces();
             // one value: the first of a 03 Pretension range is the one the model is analysed with
             var value = forces.Count == 0 ? "—" : Kn(forces[0]);
-            if (added is not null)
-                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.TryGetValue(added, out var copied) ? Kn(copied) : value, false,
-                    $"A new fan cable: it takes the target force of {added}.", StageCableForce));
-            else if (cable.IsFollower && !cable.IsSameStepFollower)
+            if (cable.IsFollower && !cable.IsSameStepFollower)
                 // the value comes from the cable it follows; once that is edited here the new value shows after Apply
-                rows.Add(new(name, cable.LoadPattern, sync, cableForceEdits.ContainsKey(cable.ReferenceCableName ?? "") ? $"follows {cable.ReferenceCableName}" : value, false,
-                    $"Follows {cable.ReferenceCableName}: edit that cable, or change the sync on 03 Pretension.", StageCableForce));
+                rows.Add(new(name, cable.LoadPattern, sync, value, false,
+                    $"Follows {cable.ReferenceCableName}: choose Independent in Sync to enter its own force.", StageCableForce));
             else
             {
                 var range = forces.Count > 1;
@@ -363,10 +365,34 @@ public partial class VcfGeometryWindow : Window
                         : "Target force [kN] of this cable.", StageCableForce));
             }
         }
+        for (var index = 0; index < rows.Count; index++)
+        {
+            var row = rows[index];
+            var cable = cables.First(item => item.CableName == row.Cable);
+            var choices = new List<string> { "Independent" };
+            foreach (var other in cables.Where(item => item.CableName != row.Cable))
+            {
+                var node = other;
+                var visited = new HashSet<string>();
+                while (node.IsFollower && visited.Add(node.CableName) && node.ReferenceCableName != row.Cable)
+                {
+                    var next = cables.FirstOrDefault(item => item.CableName == node.ReferenceCableName);
+                    if (next is null) break;
+                    node = next;
+                }
+                if (node.ReferenceCableName != row.Cable) choices.Add(other.CableName);
+            }
+            rows[index] = new(row.Cable, row.Pattern, row.Sync, row.Force, row.Editable, row.Hint, StageCableForce)
+            {
+                SyncChoices = choices,
+                SyncSelection = cable.IsFollower ? cable.ReferenceCableName! : "Independent",
+                SyncEdited = reference => StageCableSync(row.Cable, reference, CableSyncGraph.ResolvedForces(cable, cables).FirstOrDefault())
+            };
+        }
         CableForceGrid.ItemsSource = rows;
         CableForceSummary.Text = $"{rows.Count} cables" +
             (ranged == 0 ? "" : $" · {ranged} with a range on 03 Pretension (the model uses the first value)") +
-            (cableForceEdits.Count == 0 ? "" : $" · {cableForceEdits.Count} edited, not applied yet");
+            (cableForceEdits.Count + cableSyncEdits.Count == 0 ? "" : $" · {cableForceEdits.Keys.Concat(cableSyncEdits.Keys).Distinct().Count()} edited, not applied yet");
 
         // Storey force: the loaded points (all top chord points stay loaded when every one was), tributary length from the preview
         var applied = storeyPoints ?? state.AppliedPoints.Select(point => point.PointName).ToArray();
@@ -535,6 +561,57 @@ public partial class VcfGeometryWindow : Window
         }));
     }
 
+    private void StageCableSync(string cable, string reference, double currentForce)
+    {
+        cableSyncEdits[cable] = reference;
+        if (reference == "Independent") cableForceEdits[cable] = currentForce;
+        Dispatcher.BeginInvoke(new Action(Refresh));
+    }
+
+    private CablePretensionConfig[] PreviewCableConfigs(GeometryModel geometry)
+    {
+        var configs = geometry.Members.Where(member => member.Kind != MemberKind.Frame).Select(member =>
+        {
+            var template = topology is not null && topology.AddedCables.TryGetValue(member.Name, out var sourceName) ? sourceName : member.Name;
+            var source = viewModel.State.Cables.FirstOrDefault(item => item.CableName == template);
+            return new CablePretensionConfig
+            {
+                CableName = member.Name, LoadPattern = source?.LoadPattern ?? viewModel.State.LoadPatterns.FirstOrDefault() ?? "Pretension",
+                ApplyRange = source?.ApplyRange ?? false, TargetForce = source?.TargetForce ?? 0,
+                MinForce = source?.MinForce, MaxForce = source?.MaxForce, StepForce = source?.StepForce,
+                SyncMode = source?.SyncMode ?? CableSyncMode.Independent,
+                ReferenceCableName = source?.ReferenceCableName, SyncFactor = source?.SyncFactor
+            };
+        }).ToArray();
+        foreach (var cable in configs)
+        {
+            if (topology?.AddedCables.ContainsKey(cable.CableName) == true && cable.ReferenceCableName is { } oldReference)
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(cable.CableName, @"^(.*?)(\d+)([abAB])(.*)$");
+                if (match.Success)
+                {
+                    var opposite = match.Groups[3].Value.ToLowerInvariant() == "a" ? "b" : "a";
+                    var partner = $"{match.Groups[1].Value}{match.Groups[2].Value}{opposite}{match.Groups[4].Value}";
+                    if (topology.AddedCables.TryGetValue(partner, out var partnerSource) && partnerSource == oldReference)
+                        cable.ReferenceCableName = partner;
+                }
+            }
+            if (cable.ReferenceCableName is { } reference && configs.All(item => item.CableName != reference))
+            { cable.SyncMode = CableSyncMode.Independent; cable.TargetForce ??= 0; }
+            if (cableSyncEdits.TryGetValue(cable.CableName, out var selected))
+            {
+                cable.SyncMode = selected == "Independent" ? CableSyncMode.Independent : CableSyncMode.SameValues;
+                cable.ReferenceCableName = selected == "Independent" ? null : selected;
+            }
+            if (cableForceEdits.TryGetValue(cable.CableName, out var force))
+            {
+                if (cable.IsSameStepFollower) cable.MinForce = cable.MaxForce = force;
+                else if (!cable.IsFollower) { cable.ApplyRange = false; cable.TargetForce = force; }
+            }
+        }
+        return configs;
+    }
+
     internal IReadOnlyList<CableForceRow> CableForces => (IReadOnlyList<CableForceRow>?)CableForceGrid.ItemsSource ?? [];
     internal IReadOnlyList<StoreyForceRow> StoreyForces => (IReadOnlyList<StoreyForceRow>?)StoreyForceGrid.ItemsSource ?? [];
     /// <summary>Types into a geometry input (checks).</summary>
@@ -562,6 +639,15 @@ public partial class VcfGeometryWindow : Window
         viewModel.SetCableTargetForces(cableForceEdits.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
         viewModel.SetStoreyLoads(storey.Width, storey.Stories, storey.Loads, storeyPoints);
         await viewModel.ApplyVcfGeometryAsync(VcfGeometry.Build(working!, form), FormSections(), topology);
+        foreach (var config in PreviewCableConfigs(viewModel.State.Geometry))
+        {
+            var cable = viewModel.State.Cables.FirstOrDefault(item => item.CableName == config.CableName);
+            if (cable is null) { cable = new CablePretensionConfig { CableName = config.CableName, LoadPattern = config.LoadPattern }; viewModel.State.Cables.Add(cable); }
+            cable.SyncMode = config.SyncMode;
+            cable.ReferenceCableName = config.ReferenceCableName;
+            cable.SyncFactor = config.SyncFactor;
+        }
+        viewModel.SetCableTargetForces(cableForceEdits);
         LoadFromModel();
     }
 

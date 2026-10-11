@@ -215,7 +215,7 @@ public sealed partial class MainViewModel
         row.Renamed = null;
     }
 
-    private string? CaseNameProblem(FemDefinitionRow row, string name) =>
+    private string? CaseNameProblem(FemDefinitionRow? row, string name) =>
         FemCaseRows.Any(other => !ReferenceEquals(other, row) && other.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
             ? $"There is already a load case '{name}'."
         : FemCombinationRows.Any(other => other.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
@@ -281,9 +281,20 @@ public sealed partial class MainViewModel
     /// <summary>Adds a nonlinear static case with the Tab 01 loads, continuing from the pretension case when there is one.</summary>
     internal FemCaseRow? AddFemLoadCase()
     {
+        if (NewFemLoadCase() is not { } row) return null;
+        AddCaseRow(row);
+        SelectedFemCaseRow = row;
+        LoadRowChanged(row, new(nameof(FemCaseRow.Run)));
+        return row;
+    }
+
+    /// <summary>A new case as + Add proposes it — the Tab 01 loads, continuing from the pretension case — not in the
+    /// table yet: Load Case Data starts from it.</summary>
+    internal FemCaseRow? NewFemLoadCase()
+    {
         if (IsBusy || CommitEditors?.Invoke() == false) return null;
         var name = "Case 1";
-        for (var number = 2; CaseNameProblem(null!, name) is not null; number++) name = $"Case {number}";
+        for (var number = 2; CaseNameProblem(null, name) is not null; number++) name = $"Case {number}";
         var pretension = PretensionPatterns;
         var stage = FemCaseRows.FirstOrDefault(row => row.Supported && Terms(row).Any(term => pretension.Contains(term.Name, StringComparer.OrdinalIgnoreCase)));
         var patterns = FemPatternRows.Select(row => row.Name).ToArray();
@@ -294,17 +305,118 @@ public sealed partial class MainViewModel
             Warn("Load Cases", "There is no load pattern to build a case from. Use Default Setup, or File → Read FEM Properties from SAP.");
             return null;
         }
-        var row = new FemCaseRow(name, FemLoadPlan.StagedCaseType, FemLoadDefinition.Format(terms), stage?.Name, true, true, "App", "");
-        AddCaseRow(row);
-        SelectedFemCaseRow = row;
-        LoadRowChanged(row, new(nameof(FemCaseRow.Run)));
-        return row;
+        return new FemCaseRow(name, FemLoadPlan.StagedCaseType, FemLoadDefinition.Format(terms), stage?.Name, true, true, "App", "");
     }
 
     private static IReadOnlyList<(string Name, double Factor)> Terms(FemDefinitionRow row)
     {
         try { return FemLoadDefinition.Parse(row.Definition); }
         catch (ArgumentException) { return []; }
+    }
+
+    // ---- Define → Load Cases → Load Case Data: the loads of a case are chosen from the load patterns ----
+    // As SAP2000's Load Case Data: the case name, the case it continues from and its Loads Applied — a load pattern with
+    // a scale factor per row. It writes the same Name / Definition / From the table holds.
+
+    /// <summary>The loads of a case as (load pattern, scale factor) rows; none while its definition does not read.</summary>
+    internal IReadOnlyList<(string Pattern, double Factor)> FemLoadCaseLoads(FemCaseRow row) => Terms(row);
+
+    /// <summary>What a case can continue from: nothing (""), or a case that does not itself continue from it.</summary>
+    internal IReadOnlyList<string> InitialCaseChoicesFor(FemCaseRow? row)
+    {
+        var blocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (row is not null && FemCaseRows.Contains(row))
+        {
+            blocked.Add(row.Name);
+            for (var grew = true; grew;)
+            {
+                grew = false;
+                foreach (var other in FemCaseRows)
+                    if (blocked.Contains(other.InitialCase) && blocked.Add(other.Name)) grew = true;
+            }
+        }
+        return ["", .. FemCaseRows.Where(other => !blocked.Contains(other.Name)).Select(other => other.Name)];
+    }
+
+    /// <summary>What is wrong with a load case as entered in Load Case Data, or null. <paramref name="row"/> is the case
+    /// being modified; null for a new one.</summary>
+    internal string? FemLoadCaseProblem(FemCaseRow? row, string? name, string? initialCase, IReadOnlyList<(string Pattern, double Factor)> loads)
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        name = name?.Trim() ?? "";
+        if (row is { Supported: false }) return $"Load case '{row.Name}' ({row.Type}) is not supported by the internal FEM.";
+        if ((FemLoadPlan.NameProblem(name) ?? CaseNameProblem(row, name)) is { } nameProblem) return nameProblem;
+        if (loads.Count == 0) return "Add at least one load pattern to the case.";
+        foreach (var (pattern, factor) in loads)
+        {
+            if (string.IsNullOrWhiteSpace(pattern)) return "Choose the load pattern of every load (or remove the row).";
+            if (!FemPatternRows.Any(item => comparer.Equals(item.Name, pattern.Trim())))
+                return $"There is no load pattern '{pattern.Trim()}' — define it on Define → Load Patterns.";
+            if (!double.IsFinite(factor)) return $"Enter the scale factor of '{pattern.Trim()}'.";
+        }
+        if (loads.GroupBy(load => load.Pattern.Trim(), comparer).FirstOrDefault(group => group.Count() > 1) is { } repeated)
+            return $"'{repeated.Key}' is listed twice — use one row with the total scale factor.";
+        if (!FemLoadPlan.IsNoInitialCase(initialCase))
+        {
+            var previous = initialCase!.Trim();
+            if (comparer.Equals(previous, name) || row is not null && comparer.Equals(previous, row.Name)) return "A case cannot continue from itself.";
+            if (!FemCaseRows.Any(other => comparer.Equals(other.Name, previous))) return $"There is no load case '{previous}' to continue from.";
+            if (!InitialCaseChoicesFor(row).Contains(previous, comparer)) return $"'{previous}' continues from this case, so this case cannot continue from it.";
+        }
+        return null;
+    }
+
+    /// <summary>Load Case Data → OK: writes the case — its name, the case it continues from and its loads, a load pattern
+    /// with a scale factor each. A case that is not in the table yet (null, or the one + Add proposed) is added.</summary>
+    internal FemCaseRow? SaveFemLoadCase(FemCaseRow? row, string? name, string? initialCase, IReadOnlyList<(string Pattern, double Factor)> loads)
+    {
+        if (IsBusy || CommitEditors?.Invoke() == false) return null;
+        if (row is not null && !FemCaseRows.Contains(row)) row = null;
+        if (FemLoadCaseProblem(row, name, initialCase, loads) is { } problem)
+        {
+            Warn("Load Case Data", problem);
+            return null;
+        }
+        var definition = FemLoadDefinition.Format(loads.Select(load =>
+            (FemPatternRows.First(item => item.Name.Equals(load.Pattern.Trim(), StringComparison.OrdinalIgnoreCase)).Name, load.Factor)));
+        var previous = FemLoadPlan.IsNoInitialCase(initialCase) ? "" : FemCaseRows.First(other => other.Name.Equals(initialCase!.Trim(), StringComparison.OrdinalIgnoreCase)).Name;
+        if (row is null)
+            AddCaseRow(row = new FemCaseRow(name!.Trim(), FemLoadPlan.StagedCaseType, definition, previous, true, true, "App", ""));
+        else
+        {
+            row.Name = name!;
+            row.Definition = definition;
+            row.InitialCase = previous;
+        }
+        SelectedFemCaseRow = row;
+        LoadRowChanged(row, new(nameof(FemCaseRow.Definition)));
+        Message = $"Load case '{row.Name}': {row.Definition}" + (row.InitialCase.Length == 0 ? "." : $", continuing from '{row.InitialCase}'.");
+        return row;
+    }
+
+    /// <summary>Everything on the structure at the end of a case: the loads of the cases it continues from, then its own.
+    /// A load pattern met again adds up (1 + 0.35 self-weight = 1.35); the cable target forces are a state, met once.</summary>
+    internal IReadOnlyList<(string Name, double Factor)> FemLoadCaseTotal(string? initialCase, IReadOnlyList<(string Pattern, double Factor)> own)
+    {
+        var comparer = StringComparer.OrdinalIgnoreCase;
+        var chain = new List<FemCaseRow>();
+        var visited = new HashSet<string>(comparer);
+        for (var previous = initialCase; !FemLoadPlan.IsNoInitialCase(previous) && visited.Add(previous!.Trim());)
+        {
+            var wanted = previous!.Trim();
+            if (FemCaseRows.FirstOrDefault(other => comparer.Equals(other.Name, wanted)) is not { } stage) break;
+            chain.Insert(0, stage);
+            previous = stage.InitialCase;
+        }
+        var pretension = PretensionPatterns;
+        var total = new List<(string Name, double Factor)>();
+        foreach (var (pattern, factor) in chain.SelectMany(Terms).Concat(own))
+        {
+            var index = total.FindIndex(term => comparer.Equals(term.Name, pattern));
+            if (index < 0) total.Add((pattern, factor));
+            else if (!pretension.Contains(pattern, comparer)) total[index] = (total[index].Name, Math.Round(total[index].Factor + factor, 9));
+        }
+        return total;
     }
 
     /// <summary>Removes a case nothing else depends on; a case others continue from, or a combination uses, stays.</summary>

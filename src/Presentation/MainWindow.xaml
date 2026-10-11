@@ -30,7 +30,6 @@
     <MenuItem Header="03  Pretension" Tag="2" Click="MbMenu_Click" InputGestureText="{Binding CableStatus}"/>
     <MenuItem Header="04  Output Settings" Tag="3" Click="MbMenu_Click" InputGestureText="{Binding OutputStatus}"/>
     <MenuItem Header="05  Iteration" Tag="4" Click="MbMenu_Click" InputGestureText="{Binding StudyBuildStateText}"/>
-    <MenuItem Header="06  Post-Processing" Tag="5" Click="MbMenu_Click" InputGestureText="Raw data → reports"/>
     <MenuItem Header="06A  Optimization" Tag="6" Click="MbMenu_Click" InputGestureText="{Binding OptimizationTabStatus}"
               IsEnabled="{Binding HasRawData}" ToolTipService.ShowOnDisabled="True"
               ToolTip="Qualify the stored candidates against acceptance criteria — available once Tab 06 has raw data"/>
@@ -101,6 +100,12 @@
     <MenuItem Header="Show _Results…" Click="ShowResults_Click" ToolTip="Choose the load case / combo and the output to draw on the model"/>
     <MenuItem Header="Results _Table…" Click="OpenFemResultsClick" IsEnabled="{Binding HasFemResults}"
               ToolTip="Open the results table for the selected load case and output"/>
+   </MenuItem>
+   <MenuItem Header="_Post-Processing" IsEnabled="{Binding HasWorkingModel}">
+    <MenuItem Header="View FEM Results (_HTML)…" Click="OpenFemHtml_Click" IsEnabled="{Binding HasFemResults}"
+              ToolTip="Open the completed load cases and combinations of the current FEM run in your browser"/>
+    <Separator/>
+    <MenuItem Header="Study Reports…" Tag="5" Click="MbMenu_Click"/>
    </MenuItem>
    <MenuItem Header="Di_splay" IsEnabled="{Binding HasWorkingModel}">
     <MenuItem Header="Show _Undeformed Shape" InputGestureText="F4" Click="ShowUndeformed_Click" AutomationProperties.Name="Show Undeformed Shape menu"
@@ -1535,8 +1540,6 @@
           <DataGridTextColumn Header="Type" Binding="{Binding Type, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Width="Auto" MinWidth="64"/>
           <DataGridTextColumn Header="SW mult." Binding="{Binding SelfWeightMultiplier, Mode=TwoWay, UpdateSourceTrigger=LostFocus, StringFormat=0.###, ValidatesOnExceptions=True}"
                               Width="Auto" MinWidth="58" ElementStyle="{StaticResource NumericCell}"/>
-          <DataGridTextColumn Header="Role" Binding="{Binding Role}" IsReadOnly="True" Width="Auto" MinWidth="44"/>
-          <DataGridTextColumn Header="Assigned loads" Binding="{Binding Loads}" IsReadOnly="True" Width="*" MinWidth="100"/>
          </DataGrid.Columns>
         </DataGrid>
         <TextBlock Grid.Row="2" Text="{Binding FemLoadSummary}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
@@ -1559,7 +1562,7 @@
         </Grid.RowDefinitions>
         <StackPanel>
          <TextBlock Text="LOAD CASES" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
-         <TextBlock Text="Default setup, as in SAP2000 for a cable structure: Pretension (target forces + self-weight) first, then SLS and ULS continue from it with the Tab 01 loads. Case, Definition (e.g. 1 DEAD + 1 PT) and From are editable."
+         <TextBlock Text="Select a case and click Modify to edit its load components in Load Case Data. Add or remove load patterns and set their scale factors. New cases use Nonlinear Static."
                     Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,5"/>
          <WrapPanel Margin="0,0,0,5">
           <Button Content="Default Setup" Click="DefaultLoadCases_Click" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="Default load cases"
@@ -1574,7 +1577,19 @@
            </Button.Style>
           </Button>
           <Button Content="+ Add" Click="AddLoadCase_Click" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="Add load case"
-                  ToolTip="Add a nonlinear static case with the Tab 01 loads, continuing from the pretension case"/>
+                  ToolTip="Add a load case: choose its load patterns and their scale factors, and the case it continues from (Load Case Data)"/>
+          <Button Content="Modify" Click="ModifyLoadCase_Click" AutomationProperties.Name="Modify load case" ToolTipService.ShowOnDisabled="True"
+                  ToolTip="Load Case Data of the selected case: add or remove its load patterns, set their scale factors, its name and the case it continues from">
+           <Button.Style>
+            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+             <Setter Property="IsEnabled" Value="{Binding IsIdle}"/>
+             <Style.Triggers>
+              <DataTrigger Binding="{Binding SelectedFemCaseRow}" Value="{x:Null}"><Setter Property="IsEnabled" Value="False"/></DataTrigger>
+              <DataTrigger Binding="{Binding SelectedFemCaseRow.Supported}" Value="False"><Setter Property="IsEnabled" Value="False"/></DataTrigger>
+             </Style.Triggers>
+            </Style>
+           </Button.Style>
+          </Button>
           <Button Content="- Remove" Click="RemoveLoadCase_Click" IsEnabled="{Binding IsIdle}" AutomationProperties.Name="Remove load case"
                   ToolTip="Remove the selected case (a case others continue from, or a combination uses, stays)"/>
          </WrapPanel>
@@ -1589,7 +1604,22 @@
            </DataTemplate></DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="Case" Binding="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Width="Auto" MinWidth="118"/>
-          <DataGridTextColumn Header="Definition" Binding="{Binding Definition, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}" Width="*" MinWidth="270"/>
+          <DataGridTemplateColumn Header="Definition" Width="*" MinWidth="270">
+           <DataGridTemplateColumn.CellTemplate><DataTemplate>
+            <Button Click="ModifyLoadCase_Click" IsEnabled="{Binding Supported}" HorizontalContentAlignment="Left"
+                    HorizontalAlignment="Stretch" Padding="5,0" Margin="0" MinHeight="0" Background="Transparent" BorderThickness="0"
+                    AutomationProperties.Name="Edit load components" ToolTip="Edit load components: choose load patterns and scale factors, add or remove loads">
+             <TextBlock Text="{Binding Definition}" TextTrimming="CharacterEllipsis"/>
+            </Button>
+           </DataTemplate></DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTemplateColumn Width="30" MinWidth="30" CanUserResize="False">
+           <DataGridTemplateColumn.CellTemplate><DataTemplate>
+            <Button Content="…" Click="ModifyLoadCase_Click" IsEnabled="{Binding Supported}" Width="24" Height="22" MinHeight="22" Padding="0" Margin="0"
+                    Background="Transparent" BorderThickness="0" AutomationProperties.Name="Load case data"
+                    ToolTip="Choose the load patterns of this case and their scale factors (Load Case Data)"/>
+           </DataTemplate></DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
           <DataGridTemplateColumn Header="From" Width="Auto" MinWidth="98">
            <DataGridTemplateColumn.CellTemplate><DataTemplate>
             <ComboBox ItemsSource="{Binding DataContext.FemInitialCaseChoices, RelativeSource={RelativeSource AncestorType=DataGrid}}"

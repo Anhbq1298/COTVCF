@@ -1,0 +1,75 @@
+<Window x:Class="COT_VCF.Presentation.LoadCaseWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="clr-namespace:COT_VCF.Presentation"
+        Title="Load Case Data" Icon="{x:Static p:AppIcon.Window}" Width="600" Height="430" MinWidth="480" MinHeight="330"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
+ <!-- Define → Load Cases → + Add / Modify… (as SAP2000's Load Case Data): the case name, the case it continues from and
+      its Loads Applied — a load pattern with a scale factor per row. Staged: OK writes the case, Cancel leaves it. -->
+ <Window.Resources>
+  <Style x:Key="FormButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0,0,0"/></Style>
+ </Window.Resources>
+ <DockPanel Margin="10">
+  <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0" LastChildFill="True">
+   <Button x:Name="CancelButton" DockPanel.Dock="Right" Content="Cancel" Style="{StaticResource FormButton}" IsCancel="True"/>
+   <Button x:Name="OkButton" DockPanel.Dock="Right" Content="OK" IsDefault="True" Click="Ok_Click" ToolTipService.ShowOnDisabled="True">
+    <Button.Style><Style TargetType="Button" BasedOn="{StaticResource Primary}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0,0,0"/></Style></Button.Style>
+   </Button>
+   <TextBlock x:Name="ProblemText" VerticalAlignment="Center" Foreground="{StaticResource Error}" FontSize="11" TextWrapping="Wrap"/>
+  </DockPanel>
+
+  <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+   <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+   <TextBlock Text="Load Case Name" VerticalAlignment="Center" Margin="0,0,8,0"/>
+   <TextBox x:Name="NameBox" Grid.Column="1" VerticalContentAlignment="Center" TextChanged="Input_Changed" AutomationProperties.Name="Load case name"/>
+   <TextBlock Grid.Column="2" Text="Type" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="12,0,6,0"/>
+   <TextBlock x:Name="TypeText" Grid.Column="3" VerticalAlignment="Center"
+              ToolTip="Every case is solved the same way: nonlinear static, with tension-only cables and their sag."/>
+   <TextBlock Grid.Row="1" Text="Continue from" VerticalAlignment="Center" Margin="0,6,8,0"/>
+   <ComboBox x:Name="FromBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" SelectionChanged="Input_Changed" AutomationProperties.Name="Continue from load case"
+             ToolTip="The case this one continues from — its loads and its fitted cable pretension are already on the structure. Blank = starts unstressed."/>
+   <TextBlock Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" x:Name="FromHint" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontSize="11" Margin="12,6,0,0"/>
+  </Grid>
+
+  <TextBlock DockPanel.Dock="Top" Text="LOADS APPLIED" Style="{StaticResource Subheading}" Margin="0,0,0,4"/>
+  <StackPanel DockPanel.Dock="Bottom">
+   <DockPanel LastChildFill="False" Margin="0,4,0,6">
+    <Button x:Name="AddLoadButton" DockPanel.Dock="Left" Content="+ Add Load" Click="AddLoad_Click" Margin="0" AutomationProperties.Name="Add load pattern to the case"
+            ToolTip="Add a load pattern to this case, then choose it and its scale factor in the row"/>
+   </DockPanel>
+   <TextBlock x:Name="TotalText" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+              ToolTip="Everything on the structure at the end of this case: the loads of the cases it continues from, then its own."/>
+  </StackPanel>
+  <DataGrid x:Name="LoadGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column" SelectionMode="Single"
+            ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Loads applied">
+   <DataGrid.Columns>
+    <DataGridTemplateColumn Header="Load Pattern" Width="*" MinWidth="130">
+     <DataGridTemplateColumn.CellTemplate>
+      <DataTemplate>
+       <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Pattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                 BorderThickness="0" Padding="5,0" Background="Transparent" ToolTip="A load pattern of the model (Define → Load Patterns)"/>
+      </DataTemplate>
+     </DataGridTemplateColumn.CellTemplate>
+    </DataGridTemplateColumn>
+    <DataGridTemplateColumn Header="Scale Factor" Width="96">
+     <DataGridTemplateColumn.CellTemplate>
+      <DataTemplate>
+       <TextBox Text="{Binding Factor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MinHeight="0" Padding="6,0" BorderThickness="0"
+                Background="Transparent" FontFamily="{StaticResource MonoFont}" TextAlignment="Right" VerticalContentAlignment="Center"
+                ToolTip="The factor on the loads of this pattern in the case, e.g. 1.35"/>
+      </DataTemplate>
+     </DataGridTemplateColumn.CellTemplate>
+    </DataGridTemplateColumn>
+    <DataGridTextColumn Header="Carries" Binding="{Binding Carries}" IsReadOnly="True" Width="1.2*" MinWidth="120"/>
+    <DataGridTemplateColumn Width="34" MinWidth="34">
+     <DataGridTemplateColumn.CellTemplate>
+      <DataTemplate>
+       <Button Click="RemoveLoad_Click" ToolTip="Take this load pattern out of the case" Width="24" Height="22" MinHeight="22" Padding="5" Margin="0" Background="Transparent" BorderThickness="0">
+        <Viewbox Width="11" Height="11"><Path Stroke="{StaticResource Error}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,2 L14,14 M14,2 L2,14"/></Viewbox>
+       </Button>
+      </DataTemplate>
+     </DataGridTemplateColumn.CellTemplate>
+    </DataGridTemplateColumn>
+   </DataGrid.Columns>
+  </DataGrid>
+ </DockPanel>
+</Window>

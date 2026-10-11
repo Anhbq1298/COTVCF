@@ -44,7 +44,7 @@
     <TabItem Header="Cable Force">
      <Border Padding="8">
       <DockPanel>
-       <TextBlock DockPanel.Dock="Top" Text="Target force per cable — the pretension the analysis meets in the Pretension load case. One value per cable (a range belongs to Run → Optimization VCF); a cable that follows another keeps its sync rule. Apply / OK writes it to the model."
+       <TextBlock DockPanel.Dock="Top" Text="Choose Independent to enter a cable's target force, or choose another cable in Sync to follow its force. Changing bays adds or removes symmetric cable pairs automatically. Apply / OK saves the setup."
                   Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
        <TextBlock DockPanel.Dock="Bottom" x:Name="CableForceSummary" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
        <DataGrid x:Name="CableForceGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column"
@@ -52,7 +52,12 @@
         <DataGrid.Columns>
          <DataGridTextColumn Header="Cable" Binding="{Binding Cable}" IsReadOnly="True" Width="Auto" MinWidth="80"/>
          <DataGridTextColumn Header="Pattern" Binding="{Binding Pattern}" IsReadOnly="True" Width="Auto"/>
-         <DataGridTextColumn Header="Sync" Binding="{Binding Sync}" IsReadOnly="True" Width="Auto"/>
+         <DataGridTemplateColumn Header="Sync" Width="Auto" MinWidth="120">
+          <DataGridTemplateColumn.CellTemplate><DataTemplate>
+           <ComboBox ItemsSource="{Binding SyncChoices}" SelectedItem="{Binding SyncSelection, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                     BorderThickness="0" Background="Transparent" ToolTip="Independent, or the cable whose force this cable follows"/>
+          </DataTemplate></DataGridTemplateColumn.CellTemplate>
+         </DataGridTemplateColumn>
          <DataGridTemplateColumn Header="Pretension [kN]" Width="*" MinWidth="110">
           <DataGridTemplateColumn.CellTemplate>
            <DataTemplate>

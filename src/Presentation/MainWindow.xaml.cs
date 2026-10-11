@@ -283,11 +283,40 @@ public partial class MainWindow : Window
         vm.ApplySapFemLoadCases();
     }
 
+    // + Add and Modify… open Load Case Data, where the loads of a case are chosen from the load patterns
     private void AddLoadCase_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel vm || vm.AddFemLoadCase() is not { } row) return;
+        if (DataContext is MainViewModel vm && vm.NewFemLoadCase() is { } proposed) EditLoadCase(vm, proposed);
+    }
+
+    // Modify… acts on the selected case; the … button of a row on that row
+    private void ModifyLoadCase_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || !CommitEditors()) return;
+        if (((sender as FrameworkElement)?.DataContext as FemCaseRow ?? vm.SelectedFemCaseRow) is { Supported: true } row) EditLoadCase(vm, row);
+    }
+
+    private void EditLoadCase(MainViewModel vm, FemCaseRow row)
+    {
+        var dialog = new LoadCaseWindow(vm, row) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Saved is not { } saved) return;
         FemCaseRowsGrid.UpdateLayout();
-        FemCaseRowsGrid.ScrollIntoView(row);
+        FemCaseRowsGrid.ScrollIntoView(saved);
+    }
+
+    private void OpenFemHtml_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || vm.FemRuns.LastOrDefault() is not { } run) return;
+        try
+        {
+            var folder = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "COTVCF", "FemReports");
+            System.IO.Directory.CreateDirectory(folder);
+            var path = System.IO.Path.Combine(folder, $"FEM_Results_{Guid.NewGuid():N}.html");
+            COT_VCF.Infrastructure.AtomicFile.WriteAllText(path,
+                COT_VCF.Application.Results.FemRunReport.BuildHtml(run, vm.State.Model?.Name ?? "Model", vm.SelectedFemResultName, vm.PrintSettings));
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "FEM Results", MessageBoxButton.OK, MessageBoxImage.Warning); }
     }
 
     private void RemoveLoadCase_Click(object sender, RoutedEventArgs e)
