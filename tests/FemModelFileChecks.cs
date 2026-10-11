@@ -6,6 +6,7 @@ using COT_VCF.Configuration;
 using COT_VCF.Domain;
 using COT_VCF.Geometry;
 using COT_VCF.Presentation;
+using COT_VCF.Presentation.Controls;
 
 /// <summary>
 /// 07 FEM → Inputs → Save Model / Load Model, on the benchmark model (<c>tests/fem-sap-benchmark</c>): a model saved
@@ -156,6 +157,16 @@ internal static class FemModelFileChecks
         {
             ["A"] = new("A", new(0, 0, 0)), ["B"] = new("B", new(5, 0, 0)), ["C"] = new("C", new(10, 0, 0)),
         }, [new("AB", "A", "B", MemberKind.Frame), new("BC", "B", "C", MemberKind.Frame)]);
+        StructureModel3D.Scene Scene(FemSectionProperties property) => StructureModel3D.Build(beam,
+            new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal)
+            {
+                ["AB"] = property with { MemberName = "AB" }, ["BC"] = property with { MemberName = "BC" },
+            });
+        var beforeScene = Scene(before);
+        var rotatedScene = Scene(rotated);
+        Check(beforeScene.MemberVisuals.Select(member => member.Name).SequenceEqual(["AB", "BC"]) &&
+              rotatedScene.MemberVisuals.Count == 2 && beforeScene.Bounds.SizeZ > rotatedScene.Bounds.SizeZ * 4,
+            "the 3D model keeps each frame identifiable for selection and turns its visible section with the local axes");
         double Deflection(FemSectionProperties property)
         {
             var frames = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal)
