@@ -196,18 +196,62 @@ public sealed partial class MainViewModel
         {
             ApplySectionChanges(member => member.IsCable, renamed, name => after.TryGetValue(name, out var section) ? section : null,
                 (name, section) => before.GetValueOrDefault(name) is { } old && old == section, (member, section) => PropertiesFor(member, section));
-            // Tab 03: a cable's section, area and capacity follow its (new) section
-            foreach (var cable in State.Cables)
-                if (FemSectionProperties.FirstOrDefault(property => property.MemberName == cable.CableName) is { } current &&
-                    (current.SectionName != cable.SectionName || current.GrossAreaM2 != cable.SectionAreaM2))
-                {
-                    cable.SectionName = current.SectionName;
-                    cable.SectionAreaM2 = current.GrossAreaM2;
-                    cable.DesignCapacityKN = cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor);
-                }
+            SyncCablesWithSections();
         }
         library.Clear();
         foreach (var section in sections) library.Add(section);
+    }
+
+    /// <summary>Tab 03: a cable's section, area and capacity follow its (new) section.</summary>
+    private void SyncCablesWithSections()
+    {
+        foreach (var cable in State.Cables)
+            if (FemSectionProperties.FirstOrDefault(property => property.MemberName == cable.CableName) is { } current &&
+                (current.SectionName != cable.SectionName || current.GrossAreaM2 != cable.SectionAreaM2))
+            {
+                cable.SectionName = current.SectionName;
+                cable.SectionAreaM2 = current.GrossAreaM2;
+                cable.DesignCapacityKN = cable.ResolveCapacity(State.CableStrengthMpa, State.CableStrengthReductionFactor);
+            }
+    }
+
+    /// <summary>Assign → Frame / Cable Sections (as SAP2000): <paramref name="members"/> (frames, or cables when
+    /// <paramref name="cable"/>) take the library section <paramref name="sectionName"/> — area, inertia, material and outline
+    /// through <see cref="PropertiesFor(FemSectionProperties, FrameSectionProperty)"/>; each keeps its own local axis and
+    /// modifiers. FEM results are cleared; SAP2000 is never written. Returns how many members changed.</summary>
+    internal int AssignSection(IReadOnlyCollection<string> members, string sectionName, bool cable)
+    {
+        EnsureMaterials();
+        EnsureSections();
+        var names = members.ToHashSet(StringComparer.Ordinal);
+        var frame = cable ? null : FrameSections.FirstOrDefault(item => item.Name == sectionName);
+        var strand = cable ? CableSections.FirstOrDefault(item => item.Name == sectionName) : null;
+        if (frame is null && strand is null) throw new InvalidOperationException($"There is no {(cable ? "cable" : "frame")} section named '{sectionName}'.");
+        var properties = FemSectionProperties.ToArray();
+        var changed = 0;
+        for (var index = 0; index < properties.Length; index++)
+        {
+            var member = properties[index];
+            if (!names.Contains(member.MemberName) || member.IsCable != cable) continue;
+            var updated = frame is not null ? PropertiesFor(member, frame) : PropertiesFor(member, strand!);
+            if (updated == member) continue;
+            properties[index] = updated;
+            changed++;
+        }
+        if (changed > 0)
+        {
+            FemSectionProperties.Clear();
+            foreach (var property in properties) FemSectionProperties.Add(property);
+            if (cable) SyncCablesWithSections();
+            ClearFemResults();
+            Notify(nameof(SharedViewerSections));
+            Notify(nameof(SharedViewerMemberSizes));
+        }
+        Message = changed > 0
+            ? $"Assigned {sectionName} to {changed} {(cable ? "cable" : "frame")}{(changed == 1 ? "" : "s")} (FEM results cleared; SAP2000 unchanged)."
+            : $"The selected {(cable ? "cables" : "frames")} already have {sectionName}.";
+        Update();
+        return changed;
     }
 
     private void ApplySectionChanges<T>(Func<FemSectionProperties, bool> applies, IReadOnlyDictionary<string, string> renamed,

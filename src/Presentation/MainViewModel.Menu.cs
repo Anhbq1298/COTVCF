@@ -135,10 +135,34 @@ public sealed partial class MainViewModel
         Notify(nameof(PaneStatus));
     }
 
+    private bool showUndeformed;
+
+    /// <summary>Display → Show Undeformed Shape (SAP2000's F4): the viewer draws the model without any result overlay
+    /// (forces, deformed shape, reactions) until a result is shown again. The results themselves are kept.</summary>
+    public bool ShowUndeformed
+    {
+        get => showUndeformed;
+        private set
+        {
+            if (showUndeformed == value) return;
+            showUndeformed = value;
+            Notify(nameof(ShowUndeformed));
+            Notify(nameof(SharedViewerFemResult));
+        }
+    }
+
+    public void ShowUndeformedShape()
+    {
+        FemCableFitView = false;
+        ShowUndeformed = true;
+        Message = "Undeformed shape — Show Results draws a result again.";
+    }
+
     /// <summary>Result menu: show <paramref name="mode"/> (or the cable target fit) for the selected candidate on the
     /// FEM result pane and the shared viewer — what selecting it in the former result tree did.</summary>
     public void ShowFemResult(FemResultMode? mode)
     {
+        ShowUndeformed = false;
         SelectedTab = TabFem;
         if (SelectedFemRun is null && FemRuns.Count > 0) SelectedFemRun = FemRuns[0];
         FemCableFitView = mode is null;

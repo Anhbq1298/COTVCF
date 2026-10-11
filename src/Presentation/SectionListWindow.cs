@@ -197,7 +197,9 @@ public sealed class SectionListWindow : Window
         string First(MaterialKind kind) => viewModel.Materials.FirstOrDefault(item => item.Kind == kind)?.Name ?? "";
         if (shape is not (FrameShape.FilledTube or FrameShape.Encased or FrameShape.MegaComposite))
             return FrameSectionProperty.Default(shape, UniqueName($"FSEC{working.Count + 1}"), First(MaterialKind.Steel));
-        var concrete = viewModel.Materials.Where(item => item.Kind == MaterialKind.Concrete).MaxBy(item => item.Fc ?? 0)?.Name ?? "";
+        // the concrete the model uses most (the library also offers every standard grade)
+        var concrete = viewModel.Materials.Where(item => item.Kind == MaterialKind.Concrete)
+            .OrderByDescending(item => viewModel.MaterialUsage(item.Name)).FirstOrDefault()?.Name ?? "";
         var stem = shape switch { FrameShape.FilledTube => "CFT", FrameShape.MegaComposite => "MEGA", _ => "SRC" };
         return FrameSectionProperty.Default(shape, UniqueName($"{stem}{working.Count + 1}"), concrete) with
         {

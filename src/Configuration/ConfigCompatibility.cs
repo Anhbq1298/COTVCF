@@ -50,7 +50,7 @@ public sealed class ConfigCompatibilityValidator
     public ConfigValidationResult Validate(CotVcfConfigDto cfg, ApplicationState state, IReadOnlyCollection<string> modelLoadCases)
     {
         var r = new ConfigValidationResult();
-        if (cfg is null) { r.FileErrors.Add("The file is not a COT VCF configuration."); return r; }
+        if (cfg is null) { r.FileErrors.Add("The file is not a Mcotis configuration."); return r; }
         if (string.IsNullOrWhiteSpace(cfg.ConfigVersion)) r.FileErrors.Add("Missing configVersion.");
         else if (Array.IndexOf(SupportedVersions, cfg.ConfigVersion) < 0) r.FileErrors.Add($"Unsupported configVersion '{cfg.ConfigVersion}'.");
         if (cfg.PresentTabs == ConfigTabs.None) r.FileErrors.Add("The file contains no tab configuration to load.");

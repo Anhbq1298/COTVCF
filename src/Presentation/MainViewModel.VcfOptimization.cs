@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Input;
 using COT_VCF.Application;
+using COT_VCF.Domain;
+using COT_VCF.Geometry;
 
 namespace COT_VCF.Presentation;
 
@@ -9,7 +11,7 @@ namespace COT_VCF.Presentation;
 /// deflection, the span and limit span / ratio, the utilisation δ / limit and the check.</summary>
 public sealed record VcfOptimizationRow(long Case, IReadOnlyList<string> Values, double? MaxDeflectionMm, string Deflection,
     string Governing, string Point, string Status, string Span = "", string Limit = "", double? Utilisation = null, string Ratio = "",
-    string Check = "");
+    string Check = "", double? CostSgd = null, string Cost = "");
 
 // ---- Run → Optimization VCF: the search space of the VCF system and its run ----
 // The settings are kept in memory. Run walks every combination with the internal FEM (VcfOptimizationRunner) and lists the
@@ -54,9 +56,30 @@ public sealed partial class MainViewModel
         private set { if (Set(ref isVcfOptimizationRunning, value)) CommandManager.InvalidateRequerySuggested(); }
     }
 
-    private static string Best(VcfOptimizationRow row, int passing, int analysed, string criterion, bool final) =>
-        $"{passing:N0} of {analysed:N0} cases pass {criterion}{(final ? "" : " (so far)")} · least deflection: case {row.Case} · " +
-        $"{row.Deflection} mm at {row.Point}, limit {row.Limit} mm ({row.Check})";
+    private static string Best(VcfOptimizationRow row, VcfOptimizationRow? cheapest, int passing, int analysed, string criterion, bool final) =>
+        $"{passing:N0} of {analysed:N0} cases pass {criterion}{(final ? "" : " (so far)")}" +
+        (cheapest is null ? "" : $" · cheapest passing: case {cheapest.Case} · SGD {cheapest.Cost} (δ {cheapest.Deflection} mm, limit {cheapest.Limit} mm)") +
+        $" · least deflection: case {row.Case} · {row.Deflection} mm at {row.Point}, limit {row.Limit} mm ({row.Check})";
+
+    /// <summary>A member's cost per metre [SGD/m] for the optimization: a composite section (CFT, steel encased) from its
+    /// concrete volume and steel / reinforcement mass per metre; any other member from its gross area × its material's unit
+    /// cost per m³ (= SGD/t × t/m³). Works on a snapshot, so it may be used off the UI thread.</summary>
+    internal Func<FemSectionProperties, (double? SgdPerM, string? Missing)> CostPerMetre()
+    {
+        EnsureMaterials();
+        EnsureSections();
+        var materials = Materials.ToArray();
+        var composites = FrameSections.Where(section => section.IsComposite)
+            .ToDictionary(section => section.Name, section => AnalyseComposite(section)?.Cost, StringComparer.Ordinal);
+        return property =>
+        {
+            if (property.SectionName is { } name && composites.TryGetValue(name, out var composite) && composite is not null)
+                return composite.CostPerM is { } perMetre ? (perMetre, null) : (null, $"{name} ({string.Join(", ", composite.Missing)})");
+            var material = materials.FirstOrDefault(item => item.Name == property.MaterialName);
+            if (material?.UnitCostPerCubicMetre is not { } rate) return (null, property.MaterialName ?? property.SectionName ?? property.MemberName);
+            return ((property.GrossAreaM2 > 0 ? property.GrossAreaM2 : property.AreaM2) * rate, null);
+        };
+    }
 
     private CancellationTokenSource? vcfOptimizationCancellation;
     internal void CancelVcfOptimization() => vcfOptimizationCancellation?.Cancel();
@@ -95,7 +118,7 @@ public sealed partial class MainViewModel
                 VcfGeometry.Analyze(State.Geometry, State.Truss), properties, SectionSwapper(), femSapLoading,
                 FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), Tab01Patterns, PretensionPatterns,
                 State.AppliedPoints.Select(point => point.PointName).ToArray(), State.Cables.ToArray(),
-                FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag);
+                FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre());
             var runner = new VcfOptimizationRunner(inputs, settings);
             var columns = runner.Axes.Select((axis, index) => (axis, index)).Where(entry => entry.axis.Varies).ToArray();
             VcfOptimizationColumns = columns.Select(entry => entry.axis).ToArray();
@@ -104,6 +127,7 @@ public sealed partial class MainViewModel
             var total = runner.Count;
             VcfOptimizationRow? best = null;
             var passing = 0;
+            VcfOptimizationRow? cheapest = null;
             var criterion = $"δ in {settings.DeflectionResult ?? "every solved result"} ≤ span / {settings.SpanRatio:0.###}";
             var progress = new Progress<VcfOptimizationResult>(result =>
             {
@@ -117,13 +141,16 @@ public sealed partial class MainViewModel
                     result.SpanM is { } span ? span.ToString("0.###", CultureInfo.CurrentCulture) : "",
                     result.LimitMm is { } limit ? limit.ToString("0.0", CultureInfo.CurrentCulture) : "",
                     utilisation, utilisation is { } u ? u.ToString("0.00", CultureInfo.CurrentCulture) : "",
-                    result.Passes switch { true => "OK", false => "NG", null => "—" });
+                    result.Passes switch { true => "OK", false => "NG", null => "—" },
+                    result.CostSgd, result.CostSgd is { } sgd ? sgd.ToString("N0", CultureInfo.CurrentCulture) : "—");
+                if (result.CostNote is { } costNote) row = row with { Status = row.Status + " · " + costNote };
                 VcfOptimizationRows.Add(row);
                 if (row.MaxDeflectionMm is { } value && (best?.MaxDeflectionMm is not { } least || value < least)) best = row;
                 if (row.Check == "OK") passing++;
+                if (row.Check == "OK" && row.CostSgd is { } price && (cheapest?.CostSgd is not { } lowest || price < lowest)) cheapest = row;
                 VcfOptimizationPercent = 100.0 * analysed / total;
                 VcfOptimizationProgress = $"Analysing {analysed:N0} / {total:N0}";
-                if (best is not null) VcfOptimizationBest = Best(best, passing, analysed, criterion, final: false);
+                if (best is not null) VcfOptimizationBest = Best(best, cheapest, passing, analysed, criterion, final: false);
             });
             IProgress<VcfOptimizationResult> report = progress;
             await Task.Run(() =>
@@ -140,7 +167,7 @@ public sealed partial class MainViewModel
             VcfOptimizationProgress = $"Completed {VcfOptimizationRows.Count:N0} of {total:N0} cases" + (failed > 0 ? $" · {failed:N0} could not be analysed" : "") +
                 " · working model and SAP2000 unchanged.";
             Message = VcfOptimizationProgress;
-            if (best is not null) VcfOptimizationBest = Best(best, passing, analysed, criterion, final: true);
+            if (best is not null) VcfOptimizationBest = Best(best, cheapest, passing, analysed, criterion, final: true);
         }
         catch (OperationCanceledException)
         {

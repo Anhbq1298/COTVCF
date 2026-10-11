@@ -94,7 +94,7 @@ public sealed partial class MainViewModel
 
     private string SuggestFemModelFileName()
     {
-        var stem = State.Model is { Path.Length: > 0 } model ? Path.GetFileNameWithoutExtension(model.Path) : "COTVCF";
+        var stem = State.Model is { Path.Length: > 0 } model ? Path.GetFileNameWithoutExtension(model.Path) : "Mcotis";
         return stem + "_FEM" + FemModelFile.Extension;
     }
 
@@ -209,6 +209,7 @@ public sealed partial class MainViewModel
             foreach (var property in file.SectionProperties) FemSectionProperties.Add(property);
             Materials.Clear();
             foreach (var material in file.Materials ?? []) Materials.Add(material);
+            ResetMaterialLibrary();
             EnsureMaterials();
             FrameSections.Clear(); CableSections.Clear(); TendonSections.Clear();
             foreach (var section in file.FrameSections ?? []) FrameSections.Add(section);

@@ -8,5 +8,5 @@ namespace COT_VCF.Presentation;
 public static class AppIcon
 {
     public static ImageSource Window { get; } =
-        BitmapFrame.Create(new Uri("pack://application:,,,/COT VCF tools;component/src/Presentation/AppIcon.ico", UriKind.Absolute));
+        BitmapFrame.Create(new Uri("pack://application:,,,/Mcotis;component/src/Presentation/AppIcon.ico", UriKind.Absolute));
 }

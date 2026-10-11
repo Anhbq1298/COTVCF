@@ -866,7 +866,7 @@ public sealed partial class MainViewModel : Observable
     private readonly FemStudyService femStudy = new();
     private CancellationTokenSource? femCancellation;
     private bool isFemRunning;
-    private string femProgressText = "Load a COT VCF project, then run the full Tab 01-03 candidate space.";
+    private string femProgressText = "Load a Mcotis project, then run the full Tab 01-03 candidate space.";
     private FemStudyRun? selectedFemRun;
     private FemResultMode femResultMode;
     private int selectedFemPage;
@@ -1104,7 +1104,7 @@ public sealed partial class MainViewModel : Observable
         ? FemCableFitRow.FromRun(run, SelectedFemResultName) : [];
     public IReadOnlyList<FemResultRow> FemResultRows => FemResultTable.Build(SelectedFemResult, FemResultMode);
     public FemAnalysisResult? SharedViewerFemResult =>
-        selectedTab == TabFem && SelectedFemPage == FemResultsPage ? SelectedFemResult : null;
+        !ShowUndeformed && selectedTab == TabFem && SelectedFemPage == FemResultsPage ? SelectedFemResult : null;
     public FemResultMode SharedViewerFemResultMode => FemResultMode;
     public string FemResultDiagramTitle
     {
@@ -2835,7 +2835,7 @@ public sealed partial class MainViewModel : Observable
         }
     }
 
-    private const string ConfigFilter = "COT VCF Configuration (*.json)|*.json|JSON Files (*.json)|*.json";
+    private const string ConfigFilter = "Mcotis Configuration (*.json)|*.json|JSON Files (*.json)|*.json";
 
     private string? PickSavePath(ConfigTabs tabs)
     {

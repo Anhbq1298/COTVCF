@@ -1,4 +1,6 @@
-# COT VCF Parametric Automation
+# Mcotis
+
+**Mcotis** — *Meinhardt Cities of Tomorrow Integrated Structures* (formerly COT VCF Parametric Automation).
 
 WPF / .NET 8 desktop application for defining structural-study candidates from an existing SAP2000 model, then building and analyzing one isolated child `.sdb` model per selected combination.
 
@@ -259,7 +261,7 @@ of this tab.
 
 ## Project configuration
 
-The COT VCF project JSON stores the configuration for Tabs 1–5 and their study selections; loading a project never writes to SAP2000. **New Config** clears the current configuration and active file identity while retaining the connected SAP model and session baseline; the next save asks for a new file. Existing files and Print Setup preferences are retained. **Save Config** updates the current tab section, while **Save All** validates and saves all sections atomically. Saved configuration is checked against the connected model before it is applied. Configuration and workflow controls are enabled only after SAP connects successfully, and disable again if the connection is lost.
+The Mcotis project JSON stores the configuration for Tabs 1–5 and their study selections; loading a project never writes to SAP2000. **New Config** clears the current configuration and active file identity while retaining the connected SAP model and session baseline; the next save asks for a new file. Existing files and Print Setup preferences are retained. **Save Config** updates the current tab section, while **Save All** validates and saves all sections atomically. Saved configuration is checked against the connected model before it is applied. Configuration and workflow controls are enabled only after SAP connects successfully, and disable again if the connection is lost.
 
 ## Build and run
 
@@ -278,7 +280,7 @@ dotnet build COTVCF.sln '-p:SapInstallDir=C:\Your SAP2000 folder'
 
 Default executable:
 
-`bin\Debug\net8.0-windows\win-x64\COT VCF tools.exe`
+`bin\Debug\net8.0-windows\win-x64\Mcotis.exe`
 
 ## Checks
 

@@ -26,7 +26,7 @@ public partial class App : System.Windows.Application
             catch (System.IO.IOException) { }
             catch (UnauthorizedAccessException) { }
             MessageBox.Show(MainWindow, $"{args.Exception.Message}{Environment.NewLine}{Environment.NewLine}Details were written to {log}. " +
-                "The app is still running; save your work.", "COT VCF — unexpected error", MessageBoxButton.OK, MessageBoxImage.Error);
+                "The app is still running; save your work.", "Mcotis — unexpected error", MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;
         };
         gateway = new();

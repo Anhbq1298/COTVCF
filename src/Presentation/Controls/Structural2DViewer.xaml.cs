@@ -21,6 +21,13 @@ public partial class Structural2DViewer : UserControl
     public static readonly DependencyProperty ShowCableLabelsProperty = DependencyProperty.Register(nameof(ShowCableLabels), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(false));
     public static readonly DependencyProperty ShowDimensionsProperty = DependencyProperty.Register(nameof(ShowDimensions), typeof(bool), typeof(Structural2DViewer), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
     public static readonly DependencyProperty SpanPointsProperty = DependencyProperty.Register(nameof(SpanPoints), typeof(IEnumerable<string>), typeof(Structural2DViewer), new PropertyMetadata(null));
+    /// <summary>Pan mode: the left button moves the model; off (default), a click selects joints and members as in SAP2000.</summary>
+    public static readonly DependencyProperty PanModeProperty = DependencyProperty.Register(nameof(PanMode), typeof(bool), typeof(Structural2DViewer),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+    public bool PanMode { get => (bool)GetValue(PanModeProperty); set => SetValue(PanModeProperty, value); }
+    public void ClearSelection() => Canvas.ClearSelection();
+    public IReadOnlyList<string> SelectedMembers => Canvas.SelectedMembers;
+    public IReadOnlyList<string> SelectedJoints => Canvas.SelectedJoints;
     /// <summary>The truss chord points: the overall span dimension runs between their outermost lines (the mega columns).</summary>
     public IEnumerable<string>? SpanPoints { get => (IEnumerable<string>?)GetValue(SpanPointsProperty); set => SetValue(SpanPointsProperty, value); }
     public static readonly DependencyProperty AppliedPointsProperty = DependencyProperty.Register(nameof(AppliedPoints), typeof(IEnumerable<AppliedPoint>), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -287,11 +294,118 @@ public sealed class ModelCanvas : FrameworkElement
     private Vector pan;
     private Point? last;
 
+    // ---- selection, as SAP2000: a click selects (or deselects) the joint / member under the cursor; a drag on empty space
+    // draws a window — left to right selects what lies wholly inside, right to left also what it crosses. Pan mode (or the
+    // middle button) moves the model instead. Esc clears the selection and leaves pan mode.
+    public static readonly DependencyProperty PanModeProperty = DependencyProperty.Register(nameof(PanMode), typeof(bool), typeof(ModelCanvas),
+        new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, _) => ((ModelCanvas)d).UpdateCursor()));
+    public bool PanMode { get => (bool)GetValue(PanModeProperty); set => SetValue(PanModeProperty, value); }
+
+    private readonly HashSet<string> selectedMembers = new(StringComparer.Ordinal);
+    private readonly HashSet<string> selectedJoints = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (Point Start, Point End, MemberKind Kind)> memberLocations = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Point> jointLocations = new(StringComparer.Ordinal);
+    private Point? windowStart, windowEnd;
+    private bool panning;
+
+    /// <summary>The selected members and joints (names), in the order of the model.</summary>
+    public IReadOnlyList<string> SelectedMembers => Model.Members.Select(member => member.Name).Where(selectedMembers.Contains).ToArray();
+    public IReadOnlyList<string> SelectedJoints => Model.Points.Keys.Where(selectedJoints.Contains).ToArray();
+
+    /// <summary>Where each joint was last drawn (checks).</summary>
+    internal IReadOnlyDictionary<string, Point> JointScreenPoints => jointLocations;
+    internal IReadOnlyDictionary<string, (Point Start, Point End, MemberKind Kind)> MemberScreenLines => memberLocations;
+
+    public void ClearSelection()
+    {
+        selectedMembers.Clear();
+        selectedJoints.Clear();
+        InvalidateVisual();
+    }
+
+    /// <summary>Selects (or deselects) what lies at <paramref name="position"/>, as a click does (checks).</summary>
+    public bool SelectAt(Point position)
+    {
+        var joint = jointLocations.Where(item => (item.Value - position).Length <= 6).OrderBy(item => (item.Value - position).Length).Select(item => item.Key).FirstOrDefault();
+        if (joint is not null) { Toggle(selectedJoints, joint); InvalidateVisual(); return true; }
+        var member = memberLocations.Where(item => DistanceToSegment(position, item.Value.Start, item.Value.End) <= 5)
+            .OrderBy(item => Math.Round(DistanceToSegment(position, item.Value.Start, item.Value.End), 1)).ThenBy(item => item.Value.Kind != MemberKind.Frame)
+            .Select(item => item.Key).FirstOrDefault();
+        if (member is not null) { Toggle(selectedMembers, member); InvalidateVisual(); return true; }
+        return false;
+    }
+
+    /// <summary>Window (left to right: wholly inside) or crossing (right to left: touching) selection between two screen points.</summary>
+    public void SelectWindow(Point from, Point to)
+    {
+        var box = new Rect(from, to);
+        var crossing = to.X < from.X;
+        foreach (var (name, point) in jointLocations) if (box.Contains(point)) selectedJoints.Add(name);
+        foreach (var (name, (start, end, _)) in memberLocations)
+            if (box.Contains(start) && box.Contains(end) || crossing && SegmentTouches(box, start, end)) selectedMembers.Add(name);
+        InvalidateVisual();
+    }
+
+    private static void Toggle(HashSet<string> set, string name) { if (!set.Remove(name)) set.Add(name); }
+
+    private static bool SegmentTouches(Rect box, Point a, Point b)
+    {
+        if (box.Contains(a) || box.Contains(b)) return true;
+        Point[] corners = [box.TopLeft, box.TopRight, box.BottomRight, box.BottomLeft];
+        for (var i = 0; i < 4; i++) if (Intersects(a, b, corners[i], corners[(i + 1) % 4])) return true;
+        return false;
+        static double Cross(Point o, Point p, Point q) => (p.X - o.X) * (q.Y - o.Y) - (p.Y - o.Y) * (q.X - o.X);
+        static bool Intersects(Point p1, Point p2, Point q1, Point q2) =>
+            Cross(p1, p2, q1) * Cross(p1, p2, q2) <= 0 && Cross(q1, q2, p1) * Cross(q1, q2, p2) <= 0;
+    }
+
+    private void UpdateCursor() { Cursor = PanMode ? Cursors.SizeAll : Cursors.Arrow; InvalidateVisual(); }
+
+    private void DrawSelection(DrawingContext dc)
+    {
+        var highlight = new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x00)), 5) { DashStyle = DashStyles.Dash, StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        foreach (var name in selectedMembers)
+            if (memberLocations.TryGetValue(name, out var location)) dc.DrawLine(highlight, location.Start, location.End);
+        var cross = new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x00)), 2.5);
+        foreach (var name in selectedJoints)
+            if (jointLocations.TryGetValue(name, out var point))
+            {
+                dc.DrawLine(cross, point + new Vector(-6, -6), point + new Vector(6, 6));
+                dc.DrawLine(cross, point + new Vector(-6, 6), point + new Vector(6, -6));
+            }
+        if (windowStart is { } from && windowEnd is { } to)
+        {
+            var crossing = to.X < from.X;
+            dc.DrawRectangle(new SolidColorBrush(crossing ? Color.FromArgb(28, 0x2E, 0xA0, 0x40) : Color.FromArgb(28, 0x2E, 0x90, 0xFA)),
+                new Pen(crossing ? Brushes.SeaGreen : Brushes.RoyalBlue, 1) { DashStyle = crossing ? DashStyles.Dash : DashStyles.Solid }, new Rect(from, to));
+        }
+        if (selectedMembers.Count + selectedJoints.Count == 0) return;
+        // status read-out, as SAP2000's "n Points, n Frames selected" (with the section of a single member)
+        var frames = selectedMembers.Count(name => memberLocations.TryGetValue(name, out var item) && item.Kind == MemberKind.Frame);
+        var cables = selectedMembers.Count - frames;
+        var parts = new List<string>();
+        if (selectedJoints.Count > 0) parts.Add($"{selectedJoints.Count} Point{(selectedJoints.Count == 1 ? "" : "s")}");
+        if (frames > 0) parts.Add($"{frames} Frame{(frames == 1 ? "" : "s")}");
+        if (cables > 0) parts.Add($"{cables} Cable{(cables == 1 ? "" : "s")}");
+        var text = string.Join(", ", parts) + " selected";
+        if (selectedMembers.Count + selectedJoints.Count == 1)
+            text += selectedMembers.Count == 1
+                ? $" — {selectedMembers.First()}" + (MemberSizes?.TryGetValue(selectedMembers.First(), out var size) == true && !string.IsNullOrWhiteSpace(size) ? $" · {size}" : "")
+                : $" — joint {selectedJoints.First()}" + (Model.Points.TryGetValue(selectedJoints.First(), out var joint)
+                    ? $" (X {joint.Position.X:0.###}, Z {joint.Position.Z:0.###} m)" : "");
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var label = new FormattedText(text + "   ·   Esc clears", CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 11, Brushes.Black, dpi);
+        var origin = new Point(ActualWidth - label.Width - 14, ActualHeight - label.Height - 12);
+        dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(235, 255, 248, 225)), new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x00)), 1),
+            new Rect(origin.X - 6, origin.Y - 3, label.Width + 12, label.Height + 6), 3, 3);
+        dc.DrawText(label, origin);
+    }
+
     public ModelCanvas()
     {
         ClipToBounds = true;
         Focusable = true;
-        Cursor = Cursors.Hand;
+        UpdateCursor();
         SizeChanged += (_, _) => InvalidateVisual();
     }
 
@@ -362,6 +476,11 @@ public sealed class ModelCanvas : FrameworkElement
             var shift = ShowDimensions ? new Vector(-DimensionBandX / 2, -DimensionBandY / 2) : default;
             Point Screen(Point point) => new((point.X - (minX + spanX / 2)) * scale + ActualWidth / 2 + pan.X + shift.X, -(point.Y - (minY + spanY / 2)) * scale + ActualHeight / 2 + pan.Y + shift.Y);
             var screenPoints = projected.ToDictionary(item => item.Key, item => Screen(item.Value));
+            jointLocations.Clear();
+            foreach (var (name, point) in screenPoints) jointLocations[name] = point;
+            memberLocations.Clear();
+            foreach (var member in Model.Members)
+                if (screenPoints.TryGetValue(member.Start, out var a) && screenPoints.TryGetValue(member.End, out var b)) memberLocations[member.Name] = (a, b, member.Kind);
             if (ShowDimensions) DrawDimensions(dc, projected.Values, Screen);
 
             var deflectionView = FemResult is not null && FemResultMode == FemResultMode.DeflectedShape;
@@ -454,8 +573,9 @@ public sealed class ModelCanvas : FrameworkElement
         }
         else Text(dc, "No geometry loaded", new(Math.Max(16, ActualWidth / 2 - 70), ActualHeight / 2), "ViewportEdge");
 
+        DrawSelection(dc);
         DrawAxes(dc);
-        Text(dc, Plane + " projection", new(16, 12), "ViewportEdge");
+        Text(dc, Plane + " projection" + (PanMode ? "  ·  PAN — drag to move the model (Esc to select)" : ""), new(16, 12), "ViewportEdge");
     }
 
     private void DrawGroup(DrawingContext dc, IReadOnlyDictionary<string, Point> screen, IEnumerable<string>? names, Color color)
@@ -982,46 +1102,53 @@ public sealed class ModelCanvas : FrameworkElement
 
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
-        if (e.ClickCount == 2) { Fit(); return; }
         Focus();
         var position = e.GetPosition(this);
+        // pan: the middle button always, the left button in pan mode
+        if (e.ChangedButton == MouseButton.Middle || e.ChangedButton == MouseButton.Left && PanMode)
+        {
+            if (e.ClickCount == 2 && e.ChangedButton == MouseButton.Middle) { Fit(); return; }
+            panning = true; last = position; CaptureMouse(); e.Handled = true; return;
+        }
+        if (e.ChangedButton != MouseButton.Left) return;
+        if (e.ClickCount == 2) return;   // a double click selects twice; Home / Zoom extents fit the view
+
         if (FemResultMode == FemResultMode.DeflectedShape && FemResult is not null)
         {
             selectedDeflectionNode = deflectedNodes.Where(item => (item.Value - position).Length <= 10)
                 .OrderBy(item => (item.Value - position).Length).Select(item => item.Key).FirstOrDefault();
             InvalidateVisual();
             if (selectedDeflectionNode is not null) { e.Handled = true; return; }
-            last = position; CaptureMouse(); return;
         }
 
+        // a load point or a configured cable also drives the workflow tabs' selection
         var hit = appliedPointLocations.Where(item => (item.Value - position).Length <= 12).OrderBy(item => (item.Value - position).Length).Select(item => item.Key).FirstOrDefault();
-        if (hit is not null)
-        {
-            SelectedAppliedPoint = hit;
-            InvalidateVisual();
-            e.Handled = true;
-            return;
-        }
+        if (hit is not null) SelectedAppliedPoint = hit;
         var cableHit = cableLocations
             .Where(item => DistanceToSegment(position, item.Value.Start, item.Value.End) <= 8)
             .OrderBy(item => DistanceToSegment(position, item.Value.Start, item.Value.End))
             .Select(item => item.Key)
             .FirstOrDefault();
-        if (cableHit is not null)
-        {
-            SelectedCable = cableHit;
-            InvalidateVisual();
-            e.Handled = true;
-            return;
-        }
-        last = position;
+        if (cableHit is not null) SelectedCable = cableHit;
+
+        if (SelectAt(position) || hit is not null || cableHit is not null) { InvalidateVisual(); e.Handled = true; return; }
+        // empty space: start a selection window
+        windowStart = position;
+        windowEnd = null;
         CaptureMouse();
+        e.Handled = true;
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
         var next = e.GetPosition(this);
-        if (last is not { } point || !IsMouseCaptured)
+        if (windowStart is not null && IsMouseCaptured)
+        {
+            windowEnd = next;
+            InvalidateVisual();
+            return;
+        }
+        if (!panning || last is not { } point || !IsMouseCaptured)
         {
             // Hover read-out of FEM results at the section under the cursor.
             if (FemResult is null && hoverCursor is null) return;
@@ -1189,7 +1316,14 @@ public sealed class ModelCanvas : FrameworkElement
 
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
+        if (windowStart is { } from)
+        {
+            if (windowEnd is { } to && (to - from).Length > 4) SelectWindow(from, to);
+            windowStart = windowEnd = null;
+            InvalidateVisual();
+        }
         last = null;
+        panning = false;
         if (IsMouseCaptured) ReleaseMouseCapture();
     }
 
@@ -1205,7 +1339,8 @@ public sealed class ModelCanvas : FrameworkElement
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.Key == Key.Home) Fit();
+        if (e.Key == Key.Escape) { PanMode = false; ClearSelection(); e.Handled = true; }
+        else if (e.Key == Key.Home) Fit();
         else if (e.Key == Key.Add) zoom = Math.Min(100, zoom * 1.15);
         else if (e.Key == Key.Subtract) zoom = Math.Max(.05, zoom / 1.15);
         InvalidateVisual();

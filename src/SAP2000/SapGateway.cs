@@ -1663,7 +1663,7 @@ public sealed class SapGateway : ISapGateway
                     case 2: frames.Add(names[i]); break;
                     case 3: cables.Add(names[i]); break;
                     default:
-                        throw new InvalidOperationException($"{actualName}: unsupported SAP object type {types[i]} is assigned to this COTVCF output group.");
+                        throw new InvalidOperationException($"{actualName}: unsupported SAP object type {types[i]} is assigned to this Mcotis output group.");
                 }
             }
             result.Add(new(actualName, true, points, frames, cables));

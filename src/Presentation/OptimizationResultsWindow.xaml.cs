@@ -47,6 +47,8 @@ public partial class OptimizationResultsWindow : Window
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "δ / limit", MinWidth = 70, ElementStyle = numeric,
             Binding = new Binding(nameof(VcfOptimizationRow.Ratio)), SortMemberPath = nameof(VcfOptimizationRow.Utilisation) });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "Check", Binding = new Binding(nameof(VcfOptimizationRow.Check)), MinWidth = 54, ElementStyle = CheckStyle() });
+        ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "Total cost [SGD]", MinWidth = 110, ElementStyle = numeric,
+            Binding = new Binding(nameof(VcfOptimizationRow.Cost)), SortMemberPath = nameof(VcfOptimizationRow.CostSgd) });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = new TextBlock { Text = "Result" }, Binding = new Binding(nameof(VcfOptimizationRow.Governing)), MinWidth = 90 });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "Point", Binding = new Binding(nameof(VcfOptimizationRow.Point)), MinWidth = 70 });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "Status", Binding = new Binding(nameof(VcfOptimizationRow.Status)), Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 120 });

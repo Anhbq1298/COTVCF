@@ -37,6 +37,13 @@ public sealed class CompositeSectionWindow : Window
     private readonly StackPanel propertyRows = new(), costRows = new(), checkRows = new();
     private readonly TextBlock materialData = new() { Foreground = Brushes.DimGray, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
     private readonly TextBlock problem = new() { Foreground = Brushes.Firebrick, FontSize = 11, TextWrapping = TextWrapping.Wrap };
+    private readonly InteractionChart chart = new() { Width = 318, Height = 330 };
+    private readonly StackPanel diagramRows = new() { Margin = new Thickness(0, 6, 0, 0) };
+    private readonly TextBlock diagramBasis = new() { Foreground = Brushes.DimGray, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
+    private readonly ColumnDesignType designType;
+    private readonly ColumnDesignBasis designBasis;
+    /// <summary>The N–M interaction of the section in the form (null while the input is not valid).</summary>
+    internal InteractionDiagram? Interaction { get; private set; }
 
     public FrameSectionProperty? Result { get; private set; }
     /// <summary>The composite properties and cost of the section in the form (null while the input is not valid).</summary>
@@ -52,7 +59,7 @@ public sealed class CompositeSectionWindow : Window
         var c = section.Composite ?? new ColumnSectionInput();
         Title = $"{FrameSectionProperty.Title(section.Shape)} Section";
         Icon = AppIcon.Window;
-        Width = 1010; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
+        Width = 1360; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner; ShowInTaskbar = false;
         Background = (Brush)FindResource("Surface");
 
@@ -69,12 +76,20 @@ public sealed class CompositeSectionWindow : Window
         root.Children.Add(head);
 
         var columns = new Grid();
-        foreach (var width in new[] { new GridLength(1, GridUnitType.Star), new GridLength(10), new GridLength(1, GridUnitType.Star), new GridLength(10), new GridLength(290) })
+        foreach (var width in new[] { new GridLength(1, GridUnitType.Star), new GridLength(10), new GridLength(1, GridUnitType.Star), new GridLength(10), new GridLength(290), new GridLength(10), new GridLength(340) })
             columns.ColumnDefinitions.Add(new ColumnDefinition { Width = width });
-        var left = new StackPanel(); var middle = new StackPanel(); var right = new StackPanel();
-        Grid.SetColumn(middle, 2); Grid.SetColumn(right, 4);
-        columns.Children.Add(left); columns.Children.Add(middle); columns.Children.Add(right);
+        var left = new StackPanel(); var middle = new StackPanel(); var right = new StackPanel(); var interaction = new StackPanel();
+        Grid.SetColumn(middle, 2); Grid.SetColumn(right, 4); Grid.SetColumn(interaction, 6);
+        columns.Children.Add(left); columns.Children.Add(middle); columns.Children.Add(right); columns.Children.Add(interaction);
         root.Children.Add(columns);
+
+        // ---- N–M interaction from the Design menu's algorithm, with its partial factors ----
+        designType = tube ? ColumnDesignType.ConcreteFilledTube : mega ? ColumnDesignType.MegaComposite : ColumnDesignType.SteelEncased;
+        designBasis = viewModel.DesignBasis(designType);
+        var diagramGroup = Group(interaction, "N–M Interaction (Design algorithm)");
+        ((StackPanel)diagramGroup.Content).Children.Add(chart);
+        ((StackPanel)diagramGroup.Content).Children.Add(diagramRows);
+        ((StackPanel)diagramGroup.Content).Children.Add(diagramBasis);
 
         // ---- dimensions (mm, as the Design menu takes them) ----
         TextBox Mm(GroupBox group, string key, string label, double value, string unit = "mm")
@@ -383,6 +398,23 @@ public sealed class CompositeSectionWindow : Window
         Line(costRows, "Cost per metre", cost.CostPerM is { } total ? F(total, "#,0") + " SGD/m" : "—", bold: true);
         if (cost.Missing.Count > 0)
             costRows.Children.Add(Hint($"Set the unit cost of the {string.Join(" and ", cost.Missing)} in Define → Materials."));
+
+        // N–M interaction: the Design menu's algorithm for this column type, with its partial factors and grade limits
+        diagramRows.Children.Clear();
+        try { Interaction = ColumnDesignEngine.Interaction(designBasis with { Section = c }); }
+        catch (Exception ex) { Interaction = null; diagramBasis.Text = "The interaction could not be computed: " + ex.Message; }
+        chart.Diagram = Interaction;
+        if (Interaction is { } d)
+        {
+            Line(diagramRows, "Npl,Rd  (squash)", F(d.NplRdKN, "#,0") + " kN");
+            Line(diagramRows, "Nt,Rd  (tension)", F(d.NtRdKN, "#,0") + " kN");
+            Line(diagramRows, "Mpl,y,Rd  (in-plane)", F(d.MplYRdKNm, "#,0") + " kNm");
+            Line(diagramRows, "Mpl,z,Rd", F(d.MplZRdKNm, "#,0") + " kNm");
+            var maxY = d.Series[0].Points.MaxBy(point => point.MKNm);
+            Line(diagramRows, "Mmax,y,Rd  at N", $"{F(maxY.MKNm, "#,0")} kNm at {F(maxY.NKN, "#,0")} kN");
+            diagramBasis.Text = $"{d.Basis}; γC = {F(designBasis.GammaC, "0.0#")}, γa = {F(designBasis.GammaA, "0.0#")}, γS = {F(designBasis.GammaS, "0.0#")} " +
+                                "(Design → " + ColumnDesignCodes.Title(designType) + "). Cross-section resistance: buckling, second order and αM apply in the member design.";
+        }
     }
 
     private bool IsInitializedForm => Content is not null;

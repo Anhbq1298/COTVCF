@@ -18,6 +18,12 @@ public sealed record DesignCaseResult(string Case, double NEdKN, double M0EdKNm,
     public double MaxUtilization => new[] { AxialUtilization, MajorUtilization, MinorUtilization, ShearUtilization }.Max();
 }
 
+/// <summary>One curve of an N–M interaction diagram: N in kN (compression +), M in kNm (≥ 0).</summary>
+public sealed record InteractionSeries(string Name, IReadOnlyList<(double NKN, double MKNm)> Points, bool Dashed = false, bool Minor = false);
+
+/// <summary>The cross-section N–M interaction of a column design (design resistances; no buckling, no αM), with its anchors.</summary>
+public sealed record InteractionDiagram(IReadOnlyList<InteractionSeries> Series, double NplRdKN, double NtRdKN, double MplYRdKNm, double MplZRdKNm, string Basis);
+
 /// <summary>A detailing or scope rule: pass / fail with the values it compared.</summary>
 public sealed record DetailingCheck(string Name, string Clause, bool Pass, string Text);
 
@@ -45,12 +51,7 @@ public static class ColumnDesignEngine
         var length = member.LengthM > 0 ? member.LengthM * 1000 : Math.Max(l0y, l0z);
         if (member.Cases.Count == 0 || member.Cases.All(item => item.Stations.Count == 0))
             return new(member.Member, member.Section, member.LengthM, [], null, [], "", "No FEM forces for this member in the chosen load cases.");
-        ColumnDesigner designer = basis.Type switch
-        {
-            ColumnDesignType.ReinforcedConcrete => new RcDesigner(basis),
-            ColumnDesignType.MegaComposite => new MegaDesigner(basis),
-            _ => new CompositeDesigner(basis),
-        };
+        var designer = Designer(basis);
         var results = new List<(DesignCaseResult Result, string Log)>();
         foreach (var forces in member.Cases.Where(item => item.Stations.Count > 0))
         {
@@ -95,6 +96,16 @@ public static class ColumnDesignEngine
             report.AppendLine($"  [{(check.Pass ? "OK  " : "FAIL")}] {check.Name} ({check.Clause}): {check.Text}");
         return new(member.Member, member.Section, member.LengthM, perCase.Select(item => item.Result).ToList(), governing.Result, detailing, report.ToString());
     }
+
+    private static ColumnDesigner Designer(ColumnDesignBasis basis) => basis.Type switch
+    {
+        ColumnDesignType.ReinforcedConcrete => new RcDesigner(basis),
+        ColumnDesignType.MegaComposite => new MegaDesigner(basis),
+        _ => new CompositeDesigner(basis),
+    };
+
+    /// <summary>The N–M interaction of the basis' section, from the design algorithm of its column type.</summary>
+    public static InteractionDiagram Interaction(ColumnDesignBasis basis) => Designer(basis).Interaction();
 
     internal static string F(double value, int decimals = 1) =>
         double.IsFinite(value) ? value.ToString("F" + decimals, CultureInfo.InvariantCulture) : "∞";
@@ -208,6 +219,7 @@ internal sealed class InteractionCurve
     public double MaxN => points[^1].N;
     public double MinN => points[0].N;
     public double MaxM => points.Max(point => point.M);
+    public IReadOnlyList<(double N, double M)> Points => points;
 
     /// <summary>Moment resistance at axial force <paramref name="n"/>; 0 outside the curve.</summary>
     public double MomentAt(double n)
@@ -302,6 +314,15 @@ internal abstract class ColumnDesigner(ColumnDesignBasis basis)
     public abstract DesignCaseResult DesignCase(string name, double nEd, double m0, double vEd, double length, double l0y, double l0z, StringBuilder log);
     public abstract IReadOnlyList<DetailingCheck> Detailing(double maxNEd, double length, double l0y, double l0z);
     public abstract void Describe(StringBuilder report);
+    public abstract InteractionDiagram Interaction();
+
+    /// <summary>A diagram from the y-y and z-z curves (N, mm), in kN and kNm; <paramref name="extra"/> curves come first.</summary>
+    protected static InteractionDiagram Diagram(InteractionCurve y, InteractionCurve z, string basis, params InteractionSeries[] extra)
+    {
+        static IReadOnlyList<(double, double)> Kn(InteractionCurve curve) => curve.Points.Select(point => (point.N / 1000, point.M / 1e6)).ToArray();
+        return new([.. extra, new("y-y (in-plane)" + (extra.Length > 0 ? ", exact plastic" : ""), Kn(y), extra.Length > 0), new("z-z", Kn(z), Minor: true)],
+            y.MaxN / 1000, -y.MinN / 1000, y.MomentAt(0) / 1e6, z.MomentAt(0) / 1e6, basis);
+    }
 
     /// <summary>Bars around a b × h outline: <see cref="ColumnSectionInput.BarsAlongWidth"/> on each b face (corners included)
     /// and <see cref="ColumnSectionInput.BarsAlongDepth"/> on each h face between them.</summary>
@@ -353,6 +374,9 @@ internal sealed class RcDesigner : ColumnDesigner
 
     private double Ac => S.Width * S.Depth;
     private double As => major.BarArea;
+
+    public override InteractionDiagram Interaction() =>
+        Diagram(majorCurve, minorCurve, $"EN 1992-1-1 6.1 strain compatibility: η fcd block, bars elastic–plastic (fcd = {F(fcd, 1)}, fyd = {F(fyd, 1)} MPa)");
     private bool NominalStiffness => Basis.Method.Contains("stiffness", StringComparison.OrdinalIgnoreCase);
 
     public override void Describe(StringBuilder r)
@@ -570,6 +594,10 @@ internal sealed class CompositeDesigner : ColumnDesigner
         ];
         return [new(Part.Concrete, 1, 0, 0, S.Width, S.Depth), .. steel.Select(plate => plate with { Part = Part.Concrete, Sign = -1, Shear = false }), .. steel];
     }
+
+    public override InteractionDiagram Interaction() =>
+        Diagram(majorCurve, minorCurve, $"EN 1994-1-1 6.7.3.2 plastic distribution: concrete {F(alphaC, 2)} η fcd = {F(fc, 1)}, fyd = {F(fyd, 1)}" +
+                                        (filled ? " MPa" : $", fsd = {F(fsd, 1)} MPa"));
 
     private double Aa => major.Area(Part.Steel);
     private double Ac => major.ConcreteArea;

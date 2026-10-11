@@ -19,9 +19,10 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 ## Build And Run
 
 - Build the app with `dotnet build COTVCF.sln`.
-- If the running desktop app locks `bin/Debug/net8.0-windows/win-x64/COT VCF tools.exe` or `.dll`, close it with `Get-Process -Name 'COT VCF tools' -ErrorAction SilentlyContinue | Stop-Process -Force`, then rebuild.
+- If the running desktop app locks `bin/Debug/net8.0-windows/win-x64/Mcotis.exe` or `.dll`, close it with `Get-Process -Name 'Mcotis' -ErrorAction SilentlyContinue | Stop-Process -Force`, then rebuild.
 - For compile-only checks while the app is open, use `dotnet build COTVCF.csproj -o .work\build-check`.
-- Launch the app from `bin/Debug/net8.0-windows/win-x64/COT VCF tools.exe`.
+- Launch the app from `bin/Debug/net8.0-windows/win-x64/Mcotis.exe`.
+- **Brand:** the product is **Mcotis** (Meinhardt Cities of Tomorrow Integrated Structures) — main window title `Mcotis — Meinhardt Cities of Tomorrow Integrated Structures`, exe / assembly `Mcotis` (pack URIs `/Mcotis;component/…`). Internal identifiers keep the old name for compatibility: namespaces `COT_VCF`, `CotVcfConfigDto`, the FEM file format `COTVCF.FemModel` / `.cotfem.json`, `%LOCALAPPDATA%\COTVCF`, report storage keys.
 - The built application folder is `bin/COT ParametricTools_V2` (version 2.0.0.0). Produce it with
   `dotnet publish COTVCF.csproj -c Release --self-contained false -o "bin/COT ParametricTools_V2"` — never by
   copying a build output by hand: the earlier hand-copied `COT VCF Tools V1.0` folder went stale and showed an old app.
@@ -80,7 +81,11 @@ earlier tall-header / large-button / blue-block look.
     SLS — on the default model the nonlinear case `NL SLS001: 1.0DL+1.0LL`) and the limit span / `SpanRatio` (default 250;
     span = bays × bay width between the mega columns). Each row: the varying inputs, **max downward deflection** in that
     result and its point, span, limit, δ / limit, Check OK / NG, status (failures such as non-convergence or an unsolved
-    result are listed, not thrown); the summary counts the passing cases and names the least deflection. The working
+    result are listed, not thrown), and **Total cost [SGD]** = Σ member cost per metre × member length over every frame and
+    cable of the case (`MainViewModel.CostPerMetre`: composite sections — CFT / encased — from `CompositeSection.Cost`
+    (concrete m³ + steel / rebar t at their rates); any other member gross area × `MaterialProperty.UnitCostPerCubicMetre`
+    (SGD/t × t/m³); a member without a rate leaves the total blank and the status names it). The summary counts the passing
+    cases and names the cheapest passing case and the least deflection. The working
     model and SAP2000 never change. Checked: a case equals Run FEM Analysis on the same geometry applied with Edit → VCF
     Geometry. Note: the default model at its baseline truss height (Tab 02 H01) does not converge in the internal FEM, in Run
     FEM Analysis as in the optimization.
@@ -1129,7 +1134,7 @@ the `Export*Pdf` commands were removed on purpose).
 
 ## Config Project File (`src/Configuration/`)
 
-The JSON is a **COT VCF project** (document-editor model), not an export/import blob. It stores Tabs 01–05,
+The JSON is a **Mcotis project** (document-editor model), not an export/import blob. It stores Tabs 01–05,
 including the Tab 05 mode/fixed candidate/selection exclusions, and the Tab 06 Print Setup. Never serialise
 ViewModels; project save/load never mutates SAP.
 
@@ -1189,3 +1194,6 @@ ViewModels; project save/load never mutates SAP.
 - `src/Presentation/Controls/Structural2DViewer.xaml.cs`: canvas drawing (viewport brushes), fit/pan/zoom,
   reset-to-XZ, axis colors, point labels.
 - `src/Presentation/Controls/EngineeringInput.xaml`: compact 24 px numeric editor with optional label.
+- **Standard materials** (MaterialLibrary.Standard, source "Library"): S355 (S355J2, EN 10025-2), S460 (S460M, EN 10025-4), S690 (S690QL, EN 10025-6) with fy / fu and thickness bands in the notes; C70/85, C80/95, C90/105 (EC2), C100/115 (EN 206), C120/135, UHPC C130/145, C150/165, C175/190 (DAfStb / NF P18-470) and C185/200; Ecm by the EC2 expression. Added once per model load by `EnsureMaterials` (`ResetMaterialLibrary` on Load Model); a model material of the same name keeps its E / γ and only gains missing strengths (`FillGaps`). SGD rates from `MaterialCosts` (S355 ≈ 3,655 /t is an estimate — no published Singapore rate found).
+- **Model view tools (SAP2000-style):** Select is the default — a left click selects / deselects the joint or member under the cursor (frames win over coincident cables), a drag on empty space draws a window (left→right: wholly inside; right→left: crossing); the selection is highlighted in amber with an 'n Points, n Frames selected' read-out. Pan (toolbar four-arrow toggle, Structural2DViewer.PanMode) makes the left drag move the model; the middle button always pans. Esc leaves pan mode and clears the selection; Clear Selection on the toolbar. Show Undeformed Shape (frame icon, Display menu, F4) hides the result overlay (MainViewModel.ShowUndeformed) until a result is shown again.
+- **Assign menu (SAP2000 layout):** Joint ▸ Restraints (Pin Supports)…, Frame ▸ Frame Sections…, Cable ▸ Cable Sections…. The section items act on the members selected on the model view (frames / cables only; otherwise a 'select first' message) through `AssignSectionWindow` (Find this property, the library list with the selection's section preselected, Define Frame/Cable Sections…, OK / Close / Apply, double-click = OK) → `MainViewModel.AssignSection` (`PropertiesFor` from the library section; each member keeps its local axis and modifiers; cables also update Tab 03 area / capacity; FEM results cleared; SAP2000 never written).

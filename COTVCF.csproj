@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!-- Platform Configuration -->
@@ -17,13 +17,14 @@
     <!-- Build Output Configuration -->
     
     <!-- Assembly Info -->
-    <!-- AssemblyName stays "COT VCF tools": it is the .exe/.dll file name and the
-         pack:// assembly token used by the test host and skill docs. The product
-         name shown to users is set below and in the UI. -->
-    <AssemblyName>COT VCF tools</AssemblyName>
+    <!-- Brand: Mcotis (Meinhardt Cities of Tomorrow Integrated Structures). AssemblyName is the .exe/.dll file name and the
+         pack:// assembly token used by the theme, the icon and the test host. -->
+    <AssemblyName>Mcotis</AssemblyName>
     <RootNamespace>COT_VCF</RootNamespace>
-    <Title>COT VCF Parametric Automation</Title>
-    <Product>COT VCF Parametric Automation</Product>
+    <Title>Mcotis — Meinhardt Cities of Tomorrow Integrated Structures</Title>
+    <Product>Mcotis</Product>
+    <Description>Mcotis — Meinhardt Cities of Tomorrow Integrated Structures</Description>
+    <Company>Meinhardt</Company>
     <AssemblyVersion>2.0.0.0</AssemblyVersion>
     <FileVersion>2.0.0.0</FileVersion>
     <!-- The app's own logo (the truss glyph of Theme.xaml "AppLogo") for the exe, the taskbar and shortcuts. -->

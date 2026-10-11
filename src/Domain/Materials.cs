@@ -149,3 +149,71 @@ public static class MaterialCosts
 
     private static double Lerp((double X, double Y) a, (double X, double Y) b, double x) => a.Y + (x - a.X) * (b.Y - a.Y) / (b.X - a.X);
 }
+
+/// <summary>
+/// The standard materials Define → Materials offers in every model (source "Library"), with Singapore unit costs from
+/// <see cref="MaterialCosts"/>.
+/// Steel (E 210 GPa, ν 0.3, α 1.2e-5 /°C, 7850 kg/m³ — EN 1993-1-1 3.2.6): S355 = S355J2 to EN 10025-2, S460 = S460M to
+/// EN 10025-4 (heavy / jumbo sections), S690 = S690QL to EN 10025-6 (built-up plate); fy and fu are the nominal values of the
+/// thinnest band, the notes give the reduction with thickness (producer data sheets to the EN standards).
+/// Concrete (ν 0.2, α 1e-5 /°C): C70/85 – C90/105 from EN 1992-1-1 Table 3.1 and C100/115 from EN 206; C120/135 is an
+/// intermediate grade for the project's 120 MPa rate; C130/145, C150/165, C175/190 are the UHPC classes of the German
+/// DAfStb guideline / NF P18-470, and C185/200 a 200 MPa cube UHPC (cylinder by the standard's indicative 15 MPa offset).
+/// Ecm = 22 [(fck + 8)/10]^0.3 GPa throughout — the EC2 expression the column design uses; beyond C90/105 it is an
+/// extrapolation and test data or supplier values should replace it.
+/// </summary>
+public static class MaterialLibrary
+{
+    private const double SteelWeight = 76.98;      // kN/m³ (7850 kg/m³)
+
+    public static IReadOnlyList<MaterialProperty> Standard { get; } = Build();
+
+    private static List<MaterialProperty> Build()
+    {
+        MaterialProperty Steel(string name, string grade, double fy, double fu, string standard, string bands, int color) =>
+            MaterialCosts.WithDefaultCost(new MaterialProperty
+            {
+                Name = name, Kind = MaterialKind.Steel, Grade = grade, Color = color, WeightPerVolume = SteelWeight, ElasticModulus = 210_000_000,
+                PoissonRatio = 0.3, ThermalCoefficient = 1.2e-5, Fy = fy * 1000, Fu = fu * 1000, ExpectedFy = 1.1 * fy * 1000, ExpectedFu = 1.1 * fu * 1000,
+                Source = "Library", Notes = $"{grade} to {standard}. Minimum fy by nominal thickness: {bands}. fu = {fu:0} MPa (thinnest band). E 210 GPa, ν 0.3, α 1.2e-5 /°C (EN 1993-1-1 3.2.6).",
+            });
+        MaterialProperty Concrete(int fck, int cube, string basis, double weight = 25.0) =>
+            MaterialCosts.WithDefaultCost(new MaterialProperty
+            {
+                Name = $"C{fck}/{cube}", Kind = MaterialKind.Concrete, Grade = $"C{fck}/{cube}", Color = fck > 120 ? 0xC00000 : 0xFF0000,
+                WeightPerVolume = weight, ElasticModulus = Math.Round(22e3 * Math.Pow((fck + 8) / 10.0, 0.3)) * 1000, PoissonRatio = 0.2, ThermalCoefficient = 1e-5,
+                Fc = fck * 1000, ExpectedFc = fck * 1000, Source = "Library",
+                Notes = $"fck = {fck} MPa (cylinder), fck,cube = {cube} MPa — {basis}. Ecm = 22 [(fck + 8)/10]^0.3 = {22 * Math.Pow((fck + 8) / 10.0, 0.3):0.0} GPa (EC2 Table 3.1 expression)" +
+                        (fck > 90 ? "; beyond EC2's range — confirm E with test or supplier data." : "."),
+            });
+        return
+        [
+            Steel("S355", "S355J2", 355, 470, "EN 10025-2", "355 (≤ 16 mm), 345 (≤ 40), 335 (≤ 63), 325 (≤ 80), 315 (≤ 100), 295 (≤ 150)", 0xFFFF00),
+            Steel("S460", "S460M", 460, 540, "EN 10025-4", "460 (≤ 16 mm), 440 (≤ 40), 430 (≤ 63), 410 (≤ 80), 400 (≤ 100), 385 (≤ 125); jumbo sections to HISTAR 460 keep 460 to 140 mm", 0xFFA500),
+            Steel("S690", "S690QL", 690, 770, "EN 10025-6", "690 (≤ 50 mm), 650 (≤ 100), 630 (≤ 150)", 0xFF6000),
+            Concrete(70, 85, "EN 1992-1-1 Table 3.1"),
+            Concrete(80, 95, "EN 1992-1-1 Table 3.1"),
+            Concrete(90, 105, "EN 1992-1-1 Table 3.1 (highest EC2 class)"),
+            Concrete(100, 115, "EN 206 (highest EN 206 class)"),
+            Concrete(120, 135, "intermediate high-strength grade (project 120 MPa rate)"),
+            Concrete(130, 145, "UHPC, DAfStb guideline / NF P18-470", 25.5),
+            Concrete(150, 165, "UHPC, DAfStb guideline / NF P18-470", 25.5),
+            Concrete(175, 190, "UHPC, DAfStb guideline / NF P18-470", 25.5),
+            Concrete(185, 200, "UHPC with a 200 MPa cube strength; cylinder by the NF P18-470 indicative 15 MPa offset", 25.5),
+        ];
+    }
+
+    /// <summary><paramref name="material"/> with the strengths and grade it lacks taken from the standard material of the same
+    /// name; its own E, unit weight and cost are kept.</summary>
+    public static MaterialProperty FillGaps(MaterialProperty material)
+    {
+        if (Standard.FirstOrDefault(item => string.Equals(item.Name, material.Name, StringComparison.OrdinalIgnoreCase) && item.Kind == material.Kind) is not { } standard)
+            return material;
+        return material with
+        {
+            Grade = material.Grade.Length > 0 && material.Grade != material.Name ? material.Grade : standard.Grade,
+            Fc = material.Fc ?? standard.Fc, ExpectedFc = material.ExpectedFc ?? standard.ExpectedFc,
+            Fy = material.Fy ?? standard.Fy, Fu = material.Fu ?? standard.Fu, ExpectedFy = material.ExpectedFy ?? standard.ExpectedFy, ExpectedFu = material.ExpectedFu ?? standard.ExpectedFu,
+        };
+    }
+}

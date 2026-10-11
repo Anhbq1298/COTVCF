@@ -21,10 +21,29 @@ public sealed partial class MainViewModel
     /// E and unit weight the members carry; the type is guessed (cables → tendon, C… → concrete, S… → steel).</summary>
     internal void EnsureMaterials()
     {
+        if (Materials.Count == 0) SeedMaterialsFromMembers();
+        // once per model: the standard library (MaterialLibrary) — a model material of the same name only gains the
+        // strengths it lacks; a deleted standard material comes back when a model is next loaded
+        if (!standardMaterialsAdded)
+        {
+            standardMaterialsAdded = true;
+            for (var index = 0; index < Materials.Count; index++)
+                if (MaterialLibrary.FillGaps(Materials[index]) is var filled && filled != Materials[index]) Materials[index] = filled;
+            foreach (var standard in MaterialLibrary.Standard)
+                if (!Materials.Any(material => string.Equals(material.Name, standard.Name, StringComparison.OrdinalIgnoreCase))) Materials.Add(standard);
+        }
         // a material without a unit cost takes the default rate for its type and grade (MaterialCosts)
         for (var index = 0; index < Materials.Count; index++)
             if (MaterialCosts.WithDefaultCost(Materials[index]) is { UnitCost: not null } costed && !ReferenceEquals(costed, Materials[index])) Materials[index] = costed;
-        if (Materials.Count > 0) return;
+    }
+
+    private bool standardMaterialsAdded;
+
+    /// <summary>A new model starts the library again (with the standard materials).</summary>
+    internal void ResetMaterialLibrary() => standardMaterialsAdded = false;
+
+    private void SeedMaterialsFromMembers()
+    {
         foreach (var group in FemSectionProperties.Where(property => !string.IsNullOrWhiteSpace(property.MaterialName))
                      .GroupBy(property => property.MaterialName!, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal))
         {

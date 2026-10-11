@@ -43,7 +43,7 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
 
     public string SuggestFileName(ConfigTabs tabs)
     {
-        var stem = state.Model is { } m && !string.IsNullOrWhiteSpace(m.Path) ? Path.GetFileNameWithoutExtension(m.Path) : "COTVCF";
+        var stem = state.Model is { } m && !string.IsNullOrWhiteSpace(m.Path) ? Path.GetFileNameWithoutExtension(m.Path) : "Mcotis";
         var suffix = tabs switch
         {
             ConfigTabs.Loading => "Tab01_Loading",
@@ -53,7 +53,7 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
             ConfigTabs.Study => "Tab05_Study",
             _ => "Config",
         };
-        return $"{stem}_COTVCF_{suffix}.json";
+        return $"{stem}_Mcotis_{suffix}.json";
     }
 
     // ---------- open ----------
@@ -61,8 +61,8 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
     {
         CotVcfConfigDto? project;
         try { project = JsonSerializer.Deserialize<CotVcfConfigDto>(File.ReadAllText(path), Json); }
-        catch (JsonException) { throw new InvalidDataException("The selected file is not a valid COT VCF configuration file."); }
-        return project ?? throw new InvalidDataException("The selected file is not a valid COT VCF configuration file.");
+        catch (JsonException) { throw new InvalidDataException("The selected file is not a valid Mcotis configuration file."); }
+        return project ?? throw new InvalidDataException("The selected file is not a valid Mcotis configuration file.");
     }
 
     public async Task<ConfigValidationResult> ValidateAsync(CotVcfConfigDto project)

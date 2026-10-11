@@ -48,7 +48,7 @@
 
  <!-- ===================== APPLICATION LOGO ========================= -->
  <!-- Isometric Vierendeel truss with cable stays (src/Presentation/AppLogo.png, 256 px); the .exe icon is AppIcon.ico from the same image. -->
- <BitmapImage x:Key="AppLogo" UriSource="pack://application:,,,/COT VCF tools;component/src/Presentation/AppLogo.png"/>
+ <BitmapImage x:Key="AppLogo" UriSource="pack://application:,,,/Mcotis;component/src/Presentation/AppLogo.png"/>
 
  <!-- ======================== TYPOGRAPHY =========================== -->
  <!-- One type system for the whole app. Two families, one size ramp.   -->
@@ -176,6 +176,52 @@
   <Setter Property="Margin" Value="0,0,4,0"/>
  </Style>
  <!-- Top-bar tool icons (ETABS-like): borderless 26 px buttons with a Segoe Fluent / MDL2 glyph, or short text such as "xz". -->
+ <!-- a toolbar button whose content is a drawing (e.g. the SAP2000-style undeformed-shape frame) -->
+ <Style x:Key="ToolbarDrawingButton" TargetType="Button">
+  <Setter Property="Width" Value="26"/>
+  <Setter Property="Height" Value="26"/>
+  <Setter Property="Margin" Value="1,0"/>
+  <Setter Property="Background" Value="Transparent"/>
+  <Setter Property="Cursor" Value="Hand"/>
+  <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+  <Setter Property="Template">
+   <Setter.Value>
+    <ControlTemplate TargetType="Button">
+     <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="3" BorderThickness="1" BorderBrush="Transparent">
+      <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+     </Border>
+     <ControlTemplate.Triggers>
+      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#1A2E90FA"/><Setter TargetName="b" Property="BorderBrush" Value="#552E90FA"/></Trigger>
+      <Trigger Property="IsPressed" Value="True"><Setter TargetName="b" Property="Background" Value="#332E90FA"/></Trigger>
+      <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
+     </ControlTemplate.Triggers>
+    </ControlTemplate>
+   </Setter.Value>
+  </Setter>
+ </Style>
+ <!-- a toolbar tool that stays on (Select / Pan): pressed look while checked -->
+ <Style x:Key="ToolbarDrawingToggle" TargetType="ToggleButton">
+  <Setter Property="Width" Value="26"/>
+  <Setter Property="Height" Value="26"/>
+  <Setter Property="Margin" Value="1,0"/>
+  <Setter Property="Background" Value="Transparent"/>
+  <Setter Property="Cursor" Value="Hand"/>
+  <Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
+  <Setter Property="Template">
+   <Setter.Value>
+    <ControlTemplate TargetType="ToggleButton">
+     <Border x:Name="b" Background="{TemplateBinding Background}" CornerRadius="3" BorderThickness="1" BorderBrush="Transparent">
+      <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+     </Border>
+     <ControlTemplate.Triggers>
+      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="Background" Value="#1A2E90FA"/><Setter TargetName="b" Property="BorderBrush" Value="#552E90FA"/></Trigger>
+      <Trigger Property="IsChecked" Value="True"><Setter TargetName="b" Property="Background" Value="#332E90FA"/><Setter TargetName="b" Property="BorderBrush" Value="#992E90FA"/></Trigger>
+      <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.35"/></Trigger>
+     </ControlTemplate.Triggers>
+    </ControlTemplate>
+   </Setter.Value>
+  </Setter>
+ </Style>
  <Style x:Key="ToolbarButton" TargetType="Button">
   <Setter Property="Width" Value="26"/>
   <Setter Property="Height" Value="26"/>

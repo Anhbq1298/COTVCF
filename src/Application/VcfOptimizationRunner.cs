@@ -6,7 +6,8 @@ namespace COT_VCF.Application;
 
 /// <summary>Everything a Run → Optimization VCF case needs from the working model, frozen when the run starts.
 /// <see cref="SwapSection"/> gives a member's properties with another section (from a member that has it, or the section
-/// library), as Edit → VCF Geometry assigns sections.</summary>
+/// library), as Edit → VCF Geometry assigns sections. <see cref="CostPerMetre"/> gives a member's cost per metre [SGD/m]
+/// from its section and the materials' unit costs, or why it has none.</summary>
 public sealed record VcfOptimizationInputs(
     VcfGeometryAnalysis Analysis,
     IReadOnlyDictionary<string, FemSectionProperties> Properties,
@@ -22,7 +23,8 @@ public sealed record VcfOptimizationInputs(
     double TargetFitPercent,
     int TargetFitIterations,
     int FrameMeshSegments,
-    bool CableSag);
+    bool CableSag,
+    Func<FemSectionProperties, (double? SgdPerM, string? Missing)>? CostPerMetre = null);
 
 /// <summary>One variable of the search space: its key ("geometry:Bay", "cable:Cable1a-2", "storey:LL", "role:TopChord",
 /// "section:Cable1a-2"), a column label and its values (numbers, or section names).</summary>
@@ -44,7 +46,9 @@ public sealed record VcfOptimizationResult(
     bool PretensionFitted,
     string? Failure,
     double? SpanM = null,
-    double? LimitMm = null)
+    double? LimitMm = null,
+    double? CostSgd = null,
+    string? CostNote = null)
 {
     /// <summary>True when the deflection is within the limit; null when there is no deflection.</summary>
     public bool? Passes => MaxDeflectionMm is { } deflection && LimitMm is { } limit ? deflection <= limit : null;
@@ -136,10 +140,12 @@ public sealed class VcfOptimizationRunner
                 p.BackSpan is null ? null : Geometry(VcfOptimization.BackSpan, p.BackSpan.Value),
                 p.BackStayHeight is null ? null : Geometry(VcfOptimization.BackStay, p.BackStayHeight.Value));
             var problems = VcfGeometry.Validate(model, form);
-            if (problems.Count > 0) return Failed(item, "Invalid geometry: " + string.Join(" ", problems));
+            if (problems.Count > 0) return VcfOptimizationRunner.Failed(item, "Invalid geometry: " + string.Join(" ", problems));
             var geometry = VcfGeometry.Build(model, form);
 
             var properties = Properties(item, model, topology, geometry);
+            var (cost, costNote) = Cost(geometry, properties);
+            VcfOptimizationResult Failed(string reason) => VcfOptimizationRunner.Failed(item, reason) with { CostSgd = cost, CostNote = costNote };
             var loading = Loading(topology, geometry);
             var applied = AppliedPoints(model, topology, geometry);
             var loads = PointLoads(item, geometry, applied);
@@ -152,29 +158,49 @@ public sealed class VcfOptimizationRunner
             var failure = new FailureCapture();
             var runs = fem.Analyze(geometry, model.TopPoints, model.MiddlePoints, model.BottomPoints, supports, [candidate], properties,
                 failure, cancellationToken, inputs.TargetFitPercent, inputs.TargetFitIterations, inputs.FrameMeshSegments, plan, inputs.CableSag);
-            if (runs.Count == 0) return Failed(item, failure.Message ?? "The case did not reach equilibrium.");
+            if (runs.Count == 0) return Failed(failure.Message ?? "The case did not reach equilibrium.");
             var run = runs[0];
             IReadOnlyDictionary<string, FemAnalysisResult> results = run.Results ?? new Dictionary<string, FemAnalysisResult> { [plan.ResultNames.FirstOrDefault() ?? "Result"] = run.Result };
             if (settings.DeflectionResult is { } wanted)
             {
                 var match = results.Keys.FirstOrDefault(key => string.Equals(key, wanted, StringComparison.OrdinalIgnoreCase));
-                if (match is null) return Failed(item, $"'{wanted}' was not solved — tick it to run on Define → Load Cases / Load Combinations.");
+                if (match is null) return Failed($"'{wanted}' was not solved — tick it to run on Define → Load Cases / Load Combinations.");
                 results = new Dictionary<string, FemAnalysisResult> { [match] = results[match] };
             }
             var (name, point, deflection) = results
                 .SelectMany(pair => pair.Value.Joints.Select(joint => (Name: pair.Key, Point: joint.PointName, Mm: -joint.UZM * 1000)))
                 .DefaultIfEmpty(("", "", 0)).MaxBy(entry => entry.Item3);
             var span = bays * form.BayWidth;
-            return new(item, deflection, name, point, results.Values.All(result => result.TargetFitConverged), null, span, span * 1000 / settings.SpanRatio);
+            return new(item, deflection, name, point, results.Values.All(result => result.TargetFitConverged), null, span, span * 1000 / settings.SpanRatio,
+                cost, costNote);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or KeyNotFoundException)
         {
-            return Failed(item, ex.Message);
+            return VcfOptimizationRunner.Failed(item, ex.Message);
         }
     }
 
     private static VcfOptimizationResult Failed(VcfOptimizationCase item, string reason) => new(item, null, null, null, false, reason);
+
+    /// <summary>Total cost of the case's members: Σ cost per metre × member length (frames and cables of the analysed model).
+    /// Null with a note naming the sections / materials without a unit cost.</summary>
+    private (double? Sgd, string? Note) Cost(GeometryModel geometry, IReadOnlyDictionary<string, FemSectionProperties> properties)
+    {
+        if (inputs.CostPerMetre is null) return (null, null);
+        double total = 0;
+        var missing = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var member in geometry.Members)
+        {
+            if (!properties.TryGetValue(member.Name, out var property)) continue;
+            var (start, end) = (geometry.Points[member.Start].Position, geometry.Points[member.End].Position);
+            var length = Math.Sqrt(Math.Pow(end.X - start.X, 2) + Math.Pow(end.Y - start.Y, 2) + Math.Pow(end.Z - start.Z, 2));
+            var (rate, why) = inputs.CostPerMetre(property);
+            if (rate is { } sgdPerM) total += sgdPerM * length;
+            else missing.Add(why ?? property.SectionName ?? member.Name);
+        }
+        return missing.Count == 0 ? (total, null) : (null, "No unit cost for " + string.Join(", ", missing));
+    }
 
     private sealed class FailureCapture : IProgress<FemProgress>
     {

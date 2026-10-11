@@ -75,6 +75,18 @@ internal sealed class MegaDesigner : ColumnDesigner
     /// <summary>The section-level results (anchors, plates, stiffness) — NEd only matters for the member checks.</summary>
     private MegaColumnResult? Section(double l0) => MegaColumnEngine.Calculate(EngineInput(1, 0, Math.Max(l0, 1), S.Fy));
 
+    /// <summary>y-y: the CTBUH A–C–D–B polygon (closed to −Nt,Rd in tension as the design does) and, dashed, the exact plastic
+    /// curve; z-z: the exact plastic curve.</summary>
+    public override InteractionDiagram Interaction()
+    {
+        var basis = $"CTBUH 2016 §4 simplified method (A–C–D–B), 0.85 η fcd = {F(fc, 1)}, fyd = {F(fyd, 1)}, fsd = {F(fsd, 1)} MPa";
+        if (Section(1) is not { } m) return Diagram(majorCurve, minorCurve, basis);
+        var ntRd = (Aa * fyd + As * fsd) / 1000;
+        IReadOnlyList<(double, double)> polygon = [(-ntRd, 0), .. m.Points.OrderBy(point => point.N).Select(point => (point.N, point.M))];
+        var diagram = Diagram(majorCurve, minorCurve, basis, new InteractionSeries("y-y (in-plane), CTBUH A–C–D–B", polygon));
+        return diagram with { NplRdKN = m.NplRd, NtRdKN = ntRd, MplYRdKNm = m.MplRd };
+    }
+
     public override void Describe(StringBuilder r)
     {
         r.AppendLine("SECTION AND MATERIALS");

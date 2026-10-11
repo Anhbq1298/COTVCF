@@ -337,6 +337,52 @@ public partial class MainWindow : Window
         sectionsWindow.Activate();
     }
 
+    // Display → Show Undeformed Shape (toolbar frame icon, F4, as SAP2000): clear the result overlay, keep the results
+    private void ShowUndeformed_Click(object sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.ShowUndeformedShape();
+
+    // Clear Selection (toolbar) — the model view's selected joints and members
+    private void ClearSelection_Click(object sender, RoutedEventArgs e) => SharedViewer.ClearSelection();
+
+    // Assign → Frame / Cable → Sections: assign a library section to the members selected on the model view
+    private void AssignSections_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        var cable = (sender as FrameworkElement)?.Tag as string == "Cable";
+        var kinds = vm.FemSectionProperties.ToDictionary(property => property.MemberName, property => property.IsCable, StringComparer.Ordinal);
+        var chosen = SharedViewer.SelectedMembers.Where(name => kinds.TryGetValue(name, out var isCable) && isCable == cable).ToArray();
+        if (chosen.Length == 0)
+        {
+            MessageBox.Show(this, $"Select one or more {(cable ? "cables" : "frames")} on the model view first (click them, or drag a window), then choose Assign → {(cable ? "Cable → Cable" : "Frame → Frame")} Sections.",
+                cable ? "Assign Cable Sections" : "Assign Frame Sections", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        new AssignSectionWindow(vm, chosen, cable) { Owner = this }.ShowDialog();
+    }
+
+    // Select tool: always returns to selecting (clicking it while on must not switch to pan)
+    private void SelectTool_Click(object sender, RoutedEventArgs e) => SharedViewer.PanMode = false;
+
+    protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.F4 && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.None &&
+            DataContext is MainViewModel { HasWorkingModel: true } vm)
+        {
+            vm.ShowUndeformedShape();
+            e.Handled = true;
+            return;
+        }
+        // Esc, as SAP2000: leave pan mode and clear the model view's selection (not while typing in a field or list)
+        if (e.Key == System.Windows.Input.Key.Escape && System.Windows.Input.Keyboard.FocusedElement is not (System.Windows.Controls.Primitives.TextBoxBase or System.Windows.Controls.ComboBox) &&
+            (SharedViewer.PanMode || SharedViewer.SelectedMembers.Count + SharedViewer.SelectedJoints.Count > 0))
+        {
+            SharedViewer.PanMode = false;
+            SharedViewer.ClearSelection();
+            e.Handled = true;
+            return;
+        }
+        base.OnPreviewKeyDown(e);
+    }
+
     // Display → View Options: dimensions and FEM overlays in their own window
     private ViewOptionsWindow? viewOptionsWindow;
     private void ViewOptions_Click(object sender, RoutedEventArgs e)
@@ -352,7 +398,7 @@ public partial class MainWindow : Window
         viewOptionsWindow.Activate();
     }
 
-    // Edit → VCF Geometry: parameters and sections of the VCF system with a live preview
+    // Edit → VCF System: parameters and sections of the VCF system with a live preview
     private VcfGeometryWindow? vcfGeometryWindow;
     private void VcfGeometry_Click(object sender, RoutedEventArgs e)
     {

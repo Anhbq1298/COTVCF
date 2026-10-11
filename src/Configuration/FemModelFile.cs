@@ -57,7 +57,7 @@ public sealed class FemSettingsDto
 
 public static class FemModelFile
 {
-    public const string Filter = "COT VCF FEM Model (*.cotfem.json)|*.cotfem.json|JSON Files (*.json)|*.json";
+    public const string Filter = "Mcotis FEM Model (*.cotfem.json)|*.cotfem.json|JSON Files (*.json)|*.json";
     public const string Extension = ".cotfem.json";
 
     private static readonly JsonSerializerOptions Json = new()
@@ -98,9 +98,9 @@ public static class FemModelFile
     {
         FemModelFileDto? model;
         try { model = JsonSerializer.Deserialize<FemModelFileDto>(text, Json); }
-        catch (JsonException ex) { throw new InvalidDataException($"The selected file is not a valid COT VCF FEM model ({ex.Message})."); }
+        catch (JsonException ex) { throw new InvalidDataException($"The selected file is not a valid Mcotis FEM model ({ex.Message})."); }
         if (model is null || model.Format != FemModelFileDto.FormatName)
-            throw new InvalidDataException("The selected file is not a COT VCF FEM model. Use Save Model on 07 FEM → Inputs to create one.");
+            throw new InvalidDataException("The selected file is not a Mcotis FEM model. Use Save Model on 07 FEM → Inputs to create one.");
         if (model.Version > FemModelFileDto.CurrentVersion)
             throw new InvalidDataException($"The FEM model was saved by a newer version of the app (format {model.Version}).");
         if (model.Model is null || model.Geometry is not { Points.Count: > 0 } || model.Baseline is not { Points.Count: > 0 } || model.Project is null)

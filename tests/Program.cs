@@ -43,7 +43,7 @@ internal static class Program
             if (args.Contains("--study-ui"))
             {
                 var app = new System.Windows.Application();
-                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/COT VCF tools;component/src/Presentation/Theme.xaml", UriKind.Relative) });
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/src/Presentation/Theme.xaml", UriKind.Relative) });
                 var bindingLog = new StringWriter();
                 var bindingListener = new TextWriterTraceListener(bindingLog);
                 PresentationTraceSources.DataBindingSource.Listeners.Add(bindingListener);
@@ -276,11 +276,11 @@ internal static class Program
                 Assert(!window.SharedViewer.ShowDimensions, "Display -> Dimensions turns the dimension overlay off");
                 dimensionsItem.IsChecked = true;
                 Assert(window.Icon is System.Windows.Media.Imaging.BitmapFrame { Decoder.Frames.Count: >= 8 } && ReferenceEquals(window.Icon, AppIcon.Window), "The window icon is the software logo, from the multi-size icon file");
-                OpenMenu("Edit", "VCF Geometry");
+                OpenMenu("Edit", "VCF System");
                 var vcfWindow = window.OwnedWindows.OfType<VcfGeometryWindow>().Single();
                 vcfWindow.UpdateLayout();
                 Assert(vcfWindow.IsVisible && vcfWindow.Preview.Model.Points.Count == uiState.Geometry.Points.Count,
-                    "Edit -> VCF Geometry opens its own window with a preview of the model");
+                    "Edit -> VCF System opens its own window with a preview of the model");
                 vcfWindow.Close();
                 // Cable Force / Storey Force panes on the default model (10 bays of 10 m, B 12 m, 10 storeys)
                 var (defaultVm, _, _, _) = FemModelFileChecks.DefaultModelApp();
@@ -412,7 +412,7 @@ internal static class Program
                 cftForm.UpdateLayout();
                 Assert(cftForm.Title == "Concrete Filled Tube (CFT) Section" &&
                        FindVisuals<GroupBox>(cftForm).Select(box => box.Header as string).Where(header => header is { Length: > 0 })
-                           .SequenceEqual(["Steel Tube", "Materials", "Design Data (EN 1994-1-1 §6.7.3.3)", "Section Limits", "Property Modifiers", "Section", "Composite Properties", "Material Quantity and Cost (per m)"]) &&
+                           .SequenceEqual(["Steel Tube", "Materials", "Design Data (EN 1994-1-1 §6.7.3.3)", "Section Limits", "Property Modifiers", "Section", "Composite Properties", "Material Quantity and Cost (per m)", "N–M Interaction (Design algorithm)"]) &&
                        cftForm.Analysis is { Cost.CostPerM: > 0 },
                     "the CFT form shows the tube, materials, design data, section limits, drawing, composite properties and cost per metre");
                 void SaveForm(Window form, string file)
@@ -423,6 +423,9 @@ internal static class Program
                     using var formStream = File.Create(Path.Combine(".work", file)); formEncoder.Save(formStream);
                 }
                 SaveForm(cftForm, "cft-section.png");
+                Assert(cftForm.Interaction is { Series.Count: 2, NplRdKN: > 0, MplYRdKNm: > 0 } cftNm && FindVisuals<COT_VCF.Presentation.Controls.InteractionChart>(cftForm).Single().Diagram == cftNm &&
+                       Math.Abs(cftNm.NplRdKN - COT_VCF.Application.Design.ColumnDesignEngine.Interaction(defaultVm.DesignBasis(ColumnDesignType.ConcreteFilledTube) with { Section = cftForm.Read(out _)!.Composite! }).NplRdKN) < 1e-6,
+                    "the CFT form draws the N–M interaction (y-y and z-z) from the Design menu's algorithm");
                 cftForm.SetField("TubeThickness", "40");
                 var thick = cftForm.Analysis;
                 cftForm.SetTubeShape(TubeShape.Circular);
@@ -453,6 +456,9 @@ internal static class Program
                        FindVisuals<TextBlock>(megaForm).Any(text => text.Text.StartsWith("Mpl,y,Rd", StringComparison.Ordinal)),
                     "the mega column form takes the outline, 4 profiles at ±dsx / ±dsy and the bars, with the CTBUH Mpl and the cost per metre");
                 SaveForm(megaForm, "mega-section.png");
+                Assert(megaForm.Interaction is { Series.Count: 3 } megaNm && megaNm.Series[0].Name.Contains("CTBUH", StringComparison.Ordinal) && megaNm.Series[1].Dashed &&
+                       megaNm.Series[0].Points.Count == 5 && megaNm.Series[0].Points[0].NKN < 0,
+                    "the mega column form draws the CTBUH A–C–D–B polygon with the exact plastic curve dashed, and z-z");
                 megaForm.SetField("ProfileOffsetY", "1000");
                 Assert(megaForm.Read(out _) is null, "the mega column form refuses profiles outside the reinforcement cage");
                 megaForm.Close();
@@ -543,7 +549,7 @@ internal static class Program
                        FindVisuals<DataGrid>(window).Any(grid => grid.IsVisible && ReferenceEquals(grid.ItemsSource, vm.FemCaseRows)) &&
                        FindVisuals<DataGrid>(window).Any(grid => grid.IsVisible && ReferenceEquals(grid.ItemsSource, vm.FemCombinationRows)),
                     "Define -> Load Cases / Load Combinations opens the case and combination tables");
-                OpenMenu("Assign", "Joint Restraints");
+                OpenSubMenu("Assign", "Joint", "Restraints");
                 Assert(vm.PaneMenu == "Assign" && vm.FemPane == MainViewModel.FemPaneRestraints &&
                        FindVisuals<TextBlock>(window).Any(text => text.IsVisible && text.Text == vm.FemPinSupportSummary),
                     "Assign -> Joint Restraints shows the auto-detected pin supports");
@@ -593,6 +599,45 @@ internal static class Program
                 showResults.ApplySelection();
                 Assert(vm.FemResultMode == FemResultMode.BendingMoment && vm.PaneTitle == "BENDING MOMENTS" && ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result),
                     "Show Results → Apply draws the chosen output on the model view");
+                // SAP2000-style selection: Select is the default tool; a click selects a member / joint, a window selects many; Pan moves
+                var canvas = window.SharedViewer.Canvas;
+                canvas.UpdateLayout();
+                Assert(!window.SharedViewer.PanMode && FindVisuals<System.Windows.Controls.Primitives.ToggleButton>(window).Any(t => System.Windows.Automation.AutomationProperties.GetName(t) == "Select" && t.IsChecked == true),
+                    "the model view starts in Select mode (no click-drag panning)");
+                var (memberName, line) = canvas.MemberScreenLines.First(item => item.Value.Kind == COT_VCF.Domain.MemberKind.Frame && (item.Value.End - item.Value.Start).Length > 40);
+                var middle = line.Start + (line.End - line.Start) / 2;
+                var nearJoint = canvas.JointScreenPoints.Values.Any(point => (point - middle).Length <= 6);
+                Assert(nearJoint || canvas.SelectAt(middle) && canvas.SelectedMembers.SequenceEqual([memberName]), $"a click on frame {memberName} selects it [{string.Join(",", canvas.SelectedMembers)}|{string.Join(",", canvas.SelectedJoints)}]");
+                canvas.ClearSelection();
+                canvas.SelectWindow(new Point(0, 0), new Point(canvas.ActualWidth, canvas.ActualHeight));
+                Assert(canvas.SelectedJoints.Count == canvas.JointScreenPoints.Count && canvas.SelectedMembers.Count == canvas.MemberScreenLines.Count,
+                    "a window around the whole model selects every joint and member");
+                FindVisuals<System.Windows.Controls.Primitives.ToggleButton>(window).Single(t => System.Windows.Automation.AutomationProperties.GetName(t) == "Pan").IsChecked = true;
+                Assert(window.SharedViewer.PanMode && canvas.PanMode && canvas.Cursor == System.Windows.Input.Cursors.SizeAll, "the Pan tool switches the model view to panning");
+                window.SharedViewer.PanMode = false;
+                // Assign → Frame → Frame Sections on the selection (as SAP2000)
+                canvas.ClearSelection();
+                defaultVm.EnsureSections();
+                var target = defaultVm.FemSectionProperties.First(p => !p.IsCable);
+                var assignTo = defaultVm.FrameSections.Select(section => section.Name).First(name => name != target.SectionName);
+                var assign = new AssignSectionWindow(defaultVm, [target.MemberName], cable: false) { Owner = window };
+                assign.Show();
+                assign.Choose(assignTo);
+                var assignedSection = defaultVm.FrameSections.Single(section => section.Name == assignTo);
+                Assert(assign.Apply() && assign.Assigned == 1 && defaultVm.FemSectionProperties.Single(p => p.MemberName == target.MemberName) is { } after &&
+                       after.SectionName == assignTo && Math.Abs(after.GrossAreaM2 - assignedSection.Values().Area) < 1e-9 &&
+                       defaultVm.FemSectionProperties.Where(p => p.MemberName != target.MemberName).All(p => p.SectionName != null),
+                    $"Assign → Frame → Frame Sections gives the selected frame {target.MemberName} the section {assignTo} (its area reaches the FEM)");
+                assign.Close();
+                Assert(TopMenu("Assign").Items.OfType<MenuItem>().Select(item => (item.Header as string)?.Replace("_", "")).SequenceEqual(["Joint", "Frame", "Cable"]),
+                    "Assign is organised as SAP2000: Joint, Frame, Cable");
+                canvas.ClearSelection();
+                Assert(canvas.SelectedMembers.Count == 0 && canvas.SelectedJoints.Count == 0 && !window.SharedViewer.PanMode, "Clear Selection empties the selection; Select returns from pan");
+                Tool("Show Undeformed Shape").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Assert(vm.ShowUndeformed && vm.SharedViewerFemResult is null && vm.FemRuns.Contains(demoFemRun) && demoFemRun.Result is not null,
+                    "Show Undeformed Shape (frame icon) clears the result display and keeps the results");
+                showResults.ApplySelection();
+                Assert(!vm.ShowUndeformed && ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result), "Show Results draws the result again after the undeformed shape");
                 showResults.Outputs.SelectedIndex = 4;
                 showResults.ApplySelection();
                 showResults.Close();
@@ -1024,7 +1069,7 @@ internal static class Program
                 var bindingListener = new TextWriterTraceListener(bindingLog);
                 PresentationTraceSources.DataBindingSource.Listeners.Add(bindingListener);
                 PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
-                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/COT VCF tools;component/src/Presentation/Theme.xaml", UriKind.Relative) });
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/src/Presentation/Theme.xaml", UriKind.Relative) });
                 var uiState = new ApplicationState();
                 var uiWorkflow = new WorkflowService(sap, uiState);
                 uiWorkflow.ConnectAsync().GetAwaiter().GetResult();
@@ -1056,7 +1101,7 @@ internal static class Program
             if (args.Contains("--selection-ui"))
             {
                 var app = new System.Windows.Application();
-                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/COT VCF tools;component/src/Presentation/Theme.xaml", UriKind.Relative) });
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/src/Presentation/Theme.xaml", UriKind.Relative) });
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
                 timer.Tick += (_, _) =>
                 {

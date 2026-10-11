@@ -4,7 +4,7 @@ using COT_VCF.Geometry;
 
 namespace COT_VCF.Presentation;
 
-// ---- Edit → VCF Geometry: rebuild the working model from VCF parameters and member sections ----
+// ---- Edit → VCF System: rebuild the working model from VCF parameters and member sections ----
 // Apply changes the model the app works with (viewer, Tabs 01–03 coordinates, the next FEM run). SAP2000 is never written:
 // a connected session switches to an offline model, and Connect SAP / Refresh brings the SAP model back.
 public sealed partial class MainViewModel
@@ -32,7 +32,7 @@ public sealed partial class MainViewModel
         {
             if (State.IsSapConnected && (FemSectionProperties.Count == 0 || FemPatternRows.Count == 0))
             {
-                Message = "Reading sections and loading from SAP2000 before applying the VCF geometry (read-only)…";
+                Message = "Reading sections and loading from SAP2000 before applying the VCF system (read-only)…";
                 await ReadAndDisplayFemPropertiesAsync(resetLoadRows: true);
             }
             if (FemSectionProperties.Count == 0)
@@ -59,7 +59,7 @@ public sealed partial class MainViewModel
                 isDefaultModel = false;
                 State.Connection = "Offline model";
             }
-            const string edited = " · VCF geometry";
+            const string edited = " · VCF system";
             var name = offlineModelPath is null ? State.Model?.Name ?? "Model" : System.IO.Path.GetFileName(offlineModelPath);
             offlineModelPath = name.EndsWith(edited, StringComparison.Ordinal) ? name : name + edited;
 
@@ -100,13 +100,13 @@ public sealed partial class MainViewModel
 
             ClearFemResults();
             RegenerateStudyPreview();
-            FemProgressText = $"VCF geometry applied · {FemCandidateSummary}. Run Analysis uses the edited model; SAP2000 is unchanged.";
-            Message = "VCF geometry applied to the working model (SAP2000 unchanged; Connect SAP restores the SAP model).";
+            FemProgressText = $"VCF system applied · {FemCandidateSummary}. Run Analysis uses the edited model; SAP2000 is unchanged.";
+            Message = "VCF system applied to the working model (SAP2000 unchanged; Connect SAP restores the SAP model).";
         }
         catch (Exception ex)
         {
             Message = ex.Message;
-            Warn("VCF Geometry", ex.Message);
+            Warn("VCF System", ex.Message);
             if (ex is System.Runtime.InteropServices.COMException) State.Connection = "Connection Lost";
         }
         finally

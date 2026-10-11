@@ -260,11 +260,22 @@ internal static class FemModelFileChecks
     {
         var (vm, state, _, warnings) = DefaultModelApp();
         vm.EnsureMaterials();
-        Check(vm.Materials.Select(material => material.Name).Order().SequenceEqual(["C70/85", "HDPE Galvanised Strand T15.7 – Y1860S7", "S460"]) &&
-              vm.Materials.Single(material => material.Name == "S460") is { Kind: MaterialKind.Steel, ElasticModulus: > 209_999_999 and < 210_000_001 } &&
-              vm.Materials.Single(material => material.Name.StartsWith("HDPE", StringComparison.Ordinal)).Kind == MaterialKind.Tendon &&
-              vm.MaterialUsage("S460") == 30 && vm.Materials.All(material => material.Fc is null && material.Fy is null),
+        Check(vm.Materials.Take(3).Select(material => material.Name).SequenceEqual(["C70/85", "HDPE Galvanised Strand T15.7 – Y1860S7", "S460"]) &&
+              vm.Materials.Single(material => material.Name == "S460") is { Kind: MaterialKind.Steel, ElasticModulus: > 209_999_999 and < 210_000_001, Source: "Model" } &&
+              vm.Materials.Single(material => material.Name.StartsWith("HDPE", StringComparison.Ordinal)) is { Kind: MaterialKind.Tendon, Fy: null } &&
+              vm.MaterialUsage("S460") == 30,
             "without SAP2000 the material library starts from the member properties (C70/85 concrete, S460 steel, the strand as tendon)");
+        string[] standard = ["S355", "S460", "S690", "C70/85", "C80/95", "C90/105", "C100/115", "C120/135", "C130/145", "C150/165", "C175/190", "C185/200"];
+        Check(MaterialLibrary.Standard.Select(material => material.Name).SequenceEqual(standard) && standard.All(name => vm.Materials.Count(material => material.Name == name) == 1) &&
+              vm.Materials.Count == 3 + standard.Length - 2 &&
+              vm.Materials.Single(material => material.Name == "S460") is { Fy: 460_000, Fu: 540_000, Grade: "S460M", UnitCost: 4860 } &&
+              vm.Materials.Single(material => material.Name == "C70/85") is { Fc: 70_000, ElasticModulus: > 40_999_999 and < 41_000_001, Source: "Model" } &&
+              vm.Materials.Single(material => material.Name == "S355") is { Fy: 355_000, Fu: 470_000, ElasticModulus: 210_000_000, Source: "Library", UnitCost: > 3600 and < 3700 } &&
+              vm.Materials.Single(material => material.Name == "S690") is { Fy: 690_000, Fu: 770_000, UnitCost: 7500 } &&
+              vm.Materials.Single(material => material.Name == "C90/105") is { Fc: 90_000, ElasticModulus: 43_631_000 } c90 && Math.Abs(c90.UnitCostPerCubicMetre!.Value - 280) < 1e-6 &&
+              Math.Abs(vm.Materials.Single(material => material.Name == "C150/165").UnitCostPerCubicMetre!.Value - 1200) < 1e-6 &&
+              vm.Materials.Single(material => material.Name == "C185/200") is { Fc: 185_000, WeightPerVolume: 25.5, UnitCost: > 0 },
+            "Define → Materials offers the standard S355 / S460 / S690 and C70/85 … C185/200 with strengths, EC2 Ecm and SGD costs; the model's C70/85 and S460 keep their E and gain fck / fy");
 
         // unit costs (SGD): project rates, BCA averages, estimates
         double PerTonne(MaterialProperty material) => MaterialCosts.Suggest(material).PerTonne ?? double.NaN;
@@ -499,6 +510,25 @@ internal static class FemModelFileChecks
               vm.VcfOptimizationBest.Contains("span / 250", StringComparison.Ordinal),
             $"The deflection is read from '{sls}' (the default) and matches Run FEM Analysis there ({slsRow.Deflection} mm); " +
             $"checked against span / 250 = 100 m / 250 = {slsRow.Limit} mm → δ / limit {slsRow.Ratio} {slsRow.Check}");
+
+        // total cost = Σ gross area × material unit cost per m³ × member length, recomputed here from the same case geometry
+        var caseGeometry = VcfGeometry.Build(analysis, deeper);
+        var byMember = vm.FemSectionProperties.ToDictionary(property => property.MemberName, StringComparer.Ordinal);
+        double expectedCost = 0;
+        foreach (var member in caseGeometry.Members.Where(member => byMember.ContainsKey(member.Name)))
+        {
+            var property = byMember[member.Name];
+            var rate = vm.Materials.Single(material => material.Name == property.MaterialName).UnitCostPerCubicMetre!.Value;
+            var (a, b) = (caseGeometry.Points[member.Start].Position, caseGeometry.Points[member.End].Position);
+            expectedCost += (property.GrossAreaM2 > 0 ? property.GrossAreaM2 : property.AreaM2) * rate *
+                Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y) + (b.Z - a.Z) * (b.Z - a.Z));
+        }
+        Check(slsRow.CostSgd is { } slsCost && Math.Abs(slsCost - expectedCost) < 1e-6 * expectedCost && !slsRow.Status.Contains("No unit cost", StringComparison.Ordinal) &&
+              rows.Single(row => row.Case == 3).CostSgd > rows.Single(row => row.Case == 1).CostSgd &&
+              rows.Single(row => row.Case == 1).CostSgd == rows.Single(row => row.Case == 2).CostSgd &&
+              vm.VcfOptimizationBest.Contains("cheapest passing", StringComparison.Ordinal) == (slsRow.Check == "OK"),
+            $"The run reports the total cost of the system: Σ gross area × material SGD/m³ × member length = SGD {slsRow.Cost}; " +
+            $"12 m bays cost more than 10 m (SGD {rows.Single(row => row.Case == 3).Cost} vs {rows.Single(row => row.Case == 1).Cost}); the load does not change it");
 
         // another number of bays runs on the regenerated model
         var bayRows = Optimize(vm, Settings(new VcfRange(8, 12, 4), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1)));
