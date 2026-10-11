@@ -13,7 +13,7 @@
   </DockPanel>
   <TextBlock DockPanel.Dock="Bottom" Text="{Binding VcfOptimizationBest}" FontWeight="SemiBold" Margin="0,6,0,0" TextWrapping="Wrap"/>
   <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Hint}" Margin="0,6,0,0"
-             Text="Max defl. = largest downward joint displacement in the result chosen under Deflection Check (Result column); Limit = span between the mega columns / ratio; Check OK when δ ≤ limit. Total cost = Σ member cost per metre × length (gross area × material unit cost, as on Define → Materials; composite sections from their concrete, steel and reinforcement). Run → Analysis Options and Define → Load Cases apply. Each case is built in memory; the working model and SAP2000 are not changed."/>
+             Text="Max defl. = largest downward joint displacement in the result chosen under Deflection Check (Result column); Limit = span between the mega columns / ratio; Uplift = largest upward displacement of a truss chord point there (the span — not the end frames); Check OK when δ ≤ limit and uplift ≤ its limit. Total cost = Σ member cost per metre × length (gross area × material unit cost, as on Define → Materials; composite sections from their concrete, steel and reinforcement). Run → Analysis Options and Define → Load Cases apply. Each case is built in memory; the working model and SAP2000 are not changed."/>
   <DataGrid x:Name="ResultsGrid" ItemsSource="{Binding VcfOptimizationRows}" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False"
             HeadersVisibility="Column" SelectionMode="Single" AutomationProperties.Name="Optimization results"/>
  </DockPanel>

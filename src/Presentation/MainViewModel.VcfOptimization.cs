@@ -8,10 +8,11 @@ using COT_VCF.Geometry;
 namespace COT_VCF.Presentation;
 
 /// <summary>One analysed case in the Optimization VCF results: the values of the varying inputs, then the outcome — the
-/// deflection, the span and limit span / ratio, the utilisation δ / limit and the check.</summary>
+/// deflection, the span and limit span / ratio, the utilisation δ / limit, the uplift of the span (with the chord point
+/// that rises most) and the check of both.</summary>
 public sealed record VcfOptimizationRow(long Case, IReadOnlyList<string> Values, double? MaxDeflectionMm, string Deflection,
     string Governing, string Point, string Status, string Span = "", string Limit = "", double? Utilisation = null, string Ratio = "",
-    string Check = "", double? CostSgd = null, string Cost = "");
+    string Check = "", double? CostSgd = null, string Cost = "", double? MaxUpliftMm = null, string Uplift = "", string UpliftPoint = "");
 
 // ---- Run → Optimization VCF: the search space of the VCF system and its run ----
 // The settings are kept in memory. Run walks every combination with the internal FEM (VcfOptimizationRunner) and lists the
@@ -129,7 +130,7 @@ public sealed partial class MainViewModel
             VcfOptimizationRow? best = null;
             var passing = 0;
             VcfOptimizationRow? cheapest = null;
-            var criterion = $"δ in {settings.DeflectionResult ?? "every solved result"} ≤ span / {settings.SpanRatio:0.###}";
+            var criterion = $"δ in {settings.DeflectionResult ?? "every solved result"} ≤ span / {settings.SpanRatio:0.###} and uplift ≤ {settings.UpliftLimitMm:0.###} mm";
             var progress = new Progress<VcfOptimizationResult>(result =>
             {
                 analysed++;
@@ -143,7 +144,10 @@ public sealed partial class MainViewModel
                     result.LimitMm is { } limit ? limit.ToString("0.0", CultureInfo.CurrentCulture) : "",
                     utilisation, utilisation is { } u ? u.ToString("0.00", CultureInfo.CurrentCulture) : "",
                     result.Passes switch { true => "OK", false => "NG", null => "—" },
-                    result.CostSgd, result.CostSgd is { } sgd ? sgd.ToString("N0", CultureInfo.CurrentCulture) : "—");
+                    result.CostSgd, result.CostSgd is { } sgd ? sgd.ToString("N0", CultureInfo.CurrentCulture) : "—",
+                    result.MaxUpliftMm, result.MaxUpliftMm is { } up ? up.ToString("0.0", CultureInfo.CurrentCulture) : "—", result.UpliftPoint ?? "");
+                if (result.UpliftPasses == false)
+                    row = row with { Status = row.Status + $" · uplift {row.Uplift} mm at {row.UpliftPoint} is above the {settings.UpliftLimitMm:0.###} mm limit" };
                 if (result.CostNote is { } costNote) row = row with { Status = row.Status + " · " + costNote };
                 VcfOptimizationRows.Add(row);
                 if (row.MaxDeflectionMm is { } value && (best?.MaxDeflectionMm is not { } least || value < least)) best = row;

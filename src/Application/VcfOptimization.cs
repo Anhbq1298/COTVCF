@@ -133,6 +133,11 @@ public sealed record VcfOptimizationSettings(
     /// <summary>Deflection limit = span / <see cref="SpanRatio"/> (span between the mega columns = bays × bay width).</summary>
     public double SpanRatio { get; init; } = VcfOptimization.DefaultSpanRatio;
 
+    /// <summary>Uplift limit [mm]: the largest upward displacement a truss chord point (top / middle / bottom chord) may
+    /// have in the deflection result. 0 allows none — the check that stops a pretension that lifts the span above its
+    /// unloaded position, which the downward limit cannot see.</summary>
+    public double UpliftLimitMm { get; init; } = VcfOptimization.DefaultUpliftLimitMm;
+
     /// <summary>Force variants: the cable steps (all cables step together) × the storey force range counts.</summary>
     public long ForceCount => StoreyLoads.Values.Aggregate((long)CableForces.StepCount, (product, range) => Saturating(product, range.Count));
 
@@ -177,6 +182,9 @@ public static class VcfOptimization
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal));
 
     public const double DefaultSpanRatio = 250;
+    public const double DefaultUpliftLimitMm = 0;
+    /// <summary>An uplift within this of the limit passes: it reads the same at the 0.1 mm the results show.</summary>
+    public const double UpliftToleranceMm = 0.05;
 
     /// <summary>The deflection result to start with: the first solved result named SLS, else the first combination, else the
     /// first case.</summary>
@@ -356,6 +364,7 @@ public static class VcfOptimization
         }
         problems.AddRange(ValidateForces(settings));
         if (!double.IsFinite(settings.SpanRatio) || settings.SpanRatio <= 0) problems.Add("Deflection limit: span / ratio needs a ratio greater than zero.");
+        if (!double.IsFinite(settings.UpliftLimitMm) || settings.UpliftLimitMm < 0) problems.Add("Uplift limit: enter a number of at least 0 mm.");
         if (problems.Count > 0) return problems;
         var bays = settings.Geometry[Bays.Key];
         if (bays.Min < 2 || bays.Max > 200) problems.Add("Number of bays: the range must lie within 2 … 200.");

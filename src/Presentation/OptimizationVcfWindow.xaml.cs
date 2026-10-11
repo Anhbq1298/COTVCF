@@ -163,6 +163,7 @@ public partial class OptimizationVcfWindow : Window
             var chosen = kept?.DeflectionResult ?? VcfOptimization.DefaultDeflectionResult(caseNames, combinationNames);
             DeflectionResultCombo.SelectedItem = chosen is not null && DeflectionResultCombo.Items.Contains(chosen) ? chosen : null;
             SpanRatioBox.Text = (kept?.SpanRatio ?? VcfOptimization.DefaultSpanRatio).ToString("0.###", CultureInfo.CurrentCulture);
+            UpliftLimitBox.Text = (kept?.UpliftLimitMm ?? VcfOptimization.DefaultUpliftLimitMm).ToString("0.###", CultureInfo.CurrentCulture);
 
             if (frames.Count == 0 && cables.Count == 0)
                 SectionHint.Text = "No sections yet — use File → Read FEM Properties from SAP or Define → Section Properties to add candidates.";
@@ -296,6 +297,7 @@ public partial class OptimizationVcfWindow : Window
     {
         DeflectionResult = DeflectionResultCombo.SelectedItem as string,
         SpanRatio = Number(SpanRatioBox),
+        UpliftLimitMm = Number(UpliftLimitBox),
     };
 
     private void Refresh()

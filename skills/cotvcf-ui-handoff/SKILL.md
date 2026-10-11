@@ -126,8 +126,16 @@ earlier tall-header / large-button / blue-block look.
     read from (`VcfOptimizationSettings.DeflectionResult`, a load case or combination set to run; default the first named
     SLS — on the default model the default setup's staged `SLS: 1.0DL+1.0LL`, i.e. the prestressed structure; with SAP
     Cases it is SAP2000's un-prestressed `NL SLS001: 1.0DL+1.0LL`, which deflects about ten times more) and the limit span / `SpanRatio` (default 250;
-    span = bays × bay width between the mega columns). Each row: the varying inputs, **max downward deflection** in that
-    result and its point, span, limit, δ / limit, Check OK / NG, status (failures such as non-convergence or an unsolved
+    span = bays × bay width between the mega columns), and the **uplift limit** (`UpliftLimitMm`, default 0 mm — asked for
+    by the user, 2026-10-11): the largest upward displacement a truss chord point (top / middle / bottom chord — the span)
+    may have in that result. Max δ is the largest downward displacement of *any* joint, so once the fan lifts mid-span it
+    reads the settlement of the mega-column tops and passes span / ratio however far the span has risen (default model at
+    its own forces: 39.6 mm down at TTrPt001, mid-span 122.2 mm up) — the uplift limit is what fails such a case. It is
+    measured on the chord points only: the outer column tops a back-stay pulls up (201 / 204, ~2 mm) are not the span and
+    would fail every case at 0 mm. An uplift within `VcfOptimization.UpliftToleranceMm` (0.05 mm, the 0.1 mm the table
+    shows) of the limit passes. Each row: the varying inputs, **max downward deflection** in that
+    result and its point, span, limit, δ / limit, **uplift**, Check OK / NG (both limits; the status names an uplift above
+    its limit), status (failures such as non-convergence or an unsolved
     result are listed, not thrown), and **Total cost [SGD]** = Σ member cost per metre × member length over every frame and
     cable of the case (`MainViewModel.CostPerMetre`: composite sections — CFT / encased — from `CompositeSection.Cost`
     (concrete m³ + steel / rebar t at their rates); any other member gross area × `MaterialProperty.UnitCostPerCubicMetre`

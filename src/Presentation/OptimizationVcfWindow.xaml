@@ -20,7 +20,7 @@
            ToolTipService.ShowOnDisabled="True" ToolTip="Analyse every combination with the internal FEM and list the max deflection of each case (the working model is not changed)"/>
   </DockPanel>
 
-  <!-- deflection check: the result the deflection is read from and the limit span / ratio -->
+  <!-- deflection check: the result the deflection is read from, the limit span / ratio and the uplift limit of the span -->
   <Border DockPanel.Dock="Bottom" Margin="0,10,0,0" Padding="8,6" Background="{StaticResource Raised}" BorderBrush="{StaticResource Border}" BorderThickness="1">
    <StackPanel Orientation="Horizontal">
     <TextBlock Text="DEFLECTION CHECK" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,12,0"/>
@@ -30,6 +30,11 @@
     <TextBlock Text="≤ span /" VerticalAlignment="Center" Margin="10,0,6,0"/>
     <TextBox x:Name="SpanRatioBox" Width="60" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="DeflectionCheck_Changed"
              AutomationProperties.Name="Span ratio" ToolTip="Deflection limit = span between the mega columns (bays × bay width) / this ratio"/>
+    <TextBlock Text="uplift ≤" VerticalAlignment="Center" Margin="14,0,6,0"/>
+    <TextBox x:Name="UpliftLimitBox" Width="48" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="DeflectionCheck_Changed"
+             AutomationProperties.Name="Uplift limit mm"
+             ToolTip="Largest upward displacement a truss chord point (top / middle / bottom chord) may have in that result. 0 allows none: a pretension that lifts the span above its unloaded position fails."/>
+    <TextBlock Text="mm" VerticalAlignment="Center" Margin="4,0,0,0" Foreground="{StaticResource Muted}"/>
     <TextBlock x:Name="LimitText" VerticalAlignment="Center" Margin="10,0,0,0" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}"/>
    </StackPanel>
   </Border>

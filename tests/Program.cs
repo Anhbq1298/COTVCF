@@ -550,11 +550,17 @@ internal static class Program
                     "A tributary width of zero is refused");
                 optimization.SetRange(VcfOptimization.TributaryKey, "min", "12", "storey");
                 Assert(optimization.DeflectionResultCombo.SelectedItem as string == FemLoadPlan.DefaultServiceCase && optimization.SpanRatioBox.Text == "250" &&
-                       optimization.FormSettings() is { DeflectionResult: FemLoadPlan.DefaultServiceCase, SpanRatio: 250 },
-                    "The deflection check starts on the SLS load case of the default setup and span / 250");
+                       optimization.UpliftLimitBox.Text == "0" &&
+                       optimization.FormSettings() is { DeflectionResult: FemLoadPlan.DefaultServiceCase, SpanRatio: 250, UpliftLimitMm: 0 },
+                    "The deflection check starts on the SLS load case of the default setup, span / 250 and an uplift limit of 0 mm");
                 optimization.SpanRatioBox.Text = "0";
                 Assert(!optimization.OkButton.IsEnabled && !optimization.RunButton.IsEnabled, "A span ratio of zero is refused");
                 optimization.SpanRatioBox.Text = "250";
+                optimization.UpliftLimitBox.Text = "-5";
+                Assert(!optimization.OkButton.IsEnabled && optimization.ProblemText.Text.Contains("Uplift limit", StringComparison.Ordinal), "A negative uplift limit is refused");
+                optimization.UpliftLimitBox.Text = "25";
+                Assert(optimization.OkButton.IsEnabled && optimization.FormSettings().UpliftLimitMm == 25, "An uplift limit of 25 mm is taken");
+                optimization.UpliftLimitBox.Text = "0";
                 optimization.SetRange("Bays", "max", "1");
                 Assert(!optimization.OkButton.IsEnabled && optimization.ProblemText.Text.Length > 0, "An invalid range greys OK and names the problem");
                 optimization.Close();

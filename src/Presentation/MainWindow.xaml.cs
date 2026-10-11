@@ -452,7 +452,7 @@ public partial class MainWindow : Window
     protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
     {
         if (System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.None &&
-            DataContext is MainViewModel { HasUsableModelGeometry: true })
+            DataContext is MainViewModel { HasUsableModelGeometry: true, HasFemResults: true })
         {
             var picker = e.Key switch
             {

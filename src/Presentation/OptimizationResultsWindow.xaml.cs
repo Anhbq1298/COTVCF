@@ -8,7 +8,8 @@ namespace COT_VCF.Presentation;
 
 /// <summary>
 /// Optimization VCF results: one row per analysed case — the values of the inputs that vary in the run, the largest
-/// downward deflection, the load case / combination and point where it occurs, and the case status. Columns follow the
+/// downward deflection against span / ratio, the uplift of the span against its limit, the check of both, the load case /
+/// combination and point where the deflection occurs, and the case status. Columns follow the
 /// run (<see cref="MainViewModel.VcfOptimizationColumns"/>).
 /// </summary>
 public partial class OptimizationResultsWindow : Window
@@ -46,6 +47,9 @@ public partial class OptimizationResultsWindow : Window
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = $"Limit span/{ratio:0.###} [mm]", MinWidth = 110, ElementStyle = numeric, Binding = new Binding(nameof(VcfOptimizationRow.Limit)) });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "δ / limit", MinWidth = 70, ElementStyle = numeric,
             Binding = new Binding(nameof(VcfOptimizationRow.Ratio)), SortMemberPath = nameof(VcfOptimizationRow.Utilisation) });
+        var uplift = viewModel.VcfOptimizationSettings?.UpliftLimitMm ?? VcfOptimization.DefaultUpliftLimitMm;
+        ResultsGrid.Columns.Add(new DataGridTextColumn { Header = $"Uplift ≤ {uplift:0.###} [mm]", MinWidth = 96, ElementStyle = numeric,
+            Binding = new Binding(nameof(VcfOptimizationRow.Uplift)), SortMemberPath = nameof(VcfOptimizationRow.MaxUpliftMm) });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "Check", Binding = new Binding(nameof(VcfOptimizationRow.Check)), MinWidth = 54, ElementStyle = CheckStyle() });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "Total cost [SGD]", MinWidth = 110, ElementStyle = numeric,
             Binding = new Binding(nameof(VcfOptimizationRow.Cost)), SortMemberPath = nameof(VcfOptimizationRow.CostSgd) });

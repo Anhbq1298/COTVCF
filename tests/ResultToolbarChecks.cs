@@ -33,17 +33,13 @@ internal static class ResultToolbarChecks
                 .Single(button => AutomationProperties.GetName(button) == name);
             var lockButton = Tool("Lock or unlock FEM model");
             var toolButtons = window.TopToolbar.Children.OfType<Button>().ToArray();
+            var resultTools = new[] { Tool("Show Deformed Shape F5"), Tool("Show Member Forces F6"), Tool("Show Joint Reactions F7") };
             Check(Array.IndexOf(toolButtons, lockButton) < Array.IndexOf(toolButtons, Tool("Run FEM Analysis")) &&
                   toolButtons.All(button => button.IsEnabled || button != lockButton),
                 "the lock icon precedes Run Analysis and is available on the default model");
-            window.Width = window.MinWidth;
-            window.UpdateLayout();
-            var lastTool = toolButtons[^1];
-            var lastPosition = lastTool.TransformToAncestor(window).Transform(new Point());
-            Check(lastPosition.X + lastTool.ActualWidth <= window.ActualWidth,
-                "the expanded toolbar fits within the minimum window width");
-            window.Width = 1400;
-            window.UpdateLayout();
+            Check(resultTools.All(button => button.Visibility == Visibility.Visible && !button.IsEnabled) &&
+                  window.ResultMenu.Items.OfType<MenuItem>().Take(3).All(item => !item.IsEnabled),
+                "F5/F6/F7 stay visible but disabled before analysis has results");
             vm.ToggleFemModelLock.Execute(null);
             Check(vm.IsFemModelLocked && vm.FemLockActionText.StartsWith("Unlock", StringComparison.Ordinal),
                 "the toolbar lock command freezes the FEM model");
@@ -61,7 +57,7 @@ internal static class ResultToolbarChecks
             Idle();
             Check(vm.ShowFemLoads && window.SharedViewer.Canvas.ShowLoads, "the canvas L toggle restores applied loads");
 
-            Tool("Show Deformed Shape F5").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            Tool("Show Results").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Idle();
             var picker = window.OwnedWindows.OfType<ShowResultsWindow>().Single();
             Check(picker.NoResults.IsVisible && !picker.ApplyButton.IsEnabled,
@@ -73,6 +69,18 @@ internal static class ResultToolbarChecks
             vm.SelectedFemRun = vm.FemRuns[0];
             vm.SelectedFemResultName = "Case A";
             vm.Notify(nameof(MainViewModel.HasFemResults));
+            Idle();
+            Check(resultTools.All(button => button.Visibility == Visibility.Visible && button.IsEnabled) &&
+                  window.ResultMenu.Items.OfType<MenuItem>().Take(3).All(item => item.IsEnabled),
+                "F5/F6/F7 become enabled when analysis results are available");
+            window.Width = window.MinWidth;
+            window.UpdateLayout();
+            var lastTool = toolButtons[^1];
+            var lastPosition = lastTool.TransformToAncestor(window).Transform(new Point());
+            Check(lastPosition.X + lastTool.ActualWidth <= window.ActualWidth,
+                "the expanded toolbar fits within the minimum window width");
+            window.Width = 1400;
+            window.UpdateLayout();
 
             Tool("Show Deformed Shape F5").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Idle();
@@ -117,6 +125,11 @@ internal static class ResultToolbarChecks
             Press(Key.F6, ShowResultPickerKind.MemberForces);
             Press(Key.F7, ShowResultPickerKind.Reactions);
             picker.Close();
+            vm.ToggleFemModelLock.Execute(null);
+            vm.ToggleFemModelLock.Execute(null);
+            Idle();
+            Check(!vm.HasFemResults && resultTools.All(button => button.Visibility == Visibility.Visible && !button.IsEnabled),
+                "unlock removes results and greys out F5/F6/F7 again");
         }
         finally { window.Close(); }
     }

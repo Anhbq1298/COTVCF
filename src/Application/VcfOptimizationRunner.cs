@@ -41,7 +41,8 @@ public sealed record VcfCableStep(int Index, double ForceKN);
 public sealed record VcfOptimizationCase(long Index, IReadOnlyList<object> Values);
 
 /// <summary>A case's outcome: the largest downward deflection in the deflection result (or over every solved result when
-/// none is chosen), where it occurs, the span and the limit span / ratio — or why the case could not be analysed.</summary>
+/// none is chosen), where it occurs, the span and the limit span / ratio; the largest upward displacement of a truss chord
+/// point there (<see cref="MaxUpliftMm"/>, 0 when none rises) and its limit — or why the case could not be analysed.</summary>
 public sealed record VcfOptimizationResult(
     VcfOptimizationCase Case,
     double? MaxDeflectionMm,
@@ -52,10 +53,16 @@ public sealed record VcfOptimizationResult(
     double? SpanM = null,
     double? LimitMm = null,
     double? CostSgd = null,
-    string? CostNote = null)
+    string? CostNote = null,
+    double? MaxUpliftMm = null,
+    string? UpliftPoint = null,
+    double? UpliftLimitMm = null)
 {
-    /// <summary>True when the deflection is within the limit; null when there is no deflection.</summary>
-    public bool? Passes => MaxDeflectionMm is { } deflection && LimitMm is { } limit ? deflection <= limit : null;
+    /// <summary>True when the uplift is within its limit (<see cref="VcfOptimization.UpliftToleranceMm"/>); null when there is none to check.</summary>
+    public bool? UpliftPasses => MaxUpliftMm is { } uplift && UpliftLimitMm is { } limit ? uplift <= limit + VcfOptimization.UpliftToleranceMm : null;
+
+    /// <summary>True when the deflection is within the limit and the uplift within its own; null when there is no deflection.</summary>
+    public bool? Passes => MaxDeflectionMm is { } deflection && LimitMm is { } limit ? deflection <= limit && UpliftPasses != false : null;
 }
 
 /// <summary>
@@ -190,9 +197,14 @@ public sealed class VcfOptimizationRunner
             var (name, point, deflection) = results
                 .SelectMany(pair => pair.Value.Joints.Select(joint => (Name: pair.Key, Point: joint.PointName, Mm: -joint.UZM * 1000)))
                 .DefaultIfEmpty(("", "", 0)).MaxBy(entry => entry.Item3);
+            // uplift: on the truss chord points — the span. The end-frame joints a back-stay pulls up are not part of it.
+            var chord = model.TopPoints.Concat(model.MiddlePoints).Concat(model.BottomPoints).ToHashSet(StringComparer.Ordinal);
+            var (upliftPoint, uplift) = results
+                .SelectMany(pair => pair.Value.Joints.Where(joint => chord.Contains(joint.PointName)).Select(joint => (Point: joint.PointName, Mm: joint.UZM * 1000)))
+                .DefaultIfEmpty(("", 0)).MaxBy(entry => entry.Item2);
             var span = bays * form.BayWidth;
             return new(item, deflection, name, point, results.Values.All(result => result.TargetFitConverged), null, span, span * 1000 / settings.SpanRatio,
-                cost, costNote);
+                cost, costNote, Math.Max(0, uplift), uplift > 0 ? upliftPoint : null, settings.UpliftLimitMm);
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or KeyNotFoundException)
