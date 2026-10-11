@@ -127,12 +127,14 @@ earlier tall-header / large-button / blue-block look.
     SLS — on the default model the default setup's staged `SLS: 1.0DL+1.0LL`, i.e. the prestressed structure; with SAP
     Cases it is SAP2000's un-prestressed `NL SLS001: 1.0DL+1.0LL`, which deflects about ten times more) and the limit span / `SpanRatio` (default 250;
     span = bays × bay width between the mega columns), and the **uplift limit** (`UpliftLimitMm`, default 0 mm — asked for
-    by the user, 2026-10-11): the largest upward displacement a truss chord point (top / middle / bottom chord — the span)
-    may have in that result. Max δ is the largest downward displacement of *any* joint, so once the fan lifts mid-span it
-    reads the settlement of the mega-column tops and passes span / ratio however far the span has risen (default model at
-    its own forces: 39.6 mm down at TTrPt001, mid-span 122.2 mm up) — the uplift limit is what fails such a case. It is
-    measured on the chord points only: the outer column tops a back-stay pulls up (201 / 204, ~2 mm) are not the span and
-    would fail every case at 0 mm. An uplift within `VcfOptimization.UpliftToleranceMm` (0.05 mm, the 0.1 mm the table
+    by the user, 2026-10-11): the largest upward displacement allowed in that result. **Both limits are read on the bottom
+    chord points (BTrPt…, the case's `BottomPoints`) only** — the user's decision, 2026-10-11, and the points Tab 04
+    monitors; do not go back to every joint. Why: over every joint the downward maximum is the top of a mega column once
+    the fan lifts the span (default model at its own forces: 39.6 mm at TTrPt001), and a back-stay pulls the outer column
+    tops up (201 / 204, ~2 mm), which would fail every case at 0 mm. Why an uplift limit at all: with a strong fan the
+    bottom chord's downward maximum is at its ends over the mega columns and passes span / ratio however far mid-span has
+    risen (default model at its own forces, SLS: 19.8 mm down at BTrPt011, 122.2 mm up at BTrPt006) — the uplift limit is
+    what fails such a case. An uplift within `VcfOptimization.UpliftToleranceMm` (0.05 mm, the 0.1 mm the table
     shows) of the limit passes. Each row: the varying inputs, **max downward deflection** in that
     result and its point, span, limit, δ / limit, **uplift**, Check OK / NG (both limits; the status names an uplift above
     its limit), status (failures such as non-convergence or an unsolved

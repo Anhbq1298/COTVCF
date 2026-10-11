@@ -722,12 +722,16 @@ internal static class FemModelFileChecks
             $"Run Optimization analyses every case (4) and reports its max deflection: wider bays and more live load deflect more ({Defl(1):0.0} … {Defl(4):0.0} mm); the least is named");
 
         // the study case that takes every input at the model's own value is the run of Run FEM Analysis: one model, two entries
+        // (the optimization reads the deflection on the bottom chord points, BTrPt… — so does this comparison)
+        var bottomPoints = analysis.BottomPoints.ToHashSet(StringComparer.Ordinal);
+        double BottomMax(IEnumerable<FemAnalysisResult> results) =>
+            results.SelectMany(result => result.Joints).Where(joint => bottomPoints.Contains(joint.PointName)).Max(joint => -joint.UZM * 1000);
         var modelRun = Analyze(vm).Single();
-        var modelMax = modelRun.Results!.Values.SelectMany(result => result.Joints).Max(joint => -joint.UZM * 1000);
+        var modelMax = BottomMax(modelRun.Results!.Values);
         var modelCase = Optimize(vm, Settings(VcfRange.Fixed(10, 1), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1),
             VcfRange.Fixed(analysis.Parameters.TrussDepth, 0.5))).Single();
         Check(modelCase.MaxDeflectionMm is { } caseMax && Math.Abs(caseMax - modelMax) < 1e-6 && modelCase.Status.StartsWith("Analysed", StringComparison.Ordinal),
-            $"Run FEM Analysis is the one run of the model ({modelMax:0.000} mm); the Optimization VCF case at the model's own values gives the same ({modelCase.Deflection} mm)");
+            $"Run FEM Analysis is the one run of the model (bottom chord {modelMax:0.000} mm, at {modelCase.Point}); the Optimization VCF case at the model's own values gives the same ({modelCase.Deflection} mm)");
 
         // the same geometry applied with Edit → VCF Geometry and analysed with Run FEM Analysis gives the same deflection
         var (applied, appliedState, _, _) = DefaultModelApp();
@@ -735,8 +739,7 @@ internal static class FemModelFileChecks
         applied.ApplyVcfGeometryAsync(VcfGeometry.Build(VcfGeometry.Analyze(appliedState.Geometry, appliedState.Truss), deeper),
             new Dictionary<string, string>(StringComparer.Ordinal)).GetAwaiter().GetResult();
         var appliedRuns = Analyze(applied);
-        var femMax = appliedRuns.Select(run => (run.Results ?? new Dictionary<string, FemAnalysisResult> { [""] = run.Result }).Values
-            .SelectMany(result => result.Joints).Max(joint => -joint.UZM * 1000)).ToArray();
+        var femMax = appliedRuns.Select(run => BottomMax((run.Results ?? new Dictionary<string, FemAnalysisResult> { [""] = run.Result }).Values)).ToArray();
         Check(femMax.Any(value => Math.Abs(value - Defl(2)) < 1e-6),
             $"A case ({Defl(2):0.000} mm) matches Run FEM Analysis on the same geometry applied with Edit -> VCF Geometry " +
             $"(FEM max deflections {string.Join(", ", femMax.Select(value => value.ToString("0.000")))})");
@@ -747,7 +750,7 @@ internal static class FemModelFileChecks
         // (uplift limit wide open here: the model's own pretension lifts the span — that check is further down)
         var slsRows = Optimize(vm, Settings(VcfRange.Fixed(10, 1), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1)) with { DeflectionResult = sls, SpanRatio = 250, UpliftLimitMm = 1_000 });
         var slsFem = appliedRuns.Where(run => run.Results?.ContainsKey(sls) == true)
-            .Select(run => run.Results![sls].Joints.Max(joint => -joint.UZM * 1000)).ToArray();
+            .Select(run => BottomMax([run.Results![sls]])).ToArray();
         var slsRow = slsRows.Single();
         Check(VcfOptimization.DefaultDeflectionResult(slsCases, slsCombinations) == sls && slsRow.Governing == sls &&
               slsFem.Any(value => Math.Abs(value - slsRow.MaxDeflectionMm!.Value) < 1e-6) && slsRow.MaxDeflectionMm < Defl(2) &&
@@ -833,26 +836,26 @@ internal static class FemModelFileChecks
 
         // ---- uplift limit: the span must not rise above its unloaded position (default 0 mm) ----
         // The model at its own values: its fan (30,000 … 40,000 kN) lifts mid-span in SLS, so the largest downward
-        // displacement is the settlement of the mega-column tops and passes span / 250 — only the uplift limit sees it.
+        // displacement of the bottom chord is at its ends, over the mega columns, and passes span / 250 — only the uplift
+        // limit sees it.
         var modelSls = Settings(VcfRange.Fixed(10, 1), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1), VcfRange.Fixed(analysis.Parameters.TrussDepth, 0.5)) with { DeflectionResult = sls };
         var lifted = Optimize(vm, modelSls).Single();
-        var chordPoints = analysis.TopPoints.Concat(analysis.MiddlePoints).Concat(analysis.BottomPoints).ToHashSet(StringComparer.Ordinal);
-        var chordRise = modelRun.Results![sls].Joints.Where(joint => chordPoints.Contains(joint.PointName)).Max(joint => joint.UZM * 1000);   // Run FEM Analysis of the model
+        var chordRise = modelRun.Results![sls].Joints.Where(joint => bottomPoints.Contains(joint.PointName)).Max(joint => joint.UZM * 1000);   // Run FEM Analysis of the model
         Check(modelSls.UpliftLimitMm == 0 && lifted.MaxUpliftMm is { } rise && Math.Abs(rise - chordRise) < 1e-6 && rise > 100 && lifted.UpliftPoint == "BTrPt006" &&
-              lifted.MaxDeflectionMm < 400 && lifted.Point is "TTrPt001" or "TTrPt011" && lifted.Check == "NG" &&
+              lifted.MaxDeflectionMm < 400 && lifted.Point is "BTrPt001" or "BTrPt011" && lifted.Check == "NG" &&
               lifted.Status.Contains($"uplift {lifted.Uplift} mm at BTrPt006 is above the 0 mm limit", StringComparison.Ordinal) &&
               vm.VcfOptimizationBest.Contains("uplift ≤ 0 mm", StringComparison.Ordinal) && vm.VcfOptimizationBest.StartsWith("0 of 1 cases pass", StringComparison.Ordinal),
             $"The uplift limit (default 0 mm) catches a pretension that lifts the span: the model's own forces raise mid-span {lifted.Uplift} mm (BTrPt006) in '{sls}' " +
-            $"while the largest downward displacement, {lifted.Deflection} mm at a mega-column top, passes span / 250 — the case is NG, and the status says why");
+            $"while the largest downward displacement of the bottom chord, {lifted.Deflection} mm at {lifted.Point} over a mega column, passes span / 250 — the case is NG, and the status says why");
         var allowed = Optimize(vm, modelSls with { UpliftLimitMm = Math.Ceiling(chordRise) }).Single();
         Check(allowed.Check == "OK" && allowed.MaxUpliftMm == lifted.MaxUpliftMm && !allowed.Status.Contains("uplift", StringComparison.Ordinal),
             $"With the uplift limit at {Math.Ceiling(chordRise):0} mm the same case is OK");
-        // a fan at half the force leaves the span below its unloaded position: no uplift on the chord points. (The back-stay
-        // still pulls the outer column tops 201 / 204 up about 2 mm there — those joints are not part of the span.)
+        // a fan at half the force leaves the span below its unloaded position: no uplift on the bottom chord. (The back-stay
+        // still pulls the outer column tops 201 / 204 up about 2 mm there — those joints are not checked.)
         var slack = Optimize(vm, modelSls with { CableForces = linear with { Steps = 1, Fan = VcfForceSpan.Fixed(15_000), GradientKnPerM = 318 } }).Single();
-        Check(slack.MaxUpliftMm == 0 && slack.Uplift == 0.ToString("0.0") && slack.UpliftPoint == "" && slack.Point == "TTrPt006" &&
+        Check(slack.MaxUpliftMm == 0 && slack.Uplift == 0.ToString("0.0") && slack.UpliftPoint == "" && slack.Point == "BTrPt006" &&
               slack.Check == (slack.MaxDeflectionMm <= 400 ? "OK" : "NG") && slack.Check == "OK",
-            $"With the fan at half its force mid-span governs ({slack.Deflection} mm at TTrPt006) and nothing on the span rises: uplift 0.0 mm, OK at the default limit");
+            $"With the fan at half its force mid-span governs ({slack.Deflection} mm at BTrPt006) and no bottom chord point rises: uplift 0.0 mm, OK at the default limit");
 
         Check(ReferenceEquals(state.Geometry, geometryBefore) && vm.FemSectionProperties.SequenceEqual(propertiesBefore) && warnings.Count == 0,
             "Run Optimization leaves the working model, its member properties and SAP2000 unchanged" + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));

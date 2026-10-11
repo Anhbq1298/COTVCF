@@ -8,8 +8,8 @@ namespace COT_VCF.Presentation;
 
 /// <summary>
 /// Optimization VCF results: one row per analysed case — the values of the inputs that vary in the run, the largest
-/// downward deflection against span / ratio, the uplift of the span against its limit, the check of both, the load case /
-/// combination and point where the deflection occurs, and the case status. Columns follow the
+/// downward deflection of a bottom chord point against span / ratio, its largest uplift against the uplift limit, the
+/// check of both, the load case / combination and point where the deflection occurs, and the case status. Columns follow the
 /// run (<see cref="MainViewModel.VcfOptimizationColumns"/>).
 /// </summary>
 public partial class OptimizationResultsWindow : Window

@@ -40,9 +40,10 @@ public sealed record VcfCableStep(int Index, double ForceKN);
 /// <summary>One combination: the value picked on every axis (same order as <see cref="VcfOptimizationRunner.Axes"/>).</summary>
 public sealed record VcfOptimizationCase(long Index, IReadOnlyList<object> Values);
 
-/// <summary>A case's outcome: the largest downward deflection in the deflection result (or over every solved result when
-/// none is chosen), where it occurs, the span and the limit span / ratio; the largest upward displacement of a truss chord
-/// point there (<see cref="MaxUpliftMm"/>, 0 when none rises) and its limit — or why the case could not be analysed.</summary>
+/// <summary>A case's outcome, read on the bottom chord points (BTrPt…) in the deflection result (or over every solved
+/// result when none is chosen): the largest downward deflection, where it occurs, the span and the limit span / ratio; the
+/// largest upward displacement (<see cref="MaxUpliftMm"/>, 0 when none rises) and its limit — or why the case could not be
+/// analysed.</summary>
 public sealed record VcfOptimizationResult(
     VcfOptimizationCase Case,
     double? MaxDeflectionMm,
@@ -194,14 +195,17 @@ public sealed class VcfOptimizationRunner
                 if (match is null) return Failed($"'{wanted}' was not solved — tick it to run on Define → Load Cases / Load Combinations.");
                 results = new Dictionary<string, FemAnalysisResult> { [match] = results[match] };
             }
-            var (name, point, deflection) = results
-                .SelectMany(pair => pair.Value.Joints.Select(joint => (Name: pair.Key, Point: joint.PointName, Mm: -joint.UZM * 1000)))
-                .DefaultIfEmpty(("", "", 0)).MaxBy(entry => entry.Item3);
-            // uplift: on the truss chord points — the span. The end-frame joints a back-stay pulls up are not part of it.
-            var chord = model.TopPoints.Concat(model.MiddlePoints).Concat(model.BottomPoints).ToHashSet(StringComparer.Ordinal);
-            var (upliftPoint, uplift) = results
-                .SelectMany(pair => pair.Value.Joints.Where(joint => chord.Contains(joint.PointName)).Select(joint => (Point: joint.PointName, Mm: joint.UZM * 1000)))
-                .DefaultIfEmpty(("", 0)).MaxBy(entry => entry.Item2);
+            // Both limits are read on the bottom chord points (BTrPt…) only — the points the deflection is monitored at. Over
+            // every joint the downward maximum is the top of a mega column once the fan lifts the span, and a back-stay
+            // pulls the outer column tops up.
+            var bottom = model.BottomPoints.ToHashSet(StringComparer.Ordinal);
+            var checkedJoints = results
+                .SelectMany(pair => pair.Value.Joints.Where(joint => bottom.Contains(joint.PointName)).Select(joint => (Name: pair.Key, Point: joint.PointName, Mm: -joint.UZM * 1000)))
+                .ToArray();
+            if (checkedJoints.Length == 0) return Failed("No bottom chord point has a displacement to check.");
+            var (name, point, deflection) = checkedJoints.MaxBy(entry => entry.Mm);
+            var (_, upliftPoint, risen) = checkedJoints.MinBy(entry => entry.Mm);
+            var uplift = -risen;
             var span = bays * form.BayWidth;
             return new(item, deflection, name, point, results.Values.All(result => result.TargetFitConverged), null, span, span * 1000 / settings.SpanRatio,
                 cost, costNote, Math.Max(0, uplift), uplift > 0 ? upliftPoint : null, settings.UpliftLimitMm);

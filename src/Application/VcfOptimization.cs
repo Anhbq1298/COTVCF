@@ -133,9 +133,9 @@ public sealed record VcfOptimizationSettings(
     /// <summary>Deflection limit = span / <see cref="SpanRatio"/> (span between the mega columns = bays × bay width).</summary>
     public double SpanRatio { get; init; } = VcfOptimization.DefaultSpanRatio;
 
-    /// <summary>Uplift limit [mm]: the largest upward displacement a truss chord point (top / middle / bottom chord) may
-    /// have in the deflection result. 0 allows none — the check that stops a pretension that lifts the span above its
-    /// unloaded position, which the downward limit cannot see.</summary>
+    /// <summary>Uplift limit [mm]: the largest upward displacement a bottom chord point (BTrPt…) may have in the deflection
+    /// result. 0 allows none — the check that stops a pretension that lifts the span above its unloaded position, which the
+    /// downward limit cannot see. Both limits are read on the bottom chord points only.</summary>
     public double UpliftLimitMm { get; init; } = VcfOptimization.DefaultUpliftLimitMm;
 
     /// <summary>Force variants: the cable steps (all cables step together) × the storey force range counts.</summary>
