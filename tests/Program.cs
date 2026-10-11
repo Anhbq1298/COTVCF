@@ -495,10 +495,14 @@ internal static class Program
                        optimization.PreviewCaption.Text.Contains("12 bays", StringComparison.Ordinal) && optimization.PreviewCaption.Text.Contains("fan cables 6 + 6", StringComparison.Ordinal) &&
                        optimization.PreviewCaption.Text.Contains("new: Cable9a-2, Cable9b-2", StringComparison.Ordinal) &&
                        optimization.Preview.HighlightedMembers!.Order().SequenceEqual(["Cable9a-2", "Cable9b-2"]) &&
-                       optimization.Preview.MemberNotes!.ContainsKey("Cable9b-2") && optimization.Preview.MemberNotes["Cable9b-2"] == optimization.Preview.MemberNotes["Cable9a-2"],
+                       optimization.Preview.JointNotes!.Keys.Order().SequenceEqual(Enumerable.Range(2, 11).Select(line => $"BTrPt{line:000}")) &&
+                       optimization.Preview.JointNotes["BTrPt002"] == "30" && optimization.Preview.JointNotes["BTrPt007"] == (Shown(moreFan[^1].Min) / 1000).ToString("0.##") &&
+                       optimization.Preview.JointNotes["BTrPt012"] == "30" &&
+                       optimization.Preview.MemberNotes!.Keys.Order().SequenceEqual(["Cable1a-2", "Cable1b-2", "Cable7a-2", "Cable7b-2", "Cable8a-2", "Cable8b-2"]) &&
+                       optimization.Preview.MemberNotes["Cable1b-2"] == "100" && optimization.PreviewCaption.Text.Contains("labels: pretension [MN]", StringComparison.Ordinal),
                     "Cable Force follows Preview at: at More cables · 12 bays the fan lists six cables of one side, the shortest with its inputs and the others by their length " +
                     $"(rounded to 100 kN, growing to {moreFan[^1].Min} kN for the new Cable9a-2); cables that take another's value are not listed; the preview names the new cables, " +
-                    "emphasises them and labels every cable with its force");
+                    "emphasises them and writes each fan cable's force [MN] under the bottom-chord node it is anchored at (one at the mid-span node the two sides share), the other cables' along them");
                 optimization.FanGradingCombo.SelectedIndex = 2;
                 optimization.UpdateLayout();
                 var manualRows = optimization.CableForceRows;
