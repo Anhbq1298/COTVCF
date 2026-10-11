@@ -46,8 +46,6 @@
               ToolTip="The load patterns of the model. Their loads are part of the VCF system: Edit → VCF System → Storey Force and Cable Force"/>
     <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click" IsEnabled="{Binding HasUsableModelGeometry}"
               ToolTip="Define the load cases: the default staged setup (Pretension → SLS / ULS), the cases saved from SAP2000, or your own"/>
-    <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click" IsEnabled="{Binding HasUsableModelGeometry}"
-              ToolTip="Choose result cases, monitored objects, limits and default result visualization for FEM output"/>
    </MenuItem>
    <MenuItem Header="_Edit" IsEnabled="{Binding CanEditVcfGeometry}">
     <MenuItem Header="_VCF System…" Click="VcfGeometry_Click" AutomationProperties.Name="VCF System"
@@ -104,6 +102,8 @@
               ToolTip="Open the results table for the selected load case and output"/>
    </MenuItem>
    <MenuItem Header="_Post-Processing" IsEnabled="{Binding HasUsableModelGeometry}">
+    <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click"
+              ToolTip="Choose result cases, monitored objects and limits for FEM output"/>
     <MenuItem Header="View FEM Results (_HTML)…" Click="OpenFemHtml_Click" IsEnabled="{Binding HasFemResults}"
               ToolTip="Open the completed load cases and combinations of the current FEM run in your browser"/>
     <Separator/>
@@ -1802,7 +1802,7 @@
       </Border>
      </TabItem>
 
-     <!-- ============ Define → FEM Output Settings ============ -->
+     <!-- ============ Post-Processing → FEM Output Settings ============ -->
      <TabItem Header="Output Settings">
       <ScrollViewer VerticalScrollBarVisibility="Auto">
        <StackPanel Margin="8" IsEnabled="{Binding CanEditFemModel}">

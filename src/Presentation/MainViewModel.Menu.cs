@@ -64,6 +64,7 @@ public sealed partial class MainViewModel
         FemPaneRestraints => "Assign",
         FemPaneAnalysisOptions => "Run",
         FemPaneResults => "Result",
+        FemPaneOutputSettings => "Post-Processing",
         FemPaneDisplay => "Display",
         _ => "Define",
     };
