@@ -110,8 +110,8 @@
     <Separator/>
     <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click"
               ToolTip="Choose result cases, monitored objects and limits for FEM output"/>
-    <MenuItem Header="View FEM Results (_HTML)…" Click="OpenFemHtml_Click" IsEnabled="{Binding HasFemResults}"
-              ToolTip="Plot deflection, frame forces, support reactions and cable forces for one completed FEM load case or combination in your browser">
+    <MenuItem Header="FEM Live Results (_HTML)…" Click="OpenFemHtml_Click" IsEnabled="{Binding HasFemResults}"
+              ToolTip="Open the interactive FEM report: switch load cases and result families, inspect values, zoom and pan without regenerating HTML">
      <MenuItem.Icon><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D9;" FontSize="14"/></MenuItem.Icon>
     </MenuItem>
     <Separator/>

@@ -9,8 +9,10 @@ namespace COT_VCF.Presentation;
 
 /// <summary>
 /// Run → Optimization VCF. The inputs of Edit → VCF Geometry as a search space: min / max / step for every geometry
-/// parameter, every independent cable's pretension and the storey force inputs (qz per load definition, NStories, B), and
-/// the candidate sections per member role and per cable. OK keeps the settings on the view model
+/// parameter and the storey force inputs (qz per load definition, NStories, B), the cable pretensions — one shared step
+/// for every cable, a min / max per cable, the fan cables by their length (<see cref="VcfOptimization.CableTargets"/>) —
+/// and the candidate sections per member role and per cable. The Cable Force rows and the preview follow the corner chosen
+/// in Preview at, so the cables a smaller or larger number of bays removes or adds show. OK keeps the settings on the view model
 /// (<see cref="MainViewModel.VcfOptimizationSettings"/>); Run Optimization keeps them too and asks the owner to run them
 /// (<see cref="RunRequested"/>). The working model is never changed here.
 /// </summary>
@@ -23,18 +25,36 @@ public partial class OptimizationVcfWindow : Window
     /// <summary>One Min / Max / Step row and its value count.</summary>
     private sealed record RangeRow(TextBox Min, TextBox Max, TextBox Step, TextBlock Count, bool Whole);
 
+    /// <summary>A cable's Min / Max inputs on the Cable Force sheet.</summary>
+    private sealed record SpanRow(TextBox Min, TextBox Max);
+
+    /// <summary>A row shown on the Cable Force sheet: its inputs, or the read-outs that follow the form and the preview.</summary>
+    private sealed record CableRow(string Cable, string Tag, TextBlock Length, SpanRow? Inputs, TextBlock? Min, TextBlock? Max, TextBlock Step);
+
     private readonly Dictionary<string, RangeRow> ranges = new(StringComparer.Ordinal);        // Geometry
-    private readonly Dictionary<string, RangeRow> cableForces = new(StringComparer.Ordinal);   // Cable Force, by cable
+    private readonly Dictionary<string, SpanRow> cableSpans = new(StringComparer.Ordinal);     // Cable Force: every cable with a force of its own
     private readonly Dictionary<string, RangeRow> storeyLoads = new(StringComparer.Ordinal);   // Storey Force: qz by load name, Stories, B
     private readonly Dictionary<VcfMemberRole, CandidatePicker> roleSections = [];
     private readonly Dictionary<string, CandidatePicker> cableSections = new(StringComparer.Ordinal);
     private (TextBox Min, TextBox Max)? middle;     // read-only: the middle chord follows the truss depth
+    private SpanRow? fanSpan;                       // Cable Force: the shortest fan cable, while the fan is graded by its length
+    private HashSet<string> fanNames = new(StringComparer.Ordinal);                            // the model's fan cables
+    private CablePretensionConfig[] cableConfigs = [];                                         // Tab 03 rows
+    private IReadOnlyDictionary<string, double> modelForces = new Dictionary<string, double>(); // the model's own pretension per cable
+    private readonly List<CableRow> cableRows = [];                                            // the rows now on the Cable Force sheet
+    private string cableRowsKey = "";
+    private bool relabelling;                       // the Preview at items are being renamed
+
+    private static readonly IReadOnlyDictionary<string, string> NoCables = new Dictionary<string, string>(StringComparer.Ordinal);
+    /// <summary><see cref="SetRange"/> key of the shortest fan cable on the "cable" sheet (checks).</summary>
+    internal const string FanKey = "Fan";
 
     public OptimizationVcfWindow(MainViewModel viewModel)
     {
         InitializeComponent();
         this.viewModel = viewModel;
         DataContext = viewModel;
+        SetCorners(["Minimum", "Current", "Maximum"]);
         Load(viewModel.VcfOptimizationSettings);
     }
 
@@ -50,8 +70,9 @@ public partial class OptimizationVcfWindow : Window
         loading = true;
         try
         {
-            foreach (var grid in new[] { GeometryGrid, CableForceGrid, StoreyForceGrid, FrameGrid, CableGrid }) { grid.Children.Clear(); grid.RowDefinitions.Clear(); }
-            ranges.Clear(); cableForces.Clear(); storeyLoads.Clear(); roleSections.Clear(); cableSections.Clear(); middle = null;
+            foreach (var grid in new[] { GeometryGrid, FanForceGrid, CableForceGrid, StoreyForceGrid, FrameGrid, CableGrid }) { grid.Children.Clear(); grid.RowDefinitions.Clear(); }
+            ranges.Clear(); cableSpans.Clear(); storeyLoads.Clear(); roleSections.Clear(); cableSections.Clear(); middle = null;
+            fanSpan = null; cableRows.Clear(); cableRowsKey = "";
             try { analysis = VcfGeometry.Analyze(viewModel.State.Geometry, viewModel.State.Truss); }
             catch (Exception ex)
             {
@@ -75,18 +96,32 @@ public partial class OptimizationVcfWindow : Window
                 if (parameter == VcfOptimization.Depth && analysis.HasMiddleChord) AddMiddleChord();
             }
 
-            // Cable Force: every cable of the model; a Tab 03 follower is shown, not edited
+            // Cable Force: one shared step; Min / Max for every cable with a force of its own; the fan cables by their length.
+            // The rows are laid out by ShowCables — they follow the previewed corner.
             var state = viewModel.State;
-            var configs = state.Cables.ToArray();
-            AddHeader(CableForceGrid, "Cable");
+            var culture = CultureInfo.CurrentCulture;
+            cableConfigs = state.Cables.ToArray();
+            var modelCables = VcfOptimization.ModelCableForces(cableConfigs);
+            modelForces = VcfOptimization.CableTargets(modelCables, 0, analysis, analysis.Geometry, null, cableConfigs);
+            var keptCables = kept?.CableForces;
             foreach (var name in Members(VcfMemberRole.Cable))
+                if (modelCables.Cables.TryGetValue(name, out var span))
+                    cableSpans[name] = SpanBoxes(name, keptCables is not null && keptCables.Cables.TryGetValue(name, out var saved) ? saved : span);
+            var fan = VcfGeometry.FanCables(analysis);
+            fanNames = fan.Select(cable => cable.Name).ToHashSet(StringComparer.Ordinal);
+            FanForcePanel.Visibility = fan.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            if (fan.Count > 0)
             {
-                var cable = configs.FirstOrDefault(item => item.CableName == name);
-                if (cable is null) { AddNote(CableForceGrid, name, "not on 03 Pretension"); continue; }
-                if (VcfOptimization.CableRange(cable) is not { } range)
-                { AddNote(CableForceGrid, name, cable.IsFollower ? $"follows · {cable.SyncSummary}" : "no readable force on 03 Pretension"); continue; }
-                cableForces[name] = AddRange(CableForceGrid, name, "kN", Kept(kept?.CableForces, name, range), whole: false);
+                var shortest = fan[0].Name;
+                var start = modelCables.Cables.TryGetValue(shortest, out var own) ? own
+                    : VcfForceSpan.Fixed(modelForces.TryGetValue(shortest, out var force) ? force : 0);
+                fanSpan = SpanBoxes("Shortest fan cable", keptCables?.Fan ?? start);
             }
+            // the fan starts graded by length (+ kN per m, fitted to the model's own forces)
+            FanGradingCombo.SelectedIndex = keptCables?.Grading switch { null or VcfFanGrading.Linear => 0, VcfFanGrading.Proportional => 1, _ => 2 };
+            FanGradientBox.Text = (keptCables is { Grading: VcfFanGrading.Linear } ? keptCables.GradientKnPerM : VcfOptimization.FitGradient(analysis, modelForces))
+                .ToString("0.###", culture);
+            CableStepsBox.Text = (keptCables?.Steps ?? modelCables.Steps).ToString(culture);
 
             // Storey Force: qz per load definition, number of storeys, tributary width
             AddHeader(StoreyForceGrid, "Input");
@@ -236,9 +271,26 @@ public partial class OptimizationVcfWindow : Window
     private static Dictionary<string, VcfRange> Ranges(Dictionary<string, RangeRow> rows) =>
         rows.ToDictionary(pair => pair.Key, pair => Range(pair.Value), StringComparer.Ordinal);
 
+    private VcfFanGrading Grading => fanSpan is null ? VcfFanGrading.Manual
+        : FanGradingCombo.SelectedIndex switch { 0 => VcfFanGrading.Linear, 1 => VcfFanGrading.Proportional, _ => VcfFanGrading.Manual };
+
+    private static VcfForceSpan Span(SpanRow row) => new(Number(row.Min), Number(row.Max));
+
+    /// <summary>The Cable Force sheet as settings: while the fan is graded its cables are not listed — the shortest one's
+    /// span and the rule give them their force.</summary>
+    private VcfCableForces FormCableForces()
+    {
+        var grading = Grading;
+        var graded = grading != VcfFanGrading.Manual;
+        var spans = cableSpans.Where(pair => !graded || !fanNames.Contains(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => Span(pair.Value), StringComparer.Ordinal);
+        var steps = int.TryParse(CableStepsBox.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out var count) ? count : 0;
+        return new(steps, spans, grading, graded ? Span(fanSpan!) : null, grading == VcfFanGrading.Linear ? Number(FanGradientBox) : 0);
+    }
+
     /// <summary>The settings in the form (unchecked; see <see cref="VcfOptimization.Validate"/>).</summary>
     internal VcfOptimizationSettings FormSettings() => new(
-        Ranges(ranges), Ranges(cableForces), Ranges(storeyLoads),
+        Ranges(ranges), FormCableForces(), Ranges(storeyLoads),
         roleSections.Where(pair => pair.Value.Selected.Count > 0).ToDictionary(pair => pair.Key, pair => pair.Value.Selected),
         cableSections.Where(pair => pair.Value.Selected.Count > 0).ToDictionary(pair => pair.Key, pair => pair.Value.Selected, StringComparer.Ordinal))
     {
@@ -250,7 +302,9 @@ public partial class OptimizationVcfWindow : Window
     {
         if (loading || analysis is null) return;
         var settings = FormSettings();
-        foreach (var row in ranges.Values.Concat(cableForces.Values).Concat(storeyLoads.Values))
+        var linear = settings.CableForces.Grading == VcfFanGrading.Linear;
+        FanGradientBox.Visibility = FanGradientUnit.Visibility = linear ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var row in ranges.Values.Concat(storeyLoads.Values))
         {
             var range = Range(row);
             row.Count.Text = range.Problem(row.Whole) is null ? range.Count.ToString(CultureInfo.CurrentCulture) : "—";
@@ -272,6 +326,7 @@ public partial class OptimizationVcfWindow : Window
             : "Analyse every combination with the internal FEM and list the max deflection of each case (the working model is not changed)";
         ShowStoreyTotals(settings, problems.Count == 0);
         ShowLimit(settings, problems.Count == 0);
+        ShowCorners(settings, problems.Count == 0);
         ShowPreview(settings, problems.Count == 0);
     }
 
@@ -316,6 +371,34 @@ public partial class OptimizationVcfWindow : Window
     }
 
     private void DeflectionCheck_Changed(object sender, RoutedEventArgs e) => Refresh();
+    private void CableForce_Changed(object sender, RoutedEventArgs e) => Refresh();
+
+    /// <summary>Names the Preview at corners after what the number of bays does to the fan: fewer bays have fewer fan
+    /// cables, more bays more. With the bays fixed at the model's they stay Minimum / Current / Maximum.</summary>
+    private void ShowCorners(VcfOptimizationSettings settings, bool valid)
+    {
+        if (analysis is null || !valid) return;    // keep the names while the ranges are being typed
+        var bays = settings.Geometry[VcfOptimization.Bays.Key];
+        var (min, max, current) = ((int)bays.Min, (int)bays.Max, analysis.Bays);
+        if (min == current && max == current) { SetCorners(["Minimum", "Current", "Maximum"]); return; }
+        string Corner(int count, string plain) =>
+            (fanNames.Count == 0 || count / 2 == current / 2 ? plain : count / 2 < current / 2 ? "Less cables" : "More cables") + $" · {count} bays";
+        SetCorners([Corner(min, "Minimum"), $"Current · {current} bays", Corner(max, "Maximum")]);
+    }
+
+    private void SetCorners(string[] labels)
+    {
+        if (PreviewCorner.Items.OfType<string>().SequenceEqual(labels)) return;
+        relabelling = true;
+        try
+        {
+            var index = PreviewCorner.SelectedIndex;
+            PreviewCorner.Items.Clear();
+            foreach (var label in labels) PreviewCorner.Items.Add(label);
+            PreviewCorner.SelectedIndex = index < 0 ? 1 : index;
+        }
+        finally { relabelling = false; }
+    }
 
     private void ShowPreview(VcfOptimizationSettings settings, bool valid)
     {
@@ -325,19 +408,162 @@ public partial class OptimizationVcfWindow : Window
         try
         {
             var model = analysis;
+            VcfTopology? topology = null;
             var form = VcfOptimization.ParametersAt(analysis, VcfOptimization.Current(analysis), range => range.Min);   // the model, middle chord at the rule
             if (pick is not null)
             {
                 var bays = (int)pick(settings.Geometry[VcfOptimization.Bays.Key]);
-                model = bays == analysis.Bays ? analysis : VcfGeometry.Analyze(VcfGeometry.ChangeBays(analysis, bays));
+                if (bays != analysis.Bays) { topology = VcfGeometry.ChangeBays(analysis, bays); model = VcfGeometry.Analyze(topology); }
                 form = VcfOptimization.ParametersAt(analysis, settings, pick);
             }
             var geometry = VcfGeometry.Build(model, form);
             Preview.SpanPoints = model.TopPoints.Concat(model.MiddlePoints).Concat(model.BottomPoints).ToArray();
             Preview.Model = geometry;
             try { Preview.PinSupportPoints = FemStudyService.FindPinSupportPoints(geometry); } catch { Preview.PinSupportPoints = null; }
+            ShowCables(settings.CableForces, model, topology, geometry, model.Bays * form.BayWidth);
         }
         catch (InvalidOperationException ex) { ProblemText.Text = ex.Message; }
+    }
+
+    // ---- Cable Force rows and the preview's cables: they follow the previewed corner ----
+    /// <summary>
+    /// Lays out the Cable Force rows for the previewed model — the fan cables of its number of bays (a cable that number
+    /// adds is marked new) and the other cables — and fills their forces at the first and the last step; labels every
+    /// cable of the preview with that range and emphasises the new ones. A cable that takes another's value (Same Values on
+    /// 03 Pretension; the far side of a graded fan) is not listed. The rows are rebuilt only when their set changes, so
+    /// typing in one keeps the caret.
+    /// </summary>
+    private void ShowCables(VcfCableForces forces, VcfGeometryAnalysis model, VcfTopology? topology, GeometryModel geometry, double span)
+    {
+        var added = topology?.AddedCables ?? NoCables;
+        var configs = cableConfigs.GroupBy(cable => cable.CableName, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var fans = VcfGeometry.FanCables(model);
+        var fanSet = fans.Select(cable => cable.Name).ToHashSet(StringComparer.Ordinal);
+        var shortest = fans.Count > 0 ? fans[0] : null;
+        bool Mirrors(string name)
+        {
+            var source = added.TryGetValue(name, out var template) ? template : name;
+            return !cableSpans.ContainsKey(source) && configs.TryGetValue(source, out var cable) && cable is { IsFollower: true, SyncMode: CableSyncMode.SameValues };
+        }
+        (string Name, string Tag, SpanRow? Inputs) Row(string name)
+        {
+            var graded = forces.Graded && fanSet.Contains(name);
+            var inputs = graded ? name == shortest?.Name ? fanSpan : null : added.ContainsKey(name) ? null : cableSpans.GetValueOrDefault(name);
+            var tag = added.ContainsKey(name) ? "new"
+                : graded ? name == shortest?.Name ? "shortest" : ""
+                : inputs is not null ? ""
+                : configs.TryGetValue(name, out var cable) ? cable.IsFollower ? cable.SyncSummary : "no force on 03 Pretension" : "not on 03 Pretension";
+            return (name, tag, inputs);
+        }
+        var fanRows = fans.Where(cable => forces.Graded ? cable.Side == shortest!.Side : !Mirrors(cable.Name)).Select(cable => Row(cable.Name)).ToArray();
+        var otherRows = geometry.Members.Where(member => member.Kind != MemberKind.Frame && !fanSet.Contains(member.Name) && !Mirrors(member.Name))
+            .Select(member => member.Name).Order(StringComparer.Ordinal).Select(Row).ToArray();
+
+        static string Key(IEnumerable<(string Name, string Tag, SpanRow? Inputs)> rows) =>
+            string.Join("|", rows.Select(row => $"{row.Name}:{row.Tag}:{(row.Inputs is null ? 0 : 1)}"));
+        var key = Key(fanRows) + "||" + Key(otherRows);
+        if (key != cableRowsKey)
+        {
+            cableRows.Clear();
+            BuildCableRows(FanForceGrid, fanRows);
+            BuildCableRows(CableForceGrid, otherRows);
+            cableRowsKey = key;
+        }
+
+        var valid = VcfOptimization.CableProblems(forces).Count == 0;
+        var first = valid ? VcfOptimization.CableTargets(forces, 0, model, geometry, added, cableConfigs) : null;
+        var last = valid ? VcfOptimization.CableTargets(forces, forces.StepCount - 1, model, geometry, added, cableConfigs) : null;
+        var culture = CultureInfo.CurrentCulture;
+        static string Kn(double? value) => value is { } kN ? kN.ToString("N0", CultureInfo.CurrentCulture) : "—";
+        foreach (var row in cableRows)
+        {
+            double? min = first is not null && first.TryGetValue(row.Cable, out var low) ? low : null;
+            double? max = last is not null && last.TryGetValue(row.Cable, out var high) ? high : null;
+            row.Length.Text = VcfOptimization.CableLength(geometry, row.Cable) is > 0 and var length ? length.ToString("0.0", culture) : "—";
+            if (row.Min is not null) row.Min.Text = Kn(min);
+            if (row.Max is not null) row.Max.Text = Kn(max);
+            row.Step.Text = min is { } a && max is { } b && forces.StepCount > 1 && Math.Abs(b - a) > 1e-9 ? Kn((b - a) / (forces.StepCount - 1)) : "—";
+        }
+
+        var rounding = VcfOptimization.ForceRoundingKn.ToString("0", culture);
+        FanForceNote.Text = forces.Grading switch
+        {
+            VcfFanGrading.Linear => $"T = T shortest + increase × (L − L shortest), rounded to {rounding} kN. The other side takes the same by its own length.",
+            VcfFanGrading.Proportional => $"T = T shortest × L / L shortest, rounded to {rounding} kN. The other side takes the same by its own length.",
+            _ => $"A range per fan cable. A cable more bays add takes the force of the cable it copies × its length ratio, rounded to {rounding} kN.",
+        };
+        CableForceNote.Text = "The rows follow Preview at. A cable that takes another's value on 03 Pretension (Same Values) is not listed." +
+            (valid && forces.Steps == 1 && forces.Varies ? " With 1 step every cable stays at its Min — set 2 or more steps to reach Max." : "");
+
+        Preview.HighlightedMembers = added.Keys.ToArray();
+        Dictionary<string, string>? notes = null;
+        if (first is not null && last is not null)
+        {
+            notes = new(StringComparer.Ordinal);
+            foreach (var (name, low) in first)
+                if (last.TryGetValue(name, out var high)) notes[name] = Controls.ResultDisplayText.ForceRange(low, high);
+        }
+        Preview.MemberNotes = notes;
+
+        var gone = Members(VcfMemberRole.Cable).Where(name => !model.Roles.ContainsKey(name)).ToArray();
+        var sides = fans.GroupBy(cable => cable.Side).Select(side => side.Count().ToString(culture));
+        PreviewCaption.Text = $"{model.Bays} bays · span {span.ToString("0.###", culture)} m" +
+            (fans.Count > 0 ? " · fan cables " + string.Join(" + ", sides) : "") +
+            (added.Count > 0 ? " · new: " + string.Join(", ", fans.Select(cable => cable.Name).Where(added.ContainsKey)) : "") +
+            (gone.Length > 0 ? " · not in this variant: " + string.Join(", ", gone) : "");
+    }
+
+    private void BuildCableRows(Grid grid, IReadOnlyList<(string Name, string Tag, SpanRow? Inputs)> rows)
+    {
+        grid.Children.Clear();
+        grid.RowDefinitions.Clear();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Place(grid, new TextBlock { Text = "Cable", Style = (Style)FindResource("Caption"), Margin = new Thickness(0, 0, 0, 2) }, 0, 0);
+        foreach (var (text, column) in new[] { ("L [m]", 1), ("Model", 2), ("Min", 3), ("Max", 4), ("Step", 5) })
+            Place(grid, new TextBlock { Text = text, Style = (Style)FindResource("ColumnHeader") }, 0, column);
+        var mono = (System.Windows.Media.FontFamily)FindResource("MonoFont");
+        TextBlock Value(string text, Thickness margin, bool muted = true) => new()
+        {
+            Text = text, FontFamily = mono, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = margin, Foreground = muted ? Muted : (System.Windows.Media.Brush)FindResource("Text"),
+        };
+        foreach (var (name, tag, inputs) in rows)
+        {
+            var row = grid.RowDefinitions.Count;
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MinHeight = 24 });
+            var label = new TextBlock { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = tag.Length > 0 ? $"{name} · {tag}" : name };
+            label.Inlines.Add(new System.Windows.Documents.Run(name) { Foreground = inputs is null && tag != "new" ? Muted : (System.Windows.Media.Brush)FindResource(tag == "new" ? "Accent" : "Text") });
+            if (tag.Length > 0) label.Inlines.Add(new System.Windows.Documents.Run("  " + tag) { FontSize = 10.5, Foreground = tag == "new" ? (System.Windows.Media.Brush)FindResource("Accent") : Muted });
+            Place(grid, label, row, 0);
+            var length = Value("", new Thickness(0, 0, 4, 0));
+            Place(grid, length, row, 1);
+            Place(grid, Value(modelForces.TryGetValue(name, out var model) ? model.ToString("N0", CultureInfo.CurrentCulture) : "—", new Thickness(0, 0, 8, 0)), row, 2);
+            TextBlock? min = null, max = null;
+            if (inputs is not null) { Place(grid, inputs.Min, row, 3); Place(grid, inputs.Max, row, 4); }
+            else
+            {
+                (min, max) = (Value("", new Thickness(0, 0, 9, 0), muted: false), Value("", new Thickness(0, 0, 9, 0), muted: false));
+                Place(grid, min, row, 3);
+                Place(grid, max, row, 4);
+            }
+            var step = Value("", new Thickness(0, 0, 2, 0));
+            Place(grid, step, row, 5);
+            cableRows.Add(new CableRow(name, tag, length, inputs, min, max, step));
+        }
+    }
+
+    /// <summary>A cable's Min / Max inputs, kept for as long as the form is — the rows that show them come and go with the preview.</summary>
+    private SpanRow SpanBoxes(string label, VcfForceSpan span)
+    {
+        TextBox Box(double value, string part)
+        {
+            var box = new TextBox { Text = value.ToString("0.###", CultureInfo.CurrentCulture), TextAlignment = TextAlignment.Right,
+                FontFamily = (System.Windows.Media.FontFamily)FindResource("MonoFont"), Margin = new Thickness(0, 2, 4, 2) };
+            System.Windows.Automation.AutomationProperties.SetName(box, $"{label} {part}");
+            box.TextChanged += (_, _) => Refresh();
+            return box;
+        }
+        return new SpanRow(Box(span.Min, "min"), Box(span.Max, "max"));
     }
 
     /// <summary>The middle chord values shown (checks): min and max, or null when the model has no middle chord.</summary>
@@ -346,15 +572,27 @@ public partial class OptimizationVcfWindow : Window
     /// <summary>The storey force totals line (checks).</summary>
     internal string StoreyTotals => StoreyForceSummary.Text;
 
-    /// <summary>Types into a range input (checks): sheet "geometry", "cable" or "storey"; part "min", "max" or "step".</summary>
+    /// <summary>Types into a range input (checks): sheet "geometry", "cable" or "storey"; part "min", "max" or "step". On
+    /// the "cable" sheet the key is a cable with a force of its own, or <see cref="FanKey"/> for the shortest fan cable of a
+    /// graded fan; a cable has no step of its own.</summary>
     internal void SetRange(string key, string part, string text, string sheet = "geometry")
     {
-        var row = (sheet switch { "cable" => cableForces, "storey" => storeyLoads, _ => ranges })[key];
+        if (sheet == "cable")
+        {
+            var span = key == FanKey ? fanSpan! : cableSpans[key];
+            (part == "max" ? span.Max : span.Min).Text = text;
+            return;
+        }
+        var row = (sheet == "storey" ? storeyLoads : ranges)[key];
         (part switch { "min" => row.Min, "max" => row.Max, _ => row.Step }).Text = text;
     }
 
+    /// <summary>The Cable Force rows now shown (checks): cable, tag ("shortest", "new", a sync rule …), min, max and step as displayed.</summary>
+    internal IReadOnlyList<(string Cable, string Tag, string Min, string Max, string Step)> CableForceRows =>
+        cableRows.Select(row => (row.Cable, row.Tag, row.Inputs?.Min.Text ?? row.Min!.Text, row.Inputs?.Max.Text ?? row.Max!.Text, row.Step.Text)).ToArray();
+
     // ---- actions ----
-    private void PreviewCorner_Changed(object sender, SelectionChangedEventArgs e) => Refresh();
+    private void PreviewCorner_Changed(object sender, SelectionChangedEventArgs e) { if (!relabelling) Refresh(); }
     private void Reset_Click(object sender, RoutedEventArgs e) => Load(null);
 
     private void Ok_Click(object sender, RoutedEventArgs e) => Confirm(run: false);

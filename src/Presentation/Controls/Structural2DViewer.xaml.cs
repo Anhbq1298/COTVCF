@@ -71,6 +71,16 @@ public partial class Structural2DViewer : UserControl
     public bool ShowLoads { get => (bool)GetValue(ShowLoadsProperty); set => SetValue(ShowLoadsProperty, value); }
     /// <summary>Point name → vertical load Fz [kN] labelled at the load arrows.</summary>
     public IReadOnlyDictionary<string, double>? LoadValues { get => (IReadOnlyDictionary<string, double>?)GetValue(LoadValuesProperty); set => SetValue(LoadValuesProperty, value); }
+    public static readonly DependencyProperty MemberNotesProperty = DependencyProperty.Register(nameof(MemberNotes), typeof(IReadOnlyDictionary<string, string>), typeof(Structural2DViewer), new PropertyMetadata(null));
+    public static readonly DependencyProperty HighlightedMembersProperty = DependencyProperty.Register(nameof(HighlightedMembers), typeof(IEnumerable<string>), typeof(Structural2DViewer), new PropertyMetadata(null));
+    public static readonly DependencyProperty JointNotesProperty = DependencyProperty.Register(nameof(JointNotes), typeof(IReadOnlyDictionary<string, string>), typeof(Structural2DViewer), new PropertyMetadata(null));
+    /// <summary>Member name → a note drawn along the member (e.g. a cable's pretension range).</summary>
+    public IReadOnlyDictionary<string, string>? MemberNotes { get => (IReadOnlyDictionary<string, string>?)GetValue(MemberNotesProperty); set => SetValue(MemberNotesProperty, value); }
+    /// <summary>Point name → a note drawn below the joint, reading upward (e.g. the pretension of the fan cable anchored there:
+    /// the anchors are a bay apart, where notes along the cables would run into each other at the corner).</summary>
+    public IReadOnlyDictionary<string, string>? JointNotes { get => (IReadOnlyDictionary<string, string>?)GetValue(JointNotesProperty); set => SetValue(JointNotesProperty, value); }
+    /// <summary>Members drawn emphasised (e.g. the cables a variant adds to the model).</summary>
+    public IEnumerable<string>? HighlightedMembers { get => (IEnumerable<string>?)GetValue(HighlightedMembersProperty); set => SetValue(HighlightedMembersProperty, value); }
     public static readonly DependencyProperty ShowAxialValuesProperty = DependencyProperty.Register(nameof(ShowAxialValues), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
     /// <summary>Label frame N/V/M values and cable tensions in the active result view.</summary>
     public bool ShowAxialValues { get => (bool)GetValue(ShowAxialValuesProperty); set => SetValue(ShowAxialValuesProperty, value); }
@@ -274,6 +284,12 @@ public sealed class ModelCanvas : FrameworkElement
     public IReadOnlyDictionary<string, string>? MemberSizes { get => (IReadOnlyDictionary<string, string>?)GetValue(MemberSizesProperty); set => SetValue(MemberSizesProperty, value); }
     public bool ShowLoads { get => (bool)GetValue(ShowLoadsProperty); set => SetValue(ShowLoadsProperty, value); }
     public IReadOnlyDictionary<string, double>? LoadValues { get => (IReadOnlyDictionary<string, double>?)GetValue(LoadValuesProperty); set => SetValue(LoadValuesProperty, value); }
+    public static readonly DependencyProperty MemberNotesProperty = DependencyProperty.Register(nameof(MemberNotes), typeof(IReadOnlyDictionary<string, string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty HighlightedMembersProperty = DependencyProperty.Register(nameof(HighlightedMembers), typeof(IEnumerable<string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty JointNotesProperty = DependencyProperty.Register(nameof(JointNotes), typeof(IReadOnlyDictionary<string, string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+    public IReadOnlyDictionary<string, string>? JointNotes { get => (IReadOnlyDictionary<string, string>?)GetValue(JointNotesProperty); set => SetValue(JointNotesProperty, value); }
+    public IReadOnlyDictionary<string, string>? MemberNotes { get => (IReadOnlyDictionary<string, string>?)GetValue(MemberNotesProperty); set => SetValue(MemberNotesProperty, value); }
+    public IEnumerable<string>? HighlightedMembers { get => (IEnumerable<string>?)GetValue(HighlightedMembersProperty); set => SetValue(HighlightedMembersProperty, value); }
     public static readonly DependencyProperty ShowAxialValuesProperty = DependencyProperty.Register(nameof(ShowAxialValues), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
     public bool ShowAxialValues { get => (bool)GetValue(ShowAxialValuesProperty); set => SetValue(ShowAxialValuesProperty, value); }
     public static readonly DependencyProperty ShowUndeformedProperty = DependencyProperty.Register(nameof(ShowUndeformed), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -519,6 +535,25 @@ public sealed class ModelCanvas : FrameworkElement
                         screenPoints.TryGetValue(member.Start, out var sizeStart) && screenPoints.TryGetValue(member.End, out var sizeEnd))
                         MemberLabel(dc, size, sizeStart, sizeEnd, -9, member.Kind == MemberKind.Frame ? "Accent" : "AccentBright");
 
+            var highlighted = (HighlightedMembers ?? []).ToHashSet(StringComparer.Ordinal);
+            foreach (var member in Model.Members.Where(member => highlighted.Contains(member.Name)))
+                if (screenPoints.TryGetValue(member.Start, out var from) && screenPoints.TryGetValue(member.End, out var to))
+                    dc.DrawLine(new Pen(Brush("Accent"), 2.5) { DashStyle = member.Kind == MemberKind.Frame ? DashStyles.Solid : DashStyles.Dash }, from, to);
+            if (MemberNotes is { } notes)
+            {
+                var noted = Model.Members.Where(member => notes.TryGetValue(member.Name, out var note) && !string.IsNullOrWhiteSpace(note) &&
+                    screenPoints.ContainsKey(member.Start) && screenPoints.ContainsKey(member.End))
+                    .Select(member => (member.Name, Start: screenPoints[member.Start], End: screenPoints[member.End])).ToArray();
+                static Point Middle(Point a, Point b) => new((a.X + b.X) / 2, (a.Y + b.Y) / 2);
+                foreach (var (name, start, end) in noted)
+                {
+                    // two noted members that cross at their middle (an X of cables): each note moves towards its upper end
+                    var crossed = noted.Any(other => other.Name != name && (Middle(other.Start, other.End) - Middle(start, end)).Length < 14);
+                    var (upper, lower) = start.Y <= end.Y ? (start, end) : (end, start);
+                    MemberLabel(dc, notes[name], upper, lower, MemberSizes is null ? -9 : -20, highlighted.Contains(name) ? "Accent" : "AccentBright", crossed ? 0.3 : 0.5);
+                }
+            }
+
             var cableMembers = Model.Members
                 .Where(member => member.Kind == MemberKind.Cable)
                 .ToDictionary(member => member.Name, StringComparer.Ordinal);
@@ -564,6 +599,9 @@ public sealed class ModelCanvas : FrameworkElement
 
             foreach (var name in PinSupportPoints ?? [])
                 if (screenPoints.TryGetValue(name, out var support)) DrawPinSupport(dc, support);
+
+            foreach (var (name, note) in JointNotes ?? new Dictionary<string, string>())
+                if (!string.IsNullOrWhiteSpace(note) && screenPoints.TryGetValue(name, out var joint)) JointNote(dc, note, joint);
 
              if (deflectionView) dc.Pop();
             }
@@ -1102,12 +1140,28 @@ public sealed class ModelCanvas : FrameworkElement
     // Frame / cable name drawn along the member, rotated to the element's screen-space direction and kept upright.
     private void MemberLabel(DrawingContext dc, string text, Point a, Point b) => MemberLabel(dc, text, a, b, 9, "Text");
 
-    private void MemberLabel(DrawingContext dc, string text, Point a, Point b, double offset, string brush)
+    /// <summary>A note below a joint, reading upward: joints a bay apart keep their notes clear of each other.</summary>
+    private void JointNote(DrawingContext dc, string text, Point joint)
+    {
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var label = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface("Consolas"), 9.5, Brush("Accent"), dpi);
+        // laid out to the left of the joint, then turned a quarter about it: the text ends just under the joint
+        var origin = new Point(joint.X - 7 - label.Width, joint.Y - label.Height / 2);
+        dc.PushTransform(new RotateTransform(-90, joint.X, joint.Y));
+        dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(190, 255, 255, 255)), null,
+            new Rect(origin.X - 2, origin.Y - 1, label.Width + 4, label.Height + 2));
+        dc.DrawText(label, origin);
+        dc.Pop();
+    }
+
+    /// <summary>A label along a→b at <paramref name="at"/> of its length (0.5 = the middle), <paramref name="offset"/> px off the axis.</summary>
+    private void MemberLabel(DrawingContext dc, string text, Point a, Point b, double offset, string brush, double at = 0.5)
     {
         var dir = b - a;
         if (dir.Length < 8) return;
         var angle = ResultDisplayText.UprightAngle(dir.X, dir.Y);
-        var mid = new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
+        var mid = a + dir * at;
         var normal = new Vector(-dir.Y, dir.X);
         if (normal.Length > 0) normal.Normalize();
         var anchor = mid + normal * offset;

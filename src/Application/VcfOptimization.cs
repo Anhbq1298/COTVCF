@@ -46,17 +46,75 @@ public sealed record VcfRange(double Min, double Max, double Step)
         : $"{Min.ToString("0.###", CultureInfo.CurrentCulture)} … {Max.ToString("0.###", CultureInfo.CurrentCulture)} @ {Step.ToString("0.###", CultureInfo.CurrentCulture)}";
 }
 
+/// <summary>A cable's pretension [kN] from the first to the last step of the run. Every cable steps together: at step j of
+/// n it is at Min + (Max − Min) × j / (n − 1), so Min = Max keeps it fixed.</summary>
+public sealed record VcfForceSpan(double Min, double Max)
+{
+    public static VcfForceSpan Fixed(double value) => new(value, value);
+
+    public bool IsFixed => Math.Abs(Max - Min) <= 1e-9;
+
+    public double At(double fraction) => Min + (Max - Min) * fraction;
+
+    public string? Problem() =>
+        !double.IsFinite(Min) || !double.IsFinite(Max) ? "enter numbers for min and max."
+        : Max < Min - 1e-9 ? "max must not be less than min." : null;
+}
+
+/// <summary>How the fan cables (top corner → bottom chord) get their pretension. A longer cable needs more force, and the
+/// number of fan cables follows the number of bays, so the graded rules give every fan cable of a case its force from its
+/// length.</summary>
+public enum VcfFanGrading
+{
+    /// <summary>Each fan cable has a span of its own. A fan cable a larger number of bays adds takes the force of the cable
+    /// it copies × its length / that cable's length.</summary>
+    Manual,
+    /// <summary>T = T shortest + gradient [kN/m] × (L − L shortest): every fan cable steps by the same force.</summary>
+    Linear,
+    /// <summary>T = T shortest × L / L shortest.</summary>
+    Proportional,
+}
+
+/// <summary>
+/// The cable pretensions of the search space. All cables step together, <see cref="Steps"/> values each
+/// (<see cref="VcfForceSpan"/>); <see cref="Cables"/> holds the span of every cable with a force of its own — a Tab 03
+/// follower that is not listed keeps following its reference. With a graded rule (<see cref="Grading"/>) the fan cables
+/// are not listed: <see cref="Fan"/> is the span of the shortest one and the others follow by their length
+/// (<see cref="VcfOptimization.CableTargets"/>).
+/// </summary>
+public sealed record VcfCableForces(
+    int Steps,
+    IReadOnlyDictionary<string, VcfForceSpan> Cables,
+    VcfFanGrading Grading = VcfFanGrading.Manual,
+    VcfForceSpan? Fan = null,
+    double GradientKnPerM = 0)
+{
+    /// <summary>No cable has a force of its own (the settings before the form is read).</summary>
+    public static VcfCableForces None { get; } = new(1, new Dictionary<string, VcfForceSpan>(StringComparer.Ordinal));
+
+    public bool Graded => Grading != VcfFanGrading.Manual;
+
+    /// <summary>True when a cable changes from the first step to the last.</summary>
+    public bool Varies => Cables.Values.Any(span => !span.IsFixed) || Graded && Fan is { IsFixed: false };
+
+    /// <summary>Force variants of the cables: the steps, or 1 when no cable varies.</summary>
+    public int StepCount => Steps > 1 && Varies ? Steps : 1;
+
+    /// <summary>Where step <paramref name="step"/> (0-based) lies between Min (0) and Max (1).</summary>
+    public double Fraction(int step) => StepCount > 1 ? (double)Math.Clamp(step, 0, StepCount - 1) / (StepCount - 1) : 0;
+}
+
 /// <summary>
 /// Run → Optimization VCF: the search space of the VCF system — a range per geometry parameter (keys as in
-/// <see cref="VcfOptimization.Parameters"/>), the pretension range of every independent cable (<see cref="CableForces"/>,
-/// kN; a Tab 03 follower keeps following its reference), the storey force inputs (<see cref="StoreyLoads"/>: qz per Tab 01
+/// <see cref="VcfOptimization.Parameters"/>), the cable pretensions (<see cref="CableForces"/>, kN: one shared step for
+/// every cable, the fan cables by their length), the storey force inputs (<see cref="StoreyLoads"/>: qz per Tab 01
 /// load definition [kPa] by load name, plus <see cref="VcfOptimization.StoriesKey"/> and
-/// <see cref="VcfOptimization.TributaryKey"/>) and the candidate sections per member role and per cable. The run loop that
-/// walks the space is not built yet; the settings are kept by the view model.
+/// <see cref="VcfOptimization.TributaryKey"/>) and the candidate sections per member role and per cable. The settings are
+/// kept by the view model and walked by <see cref="VcfOptimizationRunner"/>.
 /// </summary>
 public sealed record VcfOptimizationSettings(
     IReadOnlyDictionary<string, VcfRange> Geometry,
-    IReadOnlyDictionary<string, VcfRange> CableForces,
+    VcfCableForces CableForces,
     IReadOnlyDictionary<string, VcfRange> StoreyLoads,
     IReadOnlyDictionary<VcfMemberRole, IReadOnlyList<string>> RoleSections,
     IReadOnlyDictionary<string, IReadOnlyList<string>> CableSections)
@@ -75,8 +133,8 @@ public sealed record VcfOptimizationSettings(
     /// <summary>Deflection limit = span / <see cref="SpanRatio"/> (span between the mega columns = bays × bay width).</summary>
     public double SpanRatio { get; init; } = VcfOptimization.DefaultSpanRatio;
 
-    /// <summary>Force variants: product of the cable pretension and storey force range counts.</summary>
-    public long ForceCount => CableForces.Values.Concat(StoreyLoads.Values).Aggregate(1L, (product, range) => Saturating(product, range.Count));
+    /// <summary>Force variants: the cable steps (all cables step together) × the storey force range counts.</summary>
+    public long ForceCount => StoreyLoads.Values.Aggregate((long)CableForces.StepCount, (product, range) => Saturating(product, range.Count));
 
     public long CombinationCount => Saturating(Saturating(GeometryCount, SectionCount), ForceCount);
 
@@ -113,7 +171,7 @@ public static class VcfOptimization
     /// <summary>Settings that keep the model as it is: every range fixed at the current value, no section candidates.</summary>
     public static VcfOptimizationSettings Current(VcfGeometryAnalysis analysis) => new(
         Parameters(analysis).ToDictionary(item => item.Parameter.Key, item => VcfRange.Fixed(item.Current, item.Parameter.DefaultStep)),
-        new Dictionary<string, VcfRange>(StringComparer.Ordinal),
+        VcfCableForces.None,
         new Dictionary<string, VcfRange>(StringComparer.Ordinal),
         new Dictionary<VcfMemberRole, IReadOnlyList<string>>(),
         new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal));
@@ -131,13 +189,120 @@ public static class VcfOptimization
     public const double DefaultForceStep = 1000;    // kN
     public const double DefaultQzStep = 1;          // kPa
 
-    /// <summary>A cable's Tab 03 pretension as a range: the fixed target, or Min … Max @ Step (null for a follower or an
-    /// unreadable row — those are not optimization variables).</summary>
-    public static VcfRange? CableRange(CablePretensionConfig cable) =>
-        cable.IsFollower ? null
-        : cable.ApplyRange && cable.MinForce is { } min && cable.MaxForce is { } max
-            ? new VcfRange(min, max, cable.StepForce is { } step && step > 0 ? step : DefaultForceStep)
-        : cable.TargetForce is { } target ? VcfRange.Fixed(target, DefaultForceStep) : null;
+    /// <summary>Forces a rule works out (a fan cable graded by its length) are rounded to this [kN].</summary>
+    public const double ForceRoundingKn = 100;
+
+    public static double RoundForce(double kN) => Math.Round(kN / ForceRoundingKn, MidpointRounding.AwayFromZero) * ForceRoundingKn;
+
+    /// <summary>A cable's Tab 03 pretension as a span: the fixed target, or Min … Max — for a cable with a force of its own
+    /// (independent, or a Same Step follower with its own end points). Null for a cable that takes another's value or an
+    /// unreadable row.</summary>
+    public static VcfForceSpan? CableSpan(CablePretensionConfig cable) =>
+        cable.IsSameStepFollower ? cable.MinForce is { } low && cable.MaxForce is { } high ? new VcfForceSpan(low, high) : null
+        : cable.IsFollower ? null
+        : cable.ApplyRange && cable.MinForce is { } min && cable.MaxForce is { } max ? new VcfForceSpan(min, max)
+        : cable.TargetForce is { } target ? VcfForceSpan.Fixed(target) : null;
+
+    /// <summary>The number of steps the form starts with: the most values a Tab 03 range has (1 when every cable is fixed).</summary>
+    public static int CableSteps(IEnumerable<CablePretensionConfig> cables) => cables
+        .Where(cable => !cable.IsFollower && cable.ApplyRange && cable.MinForce is not null && cable.MaxForce is not null)
+        .Select(cable => new VcfRange(cable.MinForce!.Value, cable.MaxForce!.Value, cable.StepForce is { } step && step > 0 ? step : DefaultForceStep).Count)
+        .Append(1).Max();
+
+    /// <summary>The cable forces of the model as it is: every cable at its Tab 03 span, the fan not graded.</summary>
+    public static VcfCableForces ModelCableForces(IReadOnlyList<CablePretensionConfig> cables)
+    {
+        var spans = new Dictionary<string, VcfForceSpan>(StringComparer.Ordinal);
+        foreach (var cable in cables)
+            if (CableSpan(cable) is { } span) spans.TryAdd(cable.CableName, span);
+        return new VcfCableForces(CableSteps(cables), spans);
+    }
+
+    /// <summary>The increase per metre [kN/m] the model's own fan forces show: from the shortest to the longest fan cable of
+    /// the first side, a whole number, never negative (0 when there is one fan cable or the forces fall with the length).</summary>
+    public static double FitGradient(VcfGeometryAnalysis analysis, IReadOnlyDictionary<string, double> forces)
+    {
+        var fan = VcfGeometry.FanCables(analysis).GroupBy(cable => cable.Side).FirstOrDefault()?.Where(cable => forces.ContainsKey(cable.Name)).ToArray();
+        if (fan is not { Length: > 1 }) return 0;
+        var (shortest, longest) = (fan[0].Name, fan[^1].Name);
+        var run = CableLength(analysis.Geometry, longest) - CableLength(analysis.Geometry, shortest);
+        return run > 1e-6 ? Math.Max(0, Math.Round((forces[longest] - forces[shortest]) / run, MidpointRounding.AwayFromZero)) : 0;
+    }
+
+    /// <summary>Chord length of a member [m] (0 when it or an end point is missing).</summary>
+    public static double CableLength(GeometryModel geometry, string member)
+    {
+        var cable = geometry.Members.FirstOrDefault(item => item.Name == member);
+        if (cable is null || !geometry.Points.TryGetValue(cable.Start, out var a) || !geometry.Points.TryGetValue(cable.End, out var b)) return 0;
+        var (dx, dy, dz) = (b.Position.X - a.Position.X, b.Position.Y - a.Position.Y, b.Position.Z - a.Position.Z);
+        return Math.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /// <summary>
+    /// The pretension [kN] of every cable of one case, at step <paramref name="step"/> (0-based) of the shared steps.
+    /// <paramref name="model"/> is the case's system (another number of bays when asked) and <paramref name="geometry"/> its
+    /// built geometry — the lengths are taken there; <paramref name="addedCables"/> are the fan cables that number of bays
+    /// adds, with the cable each copies; <paramref name="configs"/> are the Tab 03 rows (sync rules).
+    /// A cable with a span of its own is at that span; a Tab 03 follower applies its rule to its reference. With a graded
+    /// rule every fan cable takes T shortest (+ gradient × extra length, or × length ratio) of its side; without one, an
+    /// added fan cable takes the force of the cable it copies × its length ratio. Forces from a length rule are rounded to
+    /// <see cref="ForceRoundingKn"/>. A cable with no readable force is left out.
+    /// </summary>
+    public static IReadOnlyDictionary<string, double> CableTargets(VcfCableForces forces, int step, VcfGeometryAnalysis model, GeometryModel geometry,
+        IReadOnlyDictionary<string, string>? addedCables, IReadOnlyList<CablePretensionConfig> configs)
+    {
+        var fraction = forces.Fraction(step);
+        var byName = configs.GroupBy(cable => cable.CableName, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var resolved = new Dictionary<string, double?>(StringComparer.Ordinal);
+        double? Own(string name, int depth)
+        {
+            if (resolved.TryGetValue(name, out var done)) return done;
+            if (forces.Cables.TryGetValue(name, out var span)) return resolved[name] = span.At(fraction);
+            if (depth > 32 || !byName.TryGetValue(name, out var cable) || !cable.IsFollower || Own(cable.ReferenceCableName!, depth + 1) is not { } reference)
+                return resolved[name] = null;
+            return resolved[name] = cable.SyncMode switch
+            {
+                CableSyncMode.SameValues => reference,
+                CableSyncMode.SameRatio => reference * (cable.SyncFactor ?? 1),
+                CableSyncMode.SameOffset => reference + (cable.SyncFactor ?? 0),
+                CableSyncMode.SameStep when cable.MinForce is { } low && cable.MaxForce is { } high => low + (high - low) * fraction,
+                _ => null,
+            };
+        }
+
+        var lengths = new Dictionary<string, double>(StringComparer.Ordinal);
+        foreach (var member in geometry.Members.Where(member => member.Kind != MemberKind.Frame))
+            if (geometry.Points.TryGetValue(member.Start, out var a) && geometry.Points.TryGetValue(member.End, out var b))
+            {
+                var (dx, dy, dz) = (b.Position.X - a.Position.X, b.Position.Y - a.Position.Y, b.Position.Z - a.Position.Z);
+                lengths[member.Name] = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            }
+
+        var targets = new Dictionary<string, double>(StringComparer.Ordinal);
+        if (forces.Graded && forces.Fan is { } fan)
+        {
+            var shortestForce = fan.At(fraction);
+            foreach (var side in VcfGeometry.FanCables(model).Where(cable => lengths.ContainsKey(cable.Name)).GroupBy(cable => cable.Side))
+            {
+                var shortest = lengths[side.First().Name];   // the nearest cable of the side
+                foreach (var cable in side)
+                    targets[cable.Name] = RoundForce(forces.Grading == VcfFanGrading.Linear
+                        ? shortestForce + forces.GradientKnPerM * (lengths[cable.Name] - shortest)
+                        : shortest > 0 ? shortestForce * lengths[cable.Name] / shortest : shortestForce);
+            }
+        }
+        foreach (var name in lengths.Keys)
+        {
+            if (targets.ContainsKey(name)) continue;
+            if (addedCables is not null && addedCables.TryGetValue(name, out var template))
+            {
+                if (Own(template, 0) is not { } copied) continue;
+                targets[name] = RoundForce(lengths.TryGetValue(template, out var templateLength) && templateLength > 0 ? copied * lengths[name] / templateLength : copied);
+            }
+            else if (Own(name, 0) is { } own) targets[name] = own;
+        }
+        return targets;
+    }
 
     /// <summary>A Tab 01 load definition's qz [kPa] as a range (null when it has no readable value).</summary>
     public static VcfRange? LoadRange(LoadDefinition load) =>
@@ -145,13 +310,27 @@ public static class VcfOptimization
             ? new VcfRange(min, max, load.IncrementStep is { } step && step > 0 ? step : DefaultQzStep)
         : !load.ApplyIncrementStep && load.Qz is { } qz ? VcfRange.Fixed(qz, DefaultQzStep) : null;
 
-    /// <summary>The cable force and storey force problems: unreadable ranges, a negative qz, storeys that are not whole
-    /// numbers ≥ 1, a tributary width ≤ 0.</summary>
-    public static IReadOnlyList<string> ValidateForces(VcfOptimizationSettings settings)
+    /// <summary>The cable force problems: steps below 1, an unreadable span, a graded fan without a span for its shortest
+    /// cable or with an increase per metre that is not a number ≥ 0.</summary>
+    public static IReadOnlyList<string> CableProblems(VcfCableForces forces)
     {
         var problems = new List<string>();
-        foreach (var (cable, range) in settings.CableForces)
-            if (range.Problem() is { } problem) problems.Add($"Cable force {cable}: {problem}");
+        if (forces.Steps < 1) problems.Add("Cable force steps: enter a whole number of at least 1.");
+        foreach (var (cable, span) in forces.Cables)
+            if (span.Problem() is { } problem) problems.Add($"Cable force {cable}: {problem}");
+        if (!forces.Graded) return problems;
+        if (forces.Fan is not { } fan) problems.Add("Fan cable force: the shortest cable has no range.");
+        else if (fan.Problem() is { } problem) problems.Add($"Fan cable force: {problem}");
+        if (forces.Grading == VcfFanGrading.Linear && !(double.IsFinite(forces.GradientKnPerM) && forces.GradientKnPerM >= 0))
+            problems.Add("Fan cable force: the increase per metre must be a number of at least 0.");
+        return problems;
+    }
+
+    /// <summary>The cable force and storey force problems: <see cref="CableProblems"/>, unreadable ranges, a negative qz,
+    /// storeys that are not whole numbers ≥ 1, a tributary width ≤ 0.</summary>
+    public static IReadOnlyList<string> ValidateForces(VcfOptimizationSettings settings)
+    {
+        var problems = new List<string>(CableProblems(settings.CableForces));
         foreach (var (key, range) in settings.StoreyLoads)
         {
             var whole = key == StoriesKey;

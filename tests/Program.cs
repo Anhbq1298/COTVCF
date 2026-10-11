@@ -473,22 +473,74 @@ internal static class Program
                        FindVisuals<TextBox>(optimization).Where(box => System.Windows.Automation.AutomationProperties.GetName(box).StartsWith("Middle chord", StringComparison.Ordinal)).All(box => box.IsReadOnly) &&
                        VcfOptimization.ParametersAt(VcfGeometry.Analyze(defaultVm.State.Geometry, defaultVm.State.Truss), withDepth, range => range.Max).MiddleChordHeight == 12,
                     "The middle chord is not an optimization input: read-only at 0.5 × truss depth (depth 16 … 24 → 8 … 12 m) and not counted in the variants");
-                // Cable Force / Storey Force ranges start from Tab 03 / Tab 01; followers stay followers
+                // Cable Force starts from Tab 03: one shared step, the fan cables graded by their length; Storey Force from Tab 01
                 var forceStart = optimization.FormSettings();
-                var independents = defaultVm.State.Cables.Where(cable => !cable.IsFollower).ToArray();
-                Assert(forceStart.CableForces.Count == independents.Length && forceStart.CableForces["Cable1a-2"].Values().SequenceEqual(defaultVm.State.Cables.Single(cable => cable.CableName == "Cable1a-2").GetCandidateForces()) &&
-                       !forceStart.CableForces.ContainsKey("Cable1b-2") &&
+                var startCables = forceStart.CableForces;
+                Assert(startCables is { Steps: 1, Grading: VcfFanGrading.Linear, GradientKnPerM: 318 } && startCables.Fan == VcfForceSpan.Fixed(30_000) &&
+                       startCables.Cables.Keys.Order().SequenceEqual(["Cable1a-2", "Cable7a-2", "Cable8a-2"]) && startCables.Cables["Cable1a-2"] == new VcfForceSpan(100_000, 105_000) &&
                        forceStart.StoreyLoads[VcfOptimization.StoriesKey].Min == 10 && forceStart.StoreyLoads[VcfOptimization.TributaryKey].Min == 12,
-                    "Cable Force starts each independent cable at its 03 Pretension range, with the same values (Cable1a-2); a follower (Cable1b-2) is not a variable; Storey Force starts at NStories 10, B 12 m");
+                    "Cable Force starts with one step and the fan graded by length: the shortest fan cable at its 03 Pretension force (30,000 kN) + 318 kN per m, " +
+                    "fitted from the shortest to the longest fan cable of the model; the other cables with a force of their own keep their 03 Pretension span " +
+                    "(Cable1a-2 100,000 … 105,000); a follower (Cable1b-2) is not listed; Storey Force starts at NStories 10, B 12 m");
+                // the rows follow Preview at — here the maximum corner: 12 bays of 12 m, 24 m deep, which adds Cable9a-2 / 9b-2
+                static double Shown(string text) => double.Parse(text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.CurrentCulture);
+                var moreRows = optimization.CableForceRows;
+                var moreFan = moreRows.Where(row => row.Cable is "Cable2a-2" or "Cable3a-2" or "Cable4a-2" or "Cable5a-2" or "Cable6a-2" or "Cable9a-2").ToArray();
+                Assert(optimization.PreviewCorner.Items.OfType<string>().SequenceEqual(["Minimum · 10 bays", "Current · 10 bays", "More cables · 12 bays"]) &&
+                       moreFan.Select(row => row.Cable).SequenceEqual(["Cable2a-2", "Cable3a-2", "Cable4a-2", "Cable5a-2", "Cable6a-2", "Cable9a-2"]) &&
+                       moreFan[0].Tag == "shortest" && moreFan[0].Min == "30000" && moreFan[^1].Tag == "new" &&
+                       moreFan.Skip(1).Select(row => Shown(row.Min)).Zip(moreFan.Skip(2).Select(row => Shown(row.Min))).All(pair => pair.Second > pair.First) &&
+                       moreFan.Skip(1).All(row => Shown(row.Min) % 100 == 0 && Shown(row.Min) > 30_000 && row.Min == row.Max && row.Step == "—") &&
+                       moreRows.All(row => row.Cable is not ("Cable1b-2" or "Cable2b-2" or "Cable9b-2")) &&
+                       optimization.PreviewCaption.Text.Contains("12 bays", StringComparison.Ordinal) && optimization.PreviewCaption.Text.Contains("fan cables 6 + 6", StringComparison.Ordinal) &&
+                       optimization.PreviewCaption.Text.Contains("new: Cable9a-2, Cable9b-2", StringComparison.Ordinal) &&
+                       optimization.Preview.HighlightedMembers!.Order().SequenceEqual(["Cable9a-2", "Cable9b-2"]) &&
+                       optimization.Preview.MemberNotes!.ContainsKey("Cable9b-2") && optimization.Preview.MemberNotes["Cable9b-2"] == optimization.Preview.MemberNotes["Cable9a-2"],
+                    "Cable Force follows Preview at: at More cables · 12 bays the fan lists six cables of one side, the shortest with its inputs and the others by their length " +
+                    $"(rounded to 100 kN, growing to {moreFan[^1].Min} kN for the new Cable9a-2); cables that take another's value are not listed; the preview names the new cables, " +
+                    "emphasises them and labels every cable with its force");
+                optimization.FanGradingCombo.SelectedIndex = 2;
+                optimization.UpdateLayout();
+                var manualRows = optimization.CableForceRows;
+                var copied = Shown(manualRows.Single(row => row.Cable == "Cable9a-2").Min);
+                Assert(optimization.FormSettings().CableForces is { Grading: VcfFanGrading.Manual, Fan: null } manual && manual.Cables.ContainsKey("Cable2a-2") && manual.Cables.ContainsKey("Cable4b-2") &&
+                       !manual.Cables.ContainsKey("Cable2b-2") && manualRows.Single(row => row.Cable == "Cable6a-2") is var longest && longest.Min == "40000" && longest.Tag == "" &&
+                       manualRows.Single(row => row.Cable == "Cable9a-2").Tag == "new" && copied > 40_000 && copied % 100 == 0 &&
+                       optimization.FanGradientBox.Visibility != Visibility.Visible,
+                    $"Manual gives every fan cable with a force of its own its inputs (Cable6a-2 40,000 kN); the new Cable9a-2 takes Cable6a-2's force × its length ratio ({copied:N0} kN)");
+                optimization.FanGradingCombo.SelectedIndex = 0;
+                optimization.SetRange("Bays", "min", "8");
+                optimization.PreviewCorner.SelectedIndex = 0;
+                optimization.UpdateLayout();
+                Assert(optimization.PreviewCorner.Items.OfType<string>().First() == "Less cables · 8 bays" &&
+                       optimization.CableForceRows.All(row => row.Cable is not ("Cable6a-2" or "Cable9a-2")) && optimization.CableForceRows.Any(row => row.Cable == "Cable5a-2") &&
+                       optimization.PreviewCaption.Text.Contains("fan cables 4 + 4", StringComparison.Ordinal) &&
+                       optimization.PreviewCaption.Text.Contains("not in this variant: Cable6a-2, Cable6b-2", StringComparison.Ordinal) &&
+                       !optimization.Preview.HighlightedMembers!.Any() && !optimization.Preview.Model.Members.Any(member => member.Name == "Cable6a-2"),
+                    "At Less cables · 8 bays the fan has four cables a side: Cable6a-2 / 6b-2 leave the rows and the preview, and are named as not in this variant");
+                optimization.SetRange("Bays", "min", "10");
+                optimization.PreviewCorner.SelectedIndex = 2;
+                optimization.UpdateLayout();
                 optimization.SetRange("Cable1a-2", "min", "90000", "cable");
                 optimization.SetRange("Cable1a-2", "max", "110000", "cable");
-                optimization.SetRange("Cable1a-2", "step", "10000", "cable");
+                Assert(optimization.FormSettings().ForceCount == forceStart.ForceCount && optimization.CableForceRows.Single(row => row.Cable == "Cable1a-2").Step == "—",
+                    "With one step a cable's Max is not reached: no force variants are added");
+                optimization.CableStepsBox.Text = "3";
+                optimization.SetRange(OptimizationVcfWindow.FanKey, "max", "34000", "cable");
                 optimization.SetRange(VcfOptimization.StoriesKey, "max", "12", "storey");
                 optimization.SetRange(VcfOptimization.StoriesKey, "step", "2", "storey");
                 var forceSpace = optimization.FormSettings();
+                var stepped = optimization.CableForceRows;
                 Assert(forceSpace.ForceCount == forceStart.ForceCount * 3 * 2 && forceSpace.CombinationCount == forceSpace.GeometryCount * forceSpace.ForceCount &&
+                       stepped.Single(row => row.Cable == "Cable1a-2").Step == 10_000.ToString("N0") && stepped.Single(row => row.Cable == "Cable2a-2").Step == 2_000.ToString("N0") &&
+                       stepped.Single(row => row.Cable == "Cable9a-2").Step == 2_000.ToString("N0") &&
+                       Shown(stepped.Single(row => row.Cable == "Cable9a-2").Max) - Shown(stepped.Single(row => row.Cable == "Cable9a-2").Min) == 4_000 &&
                        optimization.StoreyTotals.Contains("kN", StringComparison.Ordinal),
-                    "A cable pretension range (90,000 … 110,000 @ 10,000 → 3) and a storey range (10 … 12 @ 2 → 2) multiply the force variants; the storey totals show");
+                    "All cables step together: 3 steps take Cable1a-2 from 90,000 to 110,000 (10,000 a step) and the shortest fan cable from 30,000 to 34,000 — " +
+                    "every fan cable by the same 2,000 a step — as 3 force variants, not 3 × 3; a storey range (10 … 12 @ 2 → 2) multiplies them; the storey totals show");
+                optimization.CableStepsBox.Text = "0";
+                Assert(!optimization.OkButton.IsEnabled && optimization.ProblemText.Text.Contains("Cable force steps", StringComparison.Ordinal), "Zero cable force steps are refused");
+                optimization.CableStepsBox.Text = "3";
                 optimization.SetRange(VcfOptimization.TributaryKey, "min", "0", "storey");
                 Assert(!optimization.OkButton.IsEnabled && optimization.ProblemText.Text.Contains("Tributary width B", StringComparison.Ordinal),
                     "A tributary width of zero is refused");

@@ -43,6 +43,10 @@ public sealed record VcfTopology(
     IReadOnlyDictionary<string, string> RenamedPoints,
     IReadOnlyDictionary<string, string> AddedCables);
 
+/// <summary>A fan cable: from a top corner (<see cref="Side"/> 0 left, 1 right) to the bottom-chord node
+/// <see cref="Order"/> bay lines away (1 = the nearest, the shortest cable of its side).</summary>
+public sealed record VcfFanCable(string Name, int Side, int Order);
+
 /// <summary>
 /// Edit → VCF Geometry: reads the system from the model and rebuilds it from a few parameters. The topology and every
 /// point / member name are kept — nodes are moved by a piecewise-linear map of their X (end-frame outer line, truss bay
@@ -190,6 +194,33 @@ public static class VcfGeometry
         foreach (var value in values.OrderBy(value => value))
             if (levels.Count == 0 || value - levels[^1] > Tolerance) levels.Add(value);
         return levels;
+    }
+
+    /// <summary>The fan cables of the system — the pattern <see cref="ChangeBays"/> keeps: every cable from a top chord point
+    /// on an end bay line to a bottom chord point on an interior line — by side, the nearest first.</summary>
+    public static IReadOnlyList<VcfFanCable> FanCables(VcfGeometryAnalysis analysis)
+    {
+        var lines = analysis.TrussLines;
+        var last = lines.Count - 1;
+        var top = analysis.TopPoints.ToHashSet(StringComparer.Ordinal);
+        var bottom = analysis.BottomPoints.ToHashSet(StringComparer.Ordinal);
+        int Line(string point)
+        {
+            var x = analysis.Geometry.Points[point].Position.X;
+            for (var index = 0; index < lines.Count; index++) if (Math.Abs(lines[index] - x) < Tolerance) return index;
+            return -1;
+        }
+        var fans = new List<VcfFanCable>();
+        foreach (var member in analysis.Geometry.Members.Where(member => member.Kind != MemberKind.Frame))
+        {
+            var (corner, other) = top.Contains(member.Start) && bottom.Contains(member.End) ? (member.Start, member.End)
+                : top.Contains(member.End) && bottom.Contains(member.Start) ? (member.End, member.Start) : (null, null);
+            if (corner is null || other is null) continue;
+            var (cornerLine, otherLine) = (Line(corner), Line(other));
+            if ((cornerLine == 0 || cornerLine == last) && otherLine > 0 && otherLine < last)
+                fans.Add(new(member.Name, cornerLine == 0 ? 0 : 1, Math.Abs(otherLine - cornerLine)));
+        }
+        return fans.OrderBy(fan => fan.Side).ThenBy(fan => fan.Order).ToArray();
     }
 
     // ---- number of bays ----------------------------------------------------------------------------------------------

@@ -693,7 +693,7 @@ internal static class FemModelFileChecks
         var (vm, state, _, warnings) = DefaultModelApp();
         var analysis = VcfGeometry.Analyze(state.Geometry, state.Truss);
         var current = VcfOptimization.Current(analysis);
-        var cables = state.Cables.Where(cable => !cable.IsFollower).ToDictionary(cable => cable.CableName, cable => VcfOptimization.CableRange(cable)!, StringComparer.Ordinal);
+        var cables = VcfOptimization.ModelCableForces(state.Cables.ToArray());   // every cable at its Tab 03 force, the fan not graded
         var live = state.LoadDefinitions.Single(load => load.ApplyIncrementStep);
         var dead = state.LoadDefinitions.Single(load => !load.ApplyIncrementStep);
         // a truss one Tab 02 height step deeper than the model, so the cases differ from the working model
@@ -780,6 +780,55 @@ internal static class FemModelFileChecks
         Check(bayRows.Length == 2 && bayRows.All(row => row.MaxDeflectionMm is > 0) && bayRows[1].MaxDeflectionMm > bayRows[0].MaxDeflectionMm,
             $"8 and 12 bays run on the regenerated model; the longer span deflects more ({bayRows[0].Deflection} → {bayRows[1].Deflection} mm)" +
             (bayRows.Any(row => row.MaxDeflectionMm is null) ? " — " + string.Join(" | ", bayRows.Select(row => row.Status)) : ""));
+
+        // ---- cable forces: one shared step, the fan cables by their length ----
+        var configs = state.Cables.ToArray();
+        var topology12 = VcfGeometry.ChangeBays(analysis, 12);
+        var model12 = VcfGeometry.Analyze(topology12);
+        var geometry12 = VcfGeometry.Build(model12, analysis.Parameters);
+        string[] fanA = ["Cable2a-2", "Cable3a-2", "Cable4a-2", "Cable5a-2", "Cable6a-2", "Cable9a-2"];
+        double Length12(string name) => VcfOptimization.CableLength(geometry12, name);
+        Check(VcfGeometry.FanCables(analysis).Select(fan => (fan.Name, fan.Side, fan.Order)).SequenceEqual(
+                  fanA.Take(5).Select((name, index) => (name, 0, index + 1)).Concat(fanA.Take(5).Select((name, index) => (name.Replace("a-2", "b-2"), 1, index + 1)))) &&
+              VcfGeometry.FanCables(model12).Where(fan => fan.Side == 0).Select(fan => fan.Name).SequenceEqual(fanA) &&
+              VcfOptimization.FitGradient(analysis, VcfOptimization.CableTargets(cables, 0, analysis, analysis.Geometry, null, configs)) == 318,
+            "The fan cables are read from the model (top corner → bottom chord: Cable2 … Cable6 a / b, the nearest first; 12 bays add Cable9); " +
+            "the model's own fan forces rise 318 kN per m from the shortest to the longest");
+
+        // + kN per m: T = T shortest + g × (L − L shortest), rounded to 100 kN, on both sides, for whatever fan the bays give
+        var linear = new VcfCableForces(3, cables.Cables.Where(pair => pair.Key is "Cable1a-2" or "Cable7a-2" or "Cable8a-2").ToDictionary(pair => pair.Key, pair => pair.Value),
+            VcfFanGrading.Linear, new VcfForceSpan(30_000, 34_000), 300);
+        var first12 = VcfOptimization.CableTargets(linear, 0, model12, geometry12, topology12.AddedCables, configs);
+        var last12 = VcfOptimization.CableTargets(linear, 2, model12, geometry12, topology12.AddedCables, configs);
+        Check(fanA.All(name => first12[name] == VcfOptimization.RoundForce(30_000 + 300 * (Length12(name) - Length12("Cable2a-2"))) &&
+                               first12[name.Replace("a-2", "b-2")] == first12[name] && last12[name] - first12[name] == 4_000) &&
+              first12["Cable2a-2"] == 30_000 && first12["Cable9a-2"] == 42_300 && fanA.Zip(fanA.Skip(1)).All(pair => first12[pair.Second] > first12[pair.First]) &&
+              first12["Cable1a-2"] == 100_000 && last12["Cable1a-2"] == 105_000 && first12["Cable1b-2"] == first12["Cable1a-2"] && first12["Cable7b-2"] == 30_000,
+            "Graded + 300 kN per m at 12 bays: every fan cable takes 30,000 kN + 300 × its extra length, rounded to 100 kN (Cable9a-2, 63.2 m: 42,300 kN), " +
+            "the same on both sides; all cables step together (fan + 4,000, Cable1a-2 100,000 → 105,000 over 3 steps); followers keep following");
+        var topology8 = VcfGeometry.ChangeBays(analysis, 8);
+        var model8 = VcfGeometry.Analyze(topology8);
+        var first8 = VcfOptimization.CableTargets(linear, 0, model8, VcfGeometry.Build(model8, analysis.Parameters), topology8.AddedCables, configs);
+        Check(!first8.ContainsKey("Cable6a-2") && !first8.ContainsKey("Cable9a-2") && fanA.Take(4).All(name => first8[name] == first12[name]) && first8.Count == 14,
+            "At 8 bays the fan has four cables a side with the same forces by length; the cables the smaller fan drops have none");
+
+        // × length, and Manual: a fan cable more bays add grows from the cable it copies by the length ratio
+        var proportional = VcfOptimization.CableTargets(linear with { Grading = VcfFanGrading.Proportional }, 0, model12, geometry12, topology12.AddedCables, configs);
+        var manual12 = VcfOptimization.CableTargets(cables, 0, model12, geometry12, topology12.AddedCables, configs);
+        Check(fanA.All(name => proportional[name] == VcfOptimization.RoundForce(30_000 * Length12(name) / Length12("Cable2a-2"))) && proportional["Cable9a-2"] == 84_900 &&
+              manual12["Cable6a-2"] == 40_000 && manual12["Cable5a-2"] == 30_000 && manual12["Cable9a-2"] == VcfOptimization.RoundForce(40_000 * Length12("Cable9a-2") / Length12("Cable6a-2")) &&
+              manual12["Cable9a-2"] == 47_000 && manual12["Cable9b-2"] == manual12["Cable9a-2"],
+            "× length takes 30,000 kN × L / L shortest (Cable9a-2 84,900 kN); Manual keeps the model's forces and gives the new Cable9a-2 Cable6a-2's 40,000 kN × 63.2 / 53.9 m = 47,000 kN");
+
+        // the run: one cable-step column, bays × steps cases (a cable a smaller fan drops does not multiply the cases)
+        var stepRows = Optimize(vm, Settings(new VcfRange(8, 12, 4), VcfRange.Fixed(10, 1), VcfRange.Fixed(live.MinQz.Value, 1)) with { CableForces = linear });
+        Check(stepRows.Length == 6 && stepRows.All(row => row.MaxDeflectionMm is > 0) &&
+              vm.VcfOptimizationColumns.Select(axis => axis.Label).SequenceEqual(["Bays", "Cable2a-2 [kN]"]) &&
+              stepRows.Select(row => string.Join(" / ", row.Values)).SequenceEqual(new[] { 8, 12 }.SelectMany(bays => new[] { 30_000, 32_000, 34_000 }.Select(force => $"{bays} / {force}"))) &&
+              stepRows.Select(row => row.MaxDeflectionMm).Distinct().Count() == 6,
+            "Run Optimization with a graded fan: 2 bay counts × 3 shared cable steps = 6 cases, each with its own deflection; the steps show as the shortest fan cable's force " +
+            $"(8 bays {string.Join(", ", stepRows.Take(3).Select(row => row.Deflection))} mm · 12 bays {string.Join(", ", stepRows.Skip(3).Select(row => row.Deflection))} mm)" +
+            (stepRows.Any(row => row.MaxDeflectionMm is null) ? " — " + string.Join(" | ", stepRows.Select(row => row.Status)) : ""));
 
         Check(ReferenceEquals(state.Geometry, geometryBefore) && vm.FemSectionProperties.SequenceEqual(propertiesBefore) && warnings.Count == 0,
             "Run Optimization leaves the working model, its member properties and SAP2000 unchanged" + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));

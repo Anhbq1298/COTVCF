@@ -26,12 +26,16 @@ public sealed record VcfOptimizationInputs(
     bool CableSag,
     Func<FemSectionProperties, (double? SgdPerM, string? Missing)>? CostPerMetre = null);
 
-/// <summary>One variable of the search space: its key ("geometry:Bay", "cable:Cable1a-2", "storey:LL", "role:TopChord",
-/// "section:Cable1a-2"), a column label and its values (numbers, or section names).</summary>
+/// <summary>One variable of the search space: its key ("geometry:Bay", "cable:step", "storey:LL", "role:TopChord",
+/// "section:Cable1a-2"), a column label and its values (numbers, cable steps, or section names).</summary>
 public sealed record VcfOptimizationAxis(string Key, string Label, IReadOnlyList<object> Values)
 {
     public bool Varies => Values.Count > 1;
 }
+
+/// <summary>One step of the cable forces — every cable steps together: its index and the force [kN] of the cable the
+/// results column is named after.</summary>
+public sealed record VcfCableStep(int Index, double ForceKN);
 
 /// <summary>One combination: the value picked on every axis (same order as <see cref="VcfOptimizationRunner.Axes"/>).</summary>
 public sealed record VcfOptimizationCase(long Index, IReadOnlyList<object> Values);
@@ -57,23 +61,23 @@ public sealed record VcfOptimizationResult(
 /// <summary>
 /// Run → Optimization VCF: walks the search space of <see cref="VcfOptimizationSettings"/> case by case. Each case is
 /// built in memory from the working model — geometry (with another number of bays when asked), member sections, SAP
-/// loading, Tab 01 point loads from qz × tributary length × B × NStories, Tab 03 cable targets (followers keep their sync
-/// rule) — and analysed with the same internal FEM as Run → Run FEM Analysis. The working model is never changed.
+/// loading, Tab 01 point loads from qz × tributary length × B × NStories, the cable targets of the case's step
+/// (<see cref="VcfOptimization.CableTargets"/>: every cable steps together, the fan cables by their length) — and analysed
+/// with the same internal FEM as Run → Run FEM Analysis. The working model is never changed.
 /// </summary>
 public sealed class VcfOptimizationRunner
 {
     public const int MaxCases = 10_000;
+    public const string CableStepKey = "cable:step";
     private readonly VcfOptimizationInputs inputs;
     private readonly VcfOptimizationSettings settings;
     private readonly FemStudyService fem = new();
     private readonly Dictionary<int, (VcfGeometryAnalysis Model, VcfTopology? Topology)> byBays = [];
-    private readonly Dictionary<string, CablePretensionConfig> configs;
 
     public VcfOptimizationRunner(VcfOptimizationInputs inputs, VcfOptimizationSettings settings)
     {
         this.inputs = inputs;
         this.settings = settings;
-        configs = inputs.Cables.GroupBy(cable => cable.CableName, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         var axes = new List<VcfOptimizationAxis>();
         foreach (var (key, range) in settings.Geometry)
         {
@@ -81,7 +85,7 @@ public sealed class VcfOptimizationRunner
                 VcfOptimization.BackSpan, VcfOptimization.BackStay }.FirstOrDefault(parameter => parameter.Key == key)?.Label ?? key;
             axes.Add(new("geometry:" + key, ShortLabel(key, label), range.Values().Cast<object>().ToArray()));
         }
-        foreach (var (cable, range) in settings.CableForces) axes.Add(new("cable:" + cable, $"{cable} [kN]", range.Values().Cast<object>().ToArray()));
+        if (CableSteps(settings.CableForces, inputs.Analysis) is { } cableSteps) axes.Add(cableSteps);
         foreach (var (key, range) in settings.StoreyLoads)
             axes.Add(new("storey:" + key, key switch { VcfOptimization.StoriesKey => "NStories", VcfOptimization.TributaryKey => "B [m]", _ => $"qz {key} [kPa]" },
                 range.Values().Cast<object>().ToArray()));
@@ -89,6 +93,22 @@ public sealed class VcfOptimizationRunner
         foreach (var (cable, sections) in settings.CableSections) axes.Add(new("section:" + cable, $"{cable} section", sections.Cast<object>().ToArray()));
         Axes = axes;
         Count = settings.CombinationCount;
+    }
+
+    /// <summary>The one axis the cable forces step on, or null when no cable varies. Its column is named after the first
+    /// cable that varies — the shortest fan cable when the fan is graded by length — and shows that cable's force.</summary>
+    private static VcfOptimizationAxis? CableSteps(VcfCableForces forces, VcfGeometryAnalysis analysis)
+    {
+        if (forces.StepCount < 2) return null;
+        var (name, span, rounded) = forces.Graded && forces.Fan is { IsFixed: false } fan
+            ? (VcfGeometry.FanCables(analysis).FirstOrDefault()?.Name ?? "Fan cable", fan, true)
+            : forces.Cables.Where(pair => !pair.Value.IsFixed).Select(pair => (pair.Key, pair.Value, false)).First();
+        var steps = Enumerable.Range(0, forces.StepCount).Select(index =>
+        {
+            var force = span.At(forces.Fraction(index));
+            return (object)new VcfCableStep(index, rounded ? VcfOptimization.RoundForce(force) : force);
+        }).ToArray();
+        return new(CableStepKey, $"{name} [kN]", steps);
     }
 
     private static string ShortLabel(string key, string label) => key switch
@@ -149,7 +169,7 @@ public sealed class VcfOptimizationRunner
             var loading = Loading(topology, geometry);
             var applied = AppliedPoints(model, topology, geometry);
             var loads = PointLoads(item, geometry, applied);
-            var targets = Targets(item, topology, geometry, properties);
+            var targets = Targets(item, model, topology, geometry, properties);
             var plan = FemLoadPlan.Build(inputs.Patterns, inputs.Cases, inputs.Combinations, loading, properties, geometry,
                 inputs.Tab01Patterns, inputs.PretensionPatterns, applied);
             var supports = FemStudyService.FindPinSupportPoints(geometry);
@@ -301,48 +321,21 @@ public sealed class VcfOptimizationRunner
         return loads;
     }
 
-    /// <summary>Target force of every analysed cable: an independent cable takes the case's value, a follower its Tab 03
-    /// sync rule applied to its reference's value; a new fan cable takes the value of the cable it copies.</summary>
-    private Dictionary<string, double> Targets(VcfOptimizationCase item, VcfTopology? topology, GeometryModel geometry,
+    /// <summary>Target force of every analysed cable at the case's cable step (<see cref="VcfOptimization.CableTargets"/>).</summary>
+    private Dictionary<string, double> Targets(VcfOptimizationCase item, VcfGeometryAnalysis model, VcfTopology? topology, GeometryModel geometry,
         IReadOnlyDictionary<string, FemSectionProperties> properties)
     {
-        var resolved = new Dictionary<string, (double Value, double Fraction)?>(StringComparer.Ordinal);
-        (double Value, double Fraction)? Resolve(string name, int depth)
-        {
-            if (resolved.TryGetValue(name, out var done)) return done;
-            if (depth > 32 || !configs.TryGetValue(name, out var cable)) return resolved[name] = null;
-            var axis = IndexOf("cable:" + name);
-            if (axis >= 0)
-            {
-                var values = Axes[axis].Values;
-                var value = Convert.ToDouble(item.Values[axis], CultureInfo.InvariantCulture);
-                var position = values.ToList().IndexOf(item.Values[axis]);
-                return resolved[name] = (value, values.Count > 1 ? (double)position / (values.Count - 1) : 0);
-            }
-            if (!cable.IsFollower || Resolve(cable.ReferenceCableName!, depth + 1) is not { } reference) return resolved[name] = null;
-            var factor = cable.SyncFactor;
-            return resolved[name] = cable.SyncMode switch
-            {
-                CableSyncMode.SameValues => reference,
-                CableSyncMode.SameRatio => (reference.Value * (factor ?? 1), reference.Fraction),
-                CableSyncMode.SameOffset => (reference.Value + (factor ?? 0), reference.Fraction),
-                CableSyncMode.SameStep when cable.MinForce is { } low && cable.MaxForce is { } high => (low + (high - low) * reference.Fraction, reference.Fraction),
-                _ => null,
-            };
-        }
-        var targets = new Dictionary<string, double>(StringComparer.Ordinal);
-        foreach (var member in geometry.Members.Where(member => member.Kind != MemberKind.Frame && properties.ContainsKey(member.Name)))
-        {
-            var source = topology is not null && topology.AddedCables.TryGetValue(member.Name, out var template) ? template : member.Name;
-            if (Resolve(source, 0) is { } target) targets[member.Name] = target.Value;
-        }
-        return targets;
+        var axis = IndexOf(CableStepKey);
+        var step = axis >= 0 && item.Values[axis] is VcfCableStep cableStep ? cableStep.Index : 0;
+        return VcfOptimization.CableTargets(settings.CableForces, step, model, geometry, topology?.AddedCables, inputs.Cables)
+            .Where(pair => properties.ContainsKey(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
     }
 
     /// <summary>Text of a case's value on an axis, for the results table.</summary>
     public static string Text(object value) => value switch
     {
         double number => number.ToString("0.###", CultureInfo.CurrentCulture),
+        VcfCableStep step => step.ForceKN.ToString("0.###", CultureInfo.CurrentCulture),
         _ => value.ToString() ?? "",
     };
 }

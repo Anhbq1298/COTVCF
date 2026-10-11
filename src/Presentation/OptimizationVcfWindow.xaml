@@ -2,8 +2,9 @@
         xmlns:p="clr-namespace:COT_VCF.Presentation" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls"
         Title="Optimization VCF" Icon="{x:Static p:AppIcon.Window}" Width="1180" Height="760" MinWidth="900" MinHeight="560"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
- <!-- Run → Optimization VCF: the inputs of Edit → VCF Geometry as a search space — min / max / step per geometry parameter
-      and candidate sections per member role and cable — with a preview at the minimum, current or maximum corner.
+ <!-- Run → Optimization VCF: the inputs of Edit → VCF Geometry as a search space — min / max / step per geometry parameter,
+      the cable pretensions (one shared step, the fan cables by their length) and candidate sections per member role and
+      cable — with a preview at the minimum, current or maximum corner (fewer / more fan cables when the bays change).
       OK keeps the settings; Run Optimization keeps them and analyses every combination. -->
  <Window.Resources>
   <Style x:Key="FormButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0"/></Style>
@@ -57,15 +58,42 @@
     <TabItem Header="Cable Force">
      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
       <StackPanel>
-       <TextBlock Text="Pretension per cable (starts from 03 Pretension)" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+       <!-- one shared step for every cable: at step j of n a cable is at Min + (Max − Min) × j / (n − 1) -->
+       <DockPanel Margin="0,0,0,8" LastChildFill="False">
+        <TextBlock DockPanel.Dock="Left" Text="Pretension [kN] · all cables step together (starts from 03 Pretension)" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+        <TextBox x:Name="CableStepsBox" DockPanel.Dock="Right" Width="48" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="CableForce_Changed"
+                 AutomationProperties.Name="Cable force steps" ToolTip="Number of force steps, shared by every cable: step 1 is each cable's Min, the last step its Max"/>
+        <TextBlock DockPanel.Dock="Right" Text="Steps" VerticalAlignment="Center" Margin="0,0,6,0"/>
+       </DockPanel>
+
+       <StackPanel x:Name="FanForcePanel">
+        <TextBlock Text="FAN CABLES · TOP CORNER → BOTTOM CHORD" Style="{StaticResource Subheading}"/>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+         <TextBlock Text="Force by length" VerticalAlignment="Center" Margin="0,0,6,0"/>
+         <ComboBox x:Name="FanGradingCombo" Width="110" SelectionChanged="CableForce_Changed" AutomationProperties.Name="Fan cable force by length"
+                   ToolTip="How a fan cable gets its force from its length — a longer cable takes more. Manual keeps a range per cable.">
+          <ComboBoxItem Content="+ kN per m" ToolTip="T = T shortest + increase × (L − L shortest): every fan cable steps by the same force"/>
+          <ComboBoxItem Content="× length" ToolTip="T = T shortest × L / L shortest"/>
+          <ComboBoxItem Content="Manual" ToolTip="A range per fan cable; a cable added by more bays takes the force of the cable it copies × its length ratio"/>
+         </ComboBox>
+         <TextBox x:Name="FanGradientBox" Width="60" Margin="6,0,0,0" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="CableForce_Changed"
+                  AutomationProperties.Name="Fan cable force increase per metre" ToolTip="Force added per metre a fan cable is longer than the shortest one"/>
+         <TextBlock x:Name="FanGradientUnit" Text="kN per m" VerticalAlignment="Center" Margin="6,0,0,0" Foreground="{StaticResource Muted}"/>
+        </StackPanel>
+        <Grid x:Name="FanForceGrid">
+         <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/><ColumnDefinition Width="46"/><ColumnDefinition Width="62"/><ColumnDefinition Width="74"/><ColumnDefinition Width="74"/><ColumnDefinition Width="56"/>
+         </Grid.ColumnDefinitions>
+        </Grid>
+        <TextBlock x:Name="FanForceNote" Style="{StaticResource Hint}" Margin="0,6,0,0"/>
+        <TextBlock Text="OTHER CABLES" Style="{StaticResource Subheading}" Margin="0,10,0,6"/>
+       </StackPanel>
        <Grid x:Name="CableForceGrid">
         <Grid.ColumnDefinitions>
-         <ColumnDefinition Width="*"/><ColumnDefinition Width="84"/><ColumnDefinition Width="84"/><ColumnDefinition Width="70"/>
-         <ColumnDefinition Width="24"/><ColumnDefinition Width="40"/>
+         <ColumnDefinition Width="*"/><ColumnDefinition Width="46"/><ColumnDefinition Width="62"/><ColumnDefinition Width="74"/><ColumnDefinition Width="74"/><ColumnDefinition Width="56"/>
         </Grid.ColumnDefinitions>
        </Grid>
-       <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
-                  Text="A cable that follows another on 03 Pretension (Same Values / Step / Ratio / Offset) keeps following it and is not a variable of its own. New fan cables from a larger number of bays take the range of the cable they copy."/>
+       <TextBlock x:Name="CableForceNote" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
       </StackPanel>
      </ScrollViewer>
     </TabItem>
@@ -108,12 +136,13 @@
     <TextBlock x:Name="ProblemText" DockPanel.Dock="Bottom" Foreground="{StaticResource Error}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
     <TextBlock x:Name="SpaceSummary" DockPanel.Dock="Bottom" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0"/>
     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
-     <ComboBox x:Name="PreviewCorner" DockPanel.Dock="Right" Width="120" SelectionChanged="PreviewCorner_Changed" AutomationProperties.Name="Preview at">
-      <ComboBoxItem Content="Minimum"/><ComboBoxItem Content="Current" IsSelected="True"/><ComboBoxItem Content="Maximum"/>
-     </ComboBox>
+     <!-- Minimum / Current / Maximum corner; named after the cables when the number of bays changes the fan (code-behind) -->
+     <ComboBox x:Name="PreviewCorner" DockPanel.Dock="Right" Width="170" SelectionChanged="PreviewCorner_Changed" AutomationProperties.Name="Preview at"
+               ToolTip="The corner of the ranges shown: the fewest bays (fewer fan cables), the model, or the most bays (more fan cables)"/>
      <TextBlock DockPanel.Dock="Right" Text="Preview at" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-     <TextBlock Text="PREVIEW · one corner of the ranges; the working model is not changed" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0"/>
+     <TextBlock Text="PREVIEW · one corner of the ranges; the working model is not changed" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0" TextTrimming="CharacterEllipsis"/>
     </DockPanel>
+    <TextBlock x:Name="PreviewCaption" DockPanel.Dock="Top" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,4"/>
     <Border BorderBrush="{StaticResource Border}" BorderThickness="1">
      <c:Structural2DViewer x:Name="Preview" ShowPointLabels="False" ShowDimensions="True" AutomationProperties.Name="Optimization VCF preview"/>
     </Border>

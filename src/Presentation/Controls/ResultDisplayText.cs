@@ -8,6 +8,15 @@ internal static class ResultDisplayText
     internal static string Force(double kilonewtons, string smallFormat = "0.##") =>
         Format(kilonewtons, smallFormat, "kN", "MN");
 
+    /// <summary>A force range in one unit ("6 … 8 MN"); one value when both ends are equal.</summary>
+    internal static string ForceRange(double minKilonewtons, double maxKilonewtons)
+    {
+        if (Math.Abs(maxKilonewtons - minKilonewtons) < 1e-9) return Force(minKilonewtons);
+        var large = Math.Max(Math.Abs(minKilonewtons), Math.Abs(maxKilonewtons)) > 1000;
+        string Number(double value) => (large ? value / 1000 : value).ToString(large ? "0.####" : "0.##", CultureInfo.CurrentCulture);
+        return $"{Number(minKilonewtons)} … {Number(maxKilonewtons)} {(large ? "MN" : "kN")}";
+    }
+
     internal static string Moment(double kilonewtonMetres, string smallFormat = "0.##") =>
         Format(kilonewtonMetres, smallFormat, "kN·m", "MN·m");
 
