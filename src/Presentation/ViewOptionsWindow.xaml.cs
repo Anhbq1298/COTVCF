@@ -24,17 +24,17 @@ public partial class ViewOptionsWindow : Window
 
     /// <summary>The display settings the form edits.</summary>
     private sealed record Settings(bool PointLabels, bool FrameLabels, bool CableLabels, bool MemberSizes,
-        bool Dimensions, bool Loading, bool FrameMesh, string Plane, bool AxialValues, bool Undeformed, bool DeflectionContour);
+        bool Dimensions, bool Loading, bool FrameMesh, bool FrameLocalAxes, string Plane, bool AxialValues, bool Undeformed, bool DeflectionContour);
 
     private static readonly Settings Defaults = new(PointLabels: true, FrameLabels: false, CableLabels: false, MemberSizes: false,
-        Dimensions: true, Loading: true, FrameMesh: false, Plane: "XZ", AxialValues: true, Undeformed: true, DeflectionContour: true);
+        Dimensions: true, Loading: true, FrameMesh: false, FrameLocalAxes: false, Plane: "XZ", AxialValues: true, Undeformed: true, DeflectionContour: true);
 
     private Settings Current() => new(viewer.ShowPointLabels, viewer.ShowFrameLabels, viewer.ShowCableLabels, viewModel.ShowFemMemberSizes,
-        viewModel.ShowDimensions, viewModel.ShowFemLoads, viewModel.ShowFemFrameMesh, viewer.CurrentPlane,
+        viewModel.ShowDimensions, viewModel.ShowFemLoads, viewModel.ShowFemFrameMesh, viewModel.ShowFrameLocalAxes, viewer.CurrentPlane,
         viewModel.ShowFemAxialValues, viewer.ShowUndeformed, viewer.ShowDeflectionContour);
 
     private Settings Form() => new(PointLabels.IsChecked == true, FrameLabels.IsChecked == true, CableLabels.IsChecked == true, MemberSizes.IsChecked == true,
-        Dimensions.IsChecked == true, Loading.IsChecked == true, FrameMesh.IsChecked == true,
+        Dimensions.IsChecked == true, Loading.IsChecked == true, FrameMesh.IsChecked == true, FrameLocalAxes.IsChecked == true,
         PlaneXY.IsChecked == true ? "XY" : PlaneYZ.IsChecked == true ? "YZ" : Plane3D.IsChecked == true ? "3D" : "XZ",
         AxialValues.IsChecked == true, Undeformed.IsChecked == true, DeflectionContour.IsChecked == true);
 
@@ -47,6 +47,7 @@ public partial class ViewOptionsWindow : Window
         Dimensions.IsChecked = settings.Dimensions;
         Loading.IsChecked = settings.Loading;
         FrameMesh.IsChecked = settings.FrameMesh;
+        FrameLocalAxes.IsChecked = settings.FrameLocalAxes;
         PlaneXY.IsChecked = settings.Plane == "XY";
         PlaneXZ.IsChecked = settings.Plane == "XZ";
         PlaneYZ.IsChecked = settings.Plane == "YZ";
@@ -72,6 +73,7 @@ public partial class ViewOptionsWindow : Window
         viewModel.ShowDimensions = settings.Dimensions;
         viewModel.ShowFemLoads = settings.Loading;
         viewModel.ShowFemFrameMesh = settings.FrameMesh;
+        viewModel.ShowFrameLocalAxes = settings.FrameLocalAxes;
         viewModel.ShowFemAxialValues = settings.AxialValues;
         if (viewer.CurrentPlane != settings.Plane) viewer.ShowPlane(settings.Plane);
     }

@@ -53,6 +53,7 @@
                   ToolTip="Bay spans and overall span below the model; level heights, overall height and node elevations beside it."/>
         <CheckBox x:Name="Loading" Content="Loading arrows" ToolTip="Tab 01 load arrows; with a completed case selected, each arrow is labelled with its Fz (FEM panes)."/>
         <CheckBox x:Name="FrameMesh" Content="Frame mesh" ToolTip="Each frame broken into its FEM mesh segments (FEM panes). Cables are not meshed."/>
+        <CheckBox x:Name="FrameLocalAxes" Content="Frame local axes (1 / 2 / 3)" ToolTip="Show the assigned frame local axes; select frames to isolate their axes."/>
        </StackPanel>
       </GroupBox>
      </StackPanel>

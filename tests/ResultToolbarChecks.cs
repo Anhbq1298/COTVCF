@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using System.Windows.Threading;
 using COT_VCF.Application;
 using COT_VCF.Configuration;
@@ -56,6 +57,33 @@ internal static class ResultToolbarChecks
             loadsToggle.IsChecked = true;
             Idle();
             Check(vm.ShowFemLoads && window.SharedViewer.Canvas.ShowLoads, "the canvas L toggle restores applied loads");
+
+            var axesToggle = Descendants<ToggleButton>(window.SharedViewer)
+                .Single(button => AutomationProperties.GetName(button) == "Show frame local axes");
+            axesToggle.IsChecked = true;
+            Idle();
+            Check(vm.ShowFrameLocalAxes && window.SharedViewer.Canvas.ShowFrameLocalAxes,
+                "the visualization A toggle enables frame local-axis markers in the 2D model view");
+            window.SharedViewer.ShowPlane("3D");
+            Idle();
+            var axesVisual = (ModelVisual3D)window.SharedViewer.FindName("LocalAxes3D")!;
+            var allAxes = (Model3DGroup)axesVisual.Content;
+            var allTriangles = allAxes.Children.OfType<GeometryModel3D>()
+                .Sum(model => ((MeshGeometry3D)model.Geometry).TriangleIndices.Count);
+            window.SharedViewer.Canvas.ToggleMemberSelection("170");
+            Idle();
+            var selectedAxes = (Model3DGroup)axesVisual.Content;
+            var selectedTriangles = selectedAxes.Children.OfType<GeometryModel3D>()
+                .Sum(model => ((MeshGeometry3D)model.Geometry).TriangleIndices.Count);
+            Check(allAxes.Children.Count == 3 && selectedAxes.Children.Count == 3 && selectedTriangles > 0 && selectedTriangles < allTriangles,
+                "3D local-axis markers show axes 1/2/3 and isolate the selected frame");
+            axesToggle.IsChecked = false;
+            Idle();
+            Check(!vm.ShowFrameLocalAxes && axesVisual.Content is null,
+                "turning off the A toggle removes the local-axis overlay");
+            window.SharedViewer.ClearSelection();
+            window.SharedViewer.ShowPlane("XZ");
+            Idle();
 
             Tool("Show Results").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Idle();

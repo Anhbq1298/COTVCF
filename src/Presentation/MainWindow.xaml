@@ -127,6 +127,8 @@
               ToolTip="Draw each frame broken into its FEM mesh segments (Analysis → Frame mesh). Cables are not meshed."/>
     <MenuItem Header="Member _size" IsCheckable="True" IsChecked="{Binding ShowFemMemberSizes}"
               ToolTip="Label each frame and cable with its assigned SAP section."/>
+    <MenuItem Header="Frame local _axes" IsCheckable="True" IsChecked="{Binding ShowFrameLocalAxes}"
+              ToolTip="Show local 1/2/3 axes of frames; select frames to isolate their axes."/>
     <MenuItem Header="_Dimensions" IsCheckable="True" IsChecked="{Binding ShowDimensions}"
               ToolTip="Dimension the model: bay spans and overall span below it; level heights, overall height and node elevations beside it"/>
     <MenuItem Header="_Loading" IsCheckable="True" IsChecked="{Binding ShowFemLoads}"
@@ -2006,7 +2008,7 @@
    <TextBlock DockPanel.Dock="Top" Text="{Binding SharedViewerCaption}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
    <TextBlock DockPanel.Dock="Bottom" Text="{Binding SharedViewerHint}" Style="{StaticResource Hint}" Margin="2,6,0,0"/>
    <Grid>
-    <c:Structural2DViewer x:Name="SharedViewer" ShowPointLabels="True" ShowDimensions="{Binding ShowDimensions, Mode=TwoWay}" SpanPoints="{Binding SharedViewerSpanPoints}"
+    <c:Structural2DViewer x:Name="SharedViewer" ShowPointLabels="True" ShowDimensions="{Binding ShowDimensions, Mode=TwoWay}" ShowFrameLocalAxes="{Binding ShowFrameLocalAxes, Mode=TwoWay}" SpanPoints="{Binding SharedViewerSpanPoints}"
                           Model="{Binding SharedViewerModel}"
                           AppliedPoints="{Binding SharedViewerAppliedPoints}"
                           SelectedAppliedPoint="{Binding SelectedAppliedPoint, Mode=TwoWay}"

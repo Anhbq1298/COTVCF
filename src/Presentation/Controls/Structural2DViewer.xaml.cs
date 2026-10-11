@@ -16,7 +16,7 @@ public partial class Structural2DViewer : UserControl
     public Structural2DViewer()
     {
         InitializeComponent();
-        Canvas.SelectionChanged += (_, _) => Update3DSelection();
+        Canvas.SelectionChanged += (_, _) => { Update3DSelection(); Update3DAxes(); };
     }
     public static readonly DependencyProperty ModelProperty = DependencyProperty.Register(nameof(Model), typeof(GeometryModel), typeof(Structural2DViewer), new PropertyMetadata(GeometryModel.Empty));
     public static readonly DependencyProperty ToolbarContentProperty = DependencyProperty.Register(nameof(ToolbarContent), typeof(object), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -99,6 +99,11 @@ public partial class Structural2DViewer : UserControl
         set => SetValue(MemberSectionsProperty, value);
     }
 
+    public static readonly DependencyProperty ShowFrameLocalAxesProperty = DependencyProperty.Register(nameof(ShowFrameLocalAxes),
+        typeof(bool), typeof(Structural2DViewer), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
+            (d, _) => ((Structural2DViewer)d).Update3DAxes()));
+    public bool ShowFrameLocalAxes { get => (bool)GetValue(ShowFrameLocalAxesProperty); set => SetValue(ShowFrameLocalAxesProperty, value); }
+
     public static readonly DependencyProperty ShowUndeformedProperty = DependencyProperty.Register(nameof(ShowUndeformed), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
     public bool ShowUndeformed { get => (bool)GetValue(ShowUndeformedProperty); set => SetValue(ShowUndeformedProperty, value); }
     public static readonly DependencyProperty ShowDeflectionContourProperty = DependencyProperty.Register(nameof(ShowDeflectionContour), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
@@ -147,6 +152,7 @@ public partial class Structural2DViewer : UserControl
             Rebuild3D(keepCamera: false);
             return;
         }
+        Update3DAxes();
         Canvas.Plane = plane;
         Canvas.Fit();
     }
@@ -174,6 +180,7 @@ public partial class Structural2DViewer : UserControl
         scene3D = scene;
         Structure3D.Content = scene.Model;
         Update3DSelection();
+        Update3DAxes();
         View3DInfo.Text = MemberSections is null
             ? "Isometric 3D · member sizes not read — use Read from SAP (FEM → Inputs) for to-scale sections · drag rotate · right-drag pan · wheel zoom · double-click fit"
             : $"Isometric 3D · to scale · {scene.FramesWithSapShape} frames with SAP section dimensions" +
@@ -277,6 +284,17 @@ public partial class Structural2DViewer : UserControl
             member.Model.Material = member.Model.BackMaterial = selected.Contains(member.Name) ? Selected3DMaterial : member.BaseMaterial;
     }
 
+    private void Update3DAxes()
+    {
+        if (LocalAxes3D is null || FrameAxisLegend is null) return;
+        var visible = Is3D && ShowFrameLocalAxes;
+        FrameAxisLegend.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) { LocalAxes3D.Content = null; return; }
+        var selected = Canvas.SelectedMembers.Where(name => Model.Members.Any(member => member.Name == name && member.Kind == MemberKind.Frame))
+            .ToHashSet(StringComparer.Ordinal);
+        LocalAxes3D.Content = StructureModel3D.BuildLocalAxes(Model, MemberSections, selected);
+    }
+
     private void View3DMouseWheel(object sender, MouseWheelEventArgs e)
     {
         viewWidth = Math.Max(1e-3, viewWidth * (e.Delta > 0 ? 1 / 1.15 : 1.15));
@@ -291,6 +309,8 @@ public sealed class ModelCanvas : FrameworkElement
     public static readonly DependencyProperty ShowPointLabelsProperty = DependencyProperty.Register(nameof(ShowPointLabels), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty ShowFrameLabelsProperty = DependencyProperty.Register(nameof(ShowFrameLabels), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty ShowCableLabelsProperty = DependencyProperty.Register(nameof(ShowCableLabels), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty ShowFrameLocalAxesProperty = DependencyProperty.Register(nameof(ShowFrameLocalAxes), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty MemberSectionsProperty = DependencyProperty.Register(nameof(MemberSections), typeof(IReadOnlyDictionary<string, FemSectionProperties>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty AppliedPointsProperty = DependencyProperty.Register(nameof(AppliedPoints), typeof(IEnumerable<AppliedPoint>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, AppliedPointsChanged));
     public static readonly DependencyProperty SelectedAppliedPointProperty = DependencyProperty.Register(nameof(SelectedAppliedPoint), typeof(AppliedPoint), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender | FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
     public static readonly DependencyProperty CablesProperty = DependencyProperty.Register(nameof(Cables), typeof(IEnumerable<CablePretensionConfig>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender, CablesChanged));
@@ -369,6 +389,8 @@ public sealed class ModelCanvas : FrameworkElement
     /// <summary>The selected members and joints (names), in the order of the model.</summary>
     public IReadOnlyList<string> SelectedMembers => Model.Members.Select(member => member.Name).Where(selectedMembers.Contains).ToArray();
     public IReadOnlyList<string> SelectedJoints => Model.Points.Keys.Where(selectedJoints.Contains).ToArray();
+    public bool ShowFrameLocalAxes { get => (bool)GetValue(ShowFrameLocalAxesProperty); set => SetValue(ShowFrameLocalAxesProperty, value); }
+    public IReadOnlyDictionary<string, FemSectionProperties>? MemberSections { get => (IReadOnlyDictionary<string, FemSectionProperties>?)GetValue(MemberSectionsProperty); set => SetValue(MemberSectionsProperty, value); }
 
     /// <summary>Where each joint was last drawn (checks).</summary>
     internal IReadOnlyDictionary<string, Point> JointScreenPoints => jointLocations;
@@ -669,6 +691,7 @@ public sealed class ModelCanvas : FrameworkElement
         else Text(dc, "No geometry loaded", new(Math.Max(16, ActualWidth / 2 - 70), ActualHeight / 2), "ViewportEdge");
 
         DrawSelection(dc);
+        if (ShowFrameLocalAxes) DrawFrameLocalAxes(dc);
         DrawAxes(dc);
         Text(dc, Plane + " projection" + (PanMode ? "  ·  PAN — drag to move the model (Esc to select)" : ""), new(16, 12), "ViewportEdge");
     }
@@ -1071,6 +1094,49 @@ public sealed class ModelCanvas : FrameworkElement
         dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(225, 255, 255, 255)),
             new Pen(Brush(selected ? "AccentBright" : "Border"), 1), bounds, 2, 2);
         dc.DrawText(label, point);
+    }
+
+    private void DrawFrameLocalAxes(DrawingContext dc)
+    {
+        var selectedFrames = selectedMembers.Where(name => Model.Members.Any(member => member.Name == name && member.Kind == MemberKind.Frame))
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var member in Model.Members.Where(member => member.Kind == MemberKind.Frame &&
+                     (selectedFrames.Count == 0 || selectedFrames.Contains(member.Name))))
+        {
+            if (!memberLocations.TryGetValue(member.Name, out var line) ||
+                !Model.Points.TryGetValue(member.Start, out var a) || !Model.Points.TryGetValue(member.End, out var b)) continue;
+            var start = new Point3D(a.Position.X, a.Position.Y, a.Position.Z);
+            var end = new Point3D(b.Position.X, b.Position.Y, b.Position.Z);
+            if ((end - start).Length < 1e-6) continue;
+            var (axis1, axis2, axis3) = StructureModel3D.LocalAxes(start, end, MemberSections?.GetValueOrDefault(member.Name)?.LocalAngleDeg ?? 0);
+            var origin = new Point((line.Start.X + line.End.X) / 2 + 4, (line.Start.Y + line.End.Y) / 2 + 4);
+            void Axis(Vector3D direction, string label, Color color)
+            {
+                var projected = Plane switch
+                {
+                    "XY" => new Vector(direction.X, -direction.Y),
+                    "YZ" => new Vector(direction.Y, -direction.Z),
+                    _ => new Vector(direction.X, -direction.Z),
+                };
+                var brush = new SolidColorBrush(color);
+                if (projected.Length < 1e-6)
+                {
+                    dc.DrawEllipse(Brushes.White, new Pen(brush, 1.5), origin, 3, 3);
+                    Text(dc, label, origin + new Vector(5, 1), brush);
+                    return;
+                }
+                projected.Normalize();
+                var tip = origin + projected * 17;
+                dc.DrawLine(new Pen(brush, 1.5), origin, tip);
+                var side = new Vector(-projected.Y, projected.X);
+                dc.DrawLine(new Pen(brush, 1.5), tip, tip - projected * 5 + side * 3);
+                dc.DrawLine(new Pen(brush, 1.5), tip, tip - projected * 5 - side * 3);
+                Text(dc, label, tip + projected * 2, brush);
+            }
+            Axis(axis1, "1", Color.FromRgb(0xC6, 0x28, 0x28));
+            Axis(axis2, "2", Color.FromRgb(0x2E, 0x7D, 0x32));
+            Axis(axis3, "3", Color.FromRgb(0x25, 0x63, 0xEB));
+        }
     }
 
     private void DrawAxes(DrawingContext dc)

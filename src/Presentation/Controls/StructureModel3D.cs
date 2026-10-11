@@ -152,7 +152,7 @@ public static class StructureModel3D
 
     /// <summary>SAP default local axes: 1 along the member; for a vertical member 2 = +X, otherwise 2 is the upward
     /// normal in the vertical plane through the member; 3 = 1 × 2; then rotated by the local-axis angle about 1.</summary>
-    private static (Vector3D L1, Vector3D L2, Vector3D L3) LocalAxes(Point3D start, Point3D end, double angleDeg)
+    internal static (Vector3D L1, Vector3D L2, Vector3D L3) LocalAxes(Point3D start, Point3D end, double angleDeg)
     {
         var l1 = end - start;
         l1.Normalize();
@@ -174,6 +174,57 @@ public static class StructureModel3D
             (l2, l3) = (rotated2, rotated3);
         }
         return (l1, l2, l3);
+    }
+
+    /// <summary>Small colour-coded local 1/2/3 arrows at frame midpoints. Selected frames alone are shown when
+    /// a frame selection exists; otherwise every frame is shown.</summary>
+    public static Model3DGroup BuildLocalAxes(GeometryModel model, IReadOnlyDictionary<string, FemSectionProperties>? sections,
+        IReadOnlySet<string>? selectedFrames = null)
+    {
+        var group = new Model3DGroup();
+        var meshes = new[] { new MeshBuilder(), new MeshBuilder(), new MeshBuilder() };
+        foreach (var member in model.Members.Where(member => member.Kind == MemberKind.Frame &&
+                     (selectedFrames is null || selectedFrames.Count == 0 || selectedFrames.Contains(member.Name))))
+        {
+            if (!model.Points.TryGetValue(member.Start, out var a) || !model.Points.TryGetValue(member.End, out var b)) continue;
+            var start = new Point3D(a.Position.X, a.Position.Y, a.Position.Z);
+            var end = new Point3D(b.Position.X, b.Position.Y, b.Position.Z);
+            var length = (end - start).Length;
+            if (length < 1e-6) continue;
+            var section = sections?.GetValueOrDefault(member.Name);
+            var (l1, l2, l3) = LocalAxes(start, end, section?.LocalAngleDeg ?? 0);
+            var depth = section?.Shape?.Depth ?? 0;
+            var width = section?.Shape?.Width ?? 0;
+            var origin = start + (end - start) * 0.5 + l2 * Math.Max(depth * 0.55, 0.08) + l3 * Math.Max(width * 0.55, 0.08);
+            var arrowLength = Math.Clamp(length * 0.18, 0.7, 2.2);
+            AddAxisArrow(meshes[0], origin, l1, arrowLength);
+            AddAxisArrow(meshes[1], origin, l2, arrowLength);
+            AddAxisArrow(meshes[2], origin, l3, arrowLength);
+        }
+        var colours = new[] { Color.FromRgb(0xC6, 0x28, 0x28), Color.FromRgb(0x2E, 0x7D, 0x32), Color.FromRgb(0x25, 0x63, 0xEB) };
+        for (var index = 0; index < meshes.Length; index++)
+            if (meshes[index].HasGeometry)
+            {
+                var material = Material(colours[index]);
+                group.Children.Add(new GeometryModel3D(meshes[index].ToMesh(), material) { BackMaterial = material });
+            }
+        return group;
+    }
+
+    private static void AddAxisArrow(MeshBuilder mesh, Point3D origin, Vector3D direction, double length)
+    {
+        var tip = origin + direction * length;
+        var headBase = origin + direction * (length * 0.73);
+        var radius = Math.Clamp(length * 0.022, 0.02, 0.055);
+        Extrude(mesh, Circle(radius * 2, 0, 8), origin, headBase, 0);
+        var (_, u, v) = LocalAxes(origin, tip, 0);
+        for (var index = 0; index < 8; index++)
+        {
+            var a = index * Math.PI / 4;
+            var b = (index + 1) * Math.PI / 4;
+            mesh.AddTriangle(headBase + (u * Math.Cos(a) + v * Math.Sin(a)) * radius * 2.8,
+                headBase + (u * Math.Cos(b) + v * Math.Sin(b)) * radius * 2.8, tip);
+        }
     }
 
     private static void Extrude(MeshBuilder mesh, IReadOnlyList<(double X2, double X3)[]> outline, Point3D start, Point3D end, double angleDeg)

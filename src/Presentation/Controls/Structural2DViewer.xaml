@@ -24,7 +24,7 @@
  </UserControl.Resources>
  <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource ViewportBg}">
   <Grid>
-    <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" PanMode="{Binding PanMode, ElementName=Root, Mode=TwoWay}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" ShowFrameLabels="{Binding ShowFrameLabels, ElementName=Root}" ShowCableLabels="{Binding ShowCableLabels, ElementName=Root}" ShowDimensions="{Binding ShowDimensions, ElementName=Root}" SpanPoints="{Binding SpanPoints, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}" Cables="{Binding Cables, ElementName=Root}" SelectedCable="{Binding SelectedCable, ElementName=Root, Mode=TwoWay}" TopPoints="{Binding TopPoints, ElementName=Root}" MiddlePoints="{Binding MiddlePoints, ElementName=Root}" BottomPoints="{Binding BottomPoints, ElementName=Root}" PinSupportPoints="{Binding PinSupportPoints, ElementName=Root}" FemResult="{Binding FemResult, ElementName=Root}" FemResultMode="{Binding FemResultMode, ElementName=Root}" FrameMeshSegments="{Binding FrameMeshSegments, ElementName=Root}" MemberSizes="{Binding MemberSizes, ElementName=Root}" ShowLoads="{Binding ShowLoads, ElementName=Root}" LoadValues="{Binding LoadValues, ElementName=Root}" MemberNotes="{Binding MemberNotes, ElementName=Root}" JointNotes="{Binding JointNotes, ElementName=Root}" HighlightedMembers="{Binding HighlightedMembers, ElementName=Root}" ShowAxialValues="{Binding ShowAxialValues, ElementName=Root}" ShowUndeformed="{Binding ShowUndeformed, ElementName=Root}" ShowDeflectionContour="{Binding ShowDeflectionContour, ElementName=Root}" DeflectionRangeMinMm="{Binding DeflectionRangeMinMm, ElementName=Root}" DeflectionRangeMaxMm="{Binding DeflectionRangeMaxMm, ElementName=Root}"/>
+    <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" PanMode="{Binding PanMode, ElementName=Root, Mode=TwoWay}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" ShowFrameLabels="{Binding ShowFrameLabels, ElementName=Root}" ShowCableLabels="{Binding ShowCableLabels, ElementName=Root}" ShowFrameLocalAxes="{Binding ShowFrameLocalAxes, ElementName=Root}" MemberSections="{Binding MemberSections, ElementName=Root}" ShowDimensions="{Binding ShowDimensions, ElementName=Root}" SpanPoints="{Binding SpanPoints, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}" Cables="{Binding Cables, ElementName=Root}" SelectedCable="{Binding SelectedCable, ElementName=Root, Mode=TwoWay}" TopPoints="{Binding TopPoints, ElementName=Root}" MiddlePoints="{Binding MiddlePoints, ElementName=Root}" BottomPoints="{Binding BottomPoints, ElementName=Root}" PinSupportPoints="{Binding PinSupportPoints, ElementName=Root}" FemResult="{Binding FemResult, ElementName=Root}" FemResultMode="{Binding FemResultMode, ElementName=Root}" FrameMeshSegments="{Binding FrameMeshSegments, ElementName=Root}" MemberSizes="{Binding MemberSizes, ElementName=Root}" ShowLoads="{Binding ShowLoads, ElementName=Root}" LoadValues="{Binding LoadValues, ElementName=Root}" MemberNotes="{Binding MemberNotes, ElementName=Root}" JointNotes="{Binding JointNotes, ElementName=Root}" HighlightedMembers="{Binding HighlightedMembers, ElementName=Root}" ShowAxialValues="{Binding ShowAxialValues, ElementName=Root}" ShowUndeformed="{Binding ShowUndeformed, ElementName=Root}" ShowDeflectionContour="{Binding ShowDeflectionContour, ElementName=Root}" DeflectionRangeMinMm="{Binding DeflectionRangeMinMm, ElementName=Root}" DeflectionRangeMaxMm="{Binding DeflectionRangeMaxMm, ElementName=Root}"/>
 
    <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,32,8,0" Padding="6" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1">
     <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
@@ -58,8 +58,16 @@
       </ModelVisual3D.Content>
      </ModelVisual3D>
      <ModelVisual3D x:Name="Structure3D"/>
+     <ModelVisual3D x:Name="LocalAxes3D"/>
     </Viewport3D>
     <TextBlock x:Name="View3DInfo" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,12,0,0" Style="{StaticResource Caption}"/>
+    <Border x:Name="FrameAxisLegend" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,36,0,0" Padding="5,2" Background="{StaticResource Overlay}" Visibility="Collapsed">
+     <StackPanel Orientation="Horizontal" TextElement.FontSize="11">
+      <TextBlock Text="1" Foreground="#C62828" FontWeight="Bold" Margin="0,0,8,0" ToolTip="Local 1: member I to J"/>
+      <TextBlock Text="2" Foreground="#2E7D32" FontWeight="Bold" Margin="0,0,8,0" ToolTip="Local 2: section depth direction"/>
+      <TextBlock Text="3" Foreground="#2563EB" FontWeight="Bold" ToolTip="Local 3: section width direction"/>
+     </StackPanel>
+    </Border>
    </Grid>
 
    <!-- floating viewer controls (top-right) -->
@@ -87,6 +95,10 @@
      </ToggleButton>
      <ToggleButton Style="{StaticResource ViewerTool}" IsChecked="{Binding ShowCableLabels, ElementName=Root, Mode=TwoWay}" ToolTip="Show cable / tendon labels (aligned to the member axis)">
       <TextBlock Text="C" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+     </ToggleButton>
+     <ToggleButton Style="{StaticResource ViewerTool}" IsChecked="{Binding ShowFrameLocalAxes, ElementName=Root, Mode=TwoWay}"
+                   ToolTip="Show frame local 1/2/3 axes (red / green / blue); select frames to isolate their axes" AutomationProperties.Name="Show frame local axes">
+      <TextBlock Text="A" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
      </ToggleButton>
      <ToggleButton Style="{StaticResource ViewerTool}" IsChecked="{Binding ShowDimensions, ElementName=Root, Mode=TwoWay}" ToolTip="Show dimensions: bay spans and overall span; level heights, overall height and node elevations" AutomationProperties.Name="Show dimensions">
       <TextBlock Text="D" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>

@@ -13,9 +13,12 @@ public sealed partial class MainViewModel
 
     private int femPane = FemPaneLoadPatterns;
     private bool showDimensions = true;
+    private bool showFrameLocalAxes;
 
     /// <summary>Display → Dimensions / View Options: bay spans, level heights and node elevations on the model viewer.</summary>
     public bool ShowDimensions { get => showDimensions; set => Set(ref showDimensions, value); }
+    /// <summary>Display the assigned local 1/2/3 axes on frame members in the model view.</summary>
+    public bool ShowFrameLocalAxes { get => showFrameLocalAxes; set => Set(ref showFrameLocalAxes, value); }
     private bool femCableFitView;
 
     /// <summary>The FEM pane shown in the left column (Define / Assign / Run / Result / Display menus).</summary>
