@@ -126,6 +126,63 @@ internal static class FemModelFileChecks
         }
         finally { if (File.Exists(path)) File.Delete(path); }
         RunDefaultModel();
+        RunFrameLocalAxes();
+    }
+
+    private static void RunFrameLocalAxes()
+    {
+        var state = new ApplicationState();
+        var silent = SapDouble.Create(null!, GeometryModel.Empty, refuseAll: true);
+        var workflow = new WorkflowService(silent.Gateway, state);
+        var vm = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(silent.Gateway, state, workflow));
+        vm.LoadDefaultFemModel();
+        var section = FrameSectionProperty.Default(FrameShape.Rectangle, "AXIS_CHECK", "S460") with { Depth = 2, Width = 0.4 };
+        vm.CommitFrameSections(vm.FrameSections.Append(section).ToArray(), new Dictionary<string, string>());
+        vm.AssignSection(["VRM001"], section.Name, cable: false);
+        var before = vm.FemSectionProperties.Single(property => property.MemberName == "VRM001");
+        var untouched = vm.FemSectionProperties.Single(property => property.MemberName == "VRM002");
+        Check(before.LocalAngleDeg == 0 && before.InPlaneInertiaM4 is > 0,
+            "assigning a rectangular section starts with its local 3-axis bending in the 2D FEM");
+
+        var changed = vm.AssignFrameLocalAxis(["VRM001"], 90);
+        var rotated = vm.FemSectionProperties.Single(property => property.MemberName == "VRM001");
+        Check(changed == 1 && rotated.LocalAngleDeg == 90 &&
+              Math.Abs(rotated.InPlaneInertiaM4!.Value - section.Values().I22) < 1e-12 &&
+              vm.FemSectionProperties.Single(property => property.MemberName == "VRM002") == untouched &&
+              vm.SharedViewerSections!["VRM001"].LocalAngleDeg == 90 && silent.Reads == 0 && silent.Writes == 0,
+            "Assign Frame Local Axes rotates only the selected frame: 90° uses I22 in FEM and updates the 3D section view without SAP2000");
+
+        var beam = new GeometryModel(new Dictionary<string, StructuralPoint>(StringComparer.Ordinal)
+        {
+            ["A"] = new("A", new(0, 0, 0)), ["B"] = new("B", new(5, 0, 0)), ["C"] = new("C", new(10, 0, 0)),
+        }, [new("AB", "A", "B", MemberKind.Frame), new("BC", "B", "C", MemberKind.Frame)]);
+        double Deflection(FemSectionProperties property)
+        {
+            var frames = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal)
+            {
+                ["AB"] = property with { MemberName = "AB" }, ["BC"] = property with { MemberName = "BC" },
+            };
+            var result = new PlanarFrameSolver().Solve(beam, frames, new Dictionary<string, FemSectionProperties>(),
+                new Dictionary<string, double>(), [new("B", 0, -100)], ["A", "C"]);
+            return -result.Joints.Single(joint => joint.PointName == "B").UZM;
+        }
+        Check(Math.Abs(Deflection(rotated) / Deflection(before) - before.InPlaneInertiaM4!.Value / rotated.InPlaneInertiaM4!.Value) < 1e-8,
+            "the frame FEM deflection changes with the rotated in-plane inertia");
+
+        var path = Path.Combine(Path.GetTempPath(), $"cotvcf-axis-{Guid.NewGuid():N}{FemInputDatabase.Extension}");
+        try
+        {
+            vm.SaveFemModelFileAsync(path).GetAwaiter().GetResult();
+            var openedState = new ApplicationState();
+            var openedWorkflow = new WorkflowService(silent.Gateway, openedState);
+            var reopened = new MainViewModel(openedState, openedWorkflow, new NoSelection(),
+                new ConfigService(silent.Gateway, openedState, openedWorkflow));
+            reopened.OpenFemModelFile(path);
+            var saved = reopened.FemSectionProperties.Single(property => property.MemberName == "VRM001");
+            Check(saved.LocalAngleDeg == 90 && Math.Abs(saved.InPlaneInertiaM4!.Value - rotated.InPlaneInertiaM4!.Value) < 1e-12,
+                "the selected frame's local-axis angle and effective FEM inertia survive saving and reopening the MCOTiS database");
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
     }
 
     private static void RunBlankModelFlow()
