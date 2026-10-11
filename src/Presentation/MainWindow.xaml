@@ -23,6 +23,8 @@
               ToolTip="Import the model open in ETABS — joints, frames, materials and sections (CFT, steel encased and Section Designer included), end releases, load patterns and loads, load cases and combinations — as a Mcotis model ready to run. Read-only; ETABS is never written. Without ETABS running, an .e2k file can be imported instead."/>
     <MenuItem Header="_Export to SAP2000…" Click="ExportToSap_Click" AutomationProperties.Name="Export to SAP2000"
               ToolTip="Write the Mcotis model into the model open in SAP2000 — geometry, sections, materials, assignments, supports, load patterns, Tab 01 loads, cable target forces, load cases and combinations — ready to run there. Shows the changes first; the SAP2000 model is not saved."/>
+    <MenuItem Header="Export to E_TABS…" Click="ExportToEtabs_Click" AutomationProperties.Name="Export to ETABS"
+              ToolTip="Write the Mcotis model into the model open in ETABS — frames matched by their ends, sections, materials, releases, supports, load patterns with every joint and frame load, load cases and combinations — ready to run there. Shows the changes first; the ETABS model is not saved."/>
     <MenuItem Header="_Read FEM Properties from SAP" Command="{Binding ReadFemProperties}"
               ToolTip="Read sections, materials (unit weight / mass), modifiers, end releases, load patterns with their assigned loads, static load cases and combinations from the connected SAP2000 model. Read-only; resets the Loads tables to SAP."/>
    </MenuItem>

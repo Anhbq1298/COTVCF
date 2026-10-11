@@ -93,15 +93,33 @@ public static class EtabsImport
         // ---- sections: Mcotis's own form where it has one, else ETABS's properties as a general section ----
         var assigned = frames.Select(frame => frame.Section).ToHashSet(StringComparer.Ordinal);
         var etabsSections = model.Sections.ToDictionary(section => section.Name, StringComparer.Ordinal);
+        // weight and mass per metre of a general section: its material on its area
+        SectionDesignerValues? Unit(FrameSectionProperty section) =>
+            materialByName.TryGetValue(section.Material, out var material) && section.Given is { Area: > 0 } given
+                ? new SectionDesignerValues(given.Area, given.I33, given.I22, material.UnitWeightKNPerM3 * given.Area,
+                    material.UnitWeightKNPerM3 / MaterialProperty.Gravity * given.Area, true)
+                : null;
         var sections = new List<FrameSectionProperty>();
         var weights = new Dictionary<string, SectionDesignerValues>(StringComparer.Ordinal);
-        foreach (var section in model.Sections)
+        // the sections the frames use and the I sections embedded in them (a new ETABS model lists a whole steel library)
+        var embedded = model.Sections.Where(section => assigned.Contains(section.Name) && section.EmbeddedSection.Length > 0)
+            .Select(section => section.EmbeddedSection).ToHashSet(StringComparer.Ordinal);
+        var unused = model.Sections.Count(section => !assigned.Contains(section.Name) && !embedded.Contains(section.Name));
+        if (unused > 0) notes.Add($"{unused} frame section(s) no frame uses are left out of the library.");
+        foreach (var section in model.Sections.Where(section => assigned.Contains(section.Name) || embedded.Contains(section.Name)))
         {
             try
             {
                 var (converted, weight, note) = Section(section, etabsSections, materialByName);
                 sections.Add(converted);
-                if (weight is not null) weights[section.Name] = weight;
+                // a general section's weight / mass modifiers are part of its self-weight in ETABS (Export to ETABS writes a
+                // composite's true self-weight that way); Mcotis applies section modifiers to stiffness only, so carry them here
+                double weightModifier = section.Modifiers.ElementAtOrDefault(7) is > 0 and var w ? w : 1;
+                double massModifier = section.Modifiers.ElementAtOrDefault(6) is > 0 and var mm ? mm : 1;
+                if (converted.Shape == FrameShape.General && (weight is not null || weightModifier != 1 || massModifier != 1) &&
+                    (weight ?? Unit(converted)) is { } own)
+                    weights[section.Name] = own with { WeightPerLengthKNPerM = own.WeightPerLengthKNPerM * weightModifier, MassPerLengthTPerM = own.MassPerLengthTPerM * massModifier };
+                else if (weight is not null) weights[section.Name] = weight;
                 if (note is not null && assigned.Contains(section.Name)) notes.Add(note);
             }
             catch (InvalidOperationException ex)
@@ -318,8 +336,10 @@ public static class EtabsImport
         }
         if (section.Reported is { Area: > 0 } values)
             return (General(values, section.Material), null,
-                $"{section.Name} ({section.ShapeName}): A / I33 / I22 as ETABS reports them; its self-weight is taken with the {section.Material} unit weight on that area.");
-        throw new InvalidOperationException($"Section {section.Name} ({section.ShapeName}) cannot be read from an .e2k file — import it from the running ETABS, " +
-            "which reports its properties.");
+                $"{section.Name} ({section.ShapeName}): A / I33 / I22 as ETABS reports them; its self-weight is the {section.Material} unit weight on that area" +
+                (section.Modifiers.ElementAtOrDefault(7) is var w && w > 0 && w != 1 ? $" × its weight modifier {w:0.####}." : "."));
+        throw new InvalidOperationException(section.Reported is null
+            ? $"Section {section.Name} ({section.ShapeName}) cannot be read from an .e2k file — import it from the running ETABS, which reports its properties."
+            : $"Section {section.Name} ({section.ShapeName}): ETABS reports no properties for it (e.g. an auto-select list); assign a section with properties in ETABS.");
     }
 }

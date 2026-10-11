@@ -518,6 +518,46 @@ public partial class MainWindow : Window
         }
     }
 
+    // File → Export to ETABS: preview the changes in the open ETABS model, confirm, write (not saved)
+    private async void ExportToEtabs_Click(object sender, RoutedEventArgs e)
+    {
+        const string title = "Export to ETABS";
+        if (DataContext is not MainViewModel vm) return;
+        if (!vm.CanExportToEtabs)
+        {
+            MessageBox.Show(this, "Open or import a model with geometry and member sections first.", title, MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        EtabsExportPreview preview;
+        try { preview = await vm.PreviewEtabsExportAsync(); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The export cannot be made: " + ex.Message + $"{Environment.NewLine}{Environment.NewLine}Nothing was written to ETABS.",
+                title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        var text = "Write the Mcotis model into the model open in ETABS?" + Environment.NewLine + Environment.NewLine +
+                   string.Join(Environment.NewLine, preview.Plan.Lines.Select(line => "• " + line)) + Environment.NewLine + Environment.NewLine +
+                   "ETABS frames whose ends are not those of a Mcotis member are removed. " +
+                   (preview.Plan.Target.IsLocked ? "The model is locked: ETABS deletes its analysis results when it is unlocked. " : "") +
+                   "The model is not saved — review it in ETABS and save, or close it without saving to discard the export.";
+        if (MessageBox.Show(this, text, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+        try
+        {
+            var report = await vm.ExportToEtabsAsync(preview);
+            MessageBox.Show(this, $"Exported to {report.Target.Name}:" + Environment.NewLine + Environment.NewLine +
+                                  string.Join(Environment.NewLine, report.Lines.Select(line => "• " + line)) + Environment.NewLine + Environment.NewLine +
+                                  "Review the model in ETABS, save it, and run the analysis (Analyze → Run Analysis).",
+                title, MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The export stopped: " + ex.Message + $"{Environment.NewLine}{Environment.NewLine}" +
+                                  "Part of the model may already be written. Close the ETABS model without saving to discard the export, then try again.",
+                title, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     // File → Export to SAP2000: preview the changes in the open SAP2000 model, confirm, write (not saved)
     private async void ExportToSap_Click(object sender, RoutedEventArgs e)
     {

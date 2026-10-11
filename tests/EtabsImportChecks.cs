@@ -132,7 +132,7 @@ internal static class EtabsImportChecks
             Check(mcotis.Shape == FrameShape.FilledTube && mcotis.SteelMaterial == "S690" && mcotis.Material == "C90/105" &&
                   Rel(ecm * mcotis.Given!.Area, esteel * etabs.Area) < 1e-6 && Rel(ecm * mcotis.Given.I33, esteel * etabs.I33) < 1e-6 &&
                   Rel(ecm * mcotis.Given.I22, esteel * etabs.I22) < 1e-6,
-                $"{name} is a CFT section with ETABS's EA and EI (EA {ecm * mcotis.Given.Area / 1e6:0.###} GN)");
+                $"{name} is a CFT section with ETABS's EA and EI (EA {ecm * mcotis.Given!.Area / 1e6:0.###} GN)");
         }
         var encased = vm.FrameSections.Single(section => section.Name == "SRC MegaCol 1000x1200");
         var etabsColumn = tables.Sections.Single(section => section.Name == encased.Name).Reported!;

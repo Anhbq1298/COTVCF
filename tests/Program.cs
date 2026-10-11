@@ -29,6 +29,17 @@ internal static class Program
                 SapImportChecks.Run();
                 return 0;
             }
+            if (args.Contains("--etabs-export"))
+            {
+                EtabsExportChecks.Run();
+                return 0;
+            }
+            // opt-in, live: exports into a private hidden ETABS this check starts (never the user's), imports it back and runs it
+            if (args.Contains("--etabs-export-live"))
+            {
+                EtabsExportChecks.RunLive();
+                return 0;
+            }
             if (args.Contains("--etabs-import"))
             {
                 EtabsImportChecks.Run();
@@ -1416,6 +1427,7 @@ internal static class Program
             FemModelFileChecks.Run();
             SapImportChecks.Run();
             EtabsImportChecks.Run();
+            EtabsExportChecks.Run();
             ColumnDesignChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }
