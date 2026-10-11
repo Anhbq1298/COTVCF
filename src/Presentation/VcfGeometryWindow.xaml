@@ -89,8 +89,6 @@
         <TextBlock Text="NStories" VerticalAlignment="Center" Margin="0,0,4,0"/>
         <TextBox x:Name="StoreyCountBox" Width="46" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="StoreyInput_Changed"
                  AutomationProperties.Name="Number of storeys" ToolTip="Number of storeys carried (whole number, at least 1)"/>
-        <Button x:Name="StoreyPointsButton" Content="Loaded Points…" Click="StoreyPoints_Click" Margin="12,0,0,0" ToolTipService.ShowOnDisabled="True"
-                AutomationProperties.Name="Loaded points" ToolTip="Choose the points the storey loads act on"/>
        </WrapPanel>
        <DataGrid DockPanel.Dock="Top" x:Name="StoreyLoadGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column"
                  MaxHeight="150" SelectionMode="Single" AutomationProperties.Name="Storey loads">
@@ -126,8 +124,21 @@
         <Button x:Name="AddStoreyLoadButton" DockPanel.Dock="Left" Content="+ Add Load" Click="AddStoreyLoad_Click" Margin="0" AutomationProperties.Name="Add storey load"/>
        </DockPanel>
        <TextBlock DockPanel.Dock="Bottom" x:Name="StoreyForceSummary" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+       <!-- the loaded points: chosen from a list, or picked on the preview (click or window, as in SAP2000) -->
+       <StackPanel DockPanel.Dock="Top" x:Name="StoreyPointsPanel" ToolTipService.ShowOnDisabled="True">
+        <TextBlock x:Name="StoreyPointsTitle" Text="LOADED POINTS" Style="{StaticResource Subheading}" Margin="0,0,0,2"/>
+        <WrapPanel Margin="0,0,0,4">
+         <Button x:Name="StoreyAddPointsButton" Content="+ Add" Click="AddStoreyPoints_Click" Margin="0,0,4,0" AutomationProperties.Name="Add loaded points"
+                 ToolTip="Choose points of the model from a list and load them"/>
+         <Button x:Name="StoreyAddSelectedButton" Content="+ Add Selected" Click="AddSelectedStoreyPoints_Click" Margin="0,0,4,0" ToolTipService.ShowOnDisabled="True"
+                 AutomationProperties.Name="Add selected points"
+                 ToolTip="Load the points selected on the preview — click a point, or drag a window around several, then press this"/>
+         <Button x:Name="StoreyRemovePointsButton" Content="- Remove" Click="RemoveStoreyPoints_Click" Margin="0" ToolTipService.ShowOnDisabled="True"
+                 AutomationProperties.Name="Remove loaded points" ToolTip="Take the load off the points selected in the table below, or on the preview"/>
+        </WrapPanel>
+       </StackPanel>
        <DataGrid x:Name="StoreyForceGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column"
-                 AutomationProperties.Name="Storey force" SelectionMode="Single"/>
+                 AutomationProperties.Name="Storey force" SelectionMode="Extended" SelectionChanged="StoreyForceGrid_SelectionChanged"/>
       </DockPanel>
      </Border>
     </TabItem>

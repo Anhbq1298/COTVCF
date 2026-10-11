@@ -28,6 +28,8 @@ public partial class Structural2DViewer : UserControl
     public void ClearSelection() => Canvas.ClearSelection();
     public IReadOnlyList<string> SelectedMembers => Canvas.SelectedMembers;
     public IReadOnlyList<string> SelectedJoints => Canvas.SelectedJoints;
+    /// <summary>Raised when the selected joints or members change.</summary>
+    public event EventHandler? SelectionChanged { add => Canvas.SelectionChanged += value; remove => Canvas.SelectionChanged -= value; }
     /// <summary>The truss chord points: the overall span dimension runs between their outermost lines (the mega columns).</summary>
     public IEnumerable<string>? SpanPoints { get => (IEnumerable<string>?)GetValue(SpanPointsProperty); set => SetValue(SpanPointsProperty, value); }
     public static readonly DependencyProperty AppliedPointsProperty = DependencyProperty.Register(nameof(AppliedPoints), typeof(IEnumerable<AppliedPoint>), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -316,22 +318,27 @@ public sealed class ModelCanvas : FrameworkElement
     internal IReadOnlyDictionary<string, Point> JointScreenPoints => jointLocations;
     internal IReadOnlyDictionary<string, (Point Start, Point End, MemberKind Kind)> MemberScreenLines => memberLocations;
 
+    /// <summary>Raised when the selected joints or members change: a click, a window, a clear.</summary>
+    public event EventHandler? SelectionChanged;
+
     public void ClearSelection()
     {
+        var any = selectedMembers.Count > 0 || selectedJoints.Count > 0;
         selectedMembers.Clear();
         selectedJoints.Clear();
         InvalidateVisual();
+        if (any) SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Selects (or deselects) what lies at <paramref name="position"/>, as a click does (checks).</summary>
     public bool SelectAt(Point position)
     {
         var joint = jointLocations.Where(item => (item.Value - position).Length <= 6).OrderBy(item => (item.Value - position).Length).Select(item => item.Key).FirstOrDefault();
-        if (joint is not null) { Toggle(selectedJoints, joint); InvalidateVisual(); return true; }
+        if (joint is not null) { Toggle(selectedJoints, joint); InvalidateVisual(); SelectionChanged?.Invoke(this, EventArgs.Empty); return true; }
         var member = memberLocations.Where(item => DistanceToSegment(position, item.Value.Start, item.Value.End) <= 5)
             .OrderBy(item => Math.Round(DistanceToSegment(position, item.Value.Start, item.Value.End), 1)).ThenBy(item => item.Value.Kind != MemberKind.Frame)
             .Select(item => item.Key).FirstOrDefault();
-        if (member is not null) { Toggle(selectedMembers, member); InvalidateVisual(); return true; }
+        if (member is not null) { Toggle(selectedMembers, member); InvalidateVisual(); SelectionChanged?.Invoke(this, EventArgs.Empty); return true; }
         return false;
     }
 
@@ -344,6 +351,7 @@ public sealed class ModelCanvas : FrameworkElement
         foreach (var (name, (start, end, _)) in memberLocations)
             if (box.Contains(start) && box.Contains(end) || crossing && SegmentTouches(box, start, end)) selectedMembers.Add(name);
         InvalidateVisual();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private static void Toggle(HashSet<string> set, string name) { if (!set.Remove(name)) set.Add(name); }

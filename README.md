@@ -121,8 +121,9 @@ opens on them. **SAP Cases** shows the cases saved from SAP2000 instead, and **+
 Case, Definition and From columns define others.
 
 The loads and the cable forces are part of the parametric set-up of the model, **Edit → VCF System**: the **Storey Force**
-sheet takes the tributary width B, the number of storeys, the loaded points and one qz per load pattern; the **Cable
-Force** sheet takes the target force of each cable. They are the data of Tab 1 and Tab 3 with **one fixed value each** —
+sheet takes the tributary width B, the number of storeys, one qz per load pattern and the loaded points — chosen from a
+list (**+ Add**), picked on the preview by a click or a window (**+ Add Selected**) and taken off with **- Remove**; the
+preview shows a load arrow at each. The **Cable Force** sheet takes the target force of each cable. They are the data of Tab 1 and Tab 3 with **one fixed value each** —
 no range there. A range is an input of an optimization run (**Run → Optimization VCF**), set when it is run.
 
 The flow is the one of SAP2000: **Define → Load Patterns** (add or remove patterns of the model — name, type, self-weight

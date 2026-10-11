@@ -189,13 +189,14 @@ public sealed partial class MainViewModel
         Update();
     }
 
-    /// <summary>The point picker with the model's points, for the loaded points of the Storey Force sheet; null when the
-    /// user backs out.</summary>
-    internal IReadOnlyList<string>? ChooseLoadPoints(IReadOnlyList<string> current)
+    /// <summary>The point picker for the Storey Force sheet: the model's points that are not loaded yet, to add to
+    /// <paramref name="loaded"/>; null when the user backs out.</summary>
+    internal IReadOnlyList<string>? ChooseLoadPoints(IReadOnlyList<string> loaded)
     {
-        var available = State.Geometry.Points.Values.OrderBy(point => point.Position.X).ThenBy(point => point.Name, StringComparer.Ordinal)
-            .Select(point => point.Name).ToArray();
-        return selection.Select("Select Loaded Points", available, current);
+        var skip = loaded.ToHashSet(StringComparer.Ordinal);
+        var available = State.Geometry.Points.Values.Where(point => !skip.Contains(point.Name))
+            .OrderBy(point => point.Position.X).ThenBy(point => point.Name, StringComparer.Ordinal).Select(point => point.Name).ToArray();
+        return selection.Select("Add Loaded Points", available, []);
     }
 
     private void AddCaseRow(FemCaseRow row)

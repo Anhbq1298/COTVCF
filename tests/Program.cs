@@ -348,6 +348,24 @@ internal static class Program
                        forceState.TributaryWidthB == 12 && forceState.LoadDefinitions.Single(load => load.LoadName == "LL_ABOVE").ApplyIncrementStep,
                     "Storey Force takes B, the storeys, the loaded points and one qz per load pattern; the forces follow at once (7.5 kPa × 100 m² × 8 storeys = −6,000 kN), " +
                     "bad input greys Apply, and the model is untouched until Apply");
+                // the user chooses the loaded points: on the preview (click, then + Add Selected) or in the table (- Remove)
+                forceWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                var forceCanvas = forceWindow.Preview.Canvas;
+                var arrows = forceWindow.Preview.AppliedPoints!.Select(point => point.PointName).ToArray();
+                var idle = !forceWindow.StoreyAddSelectedButton.IsEnabled && !forceWindow.StoreyRemovePointsButton.IsEnabled && forceWindow.StoreyAddPointsButton.IsEnabled;
+                forceCanvas.SelectAt(forceCanvas.JointScreenPoints["TTrPt001"]);
+                var picked = forceWindow.StoreyAddSelectedButton.IsEnabled && Equals(forceWindow.StoreyAddSelectedButton.Content, "+ Add Selected (1)");
+                forceWindow.AddSelectedStoreyPoints();
+                forceWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(arrows.Length == 10 && !arrows.Contains("TTrPt001") && idle && picked && forceWindow.StoreyPoints.Count == 11 && forceWindow.StoreyForces[0].Point == "TTrPt001" &&
+                       forceWindow.Preview.AppliedPoints!.Count() == 11 && forceWindow.Preview.SelectedJoints.Count == 0 && forceWindow.StoreyPointsTitle.Text == "LOADED POINTS (11)",
+                    "the loaded points are drawn on the preview; a point clicked there is loaded with + Add Selected");
+                forceWindow.StoreyForceGrid.SelectedItem = forceWindow.StoreyForces[0];
+                var rowPicked = forceWindow.StoreyRemovePointsButton.IsEnabled && forceWindow.Preview.SelectedAppliedPoint?.PointName == "TTrPt001";
+                forceWindow.RemoveSelectedStoreyPoints();
+                Assert(rowPicked && forceWindow.StoreyPoints.Count == 10 && !forceWindow.StoreyPoints.Contains("TTrPt001") && forceWindow.StoreyForces[0].Point == "TTrPt002" &&
+                       forceState.AppliedPoints.Count == 11,
+                    "- Remove takes the load off the point selected in the table (highlighted on the preview); the model still waits for Apply");
                 forceWindow.ApplyFormAsync().GetAwaiter().GetResult();
                 forceWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Assert(forceState.Cables.Single(cable => cable.CableName == "Cable1a-2") is { ApplyRange: false, TargetForce: 90_000.0 } &&

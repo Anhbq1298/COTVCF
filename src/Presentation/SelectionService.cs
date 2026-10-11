@@ -31,7 +31,7 @@ public sealed class SelectionService : ISelectionService
             SelectionUnit = DataGridSelectionUnit.FullRow,
             IsReadOnly = true
         };
-        grid.Columns.Add(new DataGridTextColumn { Header = "SAP object", Binding = new Binding(nameof(SelectionRow.Name)), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+        grid.Columns.Add(new DataGridTextColumn { Header = "Object", Binding = new Binding(nameof(SelectionRow.Name)), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
         var all = new Button { Content = "Select all shown" }; all.Click += (_, _) => grid.SelectAll();
         var clear = new Button { Content = "Clear selection" }; clear.Click += (_, _) => grid.UnselectAll();
         toolbar.Children.Add(all); toolbar.Children.Add(clear); DockPanel.SetDock(toolbar, Dock.Top); panel.Children.Add(toolbar);

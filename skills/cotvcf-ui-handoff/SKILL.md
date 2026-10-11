@@ -373,10 +373,18 @@ earlier tall-header / large-button / blue-block look.
       (→ `ApplyRange = false`, `TargetForce`) or a Same Step follower (→ `MinForce = MaxForce`); staged in
       `cableForceEdits`, written through `MainViewModel.SetCableTargetForces`. A cable that follows another's value
       (Same Values / Ratio / Offset) and a new-fan-cable row are read-only (a follower shows `follows <cable>` until Apply).
-    - **Storey Force**: `Trib. width B`, `NStories`, `Loaded Points…` (the point picker, `MainViewModel.ChooseLoadPoints`;
-      disabled while the form changes the number of bays), a grid of loads — Load Pattern (from `State.LoadPatterns`) and
-      qz [kPa] with a delete button — and `+ Add Load`; below it the read-out of Fz per loaded point for the form's
-      values. Written through `MainViewModel.SetStoreyLoads` (a load whose value is unchanged keeps its Tab 01 definition).
+    - **Storey Force**: `Trib. width B`, `NStories`, a grid of loads — Load Pattern (from `State.LoadPatterns`) and
+      qz [kPa] with a delete button — and `+ Add Load`; then **LOADED POINTS (n)** and below it the table of Fz per
+      loaded point for the form's values. Written through `MainViewModel.SetStoreyLoads` (a load whose value is unchanged
+      keeps its Tab 01 definition).
+    - **The user chooses the loaded points** (asked for explicitly, 2026-10-11 — keep all three ways): `+ Add` opens the
+      point picker with the model's points that are not loaded yet (`MainViewModel.ChooseLoadPoints`, title
+      `Add Loaded Points`); `+ Add Selected (n)` loads the points selected **on the preview** — click a point or drag a
+      window, as in SAP2000 (`Structural2DViewer.SelectedJoints`; the viewer raises `SelectionChanged`, added for this);
+      `- Remove` takes the load off the rows selected in the table (multi-select) and off the loaded points selected on
+      the preview. The preview draws a load arrow at every loaded point (`Preview.AppliedPoints`) and highlights the row
+      selected in the table. All staged (`storeyPoints`) until Apply / OK; the three buttons wait for Apply while the form
+      changes the number of bays (the points would be those of another model).
       An invalid input (B ≤ 0, storeys not a whole number ≥ 1, a row without pattern or qz, a pattern twice) is listed
       under the preview and greys Apply / OK.
     - Do not add a range, Min / Max / Step or an "Incr?" switch to these sheets: ranges live in Run → Optimization VCF

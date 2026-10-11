@@ -31,6 +31,7 @@ public partial class VcfGeometryWindow : Window
         InitializeComponent();
         this.viewModel = viewModel;
         DataContext = viewModel;
+        Preview.SelectionChanged += (_, _) => UpdateStoreyPointActions();
         LoadFromModel();
     }
 
@@ -286,7 +287,7 @@ public partial class VcfGeometryWindow : Window
     private IReadOnlyList<string>? storeyPoints;
     internal IReadOnlyList<StoreyLoadRow> StoreyLoads => storeyLoads;
 
-    private static string Kn(double value) => value.ToString("#,0.###", CultureInfo.CurrentCulture);
+    private static string Kn(double value) => (value == 0 ? 0 : value).ToString("#,0.###", CultureInfo.CurrentCulture);     // no "-0"
     private static string Text(double value) => value.ToString("0.###", CultureInfo.CurrentCulture);
 
     /// <summary>Fills the Storey Force inputs from the model. A load with a range on 01 Loading shows its first value —
@@ -413,10 +414,13 @@ public partial class VcfGeometryWindow : Window
         StoreyForceGrid.ItemsSource = storeyRows;
         StoreyForceCaption.Text = "The storey loads of the model: one qz per load pattern (a range belongs to Run → Optimization VCF). " +
             "Force at each loaded point: Fz = −qz × trib. length × B × NStories. Apply / OK writes them to the model.";
-        StoreyPointsButton.IsEnabled = topology is null;
-        StoreyPointsButton.ToolTip = topology is null ? "Choose the points the storey loads act on"
+        // the loaded points show on the preview — an arrow at each — and are chosen there or from the list
+        Preview.AppliedPoints = names.Select(Overlay).ToArray();
+        StoreyPointsTitle.Text = $"LOADED POINTS ({names.Length})";
+        StoreyPointsPanel.ToolTip = topology is null ? null
             : "The number of bays is changed in the form: apply it first, then choose the loaded points of the new model.";
-        StoreyForceSummary.Text = (names.Length == 0 ? "No loaded points — choose them with Loaded Points…"
+        UpdateStoreyPointActions();
+        StoreyForceSummary.Text = (names.Length == 0 ? "No loaded points — + Add them from the list, or select points on the preview and press + Add Selected."
             : $"{names.Length} points" + (loads.Length == 0 ? " · no load" : " · total " + string.Join(" · ", loads.Select((load, d) => $"{load.Pattern} {Kn(totals[d])} kN")))) +
             (storeyPoints is null ? "" : " · points changed, not applied yet");
     }
@@ -443,17 +447,81 @@ public partial class VcfGeometryWindow : Window
         if (sender is FrameworkElement { DataContext: StoreyLoadRow row }) RemoveStoreyLoad(row);
     }
 
-    /// <summary>Stages the loaded points (checks call it; the button asks the user through the point picker).</summary>
+    // ---- the loaded points: the user chooses where the storey loads act ----
+    // From a list (+ Add), or on the preview as in SAP2000 — click a point or drag a window around several, then
+    // + Add Selected; - Remove takes the load off the points selected in the table or on the preview.
+
+    private readonly Dictionary<string, AppliedPoint> pointOverlays = new(StringComparer.Ordinal);
+    /// <summary>The arrow drawn at a loaded point on the preview (one object per point, so its highlight is kept).</summary>
+    private AppliedPoint Overlay(string name) =>
+        pointOverlays.TryGetValue(name, out var point) ? point : pointOverlays[name] = new AppliedPoint { PointName = name };
+
+    /// <summary>The loaded points as the form has them: the ones chosen here, else the model's.</summary>
+    internal IReadOnlyList<string> StoreyPoints => storeyPoints ?? viewModel.State.AppliedPoints.Select(point => point.PointName).ToArray();
+
+    /// <summary>Stages the loaded points; Apply / OK writes them to the model.</summary>
     internal void SetStoreyPoints(IReadOnlyList<string> points)
     {
         storeyPoints = points.Distinct(StringComparer.Ordinal).ToArray();
         Refresh();
     }
 
-    private void StoreyPoints_Click(object sender, RoutedEventArgs e)
+    internal void AddStoreyPoints(IEnumerable<string> points) => SetStoreyPoints([.. StoreyPoints, .. points]);
+
+    internal void RemoveStoreyPoints(IEnumerable<string> points)
     {
-        var current = storeyPoints ?? viewModel.State.AppliedPoints.Select(point => point.PointName).ToArray();
-        if (viewModel.ChooseLoadPoints(current) is { } chosen) SetStoreyPoints(chosen);
+        var gone = points.ToHashSet(StringComparer.Ordinal);
+        SetStoreyPoints(StoreyPoints.Where(name => !gone.Contains(name)).ToArray());
+    }
+
+    /// <summary>Loads the points selected on the preview.</summary>
+    internal void AddSelectedStoreyPoints()
+    {
+        var picked = Preview.SelectedJoints;
+        if (picked.Count == 0 || topology is not null) return;
+        AddStoreyPoints(picked);
+        Preview.ClearSelection();
+    }
+
+    /// <summary>Takes the load off the points selected in the table and off the loaded points selected on the preview.</summary>
+    internal void RemoveSelectedStoreyPoints()
+    {
+        if (topology is not null) return;
+        var loaded = StoreyPoints.ToHashSet(StringComparer.Ordinal);
+        var names = StoreyForceGrid.SelectedItems.OfType<StoreyForceRow>().Select(row => row.Point)
+            .Concat(Preview.SelectedJoints.Where(loaded.Contains)).ToArray();
+        if (names.Length == 0) return;
+        RemoveStoreyPoints(names);
+        Preview.ClearSelection();
+    }
+
+    /// <summary>What the loaded-point buttons can do now: with the bays changed in the form the points are those of
+    /// another model, so they wait for Apply.</summary>
+    private void UpdateStoreyPointActions()
+    {
+        var editable = topology is null && analysis is not null;
+        var loaded = StoreyPoints.ToHashSet(StringComparer.Ordinal);
+        var picked = Preview.SelectedJoints;
+        var fresh = picked.Count(name => !loaded.Contains(name));
+        StoreyAddPointsButton.IsEnabled = editable;
+        StoreyAddSelectedButton.IsEnabled = editable && fresh > 0;
+        StoreyAddSelectedButton.Content = fresh > 0 ? $"+ Add Selected ({fresh})" : "+ Add Selected";
+        StoreyRemovePointsButton.IsEnabled = editable && (StoreyForceGrid.SelectedItems.Count > 0 || picked.Any(loaded.Contains));
+    }
+
+    private void AddStoreyPoints_Click(object sender, RoutedEventArgs e)
+    {
+        if (viewModel.ChooseLoadPoints(StoreyPoints) is { Count: > 0 } chosen) AddStoreyPoints(chosen);
+    }
+    private void AddSelectedStoreyPoints_Click(object sender, RoutedEventArgs e) => AddSelectedStoreyPoints();
+    private void RemoveStoreyPoints_Click(object sender, RoutedEventArgs e) => RemoveSelectedStoreyPoints();
+
+    private void StoreyForceGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (Preview is null) return;
+        // the point picked in the table is the highlighted one on the preview
+        Preview.SelectedAppliedPoint = StoreyForceGrid.SelectedItem is StoreyForceRow row ? Overlay(row.Point) : null;
+        UpdateStoreyPointActions();
     }
 
     /// <summary>A target force typed on the sheet: kept until Apply / OK, and the rows that depend on it are shown again.</summary>
