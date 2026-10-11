@@ -6,6 +6,7 @@
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <PlatformTarget>x64</PlatformTarget>
+    <SapInstallDir Condition="'$(SapInstallDir)' == '' and '$(Configuration)' == 'FreshBuild' and Exists('C:\Program Files\Computers and Structures\SAP2000 27\CSiAPIv1.dll')">C:\Program Files\Computers and Structures\SAP2000 27</SapInstallDir>
     <SapInstallDir Condition="'$(SapInstallDir)' == ''">C:\Program Files\Computers and Structures\SAP2000 26</SapInstallDir>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     
@@ -45,6 +46,17 @@
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <DefineConstants>TRACE</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Select FreshBuild in COTVCF.sln to produce a complete app in a separate folder. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'FreshBuild'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <DefineConstants>TRACE</DefineConstants>
+    <OutputPath>bin\MCOTiS_FreshBuild\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
   <ItemGroup>

@@ -16,6 +16,7 @@ internal static class FemModelFileChecks
 {
     public static void Run()
     {
+        RunBlankModelFlow();
         var folder = FemSapBenchmark.DefaultFolder;
         var text = SapModelText.Read(Path.Combine(folder, "model.s2k"));
         var geometry = text.Geometry();
@@ -125,6 +126,62 @@ internal static class FemModelFileChecks
         }
         finally { if (File.Exists(path)) File.Delete(path); }
         RunDefaultModel();
+    }
+
+    private static void RunBlankModelFlow()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "cotvcf-blank-check-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var state = new ApplicationState();
+            var silent = SapDouble.Create(null!, GeometryModel.Empty, refuseAll: true);
+            var workflow = new WorkflowService(silent.Gateway, state);
+            var sessionStore = new COT_VCF.Infrastructure.FemWorkingSessionStore(root);
+            var vm = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(silent.Gateway, state, workflow),
+                femSessionStore: sessionStore);
+
+            vm.InitializeBlankMcotisConfiguration();
+            Check(vm.IsOfflineModel && vm.HasWorkingModel && !vm.HasModelGeometry && vm.CanDefineFemModel &&
+                  vm.ShowBlankModelChoice && !vm.CanEditVcfGeometry && state.Model?.Name == "Unsaved model" && silent.Reads == 0,
+                "a fresh MCOTiS session opens as a blank unsaved model with Define available and no SAP2000 read");
+
+            vm.LoadDefaultModel.Execute(null);
+            Check(vm.IsDefaultModel && vm.HasModelGeometry && !vm.ShowBlankModelChoice && sessionStore.TryReadManifest() is not null,
+                "the blank-model template option opens the built-in model and hides the blank choice");
+            vm.InitializeBlankMcotisConfiguration();
+            Check(vm.ShowBlankModelChoice && !vm.HasModelGeometry && sessionStore.TryReadManifest() is null,
+                "New Config returns to a blank model and prevents the previous template from reopening next time");
+
+            vm.EnsureMaterials();
+            var steel = vm.Materials.First(material => material.Kind == MaterialKind.Steel);
+            var tendon = MaterialCosts.WithDefaultCost(MaterialProperty.Default(MaterialKind.Tendon, "T1860"));
+            vm.Materials.Add(tendon);
+            var frame = FrameSectionProperty.Default(FrameShape.Rectangle, "BLANK_FRAME", steel.Name) with { Depth = 0.8, Width = 0.5 };
+            var cable = new StrandSectionProperty { Name = "BLANK_CABLE", Material = tendon.Name, Area = 0.002, Source = "User" };
+            vm.CommitFrameSections([frame], new Dictionary<string, string>());
+            vm.CommitStrandSections([cable], new Dictionary<string, string>(), tendons: false);
+            Check(vm.CanEditVcfGeometry && !vm.HasModelGeometry,
+                "after frame and cable sections are defined, Edit is available while the model remains blank");
+
+            var editor = vm.AnalyzeVcfGeometryForEdit();
+            Check(editor.Geometry.Points.Count > 0 && !vm.HasModelGeometry,
+                "opening Edit uses a temporary VCF canvas and does not create geometry before Apply");
+            var assignments = editor.Geometry.Members.ToDictionary(member => member.Name,
+                member => member.Kind == MemberKind.Frame ? frame.Name : cable.Name, StringComparer.Ordinal);
+            vm.ApplyVcfGeometryAsync(editor.Geometry, assignments).GetAwaiter().GetResult();
+            Check(vm.HasModelGeometry && state.BaselineCaptured &&
+                  vm.FemSectionProperties.Count == editor.Geometry.Members.Count &&
+                  vm.FemSectionProperties.Where(property => property.IsCable).All(property => property.SectionName == cable.Name) &&
+                  vm.FemSectionProperties.Where(property => !property.IsCable).All(property => property.SectionName == frame.Name) &&
+                  silent.Reads == 0 && silent.Writes == 0,
+                "Apply creates the VCF objects from the defined sections without reading or writing SAP2000");
+            vm.FlushFemWorkingSession();
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
     }
 
     /// <summary>The built-in default model (COT Framing_V1.2_100m) opens a disconnected app on 07 FEM, ready to run.</summary>

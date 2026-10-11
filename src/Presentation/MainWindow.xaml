@@ -8,7 +8,7 @@
         Padding="6,2" FontSize="12" AutomationProperties.Name="Main menu" MenuItem.SubmenuOpened="MainMenu_SubmenuOpened">
    <MenuItem Header="_File">
     <MenuItem Header="_New Config" Command="{Binding NewConfig}"
-              ToolTip="Clear the current configuration and start again from the connected SAP model"/>
+              ToolTip="Start a blank MCOTiS model. Define materials and frame/cable sections, then create the VCF system under Edit."/>
     <MenuItem Header="_Load Configâ€¦" Command="{Binding LoadFemModel}"
               ToolTip="Open one MCOTiS configuration containing the complete analysis model and its current setup"/>
     <MenuItem Header="_Save Config" Command="{Binding SaveFemModel}"
@@ -42,9 +42,9 @@
      <Separator/>
      <MenuItem Header="_Member Sections Tableâ€¦" Click="DefineSections_Click" IsEnabled="{Binding HasUsableModelGeometry}" ToolTip="The section, material and properties of every member the FEM uses"/>
     </MenuItem>
-    <MenuItem Header="Load _Patterns" Tag="1" Click="FemPaneMenu_Click"
+    <MenuItem Header="Load _Patterns" Tag="1" Click="FemPaneMenu_Click" IsEnabled="{Binding HasUsableModelGeometry}"
               ToolTip="The load patterns of the model. Their loads are part of the VCF system: Edit â†’ VCF System â†’ Storey Force and Cable Force"/>
-    <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click"
+    <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click" IsEnabled="{Binding HasUsableModelGeometry}"
               ToolTip="Define the load cases: the default staged setup (Pretension â†’ SLS / ULS), the cases saved from SAP2000, or your own"/>
     <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click" IsEnabled="{Binding HasUsableModelGeometry}"
               ToolTip="Choose result cases, monitored objects, limits and default result visualization for FEM output"/>
@@ -213,7 +213,7 @@
   </Border>
 
   <!-- ============ WORKFLOW TABS (params) + SHARED MODEL PREVIEW ============ -->
-  <Grid IsEnabled="{Binding HasUsableModelGeometry}">
+  <Grid>
    <Grid.ColumnDefinitions>
     <ColumnDefinition x:Name="ParamsColumn" Width="2*" MinWidth="150"/>
     <ColumnDefinition x:Name="ViewerSplitterColumn" Width="Auto"/>
@@ -238,7 +238,7 @@
                 Visibility="{Binding IsOfflineModel, Converter={StaticResource BoolVisibility}}"/>
     </StackPanel>
    </Border>
-  <TabControl x:Name="WorkflowTabs" SelectedIndex="{Binding SelectedTab}" SelectionChanged="WorkflowTabs_SelectionChanged" TabStripPlacement="Left" Background="{StaticResource Background}" BorderThickness="0" Padding="10" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
+  <TabControl x:Name="WorkflowTabs" SelectedIndex="{Binding SelectedTab}" SelectionChanged="WorkflowTabs_SelectionChanged" IsEnabled="{Binding HasUsableModelGeometry}" TabStripPlacement="Left" Background="{StaticResource Background}" BorderThickness="0" Padding="10" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch">
    <TabControl.ItemContainerStyle>
     <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}"><Setter Property="Visibility" Value="Collapsed"/></Style>
    </TabControl.ItemContainerStyle>
@@ -1983,6 +1983,18 @@
                           MemberSections="{Binding SharedViewerSections}"
                           SelectedCable="{Binding SelectedCable, Mode=TwoWay}"
                           AutomationProperties.Name="Shared structural model preview"/>
+    <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="390" MaxWidth="390" Padding="18,14"
+            Background="{StaticResource Raised}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="4"
+            Visibility="{Binding ShowBlankModelChoice, Converter={StaticResource BoolVisibility}}">
+     <StackPanel>
+      <TextBlock Text="BLANK MODEL" Style="{StaticResource Subheading}"/>
+      <TextBlock Text="Start by defining materials and frame/cable sections, then use Edit → VCF System to create the model."
+                 TextWrapping="Wrap" Foreground="{StaticResource Text}" Margin="0,0,0,12"/>
+      <Button Content="Load Default Template" Command="{Binding LoadDefaultModel}" Style="{StaticResource Primary}"
+              HorizontalAlignment="Left" AutomationProperties.Name="Load default template"
+              ToolTip="Open the built-in VCF example with geometry, sections, loads and load cases already configured"/>
+     </StackPanel>
+    </Border>
     <Border VerticalAlignment="Bottom" HorizontalAlignment="Left" Margin="8,0,0,8" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="3" Padding="6,3"
             Visibility="{Binding ShowTrussLegend, Converter={StaticResource BoolVisibility}}">
      <StackPanel Orientation="Horizontal">

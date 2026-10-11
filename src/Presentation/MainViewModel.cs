@@ -104,7 +104,8 @@ public sealed partial class MainViewModel : Observable
     }
 
     public string ModelName => State.Model?.Name ?? "No model connected";
-    public string ModelPath => State.Model?.Path ?? "Open a model in SAP2000, then connect.";
+    public string ModelPath => State.Model is { Path.Length: > 0 } model ? model.Path
+        : State.Model is not null ? "Unsaved MCOTiS configuration" : "Open or create a model.";
     public string ModelVersion => State.Model?.Version ?? "-";
     public string LockState => State.Model is null ? "-" : State.Model.IsLocked ? "Locked - unlock in SAP before applying" : "Unlocked";
     public string ForceUnit => State.Model?.ForceUnit ?? "-";
@@ -1158,6 +1159,7 @@ public sealed partial class MainViewModel : Observable
     }
     public string FemProgressText { get => femProgressText; private set => Set(ref femProgressText, value); }
     public string FemStatus => isFemRunning ? "RUNNING" : FemRuns.Count > 0 ? "ANALYSIS COMPLETE" :
+        HasWorkingModel && !HasModelGeometry ? "BLANK · DEFINE → EDIT" :
         HasWorkingModel && femStudy.CanComposeModel(State) ? (IsOfflineModel ? "OFFLINE · READY" : "READY TO ANALYZE") : "LOAD CONFIG / CONNECT SAP";
     public bool CanRunFemAnalysis => !IsBusy && HasWorkingModel && femStudy.CanComposeModel(State);
     public bool CanReadFemProperties => !IsBusy && State.IsSapConnected && State.Model is not null &&
@@ -3106,7 +3108,7 @@ public sealed partial class MainViewModel : Observable
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
             nameof(HasSapConnection), nameof(HasWorkingModel), nameof(IsOfflineModel), nameof(IsDefaultModel), nameof(OfflineModelSummary), nameof(CanSaveFemModel), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
             nameof(FemRunSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus), nameof(IsFemModelLocked),
-            nameof(CanDefineFemModel), nameof(HasModelGeometry), nameof(HasUsableModelGeometry), nameof(CanEditFemModel), nameof(CanEditVcfGeometry),
+            nameof(CanDefineFemModel), nameof(HasModelGeometry), nameof(HasUsableModelGeometry), nameof(ShowBlankModelChoice), nameof(CanEditFemModel), nameof(CanEditVcfGeometry),
             nameof(CanUnlockFemModel), nameof(FemModelEditState), nameof(FemDatabaseSummary),
             nameof(FemOutputCaseChoices), nameof(FemDeflectionOutputCase), nameof(FemMemberForceOutputCase), nameof(FemFoundationOutputCase), nameof(FemCableOutputCase),
             nameof(FemDeflectionJointNames), nameof(FemFoundationLeftJointNames), nameof(FemFoundationRightJointNames), nameof(FemCableObjectNames), nameof(FemFrameObjectNames),

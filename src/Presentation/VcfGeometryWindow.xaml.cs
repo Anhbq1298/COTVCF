@@ -645,7 +645,8 @@ public partial class VcfGeometryWindow : Window
         viewModel.SetCableTargetForces(cableForceEdits.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
         if (!wasBlank) viewModel.SetStoreyLoads(storey.Width, storey.Stories, storey.Loads, storeyPoints);
         await viewModel.ApplyVcfGeometryAsync(VcfGeometry.Build(working!, form), FormSections(), topology);
-        if (wasBlank) viewModel.SetStoreyLoads(storey.Width, storey.Stories, storey.Loads, storeyPoints);
+        if (wasBlank && viewModel.HasModelGeometry)
+            viewModel.SetStoreyLoads(storey.Width, storey.Stories, storey.Loads, storeyPoints);
         foreach (var config in PreviewCableConfigs(viewModel.State.Geometry))
         {
             var cable = viewModel.State.Cables.FirstOrDefault(item => item.CableName == config.CableName);

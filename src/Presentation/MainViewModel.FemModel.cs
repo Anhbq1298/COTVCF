@@ -33,6 +33,7 @@ public sealed partial class MainViewModel
     public bool CanDefineFemModel => !IsBusy && !IsFemModelLocked;
     public bool HasModelGeometry => State.Geometry.Points.Count > 0 && State.Geometry.Members.Count > 0;
     public bool HasUsableModelGeometry => HasWorkingModel && HasModelGeometry;
+    public bool ShowBlankModelChoice => IsOfflineModel && !HasModelGeometry;
     public bool CanEditFemModel => !IsBusy && HasUsableModelGeometry && !IsFemModelLocked;
     public bool CanUnlockFemModel => !IsBusy && IsFemModelLocked;
     public string FemModelEditState => isFemRunning ? "RUNNING" : IsFemModelLocked
@@ -48,8 +49,10 @@ public sealed partial class MainViewModel
     public string OfflineModelName => offlineModelPath is null ? "" : Path.GetFileName(offlineModelPath);
     public bool IsDefaultModel => IsOfflineModel && isDefaultModel;
     public string OfflineModelSummary => IsOfflineModel
-        ? $"{(isDefaultModel ? "Default model" : "Offline model")} {OfflineModelName} · from {State.Model?.Name} — " +
-          "Run Analysis solves this model as defined; SAP2000 is not used."
+        ? !HasModelGeometry
+            ? "Blank model · Define materials and frame/cable sections, then Edit → VCF System."
+            : $"{(isDefaultModel ? "Default model" : "Offline model")} {OfflineModelName} · from {State.Model?.Name} — " +
+              "Run Analysis solves this model as defined; SAP2000 is not used."
         : "";
 
     public bool CanSaveFemModel => !IsBusy && HasWorkingModel && State.BaselineCaptured &&
@@ -66,6 +69,7 @@ public sealed partial class MainViewModel
     {
         if (IsBusy || IsFemModelLocked) return;
         femWorkingSaveTimer?.Stop();
+        femSessionStore.ClearActive();
         applyingFemDatabase = true;
         applyingProject = true;
         try

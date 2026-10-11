@@ -26,6 +26,9 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - The built application folder is `bin/COT ParametricTools_V2` (version 2.0.0.0). Produce it with
   `dotnet publish COTVCF.csproj -c Release --self-contained false -o "bin/COT ParametricTools_V2"` — never by
   copying a build output by hand: the earlier hand-copied `COT VCF Tools V1.0` folder went stale and showed an old app.
+- The solution also has a `FreshBuild` configuration. `dotnet build COTVCF.sln -c FreshBuild` writes the app directly
+  to the separate `bin/MCOTiS_FreshBuild/` folder. The configuration is registered in `COTVCF.sln`; its output path is
+  set in `COTVCF.csproj`, so it does not replace files held by an existing Debug or V2 app instance.
 
 ## Compact Engineering Density Pass
 
@@ -46,18 +49,21 @@ earlier tall-header / large-button / blue-block look.
 
 ## Navigation Style — desktop menu bar (ETABS-like)
 
-- A menu bar (`MainMenu`, top of the window) replaces the left tab rail: **File · MB · Edit · Define · Assign · Run ·
-  Result · Display · Help**. Menu items reuse the existing commands; navigation is presentation only
+- A menu bar (`MainMenu`, top of the window) replaces the left tab rail: **File · MB · Define · Edit · Assign · Run ·
+  Result · Post-Processing · Display · Design · Help**. Menu items reuse the existing commands; navigation is presentation only
   (`MainViewModel.Menu.cs`, click handlers in `MainWindow.xaml.cs`). Do not bring the rail or the toolbar buttons back.
-  - **File**: New Config, Load Config…, Save All · Load Model…, Save Model… · Read FEM Properties from SAP.
+  - **File**: New Config, Load Config…, Save Config · Default Model · Read FEM Properties from SAP. One `.cotfem.db`
+    is the complete MCOTiS configuration; the old split project/model JSON commands are not exposed.
   - **MB**: 01 Loading … 06A Optimization, 08 Quantities (each with its status as the gesture text; 06A disabled
     without raw data). Choosing one sets `SelectedTab`; the page fills the left pane.
-  - **Edit**: placeholder (no edit commands yet).
   - **Define**: Materials, Section Properties, Load Patterns, Load Cases / Load Combinations · Result Load Case.
     There is no Define → Loading: the loads of the model are entered in Edit → VCF System (Storey Force / Cable Force),
     one fixed value each — see Tab 07 FEM, "The flow the user set". The 01 Loading page stays under MB with its ranges;
     its AddPoints / RemoveAppliedPoints / AddLoadDefinition / DeleteLoadDefinition commands work on an offline model too
     (they only edit what the app holds).
+  - **Edit**: VCF System…. A blank configuration enables this after at least one frame section and one cable section
+    exist. The window previews the built-in VCF topology without putting objects in the working model; Apply creates and
+    names the joints, frames and cables and assigns the selected library sections.
   - **Assign**: Joint Restraints (Pin Supports).
   - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Optimization VCF… ·
     Analysis Options. **Optimization VCF…** opens the modal `OptimizationVcfWindow`: the Edit → VCF Geometry inputs as a
@@ -112,8 +118,11 @@ earlier tall-header / large-button / blue-block look.
     Copy Report / Save Report… (.txt). The 2D FEM moment bends the major axis y-y; z-z carries imperfections only.
     Offline checks: `dotnet run --project tests/COT_VCF.Checks.csproj -- --column-design`.
   - **Help**: Workflow Help, FEM Procedure.
-- MB, Edit, Define, Assign, Run, Result and Display are enabled with `HasWorkingModel` (connected or offline model);
-  File and Help are always open (their commands gate themselves).
+- A fresh session restores an unfinished working database when one exists; otherwise it starts with a blank, unsaved
+  MCOTiS model. The creation flow is **Define materials/sections → Edit VCF System → Define loads/cases → Run**.
+  Define remains available on the blank model. MB, Assign, Run, Result, Post-Processing, Display and Design require model
+  geometry. The blank viewer shows **Load Default Template**, bound to the same command as File → Default Model; it is never
+  loaded automatically. New Config clears the active working-session manifest so the prior model does not reopen.
 - The `WorkflowTabs` TabControl stays (indices unchanged) but its tab strip is hidden (`ItemContainerStyle` →
   `Collapsed`). A one-line pane header above it shows `PaneMenu  ›  PaneTitle` (e.g. `MB › 01  LOADING`,
   `Define › SECTIONS`) with the page status (`PaneStatus`) on the right and, offline, the `OfflineModelSummary` line.
@@ -121,7 +130,7 @@ earlier tall-header / large-button / blue-block look.
   params column goes to 0 (its MinWidth is dropped too) and the viewer takes the full width. Any MB / Define / Assign /
   Run / Result / Display item opens the pane again (`OpenPane`). At startup the pane is closed (`App.OnStartup` → `ClosePane`), so the app
   opens on the model view only. Full-width pages (05, 06, 06A, 08) always show it.
-- **Edit → VCF Geometry…** opens `VcfGeometryWindow`: `VcfGeometry.Analyze` (Application) reads the system from the
+- **Edit → VCF System…** opens `VcfGeometryWindow`: `VcfGeometry.Analyze` (Application) reads the system from the
   02 Truss Height chord groups — bays and bay width, truss depth, middle chord above the bottom chord, clear height
   (ground → bottom chord), back-span (mega column → outer column) and back-stay node height — and the role of every
   member (top / middle / bottom chord, vertical chord, mega column = vertical frames on the end bay lines, end frames,
@@ -244,10 +253,10 @@ earlier tall-header / large-button / blue-block look.
   geometry / load patterns / force sources for the current session.
 - `MainViewModel.StatusLine` feeds the top-bar status text; keep it in the `Update()` notify list.
 - Do not move connection controls into the viewer.
-- Configuration and workflow controls require a successful SAP connection and disable again on connection loss.
-  Connect, Refresh, Help and active-run cancellation remain available. The top-bar **New Config** clears Tabs 01–05
-  and the active file identity in memory, retains the SAP connection and immutable baseline, and makes the next
-  save choose a new file. Saved files and per-user Print Setup are retained.
+- File → New Config is available without SAP2000. It closes the active configuration session and creates an offline,
+  unsaved blank model with no geometry, object assignments, material/section library or FEM results. The user defines
+  materials and frame/cable sections first; Edit → VCF System commits the first geometry. Saved files and per-user Print
+  Setup are retained.
 
 ## Viewer Behavior
 

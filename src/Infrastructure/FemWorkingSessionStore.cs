@@ -23,6 +23,12 @@ public sealed class FemWorkingSessionStore(string? rootDirectory = null)
         return working;
     }
 
+    /// <summary>Stop reopening the previous model when the user starts a blank configuration.</summary>
+    public void ClearActive()
+    {
+        if (File.Exists(ManifestPath)) File.Delete(ManifestPath);
+    }
+
     public FemWorkingSession? TryReadManifest()
     {
         try

@@ -29,6 +29,13 @@ internal static class Program
                 FemModelFileChecks.Run();
                 return 0;
             }
+            if (args.Contains("--blank-ui"))
+            {
+                var app = new System.Windows.Application();
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/src/Presentation/Theme.xaml", UriKind.Relative) });
+                CheckBlankTemplateUi();
+                return 0;
+            }
             var liveMatrixIndex = Array.IndexOf(args, "--study-live-matrix");
             var liveStudyIndex = liveMatrixIndex >= 0 ? liveMatrixIndex : Array.IndexOf(args, "--study-live");
             if (liveStudyIndex >= 0)
@@ -78,29 +85,30 @@ internal static class Program
                 window.Show();
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
+                CheckBlankTemplateUi(window);
                 uiState.Connection = "Disconnected";
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 MenuItem TopMenu(string header) => window.MainMenu.Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == header);
                 Assert(window.MainMenu.Items.OfType<MenuItem>().Select(item => (item.Header as string)!.Replace("_", ""))
-                           .SequenceEqual(["File", "MB", "Edit", "Define", "Assign", "Run", "Result", "Display", "Design", "Help"]),
-                    "The menu bar reads File, MB, Edit, Define, Assign, Run, Result, Display, Design, Help");
+                           .SequenceEqual(["File", "MB", "Define", "Edit", "Assign", "Run", "Result", "Post-Processing", "Display", "Design", "Help"]),
+                    "The menu bar puts Define before Edit, followed by Assign and the analysis/result menus");
                 Assert(!FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
-                       !vm.NewConfig.CanExecute(null) && !TopMenu("MB").IsEnabled && !TopMenu("Define").IsEnabled && TopMenu("File").IsEnabled,
-                    "Workflow pages, the MB/Define menus and New Config are disabled before SAP connection; File stays open");
+                       vm.NewConfig.CanExecute(null) && !TopMenu("MB").IsEnabled && TopMenu("Define").IsEnabled && TopMenu("File").IsEnabled,
+                    "Before a model exists, model workflows stay disabled while New Config and Define remain available");
                 uiState.Connection = "Connected";
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 Assert(FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
-                       vm.NewConfig.CanExecute(null) && TopMenu("MB").IsEnabled && TopMenu("Define").IsEnabled,
-                    "Successful SAP connection enables workflow pages, the menus and New Config");
+                       vm.NewConfig.CanExecute(null) && TopMenu("MB").IsEnabled && TopMenu("Define").IsEnabled && TopMenu("Edit").IsEnabled,
+                    "A model with geometry enables workflow pages and the Define/Edit sequence");
                 var mbItems = TopMenu("MB").Items.OfType<MenuItem>().Select(item => (string)item.Header).ToArray();
                 var fileCommands = TopMenu("File").Items.OfType<MenuItem>().Select(item => item.Command).ToArray();
                 var runCommands = TopMenu("Run").Items.OfType<MenuItem>().Select(item => item.Command).ToArray();
                 Assert(mbItems.SequenceEqual(["01  Loading", "02  Truss Height", "03  Pretension", "04  Output Settings", "05  Iteration",
-                           "06  Post-Processing", "06A  Optimization", "08  Quantities"]) &&
+                           "06A  Optimization", "08  Quantities"]) &&
                        new[] { vm.NewConfig, vm.LoadFemModel, vm.SaveFemModel, vm.ReadFemProperties }.All(fileCommands.Contains) &&
                        !fileCommands.Contains(vm.LoadConfig) && !fileCommands.Contains(vm.SaveAllConfig) &&
                        new[] { vm.RunStudyFromToolbar, vm.RunFemAnalysis, vm.CancelFemAnalysis }.All(runCommands.Contains),
-                    "MB lists pages 01-06A and 08; File holds the config and model commands; Run holds the run commands");
+                    "MB lists pages 01-05, 06A and 08; File holds config commands; Run holds analysis commands");
                 var workflowTabsRail = FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs");
                 Assert(workflowTabsRail.Items.OfType<TabItem>().All(tab => tab.Visibility == Visibility.Collapsed) &&
                        vm.PaneMenu == "MB" && vm.PaneTitle == "01  LOADING",
@@ -864,8 +872,8 @@ internal static class Program
                 var optimizationTab = window.OptimizationTab;
                 Assert(!vm.HasRawData && !optimizationTab.IsEnabled && vm.OptimizationTabStatus == "Needs raw data" &&
                        TopMenu("MB").Items.OfType<MenuItem>().Single(item => Equals(item.Header, "06A  Optimization")) is { IsEnabled: false } &&
-                       mbItems.ToList().IndexOf("06A  Optimization") == mbItems.ToList().IndexOf("06  Post-Processing") + 1,
-                    "Tab 06A Optimization is listed after Tab 06 under MB and stays disabled until the study has raw data");
+                       mbItems.ToList().IndexOf("06A  Optimization") == mbItems.ToList().IndexOf("05  Iteration") + 1,
+                    "Tab 06A Optimization follows Tab 05 under MB and stays disabled until the study has raw data");
                 vm.SelectedTab = 6;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
@@ -1332,9 +1340,6 @@ internal static class Program
         var workflow = new WorkflowService(sap, state);
         var config = new ConfigService(sap, state, workflow);
         var vm = new MainViewModel(state, workflow, new NoSelection(), config);
-        var model = state.Model;
-        var geometry = state.Geometry;
-        var baseline = state.SessionBaseline;
         state.OutputSettings.DeflectionPoints.Add("top");
         state.OutputSettings.DeflectionOutputCaseName = "SLS";
         state.Study.UseCandidateFilters = true;
@@ -1342,21 +1347,7 @@ internal static class Program
         state.Study.SetRunSelected("L01_H01_P01", false);
         config.SetActiveProject("old-config.json", new CotVcfConfigDto());
         config.Session.MarkDirty(ConfigTabs.All);
-        foreach (var status in new[] { "Disconnected", "Connecting", "Error", "Connection Lost" })
-        {
-            state.Connection = status;
-            Assert(!vm.HasSapConnection && !vm.NewConfig.CanExecute(null) && !vm.AddLoadDefinition.CanExecute(null) &&
-                   !vm.GeneratePostProcessOutputs.CanExecute(null) && !vm.GenerateOptimizedReports.CanExecute(null),
-                $"Workflow commands are unavailable while SAP is {status}");
-            var count = state.LoadDefinitions.Count;
-            vm.AddLoadDefinition.Execute(null);
-            vm.NewConfig.Execute(null);
-            Assert(state.LoadDefinitions.Count == count && config.Session.HasActiveProject,
-                "Disconnected command execution cannot change configuration");
-            Assert(vm.Connect.CanExecute(null) && vm.Refresh.CanExecute(null), "Reconnect remains available");
-        }
-        state.Connection = "Connected";
-        Assert(vm.NewConfig.CanExecute(null) && vm.AddLoadDefinition.CanExecute(null), "Workflow commands enable after connection");
+        Assert(vm.NewConfig.CanExecute(null), "New Config is available without requiring a SAP2000 connection");
         vm.NewConfig.Execute(null);
         Assert(!config.Session.HasActiveProject && !config.Session.IsDirty(ConfigTabs.All) &&
                state.AppliedPoints.Count == 0 && state.Cables.Count == 0 && !state.BaselineCaptured &&
@@ -1364,9 +1355,47 @@ internal static class Program
                !state.Study.UseCandidateFilters && state.Study.MinHeightM is null && state.Study.ExcludedIterationKeys.Count == 0,
             "New Config clears tab configuration, project file identity, filters and dirty flags");
         Assert(state.LoadDefinitions.Select(row => row.LoadName).SequenceEqual(new[] { "DL_Above", "LL_Above" }) &&
-               ReferenceEquals(model, state.Model) && ReferenceEquals(geometry, state.Geometry) &&
-               ReferenceEquals(baseline, state.SessionBaseline) && state.IsSapConnected && sap.Writes == 0,
-            "New Config restores loading defaults and preserves SAP connection and baseline without writes");
+               vm.IsOfflineModel && !state.IsSapConnected && state.Model?.Name == "Unsaved model" &&
+               state.Geometry.Points.Count == 0 && state.Geometry.Members.Count == 0 &&
+               state.SessionBaseline.Points.Count == 0 && state.SessionBaseline.Members.Count == 0 &&
+               vm.CanDefineFemModel && !vm.CanEditVcfGeometry && sap.Writes == 0,
+            "New Config restores loading defaults and opens a blank Define-first model without SAP writes");
+        Assert(vm.NewConfig.CanExecute(null) && vm.Connect.CanExecute(null) && vm.Refresh.CanExecute(null),
+            "The blank model can be restarted or connected to SAP2000");
+    }
+
+    private static void CheckBlankTemplateUi(Window? owner = null)
+    {
+        var blankRoot = Path.Combine(Path.GetTempPath(), "cotvcf-blank-ui-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var blankState = new ApplicationState();
+            var blankSap = new FakeSap { Snapshot = new(new ModelInfo("", "MCOTiS", 6, "kN", "m", false), GeometryModel.Empty, []) };
+            var blankWorkflow = new WorkflowService(blankSap, blankState);
+            var blankVm = new MainViewModel(blankState, blankWorkflow, new NoSelection(), new ConfigService(blankSap, blankState, blankWorkflow),
+                femSessionStore: new COT_VCF.Infrastructure.FemWorkingSessionStore(blankRoot));
+            var blankWindow = new COT_VCF.Presentation.MainWindow { DataContext = blankVm, Width = 1100, Height = 700 };
+            if (owner is not null) blankWindow.Owner = owner;
+            try
+            {
+                blankWindow.Show();
+                blankVm.InitializeBlankMcotisConfiguration();
+                blankWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                blankWindow.UpdateLayout();
+                var templateButton = FindVisuals<Button>(blankWindow).Single(button =>
+                    System.Windows.Automation.AutomationProperties.GetName(button) == "Load default template");
+                Assert(templateButton.IsVisible && templateButton.IsEnabled && !blankWindow.WorkflowTabs.IsEnabled,
+                    "The blank viewport offers an enabled Load Default Template button while model workflow pages are disabled");
+                var templatePeer = new System.Windows.Automation.Peers.ButtonAutomationPeer(templateButton);
+                ((System.Windows.Automation.Provider.IInvokeProvider)templatePeer.GetPattern(System.Windows.Automation.Peers.PatternInterface.Invoke))
+                    .Invoke();
+                blankWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
+                Assert(blankVm.IsDefaultModel && blankVm.HasModelGeometry && !templateButton.IsVisible && blankWindow.WorkflowTabs.IsEnabled,
+                    "Clicking the blank-view button opens the default template and enables model workflow pages");
+            }
+            finally { blankWindow.Close(); }
+        }
+        finally { if (Directory.Exists(blankRoot)) Directory.Delete(blankRoot, recursive: true); }
     }
 
     private static void Assert(bool condition, string name) { if (!condition) throw new Exception("FAIL: " + name); Console.WriteLine("PASS: " + name); }
