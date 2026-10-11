@@ -19,6 +19,16 @@ internal static class Program
     {
         try
         {
+            if (args.Contains("--fem-db"))
+            {
+                FemDatabaseChecks.Run();
+                return 0;
+            }
+            if (args.Contains("--fem-model"))
+            {
+                FemModelFileChecks.Run();
+                return 0;
+            }
             var liveMatrixIndex = Array.IndexOf(args, "--study-live-matrix");
             var liveStudyIndex = liveMatrixIndex >= 0 ? liveMatrixIndex : Array.IndexOf(args, "--study-live");
             if (liveStudyIndex >= 0)
@@ -87,7 +97,8 @@ internal static class Program
                 var runCommands = TopMenu("Run").Items.OfType<MenuItem>().Select(item => item.Command).ToArray();
                 Assert(mbItems.SequenceEqual(["01  Loading", "02  Truss Height", "03  Pretension", "04  Output Settings", "05  Iteration",
                            "06  Post-Processing", "06A  Optimization", "08  Quantities"]) &&
-                       new[] { vm.NewConfig, vm.LoadConfig, vm.SaveAllConfig, vm.LoadFemModel, vm.SaveFemModel, vm.ReadFemProperties }.All(fileCommands.Contains) &&
+                       new[] { vm.NewConfig, vm.LoadFemModel, vm.SaveFemModel, vm.ReadFemProperties }.All(fileCommands.Contains) &&
+                       !fileCommands.Contains(vm.LoadConfig) && !fileCommands.Contains(vm.SaveAllConfig) &&
                        new[] { vm.RunStudyFromToolbar, vm.RunFemAnalysis, vm.CancelFemAnalysis }.All(runCommands.Contains),
                     "MB lists pages 01-06A and 08; File holds the config and model commands; Run holds the run commands");
                 var workflowTabsRail = FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs");
@@ -98,7 +109,7 @@ internal static class Program
                 window.UpdateLayout();
                 var toolbarCommands = new[] { vm.Connect, vm.Refresh };
                 var toolbarButtons = FindVisuals<Button>(window).Where(button => toolbarCommands.Contains(button.Command)).ToArray();
-                var movedCommands = new[] { vm.NewConfig, vm.SaveAllConfig, vm.LoadConfig, vm.RunStudyFromToolbar };
+                var movedCommands = new[] { vm.NewConfig, vm.SaveFemModel, vm.LoadFemModel, vm.RunStudyFromToolbar };
                 Assert(toolbarButtons.Length == 2 && toolbarButtons.All(button =>
                 {
                     var position = button.TransformToAncestor(window).Transform(new Point());
@@ -1307,6 +1318,7 @@ internal static class Program
             GatewayChecks.Run();
             QuantityTakeoffChecks.Run();
             MegaColumnChecks.Run();
+            FemDatabaseChecks.Run();
             FemModelFileChecks.Run();
             ColumnDesignChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;

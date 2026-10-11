@@ -129,7 +129,8 @@ public sealed record FemInputDatabaseRead(FemInputSnapshot Snapshot, IReadOnlyLi
 public static class FemInputDatabase
 {
     public const string Extension = ".cotfem.db";
-    public const string Filter = "Mcotis FEM Database (*.cotfem.db)|*.cotfem.db|Legacy FEM Model (*.cotfem.json)|*.cotfem.json";
+    public const string Filter = "MCOTiS Config (*.cotfem.db)|*.cotfem.db";
+    public const string OpenFilter = Filter + "|Legacy FEM Config (*.cotfem.json)|*.cotfem.json";
 
     internal static readonly JsonSerializerOptions Json = new()
     {
@@ -154,7 +155,7 @@ public static class FemInputDatabase
     public static FemInputDatabaseRead Read(string path)
     {
         using var connection = Open(path, readOnly: true);
-        var schema = Scalar<long>(connection, "SELECT schema_version FROM database_info LIMIT 1");
+        var schema = Scalar(connection, "SELECT schema_version FROM database_info LIMIT 1");
         if (schema > FemInputSnapshot.CurrentSchemaVersion)
             throw new InvalidDataException($"The FEM database schema {schema} is newer than this app supports.");
         using var command = connection.CreateCommand();
@@ -210,16 +211,26 @@ public static class FemInputDatabase
             Execute(connection, transaction, "INSERT INTO joints(object_id,x,y,z) VALUES($id,$x,$y,$z)",
                 ("$id", id), ("$x", point.Position.X), ("$y", point.Position.Y), ("$z", point.Position.Z));
         }
+        var memberIds = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var member in snapshot.Geometry.Members.OrderBy(member => member.Name, StringComparer.Ordinal))
         {
             if (!jointIds.TryGetValue(member.Start, out var start) || !jointIds.TryGetValue(member.End, out var end))
                 throw new InvalidDataException($"Member '{member.Name}' references a missing joint.");
             var type = member.Kind.ToString();
             var id = StableId(snapshot.DatabaseId, type, member.Name, oldIds);
+            memberIds[member.Name] = id;
             Execute(connection, transaction, "INSERT INTO geometry_objects(object_id,object_type,name,origin,generation_key) VALUES($id,$type,$name,'Imported',$key)",
                 ("$id", id), ("$type", type), ("$name", member.Name), ("$key", type + ":" + member.Name));
             Execute(connection, transaction, "INSERT INTO members(object_id,member_type,start_joint_id,end_joint_id) VALUES($id,$type,$start,$end)",
                 ("$id", id), ("$type", type), ("$start", start), ("$end", end));
+        }
+
+        foreach (var property in snapshot.SectionProperties.OrderBy(item => item.MemberName, StringComparer.Ordinal))
+        {
+            if (!memberIds.TryGetValue(property.MemberName, out var memberId)) continue;
+            Execute(connection, transaction, "INSERT INTO member_properties(object_id,section_name,material_name,member_category,payload_json) VALUES($id,$section,$material,$category,$payload)",
+                ("$id", memberId), ("$section", property.SectionName), ("$material", property.MaterialName),
+                ("$category", property.IsCable ? "Cable" : "Frame"), ("$payload", JsonSerializer.Serialize(property, Json)));
         }
 
         foreach (var material in snapshot.Materials.OrderBy(item => item.Name, StringComparer.Ordinal))
@@ -250,12 +261,54 @@ public static class FemInputDatabase
                     Execute(connection, transaction, "INSERT INTO load_case_components(case_id,pattern_name,factor,sequence_no) VALUES($case,$pattern,$factor,$seq)",
                         ("$case", caseId), ("$pattern", term.term.Name), ("$factor", term.term.Factor), ("$seq", term.index));
             }
-            catch (FormatException) { /* the snapshot remains authoritative and UI validation reports the row */ }
+            catch (ArgumentException) { /* the snapshot remains authoritative and UI validation reports the row */ }
         }
         foreach (var row in snapshot.CombinationRows.Select((row, index) => (row, index)))
+        {
+            var combinationId = StableId(snapshot.DatabaseId, "LoadCombination", row.row.Name, oldIds);
             Execute(connection, transaction, "INSERT INTO load_combinations(combination_id,name,combination_type,run,sequence_no,payload_json) VALUES($id,$name,$type,$run,$seq,$payload)",
-                ("$id", StableId(snapshot.DatabaseId, "LoadCombination", row.row.Name, oldIds)), ("$name", row.row.Name),
+                ("$id", combinationId), ("$name", row.row.Name),
                 ("$type", row.row.Type), ("$run", row.row.Run ? 1 : 0), ("$seq", row.index), ("$payload", JsonSerializer.Serialize(row.row, Json)));
+            try
+            {
+                foreach (var term in FemLoadDefinition.Parse(row.row.Definition).Select((term, index) => (term, index)))
+                    Execute(connection, transaction, "INSERT INTO load_combination_terms(combination_id,item_name,factor,sequence_no) VALUES($id,$name,$factor,$seq)",
+                        ("$id", combinationId), ("$name", term.term.Name), ("$factor", term.term.Factor), ("$seq", term.index));
+            }
+            catch (ArgumentException) { /* the snapshot remains authoritative and UI validation reports the row */ }
+        }
+
+        if (snapshot.Loading is { } loading)
+        {
+            foreach (var row in loading.JointLoads.Select((row, index) => (row, index)))
+                Execute(connection, transaction, "INSERT INTO joint_load_assignments(sequence_no,pattern_name,joint_name,fx_kn,fz_kn,my_knm) VALUES($seq,$pattern,$joint,$fx,$fz,$my)",
+                    ("$seq", row.index), ("$pattern", row.row.Pattern), ("$joint", row.row.Load.PointName),
+                    ("$fx", row.row.Load.FxKN), ("$fz", row.row.Load.FzKN), ("$my", row.row.Load.MyKNm));
+            foreach (var row in loading.MemberLoads.Select((row, index) => (row, index)))
+                Execute(connection, transaction, "INSERT INTO member_distributed_load_assignments(sequence_no,pattern_name,member_name,direction,rel_start,rel_end,value_start_kn_per_m,value_end_kn_per_m) VALUES($seq,$pattern,$member,$direction,$start,$end,$valueStart,$valueEnd)",
+                    ("$seq", row.index), ("$pattern", row.row.Pattern), ("$member", row.row.Load.MemberName), ("$direction", row.row.Load.Direction.ToString()),
+                    ("$start", row.row.Load.RelStart), ("$end", row.row.Load.RelEnd), ("$valueStart", row.row.Load.ValueStart), ("$valueEnd", row.row.Load.ValueEnd));
+            foreach (var row in loading.MemberPointLoads.Select((row, index) => (row, index)))
+                Execute(connection, transaction, "INSERT INTO member_point_load_assignments(sequence_no,pattern_name,member_name,direction,relative_distance,value_kn) VALUES($seq,$pattern,$member,$direction,$distance,$value)",
+                    ("$seq", row.index), ("$pattern", row.row.Pattern), ("$member", row.row.Load.MemberName), ("$direction", row.row.Load.Direction.ToString()),
+                    ("$distance", row.row.Load.Rel), ("$value", row.row.Load.ValueKN));
+            foreach (var row in loading.GravityLoads.Select((row, index) => (row, index)))
+                Execute(connection, transaction, "INSERT INTO member_gravity_load_assignments(sequence_no,pattern_name,member_name,multiplier_x,multiplier_z) VALUES($seq,$pattern,$member,$x,$z)",
+                    ("$seq", row.index), ("$pattern", row.row.Pattern), ("$member", row.row.MemberName),
+                    ("$x", row.row.MultiplierX), ("$z", row.row.MultiplierZ));
+        }
+
+        if (snapshot.CableSetup is { } cableSetup)
+            foreach (var row in cableSetup.Cables.Select((row, index) => (row, index)))
+                Execute(connection, transaction, "INSERT INTO cable_target_assignments(sequence_no,cable_name,pattern_name,mode,fixed_force_kn,min_force_kn,max_force_kn,step_force_kn,sync_mode,reference_cable_name,sync_factor) VALUES($seq,$cable,$pattern,$mode,$fixed,$min,$max,$step,$sync,$reference,$factor)",
+                    ("$seq", row.index), ("$cable", row.row.CableName), ("$pattern", row.row.PretensionLoadCase),
+                    ("$mode", row.row.Mode.ToString()), ("$fixed", row.row.FixedForce), ("$min", row.row.MinForce),
+                    ("$max", row.row.MaxForce), ("$step", row.row.StepForce), ("$sync", row.row.SyncMode.ToString()),
+                    ("$reference", row.row.ReferenceCableName), ("$factor", row.row.SyncFactor));
+
+        Execute(connection, transaction, "INSERT INTO analysis_settings(singleton,target_fit_percent,target_fit_iterations,frame_mesh_segments,cable_sag) VALUES(1,$tolerance,$iterations,$mesh,$sag)",
+            ("$tolerance", snapshot.Settings.TargetFitPercent), ("$iterations", snapshot.Settings.TargetFitIterations),
+            ("$mesh", snapshot.Settings.FrameMeshSegments), ("$sag", snapshot.Settings.CableSag ? 1 : 0));
 
         if (snapshot.OutputSettings is { } settings)
             Execute(connection, transaction, "INSERT INTO output_settings(singleton,payload_json) VALUES(1,$payload)",
@@ -327,6 +380,7 @@ public static class FemInputDatabase
             DataSource = Path.GetFullPath(path),
             Mode = readOnly ? SqliteOpenMode.ReadOnly : SqliteOpenMode.ReadWriteCreate,
             Cache = SqliteCacheMode.Private,
+            Pooling = false,
         };
         var connection = new SqliteConnection(builder.ToString());
         connection.Open();
@@ -336,7 +390,7 @@ public static class FemInputDatabase
         return connection;
     }
 
-    private static long Scalar<T>(SqliteConnection connection, string sql)
+    private static long Scalar(SqliteConnection connection, string sql)
     {
         using var command = connection.CreateCommand(); command.CommandText = sql;
         return Convert.ToInt64(command.ExecuteScalar());
@@ -356,12 +410,20 @@ public static class FemInputDatabase
         CREATE TABLE geometry_objects(object_id TEXT PRIMARY KEY, object_type TEXT NOT NULL, name TEXT NOT NULL COLLATE NOCASE, origin TEXT NOT NULL, generation_key TEXT, UNIQUE(object_type,name));
         CREATE TABLE joints(object_id TEXT PRIMARY KEY REFERENCES geometry_objects(object_id) ON DELETE CASCADE, x REAL NOT NULL, y REAL NOT NULL, z REAL NOT NULL);
         CREATE TABLE members(object_id TEXT PRIMARY KEY REFERENCES geometry_objects(object_id) ON DELETE CASCADE, member_type TEXT NOT NULL, start_joint_id TEXT NOT NULL REFERENCES joints(object_id), end_joint_id TEXT NOT NULL REFERENCES joints(object_id));
+        CREATE TABLE member_properties(object_id TEXT PRIMARY KEY REFERENCES members(object_id) ON DELETE CASCADE, section_name TEXT, material_name TEXT, member_category TEXT NOT NULL, payload_json TEXT NOT NULL);
         CREATE TABLE materials(material_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, material_type TEXT NOT NULL, payload_json TEXT NOT NULL);
         CREATE TABLE sections(section_id TEXT PRIMARY KEY, name TEXT NOT NULL, section_category TEXT NOT NULL, section_type TEXT NOT NULL, payload_json TEXT NOT NULL, UNIQUE(section_category,name));
         CREATE TABLE load_patterns(pattern_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, engineering_type TEXT NOT NULL, self_weight_multiplier REAL NOT NULL, sequence_no INTEGER NOT NULL, payload_json TEXT NOT NULL);
         CREATE TABLE load_cases(case_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, analysis_type TEXT NOT NULL, purpose TEXT NOT NULL, initial_case_name TEXT, run INTEGER NOT NULL, sequence_no INTEGER NOT NULL, payload_json TEXT NOT NULL);
         CREATE TABLE load_case_components(case_id TEXT NOT NULL REFERENCES load_cases(case_id) ON DELETE CASCADE, pattern_name TEXT NOT NULL, factor REAL NOT NULL, sequence_no INTEGER NOT NULL, PRIMARY KEY(case_id,sequence_no));
         CREATE TABLE load_combinations(combination_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, combination_type TEXT NOT NULL, run INTEGER NOT NULL, sequence_no INTEGER NOT NULL, payload_json TEXT NOT NULL);
+        CREATE TABLE load_combination_terms(combination_id TEXT NOT NULL REFERENCES load_combinations(combination_id) ON DELETE CASCADE, item_name TEXT NOT NULL, factor REAL NOT NULL, sequence_no INTEGER NOT NULL, PRIMARY KEY(combination_id,sequence_no));
+        CREATE TABLE joint_load_assignments(sequence_no INTEGER PRIMARY KEY, pattern_name TEXT NOT NULL, joint_name TEXT NOT NULL, fx_kn REAL NOT NULL, fz_kn REAL NOT NULL, my_knm REAL NOT NULL);
+        CREATE TABLE member_distributed_load_assignments(sequence_no INTEGER PRIMARY KEY, pattern_name TEXT NOT NULL, member_name TEXT NOT NULL, direction TEXT NOT NULL, rel_start REAL NOT NULL, rel_end REAL NOT NULL, value_start_kn_per_m REAL NOT NULL, value_end_kn_per_m REAL NOT NULL);
+        CREATE TABLE member_point_load_assignments(sequence_no INTEGER PRIMARY KEY, pattern_name TEXT NOT NULL, member_name TEXT NOT NULL, direction TEXT NOT NULL, relative_distance REAL NOT NULL, value_kn REAL NOT NULL);
+        CREATE TABLE member_gravity_load_assignments(sequence_no INTEGER PRIMARY KEY, pattern_name TEXT NOT NULL, member_name TEXT NOT NULL, multiplier_x REAL NOT NULL, multiplier_z REAL NOT NULL);
+        CREATE TABLE cable_target_assignments(sequence_no INTEGER PRIMARY KEY, cable_name TEXT NOT NULL, pattern_name TEXT NOT NULL, mode TEXT NOT NULL, fixed_force_kn REAL, min_force_kn REAL, max_force_kn REAL, step_force_kn REAL, sync_mode TEXT NOT NULL, reference_cable_name TEXT, sync_factor REAL);
+        CREATE TABLE analysis_settings(singleton INTEGER PRIMARY KEY CHECK(singleton=1), target_fit_percent REAL NOT NULL, target_fit_iterations INTEGER NOT NULL, frame_mesh_segments INTEGER NOT NULL, cable_sag INTEGER NOT NULL);
         CREATE TABLE output_settings(singleton INTEGER PRIMARY KEY CHECK(singleton=1), payload_json TEXT NOT NULL);
         CREATE TABLE output_registry(path TEXT PRIMARY KEY, run_id TEXT NOT NULL, database_id TEXT NOT NULL, revision INTEGER NOT NULL, revision_hash TEXT NOT NULL, created_utc TEXT NOT NULL, is_optimization INTEGER NOT NULL, candidate_id TEXT);
         CREATE INDEX ix_geometry_name ON geometry_objects(name);
@@ -388,7 +450,7 @@ public static class FemOutputDatabase
                 CREATE TABLE run_cases(case_id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,nonlinear_iterations INTEGER NOT NULL,target_fit_iterations INTEGER NOT NULL,target_fit_failure TEXT);
                 CREATE TABLE joint_displacements(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,ux_m REAL NOT NULL,uz_m REAL NOT NULL,rotation_rad REAL NOT NULL,PRIMARY KEY(case_id,object_name));
                 CREATE TABLE support_reactions(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,rx_kn REAL NOT NULL,rz_kn REAL NOT NULL,PRIMARY KEY(case_id,object_name));
-                CREATE TABLE frame_station_results(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,station REAL NOT NULL,axial_kn REAL NOT NULL,shear_kn REAL NOT NULL,moment_knm REAL NOT NULL,ux_m REAL NOT NULL,uz_m REAL NOT NULL,PRIMARY KEY(case_id,object_name,station));
+                CREATE TABLE frame_station_results(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,station_index INTEGER NOT NULL,station REAL NOT NULL,axial_kn REAL NOT NULL,shear_kn REAL NOT NULL,moment_knm REAL NOT NULL,ux_m REAL NOT NULL,uz_m REAL NOT NULL,PRIMARY KEY(case_id,object_name,station_index));
                 CREATE TABLE cable_results(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,axial_kn REAL NOT NULL,active INTEGER NOT NULL,target_kn REAL NOT NULL,applied_pretension_kn REAL NOT NULL,pretension_stage_kn REAL,sag_m REAL,tangent_stiffness_ratio REAL,PRIMARY KEY(case_id,object_name));
                 CREATE TABLE cable_fit_iterations(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,iteration_no INTEGER NOT NULL,result_force_kn REAL NOT NULL,PRIMARY KEY(case_id,object_name,iteration_no));
                 CREATE INDEX ix_frame_results ON frame_station_results(case_id,object_name,station);
@@ -417,10 +479,10 @@ public static class FemOutputDatabase
                     var stations = frame.Stations is { Count: > 0 } ? frame.Stations :
                         [new FemFrameStation(0, frame.AxialStartKN, frame.ShearStartKN, frame.MomentStartKNm, 0, 0),
                          new FemFrameStation(1, frame.AxialEndKN, frame.ShearEndKN, frame.MomentEndKNm, 0, 0)];
-                    foreach (var station in stations)
-                        Execute(connection, transaction, "INSERT INTO frame_station_results VALUES($case,$name,$station,$axial,$shear,$moment,$ux,$uz)",
-                            ("$case", caseId), ("$name", frame.MemberName), ("$station", station.Fraction), ("$axial", station.AxialKN),
-                            ("$shear", station.ShearKN), ("$moment", station.MomentKNm), ("$ux", station.UXM), ("$uz", station.UZM));
+                    foreach (var stationRow in stations.Select((station, index) => (station, index)))
+                        Execute(connection, transaction, "INSERT INTO frame_station_results VALUES($case,$name,$index,$station,$axial,$shear,$moment,$ux,$uz)",
+                            ("$case", caseId), ("$name", frame.MemberName), ("$index", stationRow.index), ("$station", stationRow.station.Fraction), ("$axial", stationRow.station.AxialKN),
+                            ("$shear", stationRow.station.ShearKN), ("$moment", stationRow.station.MomentKNm), ("$ux", stationRow.station.UXM), ("$uz", stationRow.station.UZM));
                 }
                 foreach (var cable in result.Cables)
                 {
@@ -456,5 +518,35 @@ public static class FemOutputDatabase
         using var command = connection.CreateCommand(); command.Transaction = transaction; command.CommandText = sql;
         foreach (var (name, value) in values) command.Parameters.AddWithValue(name, value ?? DBNull.Value);
         command.ExecuteNonQuery();
+    }
+}
+
+/// <summary>Deletes only output databases whose embedded provenance matches the registered input revision.</summary>
+public static class FemOutputLifecycle
+{
+    public static void DeleteVerified(FemInputSnapshot input, ICollection<FemOutputRegistration> registrations)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(registrations);
+        var existing = registrations.Where(registration => File.Exists(registration.Path)).ToArray();
+
+        // Verify the complete set first. Unlock must never leave a half-deleted result set.
+        foreach (var registration in existing)
+        {
+            var (info, _) = FemOutputDatabase.Read(registration.Path);
+            if (registration.DatabaseId != input.DatabaseId || info.InputDatabaseId != input.DatabaseId ||
+                info.InputRevision != registration.Revision ||
+                !string.Equals(info.InputRevisionHash, registration.RevisionHash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Refusing to delete unverified output '{registration.Path}'.");
+        }
+
+        foreach (var registration in existing)
+        {
+            File.Delete(registration.Path);
+            var directory = Path.GetDirectoryName(registration.Path);
+            if (directory is not null && Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
+                Directory.Delete(directory);
+        }
+        registrations.Clear();
     }
 }

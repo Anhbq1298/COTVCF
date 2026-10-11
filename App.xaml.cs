@@ -46,8 +46,9 @@ public partial class App : System.Windows.Application
             printStore: new ReportPrintSettingsStore(), quantityTakeoff: quantityTakeoff);
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
-        // Restore the autosaved FEM working database first. A fresh installation opens the built-in default model.
-        if (!viewModel.TryRestoreFemWorkingSession()) viewModel.LoadDefaultFemModel();
+        // Restore an unfinished user session. With no session, start from a blank MCOTiS model: definitions come
+        // first, then Edit creates the parametric VCF geometry. The sample model is opened only on explicit request.
+        if (!viewModel.TryRestoreFemWorkingSession()) viewModel.InitializeBlankMcotisConfiguration();
         // The model view opens on its own; the Define / Run / Result … pane appears when a menu item is chosen.
         ((Presentation.MainWindow)MainWindow).ClosePane();
     }

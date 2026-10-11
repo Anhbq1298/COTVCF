@@ -1,6 +1,8 @@
 using COT_VCF.Application;
+using COT_VCF.Configuration;
 using COT_VCF.Domain;
 using COT_VCF.Geometry;
+using System.IO;
 
 namespace COT_VCF.Presentation;
 
@@ -19,7 +21,27 @@ public sealed partial class MainViewModel
     public string? MemberSection(string member) =>
         FemSectionProperties.FirstOrDefault(property => property.MemberName.Equals(member, StringComparison.Ordinal))?.SectionName;
 
-    public bool CanEditVcfGeometry => !IsBusy && HasWorkingModel && State.Geometry.Points.Count > 0;
+    public bool CanEditVcfGeometry => !IsBusy && !IsFemModelLocked &&
+        (HasUsableModelGeometry || IsOfflineModel && !HasModelGeometry && FrameSections.Count > 0 && CableSections.Count > 0);
+
+    /// <summary>The current geometry, or the built-in VCF topology used only as a starting canvas for an untitled model.</summary>
+    internal VcfGeometryAnalysis AnalyzeVcfGeometryForEdit()
+    {
+        if (HasModelGeometry) return VcfGeometry.Analyze(State.Geometry, State.Truss);
+        if (FrameSections.Count == 0 || CableSections.Count == 0)
+            throw new InvalidOperationException("Define at least one frame section and one cable section before creating the VCF system.");
+        var template = FemModelFile.ReadDefault();
+        var setup = template.Project?.Tab03TrussHeight
+            ?? throw new InvalidDataException("The built-in VCF topology has no chord definition.");
+        var truss = new TrussHeightConfiguration
+        {
+            TopPoints = setup.TopPoints,
+            MiddlePoints = setup.MiddlePoints,
+            BottomPoints = setup.BottomPoints,
+            Reference = setup.ReferenceElevation,
+        };
+        return VcfGeometry.Analyze(template.Geometry!, truss);
+    }
 
     /// <summary>Writes the VCF geometry and the section of each member listed in <paramref name="sections"/> to the
     /// working model. Every point and member keeps its name — unless <paramref name="topology"/> changes the number of bays,
@@ -35,8 +57,7 @@ public sealed partial class MainViewModel
                 Message = "Reading sections and loading from SAP2000 before applying the VCF system (read-only)…";
                 await ReadAndDisplayFemPropertiesAsync(resetLoadRows: true);
             }
-            if (FemSectionProperties.Count == 0)
-                throw new InvalidOperationException("No member properties yet — use File → Read FEM Properties from SAP, or load a model.");
+            if (FemSectionProperties.Count == 0) SeedBlankVcfModel(sections);
 
             if (topology is not null) ApplyBayChange(geometry, topology);
 
@@ -117,6 +138,49 @@ public sealed partial class MainViewModel
             Notify(nameof(SharedViewerSections));
             Update();
         }
+    }
+
+    /// <summary>Creates member objects only when the user applies the first VCF edit to a blank model. Defined library
+    /// sections provide every engineering property; the embedded model contributes topology, local axes and releases.</summary>
+    private void SeedBlankVcfModel(IReadOnlyDictionary<string, string> sections)
+    {
+        if (HasModelGeometry) return;
+        var template = FemModelFile.ReadDefault();
+        var geometry = template.Geometry ?? throw new InvalidDataException("The built-in VCF topology is missing.");
+        var setup = template.Project?.Tab03TrussHeight
+            ?? throw new InvalidDataException("The built-in VCF topology has no chord definition.");
+        var templates = template.SectionProperties.ToDictionary(property => property.MemberName, StringComparer.Ordinal);
+        var properties = new List<FemSectionProperties>(geometry.Members.Count);
+        foreach (var member in geometry.Members)
+        {
+            if (!templates.TryGetValue(member.Name, out var basis))
+                throw new InvalidDataException($"The VCF topology has no property basis for '{member.Name}'.");
+            if (!sections.TryGetValue(member.Name, out var section))
+                throw new InvalidOperationException($"Choose a section for '{member.Name}' before applying the blank model.");
+            if (member.Kind == MemberKind.Frame)
+            {
+                var defined = FrameSections.FirstOrDefault(item => item.Name == section)
+                    ?? throw new InvalidOperationException($"Frame section '{section}' is not defined.");
+                properties.Add(PropertiesFor(basis, defined));
+            }
+            else
+            {
+                var defined = CableSections.FirstOrDefault(item => item.Name == section)
+                    ?? throw new InvalidOperationException($"Cable section '{section}' is not defined.");
+                properties.Add(PropertiesFor(basis, defined));
+            }
+        }
+
+        State.Geometry = geometry;
+        State.Baseline = geometry;
+        State.Preview = geometry;
+        State.Truss.TopPoints = setup.TopPoints;
+        State.Truss.MiddlePoints = setup.MiddlePoints;
+        State.Truss.BottomPoints = setup.BottomPoints;
+        State.Truss.Reference = setup.ReferenceElevation;
+        workflow.CaptureBaseline();
+        FemSectionProperties.Clear();
+        foreach (var property in properties.OrderBy(item => item.MemberName, StringComparer.Ordinal)) FemSectionProperties.Add(property);
     }
 
     /// <summary>A member's properties with another section — copied from a member that has it, or (for a section from

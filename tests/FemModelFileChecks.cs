@@ -156,6 +156,7 @@ internal static class FemModelFileChecks
               vm.FemProgressText.StartsWith("Analysis complete", StringComparison.Ordinal),
             $"Run Analysis on the default model is one run of the model as defined, without SAP2000 (mid-span Fz {string.Join(" / ", midSpan)} kN): " +
             vm.FemProgressText + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
+        UnlockForFurtherEdits(vm, "Run locks the FEM model; Unlock clears its output before load definitions can be edited");
         RunLoadCases(vm, state, runs[0], warnings);
         RunVcfGeometry(vm, state, silent, warnings);
         RunVcfBays();
@@ -196,6 +197,7 @@ internal static class FemModelFileChecks
         Check(Same(pretension, "Pretension") && Same(sls, "NL SLS001: 1.0DL+1.0LL-staged") && Same(uls, "NL ULS001: 1.35DL+1.5LL-staged"),
             "the default setup mimics SAP2000's: Pretension, SLS and ULS give the displacements, cable forces and reactions of SAP2000's Pretension and staged SLS / ULS cases");
 
+        UnlockForFurtherEdits(vm);
         // Default Setup again, then cases of one's own
         vm.ApplyDefaultFemLoadCases();
         var added = vm.AddFemLoadCase()!;
@@ -220,6 +222,7 @@ internal static class FemModelFileChecks
               Math.Abs(Peak(sls) - defaultRun.Results[sls].MaximumDownwardDeflectionMm) < 1e-6,
             $"a case defined in the app is solved with the others: half the live load deflects less than SLS ({Peak("Half live"):0.0} < {Peak(sls):0.0} mm)");
 
+        UnlockForFurtherEdits(vm);
         var path = Path.Combine(Path.GetTempPath(), $"cotvcf-cases-{Guid.NewGuid():N}{FemModelFile.Extension}");
         try
         {
@@ -263,6 +266,7 @@ internal static class FemModelFileChecks
         var sdlRun = Analyze(vm).Single();
         double Rz(string name) => sdlRun.Results![name].SupportReactions.Sum(reaction => reaction.ReactionZKN);
         var sdlTotal = 2.0 * (100 * 12) * 10;     // qz 2 kPa × (100 m × B 12 m) × 10 storeys
+        UnlockForFurtherEdits(vm);
         Check(sdlCase.InitialCase == pretension && Math.Abs(Rz("SDL") - Rz(pretension) - sdlTotal) < 1e-3 * sdlTotal,
             $"a load case with the new pattern, continuing from Pretension, carries its load: ΣRz grows by {Rz("SDL") - Rz(pretension):0} kN = 2 kPa × 1,200 m² × 10 storeys");
         vm.ApplyDefaultFemLoadCases();
@@ -287,6 +291,7 @@ internal static class FemModelFileChecks
         Check(leader is { ApplyRange: false, TargetForce: 90_000.0 } && Target("Cable1a-2") == 90_000 && Target("Cable1b-2") == 90_000 &&
               Math.Abs(Stage("Cable1a-2") - 90_000) < 0.1 * 90_000 && Target("Cable2a-2") == 30_000,
             $"a target force set for a cable is the one Run meets in Pretension (Cable1a-2 {Stage("Cable1a-2"):0} kN for 90,000); its follower Cable1b-2 keeps following, the other cables keep theirs");
+        UnlockForFurtherEdits(vm);
         vm.SetCableTargetForces(new Dictionary<string, double> { ["Cable1a-2"] = 100_000 });
         // a Same Step follower has a value of its own (its end points): it is set to the one number, and stays a follower
         var stepFollower = state.Cables.Single(cable => cable.CableName == "Cable4a-2");
@@ -744,6 +749,14 @@ internal static class FemModelFileChecks
         }
         finally { SynchronizationContext.SetSynchronizationContext(previous); }
         return vm.FemRuns.ToArray();
+    }
+
+    private static void UnlockForFurtherEdits(MainViewModel vm, string? checkName = null)
+    {
+        Check(vm.IsFemModelLocked && vm.UnlockFemModel.CanExecute(null), checkName ?? "the completed FEM run leaves the model locked");
+        vm.UnlockFemModel.Execute(null);
+        Check(!vm.IsFemModelLocked && vm.FemRuns.Count == 0 && !vm.HasFemResults,
+            "Unlock removes the run output and requires a new analysis before results are available");
     }
 
     private static void Check(bool condition, string name)

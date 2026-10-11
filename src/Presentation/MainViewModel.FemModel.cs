@@ -30,13 +30,16 @@ public sealed partial class MainViewModel
     private bool femWorkingDirty;
 
     public bool IsFemModelLocked => femInputSnapshot?.IsLocked == true;
-    public bool CanEditFemModel => !IsBusy && !IsFemModelLocked;
+    public bool CanDefineFemModel => !IsBusy && !IsFemModelLocked;
+    public bool HasModelGeometry => State.Geometry.Points.Count > 0 && State.Geometry.Members.Count > 0;
+    public bool HasUsableModelGeometry => HasWorkingModel && HasModelGeometry;
+    public bool CanEditFemModel => !IsBusy && HasUsableModelGeometry && !IsFemModelLocked;
     public bool CanUnlockFemModel => !IsBusy && IsFemModelLocked;
     public string FemModelEditState => isFemRunning ? "RUNNING" : IsFemModelLocked
         ? $"LOCKED · REV {femInputSnapshot!.LockedRevision ?? femInputSnapshot.Revision}"
         : femWorkingDirty ? "UNLOCKED · MODIFIED" : "UNLOCKED";
-    public string FemDatabaseSummary => femInputSnapshot is null ? "No FEM database session"
-        : $"Rev {femInputSnapshot.Revision} · {Path.GetFileName(femInputDatabasePath ?? femWorkingDatabasePath ?? "working database")}";
+    public string FemDatabaseSummary => femInputSnapshot is null ? "No MCOTiS configuration session"
+        : $"Rev {femInputSnapshot.Revision} · {Path.GetFileName(femInputDatabasePath ?? femWorkingDatabasePath ?? "working configuration")}";
 
     /// <summary>A saved FEM model is loaded and SAP2000 is not connected.</summary>
     public bool IsOfflineModel => offlineModelPath is not null && State.Model is not null && !State.IsSapConnected;
@@ -58,9 +61,70 @@ public sealed partial class MainViewModel
     /// <summary>File → Default Model: drop the current model (live or loaded) and open the built-in default model.</summary>
     public Command LoadDefaultModel => loadDefaultModel ??= new(_ => LoadDefaultFemModel(replaceCurrent: true), () => CanLoadFemModel);
 
+    /// <summary>Fresh application / File → New Config: an unsaved, offline model with no geometry or definitions.</summary>
+    internal void InitializeBlankMcotisConfiguration()
+    {
+        if (IsBusy || IsFemModelLocked) return;
+        femWorkingSaveTimer?.Stop();
+        applyingFemDatabase = true;
+        applyingProject = true;
+        try
+        {
+            ClearFemResults();
+            State.Connection = "Offline model";
+            State.Model = new ModelInfo("", "MCOTiS", 6, "kN", "m", false);
+            State.SessionBaselineModel = null;
+            State.SessionBaseline = GeometryModel.Empty;
+            State.SessionBaselinePointLoads = [];
+            State.SessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
+            State.Geometry = GeometryModel.Empty;
+            State.Baseline = GeometryModel.Empty;
+            State.Preview = GeometryModel.Empty;
+            State.LoadPatterns.Clear();
+            new ConfigurationApplicator(State, workflow).Reset();
+            config.Session.Close();
+            config.Session.ClearDirty();
+
+            FemSectionProperties.Clear();
+            Materials.Clear();
+            FrameSections.Clear();
+            CableSections.Clear();
+            TendonSections.Clear();
+            ResetMaterialLibrary();
+            femSapLoading = SapFemLoading.Empty;
+            SetFemLoadRows([], [], []);
+            offlineLoadCaseNames = [];
+            offlineModelPath = "Untitled";
+            isDefaultModel = false;
+            femInputSnapshot = null;
+            femInputDatabasePath = null;
+            femWorkingDatabasePath = null;
+            femOutputRegistrations.Clear();
+            femWorkingDirty = false;
+            SelectedAppliedPoint = null;
+            SelectedCable = null;
+            SelectedTab = TabFem;
+            SelectedFemPage = FemInputsPage;
+            FemProgressText = "Blank MCOTiS model · Define materials and frame/cable sections, then Edit → VCF System.";
+            Message = FemProgressText;
+        }
+        finally
+        {
+            applyingProject = false;
+            applyingFemDatabase = false;
+            NotifyFemDatabaseState();
+            Update();
+        }
+    }
+
     private async void SaveFemModelToFile()
     {
         if (IsBusy || CommitEditors?.Invoke() == false) return;
+        if (!string.IsNullOrWhiteSpace(femInputDatabasePath))
+        {
+            await SaveFemModelFileAsync(femInputDatabasePath);
+            return;
+        }
         var dialog = new SaveFileDialog
         {
             Filter = FemInputDatabase.Filter,
@@ -70,10 +134,8 @@ public sealed partial class MainViewModel
         if (offlineModelPath is not null && !isDefaultModel) dialog.InitialDirectory = Path.GetDirectoryName(offlineModelPath);
         else if (State.Model is { Path.Length: > 0 } model && Directory.Exists(Path.GetDirectoryName(model.Path))) dialog.InitialDirectory = Path.GetDirectoryName(model.Path);
         if (dialog.ShowDialog() != true) return;
-        var path = dialog.FilterIndex == 2 || dialog.FileName.EndsWith(FemModelFile.Extension, StringComparison.OrdinalIgnoreCase)
-            ? dialog.FileName
-            : dialog.FileName.EndsWith(FemInputDatabase.Extension, StringComparison.OrdinalIgnoreCase)
-                ? dialog.FileName : dialog.FileName.TrimEnd('.') + FemInputDatabase.Extension;
+        var path = dialog.FileName.EndsWith(FemInputDatabase.Extension, StringComparison.OrdinalIgnoreCase)
+            ? dialog.FileName : dialog.FileName.TrimEnd('.') + FemInputDatabase.Extension;
         await SaveFemModelFileAsync(path);
     }
 
@@ -93,7 +155,7 @@ public sealed partial class MainViewModel
             }
             else
             {
-                FemProgressText = "Reading sections, materials, loading, cases and combinations from SAP2000 for Save Model…";
+                FemProgressText = "Reading sections, materials, loading, cases and combinations from SAP2000 for Save MCOTiS Config…";
                 properties = await ReadAndDisplayFemPropertiesAsync();
                 loadCases = await workflow.GetLoadCaseNamesAsync();
             }
@@ -117,15 +179,15 @@ public sealed partial class MainViewModel
                 femWorkingDirty = false;
                 femWorkingDatabasePath = femSessionStore.Save(snapshot, femOutputRegistrations, path);
             }
-            FemProgressText = $"Saved FEM model {Path.GetFileName(path)} · {file.SectionProperties.Count:N0} members, {file.CaseRows.Count} load cases, " +
-                $"{file.CombinationRows.Count} combinations. Load Model reopens it without SAP2000.";
+            FemProgressText = $"Saved MCOTiS config {Path.GetFileName(path)} · {file.SectionProperties.Count:N0} members, {file.CaseRows.Count} load cases, " +
+                $"{file.CombinationRows.Count} combinations. Load MCOTiS Config reopens this complete setup without SAP2000.";
             Message = FemProgressText;
         }
         catch (Exception ex)
         {
-            FemProgressText = $"Save Model failed: {ex.Message}";
+            FemProgressText = $"Save MCOTiS Config failed: {ex.Message}";
             Message = FemProgressText;
-            Warn("Save Model", ex.Message);
+            Warn("Save MCOTiS Config", ex.Message);
             if (ex is System.Runtime.InteropServices.COMException) State.Connection = "Connection Lost";
         }
         finally { IsBusy = false; Update(); }
@@ -140,7 +202,7 @@ public sealed partial class MainViewModel
     private string SuggestFemDatabaseFileName()
     {
         var stem = State.Model is { Path.Length: > 0 } model ? Path.GetFileNameWithoutExtension(model.Path) : "Mcotis";
-        return stem + "_FEM" + FemInputDatabase.Extension;
+        return stem + "_MCOTiS" + FemInputDatabase.Extension;
     }
 
     private FemModelFileDto BuildFemModelFile(IReadOnlyDictionary<string, FemSectionProperties> properties, IReadOnlyList<string> loadCases)
@@ -178,7 +240,7 @@ public sealed partial class MainViewModel
     private void LoadFemModelFromFile()
     {
         if (IsBusy || CommitEditors?.Invoke() == false) return;
-        var dialog = new OpenFileDialog { Filter = FemInputDatabase.Filter, CheckFileExists = true };
+        var dialog = new OpenFileDialog { Filter = FemInputDatabase.OpenFilter, CheckFileExists = true };
         if (offlineModelPath is not null && !isDefaultModel) dialog.InitialDirectory = Path.GetDirectoryName(offlineModelPath);
         else if (State.Model is { Path.Length: > 0 } model && Directory.Exists(Path.GetDirectoryName(model.Path))) dialog.InitialDirectory = Path.GetDirectoryName(model.Path);
         if (dialog.ShowDialog() == true) OpenFemModelFile(dialog.FileName);
@@ -217,8 +279,8 @@ public sealed partial class MainViewModel
         }
         catch (Exception ex)
         {
-            Warn("Load Model", ex.Message);
-            Message = "Load Model cancelled — the current model is unchanged.";
+            Warn("Load MCOTiS Config", ex.Message);
+            Message = "Load MCOTiS Config cancelled — the current model is unchanged.";
             return;
         }
         ApplyFemModel(file, path, isDefault: false, database?.Snapshot, database?.Outputs);
@@ -295,17 +357,17 @@ public sealed partial class MainViewModel
             RegenerateStudyPreview();
             SelectedTab = TabFem;
             SelectedFemPage = FemInputsPage;
-            FemProgressText = $"Loaded {(isDefault ? "default " : "")}FEM model {Path.GetFileName(path)} (saved {file.SavedUtc.ToLocalTime():yyyy-MM-dd HH:mm}). " +
+            FemProgressText = $"Loaded {(isDefault ? "default " : "")}MCOTiS config {Path.GetFileName(path)} (saved {file.SavedUtc.ToLocalTime():yyyy-MM-dd HH:mm}). " +
                 "Run Analysis solves this model as defined, without SAP2000; Connect SAP for the SAP2000 study tabs.";
-            Message = $"{(isDefault ? "Default FEM model" : "FEM model")} {Path.GetFileName(path)} loaded offline from {file.Model!.Name} — SAP2000 not connected.";
+            Message = $"{(isDefault ? "Default MCOTiS config" : "MCOTiS config")} {Path.GetFileName(path)} loaded offline from {file.Model!.Name} — SAP2000 not connected.";
         }
         catch (Exception ex)
         {
             offlineModelPath = null;
             State.Connection = "Disconnected";
-            FemProgressText = $"Load Model failed: {ex.Message}";
-            Message = "Load Model failed.";
-            Warn("Load Model", ex.Message);
+            FemProgressText = $"Load MCOTiS Config failed: {ex.Message}";
+            Message = "Load MCOTiS Config failed.";
+            Warn("Load MCOTiS Config", ex.Message);
         }
         finally
         {
@@ -370,6 +432,19 @@ public sealed partial class MainViewModel
         FemLog.Clear();
         FemProgressText = "";
         NotifyFemMonitorChart();
+    }
+
+    /// <summary>Starts a new user-facing MCOTiS configuration while keeping the connected model as its source.</summary>
+    private void StartNewMcotisConfigurationFile()
+    {
+        femWorkingSaveTimer?.Stop();
+        femInputSnapshot = null;
+        femInputDatabasePath = null;
+        femWorkingDatabasePath = null;
+        femOutputRegistrations.Clear();
+        femWorkingDirty = true;
+        NotifyFemDatabaseState();
+        ScheduleFemWorkingSave();
     }
 
     private FemInputSnapshot CaptureFemInputSnapshot(bool advanceRevision)
@@ -480,18 +555,7 @@ public sealed partial class MainViewModel
     private void DeleteRegisteredFemOutputs()
     {
         if (femInputSnapshot is null) return;
-        foreach (var registration in femOutputRegistrations.ToArray())
-        {
-            if (!File.Exists(registration.Path)) { femOutputRegistrations.Remove(registration); continue; }
-            var (info, _) = FemOutputDatabase.Read(registration.Path);
-            if (info.InputDatabaseId != femInputSnapshot.DatabaseId || info.InputRevision != registration.Revision ||
-                !string.Equals(info.InputRevisionHash, registration.RevisionHash, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidDataException($"Refusing to delete unverified output '{registration.Path}'.");
-            File.Delete(registration.Path);
-            femOutputRegistrations.Remove(registration);
-            var directory = Path.GetDirectoryName(registration.Path);
-            if (directory is not null && Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
-        }
+        FemOutputLifecycle.DeleteVerified(femInputSnapshot, femOutputRegistrations);
     }
 
     private void RestoreFemOutputs()

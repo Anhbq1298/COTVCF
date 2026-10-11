@@ -21,6 +21,7 @@ public partial class VcfGeometryWindow : Window
     private readonly Dictionary<VcfMemberRole, TextBlock> roleCounts = [];
     private GeometryModel? preview;
     private bool loading;
+    private bool creatingBlankModel;
 
     private readonly Dictionary<string, TextBox> inputs = [];
     private readonly Dictionary<VcfMemberRole, ComboBox> roleSections = [];
@@ -47,7 +48,8 @@ public partial class VcfGeometryWindow : Window
             cableForceEdits.Clear();
             cableSyncEdits.Clear();
             CableGrid.Children.Clear(); CableGrid.RowDefinitions.Clear(); cableSections.Clear();
-            try { analysis = VcfGeometry.Analyze(viewModel.State.Geometry, viewModel.State.Truss); }
+            creatingBlankModel = !viewModel.HasModelGeometry;
+            try { analysis = viewModel.AnalyzeVcfGeometryForEdit(); }
             catch (Exception ex)
             {
                 analysis = null;
@@ -87,7 +89,9 @@ public partial class VcfGeometryWindow : Window
                 cableSections[name] = combo;
                 AddRow(CableGrid, name, combo, null);
             }
-            SectionHint.Text = viewModel.FemSectionProperties.Count == 0
+            SectionHint.Text = creatingBlankModel
+                ? "New blank model — the selected library sections will create the frame and cable member properties on Apply."
+                : viewModel.FemSectionProperties.Count == 0
                 ? "No member properties yet — sections are read from SAP2000 on Apply (read-only), or use File → Read FEM Properties from SAP."
                 : "Sections are the ones assigned in the model; a member keeps its own local axis and end releases.";
         }
@@ -105,7 +109,8 @@ public partial class VcfGeometryWindow : Window
         var combo = new ComboBox { MinWidth = 150, Margin = new Thickness(0, 2, 6, 2), IsEnabled = names.Count > 0 };
         combo.Items.Add(Keep);
         foreach (var name in names) combo.Items.Add(name);
-        combo.SelectedItem = current is not null && names.Contains(current) ? current : Keep;
+        combo.SelectedItem = current is not null && names.Contains(current) ? current
+            : creatingBlankModel && names.Count > 0 ? names[0] : Keep;
         combo.SelectionChanged += (_, _) => Refresh();
         return combo;
     }
@@ -633,12 +638,14 @@ public partial class VcfGeometryWindow : Window
     internal async Task ApplyFormAsync()
     {
         if (analysis is null || FormParameters(out _) is not { } form) return;
+        var wasBlank = !viewModel.HasModelGeometry;
         // the loads and cable targets first, so a change of bays carries them over: a new fan cable copies the edited
         // value of the cable it is modelled on, and the loaded points follow the new chord
         if (StoreyInputs(out _) is not { } storey) return;
         viewModel.SetCableTargetForces(cableForceEdits.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
-        viewModel.SetStoreyLoads(storey.Width, storey.Stories, storey.Loads, storeyPoints);
+        if (!wasBlank) viewModel.SetStoreyLoads(storey.Width, storey.Stories, storey.Loads, storeyPoints);
         await viewModel.ApplyVcfGeometryAsync(VcfGeometry.Build(working!, form), FormSections(), topology);
+        if (wasBlank) viewModel.SetStoreyLoads(storey.Width, storey.Stories, storey.Loads, storeyPoints);
         foreach (var config in PreviewCableConfigs(viewModel.State.Geometry))
         {
             var cable = viewModel.State.Cables.FirstOrDefault(item => item.CableName == config.CableName);

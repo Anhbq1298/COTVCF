@@ -1338,7 +1338,7 @@ public sealed partial class MainViewModel : Observable
             _ => ConfigTabs.All,
         }), () => CanUseConfig);
         SaveAllConfig = new(_ => SaveAll(), () => CanUseConfig);
-        NewConfig = new(_ => StartNewConfiguration(), () => CanUseConfig);
+        NewConfig = new(_ => InitializeBlankMcotisConfiguration(), () => !IsBusy && !IsFemModelLocked);
         LoadConfig = new(_ => OpenProject(), () => CanUseConfig);
         ReadFemProperties = new(_ => ReadFemModelProperties(), () => CanReadFemProperties);
         RunFemAnalysis = new(_ => RunFemAnalysisFromUi(), () => CanRunFemAnalysis);
@@ -1444,10 +1444,10 @@ public sealed partial class MainViewModel : Observable
         {
             if (property.GetValue(this) is not Command command ||
                 command == Connect || command == Refresh || command == CancelStudy || command == CancelFemAnalysis ||
-                command == LoadFemModel || command == LoadDefaultModel) continue;
+                command == LoadFemModel || command == LoadDefaultModel || command == NewConfig) continue;
             // A loaded FEM model (Load Model) runs FEM offline, and the 01 Loading add / remove commands only edit what the
             // app holds; every other command needs the live SAP2000 model.
-            command.Availability = command == RunFemAnalysis || command == SaveFemModel || command == AddPoints ||
+            command.Availability = command == RunFemAnalysis || command == SaveFemModel || command == UnlockFemModel || command == AddPoints ||
                                    command == RemoveAppliedPoints || command == AddLoadDefinition || command == DeleteLoadDefinition
                 ? () => HasWorkingModel
                 : () => HasSapConnection;
@@ -2882,10 +2882,11 @@ public sealed partial class MainViewModel : Observable
         SelectedAppliedPoint = null;
         SelectedCable = null;
         ClearFemResults();
+        StartNewMcotisConfigurationFile();
         PreviewMessage = "New configuration — select loading points, truss groups and cables.";
         SelectedTab = TabLoading;
         RegenerateStudyPreview();
-        Message = "New configuration started. Save Config or Save All to choose a new file.";
+        Message = "New MCOTiS configuration started. Save Config to choose its file.";
         Update();
     }
 
@@ -3105,7 +3106,8 @@ public sealed partial class MainViewModel : Observable
             nameof(ConfiguredOutputCount), nameof(OutputUnitsSummary),
             nameof(HasSapConnection), nameof(HasWorkingModel), nameof(IsOfflineModel), nameof(IsDefaultModel), nameof(OfflineModelSummary), nameof(CanSaveFemModel), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
             nameof(FemRunSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus), nameof(IsFemModelLocked),
-            nameof(CanEditFemModel), nameof(CanUnlockFemModel), nameof(FemModelEditState), nameof(FemDatabaseSummary),
+            nameof(CanDefineFemModel), nameof(HasModelGeometry), nameof(HasUsableModelGeometry), nameof(CanEditFemModel), nameof(CanEditVcfGeometry),
+            nameof(CanUnlockFemModel), nameof(FemModelEditState), nameof(FemDatabaseSummary),
             nameof(FemOutputCaseChoices), nameof(FemDeflectionOutputCase), nameof(FemMemberForceOutputCase), nameof(FemFoundationOutputCase), nameof(FemCableOutputCase),
             nameof(FemDeflectionJointNames), nameof(FemFoundationLeftJointNames), nameof(FemFoundationRightJointNames), nameof(FemCableObjectNames), nameof(FemFrameObjectNames),
             nameof(FemDeflectionLimitMinMm), nameof(FemDeflectionLimitMaxMm), nameof(FemMaximumCableUtilization), nameof(FemOutputSettingsStatus),
