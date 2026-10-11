@@ -44,7 +44,7 @@
    <Grid x:Name="View3DHost" Visibility="Collapsed" Background="{StaticResource ViewportBg}" ClipToBounds="True"
          MouseLeftButtonDown="View3DMouseDown" MouseRightButtonDown="View3DMouseDown" MouseMove="View3DMouseMove"
          MouseLeftButtonUp="View3DMouseUp" MouseRightButtonUp="View3DMouseUp" MouseWheel="View3DMouseWheel">
-    <Viewport3D x:Name="View3D" IsHitTestVisible="False">
+    <Viewport3D x:Name="View3D">
      <Viewport3D.Camera>
       <OrthographicCamera x:Name="Camera3D" UpDirection="0,0,1"/>
      </Viewport3D.Camera>

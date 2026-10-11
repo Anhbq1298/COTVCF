@@ -13,7 +13,11 @@ namespace COT_VCF.Presentation.Controls;
 
 public partial class Structural2DViewer : UserControl
 {
-    public Structural2DViewer() => InitializeComponent();
+    public Structural2DViewer()
+    {
+        InitializeComponent();
+        Canvas.SelectionChanged += (_, _) => Update3DSelection();
+    }
     public static readonly DependencyProperty ModelProperty = DependencyProperty.Register(nameof(Model), typeof(GeometryModel), typeof(Structural2DViewer), new PropertyMetadata(GeometryModel.Empty));
     public static readonly DependencyProperty ToolbarContentProperty = DependencyProperty.Register(nameof(ToolbarContent), typeof(object), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty ShowPointLabelsProperty = DependencyProperty.Register(nameof(ShowPointLabels), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(false));
@@ -157,18 +161,23 @@ public partial class Structural2DViewer : UserControl
     private double azimuthDeg = -45, elevationDeg = 35.264, viewWidth = 10;
     private Point3D target;
     private Point? dragStart;
+    private Point? dragOrigin;
     private bool panning;
+    private StructureModel3D.Scene? scene3D;
+    private static readonly Material Selected3DMaterial = new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x00)));
 
     private void Rebuild3D(bool keepCamera)
     {
         if (!Is3D || Structure3D is null) return;
         var scene = StructureModel3D.Build(Model, MemberSections);
+        scene3D = scene;
         Structure3D.Content = scene.Model;
+        Update3DSelection();
         View3DInfo.Text = MemberSections is null
             ? "Isometric 3D · member sizes not read — use Read from SAP (FEM → Inputs) for to-scale sections · drag rotate · right-drag pan · wheel zoom · double-click fit"
             : $"Isometric 3D · to scale · {scene.FramesWithSapShape} frames with SAP section dimensions" +
               (scene.FramesApproximated > 0 ? $", {scene.FramesApproximated} as equivalent solid (same A, I)" : "") +
-              " · drag rotate · right-drag pan · wheel zoom · double-click fit";
+              " · click to select · drag rotate · right-drag pan · wheel zoom · double-click fit";
         if (!keepCamera || scene.Bounds.IsEmpty) Fit3D();
         else UpdateCamera();
     }
@@ -202,7 +211,8 @@ public partial class Structural2DViewer : UserControl
     {
         if (e.ClickCount == 2) { Fit3D(); return; }
         dragStart = e.GetPosition(View3DHost);
-        panning = e.ChangedButton == MouseButton.Right || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        dragOrigin = dragStart;
+        panning = e.ChangedButton == MouseButton.Right || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) || PanMode;
         View3DHost.CaptureMouse();
     }
 
@@ -210,6 +220,7 @@ public partial class Structural2DViewer : UserControl
     {
         if (dragStart is not { } start || !View3DHost.IsMouseCaptured) return;
         var now = e.GetPosition(View3DHost);
+        if (dragOrigin is { } origin && (now - origin).Length <= 4) return;
         var delta = now - start;
         dragStart = now;
         if (panning)
@@ -233,8 +244,33 @@ public partial class Structural2DViewer : UserControl
 
     private void View3DMouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (e.ChangedButton == MouseButton.Left && !panning && dragOrigin is { } origin &&
+            (e.GetPosition(View3DHost) - origin).Length <= 4 && scene3D is { } scene)
+        {
+            string? hit = null;
+            VisualTreeHelper.HitTest(View3D, null, result =>
+            {
+                if (result is RayMeshGeometry3DHitTestResult { ModelHit: GeometryModel3D model } &&
+                    scene.MemberVisuals.FirstOrDefault(item => ReferenceEquals(item.Model, model)) is { } member)
+                {
+                    hit = member.Name;
+                    return HitTestResultBehavior.Stop;
+                }
+                return HitTestResultBehavior.Continue;
+            }, new PointHitTestParameters(e.GetPosition(View3D)));
+            if (hit is not null) Canvas.ToggleMemberSelection(hit);
+        }
         dragStart = null;
+        dragOrigin = null;
         if (View3DHost.IsMouseCaptured) View3DHost.ReleaseMouseCapture();
+    }
+
+    private void Update3DSelection()
+    {
+        if (scene3D is null) return;
+        var selected = Canvas.SelectedMembers.ToHashSet(StringComparer.Ordinal);
+        foreach (var member in scene3D.MemberVisuals)
+            member.Model.Material = member.Model.BackMaterial = selected.Contains(member.Name) ? Selected3DMaterial : member.BaseMaterial;
     }
 
     private void View3DMouseWheel(object sender, MouseWheelEventArgs e)
@@ -344,6 +380,15 @@ public sealed class ModelCanvas : FrameworkElement
         selectedJoints.Clear();
         InvalidateVisual();
         if (any) SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Toggles a member selected in the 3D view using the same selection as the 2D canvas.</summary>
+    public void ToggleMemberSelection(string name)
+    {
+        if (!Model.Members.Any(member => member.Name == name)) return;
+        Toggle(selectedMembers, name);
+        InvalidateVisual();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Selects (or deselects) what lies at <paramref name="position"/>, as a click does (checks).</summary>

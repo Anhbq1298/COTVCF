@@ -13,7 +13,9 @@ namespace COT_VCF.Presentation.Controls;
 /// </summary>
 public static class StructureModel3D
 {
-    public sealed record Scene(Model3DGroup Model, Rect3D Bounds, int FramesWithSapShape, int FramesApproximated);
+    public sealed record MemberVisual(string Name, GeometryModel3D Model, System.Windows.Media.Media3D.Material BaseMaterial);
+    public sealed record Scene(Model3DGroup Model, Rect3D Bounds, int FramesWithSapShape, int FramesApproximated,
+        IReadOnlyList<MemberVisual> MemberVisuals);
 
     private const int CircleSegments = 20;
 
@@ -24,10 +26,7 @@ public static class StructureModel3D
         var concrete = Material(Color.FromRgb(0xB9, 0xB3, 0xA8));
         var cable = Material(Color.FromRgb(0x2E, 0x90, 0xFA));
         var unknown = Material(Color.FromRgb(0xA0, 0xA6, 0xAE));
-        var frames = new MeshBuilder();
-        var concreteFrames = new MeshBuilder();
-        var unknownFrames = new MeshBuilder();
-        var cables = new MeshBuilder();
+        var memberVisuals = new List<MemberVisual>();
         int withShape = 0, approximated = 0;
 
         var span = model.Points.Count == 0 ? 1 : Math.Max(1e-3, Extent(model));
@@ -38,6 +37,8 @@ public static class StructureModel3D
             var end = new Point3D(b.Position.X, b.Position.Y, b.Position.Z);
             if ((end - start).Length < 1e-9) continue;
             var section = sections?.GetValueOrDefault(member.Name);
+            var mesh = new MeshBuilder();
+            System.Windows.Media.Media3D.Material material;
             if (member.Kind == MemberKind.Frame)
             {
                 var shape = section?.Shape;
@@ -45,20 +46,23 @@ public static class StructureModel3D
                 else if (shape.Kind == SectionShapeKind.Equivalent) approximated++;
                 else withShape++;
                 var outline = shape is not null ? Outline(shape) : Rectangle(span * 0.004, span * 0.004, 0, 0);
-                var target = shape is null ? unknownFrames : IsConcrete(section?.MaterialName) ? concreteFrames : frames;
-                Extrude(target, outline, start, end, section?.LocalAngleDeg ?? 0);
+                material = shape is null ? unknown : IsConcrete(section?.MaterialName) ? concrete : steel;
+                Extrude(mesh, outline, start, end, section?.LocalAngleDeg ?? 0);
             }
             else
             {
                 // Cables: solid rod of the gross section area (a minimum size keeps very thin strands visible).
                 var area = section is { } s ? (s.GrossAreaM2 > 0 ? s.GrossAreaM2 : s.AreaM2) : 0;
                 var diameter = Math.Max(area > 0 ? Math.Sqrt(4 * area / Math.PI) : 0, span * 0.0015);
-                Extrude(cables, Circle(diameter, 0, 12), start, end, 0);
+                material = cable;
+                Extrude(mesh, Circle(diameter, 0, 12), start, end, 0);
             }
+            if (!mesh.HasGeometry) continue;
+            var visual = new GeometryModel3D(mesh.ToMesh(), material) { BackMaterial = material };
+            group.Children.Add(visual);
+            memberVisuals.Add(new MemberVisual(member.Name, visual, material));
         }
-        foreach (var (mesh, material) in new[] { (frames, steel), (concreteFrames, concrete), (unknownFrames, unknown), (cables, cable) })
-            if (mesh.HasGeometry) group.Children.Add(new GeometryModel3D(mesh.ToMesh(), material) { BackMaterial = material });
-        return new Scene(group, group.Bounds, withShape, approximated);
+        return new Scene(group, group.Bounds, withShape, approximated, memberVisuals);
     }
 
     private static double Extent(GeometryModel model)
