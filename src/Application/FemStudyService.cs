@@ -110,9 +110,15 @@ public sealed class FemStudyService
     /// <summary>Id of the run of <see cref="ComposeModel"/>: the model itself, not an L/H/P study candidate.</summary>
     public const string ModelRunId = "Model";
 
-    /// <summary>The model has what one FEM run needs: its geometry, the Tab 01 loads and the Tab 03 cable targets.</summary>
-    public bool CanComposeModel(ApplicationState state) => state.BaselineCaptured &&
-        LoadingCandidates.TotalCount(state.LoadDefinitions) > 0 && PretensionCandidates.TotalCount(state.Cables.ToArray()) > 0;
+    /// <summary>The model has what one FEM run needs: its geometry, the Tab 01 loads and the Tab 03 cable targets (none
+    /// for a model without cables, e.g. one imported from ETABS). The Tab 02 chord groups are not needed.</summary>
+    public bool CanComposeModel(ApplicationState state) => state.Baseline.Points.Count > 0 &&
+        LoadingCandidates.TotalCount(state.LoadDefinitions) > 0 &&
+        (PretensionCandidates.TotalCount(state.Cables.ToArray()) > 0 || WithoutCables(state));
+
+    /// <summary>A model with no cable members and no Tab 03 cables: it runs without a pretension stage.</summary>
+    private static bool WithoutCables(ApplicationState state) =>
+        state.Cables.Count == 0 && state.Geometry.Members.All(member => member.Kind != MemberKind.Cable);
 
     /// <summary>
     /// The model as it stands, as the one case Run → Run FEM Analysis solves: its own geometry (no Tab 02 height change),
@@ -126,10 +132,11 @@ public sealed class FemStudyService
         var loading = LoadingCandidates.Enumerate(state.LoadDefinitions.ToArray()).First();
         var loads = StudyCompositionService.BuildPointLoads(state, loading)
             .Select(row => new FemAppliedLoad(row.AppliedPt, 0, row.FzKn, row.Case)).ToArray();
-        var pretension = PretensionCandidates.Enumerate(state.Cables.ToArray()).First();
+        var pretension = PretensionCandidates.Enumerate(state.Cables.ToArray()).FirstOrDefault();
         var height = state.Truss.BaselineHeight;
         return new FemStudyCandidate(ModelRunId, "", "", "",
-            new TrussCandidate(1, height, 0, state.Truss.Reference.ToString(), 0, 0, 0), loads, pretension.CableForces);
+            new TrussCandidate(1, height, 0, state.Truss.Reference.ToString(), 0, 0, 0), loads,
+            pretension?.CableForces ?? new Dictionary<string, double>(StringComparer.Ordinal));
     }
 
     /// <summary>What every FEM run needs of the model and of Tabs 01 and 03, whatever the number of cases.</summary>
@@ -139,13 +146,14 @@ public sealed class FemStudyService
             throw new InvalidOperationException("Open a model before running FEM: File → Default Model or Load Model, or Connect SAP and load a project.");
         if (state.Geometry.Members.Any(member => member.Kind == MemberKind.Tendon))
             throw new InvalidOperationException("The internal FEM solver currently supports frame and cable objects, not tendon objects.");
-        if (state.Baseline.Points.Count == 0 || !state.BaselineCaptured)
-            throw new InvalidOperationException("Set the Tab 02 truss-height groups and capture the baseline before running FEM.");
+        // the run solves the model's own geometry; the Tab 02 chord groups are an input of the truss-height study only
+        if (state.Baseline.Points.Count == 0)
+            throw new InvalidOperationException("The model has no geometry to analyse. Open or import a model first.");
         if (state.AppliedPoints.Count < 2) throw new InvalidOperationException("Tab 01 needs at least two applied load locations to calculate tributary widths.");
         if (state.LoadDefinitions.Count == 0 || state.LoadDefinitions.Any(definition =>
                 definition.CandidateCount <= 0 || !state.LoadPatterns.Contains(definition.LoadName, StringComparer.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Complete every Tab 01 load definition and confirm its load pattern exists in the model.");
-        if (state.Cables.Count == 0 || state.Cables.Any(cable => cable.Missing || cable.Status != "Configured" ||
+        if (state.Cables.Count == 0 && !WithoutCables(state) || state.Cables.Any(cable => cable.Missing || cable.Status != "Configured" ||
                 !state.LoadPatterns.Contains(cable.LoadPattern, StringComparer.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Complete the Tab 03 cable target-force definitions and confirm each cable and load pattern exists in the model.");
         if (state.AppliedPoints.Any(point => !state.Baseline.Points.ContainsKey(point.PointName)))

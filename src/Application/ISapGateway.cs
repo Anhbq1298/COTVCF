@@ -49,6 +49,12 @@ public interface ISapGateway : IDisposable
     Task<SectionLibrary> GetSectionsAsync(ModelInfo expected) =>
         throw new NotSupportedException("Section reads are not implemented by this SAP gateway.");
     Task<IReadOnlyList<ForceSource>> ReadForcesAsync(IReadOnlyList<StructuralMember> members, ModelInfo expected);
+    /// <summary>File → Export to SAP2000: writes <paramref name="model"/> into the verified active model (kN-m units) so it
+    /// runs in SAP2000. Unlocks a locked model only when <paramref name="unlock"/> (SAP2000 then deletes its results).
+    /// Does not save: the user reviews and saves in SAP2000, or closes without saving to discard. <paramref name="preview"/>
+    /// reads and checks only, and reports what the export would change.</summary>
+    Task<SapExportReport> ExportModelAsync(SapExportModel model, ModelInfo expected, bool unlock, bool preview = false) =>
+        throw new NotSupportedException("This SAP2000 connection cannot export a model.");
     Task ApplyLoadsAsync(IReadOnlyList<PointLoad> loads, ModelInfo expected);
     /// <summary>Moves joints to <paramref name="proposed"/>. A cable object defined by its undeformed length is given
     /// the same length relative to its chord on the new geometry — SAP2000 would otherwise keep the old length.</summary>

@@ -60,6 +60,29 @@ earlier tall-header / large-button / blue-block look.
   (`MainViewModel.Menu.cs`, click handlers in `MainWindow.xaml.cs`). Do not bring the rail or the toolbar buttons back.
   - **File**: New Config, Load Config…, Save Config · Default Model · Read FEM Properties from SAP. One `.cotfem.db`
     is the complete MCOTiS configuration; the old split project/model JSON commands are not exposed.
+    · **Import From SAP2000** (before Read FEM Properties): one read-only step from the active SAP2000 model to a model
+    ready to run — `MainViewModel.ImportFromSapAsync` (MainViewModel.Import.cs): fresh session (Tabs 01–05 reset after an
+    OK / Cancel confirmation) → connect + geometry → member properties, loads, cases, combinations → material / section
+    libraries as SAP defines them (member properties keep SAP's values) → Tab 03 = cables with a SAP target force (pattern,
+    force, section) → Tab 02 chords by `VcfChordDetection` (TTrPt / MTrPt / BTrPt names, else the three highest levels of
+    joints on horizontal frames, intermediate joints included) and baseline capture → Tab 01 fitted to the SAP joint loads
+    (a pattern with vertical loads uniform per tributary length becomes qz on those joints with B = 1 m, 1 storey, so the
+    replaced SAP loads come back identical; otherwise 0 kPa on the top chord in a pattern not loaded there). Readiness is
+    `FemStudyService.ComposeModel`'s own check; the summary dialog lists each step and what is still missing.
+    Offline checks: `--sap-import`.
+    · **Export to SAP2000…** (after Import): writes the Mcotis model into the model open in SAP2000, ready to run there.
+    `MainViewModel.BuildSapExportModel` (MainViewModel.Export.cs) → `SapExportModel` (Application/SapExport.cs): geometry,
+    member properties, materials / sections, pin supports, load patterns, Run Analysis's Tab 01 joint loads and Tab 03
+    targets (`FemStudyService.ComposeModel`), supported case rows (with Run) and linear additive combinations. Flow:
+    `PreviewSapExportAsync` (read-only: attach via `WorkflowService.PeekActiveModelAsync`, validate everything, list the
+    planned changes) → OK / Cancel dialog → `ExportToSapAsync`. `SapGateway.ExportModelAsync` (SapGateway.Export.cs,
+    signatures checked against SAP2000 27's CSiAPIv1) requires kN-m units; unlocks a locked model only after the user
+    confirmed (results deleted); order: materials → frame / cable sections (existing SAP general / Section Designer sections
+    kept) → delete members not in Mcotis (or rewired) and their unconnected joints → move joints (undeformed-length cables
+    keep their relative length) → add joints / members (new cables copy a kept cable's shape definition) → section, local
+    axis, in-plane moment releases, modifiers → pins on unrestrained supports → patterns → Tab 01 joint loads (replace) →
+    cable target forces → cases (new nonlinear: P-Δ + large displacement; existing: loads + initial case only) →
+    combinations (changed ones rebuilt) → run flags. Not saved: the user saves in SAP2000, or closes without saving to discard.
   - **MB**: 01 Loading … 06A Optimization, 08 Quantities (each with its status as the gesture text; 06A disabled
     without raw data). Choosing one sets `SelectedTab`; the page fills the left pane.
   - **Define**: Materials, Section Properties, Load Patterns, Load Cases / Load Combinations · Result Load Case.
@@ -70,6 +93,12 @@ earlier tall-header / large-button / blue-block look.
   - **Edit**: VCF System…. A blank configuration enables this after at least one frame section and one cable section
     exist. The window previews the built-in VCF topology without putting objects in the working model; Apply creates and
     names the joints, frames and cables and assigns the selected library sections.
+    · **Delete** (Del key too, not while typing): removes the joints / frames / cables selected on the model view after an
+    OK / Cancel confirmation (no undo). As SAP2000, a deleted joint takes its connected members; a deleted member leaves its
+    end joints. `MainViewModel.DeleteObjectsAsync` (MainViewModel.Edit.cs) also drops member properties, SAP loading, Tab 01
+    loaded points / point loads, Tab 02 chord-group entries (re-captures the baseline; a note if a group becomes invalid),
+    Tab 03 cables (followers of a removed cable become Independent) and Tab 04 output entries; FEM results are cleared and the
+    model becomes an offline "· edited" model — SAP2000 is never written.
   - **Assign**: Joint Restraints (Pin Supports).
   - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Optimization VCF… ·
     Analysis Options. **Optimization VCF…** opens the modal `OptimizationVcfWindow`: the Edit → VCF Geometry inputs as a

@@ -20,6 +20,14 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         }
         state.Model = info; state.Connection = "Connected";
     }
+    /// <summary>The model open in SAP2000 now, attached to without changing this session's state (for Export to SAP2000).</summary>
+    public Task<ModelInfo> PeekActiveModelAsync() => sap.ConnectAsync();
+
+    /// <summary>File → Export to SAP2000: writes <paramref name="model"/> into the active model <paramref name="target"/>
+    /// (confirmed by the user). This session's state is not changed; nothing is saved in SAP2000.</summary>
+    public Task<SapExportReport> ExportToSapAsync(SapExportModel model, ModelInfo target, bool unlock, bool preview = false) =>
+        sap.ExportModelAsync(model, target, unlock, preview);
+
     public async Task RefreshAsync()
     {
         var snapshot = await sap.ReadAsync();

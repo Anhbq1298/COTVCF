@@ -1135,13 +1135,13 @@ public sealed partial class MainViewModel : Observable
     {
         get
         {
-            if (!femStudy.CanComposeModel(State)) return "Not ready — complete 01 Loading, the 02 Truss Height baseline and 03 Pretension.";
+            if (!femStudy.CanComposeModel(State)) return "Not ready — complete 01 Loading and 03 Pretension.";
             var cables = State.Cables.ToArray();
             var ranges = State.LoadDefinitions.Where(load => load.CandidateCount > 1)
                 .Select(load => $"{load.LoadName} qz {load.CandidateValues[0]:0.###} kPa")
                 .Concat(cables.Where(cable => cable.CandidateCount > 1 && !PretensionCandidates.IsFollower(cable, cables))
                     .Select(cable => $"{cable.CableName} {cable.GetCandidateForces()[0]:0.###} kN")).ToArray();
-            return $"1 FEM run · the model as defined · truss height {State.Truss.BaselineHeight:0.###} {LengthUnit}" +
+            return "1 FEM run · the model as defined" + (State.BaselineCaptured ? $" · truss height {State.Truss.BaselineHeight:0.###} {LengthUnit}" : "") +
                 (ranges.Length == 0 ? "" : $" · ranges at their first value: {string.Join(", ", ranges.Take(3))}" +
                     (ranges.Length > 3 ? $" (+{ranges.Length - 3} more)" : ""));
         }
@@ -1973,7 +1973,8 @@ public sealed partial class MainViewModel : Observable
                 var outputDatabase = WriteFemOutput(run);
                 FemLogLine($"Output database: {outputDatabase}");
                 FemProgressText = "Analysis complete" +
-                    (run.Result.TargetFitConverged ? $" · pretension stage within {targetFitPercent:0.###}% of target"
+                    (loadPlan.FitCases.Count == 0 ? "" // no cable target forces to fit (a model without cables)
+                    : run.Result.TargetFitConverged ? $" · pretension stage within {targetFitPercent:0.###}% of target"
                         : $" · pretension not fitted within {targetFitPercent:0.###}% (closest pretension used) · see Cable Target Fit") +
                     $" · {modelName}.";
             }

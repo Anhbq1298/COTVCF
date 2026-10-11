@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 
 namespace COT_VCF.SAP2000;
 
-public sealed class SapGateway : ISapGateway
+public sealed partial class SapGateway : ISapGateway
 {
     private readonly StaWorker worker;
     private readonly bool ownsWorker;

@@ -11,6 +11,7 @@ namespace COT_VCF;
 public partial class App : System.Windows.Application
 {
     private SapGateway? gateway;
+    private EtabsGateway? etabs;
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -44,6 +45,8 @@ public partial class App : System.Windows.Application
         var viewModel = new MainViewModel(state, workflow, new SelectionService(), config, studyExecution,
             outputDialogs: outputDialogs, outputGroupPreparation: outputPreparation,
             printStore: new ReportPrintSettingsStore(), quantityTakeoff: quantityTakeoff);
+        // File → Import From ETABS reads the running ETABS on a lane of its own (read-only).
+        viewModel.Etabs = etabs = new EtabsGateway();
         // Open the built-in model before showing the window so startup never displays the blank chooser.
         viewModel.LoadDefaultFemModel();
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
@@ -55,6 +58,7 @@ public partial class App : System.Windows.Application
     {
         if (MainWindow?.DataContext is MainViewModel viewModel) viewModel.FlushFemWorkingSession();
         gateway?.Dispose();
+        etabs?.Dispose();
         base.OnExit(e);
     }
 }
