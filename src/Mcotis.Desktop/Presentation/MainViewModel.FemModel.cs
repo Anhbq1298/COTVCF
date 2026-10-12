@@ -90,7 +90,7 @@ public sealed partial class MainViewModel
         return dialog.ShowDialog() == true ? dialog.FileName : null;
     };
     public Command LoadFemModel => loadFemModel ??= new(_ => LoadFemModelFromFile(), () => CanLoadFemModel);
-    /// <summary>File → Default Model: drop the current model (live or loaded) and open the built-in default model.</summary>
+    /// <summary>File → Load VCF…: drop the current model (live or loaded) and open the built-in default model.</summary>
     public Command LoadDefaultModel => loadDefaultModel ??= new(_ => LoadDefaultFemModel(replaceCurrent: true), () => CanLoadFemModel);
     public Command ContinueWithBlankModel => continueWithBlankModel ??= new(_ =>
     {
@@ -284,7 +284,7 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Opens the bundled MCOTiS database as a fresh editable model. At startup it only opens while SAP2000 is not
-    /// connected; with <paramref name="replaceCurrent"/> (File → Default Model) it replaces whatever model is open.</summary>
+    /// connected; with <paramref name="replaceCurrent"/> (File → Load VCF…) it replaces whatever model is open.</summary>
     internal void LoadDefaultFemModel(bool replaceCurrent = false)
     {
         if (IsBusy || (State.IsSapConnected && !replaceCurrent)) return;

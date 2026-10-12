@@ -57,13 +57,47 @@ public sealed record VcfOptimizationResult(
     string? CostNote = null,
     double? MaxUpliftMm = null,
     string? UpliftPoint = null,
-    double? UpliftLimitMm = null)
+    double? UpliftLimitMm = null,
+    OptimizationResponse? Response = null)
 {
     /// <summary>True when the uplift is within its limit (<see cref="VcfOptimization.UpliftToleranceMm"/>); null when there is none to check.</summary>
     public bool? UpliftPasses => MaxUpliftMm is { } uplift && UpliftLimitMm is { } limit ? uplift <= limit + VcfOptimization.UpliftToleranceMm : null;
 
     /// <summary>True when the deflection is within the limit and the uplift within its own; null when there is no deflection.</summary>
     public bool? Passes => MaxDeflectionMm is { } deflection && LimitMm is { } limit ? deflection <= limit && UpliftPasses != false : null;
+}
+
+/// <summary>The structural responses of a case, read in the same result as the deflection: the base reactions at one end
+/// (the sum over the supports on the left half — the two column bases of that end; over all four the horizontal force sums
+/// to zero), the largest frame axial force and moment, the largest cable tension, and the mass of the system.</summary>
+public sealed record OptimizationResponse(double BaseHorizontalKN, double BaseVerticalKN, double MaxFrameAxialKN, double MaxFrameMomentKNm,
+    double MaxCableKN, double MassT);
+
+public static class OptimizationResponses
+{
+    /// <summary>The responses of <paramref name="result"/> on <paramref name="geometry"/>. The horizontal base force is the
+    /// magnitude of ΣRx over the supports left of the middle of the supports (one end).</summary>
+    public static OptimizationResponse Of(GeometryModel geometry, IReadOnlyDictionary<string, FemSectionProperties> properties, FemAnalysisResult result)
+    {
+        var supports = result.SupportReactions.Where(reaction => geometry.Points.ContainsKey(reaction.PointName)).ToArray();
+        var xs = supports.Select(reaction => geometry.Points[reaction.PointName].Position.X).ToArray();
+        var middle = xs.Length == 0 ? 0 : (xs.Min() + xs.Max()) / 2;
+        var oneEnd = supports.Where(reaction => geometry.Points[reaction.PointName].Position.X < middle - 1e-6).ToArray();
+        double mass = 0;
+        foreach (var member in geometry.Members)
+        {
+            if (!properties.TryGetValue(member.Name, out var property)) continue;
+            var (a, b) = (geometry.Points[member.Start].Position, geometry.Points[member.End].Position);
+            mass += property.MassPerLengthTPerM * Math.Sqrt(Math.Pow(b.X - a.X, 2) + Math.Pow(b.Y - a.Y, 2) + Math.Pow(b.Z - a.Z, 2));
+        }
+        return new(
+            Math.Abs(oneEnd.Sum(reaction => reaction.ReactionXKN)),
+            oneEnd.Sum(reaction => reaction.ReactionZKN),
+            result.Frames.SelectMany(frame => new[] { frame.AxialStartKN, frame.AxialEndKN }).Select(Math.Abs).DefaultIfEmpty().Max(),
+            result.Frames.SelectMany(frame => new[] { frame.MomentStartKNm, frame.MomentEndKNm }).Select(Math.Abs).DefaultIfEmpty().Max(),
+            result.Cables.Select(cable => cable.AxialForceKN).DefaultIfEmpty().Max(),
+            mass);
+    }
 }
 
 /// <summary>
@@ -73,7 +107,7 @@ public sealed record VcfOptimizationResult(
 /// (<see cref="VcfOptimization.CableTargets"/>: every cable steps together, the fan cables by their length) — and analysed
 /// with the same internal FEM as Run → Run FEM Analysis. The working model is never changed.
 /// </summary>
-public sealed class VcfOptimizationRunner
+public sealed class VcfOptimizationRunner : IOptimizationRunner
 {
     public const int MaxCases = 10_000;
     public const string CableStepKey = "cable:step";
@@ -208,7 +242,7 @@ public sealed class VcfOptimizationRunner
             var uplift = -risen;
             var span = bays * form.BayWidth;
             return new(item, deflection, name, point, results.Values.All(result => result.TargetFitConverged), null, span, span * 1000 / settings.SpanRatio,
-                cost, costNote, Math.Max(0, uplift), uplift > 0 ? upliftPoint : null, settings.UpliftLimitMm);
+                cost, costNote, Math.Max(0, uplift), uplift > 0 ? upliftPoint : null, settings.UpliftLimitMm, OptimizationResponses.Of(geometry, properties, results[name]));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or KeyNotFoundException)

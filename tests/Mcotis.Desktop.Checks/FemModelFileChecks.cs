@@ -122,16 +122,16 @@ internal static class FemModelFileChecks
                 pair.First.Result.Cables.Zip(pair.Second.Result.Cables).All(cable => Math.Abs(cable.First.AxialForceKN - cable.Second.AxialForceKN) < 1e-9));
             Check(same, "offline results equal the connected run (every joint displacement and cable force)");
 
-            // File → Default Model sets the connected model aside and opens the built-in default model.
-            Check(onlineVm.LoadDefaultModel.CanExecute(null), "File → Default Model is available while connected");
+            // File → Load VCF… sets the connected model aside and opens the built-in default model.
+            Check(onlineVm.LoadDefaultModel.CanExecute(null), "File → Load VCF… is available while connected");
             onlineVm.LoadDefaultModel.Execute(null);
             Check(warnings.Count == 0 && onlineVm.IsDefaultModel && !online.IsSapConnected && online.Model?.Name == "COT Framing_V1.2_100m.sdb" &&
                   online.Cables.Count == 16 && onlineVm.FemRuns.Count == 0 && onlineVm.SelectedTab == 7 && onlineVm.RunFemAnalysis.CanExecute(null) && sap.Writes == 0,
-                "File → Default Model replaces the connected model with the default model, ready to run, without touching SAP2000");
-            Check(vm.LoadDefaultModel.CanExecute(null), "File → Default Model is available on an offline model");
+                "File → Load VCF… replaces the connected model with the default model, ready to run, without touching SAP2000");
+            Check(vm.LoadDefaultModel.CanExecute(null), "File → Load VCF… is available on an offline model");
             vm.LoadDefaultModel.Execute(null);
             Check(warnings.Count == 0 && vm.IsDefaultModel && offline.Cables.Count == 16 && vm.FemRuns.Count == 0,
-                "File → Default Model replaces a loaded model with the default model");
+                "File → Load VCF… replaces a loaded model with the default model");
         }
         finally { if (File.Exists(path)) File.Delete(path); }
         RunDefaultModel();
@@ -864,6 +864,15 @@ internal static class FemModelFileChecks
               Defl(3) > Defl(1) && Defl(4) > Defl(2) && Defl(2) > Defl(1) && Defl(4) > Defl(3) &&
               vm.VcfOptimizationBest.Contains("case 1", StringComparison.Ordinal),
             $"Run Optimization analyses every case (4) and reports its max deflection: wider bays and more live load deflect more ({Defl(1):0.0} … {Defl(4):0.0} mm); the least is named");
+        var study = vm.OptimizationReport;
+        StudySensitivity? Swing(string metric, string parameter) =>
+            study.Sensitivities.FirstOrDefault(s => s.Metric.StartsWith(metric, StringComparison.Ordinal) && s.Parameter == parameter);
+        Check(study.Charts.Count is >= 8 and <= OptimizationStudy.MaxCharts && study.Charts[0].Title.StartsWith("Max deflection δ vs", StringComparison.Ordinal) &&
+              Swing("Base horizontal", $"qz {live.LoadName} [kPa]") is { SwingPercent: > 0, Direction: > 0 } &&
+              Swing("Total cost", $"qz {live.LoadName} [kPa]") is { SwingPercent: 0 } && Swing("Total cost", "Bay [m]") is { SwingPercent: > 0 } &&
+              study.Summary.Any(entry => entry.Heading == "Compliance") && study.Conclusions.Count > 0,
+            $"The run's Chart sheet: {study.Charts.Count} figures from the 4 cases; the base horizontal force of one end grows with the live load, " +
+            "the cost follows the bay width and not the load; summary and conclusions written");
 
         // the study case that takes every input at the model's own value is the run of Run FEM Analysis: one model, two entries
         // (the optimization reads the deflection on the bottom chord points, BTrPt… — so does this comparison)

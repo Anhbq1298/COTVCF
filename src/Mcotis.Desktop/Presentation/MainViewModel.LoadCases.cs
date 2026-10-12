@@ -69,7 +69,7 @@ public sealed partial class MainViewModel
         if (IsBusy || CommitEditors?.Invoke() == false) return null;
         name = name?.Trim() ?? "";
         var problem = State.IsSapConnected ? "The model is the connected SAP2000 model, so its load patterns are SAP2000's. " +
-                "Define load patterns on an offline model (File → Default Model or Load MCOTiS Config, or after Edit → VCF System → Apply)."
+                "Define load patterns on an offline model (File → Load VCF… or Load MCOTiS Config, or after Edit → VCF System → Apply)."
             : FemLoadPlan.NameProblem(name)
             ?? (FemPatternRows.Select(row => row.Name).Concat(State.LoadPatterns).Contains(name, StringComparer.OrdinalIgnoreCase)
                 ? $"There is already a load pattern '{name}'." : null);

@@ -92,6 +92,8 @@
     <Resource Include="Presentation\AppLogo.png" />
     <Resource Include="Presentation\AppIcon.ico" />
     <EmbeddedResource Include="Resources\Default.cotfem.db" LogicalName="Mcotis.Default.cotfem.db" />
+    <!-- File → Load TAS…: the CoT 120 m composite arch deck as ETABS wrote it (.e2k), imported like Import From ETABS. -->
+    <EmbeddedResource Include="Resources\TAS-CoT120.e2k" LogicalName="Mcotis.TAS-CoT120.e2k" />
     <!-- Help → Development Plans shows the development log; keeping it is compulsory (AGENTS.md, .githooks/commit-msg). -->
     <EmbeddedResource Include="$(RepoRoot)docs\DEVELOPMENT_LOG.md" LogicalName="Mcotis.DevelopmentLog.md" Link="DEVELOPMENT_LOG.md" />
   </ItemGroup>

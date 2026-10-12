@@ -18,6 +18,107 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Optimization results: Run and Chart sheets
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Optimization → Optimization VCF… / Optimization TAS… → Run Optimization; Optimization → Optimization Results… →
+  Run and Chart
+- What: The results window has two sheets. Run is the case table as before. Chart is the parametric study of the run,
+  written like the results section of a paper: up to 20 numbered figures — for every response that varies, its main
+  effect against every parameter that varies (the mean over the other parameters with the min … max band; deflection,
+  utilisation δ / limit with the 1.0 line, base horizontal force of one end, total cost, cost per metre of span, mass,
+  base vertical force, max cable tension, frame axial force and moment, uplift), a sensitivity ranking (swing of each key
+  response per parameter, as % of its mean), cost against utilisation for every case (passing / failing) and an
+  interaction plot of the two parameters that move the deflection most — then a summary (study, compliance, each key
+  response with its governing parameter, elasticity and linearity, the optimum, limitations) and numbered conclusions;
+  Copy Summary puts the text on the clipboard. Each case now also records the base reactions of one end (the sum over
+  the two column bases left of the middle — over all four the horizontal force is zero), the largest frame axial force,
+  moment and cable tension in the deflection result, and the system mass.
+- Checks: --optimization-study (known main effects, sensitivities, figure set, summary, one-end base force); the default
+  suite (a 4-case run on the default model gives its Chart sheet)
+
+## 2026-10-12 · Tied arch system with an elevated cable
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Edit → Tied Arch System… → Geometry (With elevated cable, H0) and Cable Force; Optimization → Optimization TAS…
+  → Geometry (H0), Cable Force and Sections (tie cable)
+- What: With elevated cable ticked, the arch springs at H0 (default 10 m) from the top of two columns of the arch's own
+  section, pinned on the ground, and one cable — TIE, the VCF model's strand section 192T15.7 — ties the two springing
+  points; H1 and H2 are measured from the springing (deck at H0 + H2). The Cable Force sheet sets the tie's target force
+  (default 20,000 kN) in the Pretension load pattern. As for the VCF cables, the Pretension case applies it with the
+  self-weight and fits the tie to it, and the SLS / ULS cases (and the P-Δ ULS cases) continue from it, prestressed then
+  loaded. Optimization TAS of such a system adds H0 to its geometry ranges, the tie's pretension in steps (min / max /
+  steps, as Optimization VCF) and the tie among its section roles; each case is fitted and run with its cable. The
+  viewer still dimensions H1 from the springing.
+- Checks: --etabs-import (the elevated system is built, pinned on the ground, meets the tie's target in Pretension and
+  solves; Optimization TAS reproduces its run and steps the pretension); --result-tools-ui (the forms show and hide H0
+  and Cable Force)
+
+## 2026-10-12 · Mcotis opens with the tied arch system
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Starting Mcotis
+- What: The app now opens with the tied arch system — TAS - Tied Arch System, as File → Load TAS… opens it, ready to run —
+  instead of the VCF model. File → Load VCF… still opens the VCF model; should TAS not load, the VCF model opens
+  instead and the status bar says why.
+- Checks: --etabs-import (a fresh start opens TAS with 30 joints and 59 frames, ready to run)
+
+## 2026-10-12 · Optimization TAS
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Optimization → Optimization TAS…; Optimization → Optimization Results…
+- What: The parametric study of the tied arch system, run as Optimization VCF is. The form has min / max / step for H1,
+  h (H2 = H1 + h, so the top chord is always above the arch crown; 2–5 m @ 1 by default), the number of bays and their
+  spacing (sheet Geometry, the others starting fixed at the open system) and for the storeys above
+  — SW 7–15 kPa @ 1, SDL 3–10 @ 1, LL 5–10 @ 2.5, floors n 5–10 @ 1 and the tributary width B (sheet Storey Force, with
+  the SLS / ULS point load per deck joint) — candidate sections per role (arch rib, top chord, mega column, end strut,
+  strut, brace), the deflection check (max δ of a top chord joint in the chosen result ≤ L / ratio, uplift limit) and a
+  preview at the minimum, current or maximum corner. Run Optimization builds every case in memory as Edit → Tied Arch
+  System would (an odd number of bays is skipped with the reason), analyses it with the internal FEM
+  and lists it in the Optimization Results table — the same table, run loop, checks and cost as Optimization VCF, which
+  now share one loop. The default space is 5,184 cases. Needs the tied arch system open (File → Load TAS… or Edit →
+  Tied Arch System…); the open model is not changed. The span of an arch is L: the model view labels it "Span L = 120 m",
+  and the form and the results give the limit as L/250 (480 mm for TAS).
+- Checks: --etabs-import (a case with the model's inputs deflects as Run FEM Analysis of Load TAS; odd bays skipped;
+  section candidates change the result; bad ranges refused); --result-tools-ui; --fem-model (Optimization VCF unchanged)
+
+## 2026-10-12 · Edit → Tied Arch System
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Edit → Tied Arch System…
+- What: Builds the tied arch system from H1 (support → arch crown), H2 (support → top chord), the number of bays (even,
+  6–40; default 12) and their spacing (default 10 m; span L = bays × spacing), and the storeys above: SW 7–15 kPa
+  (step 1), SDL 3–10 kPa (step 1), LL 5–10 kPa (step 2.5), n 5–10 floors and the tributary width B (default 12 m). The
+  form shows the point load on each top chord joint, SLS = (SW + SDL + LL) × s × B × n and ULS = (1.35 SW + 1.35 SDL +
+  1.5 LL) × s × B × n (18,000 / 25,200 kN by default), and a live preview with the SLS loads and the arch height H.
+  The arch is the parabola through the two supports and the crown (H1 at mid-span), with a joint at every vertical
+  line; the layout, members, sections, releases, load patterns, cases and combinations are those of the TAS model
+  (three braced bays at each end, pinned struts and braces). Apply / OK rebuilds the model: DEAD_above (SW + SDL) and
+  LL_above (LL) on the top chord joints, half at the two end joints; LL_left / LL_right on each half. With the
+  defaults it is the TAS model of File → Load TAS….
+- Checks: --etabs-import (the defaults build the TAS model's joints, loads and deflections; H1 25 / H2 30 / 10 bays of
+  12 m is on the parabola, ready to run, and its supports carry bays × the point load; out-of-range inputs refused)
+
+## 2026-10-12 · Load TAS (Tied Arch System) and Load VCF
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: File → Load TAS…; File → Load VCF… (was File → Default Model)
+- What: Opens the TAS model — the CoT 120 m composite arch deck (ETABS 22.2 .e2k, bundled with the app) — through the
+  same import as File → Import From ETABS: the C90/105, S690 and B500 materials, CFT, steel encased and Section
+  Designer sections, end releases, pinned bases, 6 load patterns with their 40 joint loads, 9 static load cases and 8
+  combinations. ETABS splits every column, strut and brace at each story it crosses; Load TAS joins each straight member
+  back into one frame (only where nothing else meets the joint, with no load, restraint or release there), so the model
+  has 30 joints and 59 frames instead of 114 and 143, with the same results. The model is offline and ready to run
+  without ETABS; it replaces the current model after a confirmation and shows straight away (the import summary appears
+  only if the model is not ready to run). Import From ETABS still keeps the frames as ETABS splits them. With
+  dimensions on, the XZ view of an arch model also dimensions the arch height H at the left, from the supports to the
+  crown (H = 30 m for TAS), with a dashed line out from the crown; the arch is the frames of one section that leave two
+  pinned supports inclined and join them. The model is named "TAS - Tied Arch System" in the title bar and messages.
+  File → Default Model is renamed File → Load VCF… (the same built-in VCF model, COT Framing_V1.2_100m).
+- Checks: --etabs-import (the bundled file is tests/etabs-import/CoT120.e2k; Load TAS is ready to run, has no joint
+  left inside a straight member, deflects and reacts as the split model, and its arch is found with H = 30 m; a braced
+  portal has no arch; the title is TAS - Tied Arch System); --fem-model (Load VCF… opens the default model); --dev-log
+
 ## 2026-10-12 · Run monitor shows the equilibrium of a run; no Degrees of Freedom tab in the main window
 - Status: Done
 - Who: markbui, Claude
@@ -249,6 +350,29 @@ continues on the next lines, indented by two spaces):
   open SAP2000 model in, ready to run (chord groups, cable targets, Tab 01 fitted to the SAP joint loads). Export to
   SAP2000 previews, then writes the Mcotis model into the open SAP2000 model (not saved).
 - Checks: --sap-import; offline suite
+
+## 2026-10-11 · New Config, the blank model and the desktop build
+- Status: Done
+- Who: markbui
+- Where: File → New Config; the start screen (Load Default Template / Continue with Blank Model); Edit → VCF System…;
+  build-desktop.ps1
+- What: A new configuration can start blank: define the materials and frame / cable sections, then create the VCF
+  system under Edit → VCF System…, which gives the new members the sections chosen there. The start screen offers the
+  built-in template (now File → Load VCF…) or a blank model; menus that need geometry stay off until there is some.
+  build-desktop.ps1 builds the app (FreshBuild configuration) into bin/ and puts a Mcotis shortcut on the desktop.
+- Checks: --blank-ui; --fem-db; --fem-model
+
+## 2026-10-11 · Result pickers, result values and the toolbar
+- Status: Done
+- Who: markbui
+- Where: Result → Show Deformed Shape… (F5), Show Member Forces… (F6), Show Joint Reactions… (F7); the toolbar;
+  Post-Processing → Output Settings; Display → View Options
+- What: F5 / F6 / F7 open a picker for the load case (and N, V or M for member forces) of the deflection, member force
+  and reaction views. Values on the model view are written in compact units with a fixed number of decimals (MN, MN·m)
+  and never upside down; the stored results stay in kN and kN·m. Cable force diagrams are scaled so crossing cables
+  stay legible, and Optimization VCF shows its force ranges in MN. The toolbar buttons are regrouped with new icons,
+  and Output Settings moved under Post-Processing.
+- Checks: --result-tools-ui; ViewerResultDisplayChecks (default offline suite)
 
 ## 2026-10-11 · Frame local axes
 - Status: Done

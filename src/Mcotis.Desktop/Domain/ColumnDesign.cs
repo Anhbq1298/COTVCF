@@ -57,6 +57,10 @@ public sealed record ColumnSectionInput
     public double TubeDepth { get; init; } = 800;        // H, or outside diameter D
     public double TubeWidth { get; init; } = 800;        // B (rectangular)
     public double TubeThickness { get; init; } = 20;
+    /// <summary>CFT with bars inside the tube: rectangular — <see cref="BarsAlongWidth"/> on each B face (corners included)
+    /// and <see cref="BarsAlongDepth"/> on each H face; circular — <see cref="BarsAlongWidth"/> bars on a circle. Cover is
+    /// measured from the inside face of the tube; no links.</summary>
+    public bool TubeReinforced { get; init; }
     // encased I section (steel encased), strong axis in-plane
     public double SteelDepth { get; init; } = 500;
     public double SteelWidth { get; init; } = 400;

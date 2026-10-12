@@ -798,10 +798,12 @@ public sealed class ModelCanvas : FrameworkElement
             var maxY = projected.Values.Max(point => point.Y);
             double spanX = maxX - minX;
             double spanY = maxY - minY;
-            // Dimensions sit below and to the right of the model; leave room for them when fitting.
-            double marginX = ShowDimensions ? 96 + DimensionBandX : 96, marginY = ShowDimensions ? 96 + DimensionBandY : 96;
+            // Dimensions sit below and to the right of the model, an arch's height to its left; leave room for them when fitting.
+            var arch = ShowDimensions && Plane == "XZ" ? ArchRise.Find(Model, PinSupportPoints, name => MemberSections?.GetValueOrDefault(name)?.SectionName) : null;
+            var archBand = arch is null ? 0 : ArchBandX;
+            double marginX = ShowDimensions ? 96 + DimensionBandX + archBand : 96, marginY = ShowDimensions ? 96 + DimensionBandY : 96;
             double scale = Math.Min(Math.Max(1, ActualWidth - marginX) / Math.Max(spanX, 1e-9), Math.Max(1, ActualHeight - marginY) / Math.Max(spanY, 1e-9)) * zoom;
-            var shift = ShowDimensions ? new Vector(-DimensionBandX / 2, -DimensionBandY / 2) : default;
+            var shift = ShowDimensions ? new Vector((archBand - DimensionBandX) / 2, -DimensionBandY / 2) : default;
             Point Screen(Point point) => new((point.X - (minX + spanX / 2)) * scale + ActualWidth / 2 + pan.X + shift.X, -(point.Y - (minY + spanY / 2)) * scale + ActualHeight / 2 + pan.Y + shift.Y);
             var screenPoints = projected.ToDictionary(item => item.Key, item => Screen(item.Value));
             jointLocations.Clear();
@@ -809,7 +811,8 @@ public sealed class ModelCanvas : FrameworkElement
             memberLocations.Clear();
             foreach (var member in Model.Members)
                 if (screenPoints.TryGetValue(member.Start, out var a) && screenPoints.TryGetValue(member.End, out var b)) memberLocations[member.Name] = (a, b, member.Kind);
-            if (ShowDimensions) DrawDimensions(dc, projected.Values, Screen);
+            if (ShowDimensions) DrawDimensions(dc, projected.Values, Screen, arch is not null);
+            if (arch is not null) DrawArchHeight(dc, arch, minX, Screen);
 
             var deflectionView = FemResult is not null && FemResultMode == FemResultMode.DeflectedShape;
             if (!deflectionView || ShowUndeformed)
@@ -1398,7 +1401,7 @@ public sealed class ModelCanvas : FrameworkElement
 
     private void Text(DrawingContext dc, string text, Point point, string brush) => Text(dc, text, point, Brush(brush));
     // ---- Dimensions: a chain of the distinct node positions along each axis of the projection ----
-    private const double DimensionBandX = 150, DimensionBandY = 96;
+    private const double DimensionBandX = 150, DimensionBandY = 96, ArchBandX = 70;
 
     private static IReadOnlyList<double> Levels(IEnumerable<double> values)
     {
@@ -1410,7 +1413,8 @@ public sealed class ModelCanvas : FrameworkElement
 
     private static string Metres(double value) => value.ToString("0.###", CultureInfo.CurrentCulture);
 
-    private void DrawDimensions(DrawingContext dc, IEnumerable<Point> modelPoints, Func<Point, Point> screen)
+    /// <param name="archSpan">An arch model: its overall span is the arch's span L, support to support.</param>
+    private void DrawDimensions(DrawingContext dc, IEnumerable<Point> modelPoints, Func<Point, Point> screen, bool archSpan = false)
     {
         var points = modelPoints.ToArray();
         var xs = Levels(points.Select(point => point.X));
@@ -1457,7 +1461,8 @@ public sealed class ModelCanvas : FrameworkElement
             dc.DrawLine(extension, new Point(end, chainY + 4), new Point(end, totalY + 4));
             dc.DrawLine(pen, new Point(left, totalY), new Point(end, totalY));
             Tick(new Point(left, totalY)); Tick(new Point(end, totalY));
-            var total = Label(betweenColumns ? $"Span {Metres(spanTo - spanFrom)} m (between mega columns)" : $"{horizontal} span {Metres(spanTo - spanFrom)} m", 11, bold: true);
+            var total = Label(betweenColumns ? $"Span {Metres(spanTo - spanFrom)} m (between mega columns)"
+                : archSpan ? $"Span L = {Metres(spanTo - spanFrom)} m" : $"{horizontal} span {Metres(spanTo - spanFrom)} m", 11, bold: true);
             dc.DrawText(total, new Point((left + end) / 2 - total.Width / 2, totalY - total.Height - 1));
         }
 
@@ -1494,6 +1499,27 @@ public sealed class ModelCanvas : FrameworkElement
             dc.DrawText(total, new Point(totalX - 3 - total.Width / 2, (top + bottomY) / 2 - total.Height));
             dc.Pop();
         }
+    }
+
+    // The arch's height at the left of the model: from its supports to its crown, with a dashed line out from the crown.
+    private void DrawArchHeight(DrawingContext dc, ArchCrown arch, double minX, Func<Point, Point> screen)
+    {
+        var brush = Brush("Muted");
+        var pen = new Pen(brush, 1);
+        var dashed = new Pen(brush, 0.8) { DashStyle = DashStyles.Dash };
+        var crown = screen(new Point(Model.Points[arch.Crown].Position.X, arch.CrownZ));
+        var support = screen(new Point(minX, arch.SupportZ));
+        var lineX = support.X - 44;
+        dc.DrawLine(dashed, crown, new Point(lineX - 8, crown.Y));
+        dc.DrawLine(dashed, new Point(support.X - 6, support.Y), new Point(lineX - 8, support.Y));
+        dc.DrawLine(pen, new Point(lineX, support.Y), new Point(lineX, crown.Y));
+        foreach (var y in new[] { support.Y, crown.Y }) dc.DrawLine(pen, new Point(lineX - 4, y + 4), new Point(lineX + 4, y - 4));
+        var label = new FormattedText($"H = {Metres(arch.Rise)} m", CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+            new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal), 11, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        var middle = (support.Y + crown.Y) / 2;
+        dc.PushTransform(new RotateTransform(-90, lineX - 3, middle));
+        dc.DrawText(label, new Point(lineX - 3 - label.Width / 2, middle - label.Height));
+        dc.Pop();
     }
 
     private void Text(DrawingContext dc, string text, Point point, Brush brush) => dc.DrawText(new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 12, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip), point);

@@ -1,0 +1,146 @@
+<Window x:Class="Mcotis.Desktop.Presentation.TiedArchWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="clr-namespace:Mcotis.Desktop.Presentation" xmlns:c="clr-namespace:Mcotis.Desktop.Presentation.Controls"
+        Title="Tied Arch System" Icon="{x:Static p:AppIcon.Window}" Width="1180" Height="720" MinWidth="900" MinHeight="560"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
+ <!-- Edit → Tied Arch System: H1, H2, bays and spacing, and the storeys above the deck, with a live preview.
+      Apply / OK rebuilds the TAS model from them (its sections, load patterns, cases and combinations stay); Close discards. -->
+ <Window.Resources>
+  <Style TargetType="GroupBox">
+   <Setter Property="Margin" Value="0,0,0,10"/>
+   <Setter Property="Padding" Value="8,6,8,6"/>
+   <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+   <Setter Property="Background" Value="{StaticResource Raised}"/>
+  </Style>
+  <Style x:Key="FormButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0"/></Style>
+  <Style x:Key="Value" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+   <Setter Property="TextAlignment" Value="Right"/><Setter Property="FontFamily" Value="{StaticResource MonoFont}"/><Setter Property="Margin" Value="0,2,4,2"/>
+  </Style>
+  <Style x:Key="Choice" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}"><Setter Property="Margin" Value="0,2,4,2"/></Style>
+  <Style x:Key="Unit" TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Foreground" Value="{StaticResource Muted}"/></Style>
+  <Style x:Key="Field" TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="TextWrapping" Value="Wrap"/></Style>
+ </Window.Resources>
+ <DockPanel Margin="10">
+  <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0" LastChildFill="False">
+   <Button DockPanel.Dock="Left" Content="Reset to TAS Defaults" MinWidth="180" Click="Reset_Click" AutomationProperties.Name="Reset to TAS defaults"
+           ToolTip="H1 30 m, H2 33 m, 12 bays of 10 m, B 12 m, SW 7, SDL 3, LL 5 kPa, 10 floors — the TAS model"/>
+   <Button x:Name="ApplyButton" DockPanel.Dock="Right" Content="Apply" Style="{StaticResource FormButton}" Click="Apply_Click"/>
+   <Button DockPanel.Dock="Right" Content="Close" Style="{StaticResource FormButton}" IsCancel="True" Click="Close_Click"/>
+   <Button x:Name="OkButton" DockPanel.Dock="Right" Content="OK" Style="{StaticResource FormButton}" IsDefault="True" Click="Ok_Click"/>
+  </DockPanel>
+
+  <Grid>
+   <Grid.ColumnDefinitions><ColumnDefinition Width="380" MinWidth="320"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*" MinWidth="300"/></Grid.ColumnDefinitions>
+
+   <TabControl x:Name="Sheets" Background="{StaticResource Surface}" AutomationProperties.Name="Tied arch system sheets">
+    <TabControl.Resources>
+     <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}"><Setter Property="Height" Value="26"/><Setter Property="Width" Value="NaN"/><Setter Property="MinWidth" Value="0"/><Setter Property="Padding" Value="12,0"/></Style>
+    </TabControl.Resources>
+    <TabItem Header="Geometry">
+   <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,8,0,0">
+    <StackPanel>
+     <GroupBox Header="GEOMETRY">
+      <Grid>
+       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="96"/><ColumnDefinition Width="30"/></Grid.ColumnDefinitions>
+       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+       <TextBlock Style="{StaticResource Field}" Text="H1 — support → arch crown"/>
+       <TextBox x:Name="ArchRiseBox" Grid.Column="1" Style="{StaticResource Value}" TextChanged="Input_Changed" AutomationProperties.Name="H1 arch rise"
+                ToolTip="Height of the arch's highest point, at mid-span, above the supports. The arch is the parabola through the two supports and this point."/>
+       <TextBlock Grid.Column="2" Style="{StaticResource Unit}" Text="m"/>
+       <TextBlock Grid.Row="1" Style="{StaticResource Field}" Text="H2 — support → top chord"/>
+       <TextBox x:Name="DeckHeightBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource Value}" TextChanged="Input_Changed" AutomationProperties.Name="H2 deck height"
+                ToolTip="Height of the top horizontal chord (the deck) above the supports; greater than H1"/>
+       <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="m"/>
+       <TextBlock Grid.Row="2" Style="{StaticResource Field}" Text="Number of bays"/>
+       <TextBox x:Name="BaysBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource Value}" TextChanged="Input_Changed" AutomationProperties.Name="Number of bays"
+                ToolTip="An even number from 6 to 40: the crown is the joint at mid-span; the three bays at each end are braced"/>
+       <TextBlock Grid.Row="3" Style="{StaticResource Field}" Text="Spacing of vertical lines"/>
+       <TextBox x:Name="SpacingBox" Grid.Row="3" Grid.Column="1" Style="{StaticResource Value}" TextChanged="Input_Changed" AutomationProperties.Name="Bay spacing"
+                ToolTip="Distance between the vertical lines (struts and mega columns)"/>
+       <TextBlock Grid.Row="3" Grid.Column="2" Style="{StaticResource Unit}" Text="m"/>
+       <TextBlock Grid.Row="4" Style="{StaticResource Field}" Text="Span L = bays × spacing"/>
+       <TextBlock x:Name="SpanText" Grid.Row="4" Grid.Column="1" FontFamily="{StaticResource MonoFont}" FontWeight="SemiBold" TextAlignment="Right" Margin="0,3,8,3"
+                  AutomationProperties.Name="Span L"/>
+       <TextBlock Grid.Row="4" Grid.Column="2" Style="{StaticResource Unit}" Text="m"/>
+       <!-- the arch raised on columns, tied by one cable at its springing -->
+       <CheckBox x:Name="ElevatedCableBox" Grid.Row="5" Grid.ColumnSpan="3" Content="With elevated cable" Margin="0,8,0,2" Checked="Input_Changed" Unchecked="Input_Changed"
+                 AutomationProperties.Name="With elevated cable"
+                 ToolTip="Raise the arch on two columns of height H0 (the arch's section), pinned on the ground, and tie its springing points with one cable. H1 and H2 are then measured from the springing; the cable force is set on the Cable Force sheet."/>
+       <TextBlock x:Name="CableHeightLabel" Grid.Row="6" Style="{StaticResource Field}" Text="H0 — ground → cable and springing"/>
+       <TextBox x:Name="CableHeightBox" Grid.Row="6" Grid.Column="1" Style="{StaticResource Value}" TextChanged="Input_Changed" AutomationProperties.Name="H0 cable height"
+                ToolTip="Height of the tie cable and the arch springing above the supports on the ground"/>
+       <TextBlock x:Name="CableHeightUnit" Grid.Row="6" Grid.Column="2" Style="{StaticResource Unit}" Text="m"/>
+      </Grid>
+     </GroupBox>
+
+     <GroupBox Header="LOADING OF STOREYS ABOVE">
+      <Grid>
+       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="96"/><ColumnDefinition Width="30"/></Grid.ColumnDefinitions>
+       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+       <TextBlock Style="{StaticResource Field}" Text="SW — slab self-weight"/>
+       <ComboBox x:Name="SelfWeightBox" Grid.Column="1" Style="{StaticResource Choice}" SelectionChanged="Input_Changed" AutomationProperties.Name="SW" ToolTip="7 to 15 kPa in steps of 1 kPa"/>
+       <TextBlock Grid.Column="2" Style="{StaticResource Unit}" Text="kPa"/>
+       <TextBlock Grid.Row="1" Style="{StaticResource Field}" Text="SDL — superimposed dead"/>
+       <ComboBox x:Name="SuperimposedDeadBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource Choice}" SelectionChanged="Input_Changed" AutomationProperties.Name="SDL" ToolTip="3 to 10 kPa in steps of 1 kPa"/>
+       <TextBlock Grid.Row="1" Grid.Column="2" Style="{StaticResource Unit}" Text="kPa"/>
+       <TextBlock Grid.Row="2" Style="{StaticResource Field}" Text="LL — live load"/>
+       <ComboBox x:Name="LiveBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource Choice}" SelectionChanged="Input_Changed" AutomationProperties.Name="LL" ToolTip="5 to 10 kPa in steps of 2.5 kPa"/>
+       <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Unit}" Text="kPa"/>
+       <TextBlock Grid.Row="3" Style="{StaticResource Field}" Text="Number of floors n"/>
+       <ComboBox x:Name="FloorsBox" Grid.Row="3" Grid.Column="1" Style="{StaticResource Choice}" SelectionChanged="Input_Changed" AutomationProperties.Name="Number of floors" ToolTip="5 to 10 floors"/>
+       <TextBlock Grid.Row="4" Style="{StaticResource Field}" Text="Tributary width B"/>
+       <TextBox x:Name="WidthBox" Grid.Row="4" Grid.Column="1" Style="{StaticResource Value}" TextChanged="Input_Changed" AutomationProperties.Name="Tributary width B"
+                ToolTip="Out-of-plane width of floor each deck joint carries; a deck joint's load area is spacing × B"/>
+       <TextBlock Grid.Row="4" Grid.Column="2" Style="{StaticResource Unit}" Text="m"/>
+      </Grid>
+     </GroupBox>
+
+     <GroupBox Header="POINT LOAD ON EACH TOP CHORD JOINT">
+      <StackPanel>
+       <TextBlock x:Name="SlsText" FontFamily="{StaticResource MonoFont}" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" AutomationProperties.Name="SLS point load"/>
+       <TextBlock x:Name="UlsText" FontFamily="{StaticResource MonoFont}" FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0" AutomationProperties.Name="ULS point load"/>
+       <TextBlock x:Name="LoadNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+      </StackPanel>
+     </GroupBox>
+    </StackPanel>
+   </ScrollViewer>
+    </TabItem>
+    <TabItem x:Name="CableSheet" Header="Cable Force">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,8,0,0">
+      <StackPanel>
+       <TextBlock x:Name="CableSheetNote" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+       <GroupBox Header="TIE CABLE">
+        <Grid>
+         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="110"/><ColumnDefinition Width="30"/></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+         <TextBlock Style="{StaticResource Field}" Text="Cable"/>
+         <TextBlock x:Name="CableNameText" Grid.Column="1" FontFamily="{StaticResource MonoFont}" TextAlignment="Right" Margin="0,3,8,3"/>
+         <TextBlock Grid.Row="1" Style="{StaticResource Field}" Text="Section (as the VCF cables)"/>
+         <TextBlock x:Name="CableSectionText" Grid.Row="1" Grid.Column="1" FontFamily="{StaticResource MonoFont}" TextAlignment="Right" Margin="0,3,8,3"/>
+         <TextBlock Grid.Row="2" Style="{StaticResource Field}" Text="Load pattern"/>
+         <TextBlock Grid.Row="2" Grid.Column="1" Text="Pretension" FontFamily="{StaticResource MonoFont}" TextAlignment="Right" Margin="0,3,8,3"/>
+         <TextBlock Grid.Row="3" Style="{StaticResource Field}" Text="Pretension (target force)"/>
+         <TextBox x:Name="CablePretensionBox" Grid.Row="3" Grid.Column="1" Style="{StaticResource Value}" TextChanged="Input_Changed" AutomationProperties.Name="Cable pretension"
+                  ToolTip="The tie's force at the end of the Pretension case (cable target force, as on 03 Pretension); every other case continues from it"/>
+         <TextBlock Grid.Row="3" Grid.Column="2" Style="{StaticResource Unit}" Text="kN"/>
+        </Grid>
+       </GroupBox>
+       <TextBlock Style="{StaticResource Caption}" TextWrapping="Wrap"
+                  Text="As for the VCF cables: the Pretension case applies the target force with the self-weight and fits the tie to it; SLS and ULS continue from it, prestressed then loaded. A range of forces is tried on Optimization → Optimization TAS → Cable Force."/>
+      </StackPanel>
+     </ScrollViewer>
+    </TabItem>
+   </TabControl>
+
+   <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" ResizeBehavior="PreviousAndNext"
+                 Background="{StaticResource Border}" Cursor="SizeWE" ToolTip="Drag to resize" AutomationProperties.Name="Resize form"/>
+
+   <DockPanel Grid.Column="2">
+    <TextBlock x:Name="ProblemText" DockPanel.Dock="Bottom" Foreground="{StaticResource Error}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+    <TextBlock DockPanel.Dock="Top" Text="PREVIEW · SLS point loads [kN] · updates as you edit; the model changes on Apply / OK" Style="{StaticResource Subheading}"/>
+    <Border BorderBrush="{StaticResource Border}" BorderThickness="1">
+     <c:Structural2DViewer x:Name="Preview" ShowPointLabels="False" ShowDimensions="True" AutomationProperties.Name="Tied arch system preview"/>
+    </Border>
+   </DockPanel>
+  </Grid>
+ </DockPanel>
+</Window>

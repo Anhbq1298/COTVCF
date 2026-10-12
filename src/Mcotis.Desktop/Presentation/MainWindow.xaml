@@ -25,8 +25,10 @@
     <MenuItem Header="Save Config _As…" Command="{Binding SaveFemModelAs}" InputGestureText="Ctrl+Shift+S"
               ToolTip="Save the configuration under another file name. That file becomes the active configuration: Save then overwrites it, and the file it came from is left as it was."/>
     <Separator/>
-    <MenuItem Header="_Default Model" Command="{Binding LoadDefaultModel}" AutomationProperties.Name="Load default model"
+    <MenuItem Header="Load _VCF…" Command="{Binding LoadDefaultModel}" AutomationProperties.Name="Load VCF"
               ToolTip="Set the current model aside and open the built-in default model (COT Framing_V1.2_100m) on 07 FEM, ready to run without SAP2000"/>
+    <MenuItem Header="Load _TAS…" Click="LoadTas_Click" AutomationProperties.Name="Load TAS"
+              ToolTip="Open the built-in TAS model — the CoT 120 m composite arch deck — exactly as Import From ETABS brings it in: joints, frames, materials and sections, end releases, supports, load patterns and loads, load cases and combinations, ready to run without ETABS"/>
     <Separator/>
     <MenuItem Header="_Import From SAP2000" Click="ImportFromSap_Click" AutomationProperties.Name="Import From SAP2000"
               ToolTip="Import the model open in SAP2000 — geometry, member properties, materials and sections, load patterns and loads, load cases and combinations, chord groups and cable target forces — ready to run. Read-only; SAP2000 is never written."/>
@@ -59,6 +61,8 @@
               ToolTip="Create a native building frame with X/Y bays, storey heights and beam line loads in a new model workspace"/>
     <MenuItem Header="_VCF System…" Click="VcfGeometry_Click" AutomationProperties.Name="VCF System" IsEnabled="{Binding CanEditVcfGeometry}"
               ToolTip="Create or edit the parametric VCF geometry after defining materials and frame/cable sections"/>
+    <MenuItem Header="Tied _Arch System…" Click="TiedArch_Click" AutomationProperties.Name="Tied Arch System"
+              ToolTip="Build the tied arch system (TAS) from H1 (support → arch crown), H2 (support → top chord), the number of bays and their spacing, and the storeys above (SW, SDL, LL, floors) — with the SLS / ULS point load on each top chord joint and a live preview"/>
     <Separator/>
     <MenuItem Header="_Delete" Click="DeleteSelection_Click" InputGestureText="Del" IsEnabled="{Binding CanEditFemModel}" AutomationProperties.Name="Delete"
               ToolTip="Delete the joints, frames and cables selected on the model view (a deleted joint takes its connected members); SAP2000 is unchanged"/>
@@ -165,8 +169,10 @@
    <MenuItem x:Name="OptimizationMenu" Header="_Optimization" HeaderTemplate="{StaticResource HighlightedMenuHeader}" IsEnabled="{Binding HasUsableModelGeometry}">
     <MenuItem Header="_Optimization VCF…" Click="OptimizationVcf_Click" AutomationProperties.Name="Optimization VCF"
               ToolTip="Set the VCF search space — min / max / step for bays, bay width, truss depth (middle chord kept at 0.5 × depth), clear height, back-span and back-stay height, and candidate sections per chord, mega column and cable; Run Optimization analyses every combination and lists the max deflection of each case"/>
+    <MenuItem Header="Optimization _TAS…" Click="OptimizationTas_Click" AutomationProperties.Name="Optimization TAS"
+              ToolTip="Set the tied arch system search space — min / max / step for H1, H2, bays and spacing and for the storeys above (SW, SDL, LL, floors, B), and candidate sections per role; Run Optimization analyses every combination and lists the max deflection, check and cost of each case"/>
     <MenuItem Header="Optimization _Results…" Click="OptimizationResults_Click" AutomationProperties.Name="Optimization Results"
-              ToolTip="Every case of the last Optimization VCF run with its max deflection (sortable)"/>
+              ToolTip="Every case of the last Optimization VCF or Optimization TAS run with its max deflection (sortable)"/>
     <MenuItem Header="_Cancel Optimization" Click="CancelOptimization_Click" IsEnabled="{Binding IsVcfOptimizationRunning}"/>
    </MenuItem>
    <!-- MB (the SAP2000 study pages) is kept for reference only: last on the bar, set apart by a separator. -->

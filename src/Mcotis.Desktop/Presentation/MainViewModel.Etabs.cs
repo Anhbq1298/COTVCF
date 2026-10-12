@@ -10,6 +10,11 @@ namespace Mcotis.Desktop.Presentation;
 /// <summary>What File → Import From ETABS brought in, and whether Run Analysis can start.</summary>
 public sealed record EtabsImportSummary(bool ReadyToRun, IReadOnlyList<string> Lines);
 
+/// <summary>A cable an import adds to the ETABS frames (ETABS has none): the tie of a tied arch system with an elevated
+/// cable — its ends, strand section and material, and its target force in the cable target-force pattern (Tab 03).</summary>
+internal sealed record ImportCable(string Name, string Start, string End, StrandSectionProperty Section, MaterialProperty Material,
+    string Pattern, double TargetForce);
+
 // ---- File → Import From ETABS: the model open in ETABS, complete, as an offline Mcotis model ready to run ----
 // The running ETABS exports its database tables (EtabsGateway; read-only), EtabsTableReader reads them and EtabsImport
 // turns them into Mcotis's geometry (joints label@story), material / section libraries (CFT and steel encased sections
@@ -51,12 +56,116 @@ public sealed partial class MainViewModel
         return ImportEtabsModel(model, info, Path.GetFileName(full), "from the .e2k file");
     }
 
-    internal EtabsImportSummary ImportEtabsModel(EtabsModel etabsModel, ModelInfo info, string modelName, string source)
+    internal const string TasResource = "Mcotis.TAS-CoT120.e2k";
+    internal const string TasName = "TAS - Tied Arch System";
+
+    /// <summary>File → Load TAS…: the bundled CoT 120 m composite arch deck, imported as Import From ETABS imports its
+    /// .e2k, with each straight member as one frame (ETABS splits them at every story; <see cref="EtabsFrameChains"/>).</summary>
+    internal EtabsImportSummary LoadTasModel()
+    {
+        if (IsBusy) throw new InvalidOperationException("Another operation is running; try again when it has finished.");
+        var (template, path) = ReadTasTemplate();
+        var summary = ImportEtabsModel(EtabsFrameChains.Join(template), TasInfo(template, path), Path.GetFileName(path), "the built-in TAS model", TasName);
+        tasParameters = TiedArchParameters.Default;
+        return summary;
+    }
+
+    /// <summary>The model Mcotis opens with: the tied arch system (as File → Load TAS…). Should it not load, the built-in
+    /// VCF model (File → Load VCF…) opens instead, with the reason in the status bar.</summary>
+    internal void LoadStartupModel()
+    {
+        try
+        {
+            LoadTasModel();
+            if (TiedArchParameters is not null) return;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or InvalidDataException or IOException or UnauthorizedAccessException)
+        {
+            LoadDefaultFemModel();
+            Message = $"The TAS model could not be opened ({ex.Message}); the VCF model is open instead.";
+            return;
+        }
+        LoadDefaultFemModel();
+    }
+
+    // ---- Edit → Tied Arch System: the TAS model built from its parameters (TiedArchSystem) ----
+    private TiedArchParameters? tasParameters;
+
+    /// <summary>The parameters of the open tied arch system (Load TAS or Edit → Tied Arch System), or null for another model.</summary>
+    internal TiedArchParameters? TiedArchParameters => OfflineModelName == TasName ? tasParameters : null;
+
+    /// <summary>The tied arch system the parameters give, as the editor's preview shows it: its geometry, supports and
+    /// each member's section (for the arch height dimension).</summary>
+    internal (GeometryModel Geometry, IReadOnlyList<string> Supports, IReadOnlyDictionary<string, FemSectionProperties> Sections) PreviewTiedArch(TiedArchParameters parameters)
+    {
+        var imported = EtabsImport.Convert(TiedArchSystem.Build(ReadTasTemplate().Model, parameters));
+        return (TiedArchSystem.WithCable(imported.Geometry, parameters), imported.SupportedJoints,
+            imported.Members.ToDictionary(member => member.MemberName, StringComparer.Ordinal));
+    }
+
+    /// <summary>Edit → Tied Arch System → Apply: replaces the model with the tied arch system of the parameters — the TAS
+    /// model's materials, sections, load patterns, cases and combinations, with the geometry and deck loads rebuilt.</summary>
+    internal EtabsImportSummary ApplyTiedArchSystem(TiedArchParameters parameters)
+    {
+        if (IsBusy) throw new InvalidOperationException("Another operation is running; try again when it has finished.");
+        var (template, path) = ReadTasTemplate();
+        var model = TiedArchSystem.Build(template, parameters);
+        var summary = ImportEtabsModel(model, TasInfo(template, path), Path.GetFileName(path),
+            $"Edit → Tied Arch System (H1 {parameters.ArchRise:0.###} m, H2 {parameters.DeckHeight:0.###} m, L {parameters.Span:0.###} m" +
+            (parameters.ElevatedCable ? $", elevated cable at H0 {parameters.CableHeight:0.###} m)" : ")"), TasName, TieCable(parameters));
+        tasParameters = parameters;
+        return summary;
+    }
+
+    /// <summary>The tie of a tied arch system with an elevated cable, with the strand section and material of the VCF
+    /// model's cables (File → Load VCF…); null without an elevated cable.</summary>
+    private static ImportCable? TieCable(TiedArchParameters parameters)
+    {
+        if (!parameters.ElevatedCable) return null;
+        var (section, material) = VcfCableSection();
+        var (start, end) = TiedArchSystem.CableEnds(parameters);
+        return new ImportCable(TiedArchSystem.CableName, start, end, section, material, "Pretension", parameters.CablePretension);
+    }
+
+    /// <summary>The VCF model's cable section (<see cref="TiedArchSystem.CableSection"/>) and its strand material, read from
+    /// the bundled VCF database.</summary>
+    internal static (StrandSectionProperty Section, MaterialProperty Material) VcfCableSection()
+    {
+        var snapshot = FemInputDatabase.ReadDefault().Snapshot;
+        var section = snapshot.CableSections.FirstOrDefault(item => item.Name == TiedArchSystem.CableSection)
+            ?? throw new InvalidDataException($"The VCF model has no cable section {TiedArchSystem.CableSection}.");
+        var material = snapshot.Materials.FirstOrDefault(item => item.Name == section.Material)
+            ?? throw new InvalidDataException($"The VCF model has no material {section.Material} for its cable section.");
+        return (section, material);
+    }
+
+    /// <summary>The bundled TAS .e2k, copied to the per-user app folder so the model has a real path, as an imported one does.</summary>
+    private static (EtabsModel Model, string Path) ReadTasTemplate()
+    {
+        using var resource = typeof(MainViewModel).Assembly.GetManifestResourceStream(TasResource)
+            ?? throw new InvalidDataException("The built-in TAS model is missing from the application.");
+        var path = Path.Combine(Infrastructure.AppDataPaths.EnsureDirectory(Path.Combine(Infrastructure.AppDataPaths.RootDirectory, "TAS")), "CoT120.e2k");
+        using (var file = File.Create(path)) resource.CopyTo(file);
+        return (EtabsE2kReader.Read(File.ReadAllText(path), path), path);
+    }
+
+    private static ModelInfo TasInfo(EtabsModel model, string path) => new(path, model.ProgramVersion, 6, "kN", "m", false);
+
+    /// <param name="displayName">The model's name in the title bar and messages (Load TAS); null: "file · ETABS".</param>
+    /// <param name="cable">A cable to add to the ETABS frames (the tie of a tied arch system with an elevated cable).</param>
+    internal EtabsImportSummary ImportEtabsModel(EtabsModel etabsModel, ModelInfo info, string modelName, string source, string? displayName = null,
+        ImportCable? cable = null)
     {
         if (IsBusy) throw new InvalidOperationException("Another operation is running; try again when it has finished.");
         // everything that can refuse the model does so before the current model is touched
         var imported = EtabsImport.Convert(etabsModel);
         var geometry = imported.Geometry;
+        if (cable is not null)
+        {
+            if (!geometry.Points.ContainsKey(cable.Start) || !geometry.Points.ContainsKey(cable.End))
+                throw new InvalidOperationException($"The cable {cable.Name} joins a joint the model does not have ({cable.Start}, {cable.End}).");
+            geometry = geometry with { Members = [.. geometry.Members, new StructuralMember(cable.Name, cable.Start, cable.End, MemberKind.Cable)] };
+        }
         var lines = new List<string>();
         IsBusy = true;
         try
@@ -81,14 +190,23 @@ public sealed partial class MainViewModel
             new ConfigurationApplicator(State, workflow).Reset();
             config.Session.Close();
             config.Session.ClearDirty();
+            // Tab 03: the added cable's target force in its pattern (the Pretension case is where it is met)
+            if (cable is not null)
+                State.Cables.Add(new CablePretensionConfig
+                {
+                    CableName = cable.Name, LoadPattern = cable.Pattern, TargetForce = cable.TargetForce,
+                    SectionName = cable.Section.Name, SectionAreaM2 = cable.Section.Area,
+                });
 
             // libraries, then each member's properties from its library section (as Define → Section Properties does)
             Materials.Clear();
             foreach (var material in imported.Materials) Materials.Add(MaterialCosts.WithDefaultCost(material));
+            if (cable is not null && Materials.All(material => material.Name != cable.Material.Name)) Materials.Add(cable.Material);
             FrameSections.Clear();
             foreach (var section in imported.Sections)
                 FrameSections.Add(section.IsComposite && AnalyseComposite(section) is { } analysis ? section with { Given = analysis.Values } : section);
             CableSections.Clear();
+            if (cable is not null) CableSections.Add(cable.Section);
             TendonSections.Clear();
             var library = FrameSections.ToDictionary(section => section.Name, StringComparer.Ordinal);
             FemSectionProperties.Clear();
@@ -104,10 +222,12 @@ public sealed partial class MainViewModel
                     };
                 FemSectionProperties.Add(property);
             }
+            if (cable is not null)
+                FemSectionProperties.Add(PropertiesFor(new FemSectionProperties(cable.Name, 0, 0, null, SectionName: cable.Section.Name), cable.Section));
             femSapLoading = imported.Loading;
             femInputsOutdated = false;
             offlineLoadCaseNames = femSapLoading.Cases.Select(item => item.Name).ToArray();
-            offlineModelPath = $"{modelName} · ETABS";
+            offlineModelPath = displayName ?? $"{modelName} · ETABS";
             isDefaultModel = false;
             blankModelChoiceDismissed = true;
             femInputSnapshot = null;
@@ -120,7 +240,7 @@ public sealed partial class MainViewModel
 
             var frames = geometry.Members.Count;
             var levels = geometry.Points.Values.Select(point => Math.Round(point.Position.Z, 3)).Distinct().Count();
-            lines.Add($"Model: {modelName} ({info.Version}), {source} · {geometry.Points.Count} joints on {levels} levels, {frames} frames");
+            lines.Add($"Model: {displayName ?? modelName} ({info.Version}), {source} · {geometry.Points.Count} joints on {levels} levels, {frames} frames");
             var composite = FrameSections.Count(section => section.IsComposite);
             var general = FrameSections.Count(section => section.Shape == FrameShape.General);
             lines.Add($"Libraries: {Materials.Count} materials, {FrameSections.Count} frame sections" +
@@ -146,7 +266,9 @@ public sealed partial class MainViewModel
                 catch (InvalidOperationException ex) { lines.Add($"Tab 02: chord groups found but the baseline was not captured — {ex.Message}"); }
             }
             else lines.Add("Tab 02: no truss chord groups (not needed to run; set them on 02 Truss Height for the truss-height study)");
-            lines.Add(geometry.Members.Any(member => member.Kind == MemberKind.Cable)
+            lines.Add(cable is not null
+                ? $"Tab 03: cable {cable.Name} ({cable.Section.Name}) pretensioned to {cable.TargetForce:N0} kN in the {cable.Pattern} case; the other cases continue from it"
+                : geometry.Members.Any(member => member.Kind == MemberKind.Cable)
                 ? "Tab 03: ETABS has no cable target forces — add the cable targets on 03 Pretension to run"
                 : "Tab 03: no cables — the model runs without a pretension stage");
             lines.Add(ImportTab01(chords?.Top ?? HighestLevelJoints(geometry), "ETABS"));
@@ -193,10 +315,11 @@ public sealed partial class MainViewModel
         catch (InvalidOperationException ex) { blocker = ex.Message; }
         var ready = blocker is null && HasWorkingModel;
         lines.Add(ready ? "Ready: Run → Run FEM Analysis solves the imported model." : $"Not ready to run yet: {blocker ?? "no working model"}");
-        FemProgressText = $"Imported {modelName} from ETABS · {geometry.Members.Count} frames, {femSapLoading.Cases.Count(item => item.Supported)} static load cases, " +
+        var done = displayName is null ? $"Imported {modelName} from ETABS" : $"Loaded {displayName}";
+        FemProgressText = $"{done} · {geometry.Members.Count} frames, {femSapLoading.Cases.Count(item => item.Supported)} static load cases, " +
                           $"{femSapLoading.Combinations.Count} combinations." + (ready ? " Run Analysis solves it without SAP2000 or ETABS." : "");
-        Message = ready ? $"Imported {modelName} from ETABS — ready to run (ETABS unchanged)."
-                        : $"Imported {modelName} from ETABS — see the import summary for what is still needed.";
+        Message = ready ? $"{done} — ready to run" + (displayName is null ? " (ETABS unchanged)." : ".")
+                        : $"{done} — see the import summary for what is still needed.";
         StartNewMcotisConfigurationFile();
         Notify(nameof(SharedViewerSpanPoints));
         Notify(nameof(SharedViewerMemberSizes));

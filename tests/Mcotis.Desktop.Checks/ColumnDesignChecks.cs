@@ -63,6 +63,55 @@ internal static class ColumnDesignChecks
         if (Environment.GetEnvironmentVariable("COT_PRINT_DESIGN") == "1") { Console.WriteLine(srcResult.Detail); Console.WriteLine(rcResult.Detail); }
         var none = ColumnDesignEngine.Design(src, new DesignMemberInput("S2", "SRC", 8, []));
         Check(none.Status == "ERROR", "Member without forces reports an error");
+        RunCftOptimization();
+    }
+
+    /// <summary>Design → CFT → Optimization: fy by plate thickness, cost per metre, and the cheapest passing section.</summary>
+    private static void RunCftOptimization()
+    {
+        var s355 = CftGrades.Steel.First(grade => grade.Name == "S355");
+        var s690 = CftGrades.Steel.First(grade => grade.Name == "S690");
+        Check(s355.Fy(16) == 355 && s355.Fy(50) == 335 && s690.Fy(50) == 690 && s690.Fy(60) == 650, "steel fy steps down with plate thickness (EN 10025 bands)");
+
+        // one candidate priced by hand: RHS 400 × 400 × 10 → Aa = 15 600 mm² = 122.46 kg/m; Ac = 0.1444 m³/m
+        var single = new CftOptimizationInput
+        {
+            Depth = new(400, 400, 50), Thickness = new(10, 10, 2), SteelFrom = "S355", SteelTo = "S355", ConcreteFrom = "C40/50", ConcreteTo = "C40/50",
+            SteelRates = new Dictionary<string, double> { ["S355"] = 4000 }, ConcreteRates = new Dictionary<string, double> { ["C40/50"] = 150 },
+        };
+        var priced = CftOptimizer.Candidates(single, new ColumnSectionInput()).Single();
+        Check(Near(priced.SteelKgPerM, 122.46, 0.001) && Near(priced.ConcreteM3PerM, 0.1444, 0.001) && Near(priced.CostPerM, 122.46 * 4 + 0.1444 * 150, 0.001),
+            $"a candidate is priced per metre: {priced.SteelKgPerM:0.00} kg × 4000 SGD/t + {priced.ConcreteM3PerM:0.0000} m³ × 150 SGD/m³ = {priced.CostPerM:0.0} SGD/m");
+
+        // bars inside the tube add to the squash load
+        var plain = ColumnDesignCodes.Default(ColumnDesignType.ConcreteFilledTube) with
+        {
+            EffectiveLengthY = 4, EffectiveLengthZ = 4,
+            Section = new ColumnSectionInput { Tube = TubeShape.Rectangular, TubeDepth = 600, TubeWidth = 600, TubeThickness = 16, Fck = 60, Fy = 355 },
+        };
+        var reinforced = plain with { Section = plain.Section with { TubeReinforced = true, BarsAlongWidth = 4, BarsAlongDepth = 2, BarDiameter = 32, Cover = 40 } };
+        Check(ColumnDesignEngine.Interaction(reinforced).NplRdKN > ColumnDesignEngine.Interaction(plain).NplRdKN, "bars inside the tube add to the CFT's resistance");
+
+        // the search returns the cheapest passing section: every cheaper candidate fails, and the results are in cost order
+        var members = new[] { Member("C1", 6, -12_000, 300, 900), Member("C2", 6, -9_000, 500, 1_400) };
+        var input = new CftOptimizationInput
+        {
+            Depth = new(400, 900, 100), Thickness = new(10, 30, 5), SteelFrom = "S355", SteelTo = "S460", ConcreteFrom = "C50/60", ConcreteTo = "C70/85",
+            SteelRates = CftGrades.Steel.ToDictionary(grade => grade.Name, grade => CftGrades.SteelRate(grade, [])),
+            ConcreteRates = CftGrades.Concrete.ToDictionary(grade => grade.Name, grade => CftGrades.ConcreteRate(grade, [])), Keep = 5,
+        };
+        var basis = plain with { EffectiveLengthY = 6, EffectiveLengthZ = 6 };
+        var run = CftOptimizer.Run(input, basis, members);
+        var all = CftOptimizer.Candidates(input, basis.Section).OrderBy(candidate => candidate.CostPerM).ToArray();
+        var scope = basis with { MaxConcreteGrade = "C70/85", MaxSteelGrade = "S460" };
+        var cheaper = all.TakeWhile(candidate => candidate.CostPerM < run.Best[0].Candidate.CostPerM).ToArray();
+        Check(run.Best.Count == 5 && run.Best.All(result => result.Check.Passes) &&
+              run.Best.Zip(run.Best.Skip(1)).All(pair => pair.First.Candidate.CostPerM <= pair.Second.Candidate.CostPerM) &&
+              cheaper.All(candidate => !ColumnDesignEngine.Check(scope with { Section = candidate.Section }, members).Passes),
+            $"the optimisation finds the cheapest passing CFT: {run.Best[0].Candidate.Size} {run.Best[0].Candidate.SteelGrade}/{run.Best[0].Candidate.ConcreteGrade} " +
+            $"at {run.Best[0].Candidate.CostPerM:N0} SGD/m — all {cheaper.Length} cheaper candidates fail ({run.Evaluated} of {run.Candidates} designed)");
+        var full = ColumnDesignEngine.Design(scope with { Section = run.Best[0].Candidate.Section }, members[1]);
+        Check(full.Status == "OK", $"Run Design agrees: the chosen section passes with utilisation {full.MaxUtilization:0.00}");
     }
 
     private static DesignMemberInput Member(string name, double length, double axialKN, double shearKN, double momentKNm) =>

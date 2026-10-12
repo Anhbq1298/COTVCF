@@ -28,7 +28,137 @@ internal static class EtabsImportChecks
         CheckSections(e2k, tables);
         CheckRefusals();
         CheckImport();
+        CheckLoadTas();
+        CheckTiedArch();
+        TasOptimizationChecks.Run();
         CheckLiveImportWithStandIn();
+    }
+
+    // File → Load TAS…: the bundled model is this .e2k, and loading it gives the model Import From ETABS gives, ready to run
+    private static void CheckLoadTas()
+    {
+        using (var resource = typeof(MainViewModel).Assembly.GetManifestResourceStream(MainViewModel.TasResource))
+        using (var reader = new StreamReader(resource!))
+            Check(reader.ReadToEnd().ReplaceLineEndings() == File.ReadAllText(E2k).ReplaceLineEndings(), "the TAS model bundled with the app is tests/etabs-import/CoT120.e2k (line endings aside, which git sets per checkout)");
+        var imported = NewViewModel(out _);
+        imported.ImportFromE2kFile(E2k);
+        var vm = NewViewModel(out _);
+        var summary = vm.LoadTasModel();
+        var a = vm.State.Geometry;
+        var b = imported.State.Geometry;
+        Check(summary.ReadyToRun && vm.CanRunFemAnalysis && vm.IsOfflineModel,
+            "Load TAS leaves an offline model ready to run — " + string.Join(" | ", summary.Lines));
+        Check(vm.OfflineModelName == "TAS - Tied Arch System" && vm.Message.StartsWith("Loaded TAS - Tied Arch System", StringComparison.Ordinal),
+            $"the model is named TAS - Tied Arch System in the title bar ({vm.OfflineModelName}; {vm.Message})");
+        Check(vm.FrameSections.Select(section => (section.Name, section.Shape, section.Values())).SequenceEqual(
+                  imported.FrameSections.Select(section => (section.Name, section.Shape, section.Values()))) &&
+              vm.Materials.Select(material => (material.Name, material.ElasticModulus)).SequenceEqual(imported.Materials.Select(material => (material.Name, material.ElasticModulus))) &&
+              vm.FemCaseRows.Select(row => (row.Name, row.Run)).SequenceEqual(imported.FemCaseRows.Select(row => (row.Name, row.Run))) &&
+              vm.FemCombinationRows.Select(row => row.Name).SequenceEqual(imported.FemCombinationRows.Select(row => row.Name)) &&
+              a.Points.All(point => b.Points.TryGetValue(point.Key, out var other) && point.Value.Position == other.Position),
+            "Load TAS keeps the materials, sections, load cases and combinations Import From ETABS gives, and its joints are ETABS joints");
+
+        // each straight member is one frame: no joint is left between two frames of one straight line
+        var ends = a.Members.SelectMany(member => new[] { member.Start, member.End }).GroupBy(name => name).Where(group => group.Count() == 2).Select(group => group.Key);
+        var straight = ends.Where(joint =>
+        {
+            var pair = a.Members.Where(member => member.Start == joint || member.End == joint).ToArray();
+            var p = a.Points[joint].Position;
+            var (q, r) = (a.Points[pair[0].Start == joint ? pair[0].End : pair[0].Start].Position, a.Points[pair[1].Start == joint ? pair[1].End : pair[1].Start].Position);
+            var cross = (q.X - p.X) * (r.Z - p.Z) - (q.Z - p.Z) * (r.X - p.X);
+            return Math.Abs(cross) < 1e-6 * Math.Max(1, Math.Abs((q.X - p.X) * (r.X - p.X) + (q.Z - p.Z) * (r.Z - p.Z)));
+        }).ToArray();
+        var coll = a.Members.Where(member => member.Name.StartsWith("COLL", StringComparison.Ordinal)).Select(member => $"{member.Start}→{member.End}").ToArray();
+        Check(straight.Length == 0 && a.Members.Count < b.Members.Count && a.Points.Count < b.Points.Count &&
+              coll.SequenceEqual(["1@Base→1@EL16.667", "1@EL16.667→1@EL33"]) &&
+              a.Members.Single(member => member.Name == "STR10-1") is { Start: "4@EL16.667", End: "4@EL33" } &&
+              vm.FemSectionProperties.Single(property => property.MemberName == "STR10-1") is { ReleaseStartRotation: true, ReleaseEndRotation: true },
+            $"each straight member is one frame ({b.Points.Count} → {a.Points.Count} joints, {b.Members.Count} → {a.Members.Count} frames; left column {string.Join(", ", coll)}; " +
+            $"the strut at 10 m runs from the arch to the deck with its two end releases){(straight.Length == 0 ? "" : "; still split at " + string.Join(", ", straight))}");
+
+        // the viewer's arch height: from the supports to the crown of the arch rib
+        string? SectionOf(MainViewModel model, string member) => model.FemSectionProperties.FirstOrDefault(property => property.MemberName == member)?.SectionName;
+        var rise = ArchRise.Find(a, vm.FemPinSupportPoints, member => SectionOf(vm, member));
+        Check(rise is { Support: "1@Base", Crown: "8@EL30", Rise: var h } && Near(h, 30, 1e-6),
+            $"the viewer dimensions the arch from its supports to its crown (H = {rise?.Rise:0.###} m at {rise?.Crown})");
+        var portal = new GeometryModel(new Dictionary<string, StructuralPoint>
+        {
+            ["A"] = new("A", new(0, 0, 0)), ["B"] = new("B", new(10, 0, 0)), ["C"] = new("C", new(0, 0, 5)), ["D"] = new("D", new(10, 0, 5)),
+        }, [new("CA", "A", "C", MemberKind.Frame), new("CB", "B", "D", MemberKind.Frame), new("BM", "C", "D", MemberKind.Frame),
+            new("D1", "A", "D", MemberKind.Frame), new("D2", "B", "C", MemberKind.Frame)]);
+        Check(ArchRise.Find(portal, ["A", "B"], member => member.StartsWith('D') ? "brace" : "column") is null,
+            "a braced portal has no arch: its braces leave the supports inclined but do not join them in one chain");
+
+        // joining the frames changes nothing in the results
+        var joinedRuns = FemModelFileChecks.Analyze(vm);
+        var splitRuns = FemModelFileChecks.Analyze(imported);
+        foreach (var name in new[] { "DEAD", "DEAD_above", "LL_left", "ULS1 1.35G+1.5Q full" })
+        {
+            var (joined, split) = (joinedRuns[0].ResultFor(name), splitRuns[0].ResultFor(name));
+            var differences = new[] { "8@EL33", "3@EL33", "13@EL33", "5@EL22.5" }.Select(joint =>
+                Math.Abs(joined.Joints.Single(item => item.PointName == joint).UZM - split.Joints.Single(item => item.PointName == joint).UZM)).Max();
+            var reactions = Math.Abs(joined.SupportReactions.Sum(item => item.ReactionZKN) - split.SupportReactions.Sum(item => item.ReactionZKN));
+            Check(differences < 1e-6 && reactions < 1e-3,
+                $"'{name}': the joined model deflects and reacts as the ETABS model split at every story (largest UZ difference {differences * 1000:0.######} mm)");
+        }
+    }
+
+    // Edit → Tied Arch System: with the TAS defaults it builds the TAS model ETABS wrote; other inputs build the system they describe
+    private static void CheckTiedArch()
+    {
+        var d = TiedArchParameters.Default;
+        Check(d.Span == 120 && d.SlsPointLoad == 18_000 && Near(d.UlsPointLoad, 25_200, 1e-9) && d.Problems().Count == 0,
+            $"the TAS defaults: L = 12 × 10 = {d.Span} m, SLS (7 + 3 + 5) × 10 × 12 × 10 = {d.SlsPointLoad:N0} kN, ULS (1.35 × 10 + 1.5 × 5) × 1200 = {d.UlsPointLoad:N0} kN");
+
+        var tas = NewViewModel(out _);
+        tas.LoadTasModel();
+        var built = NewViewModel(out _);
+        var summary = built.ApplyTiedArchSystem(d);
+        var (a, b) = (built.State.Geometry, tas.State.Geometry);
+        Check(summary.ReadyToRun && built.TiedArchParameters == d && built.OfflineModelName == "TAS - Tied Arch System" &&
+              a.Points.Count == b.Points.Count && a.Points.All(point => b.Points.TryGetValue(point.Key, out var other) &&
+                  Math.Abs(point.Value.Position.X - other.Position.X) < 1e-6 && Math.Abs(point.Value.Position.Z - other.Position.Z) < 1e-6) &&
+              a.Members.Count == b.Members.Count,
+            $"with the defaults, Edit → Tied Arch System builds the TAS model's {a.Points.Count} joints (same names and places) and {a.Members.Count} frames, ready to run");
+        var e2kLoads = EtabsE2kReader.Read(File.ReadAllText(E2k), E2k).JointLoads.ToDictionary(load => (load.Joint, load.Pattern.ToUpperInvariant()), load => load.Fz);
+        var builtLoads = TiedArchSystem.Build(EtabsE2kReader.Read(File.ReadAllText(E2k), E2k), d).JointLoads.ToDictionary(load => (load.Joint, load.Pattern.ToUpperInvariant()), load => load.Fz);
+        Check(builtLoads.Count == e2kLoads.Count && builtLoads.All(load => e2kLoads.TryGetValue(load.Key, out var fz) && Near(fz, load.Value, 1e-9)),
+            $"… and the 40 deck joint loads of the ETABS model (DEAD_above 12,000 / LL 6,000 kN inside, half at the ends and for LL at mid-span): {builtLoads.Count}");
+        var (builtRuns, tasRuns) = (FemModelFileChecks.Analyze(built), FemModelFileChecks.Analyze(tas));
+        foreach (var name in new[] { "DEAD", "DEAD_above", "LL_left", "ULS1 1.35G+1.5Q full" })
+        {
+            var (x, y) = (builtRuns[0].ResultFor(name), tasRuns[0].ResultFor(name));
+            var worst = x.Joints.Max(joint => Math.Abs(joint.UZM - y.Joints.Single(other => other.PointName == joint.PointName).UZM));
+            Check(worst < 1e-6, $"'{name}': the built system deflects as the TAS model at every joint (largest difference {worst * 1000:0.######} mm)");
+        }
+
+        // another system: the arch on the parabola through the supports and the crown, the deck loads from the formula
+        var p = new TiedArchParameters(25, 30, 10, 12, 10, 10, 5, 7.5, 6);
+        var vm = NewViewModel(out _);
+        Check(vm.ApplyTiedArchSystem(p).ReadyToRun && vm.TiedArchParameters == p, "Edit → Tied Arch System builds H1 25, H2 30, 10 bays of 12 m ready to run");
+        var g = vm.State.Geometry;
+        var left = g.Points.Values.Min(point => point.Position.X);
+        var archJoints = g.Points.Values.Where(point => point.Position.Z > 0 && point.Position.Z < 30 &&
+            g.Members.Any(member => member.Name.StartsWith("ARCH", StringComparison.Ordinal) && (member.Start == point.Name || member.End == point.Name))).ToArray();
+        Check(archJoints.Length == 9 && archJoints.All(point => Near(point.Position.Z, p.ArchHeightAt(point.Position.X - left), 1e-9)) &&
+              Near(g.Points.Values.Max(point => point.Position.X) - left, 120, 1e-9) && g.Points.Values.Count(point => Near(point.Position.Z, 30, 1e-9)) == 11,
+            $"the arch joints lie on z = 4·H1·x·(L − x)/L² (9 inner arch joints), the span is 120 m and the deck has 11 joints at H2");
+        var rise = ArchRise.Find(g, vm.FemPinSupportPoints, member => vm.FemSectionProperties.FirstOrDefault(property => property.MemberName == member)?.SectionName);
+        Check(rise is { Rise: var h } && Near(h, 25, 1e-9), $"the viewer dimensions H = {rise?.Rise:0.###} m to the crown {rise?.Crown}");
+        var run = FemModelFileChecks.Analyze(vm)[0];
+        foreach (var (name, total) in new[] { ("DEAD_above", 10 * p.DeadPointLoad), ("LL_above", 10 * p.LivePointLoad), ("LL_left", 5 * p.LivePointLoad),
+                     ("SLS1 G+Q full", run.ResultFor("DEAD").SupportReactions.Sum(item => item.ReactionZKN) + 10 * p.SlsPointLoad) })
+        {
+            var reactions = run.ResultFor(name).SupportReactions.Sum(item => item.ReactionZKN);
+            Check(Near(reactions, total, 1e-6 * total), $"'{name}': the supports carry {total:N0} kN = bays × the point load ({reactions:N1} kN)");
+        }
+
+        // what the form refuses
+        Check(d with { Bays = 11 } is { } odd && odd.Problems().Any(problem => problem.Contains("even", StringComparison.Ordinal)) &&
+              (d with { DeckHeight = 30 }).Problems().Any(problem => problem.StartsWith("H2", StringComparison.Ordinal)) &&
+              (d with { SelfWeight = 7.5 }).Problems().Any(problem => problem.StartsWith("SW", StringComparison.Ordinal)) &&
+              (d with { Floors = 11 }).Problems().Count == 1,
+            "odd bays, H2 not above H1, SW off its 1 kPa steps and more than 10 floors are refused");
     }
 
     private static void CheckReaders(EtabsModel e2k, EtabsModel tables)
@@ -310,7 +440,7 @@ internal static class EtabsImportChecks
         }
     }
 
-    private static MainViewModel NewViewModel(out FemModelFileChecks.SapDouble sap)
+    internal static MainViewModel NewViewModel(out FemModelFileChecks.SapDouble sap)
     {
         sap = FemModelFileChecks.SapDouble.Create(null!, GeometryModel.Empty, refuseAll: true);
         var state = new ApplicationState();

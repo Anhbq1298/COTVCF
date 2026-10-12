@@ -24,6 +24,13 @@ public sealed record InteractionSeries(string Name, IReadOnlyList<(double NKN, d
 /// <summary>The cross-section N–M interaction of a column design (design resistances; no buckling, no αM), with its anchors.</summary>
 public sealed record InteractionDiagram(IReadOnlyList<InteractionSeries> Series, double NplRdKN, double NtRdKN, double MplYRdKNm, double MplZRdKNm, string Basis);
 
+/// <summary>One section against many members: the largest utilisation (and where), whether every detailing / scope rule
+/// passed, and the first one that did not.</summary>
+public sealed record DesignCheckSummary(double MaxUtilization, bool DetailingOk, string Governing, string? FailedRule)
+{
+    public bool Passes => MaxUtilization <= 1 && DetailingOk;
+}
+
 /// <summary>A detailing or scope rule: pass / fail with the values it compared.</summary>
 public sealed record DetailingCheck(string Name, string Clause, bool Pass, string Text);
 
@@ -95,6 +102,44 @@ public static class ColumnDesignEngine
         foreach (var check in detailing)
             report.AppendLine($"  [{(check.Pass ? "OK  " : "FAIL")}] {check.Name} ({check.Clause}): {check.Text}");
         return new(member.Member, member.Section, member.LengthM, perCase.Select(item => item.Result).ToList(), governing.Result, detailing, report.ToString());
+    }
+
+    /// <summary>
+    /// Pass / fail of the basis' section for every member, as <see cref="Design"/> decides it (all utilisations ≤ 1 and every
+    /// detailing / scope rule met) but without the report, for the optimiser's loop. Stops at the first failure.
+    /// </summary>
+    public static DesignCheckSummary Check(ColumnDesignBasis basis, IReadOnlyList<DesignMemberInput> members)
+    {
+        var l0y = (basis.EffectiveLengthY ?? 0) * 1000;
+        var l0z = (basis.EffectiveLengthZ ?? 0) * 1000;
+        var designer = Designer(basis);
+        var log = new StringBuilder();
+        double worst = 0;
+        string governing = "";
+        foreach (var member in members)
+        {
+            var length = member.LengthM > 0 ? member.LengthM * 1000 : Math.Max(l0y, l0z);
+            double maxCompression = 0;
+            foreach (var forces in member.Cases.Where(item => item.Stations.Count > 0))
+            {
+                var compression = forces.Stations.Max(station => -station.AxialKN) * 1000;
+                var tension = forces.Stations.Min(station => -station.AxialKN) * 1000;
+                var moment = forces.Stations.Max(station => Math.Abs(station.MomentKNm)) * 1e6;
+                var shear = forces.Stations.Max(station => Math.Abs(station.ShearKN)) * 1000;
+                maxCompression = Math.Max(maxCompression, compression);
+                double[] scenarios = tension < 0 && tension < compression ? [compression, tension] : [compression];
+                foreach (var axial in scenarios)
+                {
+                    log.Clear();
+                    var utilization = designer.DesignCase(forces.Case, axial, moment, shear, length, l0y, l0z, log).MaxUtilization;
+                    if (!(utilization <= worst)) { worst = utilization; governing = $"{member.Member} · {forces.Case}"; }
+                    if (!(utilization <= 1)) return new(worst, true, governing, null);
+                }
+            }
+            if (designer.Detailing(maxCompression, length, l0y, l0z).FirstOrDefault(check => !check.Pass) is { } failed)
+                return new(worst, false, governing, $"{member.Member}: {failed.Name}");
+        }
+        return new(worst, true, governing, null);
     }
 
     private static ColumnDesigner Designer(ColumnDesignBasis basis) => basis.Type switch
@@ -348,6 +393,37 @@ internal abstract class ColumnDesigner(ColumnDesignBasis basis)
         return bars;
     }
 
+    /// <summary>Bars inside a steel tube (<see cref="ColumnSectionInput.TubeReinforced"/>): around the inner rectangle, or on a
+    /// circle in a circular tube; cover from the inside face of the tube, no links.</summary>
+    protected List<Bar> TubeBars()
+    {
+        if (!S.TubeReinforced || S.BarsAlongWidth < 2) return [];
+        var area = Math.PI * S.BarDiameter * S.BarDiameter / 4;
+        var inset = S.TubeThickness + S.Cover + S.BarDiameter / 2;
+        if (S.Tube == TubeShape.Circular)
+        {
+            var radius = S.TubeDepth / 2 - inset;
+            return Enumerable.Range(0, S.BarsAlongWidth)
+                .Select(index => 2 * Math.PI * index / S.BarsAlongWidth)
+                .Select(angle => new Bar(radius * Math.Sin(angle), radius * Math.Cos(angle), area)).ToList();
+        }
+        double u = S.TubeWidth / 2 - inset, v = S.TubeDepth / 2 - inset;
+        var bars = new List<Bar>();
+        for (var index = 0; index < S.BarsAlongWidth; index++)
+        {
+            var position = -u + 2 * u * index / (S.BarsAlongWidth - 1);
+            bars.Add(new(position, v, area));
+            bars.Add(new(position, -v, area));
+        }
+        for (var index = 1; index <= S.BarsAlongDepth; index++)
+        {
+            var position = -v + 2 * v * index / (S.BarsAlongDepth + 1);
+            bars.Add(new(-u, position, area));
+            bars.Add(new(u, position, area));
+        }
+        return bars;
+    }
+
     protected static double GradeNumber(string grade)
     {
         var digits = new string(grade.SkipWhile(character => !char.IsDigit(character)).TakeWhile(char.IsDigit).ToArray());
@@ -557,7 +633,7 @@ internal sealed class CompositeDesigner : ColumnDesigner
     {
         filled = Basis.Type == ColumnDesignType.ConcreteFilledTube;
         circular = filled && S.Tube == TubeShape.Circular;
-        major = new FibreSection(Regions(), filled ? [] : PerimeterBars());
+        major = new FibreSection(Regions(), filled ? TubeBars() : PerimeterBars());
         minor = major.Rotated();
         fcd = S.Fck / Basis.GammaC;
         fyd = S.Fy / Basis.GammaA;
@@ -613,6 +689,8 @@ internal sealed class CompositeDesigner : ColumnDesigner
         r.AppendLine("SECTION AND MATERIALS");
         if (circular) r.AppendLine($"  Circular tube D × t = {F(S.TubeDepth, 0)} × {F(S.TubeThickness, 1)} mm, concrete filled");
         else if (filled) r.AppendLine($"  Rectangular tube H × B × t = {F(S.TubeDepth, 0)} × {F(S.TubeWidth, 0)} × {F(S.TubeThickness, 1)} mm, concrete filled");
+        if (filled && major.Bars.Count > 0)
+            r.AppendLine($"  Bars inside the tube: {major.Bars.Count} Ø{F(S.BarDiameter, 0)}, cover {F(S.Cover, 0)} mm to the inside face; fsk = {F(S.Fyk, 0)} MPa");
         else
         {
             r.AppendLine($"  Concrete b × h = {F(S.Width, 0)} × {F(S.Depth, 0)} mm encasing I {F(S.SteelDepth, 0)} × {F(S.SteelWidth, 0)} × tf {F(S.FlangeThickness, 1)} × tw {F(S.WebThickness, 1)} mm");
@@ -779,6 +857,8 @@ internal sealed class CompositeDesigner : ColumnDesigner
             checks.Add(new("Minimum longitudinal steel", "6.7.5.2(1)", As >= 0.003 * Ac, $"As = {F(As, 0)} ≥ 0.3 % Ac = {F(0.003 * Ac, 0)} mm²"));
             checks.Add(new("Maximum longitudinal steel", "6.7.3.1(3)", As <= 0.06 * Ac, $"As = {F(As, 0)} ≤ 6 % Ac = {F(0.06 * Ac, 0)} mm²"));
         }
+        if (filled && As > 0)
+            checks.Add(new("Maximum longitudinal steel", "6.7.3.1(3)", As <= 0.06 * Ac, $"As = {F(As, 0)} ≤ 6 % Ac = {F(0.06 * Ac, 0)} mm²"));
         var maxConcrete = GradeNumber(Basis.MaxConcreteGrade);
         var maxSteel = GradeNumber(Basis.MaxSteelGrade);
         checks.Add(new("Concrete grade in scope", "3.1(2) / BC4", S.Fck <= maxConcrete,
