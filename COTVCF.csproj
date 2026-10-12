@@ -59,6 +59,13 @@
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
 
+  <!-- The development log is compulsory: every build makes this clone use the repository's commit hooks (.githooks/commit-msg
+       refuses a commit that changes the app without a docs/DEVELOPMENT_LOG.md entry). Harmless where git is absent. -->
+  <Target Name="InstallGitHooks" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true' and Exists('$(MSBuildProjectDirectory)\.git') and Exists('$(MSBuildProjectDirectory)\.githooks\commit-msg')">
+    <Exec Command="git config core.hooksPath .githooks" WorkingDirectory="$(MSBuildProjectDirectory)" ContinueOnError="true" StandardOutputImportance="low" />
+  </Target>
+
   <Target Name="ClearFreshBuildOutput" BeforeTargets="PrepareForBuild"
           Condition="'$(Configuration)' == 'FreshBuild' and '$(DesignTimeBuild)' != 'true'">
     <RemoveDir Directories="$(MSBuildProjectDirectory)\bin" />
@@ -79,6 +86,8 @@
     <Resource Include="src\Presentation\AppLogo.png" />
     <Resource Include="src\Presentation\AppIcon.ico" />
     <EmbeddedResource Include="src\Resources\Default.cotfem.db" LogicalName="COTVCF.Default.cotfem.db" />
+    <!-- Help → Development Plans shows the development log; keeping it is compulsory (AGENTS.md, .githooks/commit-msg). -->
+    <EmbeddedResource Include="docs\DEVELOPMENT_LOG.md" LogicalName="COTVCF.DevelopmentLog.md" />
   </ItemGroup>
 
   <ItemGroup>

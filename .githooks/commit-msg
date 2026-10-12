@@ -1,0 +1,33 @@
+#!/bin/sh
+# Mcotis: every commit that changes the app records the change in docs/DEVELOPMENT_LOG.md, the development log shown
+# under Help -> Development Plans. Compulsory for every team member and coding agent (AGENTS.md).
+# Installed for each clone by the build (COTVCF.csproj sets core.hooksPath to .githooks).
+# A change no user can notice (refactor, comment, test-only fix) may say [no-log] in its commit message instead.
+
+msg_file="$1"
+grep -qi '\[no-log\]' "$msg_file" && exit 0
+# merges carry the entries of the branches they join
+[ -f "$(git rev-parse --git-path MERGE_HEAD)" ] && exit 0
+
+changed=$(git diff --cached --name-only)
+echo "$changed" | grep -qE '^(src/|App\.xaml|COTVCF\.csproj)' || exit 0
+echo "$changed" | grep -qx 'docs/DEVELOPMENT_LOG.md' && exit 0
+
+cat >&2 <<'MSG'
+
+Commit refused: it changes the app but not docs/DEVELOPMENT_LOG.md.
+
+Add an entry at the top of docs/DEVELOPMENT_LOG.md (Help -> Development Plans shows it to the whole team):
+
+  ## yyyy-mm-dd · What you built
+  - Status: Done | In progress | Planned
+  - Who: your name
+  - Where: menu path / window / tab (or the code area)
+  - What: what it does, in a sentence or two
+  - Checks: the --flag of the checks that prove it, or "none yet"
+
+then stage it (git add docs/DEVELOPMENT_LOG.md) and commit again.
+Only for a change no user can notice, write [no-log] in the commit message.
+
+MSG
+exit 1
