@@ -18,6 +18,18 @@ When guidance conflicts, use this order:
 
 In particular, preserve the compact engineering UI described by the COTVCF handoff even when the generic structural UI skill shows older or more spacious examples. For SAP2000, verify API signatures against the installed `CSiAPIv1.dll` or official CSI documentation because library examples may target another API version.
 
+## Development Log (compulsory)
+
+- Every change that adds or changes a function of the app must add or update an entry at the top of
+  `docs/DEVELOPMENT_LOG.md`, in the same commit. Help → Development Plans shows that file to the whole team, so it is how
+  everyone checks what exists, who built it, where to find it and how it was verified.
+- Entry format (the file's header has the details): `## yyyy-mm-dd · title`, then `- Status:` (Done, In progress or
+  Planned), `- Who:`, `- Where:` (menu path / window / tab), `- What:`, `- Checks:` (the `--flag` of the checks, or "none yet").
+  Newest first. Record planned work and known gaps as Planned entries.
+- This applies to every team member and every coding agent, without being asked. The build installs `.githooks`
+  (`core.hooksPath`); `.githooks/commit-msg` refuses a commit that changes `src/`, `App.xaml*` or `COTVCF.csproj` without
+  the log. Use `[no-log]` in the commit message only for a change no user can notice. `--dev-log` checks the format.
+
 ## Repository Checks
 
 - Build with `dotnet build COTVCF.sln`.

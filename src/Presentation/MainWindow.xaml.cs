@@ -795,6 +795,8 @@ public partial class MainWindow : Window
 
     private void ShowFemHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.FemProcedure);
 
+    private void ShowDevelopmentPlans(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.DevelopmentPlans);
+
     private void ShowHelpTopic(HelpWindow.Topic topic)
     {
         if (helpWindow is null)

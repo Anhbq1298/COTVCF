@@ -245,7 +245,9 @@ earlier tall-header / large-button / blue-block look.
     utilisations, max, OK / CHECK (detailing) / FAIL / ERROR) above the selected member's step-by-step calculation;
     Copy Report / Save Report… (.txt). The 2D FEM moment bends the major axis y-y; z-z carries imperfections only.
     Offline checks: `dotnet run --project tests/COT_VCF.Checks.csproj -- --column-design`.
-  - **Help**: Workflow Help, FEM Procedure.
+  - **Help**: Workflow Help, FEM Procedure · Development Plans (`HelpWindow` topic 3: `docs/DEVELOPMENT_LOG.md`, embedded as
+    `COTVCF.DevelopmentLog.md`, parsed by `Application/DevelopmentLog`; in progress / planned first, then done). **Every change of
+    the app adds a log entry in the same commit** — AGENTS.md, `.githooks/commit-msg` (installed by the build), `--dev-log`.
 - Every launch opens the built-in default model before the window is shown; no blank viewport or choice appears at startup.
   File → New Config still starts an unsaved blank model. Its creation flow is
   **Define materials/sections → Edit VCF System → Define loads/cases → Run**. Define remains available on that blank model;

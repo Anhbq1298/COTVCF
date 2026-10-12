@@ -70,5 +70,9 @@
     </FlowDocument>
    </FlowDocumentScrollViewer>
   </TabItem>
+  <!-- ===================== DEVELOPMENT PLANS (docs/DEVELOPMENT_LOG.md, built in) ===================== -->
+  <TabItem Header="Development Plans">
+   <FlowDocumentScrollViewer x:Name="DevelopmentPlans" VerticalScrollBarVisibility="Auto"/>
+  </TabItem>
  </TabControl>
 </Window>

@@ -29,6 +29,11 @@ internal static class Program
                 SapImportChecks.Run();
                 return 0;
             }
+            if (args.Contains("--dev-log"))
+            {
+                DevelopmentLogChecks.Run();
+                return 0;
+            }
             if (args.Contains("--etabs-export"))
             {
                 EtabsExportChecks.Run();
@@ -1428,6 +1433,7 @@ internal static class Program
             SapImportChecks.Run();
             EtabsImportChecks.Run();
             EtabsExportChecks.Run();
+            DevelopmentLogChecks.Run();
             ColumnDesignChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }

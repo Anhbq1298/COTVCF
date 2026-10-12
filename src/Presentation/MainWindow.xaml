@@ -167,6 +167,9 @@
    <MenuItem Header="_Help">
     <MenuItem Header="_Workflow Help" Click="ShowWorkflowHelp"/>
     <MenuItem Header="_FEM Procedure" Click="ShowFemHelp"/>
+    <Separator/>
+    <MenuItem Header="_Development Plans" Click="ShowDevelopmentPlans" AutomationProperties.Name="Development Plans"
+              ToolTip="What has been built in Mcotis, by whom, where to find it and how it is checked — and what is planned (docs/DEVELOPMENT_LOG.md)"/>
    </MenuItem>
   </Menu>
 
