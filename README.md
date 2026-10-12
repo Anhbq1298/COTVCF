@@ -299,7 +299,7 @@ Requirements: Windows x64, .NET 8 Desktop Runtime, and a local SAP2000 installat
 
 ```powershell
 dotnet build COTVCF.sln
-dotnet run --project COTVCF.csproj
+dotnet run --project src/Mcotis.Desktop/Mcotis.Desktop.csproj
 ```
 
 For a different SAP2000 installation:
@@ -315,12 +315,12 @@ Default executable:
 ## Checks
 
 ```powershell
-dotnet run --project tests\COT_VCF.Checks.csproj
-dotnet run --project tests\COT_VCF.Checks.csproj -- --study-ui
-dotnet run --project tests\COT_VCF.Checks.csproj -- --fem
-dotnet run --project tests\COT_VCF.Checks.csproj -- --fem-sap
-dotnet run --project tests\COT_VCF.Checks.csproj -- --quantity-study "<baseline>.sdb"
-dotnet run --project tests\COT_VCF.Checks.csproj -- --quantity-connected
+dotnet run --project tests\COT_VCF.Checks
+dotnet run --project tests\COT_VCF.Checks -- --study-ui
+dotnet run --project tests\COT_VCF.Checks -- --fem
+dotnet run --project tests\COT_VCF.Checks -- --fem-sap
+dotnet run --project tests\COT_VCF.Checks -- --quantity-study "<baseline>.sdb"
+dotnet run --project tests\COT_VCF.Checks -- --quantity-connected
 ```
 
 The first command runs offline workflow and guarded SAP-write tests using test doubles, including the Tab 8 quantity take-off (calculation, candidate records, source selection, the isolated read against API doubles, and the tab's loading / stale-request / connection behaviour). The second opens the WPF smoke test and checks workflow/FEM/quantity bindings. The third runs the internal FEM analytical and candidate-composition checks. The fourth compares the internal FEM with a completed SAP2000 study, like for like, from the fixture in `tests/fem-sap-benchmark` (offline; report in `.work/fem-vs-sap`). The fifth prints the quantity take-off of every candidate of a study on disk from the candidates' own text exports (offline; reads only). The sixth is live but read-only: it attaches to the running SAP2000, takes off the model open in it through the API exactly as Tab 8's *Connected model* does, prints the values as SAP2000 hands them over, and confirms that the model, its units and its lock state are unchanged. Live SAP checks are intentionally separate because they require SAP2000: `--quantity-live "<candidate>.sdb"` runs the isolated Tab 8 read on one candidate — it starts its own SAP2000 on a private copy, never attaches to a running one — and compares the result with that candidate's text export.
@@ -330,7 +330,7 @@ The checks project takes the same `-p:SapInstallDir=...` as the application when
 ## Implementation boundaries
 
 - UI → ViewModel → application services → SAP gateway.
-- All CSI calls live under `src/SAP2000` and execute through dedicated STA lanes.
+- All CSI calls live under `src/Mcotis.Desktop/SAP2000` and execute through dedicated STA lanes.
 - SAP units, model identity, object existence, baseline coordinates, and return codes are verified around writes.
 - Recovery JSON is written before guarded write batches; failed batches attempt rollback.
 - Tab 8 writes nothing: it reads candidate text exports, and where SAP2000 is needed it uses a separate instance on a private copy of the model.

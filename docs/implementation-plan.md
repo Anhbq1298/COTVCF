@@ -7,7 +7,7 @@ This plan is executed sequentially. A phase is complete only when its acceptance
 - Base commit: `c661a0d`.
 - Preserve the five-tab compact engineering workflow and the shared preview layout.
 - Preserve immutable-baseline child generation, STA-only CSI calls, return-code checks, model identity/unit guards, and rollback behavior.
-- Keep the main solution limited to `COTVCF.csproj`.
+- Keep the main solution limited to `src/Mcotis.Desktop/Mcotis.Desktop.csproj`.
 
 ## Phase 1 - Reliability foundation
 
@@ -150,6 +150,6 @@ Deliverables:
 Acceptance criteria:
 
 - `dotnet build COTVCF.sln` succeeds with no warnings.
-- `dotnet run --project tests/COT_VCF.Checks.csproj` passes.
+- `dotnet run --project tests/COT_VCF.Checks` passes.
 - Offline UI smoke passes.
 - `git diff --check` passes and no unrelated user changes are overwritten.

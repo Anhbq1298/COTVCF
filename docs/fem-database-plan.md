@@ -88,7 +88,7 @@ Each generated object stores an immutable `generation_key` such as object type, 
 
 Imported and manually created objects store their origin (`Imported`, `Generated`, or `User`). Parametric regeneration renames only `Generated` objects. A case-insensitive collision with an imported/user name is a blocking validation error with a rename preview; the generator never silently overwrites or mutates an unrelated object. All assignments continue to follow stable IDs while display names change.
 
-Create focused handlers under `src/Geometry/Handlers/`:
+Create focused handlers under `src/Mcotis.Desktop/Geometry/Handlers/`:
 
 - `JointGeometryHandler.cs` for coordinates, restraint validation, rename/delete rules, and solver-node conversion;
 - `FrameGeometryHandler.cs` for topology, section/release validation, member geometry, and solver-frame conversion;
@@ -314,7 +314,7 @@ Acceptance: current sample/default files import with no unresolved references an
 - Test atomic replacement, external input modification, interrupted Save, corrupt working database, cancelled Run, and recovery cleanup.
 - Update UI handoff and user documentation.
 
-Acceptance: `dotnet build COTVCF.sln`, `dotnet run --project tests/COT_VCF.Checks.csproj`, database round-trip/recovery checks, and `git diff --check` all pass. No automated check connects to SAP2000.
+Acceptance: `dotnet build COTVCF.sln`, `dotnet run --project tests/COT_VCF.Checks`, database round-trip/recovery checks, and `git diff --check` all pass. No automated check connects to SAP2000.
 
 ## Required regression checks
 

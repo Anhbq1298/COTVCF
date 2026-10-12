@@ -3,7 +3,7 @@
 Input of the like-for-like comparison of the internal FEM (Tab 07) with a completed SAP2000 study:
 
 ```
-dotnet run --project tests/COT_VCF.Checks.csproj -- --fem-sap
+dotnet run --project tests/COT_VCF.Checks -- --fem-sap
 ```
 
 It runs offline — nothing here connects to SAP2000 — and writes `fem-vs-sap.md` and `fem-vs-sap.csv` into `.work/fem-vs-sap/`.
@@ -25,7 +25,7 @@ It runs offline — nothing here connects to SAP2000 — and writes `fem-vs-sap.
 ## Refreshing it from another study
 
 ```
-dotnet run --project tests/COT_VCF.Checks.csproj -- --fem-sap-capture "<model>.$2k" "<project>.json" "<Study>/RawData/Study_Raw_Results.json" tests/fem-sap-benchmark
+dotnet run --project tests/COT_VCF.Checks -- --fem-sap-capture "<model>.$2k" "<project>.json" "<Study>/RawData/Study_Raw_Results.json" tests/fem-sap-benchmark
 ```
 
 The capture only reads. Cable lengths come from the `.$2k` file in each candidate folder beside `RawData`; without those files the benchmark falls back to the baseline chord lengths.

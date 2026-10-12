@@ -16,7 +16,7 @@ ConsoleApp1/
 ├── design-system/
 │   └── structural-engineering/
 │       └── MASTER.md                   ← Central design system (colors, typography, components)
-└── src/UI/Templates/
+└── src/Mcotis.Desktop/UI/Templates/
     ├── WPF_IMPLEMENTATION_GUIDE.md    ← Step-by-step WPF setup
     └── COMPONENT_QUICK_REFERENCE.md   ← XAML component snippets
 ```
@@ -53,7 +53,7 @@ ConsoleApp1/
 
 **How to Use:** Reference this for implementing any UI component
 
-### 3. **WPF_IMPLEMENTATION_GUIDE.md** (`src/UI/Templates/`)
+### 3. **WPF_IMPLEMENTATION_GUIDE.md** (`src/Mcotis.Desktop/UI/Templates/`)
 **Purpose:** Complete WPF setup with code examples  
 **Content:**
 - Project setup & NuGet packages
@@ -66,7 +66,7 @@ ConsoleApp1/
 
 **How to Use:** Follow this guide to set up your WPF project structure
 
-### 4. **COMPONENT_QUICK_REFERENCE.md** (`src/UI/Templates/`)
+### 4. **COMPONENT_QUICK_REFERENCE.md** (`src/Mcotis.Desktop/UI/Templates/`)
 **Purpose:** Fast lookup for common UI components  
 **Content:**
 - Property input controls (dimension + unit)

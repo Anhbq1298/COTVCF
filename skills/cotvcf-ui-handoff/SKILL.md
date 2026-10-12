@@ -10,28 +10,34 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 ## Current Project Layout
 
 - Main solution: `COTVCF.sln`.
-- Main app project: `COTVCF.csproj`.
+- Main app project: `src/Mcotis.Desktop/Mcotis.Desktop.csproj`.
 - The old `ConsoleApp1.csproj` identity was removed; everything user-facing should be treated as COTVCF.
-- `COTVCF.sln` currently includes the app and `tests/COT_VCF.Checks.csproj`; the desktop build script targets the app project directly.
+- **Layout** (user, 2026-10-12, "dọn triệt để"): one folder per project. `src/Mcotis.Desktop` is the app — `App.xaml`,
+  `Presentation`, `Application`, `Domain`, `Configuration`, `Geometry`, `Infrastructure`, `SAP2000`, `Resources`, `UI`; it
+  used to sit at the repository root with its code under `src/`. The library projects are its siblings in `src/`; the
+  check projects are `tests/COT_VCF.Checks` and `tests/Mcotis.Checks`. Resources are addressed from the project folder:
+  pack URIs read `/Mcotis;component/Presentation/Theme.xaml`, without `src/`. The fixtures `tests/fem-sap-benchmark` and
+  `tests/etabs-import` stay where they were, and the checks are run from the repository root.
+- `COTVCF.sln` includes the app, the libraries and both check projects; the desktop build script targets the app project directly.
 - **The standalone system** (user, 2026-10-12: "ignore SAP2000 and the MB tab completely … stand on our own feet and
-  develop a new system") lives under `mcotis/` — `Mcotis.Core`, `Mcotis.Application`, `Mcotis.Persistence`,
-  `Mcotis.Checks`, all in the solution. The app project excludes that folder from its own compile (`mcotis\**` in
-  `COTVCF.csproj`) and does not reference it yet. Plan and status: `docs/mcotis-standalone-plan.md`. Checks:
-  `dotnet run --project mcotis/Mcotis.Checks`. SAP2000 and the MB pages are reference only: keep them working, do not
+  develop a new system") is the library projects `src/Mcotis.Core`, `src/Mcotis.Application`, `src/Mcotis.Persistence`
+  and `src/Mcotis.Analysis`, with their checks in `tests/Mcotis.Checks`. The app does not reference them yet. Plan and
+  status: `docs/mcotis-standalone-plan.md`. Checks:
+  `dotnet run --project tests/Mcotis.Checks`. SAP2000 and the MB pages are reference only: keep them working, do not
   extend them.
-- `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/`, `.work/`, `tests/bin/`, and `tests/obj/`.
+- `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/` and `.work/` wherever they are.
 - The app is a WPF app targeting `net8.0-windows`, `x64`, with SAP2000 API reference `CSiAPIv1.dll`.
 
 ## Build And Run
 
 - Build the app and checks together with `dotnet build COTVCF.sln -m:1`; when this machine has only SAP2000 27,
   add `-p:SapInstallDir="C:\Program Files\Computers and Structures\SAP2000 27"`.
-- If the running desktop app locks `bin/Debug/net8.0-windows/win-x64/Mcotis.exe` or `.dll`, close it with `Get-Process -Name 'Mcotis' -ErrorAction SilentlyContinue | Stop-Process -Force`, then rebuild.
-- For compile-only checks while the app is open, use `dotnet build COTVCF.csproj -o .work\build-check`.
-- Launch the app from `bin/Debug/net8.0-windows/win-x64/Mcotis.exe`.
+- If the running desktop app locks `src/Mcotis.Desktop/bin/Debug/net8.0-windows/win-x64/Mcotis.exe` or `.dll`, close it with `Get-Process -Name 'Mcotis' -ErrorAction SilentlyContinue | Stop-Process -Force`, then rebuild.
+- For compile-only checks while the app is open, use `dotnet build src/Mcotis.Desktop/Mcotis.Desktop.csproj -o .work\build-check`.
+- Launch the app from `src/Mcotis.Desktop/bin/Debug/net8.0-windows/win-x64/Mcotis.exe`.
 - **Brand:** the product is **Mcotis** (Meinhardt Cities of Tomorrow Integrated Structures) — main window title `Mcotis — Meinhardt Cities of Tomorrow Integrated Structures — <file>` (`MainViewModel.WindowTitle`, bound in `MainWindow.xaml`; asked for by the user 2026-10-12: the file name beside the title. `<file>` = `CurrentFileName`: the active configuration's file name — the one Save overwrites — else `Default model`, the name of a model opened from an older file / SAP2000, or `Untitled`), exe / assembly `Mcotis` (pack URIs `/Mcotis;component/…`). Internal identifiers keep the old name for compatibility: namespaces `COT_VCF`, `CotVcfConfigDto`, the FEM file format `COTVCF.FemModel` / `.cotfem.json`, `%LOCALAPPDATA%\COTVCF`, report storage keys.
 - The built application folder is `bin/COT ParametricTools_V2` (version 2.0.0.0). Produce it with
-  `dotnet publish COTVCF.csproj -c Release --self-contained false -o "bin/COT ParametricTools_V2"` — never by
+  `dotnet publish src/Mcotis.Desktop/Mcotis.Desktop.csproj -c Release --self-contained false -o "bin/COT ParametricTools_V2"` — never by
   copying a build output by hand: the earlier hand-copied `COT VCF Tools V1.0` folder went stale and showed an old app.
 - The solution also has a `FreshBuild` configuration. `dotnet build COTVCF.sln -c FreshBuild` deletes the existing
   `bin/` directory and builds a complete app directly into a newly created `bin/` directory (`bin/Mcotis.exe`).
@@ -39,7 +45,7 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - To rebuild and create the **Mcotis desktop icon**, run `./build-desktop.ps1`. The script checks for a running app,
   performs `FreshBuild`, and creates `Desktop/Mcotis.lnk` pointing to `bin/Mcotis.exe`. Keep the DLLs in `bin/` beside
   the executable; a standalone `.exe` on the desktop cannot run without them.
-- `src/Presentation/MainWindow.xaml` is UTF-8. A previous encoding error turned em dashes, ellipses and engineering
+- `src/Mcotis.Desktop/Presentation/MainWindow.xaml` is UTF-8. A previous encoding error turned em dashes, ellipses and engineering
   symbols into broken multi-character text; do not re-encode this XAML through Windows-1252.
 
 ## Compact Engineering Density Pass
@@ -260,7 +266,7 @@ earlier tall-header / large-button / blue-block look.
     non-modal `DesignResultsWindow`: summary grid (governing case, NEd, MEd,y, MEd,z, VEd, N / M-y / M-z+biaxial / V
     utilisations, max, OK / CHECK (detailing) / FAIL / ERROR) above the selected member's step-by-step calculation;
     Copy Report / Save Report… (.txt). The 2D FEM moment bends the major axis y-y; z-z carries imperfections only.
-    Offline checks: `dotnet run --project tests/COT_VCF.Checks.csproj -- --column-design`.
+    Offline checks: `dotnet run --project tests/COT_VCF.Checks -- --column-design`.
   - **Help**: Workflow Help, FEM Procedure · Development Plans (`HelpWindow` topic 3: `docs/DEVELOPMENT_LOG.md`, embedded as
     `COTVCF.DevelopmentLog.md`, parsed by `Application/DevelopmentLog`; in progress / planned first, then done). **Every change of
     the app adds a log entry in the same commit** — AGENTS.md, `.githooks/commit-msg` (installed by the build), `--dev-log`.
@@ -374,12 +380,12 @@ earlier tall-header / large-button / blue-block look.
   `ColumnSectionInput.MegaDefault` 2200², C100, 4 × I 500×430×60/37 S460, Ø40). Profiles are entered by plates (no
   catalogue in the repo); the form shows kg/m and compares it with the designation's mass ("HD 400x551" → 551 kg/m).
   Design → *Mega Composite Column Design…* runs `MegaDesigner`: the major axis by `MegaColumnEngine`, a formula-for-
-  formula C# port of `src/Application/Design/mega-column/engine.ts` (CTBUH / ArcelorMittal 2016 §4, Tables 11–17; only
+  formula C# port of `src/Mcotis.Desktop/Application/Design/mega-column/engine.ts` (CTBUH / ArcelorMittal 2016 §4, Tables 11–17; only
   addition: η of EC2 Table 3.1 on 0.85 fcd for high-strength concrete); plus e0 = l0/200 (y), μd ≤ 1.0, minor axis and
   biaxial by the exact fibre plastic curve (curve c), web shear, tension. The report shows the method's Mpl,y,Rd next
   to the exact plastic Mpl,y,Rd: the engine's hn equations use fyd / fsd on the steel in the 2hn zone where EC4 Annex C
   uses (2fyd − fc), so the method is ~19 % conservative on the default section (EC4 form: within 2 % of exact).
-  `tests/MegaColumnChecks.cs` ports `engine.test.ts` and the §4.2.5 worked values.
+  `tests/COT_VCF.Checks/MegaColumnChecks.cs` ports `engine.test.ts` and the §4.2.5 worked values.
 - The top bar shows only the tool icons, Connect SAP and Refresh (project name, study summary and status line removed on
   request; the offline model is named in the pane header).
 - **Define → Sections…** opens the member-property table in its own non-modal window (`DefineSectionsWindow`, same
@@ -671,9 +677,9 @@ earlier tall-header / large-button / blue-block look.
   (`InitialCase` chain). One `SolveCases` call per stage. Do not go back to one fit for all cases: on the real
   model `Pretension` (target force + self-weight) and `Pretension Only [For Ref]` both apply the pattern, and the
   staged result cases continue from the first.
-- **FEM against SAP2000** (`tests/FemSapBenchmark.cs`, `--fem-sap`; fixture `tests/fem-sap-benchmark`: `model.s2k`,
+- **FEM against SAP2000** (`tests/COT_VCF.Checks/FemSapBenchmark.cs`, `--fem-sap`; fixture `tests/fem-sap-benchmark`: `model.s2k`,
   `project.json`, `sap-results.json`; `--fem-sap-capture` rebuilds it from a study on disk). Offline — never
-  attaches to SAP2000. `tests/SapModelText.cs` reads SAP2000's text copy of the model (`.$2k`) into the same
+  attaches to SAP2000. `tests/COT_VCF.Checks/SapModelText.cs` reads SAP2000's text copy of the model (`.$2k`) into the same
   inputs `SapGateway` reads live, and refuses any analysis input it does not map. Like for like means: same
   candidates (keys, heights, every cable target checked), same supports, same stage (only the cases SAP2000's
   results were read from are run; the pretension is fitted in `Pretension` with SAP2000's own TFTol), same loads
@@ -699,7 +705,7 @@ earlier tall-header / large-button / blue-block look.
      type 8 = undeformed length; parameter [9] = undeformed length, [10] = relative length — a reply where
      [9] / chord ≠ [10] is refused before anything is written. This applies to the study's child models and to
      Tab 02's own apply. Verified against SAP2000 27.1 by `--cable-length-live <baseline.sdb> <project.json>
-     [--analyse]` (`tests/CableLengthLiveCheck.cs`; starts its own SAP2000 on a copy under `.work`, never attaches
+     [--analyse]` (`tests/COT_VCF.Checks/CableLengthLiveCheck.cs`; starts its own SAP2000 on a copy under `.work`, never attaches
      to the user's): all 16 cables at relative length 1.000 at the tallest height, and with `--analyse` the
      tallest candidate through the real study path — SAP2000 peak deflection 93.3 → 114.5 mm, FEM 114.7 mm, cable
      forces within 1.6 %. **A study run before the fix is wrong above the baseline height and has to be run
@@ -716,10 +722,10 @@ earlier tall-header / large-button / blue-block look.
   except `RunFemAnalysis` / `SaveFemModel` and the 01 Loading add / remove commands (`HasWorkingModel`) and `LoadFemModel` (always, when idle).
   `AnalyzeFemAsync` solves the properties/loading the model holds — offline and connected alike, never a SAP call; the
   offline run equals the connected run of the same model
-  (`tests/FemModelFileChecks.cs`). The model file is not a project file: loading closes the active project session.
+  (`tests/COT_VCF.Checks/FemModelFileChecks.cs`). The model file is not a project file: loading closes the active project session.
   Connect SAP leaves offline mode (live model becomes the session; Tabs 01–05 are kept and re-checked by Refresh; the
   FEM inputs held are then out of date until Read FEM Properties from SAP).
-- **Default model**: `src/Resources/Default.cotfem.db` (MCOTiS input database for COT Framing_V1.2_100m.sdb, embedded as
+- **Default model**: `src/Mcotis.Desktop/Resources/Default.cotfem.db` (MCOTiS input database for COT Framing_V1.2_100m.sdb, embedded as
   `COTVCF.Default.cotfem.db`; `FemInputDatabase.ReadDefault`). `App.OnStartup` calls `LoadDefaultFemModel()`, so the
   app opens offline on 07 FEM, `OFFLINE · READY`. Its Tabs 01–03 span 3 loadings × 6 heights × 1 pretension — the
   parametric study's space; Run Analysis is one run at its own 20 m truss height with LL_ABOVE at 5 kPa, the first value
@@ -733,7 +739,7 @@ earlier tall-header / large-button / blue-block look.
   Import From ETABS (`EtabsGateway`), which turns the ETABS model into an offline Mcotis model, and written by Export to ETABS
   after its preview and confirmation; there is no lasting ETABS session.
 
-## Tab 08 Quantity Take-off (`MainViewModel.Quantities.cs`, `src/Application/Quantities/`)
+## Tab 08 Quantity Take-off (`MainViewModel.Quantities.cs`, `src/Mcotis.Desktop/Application/Quantities/`)
 
 Concrete volume and steel mass of **one model** by assigned section, from that model's own SAP2000 data: the
 **connected model**, read live from the running SAP2000, or a **study candidate**, from its own saved data. Reads
@@ -843,7 +849,7 @@ only: never a write, nothing saved in the project JSON.
   auto-select sections, curved members, a material overwrite on an SD section, a material type that is neither
   concrete nor steel, a steel without `UnitMass`, missing section / joint / coordinates. To support a new shape:
   add its pieces in `QuantityTakeoff.cs`, a stored example to the checks, and keep the area check.
-- **Checks**: `tests/QuantityTakeoffChecks.cs` in the default run — expected values worked out independently by
+- **Checks**: `tests/COT_VCF.Checks/QuantityTakeoffChecks.cs` in the default run — expected values worked out independently by
   hand from `tests/fem-sap-benchmark/model.s2k` and derived candidates (joints moved, a section reassigned): units,
   geometry, composite separation, overlap, grouping, totals, duplicates, every withheld case, the catalog, source
   selection and freshness, the isolated read against `ApiDouble` API doubles (private copy, candidate folder
@@ -1114,8 +1120,8 @@ change the engineering content, not the identity.
   study has several loads).
 - A **Load** selector appears only when the study has more than one loading candidate; loads are never mixed
   inside a chart. One shared Y-scale from 0 per load and value mode.
-- Checks: `tests/CableForceReportChecks.cs` covers the derivations in C# and runs the report's own script against
-  its embedded data with Jint (test-only package, shared harness `tests/ReportPage.cs`) through the
+- Checks: `tests/COT_VCF.Checks/CableForceReportChecks.cs` covers the derivations in C# and runs the report's own script against
+  its embedded data with Jint (test-only package, shared harness `tests/COT_VCF.Checks/ReportPage.cs`) through the
   `window.cableReport` handle (`setMode`, `setLoad`, `applyGroups`, `autoDetect`, `resetGroups`), including the
   DOM-id regression check.
 - Printing: the report uses the shared print engine below (toolbar `Print Report`). On paper it re-lays its
@@ -1177,8 +1183,8 @@ the generic views.
   the study has no such group). Modules 02 / 03 / 05 `View Report` open the launcher (`OpenTopChordReport` /
   `OpenBottomChordReport` / `OpenMegaColumnReport`); without the group they fall back to the whole member-force
   report. `Print Report` in the report prints the Summary it is showing. Module 04 (Vierendeel) is unchanged.
-- Checks: `tests/MemberForceReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
-  `tests/ReportPage.cs`) through `window.memberReport.summary(groupIndex, 'summary' | 'station', pretensionId)`.
+- Checks: `tests/COT_VCF.Checks/MemberForceReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
+  `tests/COT_VCF.Checks/ReportPage.cs`) through `window.memberReport.summary(groupIndex, 'summary' | 'station', pretensionId)`.
 
 ## Tab 06 Post-Processing · Module 06 Support Reactions (`Support_Reactions_Report.html`)
 
@@ -1235,8 +1241,8 @@ legend, chart text, values table); do not fork that CSS per report.
 - **Paper**: the Summary re-lays its charts at the sheet width (`reportPrint.register`); a chart card continues
   on the next sheet between its rows. `Print Report` prints the view and side the report is showing.
 - **Deep links**: `#group=Right|all`, `#view=supports|totals|matrix`, `#detail=candidate&load=L01&pretension=P03&height=H02`.
-- Checks: `tests/SupportReactionReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
-  `tests/ReportPage.cs`) through `window.reactionReport.summary('summary' | 'candidate', { loadId, pretensionId, heightId })`.
+- Checks: `tests/COT_VCF.Checks/SupportReactionReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
+  `tests/COT_VCF.Checks/ReportPage.cs`) through `window.reactionReport.summary('summary' | 'candidate', { loadId, pretensionId, heightId })`.
 
 ## Tab 06A Optimization (`MainViewModel.Optimization.cs`, `Study/Optimized/`)
 
@@ -1285,7 +1291,7 @@ Qualifies the stored candidates against acceptance criteria and writes the exist
 - **Staleness**: `Optimization_Criteria.json` records the criteria, the capacity signature, the raw-data identity
   and the qualified keys; `StudyOptimizationProcessor.IsCurrent` drives the tab's "up to date" / "out of date —
   regenerate" line.
-- Checks: `tests/OptimizationChecks.cs` (metrics, inclusive bounds, not-assessed cases, the sidecar, the optimized
+- Checks: `tests/COT_VCF.Checks/OptimizationChecks.cs` (metrics, inclusive bounds, not-assessed cases, the sidecar, the optimized
   set with untouched full reports, identity and NQ marks through the report scripts, staleness, 1,000 candidates)
   and the `--study-ui` Tab 06A block (enabled state, live qualification, filter, generate).
 
@@ -1402,16 +1408,16 @@ the `Export*Pdf` commands were removed on purpose).
   - **Optimization Summary** — tagged in C#: KPI cards and criteria as the summary, the acceptance map and the
     qualified-candidates table as charts, the all-candidates table as source.
     **Diagnostics** — unmarked, printed in document order with the `Bar`.
-- Checks: `tests/ReportPrintChecks.cs` (settings store, logo embedding, sheet composition and order, saved setup,
+- Checks: `tests/COT_VCF.Checks/ReportPrintChecks.cs` (settings store, logo embedding, sheet composition and order, saved setup,
   `#print` options, every report carries the engine, the package's items / page / refusal of older reports)
-  through the Jint page in `tests/ReportPage.cs`. Real layout needs a real browser: `--report-pdf` (opt-in) prints
+  through the Jint page in `tests/COT_VCF.Checks/ReportPage.cs`. Real layout needs a real browser: `--report-pdf` (opt-in) prints
   every report with `ReportPdfExporter`, prints the package (as many pages as the reports one by one; the setup
-  handed over wins) and drives the Print Report screen of each report through `tests/ReportBrowser.cs` (order, no
+  handed over wins) and drives the Print Report screen of each report through `tests/COT_VCF.Checks/ReportBrowser.cs` (order, no
   overflowing sheet, live edits, A3 / portrait, source toggle, saved setup, print called once, clean close).
   `--study-ui` checks the Print Setup card, the seven `View Report` buttons, that no module has a PDF button, and
   Print All Reports on both tabs with a fake Save dialog and a fake printer (`AskPdfPath`, `PrintPackage`).
 
-## Config Project File (`src/Configuration/`)
+## Config Project File (`src/Mcotis.Desktop/Configuration/`)
 
 The JSON is a **Mcotis project** (document-editor model), not an export/import blob. It stores Tabs 01–05,
 including the Tab 05 mode/fixed candidate/selection exclusions, and the Tab 06 Print Setup. Never serialise
@@ -1464,20 +1470,20 @@ ViewModels; project save/load never mutates SAP.
 
 ## Important Files
 
-- `src/Presentation/MainWindow.xaml`: main window shell, compact top bar, left tab rail, page layouts.
-- `src/Presentation/Theme.xaml`: density tokens, palette (chrome + `Viewport*`), button / grid / tab
+- `src/Mcotis.Desktop/Presentation/MainWindow.xaml`: main window shell, compact top bar, left tab rail, page layouts.
+- `src/Mcotis.Desktop/Presentation/Theme.xaml`: density tokens, palette (chrome + `Viewport*`), button / grid / tab
   styles, and the `AppLogo` Vierendeel-truss `DrawingImage` (window icon + top-bar mark).
-- `src/Presentation/MainViewModel.cs`: command wiring; `StatusLine` for the top-bar status text.
-- `src/Presentation/MainViewModel.Quantities.cs` + `src/Application/Quantities/`: Tab 08 Quantity Take-off.
-- `src/Presentation/Controls/Structural2DViewer.xaml`: dark viewport shell + floating overlay controls.
-- `src/Presentation/Controls/Structural2DViewer.xaml.cs`: canvas drawing (viewport brushes), fit/pan/zoom,
+- `src/Mcotis.Desktop/Presentation/MainViewModel.cs`: command wiring; `StatusLine` for the top-bar status text.
+- `src/Mcotis.Desktop/Presentation/MainViewModel.Quantities.cs` + `src/Mcotis.Desktop/Application/Quantities/`: Tab 08 Quantity Take-off.
+- `src/Mcotis.Desktop/Presentation/Controls/Structural2DViewer.xaml`: dark viewport shell + floating overlay controls.
+- `src/Mcotis.Desktop/Presentation/Controls/Structural2DViewer.xaml.cs`: canvas drawing (viewport brushes), fit/pan/zoom,
   reset-to-XZ, axis colors, point labels.
-- `src/Presentation/Controls/EngineeringInput.xaml`: compact 24 px numeric editor with optional label.
+- `src/Mcotis.Desktop/Presentation/Controls/EngineeringInput.xaml`: compact 24 px numeric editor with optional label.
 - **Standard materials** (MaterialLibrary.Standard, source "Library"): S355 (S355J2, EN 10025-2), S460 (S460M, EN 10025-4), S690 (S690QL, EN 10025-6) with fy / fu and thickness bands in the notes; C70/85, C80/95, C90/105 (EC2), C100/115 (EN 206), C120/135, UHPC C130/145, C150/165, C175/190 (DAfStb / NF P18-470) and C185/200; Ecm by the EC2 expression. Added once per model load by `EnsureMaterials` (`ResetMaterialLibrary` on Load Model); a model material of the same name keeps its E / γ and only gains missing strengths (`FillGaps`). SGD rates from `MaterialCosts` (S355 ≈ 3,655 /t is an estimate — no published Singapore rate found).
 - **Model view tools (SAP2000-style):** Select is the default — a left click selects / deselects the joint or member under the cursor (frames win over coincident cables), a drag on empty space draws a window (left→right: wholly inside; right→left: crossing); the selection is highlighted in amber with an 'n Points, n Frames selected' read-out. Pan (toolbar four-arrow toggle, Structural2DViewer.PanMode) makes the left drag move the model; the middle button always pans. **Selecting, as the user set it on 2026-10-12** ("clicking members also allow point object, choosing is left click, viewing properties is right click, set hotkey v to select members, remove the escape button to change view, select is also applicable in 3d, the small text below the app will show how many frames / cables / points / shells are selected"): a **left click chooses** a point, frame or cable and a **right-click shows its information** — in 2D and in 3D alike, a point winning over the member it sits on. **V is the Select tool** (window-level, `MainWindow.OnPreviewKeyDown`; not while typing in a field or grid or with a menu open). **Esc only clears the selection** — it no longer leaves Pan; do not give Esc the tool change back. The **3D view selects points too**: `JointMarkers3D` (`Joints3D`, over the `Viewport3D`, no mouse input) draws every point where `Structural2DViewer.Project3D` puts it and the amber cross on the selected ones; `Select3DAt` / `RequestInformation3DAt` take the point within 7 px, else the member under the cursor. The deflected 3D shape has no point markers (it is drawn away from the points as built). A drag in 3D still rotates: window selection is 2D only. The **status bar** (`SelectionStatus`, right of the message) always reads `Selected: n Frames · n Cables · n Points · n Shells` for the shared viewer's selection (`MainWindow.UpdateSelectionStatus`; Shells is 0 — the app has no shell objects yet). Clear Selection on the toolbar. Show Undeformed Shape (frame icon, Display menu, F4) hides the result overlay (MainViewModel.ShowUndeformed) until a result is shown again.
 - **Assign menu (SAP2000 layout):** Joint ▸ Restraints (Pin Supports)…, Frame ▸ Frame Sections…, Cable ▸ Cable Sections…. The section items act on the members selected on the model view (frames / cables only; otherwise a 'select first' message) through `AssignSectionWindow` (Find this property, the library list with the selection's section preselected, Define Frame/Cable Sections…, OK / Close / Apply, double-click = OK) → `MainViewModel.AssignSection` (`PropertiesFor` from the library section; each member keeps its local axis and modifiers; cables also update Tab 03 area / capacity; FEM results cleared; SAP2000 never written).
 - **Frame local axes:** Assign ▸ Frame ▸ Local Axes… acts on selected frames from either the 2D canvas or a click in the 3D view (drag still orbits; selected members highlight amber). `AssignFrameAxisWindow` accepts an absolute angle in degrees about local 1. `MainViewModel.AssignFrameLocalAxis` keeps each member's section, recalculates its in-plane inertia from I33 cos²θ + I22 sin²θ, updates the 3D section orientation, clears results and saves the angle in the model database; SAP2000 is not written.
 - **Real sections in 3D** (asked for by the user, 2026-10-12: "it only shows a rectangular box — show the real section; a composite one see-through"): a frame whose plain `FemSectionShape` is not its outline gets a `SectionDrawing` (`Application/SectionDrawing.cs`: regions of convex polygons per material in the local 2 / 3 axes, the enclosing one marked `Shell`), handed to the viewer as `Structural2DViewer.SectionDrawings` (`MainViewModel.SharedViewerSectionDrawings`, by member; it follows `SharedViewerSections`). `StructureModel3D.Build` extrudes one piece per material — steel and concrete in their own colours — and, for a composite section, draws the shell see-through (`CompositeShellOpacity` 0.55, front faces only, added after every solid piece because WPF blends only over what is already drawn) so the material inside shows. Sources: (1) the library's composite sections as defined — CFT = tube walls + concrete core (rectangular or round), steel encased = concrete + the I profile, mega composite = concrete + its 4 / 6 profiles (reinforcement is not drawn); (2) a **General / Section Designer section**, which the model holds only as transformed A / I33 / I22: `SectionDrawings.Recover` reads the dimensions its name states and accepts them only when they reproduce those properties — three dimensions (`CFT_SHS[1200x2000x150_S460]_C70/85`) as a tube, hollow or filled (Ea / Ec from the materials), each property within 1 %; two dimensions on a concrete section (`MegaCol_1.5x3_…`) as a solid block when the stored properties are the block's plus a little steel — drawn as concrete alone, its embedded steel is not known. The inertias decide which dimension is the depth. Anything else stays the equivalent solid, as before; never draw an outline that does not check. On the default model all 38 frames are now real (chords 2.0 × 1.2 m instead of the 2.27 × 1.45 equivalent). A standard shape (box, I, pipe …) needs no drawing. Selection restores each piece's own back material (`MemberVisual.BackMaterial`; a see-through piece has none). The deflected shape uses the same outlines, shaded solid by the contour. Frame Information's Shape row reads the drawing's description.
 - **Deflected shape in 3D** (asked for by the user, 2026-10-12): with the result on Deflected shape, the 3D view draws it too (`StructureModel3D.BuildDeflected`, chosen in `Structural2DViewer.Rebuild3D`): every member with its to-scale section moved by its joint displacements — a meshed frame through its stations, so it bends, keeping the section axes of the member as built — enlarged so the largest |U| is 5 % of the model's largest dimension, shaded by |U| with the 2D palette (one mesh per member, the contour read by texture coordinate from `ContourBrush`, so selection and hit-testing still work per member), and the model as built as thin grey axes. The Undeformed guide / Contour |U| / Range options are the same controls as in 2D (drawn above the 3D host) and rebuild the scene; a legend sits bottom-right (`Deflection3DLegend`: range and `Shape magnified × n`). The solver is planar: displacements are X and Z. There is no node read-out in 3D (2D: click a node).
-- **Right-click → Frame / Cable Information** (asked for by the user, 2026-10-12: "open the dialogue just like ETABS for frame properties"): a right-click on a member in the 2D canvas (`ModelCanvas.RequestInformationAt`) or in the 3D view (a right-click that does not drag — a right-drag still pans; `RequestInformation3DAt`) selects it and raises `Structural2DViewer.MemberInformationRequested`; `MainWindow` opens the modal `ObjectInformationWindow`. Tabs **Geometry** (identification with the VCF role, length, slope, End I / End J with coordinates), **Assignments** (section, shape, material; E, A, I, unit weight, self-weight and mass per length; property modifiers; a frame's local-axis angle and end moment releases, or a cable's 03 Pretension pattern / target force or range / sync / capacity) and **Loads** (self-weight per pattern with a multiplier, distributed / point / gravity member loads, the cable target force). Section bands over name / value lines; values are read-only boxes so they can be copied. Content comes from `MainViewModel.MemberInformation` (testable, no window). **Modify Assignments…** opens the existing editable `MemberAssignmentWindow` (still on double-click) and the form refreshes. **A point has its information too** (user, 2026-10-12): a right-click on a point selects it, raises `JointInformationRequested` and opens the same window as **Point Information** (`MainViewModel.PointInformation`): Geometry (label, VCF chord group, X / Y / Z, the frames and cables that meet at it), Assignments (pin support or free) and Loads (the storey forces the model is analysed with — a 01 Loading range at its first value — and SAP joint loads by pattern); it has no Modify button. A right-click on empty space does nothing.
+- **Right-click → Frame / Cable Information** (asked for by the user, 2026-10-12: "open the dialogue just like ETABS for frame properties"): a right-click on a member in the 2D canvas (`ModelCanvas.RequestInformationAt`) or in the 3D view (a right-click that does not drag — a right-drag still pans; `RequestInformation3DAt`) selects it and raises `Structural2DViewer.MemberInformationRequested`; `MainWindow` opens the modal `ObjectInformationWindow`. Tabs **Geometry** (identification with the VCF role, length, slope, End I / End J with coordinates), **Assignments** (section, shape, material; E, A, I, unit weight, self-weight and mass per length; property modifiers; a frame's local-axis angle and end moment releases, or a cable's 03 Pretension pattern / target force or range / sync / capacity) and **Loads** (self-weight per pattern with a multiplier, distributed / point / gravity member loads, the cable target force). Section bands over name / value lines; values are read-only boxes so they can be copied. Content comes from `MainViewModel.MemberInformation` (testable, no window). **The form is also where the assignments are changed — one form per member** (user, 2026-10-12, on the separate Member Assignments form: "redundant, can be integrated?"; `MemberAssignmentWindow` and the Modify Assignments… button are gone — do not bring a second form back). The lines `MemberInformation` marks with an `InformationEdit` are editors in place while the model can be edited (`ObjectInformationWindow.Editor`): Section property (the frame or cable library), Local-axis angle and Moment release at End I / J of a frame, Target-force load pattern and Target force of a cable that does not follow another (a 03 Pretension range shows its first value and stays a range unless another value is typed). Buttons **OK / Cancel / Apply**; `Apply()` writes **only the editors the user changed** — re-assigning an untouched section would take its properties from the library again and clear the results — through `AssignSection` / `AssignFrameLocalAxis` / `AssignFrameEndReleases` / `AssignCableTarget`, refills the form and reports under the tabs. A locked model shows the same lines read-only with `Model locked. Unlock it to change member assignments.` and a Close button. A **double-click** on a member opens the same form on its Assignments tab (`openAssignments`); a right-click opens it on Geometry. **A point has its information too** (user, 2026-10-12): a right-click on a point selects it, raises `JointInformationRequested` and opens the same window as **Point Information** (`MainViewModel.PointInformation`): Geometry (label, VCF chord group, X / Y / Z, the frames and cables that meet at it), Assignments (pin support or free) and Loads (the storey forces the model is analysed with — a 01 Loading range at its first value — and SAP joint loads by pattern); it has no Modify button. A right-click on empty space does nothing.
 - **Axis display:** the model viewer's top-right **A** toggle, Display ▸ Frame local axes, and Display Options ▸ Frame local axes share `ShowFrameLocalAxes`. They draw red local 1, green local 2 and blue local 3 arrows on frames in 2D and 3D. With frame selection, only those frames' axes are shown; otherwise all frames are shown. The 3D arrows use the same section angle and local-axis basis as the extruded frame sections.

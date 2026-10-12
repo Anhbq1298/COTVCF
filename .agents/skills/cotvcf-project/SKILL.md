@@ -8,14 +8,14 @@ description: Build, modify, debug, or review the COTVCF WPF desktop application,
 Before changing COTVCF behavior or presentation, read
 [`skills/cotvcf-ui-handoff/SKILL.md`](../../../skills/cotvcf-ui-handoff/SKILL.md) completely. Treat it as the current product handoff and preserve its invariants unless the user explicitly changes them.
 
-Use the repository's current code and tests to confirm that the handoff is still accurate. Keep changes to the existing application within its Presentation, Application, Domain, Configuration, Geometry, Infrastructure, and SAP2000 boundaries.
+Use the repository's current code and tests to confirm that the handoff is still accurate. The application is the project `src/Mcotis.Desktop`; keep changes to it within its Presentation, Application, Domain, Configuration, Geometry, Infrastructure, and SAP2000 folders.
 
-The standalone system under `mcotis/` is separate work with its own rules: read `docs/mcotis-standalone-plan.md` and the "Direction" section of `AGENTS.md` first. SAP2000 and the MB pages are reference only there.
+The standalone system — the library projects `src/Mcotis.Core`, `src/Mcotis.Application`, `src/Mcotis.Persistence` and `src/Mcotis.Analysis` — is separate work with its own rules: read `docs/mcotis-standalone-plan.md` and the "Direction" section of `AGENTS.md` first. SAP2000 and the MB pages are reference only there.
 
 For UI work, also use the `structural-engineering-ui` repository skill. For SAP2000 API or model-integration work, also use the `sap2000-oapi` repository skill.
 
 ## Verification
 
 - Build with `dotnet build COTVCF.sln`.
-- Run offline checks with `dotnet run --project tests/COT_VCF.Checks.csproj` when behavior changes.
+- Run offline checks with `dotnet run --project tests/COT_VCF.Checks` when behavior changes.
 - Live SAP reads, UI-read checks, and all model writes require an explicit task that places them in scope.

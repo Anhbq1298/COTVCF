@@ -19,7 +19,7 @@ if ($runningFromBin.Count -gt 0) {
 
 Push-Location $repoRoot
 try {
-    & dotnet build COTVCF.csproj -c FreshBuild
+    & dotnet build src\Mcotis.Desktop\Mcotis.Desktop.csproj -c FreshBuild
     if ($LASTEXITCODE -ne 0) { throw "FreshBuild failed with exit code $LASTEXITCODE" }
 }
 finally { Pop-Location }

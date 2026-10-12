@@ -3,10 +3,10 @@
 Every function added or changed in Mcotis is recorded here, newest first. The app shows this file under
 **Help → Development Plans**, so every team member can see what exists, where to find it and how it was checked.
 
-**Compulsory for everyone, people and coding agents alike.** A commit that changes the app (`src/`, `App.xaml*`,
-`COTVCF.csproj`) must add or update an entry in this file. The commit hook in `.githooks/commit-msg` (installed by the
+**Compulsory for everyone, people and coding agents alike.** A commit that changes anything under `src/` — the app or the
+libraries — must add or update an entry in this file. The commit hook in `.githooks/commit-msg` (installed by the
 build) refuses such a commit without one; write `[no-log]` in the commit message only for a change no user can notice
-(a refactor, a comment, a test-only fix). The checks (`dotnet run --project tests/COT_VCF.Checks.csproj -- --dev-log`)
+(a refactor, a comment, a test-only fix). The checks (`dotnet run --project tests/COT_VCF.Checks -- --dev-log`)
 refuse an entry that breaks the format below.
 
 Entry format — a `## date · title` line, then these fields, each on its own `- Field: value` line (a longer value
@@ -17,6 +17,49 @@ continues on the next lines, indented by two spaces):
 - Where: how a user reaches it in the app (menu path, window, tab), or the code area when it has no UI
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
+
+## 2026-10-12 · One folder per project: src and tests
+- Status: Done
+- Who: markbui
+- Where: Repository layout (no change in the app)
+- What: The app is now the project src/Mcotis.Desktop (it was at the repository root with its code under src/). The
+  libraries of the standalone system are its siblings in src/ (they were under mcotis/); the checks are
+  tests/COT_VCF.Checks and tests/Mcotis.Checks. Build and run commands are unchanged except for the paths:
+  dotnet build COTVCF.sln, ./build-desktop.ps1, dotnet run --project tests/COT_VCF.Checks. A branch made before this
+  change must be merged with rename detection. The build now finds SAP2000 27 when 26 is not installed.
+- Checks: solution build; dotnet run --project tests/Mcotis.Checks; default offline COT_VCF.Checks; --dev-log;
+  --result-tools-ui
+
+## 2026-10-12 · Standalone 3D linear static frame engine
+- Status: Done
+- Who: Codex, Claude
+- Where: src/Mcotis.Analysis (library only; the desktop app still analyses with its own planar solver)
+- What: Solves 3D frames of the standalone model for linear static cases: point, line and member point loads,
+  self-weight, end moment releases, the Full 3D / XZ / XY / YZ / custom degrees of freedom. It refuses what it does not
+  cover instead of approximating it: cables, shells, nonlinear or staged cases, frames with a point inside their length,
+  unstable models. Checked against closed forms, twelve OpenSeesPy models and the app's planar solver; what that
+  evidence does and does not show is in docs/analysis/spatial-static-verification.md. One sign printed in the source
+  book's stiffness matrix is a misprint and is recorded there.
+- Checks: dotnet run --project tests/Mcotis.Checks (1447 checks); --spatial-frame-regression
+
+## 2026-10-12 · One form for a member: information and assignments together
+- Status: Done
+- Who: markbui
+- Where: Model view — right-click or double-click a frame or cable (Frame / Cable Information)
+- What: The separate Member Assignments form is gone. The information form now changes the assignments itself, on its
+  Assignments tab: section, local-axis angle and end moment releases of a frame; section, target pattern and target
+  force of a cable. OK / Cancel / Apply; only what was changed is written. A locked model shows the same form read-only.
+  A double-click opens it on Assignments, a right-click on Geometry.
+- Checks: --result-tools-ui
+
+## 2026-10-12 · Standalone 3D topology and DOF compiler foundation
+- Status: Done
+- Who: Codex
+- Where: src/Mcotis.Core; Mcotis.Analysis; Mcotis.Persistence (library only, no desktop menu yet)
+- What: Adds persisted Full 3D, XZ/XY/YZ and custom DOF masks, immutable topology compilation with free/restrained/inactive
+  mappings, load/geometry diagnostics and schema-1 to schema-2 migration preserving XZ. Keeps unsupported shells explicit.
+  The spatial stiffness solver, staged desktop dialog, P-Delta and modal algorithms remain planned with source gates.
+- Checks: dotnet run --project tests/Mcotis.Checks (364 checks); default offline COT_VCF.Checks; solution build
 
 ## 2026-10-12 · Optimization tab on the menu bar
 - Status: Done
@@ -43,7 +86,7 @@ continues on the next lines, indented by two spaces):
 - Where: Help → Development Plans; docs/DEVELOPMENT_LOG.md
 - What: Shows this log in the app — in progress and planned work first, then what is done, newest first. Writing an entry
   is compulsory for every change of the app: the build installs .githooks, whose commit-msg hook refuses a commit that
-  changes src/, App.xaml or COTVCF.csproj without a log entry ([no-log] only for changes no user can notice); AGENTS.md
+  changes src/, App.xaml or src/Mcotis.Desktop/Mcotis.Desktop.csproj without a log entry ([no-log] only for changes no user can notice); AGENTS.md
   tells every coding agent to write the entry.
 - Checks: --dev-log
 
@@ -223,7 +266,7 @@ continues on the next lines, indented by two spaces):
 ## 2026-09-08 · Feature-oriented presentation refactor (plan Phase 8)
 - Status: Planned
 - Who: Unassigned
-- Where: code: src/Presentation
+- Where: code: src/Mcotis.Desktop/Presentation
 - What: Focused feature view models and views, typed outcomes, more regression checks (docs/implementation-plan.md, Phase 8).
 - Checks: none yet
 

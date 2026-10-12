@@ -3,13 +3,22 @@
 Bản chỉnh ngày 2026-10-12. Thay cho bản plan 10 mục trước đó, và thay cho các quyết định về Lock/Unlock, SQLite và
 "stable ID theo tên" trong [fem-database-plan.md](fem-database-plan.md) đối với hệ mới.
 
+**Cập nhật 3D (2026-10-12):** theo yêu cầu mới, tầng analysis sẽ dùng chung model XYZ và DOF presets cho 3D/XZ/XY/YZ,
+thay cho việc port nguyên solver planar. Foundation đã có: `Mcotis.Analysis.ModelCompiler`, DOF settings lưu ở schema 2,
+migration schema 1 → XZ, mapping sáu DOF và diagnostics. Đã có thêm một engine tuyến tính 3D cho frame (dense, dùng để
+kiểm chứng công thức): `LinearStaticSolver`, đối chiếu với lời giải giải tích, OpenSeesPy và solver planar hiện tại —
+phạm vi, nguồn công thức và bằng chứng ở [analysis/spatial-static-verification.md](analysis/spatial-static-verification.md).
+Engine này chưa xử lý cable, shell, frame có nút ở giữa, và chưa có UI. Chi tiết và source gates:
+[analysis/foundation-status.md](analysis/foundation-status.md), [implementation plan](analysis/IMPLEMENTATION_PLAN.md),
+[literature register](analysis/literature.md). P-Delta và modal vẫn là các giai đoạn sau.
+
 ## 0. Định hướng đã chốt
 
 | Nội dung | Quyết định (người dùng, 2026-10-12) |
 |---|---|
 | SAP2000 / CSI | Bỏ qua hoàn toàn. Không import, không export, không có giai đoạn tích hợp CSI. Code SAP hiện có chỉ để tham khảo, không mở rộng. |
 | Các trang MB | Chỉ để tham khảo. Giữ nguyên hành vi, không refactor, không nối vào hệ mới. Menu **MB** nằm cuối thanh menu, sau một vạch ngăn. |
-| Hệ mới | Xây riêng trong `mcotis/`, không phụ thuộc `src/` (app cũ), WPF, SQLite hay CSI. App cũ vẫn chạy cho đến khi từng tính năng được chuyển sang. |
+| Hệ mới | Các project thư viện riêng trong `src/` (`Mcotis.Core`, `Mcotis.Application`, `Mcotis.Persistence`, `Mcotis.Analysis`), không phụ thuộc app desktop, WPF, SQLite hay CSI. App hiện tại là `src/Mcotis.Desktop`, vẫn chạy cho đến khi từng tính năng được chuyển sang. |
 
 Hệ quả: mọi mục của plan cũ nói về CSI service, version adapter, Import Report và "Save gọi SAP" đều rời khỏi phạm vi.
 
@@ -86,12 +95,13 @@ initial case hoặc combination; tên trùng. Một frame chưa gán section v�
 
 | Project | Trách nhiệm | Trạng thái |
 |---|---|---|
-| `mcotis/Mcotis.Core` | Native model, ID, naming, editor, validator, analysis input hash | Có |
-| `mcotis/Mcotis.Application` | `DocumentSession`, commands, Undo/Redo, New/Open/Save, result state, contracts | Có |
-| `mcotis/Mcotis.Persistence` | File `.mcotis`, migration, atomic save | Có |
-| `mcotis/Mcotis.Checks` | Checks offline của hệ mới | Có |
-| `mcotis/Mcotis.Analysis` | Solver, chuyển document → input, capability check, results | Giai đoạn 4 |
-| `mcotis/Mcotis.Desktop` | WPF shell, Views/ViewModels, viewport | Giai đoạn 6 |
+| `src/Mcotis.Core` | Native model, ID, naming, editor, validator, analysis input hash | Có |
+| `src/Mcotis.Application` | `DocumentSession`, commands, Undo/Redo, New/Open/Save, result state, contracts | Có |
+| `src/Mcotis.Persistence` | File `.mcotis`, migration, atomic save | Có |
+| `tests/Mcotis.Checks` | Checks offline của hệ mới | Có |
+| `src/Mcotis.Analysis` | Immutable topology/DOF compiler; engine tuyến tính 3D cho frame | Có compiler và engine frame (dense); cable, shell, solver sparse chưa có |
+| `src/Mcotis.Desktop` | App WPF hiện tại (chưa dùng các thư viện trên); sẽ chuyển dần sang shell và ViewModels mới | App hiện tại có; chuyển đổi ở giai đoạn 6 |
+| `tests/COT_VCF.Checks` | Checks offline của app | Có |
 
 Core chỉ tham chiếu .NET runtime; Application chỉ tham chiếu Core; không project nào tham chiếu WPF, SQLite hay CSI.
 `Mcotis.Checks` kiểm tra điều này bằng reflection.
@@ -123,7 +133,7 @@ Dialog làm việc trên dữ liệu tạm: Apply = validate + commit; OK = comm
 | **1 — Core document** | Native model, ID, `NameIndex`, `NamingService`, validators | Unique Name; rename không làm hỏng references | Xong |
 | **2 — Document lifecycle** | `DocumentSession`, New / Open / Save / Save As | Save đúng document đang mở; Open lỗi giữ nguyên model | Xong ở tầng thư viện |
 | **3 — Edit commands** | Commands, Undo/Redo, change sets, revision, dirty, result state | Mọi thao tác phục hồi được; invalidation nhất quán | Xong ở tầng thư viện |
-| **4 — Analysis boundary** | Đưa solver 2D frame/cable vào `Mcotis.Analysis`, đọc từ `ModelDocument`; capability check (chặn Shell…); results gắn document ID + input hash | Kết quả trên default model khớp solver hiện tại; Run không đụng CSI | Tiếp theo |
+| **4 — Analysis boundary** | Shared 3D engine, planar DOF presets, snapshot từ `ModelDocument`; capability check (chặn Shell…); results gắn document ID + input hash | Numerical source gates + XZ regression + analytical/OpenSeesPy checks | Compiler và engine frame tuyến tính 3D xong, đã đối chiếu; còn cable, shell, frame có nút giữa, solver sparse, và nối vào app |
 | **5 — Hệ VCF trên native model** | Generator VCF tạo/sinh lại geometry qua command, giữ ID bằng `GenerationKey`; tên theo vai trò | Đổi số bay giữ ID và assignments của object không đổi | |
 | **6 — Desktop** | `Mcotis.Desktop`: shell, các ViewModel ở mục 5, selection chung, viewport đọc document | Tạo → lưu → mở → phân tích → xem kết quả hoàn toàn trên hệ mới | |
 | **7 — Persistence hoàn chỉnh** | Autosave nền theo revision, recovery, results store, đọc file `.cotfem.db` cũ, default model dạng `.mcotis` | Recovery không báo thành công giả; file cũ mở được | |
@@ -137,7 +147,7 @@ chạy model có Shell và nói rõ lý do.
 
 ## 7. Checks
 
-`dotnet run --project mcotis/Mcotis.Checks` — 275 checks, không cần SAP2000, WPF hay database:
+`dotnet run --project tests/Mcotis.Checks` — 1447 checks, không cần SAP2000, WPF hay database:
 
 | Nhóm | Nội dung |
 |---|---|
@@ -147,7 +157,9 @@ chạy model có Shell và nói rõ lý do.
 | Commands | Change set, revision, Undo/Redo, dirty state, giới hạn history |
 | Result state | Hash bỏ qua tên và thứ tự dựng; current / stale / failed; snapshot không bị edit ảnh hưởng |
 | Native file | Round-trip; Save đúng dữ liệu đang thấy; Open lỗi giữ nguyên model; file thiếu/thừa field bị từ chối; migration không ghi file gốc; atomic save |
-| Independence | Ba assembly không tham chiếu WPF / SQLite / CSI |
+| DOF compilation | Full 3D/plane/custom masks, deterministic mapping, support loads, failed compilation, immutable snapshot, schema-1 migration |
+| Spatial static | Ma trận 12×12 kiểm bằng tích phân độc lập, lời giải giải tích, cân bằng toàn cục, các trường hợp từ chối, đối chiếu OpenSeesPy (12 model) |
+| Independence | Core, Application, Persistence và Analysis không tham chiếu WPF / SQLite / CSI |
 
 Còn thiếu so với danh sách của plan cũ: UX (Cancel dialog, selection đồng bộ) — thuộc giai đoạn 6; Analysis so với
 solver — giai đoạn 4.

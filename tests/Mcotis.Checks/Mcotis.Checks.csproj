@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Offline checks of the new system: run this project with "dotnet run".
+       It builds and runs on a machine without SAP2000, ETABS or their API libraries. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Mcotis.Core\Mcotis.Core.csproj" />
+    <ProjectReference Include="..\..\src\Mcotis.Application\Mcotis.Application.csproj" />
+    <ProjectReference Include="..\..\src\Mcotis.Persistence\Mcotis.Persistence.csproj" />
+    <ProjectReference Include="..\..\src\Mcotis.Analysis\Mcotis.Analysis.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

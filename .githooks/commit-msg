@@ -1,7 +1,7 @@
 #!/bin/sh
 # Mcotis: every commit that changes the app records the change in docs/DEVELOPMENT_LOG.md, the development log shown
 # under Help -> Development Plans. Compulsory for every team member and coding agent (AGENTS.md).
-# Installed for each clone by the build (COTVCF.csproj sets core.hooksPath to .githooks).
+# Installed for each clone by the build (src/Mcotis.Desktop/Mcotis.Desktop.csproj sets core.hooksPath to .githooks).
 # A change no user can notice (refactor, comment, test-only fix) may say [no-log] in its commit message instead.
 
 msg_file="$1"
@@ -10,7 +10,7 @@ grep -qi '\[no-log\]' "$msg_file" && exit 0
 [ -f "$(git rev-parse --git-path MERGE_HEAD)" ] && exit 0
 
 changed=$(git diff --cached --name-only)
-echo "$changed" | grep -qE '^(src/|App\.xaml|COTVCF\.csproj)' || exit 0
+echo "$changed" | grep -qE '^src/' || exit 0
 echo "$changed" | grep -qx 'docs/DEVELOPMENT_LOG.md' && exit 0
 
 cat >&2 <<'MSG'

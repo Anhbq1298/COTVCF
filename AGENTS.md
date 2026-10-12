@@ -22,13 +22,23 @@ In particular, preserve the compact engineering UI described by the COTVCF hando
 
 Decided by the user on 2026-10-12; it takes precedence over older guidance that says otherwise.
 
-- Mcotis is being rebuilt as a standalone system under `mcotis/` (`Mcotis.Core`, `Mcotis.Application`,
-  `Mcotis.Persistence`, later `Mcotis.Analysis` and `Mcotis.Desktop`). The plan, its decisions and the state of each
-  phase are in `docs/mcotis-standalone-plan.md`; read it before working on the new system.
-- SAP2000 and the MB pages are reference only. Do not extend them, and do not make anything under `mcotis/` depend on
-  them, on `src/`, on WPF (outside `Mcotis.Desktop`), on SQLite or on CSI libraries. `Mcotis.Checks` verifies this.
-- The existing application under `src/` keeps working until a feature has moved to the new system. The MB menu stays
-  last on the menu bar, after a separator.
+- Mcotis is being rebuilt as a standalone system: the library projects `src/Mcotis.Core`, `src/Mcotis.Application`,
+  `src/Mcotis.Persistence` and `src/Mcotis.Analysis`. The plan, its decisions and the state of each phase are in
+  `docs/mcotis-standalone-plan.md`; read it before working on the new system.
+- SAP2000 and the MB pages are reference only. Do not extend them, and do not make any of those library projects
+  depend on them, on the desktop application, on WPF, on SQLite or on CSI libraries. `Mcotis.Checks` verifies this.
+- The existing application is `src/Mcotis.Desktop`. It keeps working until a feature has moved to the new system. The
+  MB menu stays last on the menu bar, after a separator.
+
+## Repository Layout
+
+- `src/` holds one folder per project: `Mcotis.Desktop` (the WPF application: `App.xaml`, `Presentation`, `Application`,
+  `Domain`, `Configuration`, `Geometry`, `Infrastructure`, `SAP2000`, `Resources`, `UI`) and the library projects above.
+- `tests/` holds the check projects — `COT_VCF.Checks` for the application, `Mcotis.Checks` for the libraries — and the
+  fixtures the application's checks read by path (`tests/fem-sap-benchmark`, `tests/etabs-import`).
+- `bin/` at the repository root is the built application (`./build-desktop.ps1`); ordinary builds write to each
+  project's own `bin/` and `obj/`.
+- Run builds and checks from the repository root: the checks find fixtures and documents by paths relative to it.
 
 ## Development Log (compulsory)
 
@@ -39,13 +49,13 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
   Planned), `- Who:`, `- Where:` (menu path / window / tab), `- What:`, `- Checks:` (the `--flag` of the checks, or "none yet").
   Newest first. Record planned work and known gaps as Planned entries.
 - This applies to every team member and every coding agent, without being asked. The build installs `.githooks`
-  (`core.hooksPath`); `.githooks/commit-msg` refuses a commit that changes `src/`, `App.xaml*` or `COTVCF.csproj` without
+  (`core.hooksPath`); `.githooks/commit-msg` refuses a commit that changes anything under `src/` without
   the log. Use `[no-log]` in the commit message only for a change no user can notice. `--dev-log` checks the format.
 
 ## Repository Checks
 
 - Build with `dotnet build COTVCF.sln`.
-- Run the new system's checks with `dotnet run --project mcotis/Mcotis.Checks`. They need no SAP2000 installation.
-- Run offline checks with `dotnet run --project tests/COT_VCF.Checks.csproj`.
+- Run the new system's checks with `dotnet run --project tests/Mcotis.Checks`. They need no SAP2000 installation.
+- Run offline checks with `dotnet run --project tests/COT_VCF.Checks`.
 - Do not run `--sap-read`, `--ui-read`, or write to a live SAP2000 model unless the user asks for that live integration work.
 - Preserve unrelated user changes, including local Visual Studio state.
