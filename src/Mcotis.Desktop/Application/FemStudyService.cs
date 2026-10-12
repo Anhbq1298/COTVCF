@@ -143,7 +143,7 @@ public sealed class FemStudyService
     private static void RequireModel(ApplicationState state, bool offlineModel)
     {
         if (state.Model is null || !(state.IsSapConnected || offlineModel))
-            throw new InvalidOperationException("Open a model before running FEM: File → Default Model or Load Model, or Connect SAP and load a project.");
+            throw new InvalidOperationException("Open a model before running FEM: File → Load VCF… or Load Model, or Connect SAP and load a project.");
         if (state.Geometry.Members.Any(member => member.Kind == MemberKind.Tendon))
             throw new InvalidOperationException("The internal FEM solver currently supports frame and cable objects, not tendon objects.");
         // the run solves the model's own geometry; the Tab 02 chord groups are an input of the truss-height study only
