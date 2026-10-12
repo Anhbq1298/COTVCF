@@ -1,0 +1,57 @@
+<Window x:Class="COT_VCF.Presentation.NativeModelWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:COT_VCF.Presentation" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls"
+ Title="{Binding Title}" Icon="{x:Static p:AppIcon.Window}" Width="1150" Height="760" MinWidth="850" MinHeight="540" WindowStartupLocation="CenterScreen">
+ <DockPanel>
+  <Menu DockPanel.Dock="Top" IsEnabled="{Binding Editable}">
+   <MenuItem Header="_File"><MenuItem Header="_Open Native Model…" Click="Open_Click"/>
+    <MenuItem Header="_Save" Click="Save_Click" InputGestureText="Ctrl+S"/><MenuItem Header="Save _As…" Click="SaveAs_Click"/></MenuItem>
+   <MenuItem Header="_Edit"><MenuItem Header="_TemplateBuilding…" Click="Template_Click" ToolTip="Create another building in a new native model window"/>
+    <Separator/><MenuItem Header="_Undo" Click="Undo_Click" IsEnabled="{Binding Session.CanUndo}"/><MenuItem Header="_Redo" Click="Redo_Click" IsEnabled="{Binding Session.CanRedo}"/></MenuItem>
+   <MenuItem Header="_Run"><MenuItem Header="Analysis _Options…" Click="Options_Click"/><MenuItem Header="_Run Linear Static" Click="Run_Click" InputGestureText="F5"/></MenuItem>
+  </Menu>
+  <StackPanel DockPanel.Dock="Top" Margin="8,4">
+   <TextBlock Text="{Binding Summary}" FontWeight="SemiBold"/>
+   <WrapPanel Margin="0,6,0,2" IsEnabled="{Binding Editable}">
+    <TextBlock Text="Load case" Margin="0,0,8,0"/><ComboBox ItemsSource="{Binding Cases}" SelectedItem="{Binding SelectedCase}" DisplayMemberPath="Name" Width="190" AutomationProperties.Name="Analysis load case"/>
+    <Button Content="Analysis Options…" Margin="8,0" Click="Options_Click"/><Button Content="Run Linear Static" Click="Run_Click"/>
+   </WrapPanel>
+  </StackPanel>
+  <Border DockPanel.Dock="Bottom" Background="{StaticResource Surface}" Padding="8" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
+   <ScrollViewer MaxHeight="130" VerticalScrollBarVisibility="Auto"><TextBlock Text="{Binding Message}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite"/></ScrollViewer>
+  </Border>
+  <Grid>
+   <Grid.RowDefinitions><RowDefinition Height="3*"/><RowDefinition Height="5"/><RowDefinition Height="2*"/></Grid.RowDefinitions>
+   <c:Structural2DViewer x:Name="Viewer" Model="{Binding Geometry}" PinSupportPoints="{Binding Supports}" ShowPointLabels="False" ShowFrameLabels="False" ShowDimensions="False"/>
+   <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"/>
+   <TabControl Grid.Row="2" Margin="8,0,8,8">
+    <TabItem Header="Joint results">
+     <DataGrid ItemsSource="{Binding Joints}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+      <DataGrid.Columns>
+       <DataGridTextColumn Header="Point" Binding="{Binding Point}"/>
+       <DataGridTextColumn Header="UX (m)" Binding="{Binding UX, StringFormat=G6}"/><DataGridTextColumn Header="UY (m)" Binding="{Binding UY, StringFormat=G6}"/><DataGridTextColumn Header="UZ (m)" Binding="{Binding UZ, StringFormat=G6}"/>
+       <DataGridTextColumn Header="RX (rad)" Binding="{Binding RX, StringFormat=G6}"/><DataGridTextColumn Header="RY (rad)" Binding="{Binding RY, StringFormat=G6}"/><DataGridTextColumn Header="RZ (rad)" Binding="{Binding RZ, StringFormat=G6}"/>
+       <DataGridTextColumn Header="FX (kN)" Binding="{Binding FX, StringFormat=G6}"/><DataGridTextColumn Header="FY (kN)" Binding="{Binding FY, StringFormat=G6}"/><DataGridTextColumn Header="FZ (kN)" Binding="{Binding FZ, StringFormat=G6}"/>
+       <DataGridTextColumn Header="MX (kN·m)" Binding="{Binding MX, StringFormat=G6}"/><DataGridTextColumn Header="MY (kN·m)" Binding="{Binding MY, StringFormat=G6}"/><DataGridTextColumn Header="MZ (kN·m)" Binding="{Binding MZ, StringFormat=G6}"/>
+      </DataGrid.Columns>
+     </DataGrid>
+    </TabItem>
+    <TabItem Header="Frame local end actions">
+     <DataGrid ItemsSource="{Binding Frames}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+      <DataGrid.Columns><DataGridTextColumn Header="Frame" Binding="{Binding Frame}"/><DataGridTextColumn Header="End" Binding="{Binding End}"/>
+       <DataGridTextColumn Header="N (kN)" Binding="{Binding N, StringFormat=G6}"/><DataGridTextColumn Header="V2 (kN)" Binding="{Binding V2, StringFormat=G6}"/><DataGridTextColumn Header="V3 (kN)" Binding="{Binding V3, StringFormat=G6}"/>
+       <DataGridTextColumn Header="T (kN·m)" Binding="{Binding T, StringFormat=G6}"/><DataGridTextColumn Header="M2 (kN·m)" Binding="{Binding M2, StringFormat=G6}"/><DataGridTextColumn Header="M3 (kN·m)" Binding="{Binding M3, StringFormat=G6}"/>
+      </DataGrid.Columns>
+     </DataGrid>
+    </TabItem>
+    <TabItem Header="Frame line loads">
+     <DataGrid ItemsSource="{Binding Loads}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+      <DataGrid.Columns><DataGridTextColumn Header="Frame" Binding="{Binding Frame}"/><DataGridTextColumn Header="Pattern" Binding="{Binding Pattern}"/>
+       <DataGridTextColumn Header="Direction" Binding="{Binding Direction}"/><DataGridTextColumn Header="Start (relative)" Binding="{Binding Start}"/><DataGridTextColumn Header="End (relative)" Binding="{Binding End}"/>
+       <DataGridTextColumn Header="qI (kN/m)" Binding="{Binding QI}"/><DataGridTextColumn Header="qJ (kN/m)" Binding="{Binding QJ}"/>
+      </DataGrid.Columns>
+     </DataGrid>
+    </TabItem>
+   </TabControl>
+  </Grid>
+ </DockPanel>
+</Window>

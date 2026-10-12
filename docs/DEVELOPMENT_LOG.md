@@ -18,6 +18,19 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-12 · Analysis Options form and TemplateBuilding native workspace
+- Status: Done
+- Who: Codex
+- Where: Run → Analysis Options; Edit → TemplateBuilding; File → Open Native Model
+- What: A staged WPF form shows active DOFs and cable fitting inputs. The existing planar solver uses the fitting
+  tolerance, iteration limit, frame mesh and sag inputs; its DOFs remain XZ. TemplateBuilding creates a new native
+  workspace with per-bay X/Y widths, per-storey heights and downward beam line loads, general section properties,
+  fixed/pinned bases and optional self-weight. Native Save/Open, Undo/Redo, geometry view, DOF settings and linear
+  static frame results are connected to the standalone libraries. No slabs or diaphragms; the native engine remains
+  limited to frames and 600 free / 2,400 total DOFs. Native cable fitting and result-file storage remain unavailable.
+- Checks: dotnet run --project tests/Mcotis.Checks (24 template checks); --template-building-ui; --result-tools-ui;
+  --study-ui; --dev-log; dotnet build MCOTiS.sln
+
 ## 2026-10-12 · MCOTiS solution name
 - Status: Done
 - Who: Codex

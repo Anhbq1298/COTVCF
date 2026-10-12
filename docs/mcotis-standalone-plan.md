@@ -8,7 +8,9 @@ thay cho việc port nguyên solver planar. Foundation đã có: `Mcotis.Analysi
 migration schema 1 → XZ, mapping sáu DOF và diagnostics. Đã có thêm một engine tuyến tính 3D cho frame (dense, dùng để
 kiểm chứng công thức): `LinearStaticSolver`, đối chiếu với lời giải giải tích, OpenSeesPy và solver planar hiện tại —
 phạm vi, nguồn công thức và bằng chứng ở [analysis/spatial-static-verification.md](analysis/spatial-static-verification.md).
-Engine này chưa xử lý cable, shell, frame có nút ở giữa, và chưa có UI. Chi tiết và source gates:
+Engine này chưa xử lý cable, shell, frame có nút ở giữa. WPF đầu tiên đã nối vào engine qua
+**Edit → TemplateBuilding…**: model workspace riêng, native Save/Open, Undo/Redo, DOF options, chạy linear static
+và bảng kết quả. Chưa phải desktop migration đầy đủ; xem [phạm vi UI](native-building-ui.md). Chi tiết và source gates:
 [analysis/foundation-status.md](analysis/foundation-status.md), [implementation plan](analysis/IMPLEMENTATION_PLAN.md),
 [literature register](analysis/literature.md). P-Delta và modal vẫn là các giai đoạn sau.
 
@@ -100,7 +102,7 @@ initial case hoặc combination; tên trùng. Một frame chưa gán section v�
 | `src/Mcotis.Persistence` | File `.mcotis`, migration, atomic save | Có |
 | `tests/Mcotis.Checks` | Checks offline của hệ mới | Có |
 | `src/Mcotis.Analysis` | Immutable topology/DOF compiler; engine tuyến tính 3D cho frame | Có compiler và engine frame (dense); cable, shell, solver sparse chưa có |
-| `src/Mcotis.Desktop` | App WPF hiện tại (chưa dùng các thư viện trên); sẽ chuyển dần sang shell và ViewModels mới | App hiện tại có; chuyển đổi ở giai đoạn 6 |
+| `src/Mcotis.Desktop` | App WPF hiện tại; TemplateBuilding workspace đã dùng các thư viện native | Native Save/Open, DOF options, linear static và result tables đã có; migration đầy đủ còn ở giai đoạn 6 |
 | `tests/COT_VCF.Checks` | Checks offline của app | Có |
 
 Core chỉ tham chiếu .NET runtime; Application chỉ tham chiếu Core; không project nào tham chiếu WPF, SQLite hay CSI.

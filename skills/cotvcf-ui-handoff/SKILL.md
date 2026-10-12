@@ -21,10 +21,20 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - `MCOTiS.sln` includes the app, the libraries and both check projects; the desktop build script targets the app project directly.
 - **The standalone system** (user, 2026-10-12: "ignore SAP2000 and the MB tab completely … stand on our own feet and
   develop a new system") is the library projects `src/Mcotis.Core`, `src/Mcotis.Application`, `src/Mcotis.Persistence`
-  and `src/Mcotis.Analysis`, with their checks in `tests/Mcotis.Checks`. The app does not reference them yet. Plan and
+  and `src/Mcotis.Analysis`, with their checks in `tests/Mcotis.Checks`. The desktop now references them for the
+  separate TemplateBuilding native workspace. Plan and
   status: `docs/mcotis-standalone-plan.md`. Checks:
   `dotnet run --project tests/Mcotis.Checks`. SAP2000 and the MB pages are reference only: keep them working, do not
   extend them.
+- **Native building UI** (user, 2026-10-12): **Edit → TemplateBuilding…** is available even on a blank/locked legacy
+  model and creates a new native workspace, preserving the main window's model. Per-bay X/Y widths, per-storey
+  heights and beam line loads, general section properties, fixed/pinned bases and optional self-weight. Native
+  Save/Open `.mcotis`, Undo/Redo, DOF options, async linear static frame analysis and result tables. Main **File →
+  Open Native Model…** reopens saved native input. Main **Run → Analysis Options…** now opens a staged WPF dialog:
+  fixed XZ DOFs plus the real planar cable-fit tolerance/iterations/mesh/sag; the native dialog offers 3D/planar/custom
+  DOFs and marks cable/mesh controls inactive. Native limits: frames only, 600 free / 2,400 total DOFs, no result-file
+  storage, no slabs/diaphragms, no native cable/P-Delta/modal solver. Full scope: `docs/native-building-ui.md`;
+  checks `--template-building-ui`. Preserve Apply/OK/Cancel semantics and the result current/stale state.
 - `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/` and `.work/` wherever they are.
 - The app is a WPF app targeting `net8.0-windows`, `x64`, with SAP2000 API reference `CSiAPIv1.dll`.
 

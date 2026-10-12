@@ -1,0 +1,50 @@
+<Window x:Class="COT_VCF.Presentation.AnalysisOptionsWindow"
+ xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+ xmlns:p="clr-namespace:COT_VCF.Presentation" Title="Analysis Options" Icon="{x:Static p:AppIcon.Window}"
+ Width="530" Height="440" MinHeight="380" ResizeMode="CanResize" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+ <DockPanel Margin="10">
+  <StackPanel DockPanel.Dock="Bottom">
+   <TextBlock x:Name="ErrorText" TextWrapping="Wrap" Foreground="{StaticResource Error}" Margin="0,8" AutomationProperties.LiveSetting="Polite"/>
+   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+    <Button x:Name="OkButton" Content="OK" MinWidth="80" Margin="4" IsDefault="True" Click="Ok_Click"/>
+    <Button Content="Cancel" MinWidth="80" Margin="4" IsCancel="True"/>
+    <Button x:Name="ApplyButton" Content="Apply" MinWidth="80" Margin="4" Click="Apply_Click"/>
+   </StackPanel>
+  </StackPanel>
+  <TabControl>
+   <TabItem Header="Degrees of Freedom">
+    <StackPanel Margin="12">
+     <TextBlock Text="Active global degrees of freedom" FontWeight="SemiBold" Margin="0,0,0,8"/>
+     <ComboBox x:Name="Preset" SelectionChanged="Preset_Changed" AutomationProperties.Name="DOF preset" Margin="0,0,0,8">
+      <ComboBoxItem Content="Full 3D" Tag="Full3D"/><ComboBoxItem Content="XZ plane" Tag="XZ"/>
+      <ComboBoxItem Content="YZ plane" Tag="YZ"/><ComboBoxItem Content="XY plane" Tag="XY"/><ComboBoxItem Content="Custom" Tag="None"/>
+     </ComboBox>
+     <UniformGrid x:Name="DofEditors" Columns="3" Rows="2">
+      <CheckBox x:Name="UX" Content="UX — X translation" Margin="0,5"/>
+      <CheckBox x:Name="UY" Content="UY — Y translation" Margin="0,5"/>
+      <CheckBox x:Name="UZ" Content="UZ — Z translation" Margin="0,5"/>
+      <CheckBox x:Name="RX" Content="RX — X rotation" Margin="0,5"/>
+      <CheckBox x:Name="RY" Content="RY — Y rotation" Margin="0,5"/>
+      <CheckBox x:Name="RZ" Content="RZ — Z rotation" Margin="0,5"/>
+     </UniformGrid>
+     <TextBlock Text="Inactive DOFs are excluded globally. Point restraints are separate support assignments. Plane presets require geometry and loads in that plane." TextWrapping="Wrap" Margin="0,12,0,6"/>
+     <TextBlock x:Name="ScopeText" TextWrapping="Wrap" Foreground="{StaticResource Muted}"/>
+    </StackPanel>
+   </TabItem>
+   <TabItem Header="Cable Force Fitting">
+    <StackPanel Margin="12">
+     <TextBlock x:Name="CableScope" TextWrapping="Wrap" Margin="0,0,0,10"/>
+     <Grid>
+      <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions>
+      <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/></Grid.RowDefinitions>
+      <TextBlock Text="Target-force tolerance (%)"/><TextBox x:Name="Tolerance" Grid.Column="1" AutomationProperties.Name="Cable fitting tolerance percent"/>
+      <TextBlock Grid.Row="1" Text="Maximum fitting iterations"/><TextBox x:Name="Iterations" Grid.Row="1" Grid.Column="1" AutomationProperties.Name="Maximum cable fitting iterations"/>
+      <TextBlock Grid.Row="2" Text="Mesh segments per frame"/><TextBox x:Name="Mesh" Grid.Row="2" Grid.Column="1" AutomationProperties.Name="Frame mesh segments"/>
+      <CheckBox x:Name="Sag" Grid.Row="3" Grid.ColumnSpan="2" Content="Include cable sag"/>
+     </Grid>
+     <TextBlock Text="Cable target forces are assigned to individual cables and load patterns. Tolerance is the allowed percentage error relative to each target." TextWrapping="Wrap" Margin="0,12,0,0"/>
+    </StackPanel>
+   </TabItem>
+  </TabControl>
+ </DockPanel>
+</Window>

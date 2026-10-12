@@ -76,6 +76,12 @@
   </Target>
 
   <ItemGroup>
+    <ProjectReference Include="..\Mcotis.Application\Mcotis.Application.csproj" />
+    <ProjectReference Include="..\Mcotis.Analysis\Mcotis.Analysis.csproj" />
+    <ProjectReference Include="..\Mcotis.Persistence\Mcotis.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="CSiAPIv1"><HintPath>$(SapInstallDir)\CSiAPIv1.dll</HintPath><Private>true</Private></Reference>
     <InternalsVisibleTo Include="COT_VCF.Checks" />
   </ItemGroup>

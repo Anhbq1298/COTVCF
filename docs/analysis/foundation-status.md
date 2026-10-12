@@ -8,6 +8,10 @@ Later the same day a limited dense 3D linear static frame engine was added on to
 source inspection and numerical evidence are in [spatial-static-verification.md](spatial-static-verification.md);
 statements below that say no numerical solver exists describe this milestone as it stood.
 
+The first desktop connection is now **Edit → TemplateBuilding…** and its native workspace: generation, Save/Open,
+Undo/Redo, DOF settings, linear static runs and result tables. See [native UI scope](../native-building-ui.md).
+This does not complete the full desktop migration or change numerical verification gates.
+
 ## Repository audit and scope
 
 The supplied [implementation plan](IMPLEMENTATION_PLAN.md) and [literature register](literature.md) are retained as

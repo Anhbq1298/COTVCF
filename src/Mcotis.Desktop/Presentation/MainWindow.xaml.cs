@@ -10,6 +10,24 @@ namespace COT_VCF.Presentation;
 
 public partial class MainWindow : Window
 {
+    private void TemplateBuilding_Click(object sender, RoutedEventArgs e) => NativeModelWindow.CreateTemplate(this);
+    private void OpenNativeModel_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Mcotis native model (*.mcotis)|*.mcotis" };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            var session = new Mcotis.Application.DocumentSession();
+            new Mcotis.Application.DocumentLifecycle(session, new Mcotis.Persistence.NativeDocumentStore()).Open(dialog.FileName);
+            new NativeModelWindow(session).Show();
+        }
+        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Open native model", MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
+    private void AnalysisOptions_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+            new AnalysisOptionsWindow(vm.PlanarAnalysisSettings, vm.ApplyPlanarAnalysisSettings, planar: true, editable: vm.CanEditFemModel) { Owner = this }.ShowDialog();
+    }
     // Remembers the user's dragged split so it survives visits to the full-width tabs.
     private GridLength paramsColumnWidth = new(2, GridUnitType.Star);
     private GridLength viewerColumnWidth = new(3, GridUnitType.Star);

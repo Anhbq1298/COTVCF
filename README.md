@@ -2,6 +2,18 @@
 
 **Mcotis** — *Meinhardt Cities of Tomorrow Integrated Structures* (formerly COT VCF Parametric Automation).
 
+**Standalone building workflow:** **Edit → TemplateBuilding…** opens a WPF form for X/Y bay counts, individual bay
+widths (m), storey heights (m), and downward floor-beam line loads (kN/m). Review the general beam/column properties
+and fixed/pinned base supports, then **Create Model** opens a native workspace. Save/Open `.mcotis`, Undo/Redo,
+**Run → Analysis Options…** (Full 3D / XZ / YZ / XY / custom DOFs), and **Run Linear Static** use the standalone libraries.
+Joint displacement/reaction and frame local end-action tables show the result case and current/stale state.
+**File → Open Native Model…** reopens a saved building without going through the template form.
+
+The native engine currently handles linear static frames, with at most 600 free / 2,400 total DOFs. Templates have
+rigid beam-column connections and no slabs or diaphragms. Native cable analysis is not implemented. In the main
+planar workspace, **Run → Analysis Options… → Cable Force Fitting** edits the existing solver's tolerance, iteration
+limit, mesh and sag inputs; that solver retains its XZ DOFs. See [native UI scope](docs/native-building-ui.md).
+
 WPF / .NET 8 desktop application for defining structural-study candidates from an existing SAP2000 model, then building and analyzing one isolated child `.sdb` model per selected combination.
 
 The study workflow is sequential:

@@ -18,6 +18,7 @@ internal static class Program
             ("Native file", PersistenceChecks.Run),
             ("3D topology and DOF compilation", DofCompilationChecks.Run),
             ("Spatial linear static engineering benchmarks", SpatialStaticChecks.Run),
+            ("TemplateBuilding generation, loading and analysis", TemplateBuildingChecks.Run),
             ("Independence", IndependenceChecks.Run),
         ];
         foreach (var (name, run) in groups)

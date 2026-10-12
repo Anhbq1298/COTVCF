@@ -219,7 +219,7 @@ public partial class Structural2DViewer : UserControl
         View3DInfo.Text = scene.Deflected is { } shape
             ? $"Deflected shape 3D · largest |U| {shape.MaximumMm:G4} mm, drawn × {shape.Magnification:G3}" + gestures
             : MemberSections is null
-            ? "Isometric 3D · member sizes not read — use Read from SAP (FEM → Inputs) for to-scale sections · drag rotate · right-drag pan · wheel zoom · double-click fit"
+            ? "Isometric 3D · geometry view; section outlines unavailable · drag rotate · right-drag pan · wheel zoom · double-click fit"
             : $"Isometric 3D · to scale · {scene.FramesWithSapShape} frames with their section dimensions" +
               (scene.FramesApproximated > 0 ? $", {scene.FramesApproximated} as equivalent solid (same A, I)" : "") +
               (SectionDrawings?.Values.Any(drawing => drawing.Composite) == true ? " · composite sections see-through" : "") + gestures;

@@ -13,6 +13,9 @@
   <Menu x:Name="MainMenu" DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1"
         Padding="6,2" FontSize="12" AutomationProperties.Name="Main menu" MenuItem.SubmenuOpened="MainMenu_SubmenuOpened">
    <MenuItem Header="_File">
+    <MenuItem Header="Open _Native Model…" Click="OpenNativeModel_Click" AutomationProperties.Name="Open Native Model"
+              ToolTip="Open a .mcotis model in the native model workspace"/>
+    <Separator/>
     <MenuItem Header="_New Config" Command="{Binding NewConfig}"
               ToolTip="Start a blank MCOTiS model. Define materials and frame/cable sections, then create the VCF system under Edit."/>
     <MenuItem Header="_Load Config…" Command="{Binding LoadFemModel}"
@@ -51,8 +54,10 @@
     <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click" IsEnabled="{Binding HasUsableModelGeometry}"
               ToolTip="Define the load cases: the default staged setup (Pretension → SLS / ULS), the cases saved from SAP2000, or your own"/>
    </MenuItem>
-   <MenuItem Header="_Edit" IsEnabled="{Binding CanEditVcfGeometry}">
-    <MenuItem Header="_VCF System…" Click="VcfGeometry_Click" AutomationProperties.Name="VCF System"
+   <MenuItem Header="_Edit">
+    <MenuItem Header="_TemplateBuilding…" Click="TemplateBuilding_Click" AutomationProperties.Name="TemplateBuilding"
+              ToolTip="Create a native building frame with X/Y bays, storey heights and beam line loads in a new model workspace"/>
+    <MenuItem Header="_VCF System…" Click="VcfGeometry_Click" AutomationProperties.Name="VCF System" IsEnabled="{Binding CanEditVcfGeometry}"
               ToolTip="Create or edit the parametric VCF geometry after defining materials and frame/cable sections"/>
     <Separator/>
     <MenuItem Header="_Delete" Click="DeleteSelection_Click" InputGestureText="Del" IsEnabled="{Binding CanEditFemModel}" AutomationProperties.Name="Delete"
@@ -86,7 +91,7 @@
     <MenuItem Header="Analysis _Monitor" Click="OpenFemMonitorClick"
               ToolTip="Open analysis progress and cable convergence. Diagnostic details are collapsed by default."/>
     <Separator/>
-    <MenuItem Header="Analysis _Options" Tag="5" Click="FemPaneMenu_Click"/>
+    <MenuItem Header="Analysis _Options…" Click="AnalysisOptions_Click" AutomationProperties.Name="Analysis Options"/>
    </MenuItem>
    <MenuItem x:Name="ResultMenu" Header="Res_ult" IsEnabled="{Binding HasUsableModelGeometry}">
     <MenuItem Header="Show _Deformed Shape…" InputGestureText="F5" Click="ShowDeformedShape_Click" IsEnabled="{Binding HasFemResults}" ToolTip="Choose the load case for the deformed shape"/>
@@ -204,7 +209,7 @@
       <Button Style="{StaticResource ToolbarButton}" Content="{Binding FemLockGlyph}" Command="{Binding ToggleFemModelLock}"
               ToolTip="{Binding FemLockActionText}" AutomationProperties.Name="Lock or unlock FEM model"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE768;" Command="{Binding RunFemAnalysis}" ToolTip="Run FEM Analysis (Run → Run FEM Analysis)" AutomationProperties.Name="Run FEM Analysis"/>
-      <Button Style="{StaticResource ToolbarButton}" Content="&#xE713;" Tag="5" Click="FemPaneMenu_Click" IsEnabled="{Binding HasUsableModelGeometry}" ToolTip="Analysis Options (Run → Analysis Options)" AutomationProperties.Name="Analysis Options"/>
+      <Button Style="{StaticResource ToolbarButton}" Content="&#xE713;" Click="AnalysisOptions_Click" IsEnabled="{Binding HasUsableModelGeometry}" ToolTip="Analysis Options (Run → Analysis Options)" AutomationProperties.Name="Analysis Options"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE9D9;" Click="OpenFemMonitorClick" ToolTip="Analysis Monitor (Run → Analysis Monitor)" AutomationProperties.Name="Analysis Monitor"/>
       <Border Style="{StaticResource ToolbarSeparator}"/>
       <!-- SAP2000-style tools: Select (default — a click selects joints / members, a drag draws a window) and Pan -->

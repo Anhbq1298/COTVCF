@@ -19,6 +19,13 @@ internal static class Program
     {
         try
         {
+            if (args.Contains("--template-building-ui"))
+            {
+                var app = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/Presentation/Theme.xaml", UriKind.Relative) });
+                TemplateBuildingUiChecks.Run();
+                return 0;
+            }
             if (args.Contains("--spatial-frame-regression"))
             {
                 SpatialFrameRegressionChecks.Run();
@@ -362,7 +369,9 @@ internal static class Program
                 Assert(forcesWindow.ParameterTabs.Items.OfType<TabItem>().Select(tab => tab.Header as string).SequenceEqual(["Geometry", "Cable Force", "Storey Force", "Sections"]) &&
                        cableRows.Count == 16 && cableRows.Single(row => row.Cable == "Cable1a-2").Force == Kn(100_000) &&
                        cableRows.Single(row => row.Cable == "Cable2a-2").Force == Kn(30_000) && cableRows.Single(row => row.Cable == "Cable1b-2").Sync.StartsWith("=", StringComparison.Ordinal),
-                    "VCF Geometry has sheets Geometry | Cable Force | Storey Force | Sections, and shows each cable's pretension on Cable Force (Cable1a-2 100,000 kN, Cable2a-2 30,000 kN, Cable1b-2 following Cable1a-2)");
+                    "VCF Geometry has sheets Geometry | Cable Force | Storey Force | Sections, and shows each cable's pretension on Cable Force (Cable1a-2 100,000 kN, Cable2a-2 30,000 kN, Cable1b-2 following Cable1a-2)" +
+                    $" [tabs={string.Join('|', sheetTabs.Select(t => t.Header))}; rows={cableRows.Count}; " +
+                    string.Join("; ", cableRows.Where(r => r.Cable is "Cable1a-2" or "Cable2a-2" or "Cable1b-2").Select(r => $"{r.Cable}: Force={r.Force}, Sync={r.Sync}")) + "]");
                 Assert(storeyRows.Count == 11 && storeyRows[0].Area == "60" && storeyRows[5].Area == "120" &&
                        storeyRows[5].Forces[0] == Kn(-12_000) && storeyRows[0].Forces[0] == Kn(-6_000) && storeyRows[5].Forces[1] == Kn(-6_000) &&
                        forcesWindow.StoreyLoads.Select(row => (row.Pattern, row.Qz)).SequenceEqual([("DEAD_ABOVE", "10"), ("LL_ABOVE", "5")]) &&
@@ -802,12 +811,17 @@ internal static class Program
                 Assert(vm.PaneMenu == "Assign" && vm.FemPane == MainViewModel.FemPaneRestraints &&
                        FindVisuals<TextBlock>(window).Any(text => text.IsVisible && text.Text == vm.FemPinSupportSummary),
                     "Assign -> Joint Restraints shows the auto-detected pin supports");
+                bool analysisFormOpened = false;
+                window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+                {
+                    var options = window.OwnedWindows.OfType<AnalysisOptionsWindow>().Single();
+                    analysisFormOpened = options.IsVisible && !options.DofEditors.IsEnabled && options.Sag.IsChecked == vm.FemCableSag;
+                    options.Close();
+                }));
                 OpenMenu("Run", "Analysis Options");
-                Assert(vm.PaneMenu == "Run" && vm.SelectedFemPage == MainViewModel.FemAnalysisPage &&
-                       FindVisuals<Button>(window).Any(button => button.IsVisible && Equals(button.Content, "Run Analysis")) &&
-                       FindVisuals<TextBlock>(window).Any(text => text.IsVisible && text.Text == vm.FemRunSummary) &&
-                       window.SharedViewerPane.Visibility == Visibility.Visible,
-                    "Run -> Analysis Options holds the internal 2D frame analysis settings, the run controls and what the one run solves");
+                Assert(analysisFormOpened, "Run -> Analysis Options opens the staged DOF and cable fitting form");
+                vm.SelectedTab = 7; vm.FemPane = MainViewModel.FemPaneAnalysisOptions;
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var sagBox = FindVisuals<CheckBox>(window).Single(box => Equals(box.Content, "Cable sag"));
                 Assert(vm.FemCableSag && sagBox.IsChecked == true, "Tab 07 Analysis analyses cable sag by default");
                 sagBox.IsChecked = false;
