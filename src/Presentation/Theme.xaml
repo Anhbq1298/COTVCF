@@ -277,6 +277,19 @@
    </Setter.Value>
   </Setter>
  </Style>
+ <!-- The header of a top-level menu that has to stand out on the menu bar (Optimization): accent text on the pale
+      selection tint. A template, so the menu's Header stays its plain text and its drop-down keeps the normal colours. -->
+ <DataTemplate x:Key="HighlightedMenuHeader">
+  <Border x:Name="chip" Background="{StaticResource Selected}" BorderBrush="{StaticResource SelectedBorder}" BorderThickness="1" CornerRadius="3"
+          Padding="7,0,7,1" Margin="-3,0" SnapsToDevicePixels="True">
+   <AccessText Text="{Binding}" Foreground="{StaticResource Accent}" FontWeight="SemiBold"/>
+  </Border>
+  <DataTemplate.Triggers>
+   <DataTrigger Binding="{Binding IsEnabled, RelativeSource={RelativeSource AncestorType=MenuItem}}" Value="False">
+    <Setter TargetName="chip" Property="Opacity" Value="0.45"/>
+   </DataTrigger>
+  </DataTemplate.Triggers>
+ </DataTemplate>
  <!-- Faded, independently focusable help target placed beside compact actions. -->
  <Style x:Key="InlineHelpIcon" TargetType="TextBlock">
   <Setter Property="Text" Value="&#9432;"/>

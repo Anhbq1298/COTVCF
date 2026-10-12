@@ -129,9 +129,10 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 MenuItem TopMenu(string header) => window.MainMenu.Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == header);
                 Assert(window.MainMenu.Items.OfType<MenuItem>().Select(item => (item.Header as string)!.Replace("_", ""))
-                           .SequenceEqual(["File", "Define", "Edit", "Assign", "Run", "Result", "Post-Processing", "Display", "Design", "Help", "MB"]) &&
-                       window.MainMenu.Items[^2] is Separator && ReferenceEquals(window.MainMenu.Items[^1], TopMenu("MB")),
-                    "The menu bar puts Define before Edit, followed by Assign and the analysis/result menus; MB is last, after a separator");
+                           .SequenceEqual(["File", "Define", "Edit", "Assign", "Run", "Result", "Post-Processing", "Display", "Design", "Help", "Optimization", "MB"]) &&
+                       window.MainMenu.Items[^2] is Separator && ReferenceEquals(window.MainMenu.Items[^1], TopMenu("MB")) &&
+                       window.MainMenu.Items[^4] is Separator && ReferenceEquals(window.MainMenu.Items[^3], TopMenu("Optimization")),
+                    "The menu bar puts Define before Edit, followed by Assign and the analysis/result menus; Optimization, then MB, come last, each after a separator");
                 Assert(!FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
                        vm.NewConfig.CanExecute(null) && !TopMenu("MB").IsEnabled && TopMenu("Define").IsEnabled && TopMenu("File").IsEnabled,
                     "Before a model exists, model workflows stay disabled while New Config and Define remain available");
@@ -482,8 +483,9 @@ internal static class Program
                 Assert(new VcfRange(10, 14, 1.5).Values().SequenceEqual([10, 11.5, 13]) && new VcfRange(10, 13, 1.5).Values().SequenceEqual([10, 11.5, 13]) && new VcfRange(8, 8, 0).Count == 1 &&
                        new VcfRange(9, 8, 1).Problem() is not null && new VcfRange(2, 6, 0.5).Problem(whole: true) is not null,
                     "A VCF range runs Min, Min + Step, … up to Max without adding an off-step Max (the Tab 01 / 03 rule); Min = Max is one value; Max < Min and fractional bay steps are refused");
-                Assert(TopMenu("Run").Items.OfType<MenuItem>().Any(item => (item.Header as string)?.Replace("_", "") == "Optimization VCF…"),
-                    "Run offers Optimization VCF…");
+                Assert(TopMenu("Optimization").Items.OfType<MenuItem>().Any(item => (item.Header as string)?.Replace("_", "") == "Optimization VCF…") &&
+                       !TopMenu("Run").Items.OfType<MenuItem>().Any(item => (item.Header as string)?.Contains("Optimization") == true),
+                    "The Optimization tab offers Optimization VCF…; Run no longer lists it");
                 var optimization = new OptimizationVcfWindow(defaultVm) { Owner = window };
                 optimization.Show();
                 optimization.UpdateLayout();
@@ -876,7 +878,7 @@ internal static class Program
                 Assert(TopMenu("Assign").Items.OfType<MenuItem>().Select(item => (item.Header as string)?.Replace("_", "")).SequenceEqual(["Joint", "Frame", "Cable"]),
                     "Assign is organised as SAP2000: Joint, Frame, Cable");
                 canvas.ClearSelection();
-                Assert(canvas.SelectedMembers.Count == 0 && canvas.SelectedJoints.Count == 0 && !window.SharedViewer.PanMode, "Clear Selection empties the selection; Select returns from pan");
+                Assert(canvas.SelectedMembers.Count == 0 && canvas.SelectedJoints.Count == 0 && !window.SharedViewer.PanMode, "Clear Selection empties the selection; the Select tool is on");
                 Tool("Show Undeformed Shape").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert(vm.ShowUndeformed && vm.SharedViewerFemResult is null && vm.FemRuns.Contains(demoFemRun) && demoFemRun.Result is not null,
                     "Show Undeformed Shape (frame icon) clears the result display and keeps the results");

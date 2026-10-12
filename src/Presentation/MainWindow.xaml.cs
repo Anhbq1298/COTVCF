@@ -46,12 +46,36 @@ public partial class MainWindow : Window
             if (member is null || !vm.FemSectionProperties.Any(item => item.MemberName == name)) return;
             new MemberAssignmentWindow(vm, member) { Owner = this }.ShowDialog();
         };
-        // right-click a member (2D or 3D): its information, as ETABS shows it
+        // right-click a member or a point (2D or 3D): its information, as ETABS shows it
         SharedViewer.MemberInformationRequested += (_, name) =>
         {
             if (DataContext is not MainViewModel vm || SharedViewer.Model.Members.FirstOrDefault(item => item.Name == name) is not { } member) return;
             new ObjectInformationWindow(vm, member, SharedViewer.Model) { Owner = this }.ShowDialog();
         };
+        SharedViewer.JointInformationRequested += (_, name) =>
+        {
+            if (DataContext is not MainViewModel vm || !SharedViewer.Model.Points.TryGetValue(name, out var point)) return;
+            new ObjectInformationWindow(vm, point, SharedViewer.Model) { Owner = this }.ShowDialog();
+        };
+        // the status bar counts what is selected, in the 2D view or the 3D view; a new model has its own objects
+        SharedViewer.SelectionChanged += (_, _) => UpdateSelectionStatus();
+        System.ComponentModel.DependencyPropertyDescriptor.FromProperty(Controls.Structural2DViewer.ModelProperty, typeof(Controls.Structural2DViewer))
+            .AddValueChanged(SharedViewer, (_, _) => UpdateSelectionStatus());
+    }
+
+    /// <summary>The status bar's count of the selected objects by kind. Mcotis has no shell objects yet, so that count is 0.</summary>
+    private void UpdateSelectionStatus()
+    {
+        var frameNames = SharedViewer.Model.Members.Where(member => member.Kind == Domain.MemberKind.Frame).Select(member => member.Name).ToHashSet(StringComparer.Ordinal);
+        var frames = SharedViewer.SelectedMembers.Count(frameNames.Contains);
+        var cables = SharedViewer.SelectedMembers.Count - frames;
+        SelectionStatus.Text = SelectionText(frames, cables, SharedViewer.SelectedJoints.Count, shells: 0);
+    }
+
+    internal static string SelectionText(int frames, int cables, int points, int shells)
+    {
+        static string Count(int count, string noun) => $"{count} {noun}{(count == 1 ? "" : "s")}";
+        return $"Selected: {Count(frames, "Frame")} · {Count(cables, "Cable")} · {Count(points, "Point")} · {Count(shells, "Shell")}";
     }
 
     // The model preview is one shared viewer hoisted out of the TabControl. Tabs 01-04 (Loading, Truss,
@@ -671,11 +695,21 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
-        // Esc, as SAP2000: leave pan mode and clear the model view's selection (not while typing in a field or list)
-        if (e.Key == System.Windows.Input.Key.Escape && System.Windows.Input.Keyboard.FocusedElement is not (System.Windows.Controls.Primitives.TextBoxBase or System.Windows.Controls.ComboBox) &&
-            (SharedViewer.PanMode || SharedViewer.SelectedMembers.Count + SharedViewer.SelectedJoints.Count > 0))
+        // V: the Select tool, from anywhere in the window (not while typing in a field or a grid, or with a menu open)
+        if (e.Key == System.Windows.Input.Key.V && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.None &&
+            System.Windows.Input.Keyboard.FocusedElement is not (System.Windows.Controls.Primitives.TextBoxBase or System.Windows.Controls.ComboBox or
+                System.Windows.Controls.DataGrid or System.Windows.Controls.DataGridCell or MenuItem) &&
+            DataContext is MainViewModel { ShowSharedViewer: true })
         {
             SharedViewer.PanMode = false;
+            e.Handled = true;
+            return;
+        }
+        // Esc clears the model view's selection (not while typing in a field or list). It no longer changes the tool:
+        // Pan stays Pan until V or the Select button.
+        if (e.Key == System.Windows.Input.Key.Escape && System.Windows.Input.Keyboard.FocusedElement is not (System.Windows.Controls.Primitives.TextBoxBase or System.Windows.Controls.ComboBox) &&
+            SharedViewer.SelectedMembers.Count + SharedViewer.SelectedJoints.Count > 0)
+        {
             SharedViewer.ClearSelection();
             e.Handled = true;
             return;

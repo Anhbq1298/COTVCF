@@ -18,6 +18,25 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-12 · Optimization tab on the menu bar
+- Status: Done
+- Who: markbui
+- Where: Optimization (menu bar, between Help and MB)
+- What: Optimization VCF…, Optimization Results… and Cancel Optimization have a menu of their own, set apart by a
+  separator and highlighted. They are no longer under Run.
+- Checks: --result-tools-ui; --study-ui
+
+## 2026-10-12 · Selecting points, frames and cables on the model view
+- Status: Done
+- Who: markbui
+- Where: Model view, 2D and 3D; Select tool (V); status bar
+- What: A left click selects a point as well as a frame or a cable, in the 3D view too, where every point is now drawn.
+  A right-click shows the object's information — Point Information for a point: coordinates, the members that meet at
+  it, its support and its loads. V is the Select tool; Esc only clears the selection and no longer leaves Pan. The
+  status bar counts the selected frames, cables, points and shells (the app has no shells yet). Selecting by a window
+  stays 2D only: a drag in 3D rotates the model.
+- Checks: --result-tools-ui
+
 ## 2026-10-12 · Help → Development Plans and the compulsory development log
 - Status: Done
 - Who: Philip Pham

@@ -6,25 +6,29 @@ using COT_VCF.Domain;
 namespace COT_VCF.Presentation;
 
 /// <summary>
-/// Frame / Cable Information, as ETABS shows it for a right-clicked object: tabs Geometry, Assignments and Loads, each a
-/// grid of name / value lines under section bands (<see cref="MainViewModel.MemberInformation"/>). Read-only — the values
-/// can be selected and copied; Modify Assignments opens <see cref="MemberAssignmentWindow"/> and the form shows the
-/// result.
+/// Frame / Cable / Point Information, as ETABS shows it for a right-clicked object: tabs Geometry, Assignments and Loads,
+/// each a grid of name / value lines under section bands (<see cref="MainViewModel.MemberInformation"/>,
+/// <see cref="MainViewModel.PointInformation"/>). Read-only — the values can be selected and copied; for a member, Modify
+/// Assignments opens <see cref="MemberAssignmentWindow"/> and the form shows the result.
 /// </summary>
 public sealed class ObjectInformationWindow : Window
 {
-    private readonly MainViewModel viewModel;
-    private readonly StructuralMember member;
-    private readonly GeometryModel? shown;
+    private readonly Func<IReadOnlyList<InformationTab>> information;
     private readonly TabControl tabs = new();
 
     /// <param name="shown">The geometry the member was picked in (the view's model); the model's own when omitted.</param>
     public ObjectInformationWindow(MainViewModel viewModel, StructuralMember member, GeometryModel? shown = null)
+        : this(viewModel, $"{(member.Kind == MemberKind.Frame ? "Frame" : member.Kind.ToString())} Information - {member.Name}",
+            () => viewModel.MemberInformation(member, shown), member) { }
+
+    /// <param name="shown">The geometry the point was picked in (the view's model); the model's own when omitted.</param>
+    public ObjectInformationWindow(MainViewModel viewModel, StructuralPoint point, GeometryModel? shown = null)
+        : this(viewModel, $"Point Information - {point.Name}", () => viewModel.PointInformation(point, shown), null) { }
+
+    private ObjectInformationWindow(MainViewModel viewModel, string title, Func<IReadOnlyList<InformationTab>> information, StructuralMember? member)
     {
-        this.viewModel = viewModel;
-        this.member = member;
-        this.shown = shown;
-        Title = $"{(member.Kind == MemberKind.Frame ? "Frame" : member.Kind.ToString())} Information - {member.Name}";
+        this.information = information;
+        Title = title;
         Icon = AppIcon.Window;
         Width = 470; Height = 640; MinWidth = 400; MinHeight = 360;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -42,18 +46,21 @@ public sealed class ObjectInformationWindow : Window
         System.Windows.Automation.AutomationProperties.SetName(tabs, "Object information");
         Fill();
 
-        var modify = new Button { Content = "Modify Assignments…", MinWidth = 150, HorizontalAlignment = HorizontalAlignment.Left,
-            IsEnabled = viewModel.FemSectionProperties.Any(item => item.MemberName == member.Name),
-            ToolTip = "Change the section, local axis, end releases or cable target force of this member" };
-        modify.Click += (_, _) =>
-        {
-            new MemberAssignmentWindow(viewModel, member) { Owner = this }.ShowDialog();
-            Fill();
-        };
         var ok = new Button { Content = "OK", MinWidth = 84, IsDefault = true, IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right };
         ok.Click += (_, _) => Close();
         var buttons = new Grid { Margin = new Thickness(0, 10, 0, 0) };
-        buttons.Children.Add(modify);
+        if (member is not null)   // a point has no assignment form of its own: its support is set under Assign → Joint
+        {
+            var modify = new Button { Content = "Modify Assignments…", MinWidth = 150, HorizontalAlignment = HorizontalAlignment.Left,
+                IsEnabled = viewModel.FemSectionProperties.Any(item => item.MemberName == member.Name),
+                ToolTip = "Change the section, local axis, end releases or cable target force of this member" };
+            modify.Click += (_, _) =>
+            {
+                new MemberAssignmentWindow(viewModel, member) { Owner = this }.ShowDialog();
+                Fill();
+            };
+            buttons.Children.Add(modify);
+        }
         buttons.Children.Add(ok);
 
         var root = new DockPanel { Margin = new Thickness(10) };
@@ -70,7 +77,7 @@ public sealed class ObjectInformationWindow : Window
     private void Fill()
     {
         var open = Math.Max(0, tabs.SelectedIndex);
-        Shown = viewModel.MemberInformation(member, shown);
+        Shown = information();
         tabs.Items.Clear();
         foreach (var tab in Shown) tabs.Items.Add(new TabItem { Header = tab.Title, Content = Sheet(tab) });
         tabs.SelectedIndex = Math.Min(open, tabs.Items.Count - 1);

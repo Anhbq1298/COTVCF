@@ -61,6 +61,8 @@
      <ModelVisual3D x:Name="Structure3D"/>
      <ModelVisual3D x:Name="LocalAxes3D"/>
     </Viewport3D>
+    <!-- the model's points on the 3D view, so they can be clicked as in 2D; the selected ones carry the amber cross -->
+    <local:JointMarkers3D x:Name="Joints3D"/>
     <TextBlock x:Name="View3DInfo" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,12,0,0" Style="{StaticResource Caption}"/>
     <Border x:Name="FrameAxisLegend" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="5,2" Background="{StaticResource Overlay}" Visibility="Collapsed">
      <!-- below the deflected shape options while those show -->

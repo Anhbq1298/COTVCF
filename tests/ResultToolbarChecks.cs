@@ -163,6 +163,7 @@ internal static class ResultToolbarChecks
                   !window.SharedViewer.Canvas.RequestInformationAt(new Point(3, 3)),
                 "a right-click on a frame selects it and opens Frame Information with Geometry, Assignments and Loads; a right-click on empty space does nothing");
             window.SharedViewer.ClearSelection();
+            CheckObjectSelection(window, vm);
             Check3DDeflectedShape();
 
             Tool("Show Results").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
@@ -240,6 +241,112 @@ internal static class ResultToolbarChecks
                 "unlock removes results and greys out F5/F6/F7 again");
         }
         finally { window.Close(); }
+    }
+
+    /// <summary>Selecting on the model view (asked for by the user, 2026-10-12): a left click chooses points as well as
+    /// frames and cables, a right-click shows the information of a point too, V is the Select tool, Esc only clears, the 3D
+    /// view selects like the 2D view, and the status bar counts what is selected. Also the Optimization tab of the menu bar.</summary>
+    private static void CheckObjectSelection(MainWindow window, MainViewModel vm)
+    {
+        var viewer = window.SharedViewer;
+        var canvas = viewer.Canvas;
+        var status = (TextBlock)window.FindName("SelectionStatus")!;
+        const string nothing = "Selected: 0 Frames · 0 Cables · 0 Points · 0 Shells";
+        Check(status.Text == nothing && MainWindow.SelectionText(1, 2, 1, 0) == "Selected: 1 Frame · 2 Cables · 1 Point · 0 Shells",
+            "the status bar counts the selected frames, cables, points and shells — none to begin with");
+
+        // right-click a point: its information. The window opens the form modally, so a queued action reads it and closes it.
+        (string? Title, IReadOnlyList<InformationTab> Tabs) Information(Func<bool> rightClick)
+        {
+            string? title = null;
+            IReadOnlyList<InformationTab> tabs = [];
+            window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                if (window.OwnedWindows.OfType<ObjectInformationWindow>().SingleOrDefault() is not { } form) return;
+                (title, tabs) = (form.Title, form.Shown);
+                form.Close();
+            }));
+            var asked = rightClick();
+            Idle();
+            return asked ? (title, tabs) : (null, []);
+        }
+        var corner = Information(() => canvas.RequestInformationAt(canvas.JointScreenPoints["TTrPt001"]));
+        Check(corner.Title == "Point Information - TTrPt001" && corner.Tabs.Select(tab => tab.Title).SequenceEqual(["Geometry", "Assignments", "Loads"]) &&
+              corner.Tabs[0].Sections.Select(section => section.Title).SequenceEqual(["Identification", "Coordinates", "Connectivity"]) &&
+              corner.Tabs[0].Sections[0].Rows.Any(row => row is { Name: "Label", Value: "TTrPt001" }) &&
+              corner.Tabs[0].Sections[2].Rows.Single(row => row.Name == "Frames").Value != "none" &&
+              viewer.SelectedJoints.SequenceEqual(["TTrPt001"]) && viewer.SelectedMembers.Count == 0 &&
+              status.Text == "Selected: 0 Frames · 0 Cables · 1 Point · 0 Shells" && !window.OwnedWindows.OfType<ObjectInformationWindow>().Any(),
+            "a right-click on a point selects it and opens Point Information with its coordinates and the members that meet at it");
+        var support = vm.FemPinSupportPoints.First();
+        var loaded = vm.State.AppliedPoints.First().PointName;
+        Check(vm.PointInformation(vm.State.Geometry.Points[support])[1].Sections[0].Rows[0].Value.StartsWith("Pin", StringComparison.Ordinal) &&
+              vm.PointInformation(vm.State.Geometry.Points["TTrPt001"])[1].Sections[0].Rows[0].Value.StartsWith("None", StringComparison.Ordinal) &&
+              vm.PointInformation(vm.State.Geometry.Points[loaded])[2].Sections.Single(section => section.Title == "Storey force").Rows is { Count: > 0 } storey &&
+              storey.All(row => row.Value.StartsWith("Fz ", StringComparison.Ordinal)) &&
+              vm.PointInformation(vm.State.Geometry.Points[support])[2].Sections[0].Rows[0] is { Name: "Assigned loads", Value: "none" },
+            $"Point Information names a pin support ({support}), a free point, and the storey forces on a loaded point ({loaded})");
+
+        // a left click chooses: points, frames and cables alike
+        viewer.ClearSelection();
+        var cable = canvas.MemberScreenLines.First(item => item.Value.Kind == MemberKind.Cable).Key;
+        canvas.ToggleMemberSelection("170");
+        canvas.ToggleMemberSelection(cable);
+        Check(canvas.SelectAt(canvas.JointScreenPoints["TTrPt001"]) && canvas.SelectAt(canvas.JointScreenPoints["TTrPt002"]) &&
+              status.Text == "Selected: 1 Frame · 1 Cable · 2 Points · 0 Shells",
+            "left clicks add points to the frames and cables selected; the status bar follows");
+        Check(canvas.SelectAt(canvas.JointScreenPoints["TTrPt002"]) && status.Text == "Selected: 1 Frame · 1 Cable · 1 Point · 0 Shells",
+            "a second click on a selected point deselects it");
+
+        // V is the Select tool; Esc clears the selection and leaves the tool alone
+        void Press(Key key) => window.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window)!, 0, key) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+        canvas.Focus();
+        viewer.PanMode = true;
+        Press(Key.Escape);
+        var afterEscape = (viewer.PanMode, status.Text);
+        Press(Key.V);
+        Check(afterEscape == (true, nothing) && !viewer.PanMode && canvas.Cursor == Cursors.Arrow,
+            "Esc clears the selection and leaves the Pan tool on; V returns to the Select tool");
+
+        // the 3D view selects as the 2D view does: a click on a point, a frame or a cable
+        viewer.ShowPlane("3D");
+        Idle();
+        var view3D = (Viewport3D)viewer.FindName("View3D")!;
+        var structure = (ModelVisual3D)viewer.FindName("Structure3D")!;
+        var markers = (JointMarkers3D)viewer.FindName("Joints3D")!;
+        Point OnScreen(Position position) => structure.TransformToAncestor(view3D)!.Transform(new Point3D(position.X, position.Y, position.Z));
+        var cornerAt = OnScreen(viewer.Model.Points["TTrPt001"].Position);
+        var picked = viewer.Select3DAt(cornerAt);
+        Idle();
+        Check(picked && viewer.SelectedJoints.SequenceEqual(["TTrPt001"]) && markers.Markers.Count == viewer.Model.Points.Count &&
+              markers.Markers.Count(marker => marker.Selected) == 1 && (markers.Markers.Single(marker => marker.Selected).At - cornerAt).Length < 1.5 &&
+              status.Text == "Selected: 0 Frames · 0 Cables · 1 Point · 0 Shells",
+            "a click on a point of the 3D view selects it: every point is drawn there, the selected one marked where the camera shows it");
+        var joints = viewer.Model.Points.Values.Select(point => OnScreen(point.Position)).ToArray();
+        var clear = viewer.Model.Members.Where(member => member.Kind == MemberKind.Frame)
+            .Select(member => OnScreen(viewer.Model.Points[member.Start].Position) + (OnScreen(viewer.Model.Points[member.End].Position) - OnScreen(viewer.Model.Points[member.Start].Position)) / 2)
+            .First(middle => joints.All(joint => (joint - middle).Length > 12));
+        Check(viewer.Select3DAt(clear) && viewer.SelectedMembers.Count == 1 && viewer.SelectedJoints.Count == 1 && status.Text.Contains("1 Point", StringComparison.Ordinal) &&
+              !viewer.Select3DAt(new Point(2, 2)) && viewer.SelectedMembers.Count == 1,
+            "a click on a member of the 3D view adds it to the selection; a click on empty space changes nothing");
+        var corner3D = Information(() => viewer.RequestInformation3DAt(cornerAt));
+        Check(corner3D.Title == "Point Information - TTrPt001" && viewer.SelectedJoints.SequenceEqual(["TTrPt001"]) && viewer.SelectedMembers.Count == 0,
+            "a right-click on a point of the 3D view selects it alone and opens Point Information");
+        viewer.ClearSelection();
+        viewer.ShowPlane("XZ");
+        Idle();
+        Check(status.Text == nothing && markers.Markers.Count == 0, "leaving the 3D view takes its point markers away; nothing is selected");
+
+        // the menu bar: Optimization has a tab of its own, set apart and highlighted, before MB
+        var bar = window.MainMenu.Items.Cast<object>().ToArray();
+        var optimization = window.MainMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "_Optimization"));
+        var at = Array.IndexOf(bar, optimization);
+        Check(bar[at - 1] is Separator && bar[at - 2] is MenuItem { Header: "_Help" } && bar[at + 1] is Separator && bar[at + 2] is MenuItem { Header: "_MB" } &&
+              ReferenceEquals(optimization.HeaderTemplate, window.FindResource("HighlightedMenuHeader")) &&
+              optimization.Items.OfType<MenuItem>().Select(item => ((string)item.Header).Replace("_", "")).SequenceEqual(["Optimization VCF…", "Optimization Results…", "Cancel Optimization"]) &&
+              !window.MainMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "_Run")).Items.OfType<MenuItem>()
+                  .Any(item => (item.Header as string)?.Contains("Optimization", StringComparison.Ordinal) == true),
+            "Optimization is a tab of its own on the menu bar — after a separator, highlighted, before MB — and Run no longer lists it");
     }
 
     /// <summary>The 3D view draws the deflected shape, with its legend and options, and a right-click on a member there asks

@@ -133,6 +133,68 @@ public sealed partial class MainViewModel
         return tabs;
     }
 
+    /// <summary>The information of <paramref name="point"/>: Geometry (identification, coordinates, the frames and cables
+    /// that meet at it), Assignments (its support) and Loads (the storey forces and joint loads on it, by load pattern).
+    /// <paramref name="shown"/> is the geometry the point was picked in; the model's own when omitted.</summary>
+    internal IReadOnlyList<InformationTab> PointInformation(StructuralPoint point, GeometryModel? shown = null)
+    {
+        var culture = CultureInfo.CurrentCulture;
+        string Number(double value, string format = "0.###") => double.IsFinite(value) ? value.ToString(format, culture) : "—";
+        static InformationRow Row(string name, string value) => new(name, value);
+        var geometry = shown ?? State.Geometry;
+
+        // ---- Geometry ----
+        var identification = new List<InformationRow> { Row("Label", point.Name), Row("Object type", "Point") };
+        var chord = State.Truss.TopPoints.Contains(point.Name) ? "Top chord point"
+            : State.Truss.MiddlePoints.Contains(point.Name) ? "Middle chord point"
+            : State.Truss.BottomPoints.Contains(point.Name) ? "Bottom chord point" : null;
+        if (chord is not null) identification.Add(Row("Role in the VCF system", chord));
+        var meeting = geometry.Members.Where(member => member.Start == point.Name || member.End == point.Name).ToArray();
+        string Names(IEnumerable<StructuralMember> members) => string.Join(", ", members.Select(member => member.Name)) is { Length: > 0 } names ? names : "none";
+        var tabs = new List<InformationTab>
+        {
+            new("Geometry",
+            [
+                new("Identification", identification),
+                new("Coordinates", [Row("X", $"{Number(point.Position.X)} m"), Row("Y", $"{Number(point.Position.Y)} m"), Row("Z", $"{Number(point.Position.Z)} m")]),
+                new("Connectivity",
+                [
+                    Row("Frames", Names(meeting.Where(member => member.Kind == MemberKind.Frame))),
+                    Row("Cables", Names(meeting.Where(member => member.Kind != MemberKind.Frame))),
+                ]),
+            ]),
+            // ---- Assignments ----
+            new("Assignments",
+            [
+                new("Restraint", [Row("Support", FemPinSupportPoints.Contains(point.Name)
+                    ? "Pin — translations X and Z restrained, rotation free" : "None — free")]),
+            ]),
+        };
+
+        // ---- Loads ----
+        var loads = new List<InformationSection>();
+        if (State.AppliedPoints.Any(applied => applied.PointName == point.Name))
+        {
+            // the forces the model is analysed with: a range on 01 Loading enters with its first value
+            try
+            {
+                if (LoadingCandidates.Enumerate(State.LoadDefinitions.ToArray()).FirstOrDefault() is { } loading)
+                {
+                    var storey = StudyCompositionService.BuildPointLoads(State, loading).Where(row => row.AppliedPt == point.Name)
+                        .Select(row => Row(row.Case, $"Fz {Number(row.FzKn)} kN = −{Number(row.Qz)} kPa × {Number(row.TribArea)} m² × {row.NStories} storey(s)")).ToArray();
+                    if (storey.Length > 0) loads.Add(new("Storey force", storey));
+                }
+            }
+            catch (InvalidOperationException ex) { loads.Add(new("Storey force", [Row("Loaded point", "its forces cannot be worked out: " + ex.Message)])); }
+        }
+        var joint = femSapLoading.JointLoads.Where(load => load.Load.PointName == point.Name).Select(load => Row(load.Pattern,
+            $"Fx {Number(load.Load.FxKN)} kN, Fz {Number(load.Load.FzKN)} kN" + (Math.Abs(load.Load.MyKNm) > 1e-12 ? $", My {Number(load.Load.MyKNm)} kN·m" : ""))).ToArray();
+        if (joint.Length > 0) loads.Add(new("Joint loads", joint));
+        if (loads.Count == 0) loads.Add(new("Loads", [Row("Assigned loads", "none")]));
+        tabs.Add(new("Loads", loads));
+        return tabs;
+    }
+
     private static string Direction(FemLoadDirection direction) => direction switch
     {
         FemLoadDirection.Local1 => "Local 1",

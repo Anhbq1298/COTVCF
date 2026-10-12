@@ -19,6 +19,8 @@ public partial class Structural2DViewer : UserControl
         Canvas.SelectionChanged += (_, _) => { Update3DSelection(); Update3DAxes(); };
         Canvas.MemberDoubleClicked += (_, name) => MemberDoubleClicked?.Invoke(this, name);
         Canvas.MemberInformationRequested += (_, name) => MemberInformationRequested?.Invoke(this, name);
+        Canvas.JointInformationRequested += (_, name) => JointInformationRequested?.Invoke(this, name);
+        View3DHost.SizeChanged += (_, _) => Update3DJoints();
     }
     public static readonly DependencyProperty ModelProperty = DependencyProperty.Register(nameof(Model), typeof(GeometryModel), typeof(Structural2DViewer), new PropertyMetadata(GeometryModel.Empty));
     public static readonly DependencyProperty ToolbarContentProperty = DependencyProperty.Register(nameof(ToolbarContent), typeof(object), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -40,6 +42,8 @@ public partial class Structural2DViewer : UserControl
     /// <summary>Raised with the member a right-click lands on, in the 2D view or the 3D view — as ETABS opens an object's
     /// information. The member is selected first.</summary>
     public event EventHandler<string>? MemberInformationRequested;
+    /// <summary>Raised with the point a right-click lands on, in the 2D view or the 3D view. The point is selected first.</summary>
+    public event EventHandler<string>? JointInformationRequested;
     /// <summary>The truss chord points: the overall span dimension runs between their outermost lines (the mega columns).</summary>
     public IEnumerable<string>? SpanPoints { get => (IEnumerable<string>?)GetValue(SpanPointsProperty); set => SetValue(SpanPointsProperty, value); }
     public static readonly DependencyProperty AppliedPointsProperty = DependencyProperty.Register(nameof(AppliedPoints), typeof(IEnumerable<AppliedPoint>), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -170,6 +174,7 @@ public partial class Structural2DViewer : UserControl
             return;
         }
         Update3DAxes();
+        Update3DJoints();
         Canvas.Plane = plane;
         Canvas.Fit();
     }
@@ -210,7 +215,7 @@ public partial class Structural2DViewer : UserControl
         Structure3D.Content = scene.Model;
         Update3DSelection();
         Update3DAxes();
-        const string gestures = " · click to select · right-click a member for its information · drag rotate · right-drag pan · wheel zoom · double-click fit";
+        const string gestures = " · click a point, frame or cable to select · right-click for its information · drag rotate · right-drag pan · wheel zoom · double-click fit";
         View3DInfo.Text = scene.Deflected is { } shape
             ? $"Deflected shape 3D · largest |U| {shape.MaximumMm:G4} mm, drawn × {shape.Magnification:G3}" + gestures
             : MemberSections is null
@@ -253,6 +258,40 @@ public partial class Structural2DViewer : UserControl
         Camera3D.Position = target + from * viewWidth * 10;
         Camera3D.LookDirection = -from;
         Camera3D.Width = viewWidth;
+        Update3DJoints();
+    }
+
+    /// <summary>Where a model position is on the 3D view's screen: the orthographic camera looks at <see cref="target"/>
+    /// in the middle of the view and shows <see cref="viewWidth"/> metres across its width.</summary>
+    private Point? Project3D(Position position)
+    {
+        if (Camera3D is null || View3DHost.ActualWidth <= 0 || viewWidth <= 0) return null;
+        var look = Camera3D.LookDirection;
+        if (look.Length < 1e-12) return null;
+        look.Normalize();
+        var right = Vector3D.CrossProduct(look, new Vector3D(0, 0, 1));
+        if (right.Length < 1e-9) right = new Vector3D(1, 0, 0);
+        right.Normalize();
+        var up = Vector3D.CrossProduct(right, look);
+        var offset = new Point3D(position.X, position.Y, position.Z) - target;
+        var pixelsPerMetre = View3DHost.ActualWidth / viewWidth;
+        return new Point(View3DHost.ActualWidth / 2 + Vector3D.DotProduct(offset, right) * pixelsPerMetre,
+            View3DHost.ActualHeight / 2 - Vector3D.DotProduct(offset, up) * pixelsPerMetre);
+    }
+
+    /// <summary>The points of the model on the 3D view, as the 2D view draws them, with the selected ones marked. The
+    /// deflected shape is drawn away from the points as built, so it has none.</summary>
+    private void Update3DJoints()
+    {
+        if (Joints3D is null) return;
+        if (!Is3D || scene3D is not { Deflected: null })
+        {
+            Joints3D.Show([]);
+            return;
+        }
+        var selected = Canvas.SelectedJoints.ToHashSet(StringComparer.Ordinal);
+        Joints3D.Show(Model.Points.Values.Select(point => (Project3D(point.Position), Picked: selected.Contains(point.Name)))
+            .Where(item => item.Item1 is not null).Select(item => (item.Item1!.Value, item.Picked)).ToArray());
     }
 
     private void View3DMouseDown(object sender, MouseButtonEventArgs e)
@@ -307,12 +346,9 @@ public partial class Structural2DViewer : UserControl
     private void View3DMouseUp(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left && !panning && !dragged3D && dragOrigin is { } origin &&
-            (e.GetPosition(View3DHost) - origin).Length <= 4 && scene3D is { } scene)
-        {
-            var hit = Hit3DMember(e.GetPosition(View3D));
-            if (hit is not null) Canvas.ToggleMemberSelection(hit);
-        }
-        // a right-click that did not drag (a right-drag pans) asks for the information of the member under it
+            (e.GetPosition(View3DHost) - origin).Length <= 4)
+            Select3DAt(e.GetPosition(View3D));
+        // a right-click that did not drag (a right-drag pans) asks for the information of the point or member under it
         var information = e.ChangedButton == MouseButton.Right && !dragged3D && dragOrigin is { } pressed &&
             (e.GetPosition(View3DHost) - pressed).Length <= 4;
         dragStart = null;
@@ -322,14 +358,39 @@ public partial class Structural2DViewer : UserControl
         if (information && RequestInformation3DAt(e.GetPosition(View3D))) e.Handled = true;
     }
 
-    /// <summary>What a right-click at <paramref name="position"/> of the 3D view does: selects the member there and asks
-    /// for its information. False on empty space.</summary>
+    /// <summary>What a left click at <paramref name="position"/> of the 3D view does: selects (or deselects) the point
+    /// there, else the frame or cable — the same selection the 2D view holds. False on empty space.</summary>
+    internal bool Select3DAt(Point position)
+    {
+        if (Hit3DJoint(position) is { } joint) { Canvas.ToggleJointSelection(joint); return true; }
+        if (Hit3DMember(position) is not { } member) return false;
+        Canvas.ToggleMemberSelection(member);
+        return true;
+    }
+
+    /// <summary>What a right-click at <paramref name="position"/> of the 3D view does: selects the point or member there
+    /// and asks for its information. False on empty space.</summary>
     internal bool RequestInformation3DAt(Point position)
     {
+        if (Hit3DJoint(position) is { } joint)
+        {
+            Canvas.SelectJoint(joint);
+            JointInformationRequested?.Invoke(this, joint);
+            return true;
+        }
         if (Hit3DMember(position) is not { } name) return false;
         Canvas.SelectMember(name);
         MemberInformationRequested?.Invoke(this, name);
         return true;
+    }
+
+    /// <summary>The point drawn nearest to a position of the 3D view, within the reach of a click.</summary>
+    private string? Hit3DJoint(Point position)
+    {
+        if (scene3D is not { Deflected: null }) return null;
+        return Model.Points.Values.Select(point => (point.Name, At: Project3D(point.Position)))
+            .Where(item => item.At is { } at && (at - position).Length <= 7)
+            .OrderBy(item => (item.At!.Value - position).Length).Select(item => item.Name).FirstOrDefault();
     }
 
     private string? Hit3DMember(Point position)
@@ -359,6 +420,7 @@ public partial class Structural2DViewer : UserControl
             member.Model.Material = picked ? Selected3DMaterial : member.BaseMaterial;
             member.Model.BackMaterial = picked ? Selected3DMaterial : member.BackMaterial;   // a see-through piece has none
         }
+        Update3DJoints();
     }
 
     private void Update3DAxes()
@@ -377,6 +439,38 @@ public partial class Structural2DViewer : UserControl
         viewWidth = Math.Max(1e-3, viewWidth * (e.Delta > 0 ? 1 / 1.15 : 1.15));
         UpdateCamera();
         e.Handled = true;
+    }
+}
+
+/// <summary>The points of the model drawn over the 3D view, where the camera puts them: a small ring each, as in the 2D
+/// view, and the amber cross of the 2D selection on the selected ones. It takes no mouse input.</summary>
+public sealed class JointMarkers3D : FrameworkElement
+{
+    private IReadOnlyList<(Point At, bool Selected)> markers = [];
+
+    public JointMarkers3D() => IsHitTestVisible = false;
+
+    /// <summary>The markers as drawn (checks).</summary>
+    internal IReadOnlyList<(Point At, bool Selected)> Markers => markers;
+
+    public void Show(IReadOnlyList<(Point At, bool Selected)> points)
+    {
+        if (markers.Count == 0 && points.Count == 0) return;
+        markers = points;
+        InvalidateVisual();
+    }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        var ring = new Pen((Brush)FindResource("ViewportGeom"), 1);
+        var cross = new Pen(new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x00)), 2.5);
+        foreach (var (at, _) in markers) dc.DrawEllipse(Brushes.White, ring, at, 2.5, 2.5);
+        foreach (var (at, selected) in markers)
+        {
+            if (!selected) continue;
+            dc.DrawLine(cross, at + new Vector(-6, -6), at + new Vector(6, 6));
+            dc.DrawLine(cross, at + new Vector(-6, 6), at + new Vector(6, -6));
+        }
     }
 }
 
@@ -449,9 +543,10 @@ public sealed class ModelCanvas : FrameworkElement
     private Vector pan;
     private Point? last;
 
-    // ---- selection, as SAP2000: a click selects (or deselects) the joint / member under the cursor; a drag on empty space
-    // draws a window — left to right selects what lies wholly inside, right to left also what it crosses. Pan mode (or the
-    // middle button) moves the model instead. Esc clears the selection and leaves pan mode.
+    // ---- selection, as SAP2000: a left click selects (or deselects) the point / member under the cursor; a right-click
+    // shows its information; a drag on empty space draws a window — left to right selects what lies wholly inside, right to
+    // left also what it crosses. Pan mode (or the middle button) moves the model instead; V returns to selecting. Esc clears
+    // the selection and leaves the tool as it is.
     public static readonly DependencyProperty PanModeProperty = DependencyProperty.Register(nameof(PanMode), typeof(bool), typeof(ModelCanvas),
         new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, _) => ((ModelCanvas)d).UpdateCursor()));
     public bool PanMode { get => (bool)GetValue(PanModeProperty); set => SetValue(PanModeProperty, value); }
@@ -478,11 +573,19 @@ public sealed class ModelCanvas : FrameworkElement
     public event EventHandler<string>? MemberDoubleClicked;
     /// <summary>Raised with the member a right-click lands on (it is selected first).</summary>
     public event EventHandler<string>? MemberInformationRequested;
+    /// <summary>Raised with the point a right-click lands on (it is selected first).</summary>
+    public event EventHandler<string>? JointInformationRequested;
 
-    /// <summary>What a right-click at <paramref name="position"/> does: selects the member there and asks for its
-    /// information. False on empty space.</summary>
+    /// <summary>What a right-click at <paramref name="position"/> does: selects the point or the member there — a point
+    /// first, as a click does — and asks for its information. False on empty space.</summary>
     public bool RequestInformationAt(Point position)
     {
+        if (HitJointAt(position) is { } joint)
+        {
+            SelectJoint(joint);
+            JointInformationRequested?.Invoke(this, joint);
+            return true;
+        }
         if (HitMemberAt(position) is not { } name) return false;
         SelectMember(name);
         MemberInformationRequested?.Invoke(this, name);
@@ -517,6 +620,30 @@ public sealed class ModelCanvas : FrameworkElement
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
+    /// <summary>Toggles a point selected in the 3D view using the same selection as the 2D canvas.</summary>
+    public void ToggleJointSelection(string name)
+    {
+        if (!Model.Points.ContainsKey(name)) return;
+        Toggle(selectedJoints, name);
+        InvalidateVisual();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void SelectJoint(string name)
+    {
+        if (!Model.Points.ContainsKey(name)) return;
+        selectedMembers.Clear();
+        selectedJoints.Clear();
+        selectedJoints.Add(name);
+        InvalidateVisual();
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal string? HitJointAt(Point position) => jointLocations
+        .Where(item => (item.Value - position).Length <= 6)
+        .OrderBy(item => (item.Value - position).Length)
+        .Select(item => item.Key).FirstOrDefault();
+
     internal string? HitMemberAt(Point position) => memberLocations
         .Where(item => DistanceToSegment(position, item.Value.Start, item.Value.End) <= 7)
         .OrderBy(item => DistanceToSegment(position, item.Value.Start, item.Value.End))
@@ -526,7 +653,7 @@ public sealed class ModelCanvas : FrameworkElement
     /// <summary>Selects (or deselects) what lies at <paramref name="position"/>, as a click does (checks).</summary>
     public bool SelectAt(Point position)
     {
-        var joint = jointLocations.Where(item => (item.Value - position).Length <= 6).OrderBy(item => (item.Value - position).Length).Select(item => item.Key).FirstOrDefault();
+        var joint = HitJointAt(position);
         if (joint is not null) { Toggle(selectedJoints, joint); InvalidateVisual(); SelectionChanged?.Invoke(this, EventArgs.Empty); return true; }
         var member = memberLocations.Where(item => DistanceToSegment(position, item.Value.Start, item.Value.End) <= 5)
             .OrderBy(item => Math.Round(DistanceToSegment(position, item.Value.Start, item.Value.End), 1)).ThenBy(item => item.Value.Kind != MemberKind.Frame)
@@ -799,7 +926,7 @@ public sealed class ModelCanvas : FrameworkElement
         DrawSelection(dc);
         if (ShowFrameLocalAxes) DrawFrameLocalAxes(dc);
         DrawAxes(dc);
-        Text(dc, Plane + " projection" + (PanMode ? "  ·  PAN — drag to move the model (Esc to select)" : ""), new(16, 12), "ViewportEdge");
+        Text(dc, Plane + " projection" + (PanMode ? "  ·  PAN — drag to move the model (V to select)" : ""), new(16, 12), "ViewportEdge");
     }
 
     private void DrawGroup(DrawingContext dc, IReadOnlyDictionary<string, Point> screen, IEnumerable<string>? names, Color color)
@@ -1697,7 +1824,8 @@ public sealed class ModelCanvas : FrameworkElement
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) { PanMode = false; ClearSelection(); e.Handled = true; }
+        if (e.Key == Key.Escape) { ClearSelection(); e.Handled = true; }   // clears; the tool (Select / Pan) stays as it is
+        else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.None) { PanMode = false; e.Handled = true; }
         else if (e.Key == Key.Home) Fit();
         else if (e.Key == Key.Add) zoom = Math.Min(100, zoom * 1.15);
         else if (e.Key == Key.Subtract) zoom = Math.Max(.05, zoom / 1.15);
