@@ -210,10 +210,12 @@ internal static class PlanarFrameChecks
         };
         var chord = new FemSolver().Solve(chordGeometry, chordSections,
             new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["Tie"] = new("Tie", 0.001, modulusKNPerM2, null) },
-            new Dictionary<string, double>(), [new("B", 0, -loadKN)], ["A", "C"], frameMeshSegments: 10);
+            // the tie's lower end is anchored: a cable end that nothing holds is an unstable model, and is reported as one
+            new Dictionary<string, double>(), [new("B", 0, -loadKN)], ["A", "C", "Q"], frameMeshSegments: 10);
         var chordStations = chord.Frames.Single(frame => frame.MemberName == "Chord").Stations!;
         Check(Math.Abs(chord.Joints.Single(joint => joint.PointName == "B").UZM * 1000 + expectedDeflectionMm) < 1e-6 &&
-              chord.SupportReactions.All(reaction => Math.Abs(reaction.ReactionZKN - loadKN / 2) < 1e-6) &&
+              chord.SupportReactions.Where(reaction => reaction.PointName != "Q").All(reaction => Math.Abs(reaction.ReactionZKN - loadKN / 2) < 1e-6) &&
+              chord.SupportReactions.Single(reaction => reaction.PointName == "Q") is { ReactionXKN: 0, ReactionZKN: 0 } &&
               chordStations.Count == 22 && Math.Abs(chordStations.Max(station => Math.Abs(station.MomentKNm)) - loadKN * spanM / 4) < 1e-6 &&
               chord.Frames.Count == 2 && chord.Cables.Single().MemberName == "Tie" &&
               FrameJoints.Pieces(chordGeometry.Members[0], chordGeometry.Points.ToDictionary(p => p.Key, p => p.Value.Position)).Count == 2,
@@ -319,14 +321,24 @@ internal static class PlanarFrameChecks
             ["Cable-MD"] = new("Cable-MD", 0.01, modulusKNPerM2, null)
         };
         var segmentedTargets = new Dictionary<string, double> { ["Cable-BM"] = 100, ["Cable-MD"] = 100 };
-        var segmentedTaut = new FemSolver().Solve(segmentedGeometry, beamProperties, segmentedCables,
-            segmentedTargets, [new("B", 0, -50)], ["A", "C", "D"], targetFitPercent: 1);
-        var segmentedSlack = new FemSolver().Solve(segmentedGeometry, beamProperties, segmentedCables,
-            segmentedTargets, [new("B", 0, 5000)], ["A", "C", "D"], targetFitPercent: 1);
-        Check(segmentedTaut.Cables.All(cable => cable.PretensionStageForceKN is double force && Math.Abs(force - 100) <= 1) &&
-              segmentedSlack.Cables.All(cable => !cable.Active) &&
-              Math.Abs(segmentedSlack.SupportReactions.Sum(reaction => reaction.ReactionZKN) + 5000) < 1e-3,
-            "A cable split at a cable-only joint solves both taut and fully slack without a singular-tangent stall");
+        // A cable in two segments through a joint that only cables reach: nothing holds that joint across the cable.
+        // The planar solver passed over it; a movement that nothing holds is now reported as an unstable model.
+        string segmented = "";
+        try { new FemSolver().Solve(segmentedGeometry, beamProperties, segmentedCables, segmentedTargets, [new("B", 0, -50)], ["A", "C", "D"], targetFitPercent: 1); }
+        catch (InvalidOperationException ex) { segmented = ex.Message; }
+        Check(segmented.Contains("'M' UX has no stiffness and no restraint", StringComparison.Ordinal) && segmented.Contains("unstable", StringComparison.Ordinal) &&
+              segmented.Contains("model a cable that runs through such a joint as one cable", StringComparison.Ordinal),
+            "A cable split at a joint that only cables reach is reported as unstable, naming the joint and the movement, with what to change in the model");
+        // The same cable as one member is the stable model: taut it meets its target, pushed it goes slack.
+        var oneCableGeometry = new GeometryModel(cableGeometry.Points, [.. cableGeometry.Members.Where(member => member.Kind == MemberKind.Frame), new("Cable-BD", "B", "D", MemberKind.Cable)]);
+        var oneCable = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["Cable-BD"] = new("Cable-BD", 0.01, modulusKNPerM2, null) };
+        var oneTarget = new Dictionary<string, double> { ["Cable-BD"] = 100 };
+        var oneTaut = new FemSolver().Solve(oneCableGeometry, beamProperties, oneCable, oneTarget, [new("B", 0, -50)], ["A", "C", "D"], targetFitPercent: 1);
+        var oneSlack = new FemSolver().Solve(oneCableGeometry, beamProperties, oneCable, oneTarget, [new("B", 0, 5000)], ["A", "C", "D"], targetFitPercent: 1);
+        Check(oneTaut.Cables.All(cable => cable.PretensionStageForceKN is double force && Math.Abs(force - 100) <= 1) &&
+              oneSlack.Cables.All(cable => !cable.Active) &&
+              Math.Abs(oneSlack.SupportReactions.Sum(reaction => reaction.ReactionZKN) + 5000) < 1e-3,
+            "The same cable as one member solves both taut and fully slack");
 
         CableSag(section, modulusKNPerM2);
         SapModelTextReader();

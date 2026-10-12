@@ -58,6 +58,21 @@ internal static class TemplateBuildingUiChecks
             options.Preset.SelectedIndex = 1;
             Check(options.ApplyForm() && vm.Session.Document.Settings.ActiveDofs == DofMask.XZ, "Apply commits a DOF preset to the native document");
             options.Close();
+            // the degrees of freedom of cable joints, and the settings the native run now reads
+            var cableOptions = new AnalysisOptionsWindow(before.Settings, settings => vm.Session.Execute(DocumentCommands.SetSettings(settings)));
+            Check(cableOptions.CableDofEditors.IsEnabled && cableOptions.CableUX.IsChecked == true && cableOptions.CableUY.IsChecked == true && cableOptions.CableUZ.IsChecked == true &&
+                  cableOptions.CableRX.IsChecked == false && cableOptions.CableRY.IsChecked == false && cableOptions.CableRZ.IsChecked == false &&
+                  cableOptions.Tolerance.IsEnabled && cableOptions.Iterations.IsEnabled && cableOptions.Mesh.IsEnabled && cableOptions.Sag.IsEnabled,
+                "the native options offer the degrees of freedom of cable joints — the translations by default — and the cable settings the run reads");
+            cableOptions.CableUX.IsChecked = cableOptions.CableUY.IsChecked = cableOptions.CableUZ.IsChecked = false;
+            var unchanged = vm.Session.Document;
+            Check(!cableOptions.ApplyForm() && ReferenceEquals(vm.Session.Document, unchanged), "cable joints without a translation are refused atomically");
+            cableOptions.CableUZ.IsChecked = cableOptions.CableRY.IsChecked = true;
+            cableOptions.Tolerance.Text = "2"; cableOptions.Mesh.Text = "6"; cableOptions.Sag.IsChecked = false;
+            Check(cableOptions.ApplyForm() && vm.Session.Document.Settings is { CableDofs: DofMask.UZ | DofMask.RY, CableFitTolerancePercent: 2, FrameMeshSegments: 6, CableSag: false },
+                "Apply commits the degrees of freedom of cable joints and the cable settings to the native document");
+            cableOptions.Close();
+            vm.Session.Undo();
             Pump(vm.RunAsync());
             Check(vm.Results.State == ResultState.Failed && vm.Message.Contains("plane", StringComparison.OrdinalIgnoreCase), "running a spatial building with planar DOFs reports a capability error");
             vm.Session.Undo();
@@ -86,6 +101,8 @@ internal static class TemplateBuildingUiChecks
             var cable = new AnalysisOptionsWindow(legacy.PlanarAnalysisSettings, legacy.ApplyPlanarAnalysisSettings, planar: true);
             Check(!cable.DofEditors.IsEnabled && cable.UX.IsChecked == true && cable.UY.IsChecked == false && cable.RY.IsChecked == true,
                 "planar cable workspace states its actual XZ DOFs");
+            Check(!cable.CableDofEditors.IsEnabled && cable.CableUX.IsChecked == true && cable.CableUZ.IsChecked == true && cable.CableUY.IsChecked == false && cable.CableRY.IsChecked == false,
+                "… and those of its cable joints: UX and UZ");
             cable.Tolerance.Text = "5"; cable.Iterations.Text = "150"; cable.Mesh.Text = "8"; cable.Sag.IsChecked = false;
             Check(cable.ApplyForm() && legacy.FemTargetFitPercent == 5 && legacy.FemTargetFitIterations == 150 && legacy.FemFrameMeshSegments == 8 && !legacy.FemCableSag,
                 "cable fitting form updates the actual planar analysis inputs");

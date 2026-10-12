@@ -38,7 +38,8 @@ internal static class GeneralStaticChecks
         private readonly Func<Xyz, Xyz> place;
         private int points, frames, cables, loads, cases;
 
-        public Model(DofMask mask = DofMask.Full3D, bool sag = false, double fitTolerancePercent = 1e-6, double inertia22 = Iy, Func<Xyz, Xyz>? place = null, int mesh = 1)
+        public Model(DofMask mask = DofMask.Full3D, bool sag = false, double fitTolerancePercent = 1e-6, double inertia22 = Iy, Func<Xyz, Xyz>? place = null, int mesh = 1,
+            DofMask cableDofs = DofMask.Translations)
         {
             this.place = place ?? (xyz => xyz);
             Editor.PutMaterial(new(Steel, "Steel", MaterialType.Steel, Es, .3, 0, 0));
@@ -49,7 +50,7 @@ internal static class GeneralStaticChecks
             Editor.PutLoadPattern(new(Live, "LIVE", LoadPatternType.Live));
             Editor.PutLoadPattern(new(Prestress, "PT", LoadPatternType.Prestress));
             Editor.PutLoadPattern(new(Wind, "WIND", LoadPatternType.Other));
-            Editor.SetSettings(new AnalysisSettings(fitTolerancePercent, 100, mesh, sag) { ActiveDofs = mask });
+            Editor.SetSettings(new AnalysisSettings(fitTolerancePercent, 100, mesh, sag) { ActiveDofs = mask, CableDofs = cableDofs });
         }
 
         public ObjectId Point(double x, double y, double z, Restraint? restraint = null)
@@ -371,41 +372,97 @@ internal static class GeneralStaticChecks
 
     private static void HangingCable()
     {
-        (ModelDocument Document, ObjectId Top, ObjectId Node, ObjectId Cable, ObjectId Nonlinear, ObjectId Linear) Hanging(double z)
+        // A weight on a vertical cable. The cable holds its end along its own line only.
+        (ModelDocument Document, ObjectId Top, ObjectId Node, ObjectId Cable, ObjectId Nonlinear, ObjectId Linear) Hanging(double z,
+            DofMask cableDofs = DofMask.Translations, Restraint? node = null, double x = 0, Restraint? anchor = null)
         {
-            var m = new Model();
-            var top = m.Point(0, 0, 5, Restraint.Pinned);
-            var node = m.Point(0, 0, 0);
-            var cable = m.Cable(node, top);
-            m.Load(node, 0, 0, z);
+            var m = new Model(cableDofs: cableDofs);
+            var top = m.Point(0, 0, 5, anchor ?? Restraint.Pinned);
+            var joint = m.Point(0, 0, 0, node);
+            var cable = m.Cable(joint, top);
+            m.Load(joint, x, 0, z);
             var nonlinear = m.Case("Hang", LoadCaseType.NonlinearStatic, LiveOnly);
             var linear = m.Case("Linear", LoadCaseType.LinearStatic, LiveOnly);
-            return (m.Build(), top, node, cable, nonlinear, linear);
+            return (m.Build(), top, joint, cable, nonlinear, linear);
         }
-        var down = Hanging(-100);
-        var outcome = Run(down.Document, down.Nonlinear);
-        Assert(outcome.Success, "A weight hanging on a cable is solved: " + string.Join("; ", outcome.Issues));
-        var result = outcome.Result!;
-        Near(CableOf(result, down.Cable).Tension, 100, "A weight on a cable: its tension is the weight", 1e-7);
-        Near(U(result, down.Node)[2], -100 * 5 / CableEA, "… and it stretches by PL/EA", 1e-12);
-        Near(Reaction(result, down.Top)[2], 100, "… carried by the anchor", 1e-7);
-        Assert(CableOf(result, down.Cable) is { Active: true, Sag: null, TargetForce: null, AppliedPretension: 0 }, "A weightless cable is straight and has no pretension of its own");
-        Assert(result.Diagnostics.UndeterminedDofs.SequenceEqual(new DofKey[] { new(down.Node, DofComponent.UX), new(down.Node, DofComponent.UY) }) &&
-               outcome.Issues.Any(issue => issue.Code == "static.translation.undetermined" && issue.Severity == ValidationSeverity.Warning) &&
-               U(result, down.Node)[0] == 0 && U(result, down.Node)[1] == 0,
-            "Across its own line a straight cable holds nothing: those translations are reported as undetermined, not invented");
-        Assert(result.Diagnostics.NonlinearIterations >= 2 && result.Diagnostics.SolvedDofCount == 1, "The cable equilibrium is found by iteration on the one equation that has stiffness");
-        Refuse(down.Document, down.Linear, "static.cable.linearCase");
-        var up = Hanging(100);
-        Refuse(up.Document, up.Nonlinear, "static.nonlinear.noConvergence");
+        void Hangs(string how, (ModelDocument Document, ObjectId Top, ObjectId Node, ObjectId Cable, ObjectId Nonlinear, ObjectId Linear) model, int equations)
+        {
+            var outcome = Run(model.Document, model.Nonlinear);
+            Assert(outcome.Success, how + ": a weight hanging on a cable is solved: " + string.Join("; ", outcome.Issues.Select(issue => issue.Message)));
+            var result = outcome.Result!;
+            Near(CableOf(result, model.Cable).Tension, 100, how + ": a weight on a cable: its tension is the weight", 1e-7);
+            Near(U(result, model.Node)[2], -100 * 5 / CableEA, "… and it stretches by PL/EA", 1e-12);
+            Near(Reaction(result, model.Top)[2], 100, "… carried by the anchor", 1e-7);
+            Assert(CableOf(result, model.Cable) is { Active: true, Sag: null, TargetForce: null, AppliedPretension: 0 }, "A weightless cable is straight and has no pretension of its own");
+            Assert(result.Diagnostics.NonlinearIterations >= 2 && result.Diagnostics.SolvedDofCount == equations && U(result, model.Node)[0] == 0 && U(result, model.Node)[1] == 0,
+                "… by iteration on the one equation that has stiffness");
+        }
+        void Unstable(string how, ModelDocument document, ObjectId caseId, string mentions)
+        {
+            var outcome = Run(document, caseId);
+            Assert(outcome.Result is null && outcome.Issues.Any(issue => issue.Code == "static.matrix.unstable" && issue.Severity == ValidationSeverity.Error &&
+                       issue.Message.Contains("unstable", StringComparison.Ordinal) && issue.Message.Contains(mentions, StringComparison.Ordinal)),
+                how + ": reported as unstable, with no result: " + string.Join("; ", outcome.Issues.Select(issue => issue.Message)));
+        }
 
-        var sideways = new Model();
-        var anchor = sideways.Point(0, 0, 5, Restraint.Pinned);
-        var loaded = sideways.Point(0, 0, 0);
-        sideways.Cable(loaded, anchor);
-        sideways.Load(loaded, 1, 0, -100);
-        var push = sideways.Case("Push", LoadCaseType.NonlinearStatic, LiveOnly);
-        Refuse(sideways.Build(), push, "static.dof.noStiffness");
+        // With the translations of a cable joint all on, nothing holds the weight across the cable's line: unstable.
+        var free = Hanging(-100);
+        Unstable("Cable joints with UX, UY, UZ and nothing across the cable's line", free.Document, free.Nonlinear, "has no stiffness and no restraint");
+        Assert(Run(free.Document, free.Nonlinear).Issues.Count(issue => issue.Code == "static.matrix.unstable") == 2, "… naming both movements that nothing holds, UX and UY");
+        // The user restrains those movements …
+        Hangs("Restrained across the cable", Hanging(-100, node: new(true, true, false, false, false, false)), 1);
+        // … or switches them off for cable joints.
+        var vertical = Hanging(-100, DofMask.UZ);
+        Hangs("Cable joints with UZ only", vertical, 1);
+        Assert(ModelCompiler.Compile(vertical.Document).Model!.DofIndex[new(vertical.Node, DofComponent.UX)] is { State: DofState.Inactive, InactiveReason: InactiveDofReason.ElementUnused },
+            "A movement switched off for cable joints is inactive at a joint only cables reach");
+        // Rotations switched on for cable joints are movements too, at the hanging joint and at the anchor alike:
+        // nothing holds them unless they are restrained.
+        var rotations = DofMask.UZ | DofMask.RX | DofMask.RY | DofMask.RZ;
+        var turning = Hanging(-100, rotations);
+        Unstable("Cable joints with rotations and no restraint", turning.Document, turning.Nonlinear, "RX");
+        var anchored = Hanging(-100, rotations, new(false, false, false, true, true, true));
+        Unstable("Cable joints with rotations, restrained at the hanging joint only", anchored.Document, anchored.Nonlinear, "'P1' RX");
+        Hangs("Cable joints with rotations, restrained at both joints", Hanging(-100, rotations, new(false, false, false, true, true, true), anchor: Restraint.Fixed), 1);
+
+        Refuse(vertical.Document, vertical.Linear, "static.cable.linearCase");
+        var up = Hanging(100, DofMask.UZ);
+        Refuse(up.Document, up.Nonlinear, "static.nonlinear.noConvergence");
+        // a load across the cable, where nothing holds it
+        var sideways = Hanging(-100, x: 1);
+        Unstable("A load across a cable's line", sideways.Document, sideways.Nonlinear, "UX");
+
+        // a joint between two cables that both go slack has nothing holding it in that case
+        var s = new Model(cableDofs: DofMask.UZ);
+        var root = s.Point(-4, 0, 0, Restraint.Fixed);
+        var tip = s.Point(0, 0, 0);
+        var link = s.Point(0, 0, 3);
+        var anchor = s.Point(0, 0, 6, Restraint.Pinned);
+        s.Frame(root, tip);
+        s.Cable(tip, link);
+        s.Cable(link, anchor);
+        s.Load(tip, 0, 0, -50);
+        s.Load(tip, 0, 0, 50, Wind);
+        var pulled = s.Case("Down", LoadCaseType.NonlinearStatic, LiveOnly);
+        var lifted = s.Case("Up", LoadCaseType.NonlinearStatic, [(Wind, 1)]);
+        var chain = s.Build();
+        Assert(Solve(chain, pulled).Cables.All(cable => cable.Active), "Two cables in line, pulled: both taut, and the joint between them is held");
+        Unstable("Two cables in line, both slack", chain, lifted, "held by slack cables only");
+
+        // a cable that pulls in a movement switched off at its joint is held there as by a support, and that is said
+        var held = new Model(cableDofs: DofMask.UZ);
+        var above = held.Point(3, 0, 4, Restraint.Pinned);
+        var below = held.Point(0, 0, 0);
+        var inclined = held.Cable(below, above);
+        held.Load(below, 0, 0, -80);
+        var heldCase = held.Case("Hang", LoadCaseType.NonlinearStatic, LiveOnly);
+        var heldDocument = held.Build();
+        Assert(ModelCompiler.Compile(heldDocument).Issues.Any(issue => issue.Code == "dof.cable.held" && issue.Severity == ValidationSeverity.Warning && issue.Message.Contains("UX", StringComparison.Ordinal)),
+            "A cable pulling in a movement that is switched off at its joint: the compiler says the joint is held there as by a support");
+        var heldResult = Solve(heldDocument, heldCase);
+        Near(CableOf(heldResult, inclined).Tension, 80 / .8, "… the cable carries the load through its vertical component, T = P / sin θ", 1e-7);
+        Near(heldResult.Joints.Single(joint => joint.PointId == below).SuppressedDofForces[0], -60, "… and the force that holds the joint sideways is reported, apart from the reactions", 1e-7);
+        Assert(heldResult.Joints.Single(joint => joint.PointId == below).Reactions.All(value => value == 0), "… it is not a support reaction");
     }
 
     private sealed record TipCable(ModelDocument Document, ObjectId Root, ObjectId Tip, ObjectId Anchor, ObjectId Cable,
@@ -506,7 +563,7 @@ internal static class GeneralStaticChecks
         Near(ReactionSum(result).Length, 0, "… and with no applied load the reactions balance each other", 1e-7);
 
         // two cables in line share one tension: only the sum of their pretensions is determined
-        var s = new Model();
+        var s = new Model(cableDofs: DofMask.UZ);
         var root = s.Point(-4, 0, 0, Restraint.Fixed);
         var tip = s.Point(0, 0, 0);
         var link = s.Point(0, 0, 3);
@@ -521,8 +578,7 @@ internal static class GeneralStaticChecks
         Near(CableOf(series, upper).Tension, 50, "… (upper)", 1e-5);
         Near(CableOf(series, lower).AppliedPretension, expected, "… with the pretension split evenly between them: T(1 + k_series/k_b) each", 1e-4, 1e-7);
         Near(CableOf(series, upper).AppliedPretension, expected, "… (upper)", 1e-4, 1e-7);
-        Assert(series.Diagnostics.UndeterminedDofs.All(key => key.PointId == link && key.Component is DofComponent.UX or DofComponent.UY) &&
-               series.Diagnostics.UndeterminedDofs.Length == 2, "The link between two cables in line is undetermined across that line only");
+        Near(U(series, link)[2], (U(series, tip)[2] + 0) / 2, "… and the link between them moves half as far as the tip", 1e-12);
     }
 
     private static void RigidRotationAndPlanePreset()
@@ -617,7 +673,7 @@ internal static class GeneralStaticChecks
         var total = ReactionSum(loaded);
         Near(total.Z, 60 + CableWeight * length, "… and the supports carry the load and the cable's weight", 1e-7);
         Near(Math.Sqrt(total.X * total.X + total.Y * total.Y), 0, "… with no net horizontal reaction", 1e-7);
-        Assert(loaded.Diagnostics.UndeterminedDofs.IsEmpty && loaded.Diagnostics.MinimumScaledPivot > 0 && loaded.Diagnostics.ScaledResidual <= 1e-9,
+        Assert(loaded.Diagnostics.MinimumScaledPivot > 0 && loaded.Diagnostics.ScaledResidual <= 1e-9,
             "The equilibrium found is stable and inside the force tolerance");
     }
 

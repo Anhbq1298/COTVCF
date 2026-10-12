@@ -20,17 +20,19 @@ public partial class AnalysisOptionsWindow : Window
         foreach (var box in Boxes) box.Click += (_, _) => Preset.SelectedIndex = 4;
         SetMask(planar ? DofMask.XZ : settings.ActiveDofs);
         Preset.SelectedIndex = settings.ActiveDofs switch { DofMask.Full3D => 0, DofMask.XZ => 1, DofMask.YZ => 2, DofMask.XY => 3, _ => 4 };
-        Preset.IsEnabled = DofEditors.IsEnabled = !planar && editable;
+        Preset.IsEnabled = DofEditors.IsEnabled = CableDofEditors.IsEnabled = !planar && editable;
+        // the main window's model is planar: its cable joints move in the plane
+        var cableMask = planar ? settings.CableDofs & DofMask.XZ : settings.CableDofs;
+        for (int i = 0; i < 6; i++) CableBoxes[i].IsChecked = (cableMask & (DofMask)(1 << i)) != 0;
         Tolerance.Text = settings.CableFitTolerancePercent.ToString(CultureInfo.CurrentCulture);
         Iterations.Text = settings.CableFitMaxIterations.ToString(CultureInfo.CurrentCulture);
         Mesh.Text = settings.FrameMeshSegments.ToString(CultureInfo.CurrentCulture);
         Sag.IsChecked = settings.CableSag;
-        // The native linear frame kernel uses one exact prismatic element per frame, and has no cable physics yet.
-        Tolerance.IsEnabled = Iterations.IsEnabled = Mesh.IsEnabled = Sag.IsEnabled = planar && editable;
-        ScopeText.Text = planar ? "This workspace uses the planar cable/frame solver: UX, UZ and RY (XZ). Create a TemplateBuilding for native 3D frame analysis."
-            : "Native linear static frame analysis. Cable, shell, P-Delta and modal analysis are not available in this engine.";
+        Tolerance.IsEnabled = Iterations.IsEnabled = Mesh.IsEnabled = Sag.IsEnabled = editable;
+        ScopeText.Text = planar ? "This window's model is planar: it is analysed with UX, UZ and RY (XZ), and its cable joints with UX and UZ. Create a TemplateBuilding or open a native model for 3D analysis."
+            : "Static analysis of frames and cables. Shell, P-Delta and modal analysis are not available.";
         CableScope.Text = planar ? "These settings are used by Run FEM Analysis when a load case fits cable target forces."
-            : "Cable fitting is available in the main planar workspace. These saved cable settings are inactive in the native frame engine; frames use one element per member.";
+            : "These settings are used by Run Analysis: the fitting when a load case fits cable target forces, cable sag for every case with cables. The mesh is the number of stations each frame is read at; it changes no joint result.";
         if (!editable) { ErrorText.Text = "Model locked or analysis running. Close this form and unlock / finish the run before editing."; }
         CanCommit = editable;
         OkButton.IsEnabled = ApplyButton.IsEnabled = editable;
@@ -38,6 +40,7 @@ public partial class AnalysisOptionsWindow : Window
 
     private bool CanCommit { get; }
     private CheckBox[] Boxes => [UX, UY, UZ, RX, RY, RZ];
+    private CheckBox[] CableBoxes => [CableUX, CableUY, CableUZ, CableRX, CableRY, CableRZ];
     private void SetMask(DofMask mask)
     {
         for (int i = 0; i < 6; i++) Boxes[i].IsChecked = (mask & (DofMask)(1 << i)) != 0;
@@ -56,7 +59,13 @@ public partial class AnalysisOptionsWindow : Window
             for (int i = 0; i < 6; i++) if (Boxes[i].IsChecked == true) mask |= (DofMask)(1 << i);
             if ((mask & DofMask.Translations) == 0) throw new ArgumentException("Select at least one translational DOF.");
             var next = current with { ActiveDofs = mask };
-            if (planar)
+            if (!planar)
+            {
+                DofMask cable = DofMask.None;
+                for (int i = 0; i < 6; i++) if (CableBoxes[i].IsChecked == true) cable |= (DofMask)(1 << i);
+                if ((cable & DofMask.Translations) == 0) throw new ArgumentException("Select at least one translational DOF for cable joints.");
+                next = next with { CableDofs = cable };
+            }
             {
                 if (!double.TryParse(Tolerance.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var tolerance) ||
                     !double.IsFinite(tolerance) || tolerance <= 0 || tolerance >= 100)

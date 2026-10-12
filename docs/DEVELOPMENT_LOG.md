@@ -18,6 +18,26 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-12 · Degrees of freedom of cable joints; a movement nothing holds is unstable
+- Status: Done
+- Who: markbui, Claude
+- Where: Native workspace: Run → Analysis Options… → Degrees of Freedom, new group "Degrees of freedom of cable
+  joints"; the Cable Force Fitting tab is now active there too. The unstable report: every run, in both windows
+- What: A joint that only cables reach has the degrees of freedom the user gives cable joints (UX, UY, UZ by default),
+  among the active ones; the rest are switched off there. The solver no longer holds or passes over a movement by
+  itself: one that is on and that no member and no restraint holds — across a cable's line, at a cable end left free,
+  at a joint between cables that all go slack — is reported as an unstable model, with the joint and the movement, and
+  no results. Before, such a movement was left at zero with a note, or passed over silently in the main window. In the
+  main window cable joints move in UX and UZ and that cannot be changed there, so a cable modelled in several segments
+  through a joint only cables reach, or a cable end that nothing holds, now stops the run: model it as one cable, and
+  hold every cable end with a frame or a support. The default model and the stored SAP2000 study have no such joint
+  and give the same results as before. A cable that pulls in a movement switched off at its joint is held there as by
+  a support; the model says so when it is compiled. Native files are now schema 3; older files open with UX, UY, UZ
+  for their cable joints. In the native Analysis Options the fitting tolerance, iterations, frame stations and cable
+  sag can now be edited, since the native run reads them.
+- Checks: dotnet run --project tests/Mcotis.Checks (2,751 checks); default offline Mcotis.Desktop.Checks; --fem;
+  --fem-sap; --general-solver; --template-building-ui; --dev-log
+
 ## 2026-10-12 · One solver everywhere: the general 3D solver runs the application
 - Status: Done
 - Who: markbui, Claude

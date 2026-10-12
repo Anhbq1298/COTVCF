@@ -44,6 +44,7 @@ internal sealed class UnitsDto
 internal sealed class SettingsDto
 {
     public required DofMask ActiveDofs { get; init; }
+    public required DofMask CableDofs { get; init; }
     public required double CableFitTolerancePercent { get; init; }
     public required int CableFitMaxIterations { get; init; }
     public required int FrameMeshSegments { get; init; }

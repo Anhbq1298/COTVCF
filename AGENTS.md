@@ -36,6 +36,11 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
 - The planar frame solver is archived (user, 2026-10-12): it is no longer part of the application. It lives, frozen,
   in `tests/Mcotis.Desktop.Checks/Archive/PlanarFrameSolver.cs`, only as the baseline `--general-solver` compares the
   application's analysis with. Do not develop it and do not call it from `src/`.
+- No silent restraint (user, 2026-10-12: "neu ko restraint thi bao unstable thoi"): the solver does not hold or pass
+  over a movement on the user's behalf. A degree of freedom that is on and that no member and no restraint holds is
+  reported as an unstable model, with the joint and the movement, in both windows. The user decides: a restraint,
+  another member, or the degree-of-freedom options — including those of cable joints (`AnalysisSettings.CableDofs`).
+  One case is unchanged: the rotation of a frame joint whose every frame end is released is left out with a warning.
 - Validate before showing a result (user, 2026-10-12): nothing a new solver capability computes is put in a result
   view, a report or a document as a result until it has passed its checks against closed forms, against the archived
   planar solver where that covers the case, and against OpenSees where it can be modelled there. Record the evidence

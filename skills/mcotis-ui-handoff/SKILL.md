@@ -44,7 +44,11 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   in `tests/Mcotis.Desktop.Checks/Archive/`, frozen, the baseline of `--general-solver`. Where this document still
   describes `PlanarFrameSolver` internals (`SolveEquilibrium`, `WithSag`, `Assemble` …), read them as the archived
   baseline: the same laws now live in `Mcotis.Analysis` (`StaticSolver`, `CableElement`). The main window is the
-  standalone application — the user does not want it called "Tab 07" (2026-10-12). **Validate before showing a result** (same message): see AGENTS.md. Full scope: `docs/native-building-ui.md`;
+  standalone application — the user does not want it called "Tab 07" (2026-10-12). **No silent restraint** (user,
+  2026-10-12): the native Analysis Options has "Degrees of freedom of cable joints" (`AnalysisSettings.CableDofs`,
+  default UX UY UZ; fixed UX UZ in the main window), and a movement that is on and that nothing holds is reported as
+  an unstable model in both windows — a segmented cable through a cable-only joint or a free cable end now stops a
+  main-window run. Native files are schema 3. **Validate before showing a result** (same message): see AGENTS.md. Full scope: `docs/native-building-ui.md`;
   checks `--template-building-ui`. Preserve Apply/OK/Cancel semantics and the result current/stale state.
 - `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/` and `.work/` wherever they are.
 - The app is a WPF app targeting `net8.0-windows`, `x64`, with SAP2000 API reference `CSiAPIv1.dll`.

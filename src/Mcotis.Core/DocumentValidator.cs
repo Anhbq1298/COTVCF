@@ -159,6 +159,8 @@ public static class DocumentValidator
             var settings = d.Settings;
             if (!DegreesOfFreedom.IsValid(settings.ActiveDofs))
                 Error("settings.dofs", ObjectKind.Settings, default, "Select at least one of UX, UY, UZ, RX, RY, RZ; unknown DOF bits are invalid.");
+            if (!DegreesOfFreedom.IsValid(settings.CableDofs) || (settings.CableDofs & DofMask.Translations) == 0)
+                Error("settings.cableDofs", ObjectKind.Settings, default, "The degrees of freedom of cable joints need at least one of UX, UY, UZ; unknown DOF bits are invalid.");
             if (!(double.IsFinite(settings.CableFitTolerancePercent) && settings.CableFitTolerancePercent > 0) ||
                 settings.CableFitMaxIterations < 1 || settings.FrameMeshSegments < 1)
                 Error("settings.value", ObjectKind.Settings, default,

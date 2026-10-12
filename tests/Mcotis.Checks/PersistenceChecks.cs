@@ -168,6 +168,7 @@ internal static class PersistenceChecks
         old["joints"] = points;
         old["schemaVersion"] = 0;
         old["settings"]!.AsObject().Remove("activeDofs");
+        old["settings"]!.AsObject().Remove("cableDofs");
         var path = Path.Combine(folder, "schema0" + NativeDocumentFormat.Extension);
         File.WriteAllText(path, old.ToJsonString());
         var bytes = File.ReadAllBytes(path);

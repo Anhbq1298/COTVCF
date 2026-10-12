@@ -45,8 +45,14 @@ The main window's **Run → Analysis Options…** is the form of the main window
 general solver; because the main window's model is planar, the form shows fixed XZ DOFs. It edits the
 cable target-fitting tolerance, maximum iterations, frame mesh (1–100: the stations each frame piece is read at,
 which changes no joint result) and cable sag. Individual cable target
-forces remain in the cable assignments/load patterns. Native options still show the cable/mesh settings as inactive;
-the native engine reads the fitting tolerance, the iteration limit and the sag setting from the model, and needs no mesh. Locked/running legacy models show their options read-only.
+forces remain in the cable assignments/load patterns. In the native options the same four settings are active: the
+native run reads the fitting tolerance, the iteration limit and cable sag, and reads each frame at the mesh stations.
+
+**Degrees of freedom of cable joints** (native options, Degrees of Freedom tab): six checkboxes, UX UY UZ on by
+default. A joint that only cables reach has these, among the active degrees of freedom; the others are switched off
+there. A cable gives stiffness along its own line only, so a movement left on that nothing else holds — another
+member, a restraint — makes the model unstable, and Run reports it with the joint and the movement instead of
+solving. The main window shows UX and UZ for its cable joints, fixed. Locked/running legacy models show their options read-only.
 
 Verification: `dotnet run --project tests/Mcotis.Checks` includes template topology, line-load accounting, support
 reactions, self-weight, planar cases, invalid input, Undo/Redo and Save/Open. `--template-building-ui` on

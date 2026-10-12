@@ -197,6 +197,28 @@ internal static class DofCompilationChecks
         var stamp = File.GetLastWriteTimeUtc(fixture);
         var migrated = new NativeDocumentStore().Load(fixture);
         Assert(migrated.Settings.ActiveDofs == DofMask.XZ, "The committed schema-1 fixture migrates to XZ, not the new Full 3D default");
+        Assert(migrated.Settings.CableDofs == DofMask.Translations, "… and its cable joints get the translations, as they had before there was a setting");
+        // the degrees of freedom of cable joints: saved, required, validated, part of what the results depend on
+        var cabled = Frame(cable: true);
+        var before = cabled.Document.AnalysisInputHash;
+        cabled.Execute(DocumentCommands.SetSettings(cabled.Document.Settings with { CableDofs = DofMask.UX | DofMask.UZ | DofMask.RY }));
+        Assert(cabled.Document.AnalysisInputHash != before, "Changing the degrees of freedom of cable joints changes the analysis input");
+        Assert(NativeDocumentFormat.Deserialize(NativeDocumentFormat.Serialize(cabled.Document)).Settings.CableDofs == (DofMask.UX | DofMask.UZ | DofMask.RY),
+            "The degrees of freedom of cable joints are saved with the model");
+        var compiledCable = Compile(cabled);
+        Assert(compiledCable.Members.Single().SupportedDofs == (DofMask.UX | DofMask.UZ | DofMask.RY) &&
+               compiledCable.DofIndex[new(B, DofComponent.RY)].State == DofState.Free && compiledCable.DofIndex[new(B, DofComponent.UY)] is { State: DofState.Inactive, InactiveReason: InactiveDofReason.ElementUnused } &&
+               compiledCable.FreeDofCount == 3,
+            "A joint only cables reach has exactly the degrees of freedom the model gives cable joints");
+        Refused(cabled, DocumentCommands.SetSettings(cabled.Document.Settings with { CableDofs = DofMask.RX }), DocumentError.Invalid, "Cable joints without a translation are refused");
+        cabled.Execute(DocumentCommands.SetSettings(cabled.Document.Settings with { ActiveDofs = DofMask.XZ, CableDofs = DofMask.UY }));
+        Assert(ModelCompiler.Compile(cabled.Document) is { Success: false } blocked && blocked.Issues.Any(issue => issue.Code == "dof.cable.translations"),
+            "Cable joints with no translation among the active ones do not compile");
+        var older = (JsonObject)JsonNode.Parse(NativeDocumentFormat.Serialize(Frame(cable: true).Document))!;
+        older["settings"]!.AsObject().Remove("cableDofs");
+        Throws<DocumentFileException>(() => NativeDocumentFormat.Deserialize(older.ToJsonString()), "The current schema cannot silently default missing cable-joint degrees of freedom");
+        older["schemaVersion"] = 2;
+        Assert(NativeDocumentFormat.Deserialize(older.ToJsonString()).Settings.CableDofs == DofMask.Translations, "A schema-2 file opens with the translations for its cable joints");
         var compiled = ModelCompiler.Compile(migrated).Model!;
         Assert(compiled.FreeDofCount == 3 && compiled.Dofs.Length == 12 && compiled.Input.Points[B].Position == new Xyz(4, 0, 0),
             "Legacy XZ fixture preserves geometry and the three free tip equations");

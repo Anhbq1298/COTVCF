@@ -56,10 +56,8 @@ public sealed record StaticCableFit(ObjectId FitCaseId, int Iterations, double W
 /// force over the force scale of <see cref="StaticOptions.NonlinearForceTolerance"/>.</param>
 /// <param name="NonlinearIterations">0 for a linear solution.</param>
 /// <param name="EquilibriumError">Resultant force and moment of all internal forces, relative to their size.</param>
-/// <param name="UndeterminedDofs">Translations held by slack cables only: nothing acts on them and nothing holds them.</param>
 public sealed record StaticDiagnostics(int SolvedDofCount, double ScaledResidual, double MinimumScaledPivot,
-    ImmutableArray<DofKey> UnconnectedRotations, int NonlinearIterations, double EquilibriumError,
-    ImmutableArray<DofKey> UndeterminedDofs, StaticCableFit? CableFit);
+    ImmutableArray<DofKey> UnconnectedRotations, int NonlinearIterations, double EquilibriumError, StaticCableFit? CableFit);
 
 public sealed record StaticResult(ObjectId DocumentId, string InputHash, long Revision, ObjectId LoadCaseId,
     ImmutableArray<StaticJointResult> Joints, ImmutableArray<StaticFrameResult> Frames, ImmutableArray<StaticCableResult> Cables,
@@ -238,7 +236,6 @@ public static class StaticSolver
             double[]? stageTensions = null;
             StaticCableFit? cableFit = null;
             List<double[]> fitHistory = [];
-            var undetermined = new List<DofKey>();
             if (assembly.Cables.Length == 0)
             {
                 var reduced = new double[free.Length, free.Length];
@@ -298,23 +295,24 @@ public static class StaticSolver
                 (displacement, nonlinearIterations, residual) = equilibrium;
 
                 // The equilibrium has to be a stable one: the tangent there, without any regularization, is positive
-                // definite on every DOF that something holds.
+                // definite. A movement that only slack cables reach has nothing holding it in this case.
                 var tangent = Tangent(assembly, pretension, displacement, free, regularize: false);
-                for (int i = 0; i < free.Length; i++)
+                var reached = Tangent(assembly, pretension, displacement, free, regularize: true);
+                var unheld = Enumerable.Range(0, free.Length).Where(i => !(tangent[i, i] > 0)).ToArray();
+                foreach (var point in unheld.GroupBy(i => (model.Dofs[free[i]].Key.PointId, Slack: reached[i, i] > 0)))
                 {
-                    if (tangent[i, i] > 0) continue;
-                    tangent[i, i] = 1;
-                    undetermined.Add(model.Dofs[free[i]].Key);
+                    string where = $"'{document.Points[point.Key.PointId].Name}' {string.Join("/", point.Select(i => model.Dofs[free[i]].Key.Component))}";
+                    Error("static.matrix.unstable", ObjectKind.Point, point.Key.PointId, point.Key.Slack
+                        ? $"{where} is held by slack cables only in case '{loadCase.Name}': nothing holds it there, and the model is unstable. No results returned."
+                        : $"{where} has no stiffness and no restraint: the model is unstable there. A cable gives stiffness along its own line only: hold that movement with another member or a restraint, or switch it off for cable joints (Analysis Options → Degrees of Freedom). No results returned.");
                 }
+                if (unheld.Length > 0) return Failed();
                 try { minimumPivot = new ScaledCholesky(tangent, options.RelativePivotTolerance, cancellationToken).MinimumPivot; }
                 catch (FactorizationFailure failure)
                 {
                     Unstable(free[failure.Index], failure.Pivot);
                     return Failed();
                 }
-                foreach (var point in undetermined.GroupBy(key => key.PointId))
-                    issues.Add(new(ValidationSeverity.Warning, "static.translation.undetermined", ObjectKind.Point, point.Key,
-                        $"'{document.Points[point.Key].Name}' {string.Join("/", point.Select(key => key.Component))} is held by slack cables only: nothing acts on it and nothing holds it, so its displacement is not determined (reported as 0)."));
             }
 
             var tensions = assembly.Cables.Select((cable, index) => cable.Tension(pretension[index], displacement)).ToArray();
@@ -378,8 +376,8 @@ public static class StaticSolver
                 return Failed();
             }
             return new(new(model.DocumentId, model.InputHash, model.Revision, caseId, joints, frames, cables,
-                new(free.Length - undetermined.Count, residual, minimumPivot, unconnectedRotations.ToImmutableArray(), nonlinearIterations,
-                    equilibriumError, undetermined.ToImmutableArray(), cableFit)), issues.ToImmutableArray());
+                new(free.Length, residual, minimumPivot, unconnectedRotations.ToImmutableArray(), nonlinearIterations,
+                    equilibriumError, cableFit)), issues.ToImmutableArray());
         }
 
         private void Unstable(int fullIndex, double pivot)
@@ -462,15 +460,19 @@ public static class StaticSolver
             return new(frames, stiffness, external, cables.ToArray());
         }
 
-        /// <summary>The free DOFs to solve. A joint rotation that no frame stiffness reaches and no moment loads is left out.</summary>
+        /// <summary>The free DOFs to solve. The rotation of a frame joint that no frame stiffness reaches (every end there
+        /// released) and no moment loads is left out. A degree of freedom the model gives a joint only cables reach is
+        /// not: if nothing holds it, the model is unstable there and the analysis says so.</summary>
         private (int[] Free, List<DofKey> Unconnected) FreeDofs(Assembly assembly, bool report)
         {
             var unconnected = new List<DofKey>();
             var free = new List<int>();
+            var framed = model.Members.Where(member => member.Kind == ObjectKind.Frame)
+                .SelectMany(member => new[] { member.StartPointId, member.EndPointId }).ToHashSet();
             foreach (var dof in model.Dofs.Where(dof => dof.State == DofState.Free))
             {
                 bool zeroRow = Enumerable.Range(0, n).All(j => assembly.Stiffness[dof.FullIndex, j] == 0);
-                if (zeroRow && dof.Key.Component >= DofComponent.RX && assembly.External[dof.FullIndex] == 0)
+                if (zeroRow && dof.Key.Component >= DofComponent.RX && assembly.External[dof.FullIndex] == 0 && framed.Contains(dof.Key.PointId))
                 {
                     unconnected.Add(dof.Key);
                     if (report)
@@ -567,6 +569,7 @@ public static class StaticSolver
                 var tangent = Tangent(assembly, pretension, displacement, free, regularize: true);
                 var rhs = new double[free.Length];
                 double maximumDiagonal = 0;
+                bool unstable = false;
                 for (int i = 0; i < free.Length; i++)
                 {
                     if (tangent[i, i] > 0)
@@ -575,15 +578,14 @@ public static class StaticSolver
                         maximumDiagonal = Math.Max(maximumDiagonal, tangent[i, i]);
                         continue;
                     }
+                    // Neither a frame nor a cable, taut or slack, reaches this movement, and no restraint holds it.
                     var dof = model.Dofs[free[i]].Key;
-                    if (Math.Abs(residual[free[i]]) > tolerance)
-                    {
-                        Error("static.dof.noStiffness", ObjectKind.Point, dof.PointId,
-                            $"A load acts on '{document.Points[dof.PointId].Name}' {dof.Component}, which no frame or cable holds in that direction. A straight cable has no stiffness across its own line in this small-displacement analysis.");
-                        return null;
-                    }
-                    tangent[i, i] = 1;   // nothing acts on it and nothing holds it: it stays where it is
+                    Error("static.matrix.unstable", ObjectKind.Point, dof.PointId,
+                        $"'{document.Points[dof.PointId].Name}' {dof.Component} has no stiffness and no restraint: the model is unstable there. " +
+                        "A cable gives stiffness along its own line only: hold that movement with another member or a restraint, or switch it off for cable joints (Analysis Options → Degrees of Freedom). No results returned.");
+                    unstable = true;
                 }
+                if (unstable) return null;
                 double[]? Step(double shift)
                 {
                     var shifted = (double[,])tangent.Clone();

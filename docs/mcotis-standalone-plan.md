@@ -94,7 +94,7 @@ Hệ quả: mọi mục của plan cũ nói về CSI service, version adapter, I
 | Loads | Point load, frame distributed / point load, cable target force, shell uniform load — mỗi load thuộc một pattern |
 | Load case | Loại, components (pattern × hệ số), initial case, Run, fit cable target forces |
 | Combination | Terms (case hoặc combination × hệ số), loại |
-| Analysis settings | Dung sai và số vòng fit cáp, số đoạn mesh, cable sag |
+| Analysis settings | Dung sai và số vòng fit cáp, số đoạn mesh, cable sag, DOF đang bật, DOF của nút cable (mặc định UX UY UZ) |
 
 Đơn vị cố định trong document: kN, m, t. Chuyển đổi đơn vị thuộc về UI.
 
@@ -161,7 +161,7 @@ chạy model có Shell và nói rõ lý do.
 
 ## 7. Checks
 
-`dotnet run --project tests/Mcotis.Checks` — 2705 checks, không cần SAP2000, WPF hay database:
+`dotnet run --project tests/Mcotis.Checks` — 2751 checks, không cần SAP2000, WPF hay database:
 
 | Nhóm | Nội dung |
 |---|---|

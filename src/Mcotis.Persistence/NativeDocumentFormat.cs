@@ -21,11 +21,23 @@ public interface IDocumentMigration
 public static class NativeDocumentFormat
 {
     public const string FormatName = "Mcotis.Document";
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
     public const string Extension = ".mcotis";
 
-    /// <summary>Schema 1 had no DOF setting; preserve its planar XZ analysis assumption.</summary>
-    public static IReadOnlyList<IDocumentMigration> Migrations { get; } = [new AddActiveDofs()];
+    /// <summary>Schema 1 had no DOF setting; preserve its planar XZ analysis assumption. Schema 2 had no setting for the
+    /// degrees of freedom of cable joints; they were the translations, which is what it gets.</summary>
+    public static IReadOnlyList<IDocumentMigration> Migrations { get; } = [new AddActiveDofs(), new AddCableDofs()];
+
+    private sealed class AddCableDofs : IDocumentMigration
+    {
+        public int FromVersion => 2;
+        public void Upgrade(JsonObject file)
+        {
+            if (file["settings"] is not JsonObject settings || settings.ContainsKey("cableDofs"))
+                throw new DocumentFileException("Schema 2 requires settings without a cableDofs field.");
+            settings["cableDofs"] = nameof(DofMask.Translations);
+        }
+    }
 
     private sealed class AddActiveDofs : IDocumentMigration
     {
@@ -101,7 +113,7 @@ public static class NativeDocumentFormat
             {
                 CableFitTolerancePercent = d.Settings.CableFitTolerancePercent, CableFitMaxIterations = d.Settings.CableFitMaxIterations,
                 FrameMeshSegments = d.Settings.FrameMeshSegments, CableSag = d.Settings.CableSag,
-                ActiveDofs = d.Settings.ActiveDofs,
+                ActiveDofs = d.Settings.ActiveDofs, CableDofs = d.Settings.CableDofs,
             },
             NameSequence = NamingService.Kinds.Where(kind => d.Names.LastNumber(kind) > 0).ToDictionary(kind => kind.ToString(), d.Names.LastNumber),
             Materials = ByName(d.Materials.Values).Select(item => new MaterialDto
@@ -300,7 +312,7 @@ public static class NativeDocumentFormat
 
         var settings = Member(file.Settings, "settings");
         editor.SetSettings(new(settings.CableFitTolerancePercent, settings.CableFitMaxIterations, settings.FrameMeshSegments, settings.CableSag)
-        { ActiveDofs = settings.ActiveDofs });
+        { ActiveDofs = settings.ActiveDofs, CableDofs = settings.CableDofs });
 
         // Where the automatic names had got to — beyond what the names still in the file show, when objects were deleted.
         foreach (var (key, number) in Member(file.NameSequence, "nameSequence"))

@@ -44,5 +44,9 @@ public sealed record AnalysisSettings(double CableFitTolerancePercent = 10, int 
     int FrameMeshSegments = 10, bool CableSag = true)
 {
     public DofMask ActiveDofs { get; init; } = DofMask.Full3D;
+    /// <summary>The degrees of freedom a joint has when only cables reach it, among the active ones. A cable gives
+    /// stiffness along its own line only: whichever of these nothing else holds — another member, a restraint — makes
+    /// the model unstable, and the analysis says so. The rest are switched off at such a joint, as by a support.</summary>
+    public DofMask CableDofs { get; init; } = DofMask.Translations;
     public static AnalysisSettings Default { get; } = new();
 }

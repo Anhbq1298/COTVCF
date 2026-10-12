@@ -56,7 +56,8 @@ public sealed record CompilationResult(CompiledModel? Model, ImmutableArray<Vali
 /// <summary>Reads only the native snapshot. Validates DOF compatibility without modifying/projecting the model,
 /// guessing supports, meshing, or evaluating an unverified element kernel. A frame is connected to every point that
 /// lies on its axis between its ends (within <see cref="Tolerances.Length"/>): it is compiled as one member per piece.
-/// Cables are never split.</summary>
+/// Cables are never split. A joint that only cables reach has the degrees of freedom the model gives cable joints
+/// (<see cref="AnalysisSettings.CableDofs"/>); the others are switched off there.</summary>
 public static class ModelCompiler
 {
     /// <summary>A point this close [m] to a frame's axis, but not on it, is reported: it looks connected and is not.</summary>
@@ -117,17 +118,36 @@ public static class ModelCompiler
             if (document.AssignmentOfFrame(frame.Id).SectionId is null)
                 Error("analysis.section", ObjectKind.Frame, frame.Id, $"Frame '{frame.Name}' needs a section for analysis.");
         }
+        var cableDofs = document.Settings.CableDofs;
+        if (!document.Cables.IsEmpty && (mask & cableDofs & DofMask.Translations) == 0)
+            Error("dof.cable.translations", ObjectKind.Settings, default,
+                "The degrees of freedom of cable joints include no active translation; a cable needs at least one to act.");
         foreach (var cable in document.Cables.Values.OrderBy(item => item.Id))
         {
-            members.Add(new(cable.Id, ObjectKind.Cable, cable.StartPointId, cable.EndPointId, DofMask.Translations));
-            used[cable.StartPointId] |= DofMask.Translations;
-            used[cable.EndPointId] |= DofMask.Translations;
+            members.Add(new(cable.Id, ObjectKind.Cable, cable.StartPointId, cable.EndPointId, cableDofs));
+            used[cable.StartPointId] |= cableDofs;
+            used[cable.EndPointId] |= cableDofs;
             if (document.AssignmentOfCable(cable.Id).SectionId is null)
                 Error("analysis.section", ObjectKind.Cable, cable.Id, $"Cable '{cable.Name}' needs a cable section for analysis.");
         }
         foreach (var shell in document.Shells.Values.OrderBy(item => item.Id))
             Error("analysis.shell.unsupported", ObjectKind.Shell, shell.Id,
                 $"Shell '{shell.Name}' is stored in the document, but this frame/cable compiler has no verified shell kernel.");
+
+        // A cable that pulls in a direction switched off at a joint only cables reach is held there as by a support.
+        // That is the model's own setting; it is said, so that it is not taken for the structure's stiffness.
+        foreach (var cable in document.Cables.Values.OrderBy(item => item.Id))
+        {
+            var along = document.Points[cable.EndPointId].Position - document.Points[cable.StartPointId].Position;
+            if (along.Length <= Tolerances.Length) continue;
+            double[] direction = [along.X / along.Length, along.Y / along.Length, along.Z / along.Length];
+            foreach (var pointId in new[] { cable.StartPointId, cable.EndPointId })
+            foreach (var component in DegreesOfFreedom.Components.Take(3))
+                if (mask.Contains(component) && !used[pointId].Contains(component) && !document.RestraintOf(pointId).Restrains(component) &&
+                    Math.Abs(direction[(int)component]) > 1e-9)
+                    Issue(ValidationSeverity.Warning, "dof.cable.held", ObjectKind.Cable, cable.Id,
+                        $"Cable '{cable.Name}' pulls on '{document.Points[pointId].Name}' in {component}, which is switched off for cable joints: the joint is held there as by a support.");
+        }
 
         var points = document.Points.Values.OrderBy(item => item.Id).ToArray();
         // A reduced translation mask is a physical dimensional assumption. Coordinates stay XYZ and are never projected.

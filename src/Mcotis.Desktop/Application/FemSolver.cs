@@ -99,7 +99,8 @@ public sealed class FemSolver
         int made = 0;
         Native.ObjectId NewId() => new(new Guid(++made, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
         var pointIds = usedPoints.ToDictionary(name => name, _ => NewId(), StringComparer.Ordinal);
-        foreach (var name in usedPoints) editor.AddPoint(new(points[name].X, plane, points[name].Z), "P:" + name, pointIds[name]);
+        // joints keep their own names, so that what the engine says about one reads as the user knows it
+        foreach (var name in usedPoints) editor.AddPoint(new(points[name].X, plane, points[name].Z), name, pointIds[name]);
         editor.SetRestraint(supports.Select(name => pointIds[name]), Native.Restraint.Pinned);
 
         (double C, double S, double Length) Direction(StructuralMember member)
@@ -330,8 +331,15 @@ public sealed class FemSolver
             { ActiveDofs = Native.DofMask.XZ });
 
         var document = editor.Commit().Document;
-        static InvalidOperationException Refused(IEnumerable<Native.ValidationIssue> issues) =>
-            new(string.Join(" ", issues.Where(issue => issue.Severity == Native.ValidationSeverity.Error).Select(issue => issue.Message).Distinct().Take(3)));
+        static InvalidOperationException Refused(IEnumerable<Native.ValidationIssue> issues)
+        {
+            var errors = issues.Where(issue => issue.Severity == Native.ValidationSeverity.Error).ToArray();
+            // In this window the degrees of freedom of cable joints are those of its plane, UX and UZ; what can be changed is the model.
+            string hint = errors.Any(issue => issue.Code == "static.matrix.unstable" && issue.Message.Contains("cable", StringComparison.OrdinalIgnoreCase))
+                ? " In this window a joint that only cables reach moves in UX and UZ: model a cable that runs through such a joint as one cable, and hold every cable end with a frame or a support."
+                : "";
+            return new(string.Join(" ", errors.Select(issue => issue.Message).Distinct().Take(3)) + hint);
+        }
         var compiled = ModelCompiler.Compile(document);
         if (compiled.Model is not { } model) throw Refused(compiled.Issues);
         var wanted = caseIds.Select(item => item.Id).ToList();
