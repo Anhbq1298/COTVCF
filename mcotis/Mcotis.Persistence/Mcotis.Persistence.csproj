@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The native Mcotis file: one authoritative, versioned document per file, migrations between schema versions,
+       atomic save. No WPF and no SAP2000/CSI reference. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mcotis.Core\Mcotis.Core.csproj" />
+    <ProjectReference Include="..\Mcotis.Application\Mcotis.Application.csproj" />
+  </ItemGroup>
+
+</Project>

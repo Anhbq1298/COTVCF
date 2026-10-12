@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The document session, the commands that edit it, the use cases and the contracts other layers implement
+       (file store, later: solver, importers). No WPF, no database and no SAP2000/CSI reference. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mcotis.Core\Mcotis.Core.csproj" />
+  </ItemGroup>
+
+</Project>

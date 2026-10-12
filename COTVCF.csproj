@@ -66,9 +66,10 @@
 
   <ItemGroup>
     <Reference Include="CSiAPIv1"><HintPath>$(SapInstallDir)\CSiAPIv1.dll</HintPath><Private>true</Private></Reference>
-    <Compile Remove="tests\**; .work\**" />
-    <Page Remove="tests\**; .work\**" />
-    <None Remove=".work\**" />
+    <!-- mcotis\ holds the new system's own projects (Mcotis.Core …); this project does not compile them. -->
+    <Compile Remove="tests\**; .work\**; mcotis\**" />
+    <Page Remove="tests\**; .work\**; mcotis\**" />
+    <None Remove=".work\**; mcotis\**" />
     <InternalsVisibleTo Include="COT_VCF.Checks" />
   </ItemGroup>
 

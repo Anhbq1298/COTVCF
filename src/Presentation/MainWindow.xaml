@@ -7,8 +7,9 @@
  <DockPanel>
 
   <!-- ============================ MENU BAR ============================
-       Desktop-style menus (ETABS-like). MB opens workflow pages 01–06A and 08 in the left pane; the FEM page is split
-       into panes opened from Define, Assign, Run, Result and Display. Menu items reuse the existing commands. -->
+       Desktop-style menus (ETABS-like). The FEM page is split into panes opened from Define, Assign, Run, Result and
+       Display. MB — workflow pages 01–06A and 08, the SAP2000 study — comes last, after a separator: reference only.
+       Menu items reuse the existing commands. -->
   <Menu x:Name="MainMenu" DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1"
         Padding="6,2" FontSize="12" AutomationProperties.Name="Main menu" MenuItem.SubmenuOpened="MainMenu_SubmenuOpened">
    <MenuItem Header="_File">
@@ -26,18 +27,6 @@
     <Separator/>
     <MenuItem Header="_Read FEM Properties from SAP" Command="{Binding ReadFemProperties}"
               ToolTip="Read sections, materials (unit weight / mass), modifiers, end releases, load patterns with their assigned loads, static load cases and combinations from the connected SAP2000 model. Read-only; resets the Loads tables to SAP."/>
-   </MenuItem>
-   <MenuItem Header="_MB" IsEnabled="{Binding HasUsableModelGeometry}">
-    <MenuItem Header="01  Loading" Tag="0" Click="MbMenu_Click" InputGestureText="{Binding LoadStatus}"/>
-    <MenuItem Header="02  Truss Height" Tag="1" Click="MbMenu_Click" InputGestureText="{Binding TrussStatus}"/>
-    <MenuItem Header="03  Pretension" Tag="2" Click="MbMenu_Click" InputGestureText="{Binding CableStatus}"/>
-    <MenuItem Header="04  Output Settings" Tag="3" Click="MbMenu_Click" InputGestureText="{Binding OutputStatus}"/>
-    <MenuItem Header="05  Iteration" Tag="4" Click="MbMenu_Click" InputGestureText="{Binding StudyBuildStateText}"/>
-    <MenuItem Header="06A  Optimization" Tag="6" Click="MbMenu_Click" InputGestureText="{Binding OptimizationTabStatus}"
-              IsEnabled="{Binding HasRawData}" ToolTipService.ShowOnDisabled="True"
-              ToolTip="Qualify the stored candidates against acceptance criteria — available once Tab 06 has raw data"/>
-    <Separator/>
-    <MenuItem Header="08  Quantities" Tag="8" Click="MbMenu_Click" InputGestureText="{Binding QuantityTabStatus}"/>
    </MenuItem>
    <MenuItem Header="_Define" IsEnabled="{Binding CanDefineFemModel}">
     <MenuItem Header="_Materials…" Click="DefineMaterials_Click" AutomationProperties.Name="Define Materials"
@@ -156,6 +145,20 @@
    <MenuItem Header="_Help">
     <MenuItem Header="_Workflow Help" Click="ShowWorkflowHelp"/>
     <MenuItem Header="_FEM Procedure" Click="ShowFemHelp"/>
+   </MenuItem>
+   <!-- MB (the SAP2000 study pages) is kept for reference only: last on the bar, set apart by a separator. -->
+   <Separator x:Name="MbMenuSeparator" Style="{StaticResource MenuBarSeparator}"/>
+   <MenuItem Header="_MB" IsEnabled="{Binding HasUsableModelGeometry}">
+    <MenuItem Header="01  Loading" Tag="0" Click="MbMenu_Click" InputGestureText="{Binding LoadStatus}"/>
+    <MenuItem Header="02  Truss Height" Tag="1" Click="MbMenu_Click" InputGestureText="{Binding TrussStatus}"/>
+    <MenuItem Header="03  Pretension" Tag="2" Click="MbMenu_Click" InputGestureText="{Binding CableStatus}"/>
+    <MenuItem Header="04  Output Settings" Tag="3" Click="MbMenu_Click" InputGestureText="{Binding OutputStatus}"/>
+    <MenuItem Header="05  Iteration" Tag="4" Click="MbMenu_Click" InputGestureText="{Binding StudyBuildStateText}"/>
+    <MenuItem Header="06A  Optimization" Tag="6" Click="MbMenu_Click" InputGestureText="{Binding OptimizationTabStatus}"
+              IsEnabled="{Binding HasRawData}" ToolTipService.ShowOnDisabled="True"
+              ToolTip="Qualify the stored candidates against acceptance criteria — available once Tab 06 has raw data"/>
+    <Separator/>
+    <MenuItem Header="08  Quantities" Tag="8" Click="MbMenu_Click" InputGestureText="{Binding QuantityTabStatus}"/>
    </MenuItem>
   </Menu>
 

@@ -97,8 +97,9 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 MenuItem TopMenu(string header) => window.MainMenu.Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == header);
                 Assert(window.MainMenu.Items.OfType<MenuItem>().Select(item => (item.Header as string)!.Replace("_", ""))
-                           .SequenceEqual(["File", "MB", "Define", "Edit", "Assign", "Run", "Result", "Post-Processing", "Display", "Design", "Help"]),
-                    "The menu bar puts Define before Edit, followed by Assign and the analysis/result menus");
+                           .SequenceEqual(["File", "Define", "Edit", "Assign", "Run", "Result", "Post-Processing", "Display", "Design", "Help", "MB"]) &&
+                       window.MainMenu.Items[^2] is Separator && ReferenceEquals(window.MainMenu.Items[^1], TopMenu("MB")),
+                    "The menu bar puts Define before Edit, followed by Assign and the analysis/result menus; MB is last, after a separator");
                 Assert(!FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
                        vm.NewConfig.CanExecute(null) && !TopMenu("MB").IsEnabled && TopMenu("Define").IsEnabled && TopMenu("File").IsEnabled,
                     "Before a model exists, model workflows stay disabled while New Config and Define remain available");
@@ -1462,7 +1463,7 @@ internal static class Program
                 blankVm.InitializeBlankMcotisConfiguration();
                 blankWindow.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var fileMenu = (MenuItem)blankWindow.MainMenu.Items[0];
-                var defineMenu = (MenuItem)blankWindow.MainMenu.Items[2];
+                var defineMenu = blankWindow.MainMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "_Define"));
                 Assert(blankWindow.Title == "Mcotis — Meinhardt Cities of Tomorrow Integrated Structures — Untitled" &&
                        fileMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Load Config…")) &&
                        defineMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Materials…")) &&

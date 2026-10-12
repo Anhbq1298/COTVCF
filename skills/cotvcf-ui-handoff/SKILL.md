@@ -13,6 +13,12 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - Main app project: `COTVCF.csproj`.
 - The old `ConsoleApp1.csproj` identity was removed; everything user-facing should be treated as COTVCF.
 - `COTVCF.sln` currently includes the app and `tests/COT_VCF.Checks.csproj`; the desktop build script targets the app project directly.
+- **The standalone system** (user, 2026-10-12: "ignore SAP2000 and the MB tab completely … stand on our own feet and
+  develop a new system") lives under `mcotis/` — `Mcotis.Core`, `Mcotis.Application`, `Mcotis.Persistence`,
+  `Mcotis.Checks`, all in the solution. The app project excludes that folder from its own compile (`mcotis\**` in
+  `COTVCF.csproj`) and does not reference it yet. Plan and status: `docs/mcotis-standalone-plan.md`. Checks:
+  `dotnet run --project mcotis/Mcotis.Checks`. SAP2000 and the MB pages are reference only: keep them working, do not
+  extend them.
 - `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/`, `.work/`, `tests/bin/`, and `tests/obj/`.
 - The app is a WPF app targeting `net8.0-windows`, `x64`, with SAP2000 API reference `CSiAPIv1.dll`.
 
@@ -55,9 +61,12 @@ earlier tall-header / large-button / blue-block look.
 
 ## Navigation Style — desktop menu bar (ETABS-like)
 
-- A menu bar (`MainMenu`, top of the window) replaces the left tab rail: **File · MB · Define · Edit · Assign · Run ·
-  Result · Post-Processing · Display · Design · Help**. Menu items reuse the existing commands; navigation is presentation only
+- A menu bar (`MainMenu`, top of the window) replaces the left tab rail: **File · Define · Edit · Assign · Run ·
+  Result · Post-Processing · Display · Design · Help | MB**. Menu items reuse the existing commands; navigation is presentation only
   (`MainViewModel.Menu.cs`, click handlers in `MainWindow.xaml.cs`). Do not bring the rail or the toolbar buttons back.
+  **MB is last, after a separator** (user, 2026-10-12: the MB pages are for reference only) — `MbMenuSeparator`, a
+  `Separator` with the `MenuBarSeparator` style of `Theme.xaml` (a vertical line; the default style of a `Separator`
+  in a menu is the drop-down's horizontal rule). Do not move MB back among the working menus.
   - **File**: New Config, Load Config…, Save Config (**Ctrl+S**), Save Config As… (**Ctrl+Shift+S**) · Default Model ·
     Read FEM Properties from SAP. Save (`SaveFemModel`) overwrites the active configuration and asks for a file only when
     there is none; Save As (`SaveFemModelAs`, asked for by the user 2026-10-12) always asks, starting from the active
