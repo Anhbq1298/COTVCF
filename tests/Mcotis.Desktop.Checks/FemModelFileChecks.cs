@@ -122,16 +122,16 @@ internal static class FemModelFileChecks
                 pair.First.Result.Cables.Zip(pair.Second.Result.Cables).All(cable => Math.Abs(cable.First.AxialForceKN - cable.Second.AxialForceKN) < 1e-9));
             Check(same, "offline results equal the connected run (every joint displacement and cable force)");
 
-            // File → Default Model sets the connected model aside and opens the built-in default model.
-            Check(onlineVm.LoadDefaultModel.CanExecute(null), "File → Default Model is available while connected");
+            // File → Load VCF… sets the connected model aside and opens the built-in default model.
+            Check(onlineVm.LoadDefaultModel.CanExecute(null), "File → Load VCF… is available while connected");
             onlineVm.LoadDefaultModel.Execute(null);
             Check(warnings.Count == 0 && onlineVm.IsDefaultModel && !online.IsSapConnected && online.Model?.Name == "COT Framing_V1.2_100m.sdb" &&
                   online.Cables.Count == 16 && onlineVm.FemRuns.Count == 0 && onlineVm.SelectedTab == 7 && onlineVm.RunFemAnalysis.CanExecute(null) && sap.Writes == 0,
-                "File → Default Model replaces the connected model with the default model, ready to run, without touching SAP2000");
-            Check(vm.LoadDefaultModel.CanExecute(null), "File → Default Model is available on an offline model");
+                "File → Load VCF… replaces the connected model with the default model, ready to run, without touching SAP2000");
+            Check(vm.LoadDefaultModel.CanExecute(null), "File → Load VCF… is available on an offline model");
             vm.LoadDefaultModel.Execute(null);
             Check(warnings.Count == 0 && vm.IsDefaultModel && offline.Cables.Count == 16 && vm.FemRuns.Count == 0,
-                "File → Default Model replaces a loaded model with the default model");
+                "File → Load VCF… replaces a loaded model with the default model");
         }
         finally { if (File.Exists(path)) File.Delete(path); }
         RunDefaultModel();

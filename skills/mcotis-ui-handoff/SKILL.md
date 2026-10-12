@@ -99,7 +99,7 @@ earlier tall-header / large-button / blue-block look.
   **MB is last, after a separator** (user, 2026-10-12: the MB pages are for reference only) — `MbMenuSeparator`, a
   `Separator` with the `MenuBarSeparator` style of `Theme.xaml` (a vertical line; the default style of a `Separator`
   in a menu is the drop-down's horizontal rule). Do not move MB back among the working menus.
-  - **File**: New Config, Load Config…, Save Config (**Ctrl+S**), Save Config As… (**Ctrl+Shift+S**) · Default Model ·
+  - **File**: New Config, Load Config…, Save Config (**Ctrl+S**), Save Config As… (**Ctrl+Shift+S**) · Load VCF… · Load TAS… ·
     Read FEM Properties from SAP. Save (`SaveFemModel`) overwrites the active configuration and asks for a file only when
     there is none; Save As (`SaveFemModelAs`, asked for by the user 2026-10-12) always asks, starting from the active
     file's folder and name, and the file it writes becomes the active configuration. Both are on the toolbar (Save As
@@ -295,7 +295,7 @@ earlier tall-header / large-button / blue-block look.
   File → New Config still starts an unsaved blank model. Its creation flow is
   **Define materials/sections → Edit VCF System → Define loads/cases → Run**. Define remains available on that blank model;
   MB, Assign, Run, Result, Post-Processing, Display and Design require geometry. The New Config blank viewer offers
-  **Load Default Template** and **Continue with Blank Model**. The template uses File → Default Model; Continue hides
+  **Load Default Template** and **Continue with Blank Model**. The template uses File → Load VCF…; Continue hides
   the choice and keeps the model empty. New Config clears the active working-session manifest.
 - The `WorkflowTabs` TabControl stays (indices unchanged) but its tab strip is hidden (`ItemContainerStyle` →
   `Collapsed`). A one-line pane header above it shows `PaneMenu  ›  PaneTitle` (e.g. `MB › 01  LOADING`,

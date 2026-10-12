@@ -18,6 +18,43 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-12 · Edit → Tied Arch System
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Edit → Tied Arch System…
+- What: Builds the tied arch system from H1 (support → arch crown), H2 (support → top chord), the number of bays (even,
+  6–40; default 12) and their spacing (default 10 m; span L = bays × spacing), and the storeys above: SW 7–15 kPa
+  (step 1), SDL 3–10 kPa (step 1), LL 5–10 kPa (step 2.5), n 5–10 floors and the tributary width B (default 12 m). The
+  form shows the point load on each top chord joint, SLS = (SW + SDL + LL) × s × B × n and ULS = (1.35 SW + 1.35 SDL +
+  1.5 LL) × s × B × n (18,000 / 25,200 kN by default), and a live preview with the SLS loads and the arch height H.
+  The arch is the parabola through the two supports and the crown (H1 at mid-span), with a joint at every vertical
+  line; the layout, members, sections, releases, load patterns, cases and combinations are those of the TAS model
+  (three braced bays at each end, pinned struts and braces). Apply / OK rebuilds the model: DEAD_above (SW + SDL) and
+  LL_above (LL) on the top chord joints, half at the two end joints; LL_left / LL_right on each half. With the
+  defaults it is the TAS model of File → Load TAS….
+- Checks: --etabs-import (the defaults build the TAS model's joints, loads and deflections; H1 25 / H2 30 / 10 bays of
+  12 m is on the parabola, ready to run, and its supports carry bays × the point load; out-of-range inputs refused)
+
+## 2026-10-12 · Load TAS (Tied Arch System) and Load VCF
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: File → Load TAS…; File → Load VCF… (was File → Default Model)
+- What: Opens the TAS model — the CoT 120 m composite arch deck (ETABS 22.2 .e2k, bundled with the app) — through the
+  same import as File → Import From ETABS: the C90/105, S690 and B500 materials, CFT, steel encased and Section
+  Designer sections, end releases, pinned bases, 6 load patterns with their 40 joint loads, 9 static load cases and 8
+  combinations. ETABS splits every column, strut and brace at each story it crosses; Load TAS joins each straight member
+  back into one frame (only where nothing else meets the joint, with no load, restraint or release there), so the model
+  has 30 joints and 59 frames instead of 114 and 143, with the same results. The model is offline and ready to run
+  without ETABS; it replaces the current model after a confirmation and shows straight away (the import summary appears
+  only if the model is not ready to run). Import From ETABS still keeps the frames as ETABS splits them. With
+  dimensions on, the XZ view of an arch model also dimensions the arch height H at the left, from the supports to the
+  crown (H = 30 m for TAS), with a dashed line out from the crown; the arch is the frames of one section that leave two
+  pinned supports inclined and join them. The model is named "TAS - Tied Arch System" in the title bar and messages.
+  File → Default Model is renamed File → Load VCF… (the same built-in VCF model, COT Framing_V1.2_100m).
+- Checks: --etabs-import (the bundled file is tests/etabs-import/CoT120.e2k; Load TAS is ready to run, has no joint
+  left inside a straight member, deflects and reacts as the split model, and its arch is found with H = 30 m; a braced
+  portal has no arch; the title is TAS - Tied Arch System); --fem-model (Load VCF… opens the default model); --dev-log
+
 ## 2026-10-12 · One solver everywhere: the general 3D solver runs the application
 - Status: Done
 - Who: markbui, Claude

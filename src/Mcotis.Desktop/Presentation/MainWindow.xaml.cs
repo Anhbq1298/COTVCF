@@ -572,6 +572,29 @@ public partial class MainWindow : Window
         }
     }
 
+    // File → Load TAS…: the built-in CoT 120 m composite arch deck, imported as Import From ETABS imports its .e2k
+    private void LoadTas_Click(object sender, RoutedEventArgs e)
+    {
+        const string title = "Load TAS";
+        if (DataContext is not MainViewModel vm || !vm.CanImportFromEtabs) return;
+        if (vm.HasWorkingModel && MessageBox.Show(this,
+                "Load the TAS model (CoT 120 m composite arch deck)? It replaces the current model and its Tabs 01–05 in Mcotis (save the configuration first to keep it).",
+                title, MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK) != MessageBoxResult.OK) return;
+        SharedViewer.ClearSelection();
+        try
+        {
+            // the model shows in the viewer and the status bar says it is ready; the summary only when something is missing
+            var summary = vm.LoadTasModel();
+            if (!summary.ReadyToRun)
+                MessageBox.Show(this, string.Join(Environment.NewLine, summary.Lines.Select(line => "• " + line)), title,
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The TAS model could not be loaded: " + ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     // File → Export to ETABS: preview the changes in the open ETABS model, confirm, write (not saved)
     private async void ExportToEtabs_Click(object sender, RoutedEventArgs e)
     {
@@ -763,6 +786,22 @@ public partial class MainWindow : Window
         else vcfGeometryWindow.LoadFromModel();
         if (vcfGeometryWindow.WindowState == WindowState.Minimized) vcfGeometryWindow.WindowState = WindowState.Normal;
         vcfGeometryWindow.Activate();
+    }
+
+    // Edit → Tied Arch System: H1, H2, bays, spacing and the storeys above, with a live preview; Apply rebuilds the TAS model
+    private TiedArchWindow? tiedArchWindow;
+    private void TiedArch_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (tiedArchWindow is null)
+        {
+            tiedArchWindow = new TiedArchWindow(vm) { Owner = this };
+            tiedArchWindow.Closed += (_, _) => tiedArchWindow = null;
+            tiedArchWindow.Show();
+        }
+        else tiedArchWindow.LoadFromModel();
+        if (tiedArchWindow.WindowState == WindowState.Minimized) tiedArchWindow.WindowState = WindowState.Normal;
+        tiedArchWindow.Activate();
     }
 
     // Run → Optimization VCF: ranges (min / max / step) of the VCF inputs and candidate sections; OK keeps them

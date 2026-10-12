@@ -101,7 +101,7 @@ public sealed partial class MainViewModel
         }
         if (State.Model is null || !(State.IsSapConnected || IsOfflineModel))
         {
-            VcfOptimizationProgress = "Open a model before running the optimization: File → Default Model or Load MCOTiS Config, or Connect SAP.";
+            VcfOptimizationProgress = "Open a model before running the optimization: File → Load VCF… or Load MCOTiS Config, or Connect SAP.";
             Warn("Optimization VCF", VcfOptimizationProgress);
             return;
         }

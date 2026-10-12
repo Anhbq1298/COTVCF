@@ -51,7 +51,61 @@ public sealed partial class MainViewModel
         return ImportEtabsModel(model, info, Path.GetFileName(full), "from the .e2k file");
     }
 
-    internal EtabsImportSummary ImportEtabsModel(EtabsModel etabsModel, ModelInfo info, string modelName, string source)
+    internal const string TasResource = "Mcotis.TAS-CoT120.e2k";
+    internal const string TasName = "TAS - Tied Arch System";
+
+    /// <summary>File → Load TAS…: the bundled CoT 120 m composite arch deck, imported as Import From ETABS imports its
+    /// .e2k, with each straight member as one frame (ETABS splits them at every story; <see cref="EtabsFrameChains"/>).</summary>
+    internal EtabsImportSummary LoadTasModel()
+    {
+        if (IsBusy) throw new InvalidOperationException("Another operation is running; try again when it has finished.");
+        var (template, path) = ReadTasTemplate();
+        var summary = ImportEtabsModel(EtabsFrameChains.Join(template), TasInfo(template, path), Path.GetFileName(path), "the built-in TAS model", TasName);
+        tasParameters = TiedArchParameters.Default;
+        return summary;
+    }
+
+    // ---- Edit → Tied Arch System: the TAS model built from its parameters (TiedArchSystem) ----
+    private TiedArchParameters? tasParameters;
+
+    /// <summary>The parameters of the open tied arch system (Load TAS or Edit → Tied Arch System), or null for another model.</summary>
+    internal TiedArchParameters? TiedArchParameters => OfflineModelName == TasName ? tasParameters : null;
+
+    /// <summary>The tied arch system the parameters give, as the editor's preview shows it: its geometry, supports and
+    /// each member's section (for the arch height dimension).</summary>
+    internal (GeometryModel Geometry, IReadOnlyList<string> Supports, IReadOnlyDictionary<string, FemSectionProperties> Sections) PreviewTiedArch(TiedArchParameters parameters)
+    {
+        var imported = EtabsImport.Convert(TiedArchSystem.Build(ReadTasTemplate().Model, parameters));
+        return (imported.Geometry, imported.SupportedJoints, imported.Members.ToDictionary(member => member.MemberName, StringComparer.Ordinal));
+    }
+
+    /// <summary>Edit → Tied Arch System → Apply: replaces the model with the tied arch system of the parameters — the TAS
+    /// model's materials, sections, load patterns, cases and combinations, with the geometry and deck loads rebuilt.</summary>
+    internal EtabsImportSummary ApplyTiedArchSystem(TiedArchParameters parameters)
+    {
+        if (IsBusy) throw new InvalidOperationException("Another operation is running; try again when it has finished.");
+        var (template, path) = ReadTasTemplate();
+        var model = TiedArchSystem.Build(template, parameters);
+        var summary = ImportEtabsModel(model, TasInfo(template, path), Path.GetFileName(path),
+            $"Edit → Tied Arch System (H1 {parameters.ArchRise:0.###} m, H2 {parameters.DeckHeight:0.###} m, L {parameters.Span:0.###} m)", TasName);
+        tasParameters = parameters;
+        return summary;
+    }
+
+    /// <summary>The bundled TAS .e2k, copied to the per-user app folder so the model has a real path, as an imported one does.</summary>
+    private static (EtabsModel Model, string Path) ReadTasTemplate()
+    {
+        using var resource = typeof(MainViewModel).Assembly.GetManifestResourceStream(TasResource)
+            ?? throw new InvalidDataException("The built-in TAS model is missing from the application.");
+        var path = Path.Combine(Infrastructure.AppDataPaths.EnsureDirectory(Path.Combine(Infrastructure.AppDataPaths.RootDirectory, "TAS")), "CoT120.e2k");
+        using (var file = File.Create(path)) resource.CopyTo(file);
+        return (EtabsE2kReader.Read(File.ReadAllText(path), path), path);
+    }
+
+    private static ModelInfo TasInfo(EtabsModel model, string path) => new(path, model.ProgramVersion, 6, "kN", "m", false);
+
+    /// <param name="displayName">The model's name in the title bar and messages (Load TAS); null: "file · ETABS".</param>
+    internal EtabsImportSummary ImportEtabsModel(EtabsModel etabsModel, ModelInfo info, string modelName, string source, string? displayName = null)
     {
         if (IsBusy) throw new InvalidOperationException("Another operation is running; try again when it has finished.");
         // everything that can refuse the model does so before the current model is touched
@@ -107,7 +161,7 @@ public sealed partial class MainViewModel
             femSapLoading = imported.Loading;
             femInputsOutdated = false;
             offlineLoadCaseNames = femSapLoading.Cases.Select(item => item.Name).ToArray();
-            offlineModelPath = $"{modelName} · ETABS";
+            offlineModelPath = displayName ?? $"{modelName} · ETABS";
             isDefaultModel = false;
             blankModelChoiceDismissed = true;
             femInputSnapshot = null;
@@ -120,7 +174,7 @@ public sealed partial class MainViewModel
 
             var frames = geometry.Members.Count;
             var levels = geometry.Points.Values.Select(point => Math.Round(point.Position.Z, 3)).Distinct().Count();
-            lines.Add($"Model: {modelName} ({info.Version}), {source} · {geometry.Points.Count} joints on {levels} levels, {frames} frames");
+            lines.Add($"Model: {displayName ?? modelName} ({info.Version}), {source} · {geometry.Points.Count} joints on {levels} levels, {frames} frames");
             var composite = FrameSections.Count(section => section.IsComposite);
             var general = FrameSections.Count(section => section.Shape == FrameShape.General);
             lines.Add($"Libraries: {Materials.Count} materials, {FrameSections.Count} frame sections" +
@@ -193,10 +247,11 @@ public sealed partial class MainViewModel
         catch (InvalidOperationException ex) { blocker = ex.Message; }
         var ready = blocker is null && HasWorkingModel;
         lines.Add(ready ? "Ready: Run → Run FEM Analysis solves the imported model." : $"Not ready to run yet: {blocker ?? "no working model"}");
-        FemProgressText = $"Imported {modelName} from ETABS · {geometry.Members.Count} frames, {femSapLoading.Cases.Count(item => item.Supported)} static load cases, " +
+        var done = displayName is null ? $"Imported {modelName} from ETABS" : $"Loaded {displayName}";
+        FemProgressText = $"{done} · {geometry.Members.Count} frames, {femSapLoading.Cases.Count(item => item.Supported)} static load cases, " +
                           $"{femSapLoading.Combinations.Count} combinations." + (ready ? " Run Analysis solves it without SAP2000 or ETABS." : "");
-        Message = ready ? $"Imported {modelName} from ETABS — ready to run (ETABS unchanged)."
-                        : $"Imported {modelName} from ETABS — see the import summary for what is still needed.";
+        Message = ready ? $"{done} — ready to run" + (displayName is null ? " (ETABS unchanged)." : ".")
+                        : $"{done} — see the import summary for what is still needed.";
         StartNewMcotisConfigurationFile();
         Notify(nameof(SharedViewerSpanPoints));
         Notify(nameof(SharedViewerMemberSizes));
