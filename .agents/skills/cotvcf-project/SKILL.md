@@ -16,6 +16,6 @@ For UI work, also use the `structural-engineering-ui` repository skill. For SAP2
 
 ## Verification
 
-- Build with `dotnet build COTVCF.sln`.
+- Build with `dotnet build MCOTiS.sln`.
 - Run offline checks with `dotnet run --project tests/COT_VCF.Checks` when behavior changes.
 - Live SAP reads, UI-read checks, and all model writes require an explicit task that places them in scope.

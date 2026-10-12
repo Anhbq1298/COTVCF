@@ -314,7 +314,7 @@ Acceptance: current sample/default files import with no unresolved references an
 - Test atomic replacement, external input modification, interrupted Save, corrupt working database, cancelled Run, and recovery cleanup.
 - Update UI handoff and user documentation.
 
-Acceptance: `dotnet build COTVCF.sln`, `dotnet run --project tests/COT_VCF.Checks`, database round-trip/recovery checks, and `git diff --check` all pass. No automated check connects to SAP2000.
+Acceptance: `dotnet build MCOTiS.sln`, `dotnet run --project tests/COT_VCF.Checks`, database round-trip/recovery checks, and `git diff --check` all pass. No automated check connects to SAP2000.
 
 ## Required regression checks
 

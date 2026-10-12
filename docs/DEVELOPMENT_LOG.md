@@ -18,6 +18,14 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-12 · MCOTiS solution name
+- Status: Done
+- Who: Codex
+- Where: Repository root — MCOTiS.sln
+- What: Renames COTVCF.sln to MCOTiS.sln, preserving the projects and build configurations. Documentation and agent
+  build commands use the new solution name.
+- Checks: dotnet build MCOTiS.sln; --dev-log
+
 ## 2026-10-12 · One folder per project: src and tests
 - Status: Done
 - Who: markbui
@@ -25,7 +33,7 @@ continues on the next lines, indented by two spaces):
 - What: The app is now the project src/Mcotis.Desktop (it was at the repository root with its code under src/). The
   libraries of the standalone system are its siblings in src/ (they were under mcotis/); the checks are
   tests/COT_VCF.Checks and tests/Mcotis.Checks. Build and run commands are unchanged except for the paths:
-  dotnet build COTVCF.sln, ./build-desktop.ps1, dotnet run --project tests/COT_VCF.Checks. A branch made before this
+  dotnet build MCOTiS.sln, ./build-desktop.ps1, dotnet run --project tests/COT_VCF.Checks. A branch made before this
   change must be merged with rename detection. The build now finds SAP2000 27 when 26 is not installed.
 - Checks: solution build; dotnet run --project tests/Mcotis.Checks; default offline COT_VCF.Checks; --dev-log;
   --result-tools-ui

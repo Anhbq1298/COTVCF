@@ -91,5 +91,5 @@ not happened because this milestone has no numerical solver.
 4. Preserve separate geometric-stiffness, mass, modal and diagnostics gates. ALG-09 remains blocked pending the
    mass-based story P-Delta derivation. Do not label an invented approximation as CSI's method.
 
-Validation commands: `dotnet build COTVCF.sln -m:1 -p:SapInstallDir="C:\Program Files\Computers and Structures\SAP2000 27"`,
+Validation commands: `dotnet build MCOTiS.sln -m:1 -p:SapInstallDir="C:\Program Files\Computers and Structures\SAP2000 27"`,
 `dotnet run --project tests/Mcotis.Checks`, `dotnet run --project tests/COT_VCF.Checks`.

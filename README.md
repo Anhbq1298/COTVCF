@@ -298,14 +298,14 @@ The Mcotis project JSON stores the configuration for Tabs 1–5 and their study 
 Requirements: Windows x64, .NET 8 Desktop Runtime, and a local SAP2000 installation providing `CSiAPIv1.dll` (SAP2000 26 is the project default; the installed SAP2000 27 API also builds). The API DLL is not committed.
 
 ```powershell
-dotnet build COTVCF.sln
+dotnet build MCOTiS.sln
 dotnet run --project src/Mcotis.Desktop/Mcotis.Desktop.csproj
 ```
 
 For a different SAP2000 installation:
 
 ```powershell
-dotnet build COTVCF.sln '-p:SapInstallDir=C:\Your SAP2000 folder'
+dotnet build MCOTiS.sln '-p:SapInstallDir=C:\Your SAP2000 folder'
 ```
 
 Default executable:

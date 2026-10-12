@@ -9,7 +9,7 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 
 ## Current Project Layout
 
-- Main solution: `COTVCF.sln`.
+- Main solution: `MCOTiS.sln`.
 - Main app project: `src/Mcotis.Desktop/Mcotis.Desktop.csproj`.
 - The old `ConsoleApp1.csproj` identity was removed; everything user-facing should be treated as COTVCF.
 - **Layout** (user, 2026-10-12, "dọn triệt để"): one folder per project. `src/Mcotis.Desktop` is the app — `App.xaml`,
@@ -18,7 +18,7 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
   check projects are `tests/COT_VCF.Checks` and `tests/Mcotis.Checks`. Resources are addressed from the project folder:
   pack URIs read `/Mcotis;component/Presentation/Theme.xaml`, without `src/`. The fixtures `tests/fem-sap-benchmark` and
   `tests/etabs-import` stay where they were, and the checks are run from the repository root.
-- `COTVCF.sln` includes the app, the libraries and both check projects; the desktop build script targets the app project directly.
+- `MCOTiS.sln` includes the app, the libraries and both check projects; the desktop build script targets the app project directly.
 - **The standalone system** (user, 2026-10-12: "ignore SAP2000 and the MB tab completely … stand on our own feet and
   develop a new system") is the library projects `src/Mcotis.Core`, `src/Mcotis.Application`, `src/Mcotis.Persistence`
   and `src/Mcotis.Analysis`, with their checks in `tests/Mcotis.Checks`. The app does not reference them yet. Plan and
@@ -30,7 +30,7 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 
 ## Build And Run
 
-- Build the app and checks together with `dotnet build COTVCF.sln -m:1`; when this machine has only SAP2000 27,
+- Build the app and checks together with `dotnet build MCOTiS.sln -m:1`; when this machine has only SAP2000 27,
   add `-p:SapInstallDir="C:\Program Files\Computers and Structures\SAP2000 27"`.
 - If the running desktop app locks `src/Mcotis.Desktop/bin/Debug/net8.0-windows/win-x64/Mcotis.exe` or `.dll`, close it with `Get-Process -Name 'Mcotis' -ErrorAction SilentlyContinue | Stop-Process -Force`, then rebuild.
 - For compile-only checks while the app is open, use `dotnet build src/Mcotis.Desktop/Mcotis.Desktop.csproj -o .work\build-check`.
@@ -39,7 +39,7 @@ Use this when continuing work on the COTVCF WPF desktop app in this repository. 
 - The built application folder is `bin/COT ParametricTools_V2` (version 2.0.0.0). Produce it with
   `dotnet publish src/Mcotis.Desktop/Mcotis.Desktop.csproj -c Release --self-contained false -o "bin/COT ParametricTools_V2"` — never by
   copying a build output by hand: the earlier hand-copied `COT VCF Tools V1.0` folder went stale and showed an old app.
-- The solution also has a `FreshBuild` configuration. `dotnet build COTVCF.sln -c FreshBuild` deletes the existing
+- The solution also has a `FreshBuild` configuration. `dotnet build MCOTiS.sln -c FreshBuild` deletes the existing
   `bin/` directory and builds a complete app directly into a newly created `bin/` directory (`bin/Mcotis.exe`).
   Close any running Mcotis instance from `bin/` first; this build also removes any Debug or published outputs there.
 - To rebuild and create the **Mcotis desktop icon**, run `./build-desktop.ps1`. The script checks for a running app,

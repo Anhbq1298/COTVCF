@@ -54,7 +54,7 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
 
 ## Repository Checks
 
-- Build with `dotnet build COTVCF.sln`.
+- Build with `dotnet build MCOTiS.sln`.
 - Run the new system's checks with `dotnet run --project tests/Mcotis.Checks`. They need no SAP2000 installation.
 - Run offline checks with `dotnet run --project tests/COT_VCF.Checks`.
 - Do not run `--sap-read`, `--ui-read`, or write to a live SAP2000 model unless the user asks for that live integration work.

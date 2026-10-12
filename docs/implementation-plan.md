@@ -149,7 +149,7 @@ Deliverables:
 
 Acceptance criteria:
 
-- `dotnet build COTVCF.sln` succeeds with no warnings.
+- `dotnet build MCOTiS.sln` succeeds with no warnings.
 - `dotnet run --project tests/COT_VCF.Checks` passes.
 - Offline UI smoke passes.
 - `git diff --check` passes and no unrelated user changes are overwritten.
