@@ -72,7 +72,7 @@ public sealed partial class MainViewModel
               "Run Analysis solves this model as defined; SAP2000 is not used."
         : "";
 
-    public bool CanSaveFemModel => !IsBusy && HasWorkingModel && State.BaselineCaptured &&
+    public bool CanSaveFemModel => !IsBusy && HasWorkingModel && State.Baseline.Points.Count > 0 &&
         State.Geometry.Members.Any(member => member.Kind is MemberKind.Frame or MemberKind.Cable);
     public bool CanLoadFemModel => !IsBusy;
 

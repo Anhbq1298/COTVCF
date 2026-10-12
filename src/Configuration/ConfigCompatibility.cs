@@ -111,7 +111,10 @@ public sealed class ConfigCompatibilityValidator
         }
 
         // ---- Tab 02 Truss Height ----
-        if (cfg.Tab03TrussHeight is { } t3)
+        // A section without any chord group is a model without a truss-height study (e.g. one imported from ETABS): not
+        // configured, as ConfigService treats it — the FEM database still stores the section.
+        if (cfg.Tab03TrussHeight is { } t3 &&
+            (t3.TopPoints?.Count ?? 0) + (t3.MiddlePoints?.Count ?? 0) + (t3.BottomPoints?.Count ?? 0) > 0)
         {
             var tc = r.Truss; tc.Present = true;
             if (!Enum.IsDefined(t3.ReferenceElevation)) tc.Problems.Add("reference elevation is invalid.");
@@ -199,7 +202,12 @@ public sealed class ConfigCompatibilityValidator
         }
 
         // ---- Tab 04 Output Settings ----
-        if (cfg.Tab05OutputSettings is { } t5)
+        // a section that monitors nothing is not configured (ConfigService.ConfiguredIn's rule) — e.g. a model imported
+        // from ETABS or SAP2000 and saved before any output was chosen
+        if (cfg.Tab05OutputSettings is { } t5 &&
+            ((t5.DeflectionPointNames?.Count ?? 0) > 0 || (t5.MemberForceGroups?.Count ?? 0) > 0 ||
+             (t5.FoundationLeftPointNames?.Count ?? 0) > 0 || (t5.FoundationRightPointNames?.Count ?? 0) > 0 ||
+             (t5.CableNames?.Count ?? 0) > 0 || !string.IsNullOrWhiteSpace(t5.CableResultLoadCase)))
         {
             var tc = r.Output; tc.Present = true;
             if (!string.Equals(t5.OutputGroupPrefix, OutputGroupNaming.Prefix, StringComparison.Ordinal))

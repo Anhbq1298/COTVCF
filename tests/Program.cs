@@ -24,6 +24,33 @@ internal static class Program
                 FemDatabaseChecks.Run();
                 return 0;
             }
+            if (args.Contains("--sap-import"))
+            {
+                SapImportChecks.Run();
+                return 0;
+            }
+            if (args.Contains("--etabs-export"))
+            {
+                EtabsExportChecks.Run();
+                return 0;
+            }
+            // opt-in, live: exports into a private hidden ETABS this check starts (never the user's), imports it back and runs it
+            if (args.Contains("--etabs-export-live"))
+            {
+                EtabsExportChecks.RunLive();
+                return 0;
+            }
+            if (args.Contains("--etabs-import"))
+            {
+                EtabsImportChecks.Run();
+                return 0;
+            }
+            // opt-in, live: imports the model open in the running ETABS (read-only — ETABS is never written)
+            if (args.Contains("--etabs-live"))
+            {
+                EtabsImportChecks.RunLive();
+                return 0;
+            }
             if (args.Contains("--fem-model"))
             {
                 FemModelFileChecks.Run();
@@ -1399,6 +1426,9 @@ internal static class Program
             MegaColumnChecks.Run();
             FemDatabaseChecks.Run();
             FemModelFileChecks.Run();
+            SapImportChecks.Run();
+            EtabsImportChecks.Run();
+            EtabsExportChecks.Run();
             ColumnDesignChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }

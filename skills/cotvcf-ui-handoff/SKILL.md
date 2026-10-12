@@ -74,6 +74,76 @@ earlier tall-header / large-button / blue-block look.
     beside Save) and bound as `Window.InputBindings` in `MainWindow.xaml`; the dialog is `MainViewModel.AskFemSavePath`
     (a check replaces it). One `.cotfem.db`
     is the complete MCOTiS configuration; the old split project/model JSON commands are not exposed.
+    · **Import From SAP2000** (before Read FEM Properties): one read-only step from the active SAP2000 model to a model
+    ready to run — `MainViewModel.ImportFromSapAsync` (MainViewModel.Import.cs): fresh session (Tabs 01–05 reset after an
+    OK / Cancel confirmation) → connect + geometry → member properties, loads, cases, combinations → material / section
+    libraries as SAP defines them (member properties keep SAP's values) → Tab 03 = cables with a SAP target force (pattern,
+    force, section) → Tab 02 chords by `VcfChordDetection` (TTrPt / MTrPt / BTrPt names, else the three highest levels of
+    joints on horizontal frames, intermediate joints included) and baseline capture → Tab 01 fitted to the SAP joint loads
+    (a pattern with vertical loads uniform per tributary length becomes qz on those joints with B = 1 m, 1 storey, so the
+    replaced SAP loads come back identical; otherwise 0 kPa on the top chord in a pattern not loaded there). Readiness is
+    `FemStudyService.ComposeModel`'s own check; the summary dialog lists each step and what is still missing.
+    Offline checks: `--sap-import`.
+    · **Export to SAP2000…** (after Import): writes the Mcotis model into the model open in SAP2000, ready to run there.
+    `MainViewModel.BuildSapExportModel` (MainViewModel.Export.cs) → `SapExportModel` (Application/SapExport.cs): geometry,
+    member properties, materials / sections, pin supports, load patterns, Run Analysis's Tab 01 joint loads and Tab 03
+    targets (`FemStudyService.ComposeModel`), supported case rows (with Run) and linear additive combinations. Flow:
+    `PreviewSapExportAsync` (read-only: attach via `WorkflowService.PeekActiveModelAsync`, validate everything, list the
+    planned changes) → OK / Cancel dialog → `ExportToSapAsync`. `SapGateway.ExportModelAsync` (SapGateway.Export.cs,
+    signatures checked against SAP2000 27's CSiAPIv1) requires kN-m units; unlocks a locked model only after the user
+    confirmed (results deleted); order: materials → frame / cable sections (existing SAP general / Section Designer sections
+    kept) → delete members not in Mcotis (or rewired) and their unconnected joints → move joints (undeformed-length cables
+    keep their relative length) → add joints / members (new cables copy a kept cable's shape definition) → section, local
+    axis, in-plane moment releases, modifiers → pins on unrestrained supports → patterns → Tab 01 joint loads (replace) →
+    cable target forces → cases (new nonlinear: P-Δ + large displacement; existing: loads + initial case only) →
+    combinations (changed ones rebuilt) → run flags. Not saved: the user saves in SAP2000, or closes without saving to discard.
+    · **Import From ETABS** (after Import From SAP2000; asked for by the user 2026-10-12): the model open in ETABS as an
+    offline Mcotis model ready to run — `MainViewModel.ImportFromEtabsAsync` (MainViewModel.Etabs.cs). `SAP2000/EtabsGateway`
+    attaches through CSiAPIv1 (ProgID `CSI.ETABS.API.ETABSObject`; SAP2000 27's CSiAPIv1 2.15 verified against ETABS 23.2)
+    and calls only GetModelFilename, GetVersion and `File.ExportFile(…, DBTablesText)` to a temp folder it deletes — never
+    an edit, unlock, save or unit change. **ETABS refuses the .e2k export (`TextFile`) of an unsaved model through the API**,
+    so the live path reads the database tables (`Application/Etabs/EtabsTableReader`). Without a running ETABS the window
+    offers an .e2k file instead (`EtabsE2kReader`, `ImportFromE2kFile`). Both fill `EtabsModel` (kN, m); `EtabsImport.Convert`
+    refuses non-planar models (all joints at one Y), axial / in-plane shear releases and rotated axes with releases before
+    anything changes. Joints are named `label@story`; frames by label (`label@story` when a label is on several stories).
+    Sections in Mcotis's own forms: I, box, pipe, rectangle, circle; Filled Steel Tube / Pipe → CFT; Concrete Encasement
+    Rectangle with an embedded I and its R-n2-n3 bars → steel encased (n3 = bars per face parallel to local 3 =
+    BarsAlongWidth, n2 − 2 = BarsAlongDepth; CSI's NumberR3Bars / NumberR2Bars); Section Designer → general section
+    (`SectionDesignerSection`: shapes in Z-order replace what they cover, circles / pipes as inscribed 32-gons as ETABS draws
+    them, D along local 2, the SDSECTION ANGLE does not rotate the properties — reproduces ETABS 23.2's A / I33 / I22 of the
+    arch rib to five figures) with ETABS's reported properties when the tables give them and the true per-shape self-weight;
+    any other shape → ETABS's reported A / I33 / I22 (live only). CFT EA / EI equal ETABS's; the encased section also counts
+    its bars (ETABS leaves them out — said in the summary). ETABS converts a kip as 4.448222 kN; `EtabsUnits` uses that
+    factor so a kip-in table export gives back the kN-m model exactly. Then: loading (joint FX / FZ / MY, frame loads),
+    static cases (P-Δ / preset stiffness not modelled, said in the case note), linear additive combinations, Tab 02 chords
+    only if `VcfChordDetection` finds a truss, Tab 01 fitted to the ETABS joint loads (`ImportTab01(…, "ETABS")`), and
+    a supports line comparing Mcotis's auto pins with ETABS's restraints. Offline checks: `--etabs-import` (fixtures
+    `tests/etabs-import`: the user's `CoT120.e2k` and the live table export `CoT120-live.tables.txt`, which has two braces
+    D1 / D3 added since); live, read-only: `--etabs-live`.
+    · **Export to ETABS…** (after Export to SAP2000; asked for by the user 2026-10-12): the Mcotis model written into the model
+    open in ETABS, ready to run there — `MainViewModel.BuildEtabsExportModel` / `PreviewEtabsExportAsync` / `ExportToEtabsAsync`
+    (MainViewModel.EtabsExport.cs) → `EtabsExportModel` (Application/Etabs/EtabsExport.cs: the SAP export model plus every
+    load Mcotis holds — joint loads as Run Analysis applies them, frame loads — and each section's weight / mass per metre,
+    because an ETABS target may be empty) → `EtabsGateway.Export.cs`. Same flow as SAP2000: read-only preview, OK / Cancel,
+    write, not saved; kN-m required; a locked model is unlocked only after the confirmation. ETABS names its objects itself,
+    so **members are matched to ETABS frames by their end coordinates (1 mm), in either direction** — ETABS turns a beam to
+    run towards +X (BHR-1 / BHR-2 of the CoT model), so a reversed frame gets its I / J releases swapped and its frame loads
+    mirrored. Unmatched ETABS frames are removed (their unconnected joints too), unmatched members added (`AddByCoord`, user
+    name = the Mcotis name). An **empty** model first gets one story per joint level (`SetStories_2`, names `EL<z>`), as the
+    first write. **ETABS refuses new stories (code 1) for any model that has ever had objects** — also one emptied by deleting
+    them, and its Story Definitions table is not editable through the API either — so a refusal keeps ETABS's stories and
+    the export goes on (ETABS attaches off-level joints itself, below the base too) with a note; checked by the live check's
+    second scenario (default model into an emptied model). **`SetTube_1` with a corner radius of exactly 0 returns 1 in
+    ETABS 23**; a box is written with 1 µm, which gives the sharp-cornered A / I exactly. Otherwise stories are kept. Sections
+    ETABS already has are kept (a standard shape whose A / I differs from Mcotis's is rewritten); new standard shapes are
+    written as such; CFT / steel encased / Section Designer / general ones as general sections (no API for filled-tube /
+    encased) with the weight and mass modifiers that keep their true self-weight — the import reads those modifiers back
+    into the members' self-weight. Cables become tension-only frames (`SetTCLimits`) pinned at both ends; their Tab 03 target
+    forces are not exported (ETABS has no target-force load — said in the report). Active DOF set to UX, UZ, RY (plane
+    frame). The import keeps only the sections the frames use (+ embedded I sections). Offline checks: `--etabs-export`;
+    live: `--etabs-export-live` starts a **private hidden ETABS** (`EtabsGateway.StartPrivateAsync`, never the user's), exports
+    the CoT model into its blank model, previews again (143 matched, nothing to change), imports it back and runs it: same
+    members, joint loads, deflections and reactions (self-weight within 3·10⁻⁶ — ETABS keeps the weight modifier to ~6 figures).
   - **MB**: 01 Loading … 06A Optimization, 08 Quantities (each with its status as the gesture text; 06A disabled
     without raw data). Choosing one sets `SelectedTab`; the page fills the left pane.
   - **Define**: Materials, Section Properties, Load Patterns, Load Cases / Load Combinations · Result Load Case.
@@ -84,6 +154,12 @@ earlier tall-header / large-button / blue-block look.
   - **Edit**: VCF System…. A blank configuration enables this after at least one frame section and one cable section
     exist. The window previews the built-in VCF topology without putting objects in the working model; Apply creates and
     names the joints, frames and cables and assigns the selected library sections.
+    · **Delete** (Del key too, not while typing): removes the joints / frames / cables selected on the model view after an
+    OK / Cancel confirmation (no undo). As SAP2000, a deleted joint takes its connected members; a deleted member leaves its
+    end joints. `MainViewModel.DeleteObjectsAsync` (MainViewModel.Edit.cs) also drops member properties, SAP loading, Tab 01
+    loaded points / point loads, Tab 02 chord-group entries (re-captures the baseline; a note if a group becomes invalid),
+    Tab 03 cables (followers of a removed cable become Independent) and Tab 04 output entries; FEM results are cleared and the
+    model becomes an offline "· edited" model — SAP2000 is never written.
   - **Assign**: Joint Restraints (Pin Supports).
   - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Optimization VCF… ·
     Analysis Options. **Optimization VCF…** opens the modal `OptimizationVcfWindow`: the Edit → VCF Geometry inputs as a
@@ -392,6 +468,12 @@ earlier tall-header / large-button / blue-block look.
 ## Tab 07 FEM
 
 - **Who runs what** (decided by the user, 2026-10-11 — do not go back to running candidates here):
+  - **The run needs the model, not a truss or cables** (2026-10-12, for models imported from ETABS — e.g. an arch):
+    `FemStudyService.CanComposeModel` / `RequireModel` need the model geometry (`State.Baseline`), Tab 01, and Tab 03
+    targets only when the model has cable members (none → no pretension stage). The Tab 02 chord groups / captured baseline
+    are inputs of the truss-height study only (`Compose` still needs them). Save Config needs geometry, not a captured
+    baseline; on load, a Tab 02 section without chord groups and an Output Settings section that monitors nothing count
+    as not configured (`ConfigCompatibilityValidator`, the rule `ConfigService.ConfiguredIn` already used).
   - **Run → Run FEM Analysis = one run of the model as it is defined** (`FemStudyService.ComposeModel` →
     `MainViewModel.AnalyzeFemAsync`): the model's own geometry (`State.Baseline`, no Tab 02 height change — the chord
     groups and the height range are not needed), the Tab 01 loads and the Tab 03 cable targets, with the sections,
@@ -638,8 +720,9 @@ earlier tall-header / large-button / blue-block look.
   Replace the default by saving a new database over that file and rebuilding. Checks construct the view model directly, so
   they never auto-load it.
 - The global `Load Config` picker starts in the repository `tests` folder when that folder is available.
-- The connection gateway attaches to SAP2000 only. An ETABS-originated model must be open/exported into SAP2000;
-  direct ETABS process attachment is not part of this FEM workflow.
+- The connection gateway (Connect SAP, the study) attaches to SAP2000 only. ETABS is read once, read-only, by File →
+  Import From ETABS (`EtabsGateway`), which turns the ETABS model into an offline Mcotis model, and written by Export to ETABS
+  after its preview and confirmation; there is no lasting ETABS session.
 
 ## Tab 08 Quantity Take-off (`MainViewModel.Quantities.cs`, `src/Application/Quantities/`)
 

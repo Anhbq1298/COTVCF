@@ -127,6 +127,7 @@ internal static class FemModelFileChecks
         }
         finally { if (File.Exists(path)) File.Delete(path); }
         RunDefaultModel();
+        RunDeleteObjects();
         RunFrameLocalAxes();
     }
 
@@ -283,6 +284,39 @@ internal static class FemModelFileChecks
         {
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
+    }
+
+    /// <summary>Edit → Delete on the default model: a deleted cable leaves Tab 03 and its properties; a deleted joint takes its
+    /// connected members, its loads and its Tab 01 / Tab 02 entries; the edited model still runs, without SAP2000.</summary>
+    private static void RunDeleteObjects()
+    {
+        var state = new ApplicationState();
+        var silent = SapDouble.Create(null!, GeometryModel.Empty, refuseAll: true);
+        var workflow = new WorkflowService(silent.Gateway, state);
+        var vm = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(silent.Gateway, state, workflow));
+        vm.LoadDefaultFemModel();
+        var cable = state.Cables[0].CableName;
+        var points = state.Geometry.Points.Count;
+        var members = state.Geometry.Members.Count;
+        vm.DeleteObjectsAsync([cable], []).GetAwaiter().GetResult();
+        Check(state.Geometry.Members.Count == members - 1 && state.Geometry.Points.Count == points &&
+              state.Cables.All(item => item.CableName != cable) && vm.FemSectionProperties.All(item => item.MemberName != cable) &&
+              state.Cables.All(item => item.ReferenceCableName != cable || item.SyncMode == CableSyncMode.Independent),
+            $"Delete removes cable {cable} from the geometry, its properties and Tab 03; its end joints stay");
+
+        // a loaded top-chord joint: its connected members, Tab 01 point and Tab 02 group entry go with it
+        var joint = state.AppliedPoints[^1].PointName;
+        var connected = vm.MembersDeletedWith([], [joint]);
+        var before = state.Geometry.Members.Count;
+        var (removedMembers, removedJoints) = vm.DeleteObjectsAsync([], [joint]).GetAwaiter().GetResult();
+        Check(removedJoints == 1 && removedMembers == connected.Count && connected.Count > 0 &&
+              state.Geometry.Members.Count == before - connected.Count && !state.Geometry.Points.ContainsKey(joint) &&
+              state.Geometry.Members.All(member => member.Start != joint && member.End != joint) &&
+              state.AppliedPoints.All(point => point.PointName != joint) && !state.Truss.TopPoints.Contains(joint) &&
+              vm.FemSectionProperties.Count == state.Geometry.Members.Count && silent.Writes == 0,
+            $"Delete of joint {joint} removes it with its {connected.Count} connected members and its Tab 01 / Tab 02 entries");
+        var runs = Analyze(vm);
+        Check(runs.Count == 1 && silent.Reads == 0 && silent.Writes == 0, "the edited model runs FEM without SAP2000");
     }
 
     /// <summary>The built-in default model (COT Framing_V1.2_100m) opens a disconnected app on 07 FEM, ready to run.</summary>
@@ -1174,7 +1208,7 @@ internal static class FemModelFileChecks
     }
 
     /// <summary>Runs the FEM tab's analysis with a dispatcher, so progress reports land as they do in the app.</summary>
-    private static IReadOnlyList<FemStudyRun> Analyze(MainViewModel vm)
+    internal static IReadOnlyList<FemStudyRun> Analyze(MainViewModel vm)
     {
         var previous = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));

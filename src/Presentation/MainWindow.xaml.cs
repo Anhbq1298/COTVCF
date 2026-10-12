@@ -474,6 +474,170 @@ public partial class MainWindow : Window
         new AssignFrameAxisWindow(vm, chosen) { Owner = this }.ShowDialog();
     }
 
+    // File → Import From SAP2000: the active SAP2000 model, complete, as the working model (read-only)
+    private async void ImportFromSap_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || !vm.CanImportFromSap) return;
+        if (vm.HasWorkingModel && MessageBox.Show(this,
+                "Import the model open in SAP2000? It replaces the current model and its Tabs 01–05 in Mcotis (save the configuration first to keep it)." +
+                $"{Environment.NewLine}{Environment.NewLine}SAP2000 is only read, never written.",
+                "Import From SAP2000", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK) != MessageBoxResult.OK) return;
+        SharedViewer.ClearSelection();
+        try
+        {
+            var summary = await vm.ImportFromSapAsync();
+            MessageBox.Show(this, string.Join(Environment.NewLine, summary.Lines.Select(line => "• " + line)), "Import From SAP2000",
+                MessageBoxButton.OK, summary.ReadyToRun ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The import could not be completed: " + ex.Message +
+                $"{Environment.NewLine}{Environment.NewLine}Open the model in SAP2000 (unlocked or locked, analysed or not) and try again.",
+                "Import From SAP2000", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    // File → Import From ETABS: the model open in ETABS as an offline model ready to run (read-only); without ETABS
+    // running, an .e2k file ETABS wrote
+    private async void ImportFromEtabs_Click(object sender, RoutedEventArgs e)
+    {
+        const string title = "Import From ETABS";
+        if (DataContext is not MainViewModel vm || !vm.CanImportFromEtabs) return;
+        if (vm.HasWorkingModel && MessageBox.Show(this,
+                "Import the model open in ETABS? It replaces the current model and its Tabs 01–05 in Mcotis (save the configuration first to keep it)." +
+                $"{Environment.NewLine}{Environment.NewLine}ETABS is only read, never written.",
+                title, MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK) != MessageBoxResult.OK) return;
+        SharedViewer.ClearSelection();
+        try
+        {
+            EtabsImportSummary summary;
+            try { summary = await vm.ImportFromEtabsAsync(); }
+            catch (COT_VCF.Application.Etabs.EtabsNotRunningException ex)
+            {
+                if (MessageBox.Show(this, ex.Message + $"{Environment.NewLine}{Environment.NewLine}Import an .e2k file ETABS wrote instead " +
+                        "(ETABS: File → Export → ETABS .e2k Text File)?", title, MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+                var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "ETABS text file (*.e2k)|*.e2k|All files (*.*)|*.*", CheckFileExists = true, Title = title };
+                if (dialog.ShowDialog(this) != true) return;
+                summary = vm.ImportFromE2kFile(dialog.FileName);
+            }
+            MessageBox.Show(this, string.Join(Environment.NewLine, summary.Lines.Select(line => "• " + line)), title,
+                MessageBoxButton.OK, summary.ReadyToRun ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The import could not be completed: " + ex.Message +
+                $"{Environment.NewLine}{Environment.NewLine}ETABS was only read, never written.",
+                title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    // File → Export to ETABS: preview the changes in the open ETABS model, confirm, write (not saved)
+    private async void ExportToEtabs_Click(object sender, RoutedEventArgs e)
+    {
+        const string title = "Export to ETABS";
+        if (DataContext is not MainViewModel vm) return;
+        if (!vm.CanExportToEtabs)
+        {
+            MessageBox.Show(this, "Open or import a model with geometry and member sections first.", title, MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        EtabsExportPreview preview;
+        try { preview = await vm.PreviewEtabsExportAsync(); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The export cannot be made: " + ex.Message + $"{Environment.NewLine}{Environment.NewLine}Nothing was written to ETABS.",
+                title, MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        var text = "Write the Mcotis model into the model open in ETABS?" + Environment.NewLine + Environment.NewLine +
+                   string.Join(Environment.NewLine, preview.Plan.Lines.Select(line => "• " + line)) + Environment.NewLine + Environment.NewLine +
+                   "ETABS frames whose ends are not those of a Mcotis member are removed. " +
+                   (preview.Plan.Target.IsLocked ? "The model is locked: ETABS deletes its analysis results when it is unlocked. " : "") +
+                   "The model is not saved — review it in ETABS and save, or close it without saving to discard the export.";
+        if (MessageBox.Show(this, text, title, MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+        try
+        {
+            var report = await vm.ExportToEtabsAsync(preview);
+            MessageBox.Show(this, $"Exported to {report.Target.Name}:" + Environment.NewLine + Environment.NewLine +
+                                  string.Join(Environment.NewLine, report.Lines.Select(line => "• " + line)) + Environment.NewLine + Environment.NewLine +
+                                  "Review the model in ETABS, save it, and run the analysis (Analyze → Run Analysis).",
+                title, MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The export stopped: " + ex.Message + $"{Environment.NewLine}{Environment.NewLine}" +
+                                  "Part of the model may already be written. Close the ETABS model without saving to discard the export, then try again.",
+                title, MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // File → Export to SAP2000: preview the changes in the open SAP2000 model, confirm, write (not saved)
+    private async void ExportToSap_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (!vm.CanExportToSap)
+        {
+            MessageBox.Show(this, "Open or import a model with geometry and member sections first.", "Export to SAP2000", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        SapExportPreview preview;
+        try { preview = await vm.PreviewSapExportAsync(); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The export cannot be made: " + ex.Message + $"{Environment.NewLine}{Environment.NewLine}Nothing was written to SAP2000.",
+                "Export to SAP2000", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        var text = "Write the Mcotis model into the model open in SAP2000?" + Environment.NewLine + Environment.NewLine +
+                   string.Join(Environment.NewLine, preview.Plan.Lines.Select(line => "• " + line)) + Environment.NewLine + Environment.NewLine +
+                   "SAP2000 members and joints that are not in Mcotis are removed. " +
+                   (preview.Target.IsLocked ? "The model is locked: SAP2000 deletes its analysis results when it is unlocked. " : "") +
+                   "The model is not saved — review it in SAP2000 and save, or close it without saving to discard the export.";
+        if (MessageBox.Show(this, text, "Export to SAP2000", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+        try
+        {
+            var report = await vm.ExportToSapAsync(preview);
+            MessageBox.Show(this, $"Exported to {report.ModelPath}:" + Environment.NewLine + Environment.NewLine +
+                                  string.Join(Environment.NewLine, report.Lines.Select(line => "• " + line)) + Environment.NewLine + Environment.NewLine +
+                                  "Review the model in SAP2000, save it, and run the analysis (Analyze → Run Analysis).",
+                "Export to SAP2000", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "The export stopped: " + ex.Message + $"{Environment.NewLine}{Environment.NewLine}" +
+                                  "Part of the model may already be written. Close the SAP2000 model without saving to discard the export, then try again.",
+                "Export to SAP2000", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // Edit → Delete (Del): remove the selected joints and members from the working model, after confirming
+    private async void DeleteSelection_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || !vm.CanEditFemModel) return;
+        var joints = SharedViewer.SelectedJoints.ToArray();
+        var members = vm.MembersDeletedWith(SharedViewer.SelectedMembers, joints);
+        if (joints.Length + members.Count == 0)
+        {
+            MessageBox.Show(this, "Select the joints, frames or cables to delete on the model view first (click them, or drag a window), then choose Edit → Delete.",
+                "Delete", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var connected = members.Count - SharedViewer.SelectedMembers.Count(members.Contains);
+        var text = $"Delete {members.Count} member(s) and {joints.Length} joint(s) from the working model?" +
+                   (connected > 0 ? $"{Environment.NewLine}{Environment.NewLine}{connected} of the members are connected to the selected joints." : "") +
+                   $"{Environment.NewLine}{Environment.NewLine}FEM results are cleared. There is no undo; SAP2000 is not changed (Connect SAP restores the SAP model).";
+        if (MessageBox.Show(this, text, "Delete", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+        try
+        {
+            await vm.DeleteObjectsAsync(SharedViewer.SelectedMembers, joints);
+            SharedViewer.ClearSelection();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            MessageBox.Show(this, ex.Message, "Delete", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
     // Select tool: always returns to selecting (clicking it while on must not switch to pan)
     private void SelectTool_Click(object sender, RoutedEventArgs e) => SharedViewer.PanMode = false;
 
@@ -495,6 +659,15 @@ public partial class MainWindow : Window
             DataContext is MainViewModel { HasWorkingModel: true } vm)
         {
             vm.ShowUndeformedShape();
+            e.Handled = true;
+            return;
+        }
+        // Del, as SAP2000: delete the model view's selection (not while typing in a field or list)
+        if (e.Key == System.Windows.Input.Key.Delete && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.None &&
+            System.Windows.Input.Keyboard.FocusedElement is not (System.Windows.Controls.Primitives.TextBoxBase or System.Windows.Controls.ComboBox or System.Windows.Controls.DataGrid or System.Windows.Controls.DataGridCell) &&
+            SharedViewer.SelectedMembers.Count + SharedViewer.SelectedJoints.Count > 0)
+        {
+            DeleteSelection_Click(this, new RoutedEventArgs());
             e.Handled = true;
             return;
         }

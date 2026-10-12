@@ -25,6 +25,14 @@
     <MenuItem Header="_Default Model" Command="{Binding LoadDefaultModel}" AutomationProperties.Name="Load default model"
               ToolTip="Set the current model aside and open the built-in default model (COT Framing_V1.2_100m) on 07 FEM, ready to run without SAP2000"/>
     <Separator/>
+    <MenuItem Header="_Import From SAP2000" Click="ImportFromSap_Click" AutomationProperties.Name="Import From SAP2000"
+              ToolTip="Import the model open in SAP2000 — geometry, member properties, materials and sections, load patterns and loads, load cases and combinations, chord groups and cable target forces — ready to run. Read-only; SAP2000 is never written."/>
+    <MenuItem Header="Import From _ETABS" Click="ImportFromEtabs_Click" AutomationProperties.Name="Import From ETABS"
+              ToolTip="Import the model open in ETABS — joints, frames, materials and sections (CFT, steel encased and Section Designer included), end releases, load patterns and loads, load cases and combinations — as a Mcotis model ready to run. Read-only; ETABS is never written. Without ETABS running, an .e2k file can be imported instead."/>
+    <MenuItem Header="_Export to SAP2000…" Click="ExportToSap_Click" AutomationProperties.Name="Export to SAP2000"
+              ToolTip="Write the Mcotis model into the model open in SAP2000 — geometry, sections, materials, assignments, supports, load patterns, Tab 01 loads, cable target forces, load cases and combinations — ready to run there. Shows the changes first; the SAP2000 model is not saved."/>
+    <MenuItem Header="Export to E_TABS…" Click="ExportToEtabs_Click" AutomationProperties.Name="Export to ETABS"
+              ToolTip="Write the Mcotis model into the model open in ETABS — frames matched by their ends, sections, materials, releases, supports, load patterns with every joint and frame load, load cases and combinations — ready to run there. Shows the changes first; the ETABS model is not saved."/>
     <MenuItem Header="_Read FEM Properties from SAP" Command="{Binding ReadFemProperties}"
               ToolTip="Read sections, materials (unit weight / mass), modifiers, end releases, load patterns with their assigned loads, static load cases and combinations from the connected SAP2000 model. Read-only; resets the Loads tables to SAP."/>
    </MenuItem>
@@ -46,6 +54,9 @@
    <MenuItem Header="_Edit" IsEnabled="{Binding CanEditVcfGeometry}">
     <MenuItem Header="_VCF System…" Click="VcfGeometry_Click" AutomationProperties.Name="VCF System"
               ToolTip="Create or edit the parametric VCF geometry after defining materials and frame/cable sections"/>
+    <Separator/>
+    <MenuItem Header="_Delete" Click="DeleteSelection_Click" InputGestureText="Del" IsEnabled="{Binding CanEditFemModel}" AutomationProperties.Name="Delete"
+              ToolTip="Delete the joints, frames and cables selected on the model view (a deleted joint takes its connected members); SAP2000 is unchanged"/>
    </MenuItem>
    <MenuItem Header="_Assign" IsEnabled="{Binding CanEditFemModel}">
     <MenuItem Header="_Joint">
