@@ -183,6 +183,49 @@ internal static class GeneralSolverParityChecks
         Both("cable truss with target forces that cannot be met, cable sag on", unreachable, dead,
             [new("Pretension", dead, 1), new("Service", service, 1)], 1.0, true, 1e-4, false,
             old => { if (old["Pretension"].TargetFitConverged) throw new Exception("FAIL: the comparison needs targets that cannot be met"); });
+
+        // What the application is told of the equilibrium while a run goes: the fitted run again, followed.
+        FemCaseLoads[] staged = [new("Pretension", dead, 1), new("Service", service, 1), new("Unstressed", live, 0)];
+        var reports = new EquilibriumReports();
+        var followed = general.SolveCases(geometry, frameSections, cableSections, targets, dead, staged, pins, default, 1.0, 100, 4, true, reports);
+        var unfollowed = general.SolveCases(geometry, frameSections, cableSections, targets, dead, staged, pins, default, 1.0, 100, 4, true);
+        void Require(bool condition, string description)
+        {
+            if (!condition) throw new Exception("FAIL: " + description);
+            Console.WriteLine("PASS: " + description);
+        }
+        Require(staged.All(item => followed[item.Name].Joints.Zip(unfollowed[item.Name].Joints).All(pair => pair.First == pair.Second) &&
+                    followed[item.Name].Cables.Zip(unfollowed[item.Name].Cables).All(pair => pair.First.AxialForceKN == pair.Second.AxialForceKN && pair.First.AppliedPretensionKN == pair.Second.AppliedPretensionKN)),
+            "following the equilibrium of a run changes no digit of its results");
+        var labels = reports.Items.Select(FemEquilibriumRow.CaseLabel).Distinct().ToArray();
+        Require(labels.SequenceEqual(["Target fit", "Pretension", "Service", "Unstressed"]),
+            "the equilibrium is reported case by case, the fit of the cable target forces first: " + string.Join(", ", labels));
+        // 10 joints, every one on a chord: UX, UZ and RY each. The two pins hold UX and UZ.
+        Require(reports.Items.All(item => item is { ActiveDofs: 30, RestrainedDofs: 4, SolvedDofs: 26 }),
+            "… with the degrees of freedom of the model: 30 active (UX, UZ, RY at 10 joints), 4 restrained at the two pins, 26 solved");
+        var ended = labels.Select(label => reports.Items.Last(item => FemEquilibriumRow.CaseLabel(item) == label)).ToArray();
+        Require(ended.All(item => item is { State: FemEquilibriumState.Converged, Joints: 10, JointsInEquilibrium: 10, Linear: false } && item.OutOfBalance <= item.Tolerance && item.Iteration >= 1) &&
+                ended[0].FitRun == followed["Pretension"].TargetFitIterations && ended[3].FitRun == 0,
+            $"… every case ends converged with all 10 joints in equilibrium, the fit after its {ended[0].FitRun} fitting runs");
+        var running = reports.Items.Where(item => item.State == FemEquilibriumState.Running && item.OutOfBalance is not null).ToArray();
+        Require(running.Any(item => item.FitRun > 0 && item.FitStage) && running.Any(item => item.JointsInEquilibrium < item.Joints && points.ContainsKey(item.WorstJoint!) && item.WorstDof is "UX" or "UZ" or "RY") &&
+                running.All(item => item.JointsInEquilibrium == item.Joints == (item.OutOfBalance <= item.Tolerance)),
+            "… and while it iterates, each report counts the joints within the accepted out-of-balance and names the joint and movement where it is largest");
+        var fractions = reports.Items.Select(item => item.Fraction).ToArray();
+        Require(fractions.Zip(fractions.Skip(1)).All(pair => pair.Second >= pair.First) && fractions[0] == 0 && fractions[^1] == 1 &&
+                reports.Items.Last(item => item.FitStage).Fraction == .25,
+            "… the part of the run that has ended counts the load cases: a quarter after the fit, all of it at the end");
+        var rows = ended.Select(item => FemEquilibriumRow.From(item)).ToArray();
+        Require(rows.All(row => row is { Status: FemEquilibriumRow.Converged, SolvedDofs: "26", Joints: "10 / 10", Detail: null } &&
+                    (row.OutOfBalance.EndsWith(" kN", StringComparison.Ordinal) || row.OutOfBalance.EndsWith(" kN·m", StringComparison.Ordinal)) && row.Accepted.EndsWith(" kN", StringComparison.Ordinal)) &&
+                rows[0].Iterations.Contains($"· {ended[0].FitRun} fit run", StringComparison.Ordinal) && rows[1].Iterations == ended[1].Iteration.ToString(),
+            $"… which the run monitor shows as one line per case: {rows[0].Case} — {rows[0].Iterations} iterations, out-of-balance {rows[0].OutOfBalance} against {rows[0].Accepted}, joints {rows[0].Joints}, largest at {rows[0].LargestAt}, {rows[0].Status}");
+    }
+
+    internal sealed class EquilibriumReports : IProgress<FemEquilibriumProgress>
+    {
+        public readonly List<FemEquilibriumProgress> Items = [];
+        public void Report(FemEquilibriumProgress value) => Items.Add(value);
     }
 
     /// <summary>The application's default model: the run the application makes (through <see cref="FemSolver"/>) against
@@ -236,6 +279,34 @@ internal static class GeneralSolverParityChecks
                 $"({state.Baseline.Points.Count} joints, {frameSections.Count} frames, {cableSections.Count} cables, {solved} cases; " +
                 $"target forces within {vm.FemTargetFitPercent:G3}%, cable sag {(vm.FemCableSag ? "on" : "off")}, {vm.FemFrameMeshSegments} stations per frame piece): {total}");
             Console.WriteLine("      largest downward deflection the application shows: " + string.Join(" · ", deflections));
+
+            // What the run monitor shows of that run: the degrees of freedom, and the equilibrium of every load case.
+            // Counted here from the model: UX, UZ and RY at a joint a frame reaches (at an end, or lying on it), UX and
+            // UZ at a joint only cables reach; the pin supports hold UX and UZ.
+            var members = state.Baseline.Members.Where(member => member.Kind == MemberKind.Frame || member.Kind == MemberKind.Cable && cableSections.ContainsKey(member.Name)).ToArray();
+            var positions = members.SelectMany(member => new[] { member.Start, member.End }).Distinct(StringComparer.Ordinal)
+                .ToDictionary(name => name, name => state.Baseline.Points[name].Position, StringComparer.Ordinal);
+            var framed = members.Where(member => member.Kind == MemberKind.Frame).SelectMany(member => FrameJoints.Pieces(member, positions))
+                .SelectMany(piece => new[] { piece.Member.Start, piece.Member.End }).ToHashSet(StringComparer.Ordinal);
+            int active = 3 * framed.Count + 2 * (positions.Count - framed.Count), restrained = 2 * supports.Count;
+            void Monitor(bool condition, string description)
+            {
+                if (!condition) throw new Exception("FAIL: " + description);
+                Console.WriteLine("PASS: " + description);
+            }
+            Monitor(vm.FemMonitorDofText.Contains($"{active:N0} active", StringComparison.Ordinal) && vm.FemMonitorDofText.Contains($"{active - restrained:N0} solved", StringComparison.Ordinal) &&
+                    vm.FemMonitorDofText.Contains($"{restrained:N0} restrained", StringComparison.Ordinal) && !vm.FemMonitorDofText.Contains("left out", StringComparison.Ordinal),
+                $"the run monitor states the degrees of freedom of the run, as counted from the model ({framed.Count} frame joints, {positions.Count - framed.Count} cable-only joints, {supports.Count} pins) — {vm.FemMonitorDofText}");
+            var expectedRows = plan.StagesFor(model.Loads).SelectMany(stage => (stage.FitCase is { } fit ? new[] { $"{fit} · target fit" } : []).Concat(stage.Cases.Select(item => item.Name))).ToArray();
+            string everyJoint = $"{positions.Count:N0} / {positions.Count:N0}";
+            Monitor(vm.FemEquilibriumRows.Select(row => row.Case).SequenceEqual(expectedRows) &&
+                    vm.FemEquilibriumRows.All(row => row.Status == FemEquilibriumRow.Converged && row.Joints == everyJoint && row.SolvedDofs == $"{active - restrained:N0}"),
+                $"… and the equilibrium of every load case, the fit of the cable target forces first, each converged with every joint in equilibrium ({everyJoint}): " +
+                string.Join(" | ", vm.FemEquilibriumRows.Select(row => $"{row.Case}: {row.Iterations} it., {row.OutOfBalance} ≤ {row.Accepted}")));
+            Monitor(vm.FemMonitorEquilibriumText.StartsWith("Equilibrium reached in every load case", StringComparison.Ordinal) && vm.FemMonitorProgress == 1 && !vm.FemMonitorIndeterminate &&
+                    vm.FemEquilibriumRows.All(row => vm.FemLog.Any(line => line.Contains($"Equilibrium · {row.Case}: Converged", StringComparison.Ordinal))) &&
+                    vm.FemLog.Any(line => line.Contains("Degrees of freedom:", StringComparison.Ordinal)),
+                "… with the outcome in one line, the bar full, and the same in the diagnostic log: " + vm.FemMonitorEquilibriumText);
         }
         finally
         {

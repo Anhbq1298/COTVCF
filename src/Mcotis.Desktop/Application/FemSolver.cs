@@ -38,12 +38,13 @@ public sealed class FemSolver
         double? targetFitPercent = null,
         int maximumTargetFitIterations = DefaultTargetFitIterations,
         int frameMeshSegments = 1,
-        bool cableSag = false)
+        bool cableSag = false,
+        IProgress<FemEquilibriumProgress>? equilibrium = null)
     {
         var caseLoads = new FemLoadSet(loads.Select(load => new FemJointLoad(load.PointName, load.FxKN, load.FzKN)).ToArray(), [], []);
         return SolveCases(geometry, frameSections, cableSections, cablePretensionsKN, FemLoadSet.Empty,
             [new FemCaseLoads("Default", caseLoads, 1)], pinSupportPoints, cancellationToken, targetFitPercent,
-            maximumTargetFitIterations, frameMeshSegments, cableSag)["Default"];
+            maximumTargetFitIterations, frameMeshSegments, cableSag, equilibrium)["Default"];
     }
 
     /// <summary>
@@ -51,7 +52,8 @@ public sealed class FemSolver
     /// <paramref name="fitLoads"/> — the other loads of the case that holds the cable target-force pattern — and
     /// every case with a <see cref="FemCaseLoads.PretensionFactor"/> carries it; without one, the target is applied as
     /// the pretension itself. <paramref name="frameMeshSegments"/> is the number of intervals each frame piece is read
-    /// at for diagrams and the deflected line; no result at a joint depends on it.
+    /// at for diagrams and the deflected line; no result at a joint depends on it. <paramref name="equilibrium"/> is
+    /// told how the equilibrium of each case goes while it is solved; it is called on the solving thread.
     /// </summary>
     public IReadOnlyDictionary<string, FemAnalysisResult> SolveCases(
         GeometryModel geometry,
@@ -65,7 +67,8 @@ public sealed class FemSolver
         double? targetFitPercent = null,
         int maximumTargetFitIterations = DefaultTargetFitIterations,
         int frameMeshSegments = 1,
-        bool cableSag = false)
+        bool cableSag = false,
+        IProgress<FemEquilibriumProgress>? equilibrium = null)
     {
         ArgumentNullException.ThrowIfNull(geometry);
         if (cases.Count == 0) throw new InvalidOperationException("At least one load case is required.");
@@ -331,21 +334,54 @@ public sealed class FemSolver
             { ActiveDofs = Native.DofMask.XZ });
 
         var document = editor.Commit().Document;
+        // In this window the degrees of freedom of cable joints are those of its plane, UX and UZ, and it has no option
+        // for them: what can be changed is the model.
+        static string Said(Native.ValidationIssue issue) => issue.Message.Replace(StaticSolver.CableJointOption, "", StringComparison.Ordinal);
         static InvalidOperationException Refused(IEnumerable<Native.ValidationIssue> issues)
         {
             var errors = issues.Where(issue => issue.Severity == Native.ValidationSeverity.Error).ToArray();
-            // In this window the degrees of freedom of cable joints are those of its plane, UX and UZ; what can be changed is the model.
             string hint = errors.Any(issue => issue.Code == "static.matrix.unstable" && issue.Message.Contains("cable", StringComparison.OrdinalIgnoreCase))
                 ? " In this window a joint that only cables reach moves in UX and UZ: model a cable that runs through such a joint as one cable, and hold every cable end with a frame or a support."
                 : "";
-            return new(string.Join(" ", errors.Select(issue => issue.Message).Distinct().Take(3)) + hint);
+            return new(string.Join(" ", errors.Select(Said).Distinct().Take(3)) + hint);
         }
         var compiled = ModelCompiler.Compile(document);
         if (compiled.Model is not { } model) throw Refused(compiled.Issues);
         var wanted = caseIds.Select(item => item.Id).ToList();
         if (pretensioned) wanted.Insert(0, fitCase);
+
+        // What the engine reports of each case while it solves, in the application's names. The stage that fits the
+        // cable target forces is no case of the caller's: it goes without a name.
+        IProgress<StaticProgress>? follow = null;
+        if (equilibrium is not null)
+        {
+            var caseNames = caseIds.ToDictionary(item => item.Id, item => item.Case.Name);
+            int ended = 0;
+            follow = new DirectProgress<StaticProgress>(report =>
+            {
+                if (report.Kind is StaticProgressKind.Finished or StaticProgressKind.Failed) ended++;
+                var state = report.Kind switch
+                {
+                    StaticProgressKind.Finished => FemEquilibriumState.Converged,
+                    StaticProgressKind.Failed => report.Issue?.Code switch
+                    {
+                        "static.matrix.unstable" => FemEquilibriumState.Unstable,
+                        "static.nonlinear.noConvergence" or "static.nonlinear.stalled" => FemEquilibriumState.NotConverged,
+                        _ => FemEquilibriumState.Failed,
+                    },
+                    _ => FemEquilibriumState.Running,
+                };
+                var balance = report.Balance;
+                equilibrium.Report(new(caseNames.GetValueOrDefault(report.CaseId, ""), !caseNames.ContainsKey(report.CaseId), state,
+                    report.ActiveDofs, report.RestrainedDofs, report.SolvedDofs, report.FitRun, balance?.Iteration ?? 0, balance?.Linear ?? false,
+                    balance?.OutOfBalance, balance?.Tolerance, balance?.Joints ?? 0, balance?.JointsInBalance ?? 0,
+                    balance?.Worst is { } worst ? document.Points[worst.PointId].Name : null, balance?.Worst?.Component.ToString(),
+                    (double)ended / wanted.Count, report.Issue is { } issue ? Said(issue) : null));
+            });
+        }
         // The engine is dense. These limits are where its memory, not its method, ends: about 1,000 joints.
-        var outcomes = StaticSolver.Solve(model, wanted, new StaticOptions(MaximumFullDofs: 6000, MaximumFreeDofs: 3000, AcceptClosestFit: true), cancellationToken);
+        var outcomes = StaticSolver.Solve(model, wanted, new StaticOptions(MaximumFullDofs: 6000, MaximumFreeDofs: 3000, AcceptClosestFit: true),
+            cancellationToken, follow);
         StaticResult Result(Native.ObjectId id) => outcomes[id].Result ?? throw Refused(outcomes[id].Issues);
 
         var stage = pretensioned ? Result(fitCase) : null;
@@ -421,4 +457,33 @@ public sealed class FemSolver
             default: throw new InvalidOperationException($"Unsupported load direction {direction}.");
         }
     }
+}
+
+public enum FemEquilibriumState { Running, Converged, NotConverged, Unstable, Failed }
+
+/// <summary>The equilibrium of one load case as the solver reports it: while it is iterated, and how it ended.
+/// <para>A case with cables is iterated: <paramref name="Iteration"/> counts from 1, <paramref name="OutOfBalance"/> is
+/// the largest unbalanced force or moment on a solved degree of freedom [kN, kN·m] and <paramref name="Tolerance"/>
+/// the one accepted. A case without cables is solved directly (<paramref name="Linear"/>): the two are then its scaled
+/// backward error and the accepted one, without a unit.</para></summary>
+/// <param name="CaseName">The load case; for <paramref name="FitStage"/>, the case whose cable target forces are fitted.</param>
+/// <param name="FitStage">The stage that fits the cable target forces, solved before the cases that carry its pretension.</param>
+/// <param name="ActiveDofs">Degrees of freedom that are on: those solved, those restrained and any rotation left out.</param>
+/// <param name="FitRun">While running: the fitting run in progress (0 = the case's own equilibrium). When ended: the
+/// number of fitting runs the pretension took.</param>
+/// <param name="Joints">Joints with a solved degree of freedom.</param>
+/// <param name="JointsInEquilibrium">Those of them whose every solved degree of freedom is within the tolerance.</param>
+/// <param name="WorstJoint">The joint where the out-of-balance is largest, and <paramref name="WorstDof"/> its movement.</param>
+/// <param name="Fraction">The part of the run that has ended, 0 to 1, counted in load cases.</param>
+/// <param name="Failure">Why the case has no result.</param>
+public sealed record FemEquilibriumProgress(string CaseName, bool FitStage, FemEquilibriumState State,
+    int ActiveDofs, int RestrainedDofs, int SolvedDofs, int FitRun, int Iteration, bool Linear,
+    double? OutOfBalance, double? Tolerance, int Joints, int JointsInEquilibrium, string? WorstJoint, string? WorstDof,
+    double Fraction, string? Failure = null);
+
+/// <summary>Passes a report on at once, on the thread that makes it; <see cref="Progress{T}"/> would post it, and it
+/// could arrive after the run has returned.</summary>
+internal sealed class DirectProgress<T>(Action<T> report) : IProgress<T>
+{
+    public void Report(T value) => report(value);
 }

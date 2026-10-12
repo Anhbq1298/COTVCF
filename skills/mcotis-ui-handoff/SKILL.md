@@ -46,7 +46,8 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   baseline: the same laws now live in `Mcotis.Analysis` (`StaticSolver`, `CableElement`). The main window is the
   standalone application — the user does not want it called "Tab 07" (2026-10-12). **No silent restraint** (user,
   2026-10-12): the native Analysis Options has "Degrees of freedom of cable joints" (`AnalysisSettings.CableDofs`,
-  default UX UY UZ; fixed UX UZ in the main window), and a movement that is on and that nothing holds is reported as
+  default UX UY UZ; fixed UX UZ in the main window, whose Analysis Options has **no Degrees of Freedom tab** — the
+  user, 2026-10-12: "tab này hơi thừa, nhất là cho cable"; do not bring it back there), and a movement that is on and that nothing holds is reported as
   an unstable model in both windows — a segmented cable through a cable-only joint or a free cable end now stops a
   main-window run. Native files are schema 3. **Validate before showing a result** (same message): see AGENTS.md. Full scope: `docs/native-building-ui.md`;
   checks `--template-building-ui`. Preserve Apply/OK/Cancel semantics and the result current/stale state.
@@ -654,8 +655,18 @@ earlier tall-header / large-button / blue-block look.
   There are no floating result buttons on the model view (removed on request): the result type is chosen in Show
   Results (toolbar) or the Result menu. Solver behavior is unchanged.
 - Run Analysis — after Run Now in Set Load Cases to Run — opens the non-modal FEM Run Monitor (FemRunMonitorWindow; reopen with Analysis → Monitor): status
-  (Running — indeterminate bar — / Finished / No result), live log inside a collapsed Diagnostic details expander
-  (FemLog, one line per step), Cable dropdown (default Cable1a-2) and Loadcase/Loadcomb dropdown — no Candidate
+  (Running / Finished / No result) over a bar that counts the load cases ended (`FemMonitorProgress`; it only moves
+  from side to side until the first has, `FemMonitorIndeterminate`), then — asked for by the user, 2026-10-12: "khi ấn
+  analysis hãy hiện thanh chạy equilibrium bao gồm bao nhiêu active dof... các joint có converge hay không" — the
+  degrees of freedom of the run (`FemMonitorDofText`: active · solved · restrained) and where the equilibrium stands
+  (`FemMonitorEquilibriumText`: fitting run, iteration, out-of-balance against the accepted value, joints in
+  equilibrium, the joint and movement where it is largest; after the run, the outcome), and the table **Equilibrium
+  by load case** (`FemEquilibriumRows`, one `FemEquilibriumRow` per case, the target fit first: Load case · Solved
+  DOFs · Iterations · Out-of-balance · Accepted · Joints converged · Largest at · Status = Converged / Not converged
+  / Unstable / Failed / Stopped, the reason as the status tooltip). The numbers come from the solver's own reports
+  (`StaticSolver.Solve(..., progress)` → `FemSolver` → `FemStudyService.Analyze(..., equilibrium)` →
+  `MainViewModel.FemEquilibriumReport`, shown at most every 80 ms); never compute them in the view. Then the live log
+  inside a collapsed Diagnostic details expander (FemLog, one line per step, with a line per case's equilibrium), Cable dropdown (default Cable1a-2) and Loadcase/Loadcomb dropdown — no Candidate
   dropdown and no Follow latest, there is one run — and ConvergenceChart of P_result/P_preset per pretension-fitting run (run 0 = 0, line at 1, ±tol
   band) from FemCableResponse.FitHistoryKN. Help is a window (HelpWindow) with Workflow and FEM procedure topics;
   the ⓘ next to Monitor and top-bar Help on Tab 07 open the FEM procedure directly. Keep the topic concise:

@@ -4,7 +4,8 @@ using System.Windows.Threading;
 
 namespace Mcotis.Desktop.Presentation;
 
-/// <summary>Non-modal window opened by Run Analysis: progress, live FEM log and cable convergence chart.</summary>
+/// <summary>Non-modal window opened by Run Analysis: progress, the equilibrium of every load case (degrees of freedom,
+/// iterations, joints in equilibrium), the cable convergence chart and the live log.</summary>
 public partial class FemRunMonitorWindow : Window
 {
     public FemRunMonitorWindow(MainViewModel viewModel)

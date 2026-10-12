@@ -11,8 +11,8 @@
     <Button x:Name="ApplyButton" Content="Apply" MinWidth="80" Margin="4" Click="Apply_Click"/>
    </StackPanel>
   </StackPanel>
-  <TabControl>
-   <TabItem Header="Degrees of Freedom">
+  <TabControl x:Name="Tabs">
+   <TabItem x:Name="DofTab" Header="Degrees of Freedom">
     <StackPanel Margin="12">
      <TextBlock Text="Active global degrees of freedom" FontWeight="SemiBold" Margin="0,0,0,8"/>
      <ComboBox x:Name="Preset" SelectionChanged="Preset_Changed" AutomationProperties.Name="DOF preset" Margin="0,0,0,8">
@@ -41,7 +41,7 @@
      <TextBlock x:Name="ScopeText" TextWrapping="Wrap" Foreground="{StaticResource Muted}"/>
     </StackPanel>
    </TabItem>
-   <TabItem Header="Cable Force Fitting">
+   <TabItem x:Name="FittingTab" Header="Cable Force Fitting">
     <StackPanel Margin="12">
      <TextBlock x:Name="CableScope" TextWrapping="Wrap" Margin="0,0,0,10"/>
      <Grid>

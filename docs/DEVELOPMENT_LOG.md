@@ -18,6 +18,26 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-12 · Run monitor shows the equilibrium of a run; no Degrees of Freedom tab in the main window
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis → the run monitor (also Run → Analysis Monitor): the bar and the lines under it, and
+  the new table "Equilibrium by load case". Run → Analysis Options… in the main window
+- What: While a run goes, the monitor now says where its equilibrium stands. Under the bar: the degrees of freedom of
+  the run (how many are active, solved and restrained) and the iteration in progress — the fitting run, the
+  out-of-balance force against the accepted one, how many joints are in equilibrium and the joint and movement where
+  the out-of-balance is largest. The bar counts the load cases that have ended. The table has one line per load case,
+  the fit of the cable target forces first: solved degrees of freedom, iterations, out-of-balance, accepted value,
+  joints converged, where the out-of-balance is largest, and the status — Converged, Not converged, Unstable, Failed
+  (the reason is the status tooltip) or Stopped. The lines stay after the run and are written to Diagnostic details.
+  A joint counts as converged when every solved degree of freedom of it is within the accepted out-of-balance. The
+  results of a run are unchanged. In the main window, Analysis Options no longer has a Degrees of Freedom tab: nothing
+  on it could be changed there, since that model is analysed in its XZ plane. The form opens on the cable settings,
+  and an unstable-model message there no longer points to that tab. The native workspace keeps the tab, where the
+  degrees of freedom, those of cable joints included, are a choice.
+- Checks: dotnet run --project tests/Mcotis.Checks (2,767 checks); default offline Mcotis.Desktop.Checks; --fem;
+  --fem-sap; --general-solver; --template-building-ui; --dev-log
+
 ## 2026-10-12 · Degrees of freedom of cable joints; a movement nothing holds is unstable
 - Status: Done
 - Who: markbui, Claude

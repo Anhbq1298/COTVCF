@@ -29,10 +29,18 @@ public partial class AnalysisOptionsWindow : Window
         Mesh.Text = settings.FrameMeshSegments.ToString(CultureInfo.CurrentCulture);
         Sag.IsChecked = settings.CableSag;
         Tolerance.IsEnabled = Iterations.IsEnabled = Mesh.IsEnabled = Sag.IsEnabled = editable;
-        ScopeText.Text = planar ? "This window's model is planar: it is analysed with UX, UZ and RY (XZ), and its cable joints with UX and UZ. Create a TemplateBuilding or open a native model for 3D analysis."
-            : "Static analysis of frames and cables. Shell, P-Delta and modal analysis are not available.";
-        CableScope.Text = planar ? "These settings are used by Run FEM Analysis when a load case fits cable target forces."
-            : "These settings are used by Run Analysis: the fitting when a load case fits cable target forces, cable sag for every case with cables. The mesh is the number of stations each frame is read at; it changes no joint result.";
+        ScopeText.Text = "Static analysis of frames and cables. Shell, P-Delta and modal analysis are not available.";
+        CableScope.Text = "These settings are used by Run Analysis: the fitting when a load case fits cable target forces, cable sag for every case with cables. The mesh is the number of stations each frame is read at; it changes no joint result." +
+            (planar ? " This window's model is analysed in its XZ plane; the run monitor shows the degrees of freedom of each run." : "");
+        if (planar)
+        {
+            // The degrees of freedom are not a choice in the main window — its model is planar — so the tab would only
+            // show boxes that cannot be changed (user, 2026-10-12: "tab này hơi thừa, nhất là cho cable").
+            DofTab.Visibility = Visibility.Collapsed;
+            Tabs.SelectedItem = FittingTab;
+            MinHeight = 0;
+            SizeToContent = SizeToContent.Height;
+        }
         if (!editable) { ErrorText.Text = "Model locked or analysis running. Close this form and unlock / finish the run before editing."; }
         CanCommit = editable;
         OkButton.IsEnabled = ApplyButton.IsEnabled = editable;

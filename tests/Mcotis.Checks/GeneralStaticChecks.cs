@@ -29,6 +29,7 @@ internal static class GeneralStaticChecks
         RigidRotationAndPlanePreset();
         CableSag();
         Refusals();
+        ProgressReports();
         CrossCheckOpenSees();
     }
 
@@ -175,6 +176,113 @@ internal static class GeneralStaticChecks
             Near(tension, reference, "Sagging cable tension equals an independent bisection of the cable equation", 1e-9, 1e-10);
             Assert(tension > 0 && tension >= s, "A cable with weight never goes slack, and sag only adds to its straight tension");
         }
+
+        // The backward error equation by equation. K = diag(4, 9), u = (1, 1), f = (4, 8): the second equation is 1 out.
+        // Scaled by √K_ii the residuals are (0, 1/3); the scale is ‖K‖·‖u‖ + ‖f‖ = 1·3 + 8/3 = 17/3.
+        var (stiff, moved, loaded) = (new double[,] { { 4, 0 }, { 0, 9 } }, new double[] { 1, 1 }, new double[] { 4, 8 });
+        var byEquation = DenseAlgebra.ScaledResiduals(stiff, moved, loaded);
+        Near(byEquation[0], 0, "The scaled backward error of a balanced equation is zero"); Near(byEquation[1], 1.0 / 17, "… and that of an unbalanced one is its residual over the scale of the system");
+        Assert(DenseAlgebra.ScaledResidual(stiff, moved, loaded) == byEquation.Max(), "The backward error of a solution is the largest of its equations'");
+    }
+
+    private sealed class Reports : IProgress<StaticProgress>
+    {
+        public readonly List<StaticProgress> Items = [];
+        public void Report(StaticProgress value) => Items.Add(value);
+    }
+
+    /// <summary>What a run tells a view that follows it: the degrees of freedom, every equilibrium iteration joint by
+    /// joint, and how the case ended — without changing a digit of the result.</summary>
+    private static void ProgressReports()
+    {
+        var s = BuildTipCable();
+        var compiled = ModelCompiler.Compile(s.Document, 5).Model!;
+        ObjectId[] staged = [s.Pretension, s.Service];
+        var silent = StaticSolver.Solve(compiled, staged);
+        var reports = new Reports();
+        var followed = StaticSolver.Solve(compiled, staged, progress: reports);
+        Assert(staged.All(caseId =>
+                   followed[caseId].Result!.Joints.Zip(silent[caseId].Result!.Joints).All(pair => pair.First.Displacements.SequenceEqual(pair.Second.Displacements) && pair.First.Reactions.SequenceEqual(pair.Second.Reactions)) &&
+                   followed[caseId].Result!.Cables.Zip(silent[caseId].Result!.Cables).All(pair => pair.First.Tension == pair.Second.Tension && pair.First.AppliedPretension == pair.Second.AppliedPretension) &&
+                   followed[caseId].Result!.Diagnostics.NonlinearIterations == silent[caseId].Result!.Diagnostics.NonlinearIterations),
+            "Following a run changes no digit of its results");
+
+        var fit = reports.Items.Where(item => item.CaseId == s.Pretension).ToArray();
+        Assert(fit[0] is { Kind: StaticProgressKind.Started, ActiveDofs: 15, RestrainedDofs: 9, SolvedDofs: 6, FitRun: 0, Balance: null },
+            "A case starts by reporting its degrees of freedom: 15 on (6 at each frame joint, 3 at the cable's anchor), 9 restrained, 6 solved");
+        Assert(fit[^1] is { Kind: StaticProgressKind.Finished, FitRun: 2, Balance: { Joints: 1, JointsInBalance: 1, Linear: false } last } && last.OutOfBalance <= last.Tolerance &&
+               last.Iteration == followed[s.Pretension].Result!.Diagnostics.NonlinearIterations && last.Worst?.PointId == s.Tip,
+            "… and ends with its last equilibrium, every joint in balance, and the number of fitting runs its pretension took");
+        var iterations = fit[1..^1];
+        Assert(iterations.Length > 0 && iterations.All(item => item is { Kind: StaticProgressKind.Equilibrium, Balance: { Joints: 1 } balance } &&
+                   balance.JointsInBalance == (balance.OutOfBalance <= balance.Tolerance ? 1 : 0)),
+            "In between, every equilibrium iteration reports the out-of-balance and the joints within the tolerance");
+        Assert(iterations[0] is { FitRun: 1, Balance: { Iteration: 1, JointsInBalance: 0 } first } && first.Worst == new DofKey(s.Tip, DofComponent.UZ) &&
+               Math.Abs(first.OutOfBalance - 50) < 1e-9 && first.Tolerance == 1e-9 * 50,
+            "The first iteration of the first fitting run: the 50 kN pretension is out of balance at the tip, vertically, against 1e-9 of it");
+        var runs = iterations.Select(item => item.FitRun).ToArray();
+        Assert(runs.Max() == 2 && runs.SequenceEqual(runs.OrderBy(run => run == 0 ? int.MaxValue : run)),
+            "The fitting runs are numbered as they come, and the case's own equilibrium follows them");
+        // an equilibrium counts its iterations from 1: where the count starts again, the one before has ended
+        var ends = iterations.Where((_, index) => index == iterations.Length - 1 || iterations[index + 1].Balance!.Iteration == 1).ToArray();
+        Assert(ends.Length == 4 && ends.All(item => item.Balance!.OutOfBalance <= item.Balance.Tolerance),
+            "Every equilibrium of the fit is iterated to within the tolerance: two fitting runs, the trial pretension of the first, and the case's own");
+
+        var service = reports.Items.Where(item => item.CaseId == s.Service).ToArray();
+        Assert(service.Length >= 3 && service[0].Kind == StaticProgressKind.Started && service[^1] is { Kind: StaticProgressKind.Finished, FitRun: 2 } &&
+               service[1..^1].All(item => item is { Kind: StaticProgressKind.Equilibrium, FitRun: 0 }),
+            "A case continuing from the fit case reports its own equilibrium only: the fit is shared, not repeated");
+        Assert(reports.Items.Take(fit.Length).All(item => item.CaseId == s.Pretension) && reports.Items.Count == fit.Length + service.Length,
+            "Cases are reported one after the other, in the order they were asked for");
+
+        // a linear case is solved in one step, and judged by its backward error
+        var m = new Model();
+        var root = m.Point(0, 0, 0, Restraint.Fixed);
+        var tip = m.Point(4, 0, 0);
+        m.Frame(root, tip);
+        m.Load(tip, 0, 0, -100);
+        var linearCase = m.Case("Linear", LoadCaseType.LinearStatic, LiveOnly);
+        var direct = new Reports();
+        var linear = StaticSolver.Solve(ModelCompiler.Compile(m.Build(), 5).Model!, linearCase, progress: direct);
+        Assert(linear.Success && direct.Items.Select(item => item.Kind).SequenceEqual([StaticProgressKind.Started, StaticProgressKind.Equilibrium, StaticProgressKind.Finished]) &&
+               direct.Items[1].Balance is { Linear: true, Iteration: 0, Joints: 1, JointsInBalance: 1, Tolerance: 1e-10 } solved &&
+               solved.OutOfBalance == linear.Result!.Diagnostics.ScaledResidual && direct.Items[2] is { ActiveDofs: 12, RestrainedDofs: 6, SolvedDofs: 6, FitRun: 0 },
+            "A linear case is solved directly: one report, with the scaled backward error it is accepted by");
+
+        // joints are counted one by one
+        var c = new Model(cableDofs: DofMask.UZ);
+        var fixedEnd = c.Point(-4, 0, 0, Restraint.Fixed);
+        var loadedTip = c.Point(0, 0, 0);
+        var link = c.Point(0, 0, 3);
+        var anchor = c.Point(0, 0, 6, Restraint.Pinned);
+        c.Frame(fixedEnd, loadedTip);
+        c.Cable(loadedTip, link);
+        c.Cable(link, anchor);
+        c.Load(loadedTip, 0, 0, -50);
+        var pulled = c.Case("Down", LoadCaseType.NonlinearStatic, LiveOnly);
+        var two = new Reports();
+        Assert(StaticSolver.Solve(ModelCompiler.Compile(c.Build(), 5).Model!, pulled, progress: two).Success &&
+               two.Items[1].Balance is { Iteration: 1, Joints: 2, JointsInBalance: 1 } start && start.Worst == new DofKey(loadedTip, DofComponent.UZ) &&
+               two.Items[^1].Balance is { Joints: 2, JointsInBalance: 2 },
+            "Joints are counted one by one: with a load at one of two joints, the other is in balance at the first iteration; at the end both are");
+
+        // a run that gives no result says so, with its first error
+        var h = new Model();
+        var top = h.Point(0, 0, 5, Restraint.Pinned);
+        var node = h.Point(0, 0, 0);
+        h.Cable(node, top);
+        h.Load(node, 0, 0, -100);
+        var hang = h.Case("Hang", LoadCaseType.NonlinearStatic, LiveOnly);
+        var linearWithCable = h.Case("Linear", LoadCaseType.LinearStatic, LiveOnly);
+        var hanging = ModelCompiler.Compile(h.Build(), 5).Model!;
+        var unstable = new Reports();
+        Assert(!StaticSolver.Solve(hanging, hang, progress: unstable).Success && unstable.Items.Count(item => item.Kind == StaticProgressKind.Failed) == 1 &&
+               unstable.Items[^1] is { Kind: StaticProgressKind.Failed, Issue.Code: "static.matrix.unstable", ActiveDofs: 6, RestrainedDofs: 3, SolvedDofs: 3 },
+            "An unstable model ends its report with the failure and its first error");
+        var refused = new Reports();
+        Assert(!StaticSolver.Solve(hanging, linearWithCable, progress: refused).Success &&
+               refused.Items is [{ Kind: StaticProgressKind.Failed, Issue.Code: "static.cable.linearCase", SolvedDofs: 0, Balance: null }],
+            "A case refused before it is solved reports the refusal alone");
     }
 
     private static void InteriorJoints()

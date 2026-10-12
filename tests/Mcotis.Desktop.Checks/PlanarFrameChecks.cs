@@ -324,11 +324,19 @@ internal static class PlanarFrameChecks
         // A cable in two segments through a joint that only cables reach: nothing holds that joint across the cable.
         // The planar solver passed over it; a movement that nothing holds is now reported as an unstable model.
         string segmented = "";
-        try { new FemSolver().Solve(segmentedGeometry, beamProperties, segmentedCables, segmentedTargets, [new("B", 0, -50)], ["A", "C", "D"], targetFitPercent: 1); }
+        var segmentedReports = new GeneralSolverParityChecks.EquilibriumReports();
+        try { new FemSolver().Solve(segmentedGeometry, beamProperties, segmentedCables, segmentedTargets, [new("B", 0, -50)], ["A", "C", "D"], targetFitPercent: 1, equilibrium: segmentedReports); }
         catch (InvalidOperationException ex) { segmented = ex.Message; }
         Check(segmented.Contains("'M' UX has no stiffness and no restraint", StringComparison.Ordinal) && segmented.Contains("unstable", StringComparison.Ordinal) &&
               segmented.Contains("model a cable that runs through such a joint as one cable", StringComparison.Ordinal),
             "A cable split at a joint that only cables reach is reported as unstable, naming the joint and the movement, with what to change in the model");
+        // The main window has no option for the degrees of freedom of cable joints, so nothing it says points to one.
+        var segmentedFit = segmentedReports.Items.Last(item => item.FitStage);
+        Check(!segmented.Contains("Analysis Options", StringComparison.Ordinal) &&
+              segmentedFit.State == FemEquilibriumState.Unstable && segmentedFit.Failure!.Contains("'M' UX", StringComparison.Ordinal) &&
+              !segmentedFit.Failure.Contains("Analysis Options", StringComparison.Ordinal) &&
+              FemEquilibriumRow.From(segmentedFit) is { Status: FemEquilibriumRow.Unstable, Case: "Target fit" } unstableRow && unstableRow.Detail == segmentedFit.Failure,
+            "… without pointing to a degree-of-freedom option this window does not have, and the run monitor's line for the case reads Unstable with the reason");
         // The same cable as one member is the stable model: taut it meets its target, pushed it goes slack.
         var oneCableGeometry = new GeometryModel(cableGeometry.Points, [.. cableGeometry.Members.Where(member => member.Kind == MemberKind.Frame), new("Cable-BD", "B", "D", MemberKind.Cable)]);
         var oneCable = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["Cable-BD"] = new("Cable-BD", 0.01, modulusKNPerM2, null) };

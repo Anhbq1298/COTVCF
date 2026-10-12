@@ -80,7 +80,7 @@ Everything below runs offline. Counts and differences are those of the runs of 2
 
 ### 1. Closed forms and independent scalar solutions
 
-`dotnet run --project tests/Mcotis.Checks`, group *General static solver* (`GeneralStaticChecks.cs`, 1,257 checks
+`dotnet run --project tests/Mcotis.Checks`, group *General static solver* (`GeneralStaticChecks.cs`, 1,273 checks
 with the OpenSees comparison). Every expected value is worked out in the check file, not taken from the solver.
 
 | Subject | What is compared |
@@ -95,6 +95,7 @@ with the OpenSees comparison). Every expected value is worked out in the check f
 | Sag vs. exact theory | The same level cable as an exact elastic catenary (Irvine): the tensions differ by less than 0.2 % at a sag of 1.0 % of the span |
 | Cable joints | A weight on a vertical cable: unstable across the cable's line with UX, UY, UZ on; solved with those two restrained, or with UZ alone for cable joints; rotations switched on for cable joints are unstable at the hanging joint and at the anchor until both are restrained; a load across a cable; two cables in line, taut and both slack; a cable pulling in a switched-off movement, with the holding force reported |
 | Refusals | Each refusal listed above |
+| Reports of a run | The backward error equation by equation, by hand (`K = diag(4, 9)`: 1/17); a followed run gives the same results to the last digit; the degrees of freedom counted by hand (15 active, 9 restrained, 6 solved); the first iteration of a fit is the 50 kN pretension out of balance at the tip, against 1e-9 of it; every equilibrium of a fit ends within the tolerance; a joint is counted in balance only when every solved degree of freedom of it is; a linear case reports the backward error it is accepted by; an unstable or refused case ends its report with its first error |
 
 ### 2. The archived planar solver, and the application's own checks
 
@@ -118,7 +119,7 @@ was not established.)
 
 The checks that were written for the application's solver now run through the general solver:
 
-- `--fem` — 59 checks against closed forms (`PL³/48EI`, `5wL⁴/384EI`, `wL²/8`, reactions and equilibrium, stations
+- `--fem` — 60 checks against closed forms (`PL³/48EI`, `5wL⁴/384EI`, `wL²/8`, reactions and equilibrium, stations
   against an unmeshed frame, superposition, the cable sag equation, Ernst's formula, fitting and its failure note).
 - `--fem-sap` — the stored SAP2000 study of 135 candidates, 4,995 values: total vertical reaction within 0.002 %,
   cable forces within 3.82 %, deflections within 3.22 %, reactions within 1.2 % of the largest SAP2000 value — the
@@ -145,6 +146,15 @@ equilibrium's out-of-balance force is within 1e-9 of the largest load or pretens
 is positive definite on every DOF that something holds; and the internal forces of the whole model have no
 resultant force or moment (within 1e-8). A movement that nothing holds stops the run as an unstable model; it is
 never given a number.
+
+**Reports of a run.** `StaticSolver.Solve` takes an optional `IProgress<StaticProgress>`: a case started, with its
+degrees of freedom (active, restrained, solved); each equilibrium iteration, with the largest out-of-balance on a
+solved degree of freedom, the accepted value, the joints whose every solved degree of freedom is within it and the
+place where it is largest; and how the case ended — finished, or failed with its first error. While target forces
+are fitted the report carries the fitting run. A linear case makes one report, with the scaled backward error of
+each equation (`DenseAlgebra.ScaledResiduals`; the gate above is the largest of them). The reports are read from
+what the iteration computes anyway and decide nothing: with and without them the results are equal to the last
+digit. The main window's run monitor shows them (`FemEquilibriumProgress`), one line per load case.
 
 ## What this evidence does not show
 

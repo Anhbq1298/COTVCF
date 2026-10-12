@@ -1,30 +1,101 @@
 <Window x:Class="Mcotis.Desktop.Presentation.FemRunMonitorWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:Mcotis.Desktop.Presentation" xmlns:c="clr-namespace:Mcotis.Desktop.Presentation.Controls"
-        Title="FEM Analysis — Run Monitor" Icon="{x:Static p:AppIcon.Window}" Width="900" Height="720" MinWidth="640" MinHeight="520"
+        Title="FEM Analysis — Run Monitor" Icon="{x:Static p:AppIcon.Window}" Width="900" Height="800" MinWidth="640" MinHeight="560"
         Background="{StaticResource Background}" WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+ <Window.Resources>
+  <!-- a line that has nothing to say takes no room -->
+  <Style x:Key="RunLine" TargetType="TextBlock">
+   <Setter Property="FontSize" Value="11"/>
+   <Setter Property="TextWrapping" Value="Wrap"/>
+   <Style.Triggers><Trigger Property="Text" Value=""><Setter Property="Visibility" Value="Collapsed"/></Trigger></Style.Triggers>
+  </Style>
+ </Window.Resources>
  <Grid Margin="10">
   <Grid.RowDefinitions>
    <RowDefinition Height="Auto"/>
    <RowDefinition Height="8"/>
-   <RowDefinition Height="3*"/>
+   <RowDefinition Height="Auto"/>
+   <RowDefinition Height="8"/>
+   <RowDefinition Height="*"/>
    <RowDefinition Height="8"/>
    <RowDefinition Height="Auto"/>
    <RowDefinition Height="Auto"/>
   </Grid.RowDefinitions>
 
-  <!-- Progress -->
+  <!-- Progress: the load cases ended, the degrees of freedom of the run and where the equilibrium stands -->
   <Border Grid.Row="0" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
    <StackPanel>
     <DockPanel>
-     <TextBlock Text="INTERNAL 2D FRAME ANALYSIS" Style="{StaticResource Subheading}"/>
+     <TextBlock Text="ANALYSIS RUN" Style="{StaticResource Subheading}"/>
      <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right" Text="{Binding FemMonitorProgressText}" FontFamily="{StaticResource MonoFont}" FontSize="11"/>
     </DockPanel>
-    <ProgressBar Height="8" Minimum="0" Maximum="1" Value="{Binding FemMonitorProgress, Mode=OneWay}" IsIndeterminate="{Binding FemMonitorRunning, Mode=OneWay}" Margin="0,0,0,4"/>
-    <TextBlock Text="{Binding FemProgressText}" Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
+    <ProgressBar Height="8" Minimum="0" Maximum="1" Value="{Binding FemMonitorProgress, Mode=OneWay}" IsIndeterminate="{Binding FemMonitorIndeterminate, Mode=OneWay}" Margin="0,0,0,4"
+                 AutomationProperties.Name="Load cases solved" ToolTip="The part of the run's load cases that has ended. It only moves from side to side until the first one has."/>
+    <TextBlock Text="{Binding FemMonitorDofText}" Style="{StaticResource RunLine}" FontFamily="{StaticResource MonoFont}" Margin="0,0,0,2"
+               ToolTip="Active: the degrees of freedom that are on. Solved: those the equilibrium equations are solved for. Restrained: those held by a support."/>
+    <TextBlock Text="{Binding FemMonitorEquilibriumText}" Style="{StaticResource RunLine}" Margin="0,0,0,2" AutomationProperties.LiveSetting="Polite"/>
+    <TextBlock Text="{Binding FemProgressText}" Style="{StaticResource RunLine}" Foreground="{StaticResource Muted}"/>
+   </StackPanel>
+  </Border>
+
+  <!-- Equilibrium of every load case -->
+  <Border Grid.Row="2" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
+   <StackPanel>
+    <TextBlock Text="EQUILIBRIUM BY LOAD CASE" Style="{StaticResource Subheading}"/>
+    <DataGrid x:Name="EquilibriumGrid" ItemsSource="{Binding FemEquilibriumRows}" IsReadOnly="True" CanUserDeleteRows="False" SelectionMode="Single"
+              MinHeight="52" MaxHeight="178" AutomationProperties.Name="Equilibrium by load case">
+     <DataGrid.Columns>
+      <DataGridTextColumn Header="Load case" Binding="{Binding Case}" Width="1.5*" MinWidth="130"/>
+      <DataGridTextColumn Header="Solved DOFs" Binding="{Binding SolvedDofs}" Width=".75*" MinWidth="88" ElementStyle="{StaticResource NumericCell}"/>
+      <DataGridTextColumn Binding="{Binding Iterations}" Width="1*" MinWidth="114" ElementStyle="{StaticResource NumericCell}">
+       <DataGridTextColumn.Header><TextBlock Text="Iterations" ToolTip="Equilibrium iterations of the case. While cable target forces are fitted: the fitting run and the iteration of its equilibrium. 'direct': a case without cables is solved in one step."/></DataGridTextColumn.Header>
+      </DataGridTextColumn>
+      <DataGridTextColumn Binding="{Binding OutOfBalance}" Width="1*" MinWidth="104" ElementStyle="{StaticResource NumericCell}">
+       <DataGridTextColumn.Header><TextBlock Text="Out-of-balance" ToolTip="The largest unbalanced force [kN] or moment [kN·m] on a solved degree of freedom. 'rel.': a case solved directly is judged by its scaled backward error, which has no unit."/></DataGridTextColumn.Header>
+      </DataGridTextColumn>
+      <DataGridTextColumn Binding="{Binding Accepted}" Width="1*" MinWidth="104" ElementStyle="{StaticResource NumericCell}">
+       <DataGridTextColumn.Header><TextBlock Text="Accepted" ToolTip="The out-of-balance the solver accepts for the case: a fixed fraction of its largest applied load or cable pretension. For a case solved directly: the accepted backward error."/></DataGridTextColumn.Header>
+      </DataGridTextColumn>
+      <DataGridTextColumn Binding="{Binding Joints}" Width="1*" MinWidth="116" ElementStyle="{StaticResource NumericCell}">
+       <DataGridTextColumn.Header><TextBlock Text="Joints converged" ToolTip="Joints in equilibrium — every solved degree of freedom of the joint within the accepted out-of-balance — of the joints that have one."/></DataGridTextColumn.Header>
+      </DataGridTextColumn>
+      <DataGridTextColumn Binding="{Binding LargestAt}" Width=".9*" MinWidth="92">
+       <DataGridTextColumn.Header><TextBlock Text="Largest at" ToolTip="The joint and the movement where the out-of-balance is largest."/></DataGridTextColumn.Header>
+      </DataGridTextColumn>
+      <DataGridTemplateColumn Header="Status" Width=".9*" MinWidth="96">
+       <DataGridTemplateColumn.CellTemplate>
+        <DataTemplate>
+         <TextBlock x:Name="StatusText" Text="{Binding Status}" ToolTip="{Binding Detail}" VerticalAlignment="Center" Margin="4,0"/>
+         <DataTemplate.Triggers>
+          <DataTrigger Binding="{Binding Status}" Value="Converged">
+           <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Success}"/>
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Status}" Value="Stopped">
+           <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Warning}"/>
+           <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold"/>
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Status}" Value="Not converged">
+           <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Error}"/>
+           <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold"/>
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Status}" Value="Unstable">
+           <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Error}"/>
+           <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold"/>
+          </DataTrigger>
+          <DataTrigger Binding="{Binding Status}" Value="Failed">
+           <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Error}"/>
+           <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold"/>
+          </DataTrigger>
+         </DataTemplate.Triggers>
+        </DataTemplate>
+       </DataGridTemplateColumn.CellTemplate>
+      </DataGridTemplateColumn>
+     </DataGrid.Columns>
+    </DataGrid>
    </StackPanel>
   </Border>
 
   <!-- Convergence chart -->
-  <Border Grid.Row="2" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
+  <Border Grid.Row="4" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
    <Grid>
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <DockPanel Margin="0,0,0,6" LastChildFill="False">
@@ -43,14 +114,14 @@
   </Border>
 
   <!-- Live log -->
-  <Border Grid.Row="4" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
+  <Border Grid.Row="6" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
    <Expander Header="Diagnostic details" IsExpanded="False">
     <ListBox x:Name="LogList" MaxHeight="150" ItemsSource="{Binding FemLog}" FontFamily="{StaticResource MonoFont}" FontSize="11"
              ScrollViewer.HorizontalScrollBarVisibility="Auto" VirtualizingPanel.IsVirtualizing="True" BorderThickness="1"/>
    </Expander>
   </Border>
 
-  <DockPanel Grid.Row="5" Margin="0,8,0,0" LastChildFill="False">
+  <DockPanel Grid.Row="7" Margin="0,8,0,0" LastChildFill="False">
    <TextBlock DockPanel.Dock="Left" Text="One run of the model as it is defined. SAP2000 is not read or written." Style="{StaticResource Caption}" VerticalAlignment="Center"/>
    <Button DockPanel.Dock="Right" Content="Close" Click="CloseWindow" Margin="0"/>
    <Button DockPanel.Dock="Right" Content="Cancel Analysis" Command="{Binding CancelFemAnalysis}"/>
