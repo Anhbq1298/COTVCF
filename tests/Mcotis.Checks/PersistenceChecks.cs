@@ -128,7 +128,7 @@ internal static class PersistenceChecks
 
         Throws<DocumentFileException>(() => NativeDocumentFormat.Deserialize("not json"), "A file that is not JSON is refused");
         Throws<DocumentFileException>(() => NativeDocumentFormat.Deserialize("[1, 2]"), "A JSON file that is not a document is refused");
-        Refuse(file => file["format"] = "COTVCF.FemModel", "A file of another format is refused");
+        Refuse(file => file["format"] = "Mcotis.FemModel", "A file of another format is refused");
         Refuse(file => file.Remove("schemaVersion"), "A file without a schema version is refused");
         var newer = Refuse(file => file["schemaVersion"] = NativeDocumentFormat.CurrentSchemaVersion + 1, "A file of a newer schema is refused");
         Assert(newer.Message.Contains("newer version"), "… and says it was saved by a newer version");

@@ -1,10 +1,10 @@
-using COT_VCF.Application.Results;
-using COT_VCF.Application.Workers;
-using COT_VCF.Domain.Results;
+using Mcotis.Desktop.Application.Results;
+using Mcotis.Desktop.Application.Workers;
+using Mcotis.Desktop.Domain.Results;
 using System.IO;
 using System.Collections.Concurrent;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 public sealed class StudyExecutionCoordinator
 {

@@ -1,6 +1,6 @@
 using Mcotis.Core;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public sealed partial class MainViewModel
 {

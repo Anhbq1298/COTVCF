@@ -1,9 +1,9 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
 /// Define → Materials, laid out like SAP2000's Define Materials: the material list, Get From SAP2000, Add New / Add Copy /

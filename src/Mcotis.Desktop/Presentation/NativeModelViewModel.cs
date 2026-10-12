@@ -1,10 +1,10 @@
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 using Mcotis.Analysis;
 using Mcotis.Application;
 using Mcotis.Core;
 using Mcotis.Persistence;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public sealed record NativeJointRow(string Point, double UX, double UY, double UZ, double RX, double RY, double RZ,
     double FX, double FY, double FZ, double MX, double MY, double MZ);

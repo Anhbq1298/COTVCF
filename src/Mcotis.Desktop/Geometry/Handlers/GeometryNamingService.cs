@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace COT_VCF.Geometry.Handlers;
+namespace Mcotis.Desktop.Geometry.Handlers;
 
 /// <summary>One deterministic naming policy for parametric joints, frames and symmetric cable pairs.</summary>
 public sealed partial class GeometryNamingService

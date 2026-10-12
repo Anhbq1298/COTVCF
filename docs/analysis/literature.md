@@ -1,4 +1,4 @@
-# COTVCF — Literature, Equations and QA/QC Traceability
+# Mcotis — Literature, Equations and QA/QC Traceability
 
 Repository note (2026-10-12): this is the supplied research register. Book/PDF descriptions below are supplied
 claims, not independently inspected source passages in this implementation. See [foundation-status.md](foundation-status.md)
@@ -92,7 +92,7 @@ Status: OPEN | SOURCE_VERIFIED | CODED | CROSS_VERIFIED | RELEASED
 - `BENCH-09` frame modal effective mass/orthogonality/MAC with OpenSeesPy.
 - `BENCH-10` prestressed modal K_t eigenmodes compared only with equivalent OpenSeesPy tangent formulation.
 
-OpenSeesPy tests should be built *independently from benchmark specifications*, not only translated from COTVCF's already assembled element matrices. Commit fixture source, software versions, units, tolerances and comparison script; flag formulation mismatches as `NOT COMPARABLE` rather than force artificial pass.
+OpenSeesPy tests should be built *independently from benchmark specifications*, not only translated from Mcotis's already assembled element matrices. Commit fixture source, software versions, units, tolerances and comparison script; flag formulation mismatches as `NOT COMPARABLE` rather than force artificial pass.
 
 ## 7. Outstanding research tickets
 
@@ -102,7 +102,7 @@ OpenSeesPy tests should be built *independently from benchmark specifications*, 
 - `RES-04 HIGH`: Find authoritative mass matrix/modal participation formulations, consistent vs lumped mass and handling massless DOFs; CSI Analysis Reference and structural dynamics textbook.
 - `RES-05 MEDIUM`: Sparse factorization, rank-revealing LDLᵀ, numerical inertia and mechanism nullspace methods. Need production-grade numerical linear algebra citations beyond B1 elementary algorithms.
 - `RES-06 MEDIUM`: Confirm CSI standard solver reporting semantics and distinguish public help claims from internal algorithm claims.
-- `RES-07 HIGH`: Examine COTVCF repository revision and migrate concrete module names/constraints; this document has not audited the current code.
+- `RES-07 HIGH`: Examine Mcotis repository revision and migrate concrete module names/constraints; this document has not audited the current code.
 
 ## 8. Reviewer acceptance checklist
 

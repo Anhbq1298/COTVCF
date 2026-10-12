@@ -1,5 +1,5 @@
-using COT_VCF.Domain;
-namespace COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+namespace Mcotis.Desktop.Geometry;
 
 public sealed class TrussGeometryService
 {

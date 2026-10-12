@@ -1,8 +1,8 @@
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
 using System.IO;
 
-namespace COT_VCF.Application.Workers;
+namespace Mcotis.Desktop.Application.Workers;
 
 public sealed record SapWorkerJobResult(
     StudyIterationStatus Status,

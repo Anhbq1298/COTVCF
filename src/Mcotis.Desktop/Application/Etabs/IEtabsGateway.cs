@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Etabs;
+namespace Mcotis.Desktop.Application.Etabs;
 
 /// <summary>The model open in ETABS, as its database tables (see <see cref="EtabsTableReader"/>). <see cref="FilePath"/>
 /// is empty for a model ETABS has not saved.</summary>

@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application.Quantities;
+namespace Mcotis.Desktop.Application.Quantities;
 
 /// <summary>The force and length units a set of SAP2000 database tables is written in, and what brings its
 /// values to metres, square metres and tonnes per cubic metre.</summary>

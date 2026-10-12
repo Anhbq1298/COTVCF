@@ -247,7 +247,7 @@ Keep `.cotfem.json` as a read-only import format during the transition:
 
 1. Validate the existing file with the current reader.
 2. Import geometry, resolved loads, load definitions, material/section libraries, assignments, and FEM settings.
-3. Deliberately ignore `CotVcfConfigDto` MB ranges, candidate/study data, study journals, and MB report artifacts. If the old file contains compatible monitored joints/frames/cables, result-case selections, or limit bands, translate those values once into the new FEM Output Settings tables without retaining the MB DTO.
+3. Deliberately ignore `McotisConfigDto` MB ranges, candidate/study data, study journals, and MB report artifacts. If the old file contains compatible monitored joints/frames/cables, result-case selections, or limit bands, translate those values once into the new FEM Output Settings tables without retaining the MB DTO.
 4. Convert name references to stable IDs and report every unresolved or duplicate reference before creating the database.
 5. Derive generation keys and preview the automatic naming map; do not silently rename imported/user objects during migration.
 6. Save the new database beside the JSON only after the import transaction passes validation.
@@ -314,7 +314,7 @@ Acceptance: current sample/default files import with no unresolved references an
 - Test atomic replacement, external input modification, interrupted Save, corrupt working database, cancelled Run, and recovery cleanup.
 - Update UI handoff and user documentation.
 
-Acceptance: `dotnet build MCOTiS.sln`, `dotnet run --project tests/COT_VCF.Checks`, database round-trip/recovery checks, and `git diff --check` all pass. No automated check connects to SAP2000.
+Acceptance: `dotnet build MCOTiS.sln`, `dotnet run --project tests/Mcotis.Desktop.Checks`, database round-trip/recovery checks, and `git diff --check` all pass. No automated check connects to SAP2000.
 
 ## Required regression checks
 

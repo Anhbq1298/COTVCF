@@ -25,7 +25,7 @@
     <!-- Brand: Mcotis (Meinhardt Cities of Tomorrow Integrated Structures). AssemblyName is the .exe/.dll file name and the
          pack:// assembly token used by the theme, the icon and the test host. -->
     <AssemblyName>Mcotis</AssemblyName>
-    <RootNamespace>COT_VCF</RootNamespace>
+    <RootNamespace>Mcotis.Desktop</RootNamespace>
     <Title>Mcotis — Meinhardt Cities of Tomorrow Integrated Structures</Title>
     <Product>Mcotis</Product>
     <Description>Mcotis — Meinhardt Cities of Tomorrow Integrated Structures</Description>
@@ -83,7 +83,7 @@
 
   <ItemGroup>
     <Reference Include="CSiAPIv1"><HintPath>$(SapInstallDir)\CSiAPIv1.dll</HintPath><Private>true</Private></Reference>
-    <InternalsVisibleTo Include="COT_VCF.Checks" />
+    <InternalsVisibleTo Include="Mcotis.Desktop.Checks" />
   </ItemGroup>
 
   <ItemGroup>
@@ -91,9 +91,9 @@
     <!-- The software logo: window icons (Theme.xaml AppLogo); AppIcon.ico is made from the same picture. -->
     <Resource Include="Presentation\AppLogo.png" />
     <Resource Include="Presentation\AppIcon.ico" />
-    <EmbeddedResource Include="Resources\Default.cotfem.db" LogicalName="COTVCF.Default.cotfem.db" />
+    <EmbeddedResource Include="Resources\Default.cotfem.db" LogicalName="Mcotis.Default.cotfem.db" />
     <!-- Help → Development Plans shows the development log; keeping it is compulsory (AGENTS.md, .githooks/commit-msg). -->
-    <EmbeddedResource Include="$(RepoRoot)docs\DEVELOPMENT_LOG.md" LogicalName="COTVCF.DevelopmentLog.md" Link="DEVELOPMENT_LOG.md" />
+    <EmbeddedResource Include="$(RepoRoot)docs\DEVELOPMENT_LOG.md" LogicalName="Mcotis.DevelopmentLog.md" Link="DEVELOPMENT_LOG.md" />
   </ItemGroup>
 
   <ItemGroup>

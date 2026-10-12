@@ -3,11 +3,11 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>The complete SAP-independent input consumed by Tab 06 post-processing.</summary>
 public sealed class StudyRawDataPackage

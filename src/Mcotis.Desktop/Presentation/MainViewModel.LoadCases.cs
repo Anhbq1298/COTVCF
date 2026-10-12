@@ -1,8 +1,8 @@
 using System.Collections.ObjectModel;
-using COT_VCF.Application;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 // ---- Define → Load Cases: the load cases are defined in the app ----
 // The default setup is SAP2000's for a cable structure (FemLoadPlan.DefaultSetup): Pretension — the cable target forces

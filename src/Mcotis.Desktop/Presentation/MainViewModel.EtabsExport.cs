@@ -1,9 +1,9 @@
-using COT_VCF.Application;
-using COT_VCF.Application.Etabs;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Etabs;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>The ETABS model an export targets and what the export would change there (nothing written yet).</summary>
 public sealed record EtabsExportPreview(EtabsExportModel Model, EtabsExportReport Plan);

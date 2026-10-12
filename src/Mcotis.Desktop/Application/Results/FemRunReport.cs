@@ -1,7 +1,7 @@
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>A live HTML result viewer for the current model's completed FEM load cases.</summary>
 public static class FemRunReport

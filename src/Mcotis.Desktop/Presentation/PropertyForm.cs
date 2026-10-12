@@ -4,7 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>Builders for the SAP2000-style property forms (Define → Section Properties): labelled rows with a value and a
 /// unit, read-only values, a colour swatch, and the small Notes / Modifiers / Properties dialogs.</summary>

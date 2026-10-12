@@ -1,7 +1,7 @@
 using System.IO;
 using System.Text;
 
-namespace COT_VCF.Infrastructure;
+namespace Mcotis.Desktop.Infrastructure;
 
 /// <summary>Same-volume temporary write followed by atomic replacement. The destination is untouched when the writer fails.</summary>
 public static class AtomicFile

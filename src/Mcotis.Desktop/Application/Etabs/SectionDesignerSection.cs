@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Etabs;
+namespace Mcotis.Desktop.Application.Etabs;
 
 /// <summary>A Section Designer section worked out as ETABS does: A, I33, I22 transformed to the base material [m², m⁴]
 /// and the true weight and mass per metre (each shape with its own material). <see cref="Exact"/> is false when a shape

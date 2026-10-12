@@ -1,7 +1,7 @@
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 /// <summary>A load pattern to exist in SAP2000: its name, SAP pattern type (Dead, Live, Other …) and self-weight multiplier.</summary>
 public sealed record SapExportPattern(string Name, string Type, double SelfWeightMultiplier);

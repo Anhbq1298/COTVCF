@@ -1,9 +1,9 @@
 using System.Net;
 using System.Text.Json;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Single-model counterpart of the MB reports: embedded results and browser-side chart rendering.</summary>
 internal static class FemLiveReport

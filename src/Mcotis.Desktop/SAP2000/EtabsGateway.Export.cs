@@ -1,10 +1,10 @@
-using COT_VCF.Application;
-using COT_VCF.Application.Etabs;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Etabs;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 using CSiAPIv1;
 
-namespace COT_VCF.SAP2000;
+namespace Mcotis.Desktop.SAP2000;
 
 /// <summary>
 /// File → Export to ETABS: the Mcotis model written into the model open in ETABS, ready to run there. Calls checked

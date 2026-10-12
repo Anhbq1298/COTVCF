@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace COT_VCF.Presentation.Controls;
+namespace Mcotis.Desktop.Presentation.Controls;
 
 /// <summary>Compact display units for values drawn on the FEM viewport; the stored results remain in kN and kN·m.</summary>
 internal static class ResultDisplayText

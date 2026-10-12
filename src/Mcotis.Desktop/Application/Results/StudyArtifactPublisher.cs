@@ -1,7 +1,7 @@
-using COT_VCF.Domain.Results;
+using Mcotis.Desktop.Domain.Results;
 using System.IO;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 public interface IStudyArtifactPublisher
 {

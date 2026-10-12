@@ -1,5 +1,5 @@
-<Window x:Class="COT_VCF.Presentation.NativeModelWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
- xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:COT_VCF.Presentation" xmlns:c="clr-namespace:COT_VCF.Presentation.Controls"
+<Window x:Class="Mcotis.Desktop.Presentation.NativeModelWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+ xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:Mcotis.Desktop.Presentation" xmlns:c="clr-namespace:Mcotis.Desktop.Presentation.Controls"
  Title="{Binding Title}" Icon="{x:Static p:AppIcon.Window}" Width="1150" Height="760" MinWidth="850" MinHeight="540" WindowStartupLocation="CenterScreen">
  <DockPanel>
   <Menu DockPanel.Dock="Top" IsEnabled="{Binding Editable}">

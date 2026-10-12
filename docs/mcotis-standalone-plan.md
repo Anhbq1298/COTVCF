@@ -103,7 +103,7 @@ initial case hoặc combination; tên trùng. Một frame chưa gán section v�
 | `tests/Mcotis.Checks` | Checks offline của hệ mới | Có |
 | `src/Mcotis.Analysis` | Immutable topology/DOF compiler; engine tuyến tính 3D cho frame | Có compiler và engine frame (dense); cable, shell, solver sparse chưa có |
 | `src/Mcotis.Desktop` | App WPF hiện tại; TemplateBuilding workspace đã dùng các thư viện native | Native Save/Open, DOF options, linear static và result tables đã có; migration đầy đủ còn ở giai đoạn 6 |
-| `tests/COT_VCF.Checks` | Checks offline của app | Có |
+| `tests/Mcotis.Desktop.Checks` | Checks offline của app | Có |
 
 Core chỉ tham chiếu .NET runtime; Application chỉ tham chiếu Core; không project nào tham chiếu WPF, SQLite hay CSI.
 `Mcotis.Checks` kiểm tra điều này bằng reflection.

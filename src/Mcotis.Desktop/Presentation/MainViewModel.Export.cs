@@ -1,7 +1,7 @@
-using COT_VCF.Application;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>The SAP2000 model an export targets and what the export would change there (nothing written yet).</summary>
 public sealed record SapExportPreview(ModelInfo Target, SapExportModel Model, SapExportReport Plan);

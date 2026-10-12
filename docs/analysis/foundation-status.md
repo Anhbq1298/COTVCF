@@ -75,10 +75,10 @@ compilation, support loads, cable rotations, immutability, migration and Undo/Re
 | APP-DOF-01 | Project convention: XYZ storage, immutable IDs, native kN/m/t, six canonical joint components | Full/reduced mapping and nodal vectors in `ModelCompiler` | Deterministic mapping, support-load and snapshot checks | Application convention tested; no stiffness derivation claim |
 | APP-DOF-02 | Prior schema 1 has no active DOF setting; prior analysis direction is XZ | `NativeDocumentFormat.AddActiveDofs` | Committed schema-1 fixture and sequential migration checks | Migration tested |
 
-XY and custom masks are COTVCF requirements from the supplied plan. The inspected CSI page lists Full 3D, XZ, YZ
+XY and custom masks are Mcotis requirements from the supplied plan. The inspected CSI page lists Full 3D, XZ, YZ
 and No Z Rotation; it does not list an XY button. Do not attribute the XY preset to that page.
 
-Existing numerical baseline tests remain `tests/COT_VCF.Checks/PlanarFrameChecks.cs` (analytical deflections, forces/reactions,
+Existing numerical baseline tests remain `tests/Mcotis.Desktop.Checks/PlanarFrameChecks.cs` (analytical deflections, forces/reactions,
 distributed loads, mesh, releases, cable equilibrium/sag) and the saved benchmark inputs under
 `tests/fem-sap-benchmark/`. They protect the current engine. A standalone solver comparison to those results has
 not happened because this milestone has no numerical solver.
@@ -96,4 +96,4 @@ not happened because this milestone has no numerical solver.
    mass-based story P-Delta derivation. Do not label an invented approximation as CSI's method.
 
 Validation commands: `dotnet build MCOTiS.sln -m:1 -p:SapInstallDir="C:\Program Files\Computers and Structures\SAP2000 27"`,
-`dotnet run --project tests/Mcotis.Checks`, `dotnet run --project tests/COT_VCF.Checks`.
+`dotnet run --project tests/Mcotis.Checks`, `dotnet run --project tests/Mcotis.Desktop.Checks`.

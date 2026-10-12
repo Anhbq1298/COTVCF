@@ -1,9 +1,9 @@
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 // ---- Define → Materials: the material library of the working model ----
 // Get From SAP2000 reads the connected model's materials (read-only). Without it the library starts from the materials the

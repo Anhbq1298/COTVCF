@@ -1,13 +1,13 @@
 using System.Windows;
-using COT_VCF.Application;
-using COT_VCF.Application.Quantities;
-using COT_VCF.Application.Workers;
-using COT_VCF.Domain;
-using COT_VCF.Infrastructure;
-using COT_VCF.Presentation;
-using COT_VCF.SAP2000;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Quantities;
+using Mcotis.Desktop.Application.Workers;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Infrastructure;
+using Mcotis.Desktop.Presentation;
+using Mcotis.Desktop.SAP2000;
 
-namespace COT_VCF;
+namespace Mcotis.Desktop;
 public partial class App : System.Windows.Application
 {
     private SapGateway? gateway;
@@ -18,7 +18,7 @@ public partial class App : System.Windows.Application
         // A UI-thread error must not silently close the app (and lose the SAP session): log it, report it, keep running.
         DispatcherUnhandledException += (_, args) =>
         {
-            var log = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "COTVCF", "error.log");
+            var log = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Mcotis", "error.log");
             try
             {
                 System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(log)!);

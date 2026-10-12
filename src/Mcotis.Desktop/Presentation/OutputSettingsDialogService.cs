@@ -1,10 +1,10 @@
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public interface IOutputSettingsDialogService
 {

@@ -1,7 +1,7 @@
 using System.IO;
 using System.Text.RegularExpressions;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 /// <summary>Computes deterministic study paths without touching the file system.</summary>
 public sealed partial class StudyPathService
@@ -51,7 +51,7 @@ public sealed partial class StudyPathService
     {
         var invalid = Path.GetInvalidFileNameChars().ToHashSet();
         var clean = new string(stem.Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim();
-        return clean.Length == 0 ? "COT_VCF" : clean;
+        return clean.Length == 0 ? "Mcotis" : clean;
     }
 
     [GeneratedRegex("^L[0-9]+_H[0-9]+_P[0-9]+$", RegexOptions.CultureInvariant)]

@@ -1,7 +1,7 @@
-using COT_VCF.Application;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>What File → Import From SAP2000 brought in, and whether Run Analysis can start.</summary>
 public sealed record SapImportSummary(bool ReadyToRun, IReadOnlyList<string> Lines);

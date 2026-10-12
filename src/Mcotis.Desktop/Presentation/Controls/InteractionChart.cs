@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
-using COT_VCF.Application.Design;
+using Mcotis.Desktop.Application.Design;
 
-namespace COT_VCF.Presentation.Controls;
+namespace Mcotis.Desktop.Presentation.Controls;
 
 /// <summary>
 /// An N–M interaction diagram: M [kNm] across, N [kN] up (compression +), one curve per <see cref="InteractionSeries"/>

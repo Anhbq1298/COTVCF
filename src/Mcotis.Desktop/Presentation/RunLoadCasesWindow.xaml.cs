@@ -1,8 +1,8 @@
 using System.Windows;
-using COT_VCF.Application;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
 /// Run → Run FEM Analysis opens this first (as SAP2000's Set Load Cases to Run): the load cases and combinations of

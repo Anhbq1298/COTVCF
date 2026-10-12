@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 public enum SectionMaterial { Steel, Concrete }
 

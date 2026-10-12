@@ -1,11 +1,11 @@
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Builds <c>Cable_Forces_Report.html</c> — prestress target vs final analysed cable force: a
 /// height overview, one detailed chart per pretension candidate and user-defined cable side, and a governing /
@@ -569,7 +569,7 @@ const defaultGroups = () => cleanGroups(D.autoGroups || {});
 const cablesOf = side => D.cables.filter(c => S.groups[c] === side);
 function counts(g){ let a = 0, b = 0, u = 0; D.cables.forEach(c => { if (g[c] === "A") a++; else if (g[c] === "B") b++; else u++; }); return { a, b, u }; }
 const unassignedText = n => n + (n === 1 ? " cable" : " cables") + " currently unassigned.";
-const STORE_KEY = "cotvcf.cableGroups:" + D.study.baselineModelName;
+const STORE_KEY = "mcotis.cableGroups:" + D.study.baselineModelName;
 function loadSaved(){
   try {
     const raw = window.localStorage.getItem(STORE_KEY);

@@ -1,23 +1,23 @@
-using COT_VCF.Domain;
-using COT_VCF.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Application;
 
-namespace COT_VCF.Configuration;
+namespace Mcotis.Desktop.Configuration;
 
 /// <summary>
-/// Turns the current <see cref="ApplicationState"/> into a <see cref="CotVcfConfigDto"/> for the requested
+/// Turns the current <see cref="ApplicationState"/> into a <see cref="McotisConfigDto"/> for the requested
 /// tabs only. Read-only: it never touches SAP2000. The model snapshot carries just the points / cables /
 /// load patterns referenced by the included tabs, taken from the immutable baseline geometry.
 /// </summary>
 public sealed class ConfigurationExtractor
 {
-    public CotVcfConfigDto Extract(ApplicationState state, IReadOnlyCollection<string> modelLoadCases, ConfigTabs tabs)
+    public McotisConfigDto Extract(ApplicationState state, IReadOnlyCollection<string> modelLoadCases, ConfigTabs tabs)
     {
         var t02 = tabs.HasFlag(ConfigTabs.Loading) ? ExtractLoading(state) : null;
         var t03 = tabs.HasFlag(ConfigTabs.Truss) ? ExtractTruss(state) : null;
         var t04 = tabs.HasFlag(ConfigTabs.Cable) ? ExtractCables(state) : null;
         var t05 = tabs.HasFlag(ConfigTabs.Output) ? ExtractOutput(state) : null;
         var t06 = tabs.HasFlag(ConfigTabs.Study) ? ExtractStudy(state) : null;
-        return new CotVcfConfigDto
+        return new McotisConfigDto
         {
             ConfigVersion = "1.0",
             Units = new UnitsDto(),
@@ -60,7 +60,7 @@ public sealed class ConfigurationExtractor
 
     /// <summary>Recompute a project's model snapshot from whichever tab sections it currently holds,
     /// preserving <see cref="ModelSnapshotDto.OriginalFileName"/>.</summary>
-    public ModelSnapshotDto RebuildSnapshot(CotVcfConfigDto project, ApplicationState state, IReadOnlyCollection<string> modelLoadCases) =>
+    public ModelSnapshotDto RebuildSnapshot(McotisConfigDto project, ApplicationState state, IReadOnlyCollection<string> modelLoadCases) =>
         Snapshot(state, project.Tab02Loading, project.Tab03TrussHeight, project.Tab04CableForce, project.Tab05OutputSettings, modelLoadCases, project.Model);
 
     private static LoadingConfigDto ExtractLoading(ApplicationState s) => new()

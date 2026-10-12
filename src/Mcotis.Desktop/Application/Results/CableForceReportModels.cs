@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 // Report-side DTOs for Cable_Forces_Report.html. Serialized (camelCase) into the page as #report-data.
 // Kept separate from the SAP extraction objects so the HTML never depends on domain / SAP types.

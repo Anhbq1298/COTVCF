@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Browser-side report controls, following the same embedded-data/inline-script pattern as MB reports.</summary>
 internal static class FemLiveReportAssets

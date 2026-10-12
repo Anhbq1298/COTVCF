@@ -1,8 +1,8 @@
 using System.Globalization;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 /// <summary>Everything a Run → Optimization VCF case needs from the working model, frozen when the run starts.
 /// <see cref="SwapSection"/> gives a member's properties with another section (from a member that has it, or the section

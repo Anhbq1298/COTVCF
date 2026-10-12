@@ -1,4 +1,4 @@
-# COTVCF Reliability and Product Enhancement Plan
+# Mcotis Reliability and Product Enhancement Plan
 
 This plan is executed sequentially. A phase is complete only when its acceptance criteria pass and both the application build and relevant offline checks are green. Live SAP2000 reads or writes remain outside automated verification unless explicitly requested.
 
@@ -150,6 +150,6 @@ Deliverables:
 Acceptance criteria:
 
 - `dotnet build MCOTiS.sln` succeeds with no warnings.
-- `dotnet run --project tests/COT_VCF.Checks` passes.
+- `dotnet run --project tests/Mcotis.Desktop.Checks` passes.
 - Offline UI smoke passes.
 - `git diff --check` passes and no unrelated user changes are overwritten.

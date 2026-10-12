@@ -1,7 +1,7 @@
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Turns one analyzed child model into a <see cref="CandidateResultDto"/>: reads the configured
 /// monitored-point Uz under the configured output case and records an explicit status for every point.

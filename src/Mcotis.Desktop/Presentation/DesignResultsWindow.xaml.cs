@@ -2,11 +2,11 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
-using COT_VCF.Application.Design;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Application.Design;
+using Mcotis.Desktop.Domain;
 using Microsoft.Win32;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
 /// The result of a column design run: one summary row per member (governing case, design actions, utilisations, status)

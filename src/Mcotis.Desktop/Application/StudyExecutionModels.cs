@@ -1,7 +1,7 @@
-using COT_VCF.Domain;
-using COT_VCF.Application.Results;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Application.Results;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 public sealed record ResolvedPretensionCandidate(
     string Id,

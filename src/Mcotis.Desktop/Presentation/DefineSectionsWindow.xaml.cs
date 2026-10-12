@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>Define → Sections: the SAP member properties the FEM uses, in a window of its own (read-only).</summary>
 public partial class DefineSectionsWindow : Window

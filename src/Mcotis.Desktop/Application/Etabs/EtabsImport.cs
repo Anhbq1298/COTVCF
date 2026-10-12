@@ -1,7 +1,7 @@
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Application.Etabs;
+namespace Mcotis.Desktop.Application.Etabs;
 
 /// <summary>
 /// What File → Import From ETABS puts into Mcotis: the geometry (joints label@story, frames by label), the material and

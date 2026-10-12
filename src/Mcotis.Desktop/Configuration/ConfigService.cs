@@ -1,17 +1,17 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using COT_VCF.Application;
-using COT_VCF.Domain;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Configuration;
+namespace Mcotis.Desktop.Configuration;
 
 public enum SaveResult { Saved, Cancelled, Blocked }
 public readonly record struct SaveOutcome(SaveResult Result, string Message);
 
 /// <summary>
-/// Owns the active COT VCF <b>project</b> (see <see cref="Session"/>). Load = open a project;
+/// Owns the active Mcotis <b>project</b> (see <see cref="Session"/>). Load = open a project;
 /// per-tab save overwrites only its section of the in-memory project, then writes the whole file back;
 /// Save All extracts every tab from the UI and rewrites the project atomically. Never shows dialogs —
 /// the caller supplies a Save-As path picker.
@@ -57,23 +57,23 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
     }
 
     // ---------- open ----------
-    public CotVcfConfigDto Read(string path)
+    public McotisConfigDto Read(string path)
     {
-        CotVcfConfigDto? project;
-        try { project = JsonSerializer.Deserialize<CotVcfConfigDto>(File.ReadAllText(path), Json); }
+        McotisConfigDto? project;
+        try { project = JsonSerializer.Deserialize<McotisConfigDto>(File.ReadAllText(path), Json); }
         catch (JsonException) { throw new InvalidDataException("The selected file is not a valid Mcotis configuration file."); }
         return project ?? throw new InvalidDataException("The selected file is not a valid Mcotis configuration file.");
     }
 
-    public async Task<ConfigValidationResult> ValidateAsync(CotVcfConfigDto project)
+    public async Task<ConfigValidationResult> ValidateAsync(McotisConfigDto project)
     {
         var model = state.Model;
         IReadOnlyList<string> cases = model is null ? Array.Empty<string>() : await sap.GetLoadCaseNamesAsync(model);
         return new ConfigCompatibilityValidator().Validate(project, state, cases);
     }
 
-    public void SetActiveProject(string path, CotVcfConfigDto project) => Session.Open(path, project);
-    public void Apply(CotVcfConfigDto project, ConfigValidationResult check) =>
+    public void SetActiveProject(string path, McotisConfigDto project) => Session.Open(path, project);
+    public void Apply(McotisConfigDto project, ConfigValidationResult check) =>
         new ConfigurationApplicator(state, workflow).Apply(project, check);
 
     // ---------- save (per-tab or all) ----------
@@ -87,7 +87,7 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         var cases = await sap.GetLoadCaseNamesAsync(state.Model!);
         var extractor = new ConfigurationExtractor();
 
-        var project = Session.Project is { } active ? Clone(active) : new CotVcfConfigDto { ConfigVersion = "1.0", Units = new() };
+        var project = Session.Project is { } active ? Clone(active) : new McotisConfigDto { ConfigVersion = "1.0", Units = new() };
         if (uiTabs.HasFlag(ConfigTabs.Loading)) project.Tab02Loading = extractor.ExtractLoadingSection(state);
         if (uiTabs.HasFlag(ConfigTabs.Truss)) project.Tab03TrussHeight = extractor.ExtractTrussSection(state);
         if (uiTabs.HasFlag(ConfigTabs.Cable)) project.Tab04CableForce = extractor.ExtractCableSection(state);
@@ -125,7 +125,7 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         return new(SaveResult.Saved, "");
     }
 
-    private static ConfigTabs ConfiguredIn(CotVcfConfigDto p)
+    private static ConfigTabs ConfiguredIn(McotisConfigDto p)
     {
         var t = ConfigTabs.None;
         if (p.Tab02Loading is { AppliedPoints.Count: > 0 } or { LoadDefinitions.Count: > 0 }) t |= ConfigTabs.Loading;
@@ -160,6 +160,6 @@ public sealed class ConfigService(ISapGateway sap, ApplicationState state, Workf
         return "Unable to save the configuration:\n\n" + string.Join("\n\n", lines) + "\n\nNo changes have been written to the project file.";
     }
 
-    private static CotVcfConfigDto Clone(CotVcfConfigDto d) =>
-        JsonSerializer.Deserialize<CotVcfConfigDto>(JsonSerializer.Serialize(d, Json), Json)!;
+    private static McotisConfigDto Clone(McotisConfigDto d) =>
+        JsonSerializer.Deserialize<McotisConfigDto>(JsonSerializer.Serialize(d, Json), Json)!;
 }

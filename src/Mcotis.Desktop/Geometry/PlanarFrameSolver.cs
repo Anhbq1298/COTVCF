@@ -1,7 +1,7 @@
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 using MathNet.Numerics.LinearAlgebra.Double;
 
-namespace COT_VCF.Geometry;
+namespace Mcotis.Desktop.Geometry;
 
 public sealed record FemSectionProperties(
     string MemberName,
@@ -168,11 +168,11 @@ public static class FrameJoints
 /// <item>Pretension fitting — follows the intent of SAP2000's Target-Force load (CSI Analysis Reference Manual), by a
 /// Newton iteration of its own on the cable pretensions; it is not CSI's algorithm.</item>
 /// </list>
-/// <para><b>Verification.</b> <c>tests/COT_VCF.Checks/PlanarFrameChecks.cs</c> (<c>--fem</c>) compares the solver with closed-form
+/// <para><b>Verification.</b> <c>tests/Mcotis.Desktop.Checks/PlanarFrameChecks.cs</c> (<c>--fem</c>) compares the solver with closed-form
 /// results: PL³/48EI, 5wL⁴/384EI, wL²/8, P·a·b/L, reactions and equilibrium, meshed against unmeshed frames,
 /// superposition of cases, and — for cable sag — an independent scalar solution of the cable equation and Ernst's
 /// formula.</para>
-/// <para><b>Benchmark against SAP2000.</b> <c>tests/COT_VCF.Checks/FemSapBenchmark.cs</c> (<c>--fem-sap</c>) runs the solver on
+/// <para><b>Benchmark against SAP2000.</b> <c>tests/Mcotis.Desktop.Checks/FemSapBenchmark.cs</c> (<c>--fem-sap</c>) runs the solver on
 /// SAP2000's own text copy of a real model and compares it, like for like, with a completed SAP2000 study of 135
 /// candidates: same candidates, same pretension stage, same staged load cases. The total vertical reaction agrees
 /// to 0.002 %; cable forces to within 3.8 % and deflections to within 3.2 % of the largest SAP2000 value;

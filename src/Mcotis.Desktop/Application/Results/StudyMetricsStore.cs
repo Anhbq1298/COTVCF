@@ -1,10 +1,10 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using COT_VCF.Domain;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>The candidate metrics of one raw-data package, with enough of the package's identity to tell when
 /// they no longer belong to it.</summary>

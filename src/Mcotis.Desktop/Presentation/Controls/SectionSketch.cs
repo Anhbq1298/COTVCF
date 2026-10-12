@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation.Controls;
+namespace Mcotis.Desktop.Presentation.Controls;
 
 /// <summary>The section drawing of a frame section form (as SAP2000's "Section" box): the outline to scale on a grid, with
 /// the local 2 (up) and 3 (left) axes. A General / Section Designer section is drawn as its equivalent rectangle, dashed.</summary>

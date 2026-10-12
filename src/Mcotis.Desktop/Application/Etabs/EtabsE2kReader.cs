@@ -1,7 +1,7 @@
 using System.IO;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application.Etabs;
+namespace Mcotis.Desktop.Application.Etabs;
 
 /// <summary>
 /// Reads ETABS's .e2k text file into an <see cref="EtabsModel"/>. Records are lines of quoted names and KEY value pairs,

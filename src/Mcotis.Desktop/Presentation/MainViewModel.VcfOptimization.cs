@@ -1,11 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Input;
-using COT_VCF.Application;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>One analysed case in the Optimization VCF results: the values of the varying inputs, then the outcome — the
 /// deflection, the span and limit span / ratio, the utilisation δ / limit, the uplift of the span (with the chord point

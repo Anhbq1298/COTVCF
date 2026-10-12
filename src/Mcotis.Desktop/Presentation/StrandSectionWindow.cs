@@ -2,10 +2,10 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using COT_VCF.Domain;
-using static COT_VCF.Presentation.PropertyForm;
+using Mcotis.Desktop.Domain;
+using static Mcotis.Desktop.Presentation.PropertyForm;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>A cable or tendon section form (SAP2000's Cable / Tendon Section Data): name, colour, notes; material; diameter
 /// and area (linked); for a cable the area / mass / weight modifiers. Strand Bundle works the section out from its

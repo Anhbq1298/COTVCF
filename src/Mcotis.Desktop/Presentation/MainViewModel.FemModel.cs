@@ -1,14 +1,14 @@
-using COT_VCF.Application;
-using COT_VCF.Configuration;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Configuration;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
+using Mcotis.Desktop.Infrastructure;
 using Microsoft.Win32;
 using System.IO;
 using System.Windows.Input;
 using System.Windows.Threading;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 // ---- 07 FEM → Inputs: Save Model / Load Model ----
 // Save Model writes everything the FEM run reads from SAP2000 and Tabs 01–05 into one file. Load Model restores it

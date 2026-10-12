@@ -6,7 +6,7 @@ Every function added or changed in Mcotis is recorded here, newest first. The ap
 **Compulsory for everyone, people and coding agents alike.** A commit that changes anything under `src/` — the app or the
 libraries — must add or update an entry in this file. The commit hook in `.githooks/commit-msg` (installed by the
 build) refuses such a commit without one; write `[no-log]` in the commit message only for a change no user can notice
-(a refactor, a comment, a test-only fix). The checks (`dotnet run --project tests/COT_VCF.Checks -- --dev-log`)
+(a refactor, a comment, a test-only fix). The checks (`dotnet run --project tests/Mcotis.Desktop.Checks -- --dev-log`)
 refuse an entry that breaks the format below.
 
 Entry format — a `## date · title` line, then these fields, each on its own `- Field: value` line (a longer value
@@ -17,6 +17,21 @@ continues on the next lines, indented by two spaces):
 - Where: how a user reaches it in the app (menu path, window, tab), or the code area when it has no UI
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
+
+## 2026-10-12 · The old name is gone: everything is Mcotis
+- Status: Done
+- Who: markbui, Claude
+- Where: Whole repository; in the app: 07 FEM → Inputs → Save Model / Load Model, the app's data folder, printed reports
+- What: The name COTVCF is replaced everywhere. Code: the namespaces COT_VCF.* are Mcotis.Desktop.* (Mcotis.* stays with
+  the libraries), CotVcfConfigDto is McotisConfigDto, the application's checks moved from tests/COT_VCF.Checks to
+  tests/Mcotis.Desktop.Checks, and the skills are skills/mcotis-ui-handoff and .agents/skills/mcotis-project. What a
+  user can notice: a saved FEM model file says Mcotis.FemModel (one saved as COTVCF.FemModel still opens); the app
+  keeps its data in %LocalAppData%\Mcotis, so the print setup, sessions and logs under %LocalAppData%\COTVCF are not
+  picked up (copy ReportPrintSettings.json across to keep the print setup); a report generated before this change must
+  be regenerated before it prints in a package, and the browser asks for the print setup once more. A branch made
+  before this change must be merged with rename detection.
+- Checks: dotnet build MCOTiS.sln; dotnet run --project tests/Mcotis.Checks; default offline Mcotis.Desktop.Checks
+  (old format name still opens); --dev-log
 
 ## 2026-10-12 · Analysis Options form and TemplateBuilding native workspace
 - Status: Done
@@ -45,10 +60,10 @@ continues on the next lines, indented by two spaces):
 - Where: Repository layout (no change in the app)
 - What: The app is now the project src/Mcotis.Desktop (it was at the repository root with its code under src/). The
   libraries of the standalone system are its siblings in src/ (they were under mcotis/); the checks are
-  tests/COT_VCF.Checks and tests/Mcotis.Checks. Build and run commands are unchanged except for the paths:
-  dotnet build MCOTiS.sln, ./build-desktop.ps1, dotnet run --project tests/COT_VCF.Checks. A branch made before this
+  tests/Mcotis.Desktop.Checks and tests/Mcotis.Checks. Build and run commands are unchanged except for the paths:
+  dotnet build MCOTiS.sln, ./build-desktop.ps1, dotnet run --project tests/Mcotis.Desktop.Checks. A branch made before this
   change must be merged with rename detection. The build now finds SAP2000 27 when 26 is not installed.
-- Checks: solution build; dotnet run --project tests/Mcotis.Checks; default offline COT_VCF.Checks; --dev-log;
+- Checks: solution build; dotnet run --project tests/Mcotis.Checks; default offline Mcotis.Desktop.Checks; --dev-log;
   --result-tools-ui
 
 ## 2026-10-12 · Standalone 3D linear static frame engine
@@ -80,7 +95,7 @@ continues on the next lines, indented by two spaces):
 - What: Adds persisted Full 3D, XZ/XY/YZ and custom DOF masks, immutable topology compilation with free/restrained/inactive
   mappings, load/geometry diagnostics and schema-1 to schema-2 migration preserving XZ. Keeps unsupported shells explicit.
   The spatial stiffness solver, staged desktop dialog, P-Delta and modal algorithms remain planned with source gates.
-- Checks: dotnet run --project tests/Mcotis.Checks (364 checks); default offline COT_VCF.Checks; solution build
+- Checks: dotnet run --project tests/Mcotis.Checks (364 checks); default offline Mcotis.Desktop.Checks; solution build
 
 ## 2026-10-12 · Optimization tab on the menu bar
 - Status: Done
@@ -303,5 +318,5 @@ continues on the next lines, indented by two spaces):
 - Status: Done
 - Who: AnhBui
 - Where: MB → 01 Loading, 02 Truss Height, 03 Pretension
-- What: The COTVCF candidate workflow: loading criteria, truss-height and pretension candidates on the SAP2000 model.
+- What: The Mcotis candidate workflow: loading criteria, truss-height and pretension candidates on the SAP2000 model.
 - Checks: offline suite

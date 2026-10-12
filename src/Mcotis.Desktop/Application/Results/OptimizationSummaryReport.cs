@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.IO;
 using System.Text;
-using COT_VCF.Domain;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Tab 06A front page of the optimized set: the criteria, how many candidates qualify and why the others
 /// do not, an acceptance map of every candidate against the two limits, and the candidate tables. Self-contained

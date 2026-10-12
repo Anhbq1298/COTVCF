@@ -2,9 +2,9 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using COT_VCF.Application;
+using Mcotis.Desktop.Application;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
 /// Optimization VCF results: one row per analysed case — the values of the inputs that vary in the run, the largest

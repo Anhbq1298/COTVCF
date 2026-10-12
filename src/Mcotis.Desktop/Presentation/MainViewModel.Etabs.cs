@@ -1,11 +1,11 @@
 using System.IO;
-using COT_VCF.Application;
-using COT_VCF.Application.Etabs;
-using COT_VCF.Configuration;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Etabs;
+using Mcotis.Desktop.Configuration;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>What File → Import From ETABS brought in, and whether Run Analysis can start.</summary>
 public sealed record EtabsImportSummary(bool ReadyToRun, IReadOnlyList<string> Lines);

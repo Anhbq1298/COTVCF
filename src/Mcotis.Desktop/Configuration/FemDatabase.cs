@@ -3,13 +3,13 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.IO;
-using COT_VCF.Application;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
+using Mcotis.Desktop.Infrastructure;
 using Microsoft.Data.Sqlite;
 
-namespace COT_VCF.Configuration;
+namespace Mcotis.Desktop.Configuration;
 
 /// <summary>The FEM input persisted in SQLite. It intentionally contains no MB study/candidate configuration.</summary>
 public sealed class FemInputSnapshot
@@ -95,7 +95,7 @@ public sealed class FemInputSnapshot
             Baseline = Baseline,
             LoadPatterns = LoadPatterns.ToList(),
             LoadCaseNames = LoadCaseNames.ToList(),
-            Project = new CotVcfConfigDto
+            Project = new McotisConfigDto
             {
                 Units = Units,
                 Model = CompatibilityModel,
@@ -132,7 +132,7 @@ public static class FemInputDatabase
     public const string Filter = "MCOTiS Config (*.cotfem.db)|*.cotfem.db";
     public const string OpenFilter = Filter + "|Legacy FEM Config (*.cotfem.json)|*.cotfem.json";
     public const string DefaultModelName = "Default.cotfem.db";
-    private const string DefaultResource = "COTVCF.Default.cotfem.db";
+    private const string DefaultResource = "Mcotis.Default.cotfem.db";
 
     internal static readonly JsonSerializerOptions Json = new()
     {

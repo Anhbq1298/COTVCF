@@ -1,4 +1,4 @@
-namespace COT_VCF.Domain;
+namespace Mcotis.Desktop.Domain;
 
 /// <summary>The column designs offered under the Design menu.</summary>
 public enum ColumnDesignType { ReinforcedConcrete, ConcreteFilledTube, SteelEncased, MegaComposite }

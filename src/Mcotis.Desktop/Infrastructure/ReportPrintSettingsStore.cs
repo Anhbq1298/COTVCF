@@ -1,13 +1,13 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Infrastructure;
+namespace Mcotis.Desktop.Infrastructure;
 
 /// <summary>Keeps the report Print Setup (company, logo, header / footer texts, default sheet) for the current
 /// Windows user — what the Print Setup card shows when the application starts and what a project without a
-/// Print Setup of its own is printed with. A COT VCF project file can carry its own (<c>printSetup</c>): opening
+/// Print Setup of its own is printed with. A Mcotis project file can carry its own (<c>printSetup</c>): opening
 /// that project puts it on the card, and so here. Never touches a study folder.</summary>
 public sealed class ReportPrintSettingsStore
 {

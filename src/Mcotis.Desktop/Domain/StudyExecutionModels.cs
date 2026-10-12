@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 
-namespace COT_VCF.Domain;
+namespace Mcotis.Desktop.Domain;
 
 /// <summary>One Cartesian loading choice: one qz value for every configured load pattern.</summary>
 public sealed record LoadingCombination(long Index, IReadOnlyList<(string Name, double Qz)> Loads);

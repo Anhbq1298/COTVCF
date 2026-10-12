@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Marks a report as covering a named subset of the study's candidates (Tab 06A: the qualified set) and
 /// carries what the subset alone cannot tell: the full study's candidate ids — so an id keeps the order, colour

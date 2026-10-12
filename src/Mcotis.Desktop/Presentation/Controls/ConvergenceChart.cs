@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Media;
 
-namespace COT_VCF.Presentation.Controls;
+namespace Mcotis.Desktop.Presentation.Controls;
 
 /// <summary>
 /// Cable target-force convergence: P_result / P_preset after each pretension-fitting run, starting from 0 at run 0

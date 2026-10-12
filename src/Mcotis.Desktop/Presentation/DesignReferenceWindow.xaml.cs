@@ -2,9 +2,9 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
 /// Design → RC Column / CFT / Steel Encased Composite: the design code, method, effective lengths, partial factors and

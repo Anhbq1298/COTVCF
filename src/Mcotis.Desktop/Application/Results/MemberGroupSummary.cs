@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Report-side reading of a Top Chord, Bottom Chord or Mega Column member-force group: the governing
 /// axial force of each iteration and, for a chord, one governing point per physical station. Derived from the

@@ -5,11 +5,11 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
-using COT_VCF.Application;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Presentation.Controls;
+namespace Mcotis.Desktop.Presentation.Controls;
 
 public partial class Structural2DViewer : UserControl
 {

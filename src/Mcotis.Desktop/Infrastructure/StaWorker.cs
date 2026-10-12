@@ -1,5 +1,5 @@
 using System.Windows.Threading;
-namespace COT_VCF.Infrastructure;
+namespace Mcotis.Desktop.Infrastructure;
 
 public sealed class StaWorker : IDisposable
 {

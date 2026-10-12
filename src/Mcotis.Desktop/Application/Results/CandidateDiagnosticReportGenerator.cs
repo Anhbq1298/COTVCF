@@ -1,11 +1,11 @@
 using System.IO;
 using System.Net;
 using System.Text;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Writes <c>Deflection_Diagnostic_&lt;key&gt;.html</c> into a candidate folder — a standalone
 /// QA/QC / traceability document for one candidate. Not the consolidated study report.</summary>

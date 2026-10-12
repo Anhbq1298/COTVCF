@@ -1,8 +1,8 @@
 using System.IO;
 using System.Text.RegularExpressions;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application.Etabs;
+namespace Mcotis.Desktop.Application.Etabs;
 
 /// <summary>
 /// Reads the database tables ETABS exports through its API (<c>File.ExportFile</c>, <c>DBTablesText</c>) into an

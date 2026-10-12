@@ -1,6 +1,6 @@
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Application.Etabs;
+namespace Mcotis.Desktop.Application.Etabs;
 
 /// <summary>
 /// Everything File → Export to ETABS writes into the model open in ETABS, in kN, m. <see cref="Base"/> is what Export to

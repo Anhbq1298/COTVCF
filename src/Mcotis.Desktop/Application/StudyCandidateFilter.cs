@@ -1,7 +1,7 @@
 using System.Numerics;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 public sealed record StudyFilterAudit(
     BigInteger BeforeCount,

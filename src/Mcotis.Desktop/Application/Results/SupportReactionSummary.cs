@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Report-side reading of a foundation's two support points: which one is the inner and which the outer
 /// support, and — per iteration and result step — each one's Fx / Fz with their algebraic sum. Derived from the

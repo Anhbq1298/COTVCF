@@ -1,7 +1,7 @@
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
 {

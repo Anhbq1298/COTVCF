@@ -1,7 +1,7 @@
 using System.Numerics;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 /// <summary>One planned iteration: which loading case, truss-height candidate and pretension combination it uses.</summary>
 public readonly record struct StudyRun(long Index, int LoadIndex, int HeightIndex, long PretensionIndex);

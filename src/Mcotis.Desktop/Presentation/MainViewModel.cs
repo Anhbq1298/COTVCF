@@ -1,10 +1,10 @@
-using COT_VCF.Application;
-using COT_VCF.Application.Quantities;
-using COT_VCF.Application.Results;
-using COT_VCF.Configuration;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Quantities;
+using Mcotis.Desktop.Application.Results;
+using Mcotis.Desktop.Configuration;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
+using Mcotis.Desktop.Infrastructure;
 using Microsoft.Win32;
 using System.Collections;
 using System.Collections.ObjectModel;
@@ -14,7 +14,7 @@ using System.Numerics;
 using System.Windows.Input;
 using MessageBox = System.Windows.MessageBox;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public sealed partial class MainViewModel : Observable
 {
@@ -214,7 +214,7 @@ public sealed partial class MainViewModel : Observable
     public string TrussCandidatesHint { get { TrussCandidatesReady(out var reason); return reason; } }
     public string IterationSummary => $"MODEL\n{ModelName} - {State.Units}\n\nLOADING CRITERIA\n{State.AppliedPoints.Count} applied points - {State.LoadDefinitions.Count} load definitions\n\nTRUSS HEIGHT\n{State.Truss.MinimumHeight:F4} to {State.Truss.MaximumHeight:F4} {LengthUnit} - step {State.Truss.Increment:F4} {LengthUnit}\n\nCABLE PRETENSION\n{CableCount} cables ({VariableCableCount} variable) - {PretensionCandidateCount} pretension candidates";
     public int CableCount => State.Cables.Count;
-    public int VariableCableCount => COT_VCF.Application.PretensionCandidates.VariableCount(State.Cables);
+    public int VariableCableCount => Mcotis.Desktop.Application.PretensionCandidates.VariableCount(State.Cables);
     /// <summary>Sync-column mode options.</summary>
     public IReadOnlyList<CableSyncMode> CableSyncModes { get; } =
         [CableSyncMode.Independent, CableSyncMode.SameValues, CableSyncMode.SameStep,
@@ -228,7 +228,7 @@ public sealed partial class MainViewModel : Observable
     {
         get
         {
-            var (g, f) = COT_VCF.Application.PretensionCandidates.SyncGroupCounts(State.Cables);
+            var (g, f) = Mcotis.Desktop.Application.PretensionCandidates.SyncGroupCounts(State.Cables);
             return f == 0 ? "no synced cables" : $"{g} sync group{(g == 1 ? "" : "s")} · {f} follower{(f == 1 ? "" : "s")}";
         }
     }
@@ -710,7 +710,7 @@ public sealed partial class MainViewModel : Observable
     private bool AnyTrussGroup => State.Truss.TopPoints.Count > 0 || State.Truss.MiddlePoints.Count > 0 || State.Truss.BottomPoints.Count > 0;
     public string LoadStatus => TabState(ConfigTabs.Loading, State.AppliedPoints.Count > 0, State.AppliedPoints.Count > 0 && !LoadingCriteriaValid());
     public string TrussStatus => TabState(ConfigTabs.Truss, State.BaselineCaptured || AnyTrussGroup,
-        !State.BaselineCaptured || new COT_VCF.Geometry.TrussGeometryService().Validate(State.Baseline, State.Truss).Count > 0);
+        !State.BaselineCaptured || new Mcotis.Desktop.Geometry.TrussGeometryService().Validate(State.Baseline, State.Truss).Count > 0);
     public string CableStatus => TabState(ConfigTabs.Cable, State.Cables.Count > 0, State.Cables.Any(c => c.Status != "Configured"));
     public string OutputStatus => TabState(ConfigTabs.Output, State.OutputSettings.IsConfigured,
         new OutputSettingsValidator().Validate(State).Any(issue => issue.Severity == ValidationSeverity.Error));
@@ -2548,10 +2548,10 @@ public sealed partial class MainViewModel : Observable
         return File.Exists(path) ? path : null;
     }
 
-    private void AddPostProcessRow(COT_VCF.Domain.Results.CandidateResultDto dto)
+    private void AddPostProcessRow(Mcotis.Desktop.Domain.Results.CandidateResultDto dto)
     {
         var points = dto.Groups.Sum(g => g.Points.Count);
-        var valid = dto.Groups.Sum(g => g.Points.Count(p => p.Status == COT_VCF.Domain.Results.ResultValueStatus.Valid));
+        var valid = dto.Groups.Sum(g => g.Points.Count(p => p.Status == Mcotis.Desktop.Domain.Results.ResultValueStatus.Valid));
         var p = dto.Parameters;
         var fileName = string.IsNullOrEmpty(dto.CandidateModelPath) ? $"{dto.IterationKey}.sdb" : Path.GetFileName(dto.CandidateModelPath);
         var description = $"{p.LoadingLabel} · H {p.TrussHeightM:0.##} m · {p.PretensionLabel}";
@@ -2744,7 +2744,7 @@ public sealed partial class MainViewModel : Observable
         foreach (var height in t.CandidateHeights)
         {
             double deltaH = height - t.BaselineHeight;
-            var (top, mid, bot) = COT_VCF.Geometry.TrussGeometryService.ChordDeltas(t.Reference, deltaH);
+            var (top, mid, bot) = Mcotis.Desktop.Geometry.TrussGeometryService.ChordDeltas(t.Reference, deltaH);
             rows.Add(new(index++, height, deltaH, t.Reference.ToString(), top, mid, bot));
         }
         Message = $"{rows.Count} truss-height candidates generated from baseline H₀ {t.BaselineHeight:F4} {LengthUnit}.";
@@ -2991,7 +2991,7 @@ public sealed partial class MainViewModel : Observable
         IsBusy = true;
         try
         {
-            CotVcfConfigDto project;
+            McotisConfigDto project;
             try { project = config.Read(path); }
             catch (Exception ex)
             {
@@ -3049,7 +3049,7 @@ public sealed partial class MainViewModel : Observable
         finally { IsBusy = false; Update(); }
     }
 
-    private string OpenBlockReport(CotVcfConfigDto project, ConfigValidationResult r)
+    private string OpenBlockReport(McotisConfigDto project, ConfigValidationResult r)
     {
         var lines = new List<string>
         {

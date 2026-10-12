@@ -1,7 +1,7 @@
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
-using COT_VCF.Geometry;
-namespace COT_VCF.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
+using Mcotis.Desktop.Geometry;
+namespace Mcotis.Desktop.Application;
 
 public interface ISapGateway : IDisposable
 {
@@ -67,7 +67,7 @@ public interface ISapGateway : IDisposable
     Task<IReadOnlyList<string>> GetLoadCaseNamesAsync(ModelInfo expected);
     /// <summary>Reads only the requested SAP groups and their point/frame/cable assignments.</summary>
     Task<IReadOnlyList<SapGroupSnapshot>> ReadOutputGroupsAsync(IReadOnlyList<string> groupNames, ModelInfo expected);
-    /// <summary>Replaces the requested COTVCF-managed [O]- groups in the active baseline model. Does not save the model.</summary>
+    /// <summary>Replaces the requested Mcotis-managed [O]- groups in the active baseline model. Does not save the model.</summary>
     Task ReplaceOutputGroupsAsync(IReadOnlyList<OutputSapGroupDefinition> groups, ModelInfo expected);
 
     /// <summary>Reads global joint displacements (U3 → Uz, mm) for the given points from the analyzed active model

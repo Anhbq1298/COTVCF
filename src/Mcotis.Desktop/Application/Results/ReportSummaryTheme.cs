@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>The shared look of a report's Summary and drill-down views (member forces, support reactions): the
 /// heading with its view tag, cards, KPI cards, legend, SVG chart text and grid, the values table — and their

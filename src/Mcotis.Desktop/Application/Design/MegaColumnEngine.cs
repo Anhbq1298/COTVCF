@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Design;
+namespace Mcotis.Desktop.Application.Design;
 
 /// <summary>Four profiles at (±dsx, ±dsy), or six with two more on the bending axis (CTBUH Tables 15 / 17).</summary>
 public enum ProfileArrangement { Four, Six }

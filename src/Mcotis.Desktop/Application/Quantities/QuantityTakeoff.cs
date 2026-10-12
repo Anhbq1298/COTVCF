@@ -1,7 +1,7 @@
 using System.Globalization;
-using COT_VCF.Application.Results;
+using Mcotis.Desktop.Application.Results;
 
-namespace COT_VCF.Application.Quantities;
+namespace Mcotis.Desktop.Application.Quantities;
 
 public enum QuantityMemberKind { Frame, Cable }
 public enum QuantityMaterialClass { Concrete, Steel }

@@ -1,4 +1,4 @@
-namespace COT_VCF.Geometry;
+namespace Mcotis.Desktop.Geometry;
 
 /// <summary>
 /// Direction of a member load, using SAP2000's load-direction codes resolved to the 2D XZ model. Local directions

@@ -1,13 +1,13 @@
 using System.IO;
 
-namespace COT_VCF.Infrastructure;
+namespace Mcotis.Desktop.Infrastructure;
 
 /// <summary>Writable, per-user application storage. Never place mutable recovery or log data beside the executable.</summary>
 public static class AppDataPaths
 {
     public static string RootDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "COTVCF");
+        "Mcotis");
 
     public static string RecoveryDirectory => Path.Combine(RootDirectory, "Recovery");
     public static string LogsDirectory => Path.Combine(RootDirectory, "Logs");

@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Configuration;
+namespace Mcotis.Desktop.Configuration;
 
 // Pure data contract for Save/Load Config. No UI, no SAP COM types, no generated candidates,
 // no analysis results. Internal units are fixed (m / kN / kPa) regardless of SAP present units.
@@ -12,7 +12,7 @@ public enum CableForceMode { Fixed, Range }
 [Flags]
 public enum ConfigTabs { None = 0, Loading = 1, Truss = 2, Cable = 4, Study = 8, Output = 16, All = Loading | Truss | Cable | Output | Study }
 
-public sealed class CotVcfConfigDto
+public sealed class McotisConfigDto
 {
     public string ConfigVersion { get; set; } = "1.0";
     public UnitsDto Units { get; set; } = new();

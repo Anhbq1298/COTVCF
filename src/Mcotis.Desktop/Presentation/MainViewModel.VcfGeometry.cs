@@ -1,10 +1,10 @@
-using COT_VCF.Application;
-using COT_VCF.Configuration;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Configuration;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 using System.IO;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 // ---- Edit → VCF System: rebuild the working model from VCF parameters and member sections ----
 // Apply changes the model the app works with (viewer, Tabs 01–03 coordinates, the next FEM run). SAP2000 is never written:

@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Windows.Data;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>true ↔ false (e.g. the Select tool is on while pan mode is off).</summary>
 public sealed class InverseBoolConverter : IValueConverter

@@ -1,10 +1,10 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using COT_VCF.Domain.Results;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Domain.Results;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>
 /// Durable, per-candidate result payload used to rebuild a complete consolidated result set after an

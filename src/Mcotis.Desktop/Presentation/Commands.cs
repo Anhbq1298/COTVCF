@@ -1,5 +1,5 @@
 using System.Windows.Input;
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public sealed class Command(Action<object?> execute, Func<bool>? canExecute = null) : ICommand
 {

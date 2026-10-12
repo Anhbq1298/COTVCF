@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.IO;
-using COT_VCF.Application.Quantities;
+using Mcotis.Desktop.Application.Quantities;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>One line of the Tab 08 table. A null quantity is unavailable and is shown as n/a — never as 0.</summary>
 public sealed record QuantityRow(

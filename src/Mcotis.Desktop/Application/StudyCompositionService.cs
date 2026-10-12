@@ -1,7 +1,7 @@
 using System.Numerics;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 public sealed record StudyHeightCandidate(string Id, TrussCandidate Candidate, string Unit)
 {
@@ -82,7 +82,7 @@ public sealed class StudyCompositionService
         var heights = state.Truss.CandidateHeights.Select((height, index) =>
         {
             var delta = height - state.Truss.BaselineHeight;
-            var (top, mid, bot) = COT_VCF.Geometry.TrussGeometryService.ChordDeltas(state.Truss.Reference, delta);
+            var (top, mid, bot) = Mcotis.Desktop.Geometry.TrussGeometryService.ChordDeltas(state.Truss.Reference, delta);
             return new StudyHeightCandidate(CandidateId('H', index),
                 new TrussCandidate(index + 1, height, delta, state.Truss.Reference.ToString(), top, mid, bot),
                 state.Model?.LengthUnit ?? "m");
@@ -126,7 +126,7 @@ public sealed class StudyCompositionService
             var height = heights[run.HeightIndex];
             var pretension = pretensions[run.PretensionIndex];
             var key = $"{load.Id}_{height.Id}_{pretension.Id}";
-            string directory = "", fullPath = "", fileName = $"COT_VCF_{key}.sdb";
+            string directory = "", fullPath = "", fileName = $"Mcotis_{key}.sdb";
             try
             {
                 var baselinePath = (state.SessionBaselineModel ?? state.Model)?.Path ?? "";

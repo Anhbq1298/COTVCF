@@ -1,6 +1,6 @@
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 // ---- Edit → Delete: remove the objects selected on the model view from the working model ----
 // As SAP2000: a deleted joint takes the frames and cables connected to it; a deleted member leaves its end joints. Everything

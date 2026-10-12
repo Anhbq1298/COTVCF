@@ -1,6 +1,6 @@
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application.Workers;
+namespace Mcotis.Desktop.Application.Workers;
 
 /// <summary>
 /// Counts the SAP2000 instance already connected by the application as study worker 1.

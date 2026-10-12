@@ -1,8 +1,8 @@
 using System.Globalization;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Application.Etabs;
+namespace Mcotis.Desktop.Application.Etabs;
 
 // ---------------------------------------------------------------------------------------------------------------
 // An ETABS model as File → Import From ETABS reads it, in kN, m and degrees, whatever units ETABS wrote it in. Two

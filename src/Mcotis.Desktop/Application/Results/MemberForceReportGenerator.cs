@@ -1,10 +1,10 @@
 using System.IO;
 using System.Text.Json;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Self-contained comparison report for every SAP frame analysis-element/result-station row.</summary>
 public sealed class MemberForceReportGenerator

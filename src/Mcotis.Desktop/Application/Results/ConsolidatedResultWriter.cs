@@ -2,11 +2,11 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using ClosedXML.Excel;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Consolidated long-form deflection source data for one study. Workers hand their
 /// <see cref="CandidateResultDto"/> to <see cref="Add"/> (thread-safe); the study coordinator makes a single

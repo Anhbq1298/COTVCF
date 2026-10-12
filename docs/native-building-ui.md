@@ -42,5 +42,5 @@ the native frame engine does not use them. Locked/running legacy models show the
 
 Verification: `dotnet run --project tests/Mcotis.Checks` includes template topology, line-load accounting, support
 reactions, self-weight, planar cases, invalid input, Undo/Redo and Save/Open. `--template-building-ui` on
-`tests/COT_VCF.Checks` checks staged forms, native runs, diagnostics, result state, Save/Open and WPF bindings;
+`tests/Mcotis.Desktop.Checks` checks staged forms, native runs, diagnostics, result state, Save/Open and WPF bindings;
 it captures the forms in `.work/*-ui.png`. Existing numerical benchmarks remain unchanged.

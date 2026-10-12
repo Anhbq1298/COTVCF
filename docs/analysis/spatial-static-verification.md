@@ -86,7 +86,7 @@ All of it runs in `dotnet run --project tests/Mcotis.Checks` (group *Spatial lin
 | Transformations | Orthonormal right-handed axes; a rigid rotation of model and loads rotates the response; stiffness scaling | pass |
 | Refusals | Tested nonlinear/staged setup, unsupported shear release, size limit, zero torsion, loaded released rotation, interior joint, nonfinite assembly and singular/near-singular cases return no result | pass for the listed checks; not exhaustive branch coverage |
 | OpenSeesPy | 12 models built from the physical specification with `elasticBeamColumn` and the `Linear` transformation: displacements, reactions and local end actions, 516 numbers | largest difference 2.1e-15 in displacement or rotation, 2.1e-12 in force or moment |
-| Legacy planar solver | Six XZ models solved by the existing `PlanarFrameSolver` and by this engine with the XZ mask: point, line and member point loads, end releases, a portal, section roll of 30° and 90° (`dotnet run --project tests/COT_VCF.Checks -- --spatial-frame-regression`) | displacements to 1e-10, reactions and end actions to 1e-8 absolute + 1e-7 relative |
+| Legacy planar solver | Six XZ models solved by the existing `PlanarFrameSolver` and by this engine with the XZ mask: point, line and member point loads, end releases, a portal, section roll of 30° and 90° (`dotnet run --project tests/Mcotis.Desktop.Checks -- --spatial-frame-regression`) | displacements to 1e-10, reactions and end actions to 1e-8 absolute + 1e-7 relative |
 
 The OpenSees reference is reproducible: `verification/spatial-static/generate_opensees.py` with the versions in
 `requirements.txt` (OpenSees 3.8.0, openseespy 3.8.0.0, numpy 2.5.4) regenerated a file identical to the stored

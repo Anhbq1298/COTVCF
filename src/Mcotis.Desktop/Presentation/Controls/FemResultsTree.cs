@@ -1,9 +1,9 @@
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
-using COT_VCF.Application;
+using Mcotis.Desktop.Application;
 
-namespace COT_VCF.Presentation.Controls;
+namespace Mcotis.Desktop.Presentation.Controls;
 
 /// <summary>Presentation-only candidate and result navigation.</summary>
 public sealed class FemResultsTree : TreeView

@@ -1,8 +1,8 @@
 using System.IO;
-using COT_VCF.Application.Results;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Application.Results;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application.Quantities;
+namespace Mcotis.Desktop.Application.Quantities;
 
 /// <summary>When a study run worked on a candidate, from the run journal.</summary>
 public sealed record QuantityRunWindow(DateTimeOffset StartedAt, DateTimeOffset? CompletedAt);

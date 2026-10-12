@@ -1,10 +1,10 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
-using COT_VCF.Application.Workers;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Application.Workers;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application.Quantities;
+namespace Mcotis.Desktop.Application.Quantities;
 
 /// <summary>Reads the database tables of a saved SAP2000 model without touching that model or any SAP2000 the user
 /// is working in.</summary>

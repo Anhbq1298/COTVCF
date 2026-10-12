@@ -1,9 +1,9 @@
 using System.Text.Json;
 using System.IO;
-using COT_VCF.Domain;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 public enum StudyCandidateRunDisposition
 {

@@ -1,10 +1,10 @@
-using COT_VCF.Application.Results;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Application.Results;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
+using Mcotis.Desktop.Geometry;
 using System.IO;
 
-namespace COT_VCF.Application.Workers;
+namespace Mcotis.Desktop.Application.Workers;
 
 /// <summary>The analyzed child plus its extracted raw result. User-facing diagnostic HTML is deliberately
 /// deferred to Tab 06 post-processing. <see cref="Reused"/> is true when an already-built child model on disk

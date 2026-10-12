@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.IO;
-using COT_VCF.Configuration;
+using Mcotis.Desktop.Configuration;
 
-namespace COT_VCF.Infrastructure;
+namespace Mcotis.Desktop.Infrastructure;
 
 public sealed record FemWorkingSession(string WorkingDatabasePath, string? InputDatabasePath, DateTime UpdatedUtc);
 

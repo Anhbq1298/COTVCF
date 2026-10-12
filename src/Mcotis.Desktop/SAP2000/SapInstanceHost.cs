@@ -1,12 +1,12 @@
-using COT_VCF.Application;
-using COT_VCF.Application.Workers;
-using COT_VCF.Domain;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Workers;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Infrastructure;
 using CSiAPIv1;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace COT_VCF.SAP2000;
+namespace Mcotis.Desktop.SAP2000;
 
 /// <summary>Owns one background SAP2000 process, COM graph and STA lane.</summary>
 public sealed class SapInstanceHost : ISapInstanceHost

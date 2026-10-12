@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public partial class FemResultsWindow : Window
 {

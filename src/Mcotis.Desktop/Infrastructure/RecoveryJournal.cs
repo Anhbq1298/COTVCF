@@ -1,6 +1,6 @@
 using System.IO;
 using System.Text.Json;
-namespace COT_VCF.Infrastructure;
+namespace Mcotis.Desktop.Infrastructure;
 
 public static class RecoveryJournal
 {

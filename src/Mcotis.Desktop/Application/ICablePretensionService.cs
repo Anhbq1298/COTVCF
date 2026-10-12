@@ -1,6 +1,6 @@
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 /// <summary>
 /// Application seam that turns Tab 3 cable configs into concrete

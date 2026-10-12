@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
 
-namespace COT_VCF.Application.Workers;
+namespace Mcotis.Desktop.Application.Workers;
 
 /// <summary>A central next-available-worker queue feeding 1..3 sequential SAP lanes.</summary>
 public sealed class SapWorkerPool(

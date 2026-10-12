@@ -1,4 +1,4 @@
-using COT_VCF.Application;
+using Mcotis.Desktop.Application;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -6,7 +6,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public partial class MainWindow : Window
 {
@@ -369,11 +369,11 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel vm || vm.FemRuns.LastOrDefault() is not { } run) return;
         try
         {
-            var folder = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "COTVCF", "FemReports");
+            var folder = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Mcotis", "FemReports");
             System.IO.Directory.CreateDirectory(folder);
             var path = System.IO.Path.Combine(folder, $"FEM_Results_{Guid.NewGuid():N}.html");
-            COT_VCF.Infrastructure.AtomicFile.WriteAllText(path,
-                COT_VCF.Application.Results.FemRunReport.BuildHtml(run, vm.State.Model?.Name ?? "Model", vm.SelectedFemResultName, vm.PrintSettings, vm.State.Baseline));
+            Mcotis.Desktop.Infrastructure.AtomicFile.WriteAllText(path,
+                Mcotis.Desktop.Application.Results.FemRunReport.BuildHtml(run, vm.State.Model?.Name ?? "Model", vm.SelectedFemResultName, vm.PrintSettings, vm.State.Baseline));
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "FEM Results", MessageBoxButton.OK, MessageBoxImage.Warning); }
@@ -553,7 +553,7 @@ public partial class MainWindow : Window
         {
             EtabsImportSummary summary;
             try { summary = await vm.ImportFromEtabsAsync(); }
-            catch (COT_VCF.Application.Etabs.EtabsNotRunningException ex)
+            catch (Mcotis.Desktop.Application.Etabs.EtabsNotRunningException ex)
             {
                 if (MessageBox.Show(this, ex.Message + $"{Environment.NewLine}{Environment.NewLine}Import an .e2k file ETABS wrote instead " +
                         "(ETABS: File → Export → ETABS .e2k Text File)?", title, MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
@@ -820,19 +820,19 @@ public partial class MainWindow : Window
     {
         if (DataContext is not MainViewModel vm
             || (sender as FrameworkElement)?.Tag is not string tag
-            || !Enum.TryParse<COT_VCF.Domain.ColumnDesignType>(tag, out var type)) return;
+            || !Enum.TryParse<Mcotis.Desktop.Domain.ColumnDesignType>(tag, out var type)) return;
         var dialog = new DesignReferenceWindow(vm.DesignBasis(type), vm.DesignMemberOptions(type), vm.DesignCaseNames(), vm.DesignDefaultCases(),
             vm.DesignRunId, member => vm.DesignSectionDefaults(type, member), SharedViewer.SelectedMembers) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is not { } basis) return;
         vm.SetDesignBasis(basis);
-        var title = COT_VCF.Domain.ColumnDesignCodes.Title(type);
+        var title = Mcotis.Desktop.Domain.ColumnDesignCodes.Title(type);
         if (vm.DesignRunId is null)
         {
             MessageBox.Show(this, "There are no FEM results to design with. Run the FEM analysis (Run → Run FEM Analysis) first; the design basis is kept.",
                 title, MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        IReadOnlyList<COT_VCF.Application.Design.ColumnMemberDesign> results;
+        IReadOnlyList<Mcotis.Desktop.Application.Design.ColumnMemberDesign> results;
         try { results = vm.RunColumnDesign(basis); }
         catch (Exception ex)
         {

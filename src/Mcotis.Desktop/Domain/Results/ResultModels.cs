@@ -1,4 +1,4 @@
-namespace COT_VCF.Domain.Results;
+namespace Mcotis.Desktop.Domain.Results;
 
 // ============================ enums ============================
 

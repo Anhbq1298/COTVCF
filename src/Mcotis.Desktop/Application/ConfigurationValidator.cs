@@ -1,6 +1,6 @@
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
-namespace COT_VCF.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
+namespace Mcotis.Desktop.Application;
 
 public sealed class ConfigurationValidator
 {

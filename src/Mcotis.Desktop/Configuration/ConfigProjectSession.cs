@@ -1,14 +1,14 @@
-namespace COT_VCF.Configuration;
+namespace Mcotis.Desktop.Configuration;
 
 /// <summary>
-/// The active COT VCF project. Once <see cref="Open"/> is called the JSON file becomes a live document:
+/// The active Mcotis project. Once <see cref="Open"/> is called the JSON file becomes a live document:
 /// the in-memory <see cref="Project"/> is the source of truth, and per-tab saves overwrite only their
 /// section of it before writing the whole file back to <see cref="FilePath"/>.
 /// </summary>
 public sealed class ConfigProjectSession
 {
     public string? FilePath { get; private set; }
-    public CotVcfConfigDto? Project { get; private set; }
+    public McotisConfigDto? Project { get; private set; }
 
     public bool Tab02Dirty { get; private set; }
     public bool Tab03Dirty { get; private set; }
@@ -26,7 +26,7 @@ public sealed class ConfigProjectSession
     }
 
     /// <summary>Open a freshly loaded project — everything starts clean.</summary>
-    public void Open(string path, CotVcfConfigDto project)
+    public void Open(string path, McotisConfigDto project)
     {
         FilePath = path;
         Project = project;
@@ -35,7 +35,7 @@ public sealed class ConfigProjectSession
 
     /// <summary>Point the session at the just-written project without touching dirty flags
     /// (a per-tab save clears only its own tab afterwards).</summary>
-    public void SetProject(string path, CotVcfConfigDto project)
+    public void SetProject(string path, McotisConfigDto project)
     {
         FilePath = path;
         Project = project;

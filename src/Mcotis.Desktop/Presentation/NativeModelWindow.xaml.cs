@@ -4,7 +4,7 @@ using System.Windows.Input;
 using Mcotis.Application;
 using Microsoft.Win32;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public partial class NativeModelWindow : Window
 {

@@ -2,10 +2,10 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
-using COT_VCF.Application;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
 /// Run → Optimization VCF. The inputs of Edit → VCF Geometry as a search space: min / max / step for every geometry

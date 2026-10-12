@@ -1,8 +1,8 @@
 using System.IO;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Which Tab 06 outputs one generation writes. <c>Generate Outputs</c> writes them all; a module's own
 /// <c>Regenerate</c> asks for its report alone — the Excel workbook is by far the slowest output, and a report

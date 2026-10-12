@@ -1,7 +1,7 @@
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 using System.IO;
 
-namespace COT_VCF.Application.Workers;
+namespace Mcotis.Desktop.Application.Workers;
 
 public sealed record IterationVerificationResult(
     int GeometryPointsVerified,

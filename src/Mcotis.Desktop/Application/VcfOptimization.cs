@@ -1,7 +1,7 @@
 using System.Globalization;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 /// <summary>One optimization variable: Min, Min + Step, … up to Max — the rule of 01 Loading and 03 Pretension, so a
 /// step that does not divide the range stops at the last value below Max (Max itself is not added).</summary>

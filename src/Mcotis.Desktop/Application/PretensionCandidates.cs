@@ -1,7 +1,7 @@
 using System.Numerics;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 /// <summary>
 /// Pure combinatorics over the Tab 3 cable pretension configs. The total number of PRETENSION candidates

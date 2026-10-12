@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcotis.Desktop", "src\Mcoti
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "COT_VCF.Checks", "tests\COT_VCF.Checks\COT_VCF.Checks.csproj", "{1BF96CA2-5178-4DCA-B856-12A94DC3ACF7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Mcotis.Desktop.Checks", "tests\Mcotis.Desktop.Checks\Mcotis.Desktop.Checks.csproj", "{1BF96CA2-5178-4DCA-B856-12A94DC3ACF7}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{C2B0FEF5-91EA-FBDA-27C0-74CBE03E7539}"
 EndProject

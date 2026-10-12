@@ -3,7 +3,7 @@ using System.ComponentModel;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
-namespace COT_VCF.Domain;
+namespace Mcotis.Desktop.Domain;
 
 public abstract class Observable : INotifyPropertyChanged
 {

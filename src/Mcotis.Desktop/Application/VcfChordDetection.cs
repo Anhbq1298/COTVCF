@@ -1,6 +1,6 @@
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 /// <summary>
 /// The Tab 02 chord groups (top, middle, bottom) of a VCF model read from SAP2000, for File → Import From SAP2000. The COT

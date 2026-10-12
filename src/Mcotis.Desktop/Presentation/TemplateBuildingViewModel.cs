@@ -1,11 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Collections.Immutable;
 using System.Globalization;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 using Mcotis.Application;
 using Mcotis.Core;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public sealed class BuildingBayRow(int index, string width)
 {

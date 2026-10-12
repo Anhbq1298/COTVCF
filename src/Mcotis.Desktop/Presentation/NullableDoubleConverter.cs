@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>Enum → friendly label for the cable Sync mode dropdown ("SameValues" → "Same Values").</summary>
 public sealed class CableSyncModeLabelConverter : IValueConverter

@@ -1,6 +1,6 @@
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Geometry.Handlers;
+namespace Mcotis.Desktop.Geometry.Handlers;
 
 public sealed class JointGeometryHandler
 {

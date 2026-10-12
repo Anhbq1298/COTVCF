@@ -2,12 +2,12 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using COT_VCF.Application.Design;
-using COT_VCF.Domain;
-using COT_VCF.Presentation.Controls;
-using static COT_VCF.Presentation.PropertyForm;
+using Mcotis.Desktop.Application.Design;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Presentation.Controls;
+using static Mcotis.Desktop.Presentation.PropertyForm;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
 /// The section form of a concrete filled tube (CFT) or steel encased composite frame section, laid out like the other
@@ -363,7 +363,7 @@ public sealed class CompositeSectionWindow : Window
 
         static string F(double value, string format) => value.ToString(format, CultureInfo.CurrentCulture);
         // EN 1994-1-1 §6.7.3.2: Npl,Rk = Aa fy + μc η Ac fck + As fsk (μc = 1.0 for a filled section, 0.85 encased; η of EC2 Table 3.1 above C50/60, BC4)
-        var concreteFactor = (tube ? 1.0 : 0.85) * COT_VCF.Application.Design.ColumnDesignEngine.BlockFactors(c.Fck).Eta;
+        var concreteFactor = (tube ? 1.0 : 0.85) * Mcotis.Desktop.Application.Design.ColumnDesignEngine.BlockFactors(c.Fck).Eta;
         var npl = (p.SteelArea * c.Fy + concreteFactor * p.ConcreteArea * c.Fck + p.RebarArea * c.Fyk) * 1000;           // kN
         var nplRd = (p.SteelArea * c.Fy / 1.0 + concreteFactor * p.ConcreteArea * c.Fck / 1.5 + p.RebarArea * c.Fyk / 1.15) * 1000;
         var delta = nplRd > 0 ? p.SteelArea * c.Fy * 1000 / nplRd : 0;

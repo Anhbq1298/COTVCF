@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 // Report-side DTOs. Serialized (camelCase) into the final HTML as #report-data. Kept separate from the
 // SAP extraction objects so the HTML never depends on domain/SAP types.

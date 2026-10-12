@@ -1,4 +1,4 @@
-# COTVCF — General 3D, DOF Selection, Global P-Delta, Eigen Modal
+# Mcotis — General 3D, DOF Selection, Global P-Delta, Eigen Modal
 
 Repository note (2026-10-12): this is the supplied planning specification. See [foundation-status.md](foundation-status.md)
 for audited module names, implemented scope and verification evidence. Work targets the standalone library projects under `src/` (`Mcotis.Core`, `Mcotis.Analysis` …);
@@ -91,7 +91,7 @@ Acceptance: total/translational mass and COM checks, mass-source sum independent
 
 CSI states this method is *story-by-story*, uses a simplified stick model, is approximate and **non-iterative**; it does **not** publish sufficient detailed formulas in the cited help page to code a validated clone. **Do not substitute the element `K_g(N)` iteration from section E or assign mass*g as equivalent axial loads and claim it matches CSI.**
 
-Before implementation require: (1) exact public CSI Analysis Reference passage and/or authoritative published derivation describing story geometric stiffness, interstory drift relation, gravity effects, multiple diaphragms and DOF mapping; (2) explicit statement of limitations (e.g. local member buckling); (3) validated hand-computable story benchmark; (4) independently reproduced CSI results where accessible, or flag as COTVCF-original approximation with own cited derivation; (5) OpenSeesPy comparison at *structural-response* level, with non-equivalence documented.
+Before implementation require: (1) exact public CSI Analysis Reference passage and/or authoritative published derivation describing story geometric stiffness, interstory drift relation, gravity effects, multiple diaphragms and DOF mapping; (2) explicit statement of limitations (e.g. local member buckling); (3) validated hand-computable story benchmark; (4) independently reproduced CSI results where accessible, or flag as Mcotis-original approximation with own cited derivation; (5) OpenSeesPy comparison at *structural-response* level, with non-equivalence documented.
 
 Suggested UI: disable mass-based P-Delta if required story/diaphragm/mass definition is incomplete; show "Approximate global sway P-Delta only"; provide method limitations in tooltip and report. This method may need a different supported eligibility class than arbitrary 3D frames.
 
@@ -118,12 +118,12 @@ Acceptance: SDOF oscillator, axial truss/mass system, Euler-Bernoulli bending be
 ## J. Suggested code modules (adjust to actual repository)
 
 ```
-COTVCF.Domain/{Geometry,Elements,Loads,Mass,Constraints,AnalysisCases}
-COTVCF.Analysis/{Compilation,DofMapping,ElementKernels,Assembly,LinearStatic,PDelta,Modal,Results}
-COTVCF.Numerics/{SparseFactorizations,Eigensolvers,MatrixDiagnostics}
-COTVCF.Diagnostics/{ModelChecks,Mechanisms,Conditioning,Reports}
-COTVCF.Presentation/{AnalysisSettings,ViewModels,3DViewer,ResultExplorer}
-COTVCF.Verification/{Fixtures,AnalyticalBenchmarks,OpenSeesPyAdapter,Comparison}
+Mcotis.Domain/{Geometry,Elements,Loads,Mass,Constraints,AnalysisCases}
+Mcotis.Analysis/{Compilation,DofMapping,ElementKernels,Assembly,LinearStatic,PDelta,Modal,Results}
+Mcotis.Numerics/{SparseFactorizations,Eigensolvers,MatrixDiagnostics}
+Mcotis.Diagnostics/{ModelChecks,Mechanisms,Conditioning,Reports}
+Mcotis.Presentation/{AnalysisSettings,ViewModels,3DViewer,ResultExplorer}
+Mcotis.Verification/{Fixtures,AnalyticalBenchmarks,OpenSeesPyAdapter,Comparison}
 ```
 
 Do not assume folders/projects listed above are current: integrate via a separate repository architecture review before moving existing types.
@@ -136,4 +136,4 @@ PR01 source register + regression fixtures + conventions; PR02 domain XYZ + DOF 
 - Does the uploaded Rugarli book provide a fully implementable mass-based story P-Delta formula? Currently **not verified**.
 - Does the available public CSI Analysis Reference specify precise non-iterative mass-based P-Delta equations? **Unverified**; the help files document behavior only.
 - Can an arbitrary frame model without floors use story mass-based P-Delta? **No blanket support**; restrict until separately derived/validated.
-- Exact current COTVCF class names, startup UI and storage schemas? **Repository inspection required**.
+- Exact current Mcotis class names, startup UI and storage schemas? **Repository inspection required**.

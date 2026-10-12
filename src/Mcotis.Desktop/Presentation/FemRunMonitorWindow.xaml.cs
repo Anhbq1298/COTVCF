@@ -2,7 +2,7 @@ using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Threading;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>Non-modal window opened by Run Analysis: progress, live FEM log and cable convergence chart.</summary>
 public partial class FemRunMonitorWindow : Window

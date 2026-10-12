@@ -1,8 +1,8 @@
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 using System.Collections.ObjectModel;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>A composite section worked out with the library materials (moduli in kN/m², weight kN/m, γ / ρ equivalent on the
 /// transformed area).</summary>

@@ -1,7 +1,7 @@
-using COT_VCF.Application.Design;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Application.Design;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>A frame member offered in the Design Reference member list.</summary>
 public sealed record DesignMemberOption(string Member, string Section, string Material, double LengthM, bool Suggested);

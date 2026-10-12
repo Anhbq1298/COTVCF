@@ -1,6 +1,6 @@
-using COT_VCF.Application;
+using Mcotis.Desktop.Application;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 // ---- Menu bar navigation (presentation only) ----
 // The left pane shows one workflow page at a time, chosen from the menu bar: MB opens Tabs 01–06A and 08; the FEM page

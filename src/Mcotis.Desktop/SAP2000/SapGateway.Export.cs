@@ -1,9 +1,9 @@
-using COT_VCF.Application;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 using CSiAPIv1;
 
-namespace COT_VCF.SAP2000;
+namespace Mcotis.Desktop.SAP2000;
 
 /// <summary>
 /// File → Export to SAP2000. Signatures checked against CSiAPIv1 of SAP2000 27: PropMaterial.SetMaterial / SetMPIsotropic /

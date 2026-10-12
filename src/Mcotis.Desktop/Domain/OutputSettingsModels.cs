@@ -1,6 +1,6 @@
 using System.Collections.ObjectModel;
 
-namespace COT_VCF.Domain;
+namespace Mcotis.Desktop.Domain;
 
 public static class OutputUnits
 {

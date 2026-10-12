@@ -1,4 +1,4 @@
-namespace COT_VCF.Domain;
+namespace Mcotis.Desktop.Domain;
 
 /// <summary>Frame section shapes the app can draw and compute; <see cref="General"/> covers Section Designer and any
 /// other SAP2000 shape, whose properties are taken as SAP2000 reports them. <see cref="FilledTube"/> (CFT) and

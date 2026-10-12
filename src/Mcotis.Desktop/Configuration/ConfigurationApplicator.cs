@@ -1,10 +1,10 @@
-using COT_VCF.Application;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Configuration;
+namespace Mcotis.Desktop.Configuration;
 
 /// <summary>
-/// Writes a validated <see cref="CotVcfConfigDto"/> back into <see cref="ApplicationState"/> (Tabs 01-05),
+/// Writes a validated <see cref="McotisConfigDto"/> back into <see cref="ApplicationState"/> (Tabs 01-05),
 /// then lets the existing reactive machinery regenerate candidates and refresh the preview. Callers must
 /// only invoke this after schema + model validation have both passed. Nothing here writes to SAP2000.
 /// </summary>
@@ -36,7 +36,7 @@ public sealed class ConfigurationApplicator(ApplicationState state, WorkflowServ
     }
 
     /// <summary>Apply only the tabs whose checks passed; skip the rest so a partial file still loads.</summary>
-    public void Apply(CotVcfConfigDto cfg, ConfigValidationResult check)
+    public void Apply(McotisConfigDto cfg, ConfigValidationResult check)
     {
         if (check.Loading.Ok && cfg.Tab02Loading is { } l) ApplyLoading(l);
         if (check.Truss.Ok && cfg.Tab03TrussHeight is { } t) ApplyTruss(t);

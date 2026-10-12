@@ -1,6 +1,6 @@
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 /// <summary>Resolves preview IDs into the complete, immutable assignments required by a worker.</summary>
 public sealed class StudyCandidateResolver

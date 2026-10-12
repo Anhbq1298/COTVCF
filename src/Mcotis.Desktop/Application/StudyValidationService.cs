@@ -1,9 +1,9 @@
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 using System.IO;
-using COT_VCF.Application.Results;
+using Mcotis.Desktop.Application.Results;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 public enum StudyValidationState { NotValidated, Valid, ValidWithWarnings, Invalid }
 

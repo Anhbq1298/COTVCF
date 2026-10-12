@@ -1,9 +1,9 @@
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Media;
-using COT_VCF.Application;
+using Mcotis.Desktop.Application;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>Help: the workflow overview, the Tab 07 FEM procedure documentation and the development plans (the
 /// development log built into the app, <see cref="DevelopmentLog"/>).</summary>

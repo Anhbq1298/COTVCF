@@ -2,9 +2,9 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using Mcotis.Core;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>Edits a private form. Only Apply/OK calls the supplied commit; Cancel discards uncommitted edits.</summary>
 public partial class AnalysisOptionsWindow : Window

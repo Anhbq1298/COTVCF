@@ -1,9 +1,9 @@
-using COT_VCF.Domain;
-using COT_VCF.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Application;
 using System.IO;
 using System.Numerics;
 
-namespace COT_VCF.Configuration;
+namespace Mcotis.Desktop.Configuration;
 
 public sealed record PointCoordinateMismatch(string PointName, CoordinateDto Saved, CoordinateDto Current)
 {
@@ -47,7 +47,7 @@ public sealed class ConfigCompatibilityValidator
     public const double CoordinateToleranceM = 0.001; // 1 mm
     private static readonly string[] SupportedVersions = { "1.0" };
 
-    public ConfigValidationResult Validate(CotVcfConfigDto cfg, ApplicationState state, IReadOnlyCollection<string> modelLoadCases)
+    public ConfigValidationResult Validate(McotisConfigDto cfg, ApplicationState state, IReadOnlyCollection<string> modelLoadCases)
     {
         var r = new ConfigValidationResult();
         if (cfg is null) { r.FileErrors.Add("The file is not a Mcotis configuration."); return r; }
@@ -346,7 +346,7 @@ public sealed class ConfigCompatibilityValidator
     private static bool ValidCandidateId(string? id, char prefix) =>
         id is { Length: >= 2 } && id[0] == prefix && long.TryParse(id[1..], out var n) && n > 0;
     private static long CandidateOrdinal(string id) => long.TryParse(id[1..], out var n) ? n : 0;
-    private static long HeightCandidateCount(CotVcfConfigDto cfg, ApplicationState state)
+    private static long HeightCandidateCount(McotisConfigDto cfg, ApplicationState state)
     {
         if (cfg.Tab03TrussHeight is not { } h) return state.Truss.CandidateCount;
         if (!double.IsFinite(h.MinDeltaH) || !double.IsFinite(h.MaxDeltaH) || !double.IsFinite(h.StepDeltaH) || h.StepDeltaH <= 0 || h.MaxDeltaH < h.MinDeltaH) return 0;
@@ -419,7 +419,7 @@ public sealed class ConfigCompatibilityValidator
         }
         return values;
     }
-    private static BigInteger PretensionCandidateCount(CotVcfConfigDto cfg, ApplicationState state)
+    private static BigInteger PretensionCandidateCount(McotisConfigDto cfg, ApplicationState state)
     {
         if (cfg.Tab04CableForce is not { } cableConfig) return PretensionCandidates.TotalCount(state.Cables);
         BigInteger total = BigInteger.One;

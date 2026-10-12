@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 // Report-side derivations for Cable_Forces_Report.html. Pure functions over values that were already extracted:
 // no SAP, no I/O. Nothing here is persisted — a historical Study_Raw_Results.json stays a valid input.

@@ -1,4 +1,4 @@
-namespace COT_VCF.Domain;
+namespace Mcotis.Desktop.Domain;
 
 public readonly record struct JointId(Guid Value)
 {

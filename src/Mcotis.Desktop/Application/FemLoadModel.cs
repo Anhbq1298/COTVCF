@@ -1,8 +1,8 @@
 using System.Globalization;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 // ---------------------------------------------------------------------------------------------------------------
 // Read-only snapshot of the SAP2000 loading used by the internal FEM (patterns, their assigned loads, static load

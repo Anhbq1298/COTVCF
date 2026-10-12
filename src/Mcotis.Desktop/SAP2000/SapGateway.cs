@@ -1,14 +1,14 @@
-using COT_VCF.Application;
-using COT_VCF.Application.Quantities;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
-using COT_VCF.Geometry;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Quantities;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
+using Mcotis.Desktop.Geometry;
+using Mcotis.Desktop.Infrastructure;
 using CSiAPIv1;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace COT_VCF.SAP2000;
+namespace Mcotis.Desktop.SAP2000;
 
 public sealed partial class SapGateway : ISapGateway
 {

@@ -1,9 +1,9 @@
 using System.IO;
 using System.Net;
 using System.Text;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>One report of a package: the file in the report folder and the view of it to print.</summary>
 /// <param name="Options">Report options for the URL fragment, e.g. <c>summary=top</c>.</param>
@@ -86,8 +86,8 @@ public static class StudyReportPackage
   window.addEventListener("DOMContentLoaded", waiting);
   window.addEventListener("message", e => {
     const m = e.data, all = frames(), frame = all.filter(f => f.contentWindow === e.source)[0];
-    if (!frame || !m || m.cotvcf !== "print") return;
-    if (m.type === "ready") e.source.postMessage({ cotvcf: "print", type: "setup", setup: setup }, "*");
+    if (!frame || !m || m.mcotis !== "print") return;
+    if (m.type === "ready") e.source.postMessage({ mcotis: "print", type: "setup", setup: setup }, "*");
     else if (m.type === "sheets"){
       counts.set(frame, m.count | 0);
       document.getElementById("pg").textContent = "@page{size:" + m.widthMm + "mm " + m.heightMm + "mm;margin:0}";
@@ -95,7 +95,7 @@ public static class StudyReportPackage
       waiting();
       if (counts.size < all.length) return;
       const total = all.reduce((n, f) => n + counts.get(f), 0); let offset = 0;
-      all.forEach(f => { f.contentWindow.postMessage({ cotvcf: "print", type: "number", offset: offset, total: total }, "*"); offset += counts.get(f); });
+      all.forEach(f => { f.contentWindow.postMessage({ mcotis: "print", type: "number", offset: offset, total: total }, "*"); offset += counts.get(f); });
       document.documentElement.setAttribute("data-print-ready", String(total));
     }
   });

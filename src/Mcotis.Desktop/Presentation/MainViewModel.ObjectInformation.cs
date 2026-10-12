@@ -1,9 +1,9 @@
 using System.Globalization;
-using COT_VCF.Application;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>The assignments of a member that its information form lets the user change in place.</summary>
 public enum InformationEdit { None, Section, LocalAxisAngle, ReleaseStart, ReleaseEnd, TargetPattern, TargetForce }

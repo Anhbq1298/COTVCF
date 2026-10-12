@@ -3,7 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>Assigns one local 2/3-axis orientation to the frames selected in the model view.</summary>
 public sealed class AssignFrameAxisWindow : Window

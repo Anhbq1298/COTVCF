@@ -1,4 +1,4 @@
-namespace COT_VCF.Domain;
+namespace Mcotis.Desktop.Domain;
 
 /// <summary>SAP2000 material types (eMatType), plus <see cref="Other"/> for a material whose type is not known.</summary>
 public enum MaterialKind { Steel, Concrete, NoDesign, Aluminum, ColdFormed, Rebar, Tendon, Masonry, Other }

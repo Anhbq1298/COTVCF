@@ -1,4 +1,4 @@
-namespace COT_VCF.Domain;
+namespace Mcotis.Desktop.Domain;
 
 public enum ReportPaperSize { A4, A3, Letter }
 

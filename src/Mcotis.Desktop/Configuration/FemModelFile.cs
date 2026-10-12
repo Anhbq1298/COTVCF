@@ -1,12 +1,12 @@
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using COT_VCF.Application;
-using COT_VCF.Domain;
-using COT_VCF.Geometry;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Configuration;
+namespace Mcotis.Desktop.Configuration;
 
 /// <summary>
 /// A saved FEM model (Tab 07 → Inputs → Save Model): everything the internal FEM run reads from SAP2000 and from
@@ -17,7 +17,9 @@ namespace COT_VCF.Configuration;
 /// </summary>
 public sealed class FemModelFileDto
 {
-    public const string FormatName = "COTVCF.FemModel";
+    public const string FormatName = "Mcotis.FemModel";
+    /// <summary>What <see cref="FormatName"/> was before the app was renamed. Files saved under it still open; none is written.</summary>
+    public const string LegacyFormatName = "COTVCF.FemModel";
     public const int CurrentVersion = 1;
 
     public string Format { get; set; } = FormatName;
@@ -29,7 +31,7 @@ public sealed class FemModelFileDto
     public GeometryModel? Baseline { get; set; }
     public List<string> LoadPatterns { get; set; } = [];
     public List<string> LoadCaseNames { get; set; } = [];
-    public CotVcfConfigDto? Project { get; set; }
+    public McotisConfigDto? Project { get; set; }
     public List<FemSectionProperties> SectionProperties { get; set; } = [];
     /// <summary>Define → Materials library (optional; older files have none and it is rebuilt from the member properties).</summary>
     public List<MaterialProperty>? Materials { get; set; }
@@ -86,7 +88,7 @@ public static class FemModelFile
         FemModelFileDto? model;
         try { model = JsonSerializer.Deserialize<FemModelFileDto>(text, Json); }
         catch (JsonException ex) { throw new InvalidDataException($"The selected file is not a valid Mcotis FEM model ({ex.Message})."); }
-        if (model is null || model.Format != FemModelFileDto.FormatName)
+        if (model is null || model.Format is not (FemModelFileDto.FormatName or FemModelFileDto.LegacyFormatName))
             throw new InvalidDataException("The selected file is not a Mcotis FEM model. Use Save Model on 07 FEM → Inputs to create one.");
         if (model.Version > FemModelFileDto.CurrentVersion)
             throw new InvalidDataException($"The FEM model was saved by a newer version of the app (format {model.Version}).");

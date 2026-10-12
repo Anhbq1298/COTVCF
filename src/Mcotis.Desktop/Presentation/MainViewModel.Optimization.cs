@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.IO;
 using System.Windows.Input;
-using COT_VCF.Application.Results;
+using Mcotis.Desktop.Application.Results;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>One row of the Tab 06A candidate table.</summary>
 public sealed record OptimizationRow(

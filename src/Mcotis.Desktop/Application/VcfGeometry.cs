@@ -1,7 +1,7 @@
-using COT_VCF.Domain;
-using COT_VCF.Geometry.Handlers;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Geometry.Handlers;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 /// <summary>What a member is in the VCF (Vierendeel cable frame) system, read from the Tab 02 chord groups.</summary>
 public enum VcfMemberRole { TopChord, MiddleChord, BottomChord, VerticalChord, MegaColumn, EndFrame, Cable }

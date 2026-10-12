@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Quantities;
+namespace Mcotis.Desktop.Application.Quantities;
 
 internal readonly record struct PlanePoint(double X, double Y);
 

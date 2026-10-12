@@ -1,10 +1,10 @@
 using System.IO;
 using System.Text.Json;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
+using Mcotis.Desktop.Infrastructure;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>Self-contained comparison report for the Left and Right foundation points selected in Output Settings.
 /// Opens on a Summary — per foundation side the inner support, the outer support and their net, Fz and Fx — with

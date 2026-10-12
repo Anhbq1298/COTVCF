@@ -1,4 +1,4 @@
-namespace COT_VCF.Domain;
+namespace Mcotis.Desktop.Domain;
 
 /// <summary>The parts of a composite column section, in m: areas and second moments about the 3-axis (in-plane bending,
 /// depth h) and the 2-axis, for the concrete, the structural steel and the reinforcement (bars + links per metre).</summary>

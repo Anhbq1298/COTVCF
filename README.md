@@ -263,7 +263,7 @@ about 1.5 s, model, units and lock state unchanged.
    writes the `.sdb` once more; the run journal accounts for that gap, and without a journal entry up to 15 minutes
    are accepted). This needs no SAP2000 at all.
 2. Otherwise the model is read through an **isolated, read-only SAP2000 workflow**: the candidate's `.sdb` is copied
-   into a private folder (`%LocalAppData%\COTVCF\QuantityRead`), a separate SAP2000 instance opens the copy, the
+   into a private folder (`%LocalAppData%\Mcotis\QuantityRead`), a separate SAP2000 instance opens the copy, the
    same tables are read through the database-tables API (`GetAvailableTables`, `GetTableForDisplayArray`), and the
    instance is closed without saving. SAP2000 never opens the candidate's own files, and the connected SAP2000 — its
    model, units and lock state — is not involved. The application is busy while this runs; **Cancel** or another
@@ -327,12 +327,12 @@ Default executable:
 ## Checks
 
 ```powershell
-dotnet run --project tests\COT_VCF.Checks
-dotnet run --project tests\COT_VCF.Checks -- --study-ui
-dotnet run --project tests\COT_VCF.Checks -- --fem
-dotnet run --project tests\COT_VCF.Checks -- --fem-sap
-dotnet run --project tests\COT_VCF.Checks -- --quantity-study "<baseline>.sdb"
-dotnet run --project tests\COT_VCF.Checks -- --quantity-connected
+dotnet run --project tests\Mcotis.Desktop.Checks
+dotnet run --project tests\Mcotis.Desktop.Checks -- --study-ui
+dotnet run --project tests\Mcotis.Desktop.Checks -- --fem
+dotnet run --project tests\Mcotis.Desktop.Checks -- --fem-sap
+dotnet run --project tests\Mcotis.Desktop.Checks -- --quantity-study "<baseline>.sdb"
+dotnet run --project tests\Mcotis.Desktop.Checks -- --quantity-connected
 ```
 
 The first command runs offline workflow and guarded SAP-write tests using test doubles, including the Tab 8 quantity take-off (calculation, candidate records, source selection, the isolated read against API doubles, and the tab's loading / stale-request / connection behaviour). The second opens the WPF smoke test and checks workflow/FEM/quantity bindings. The third runs the internal FEM analytical and candidate-composition checks. The fourth compares the internal FEM with a completed SAP2000 study, like for like, from the fixture in `tests/fem-sap-benchmark` (offline; report in `.work/fem-vs-sap`). The fifth prints the quantity take-off of every candidate of a study on disk from the candidates' own text exports (offline; reads only). The sixth is live but read-only: it attaches to the running SAP2000, takes off the model open in it through the API exactly as Tab 8's *Connected model* does, prints the values as SAP2000 hands them over, and confirms that the model, its units and its lock state are unchanged. Live SAP checks are intentionally separate because they require SAP2000: `--quantity-live "<candidate>.sdb"` runs the isolated Tab 8 read on one candidate — it starts its own SAP2000 on a private copy, never attaches to a running one — and compares the result with that candidate's text export.

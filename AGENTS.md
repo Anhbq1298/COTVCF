@@ -1,4 +1,4 @@
-# COTVCF Agent Guidance
+# Mcotis Agent Guidance
 
 ## Shared Agent Instructions
 
@@ -12,11 +12,11 @@
 When guidance conflicts, use this order:
 
 1. The user's current request and the repository's current code, tests, and verified runtime behavior.
-2. `skills/cotvcf-ui-handoff/SKILL.md` for current COTVCF product and UI decisions.
+2. `skills/mcotis-ui-handoff/SKILL.md` for current Mcotis product and UI decisions.
 3. Task-specific guidance under `.claude/skills/` and `.instructions.md`.
 4. Generic examples or suggested package lists in the skills.
 
-In particular, preserve the compact engineering UI described by the COTVCF handoff even when the generic structural UI skill shows older or more spacious examples. For SAP2000, verify API signatures against the installed `CSiAPIv1.dll` or official CSI documentation because library examples may target another API version.
+In particular, preserve the compact engineering UI described by the Mcotis handoff even when the generic structural UI skill shows older or more spacious examples. For SAP2000, verify API signatures against the installed `CSiAPIv1.dll` or official CSI documentation because library examples may target another API version.
 
 ## Direction: The Standalone System
 
@@ -34,7 +34,7 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
 
 - `src/` holds one folder per project: `Mcotis.Desktop` (the WPF application: `App.xaml`, `Presentation`, `Application`,
   `Domain`, `Configuration`, `Geometry`, `Infrastructure`, `SAP2000`, `Resources`, `UI`) and the library projects above.
-- `tests/` holds the check projects — `COT_VCF.Checks` for the application, `Mcotis.Checks` for the libraries — and the
+- `tests/` holds the check projects — `Mcotis.Desktop.Checks` for the application, `Mcotis.Checks` for the libraries — and the
   fixtures the application's checks read by path (`tests/fem-sap-benchmark`, `tests/etabs-import`).
 - `bin/` at the repository root is the built application (`./build-desktop.ps1`); ordinary builds write to each
   project's own `bin/` and `obj/`.
@@ -56,6 +56,6 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
 
 - Build with `dotnet build MCOTiS.sln`.
 - Run the new system's checks with `dotnet run --project tests/Mcotis.Checks`. They need no SAP2000 installation.
-- Run offline checks with `dotnet run --project tests/COT_VCF.Checks`.
+- Run offline checks with `dotnet run --project tests/Mcotis.Desktop.Checks`.
 - Do not run `--sap-read`, `--ui-read`, or write to a live SAP2000 model unless the user asks for that live integration work.
 - Preserve unrelated user changes, including local Visual Studio state.

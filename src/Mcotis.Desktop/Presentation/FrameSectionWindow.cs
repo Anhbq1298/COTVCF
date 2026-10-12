@@ -1,11 +1,11 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using COT_VCF.Domain;
-using COT_VCF.Presentation.Controls;
-using static COT_VCF.Presentation.PropertyForm;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Presentation.Controls;
+using static Mcotis.Desktop.Presentation.PropertyForm;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
 /// A frame section form, laid out like SAP2000's (e.g. "Box/Tube Section"): Section Name, Section Notes and Display Color;

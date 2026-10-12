@@ -3,10 +3,10 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.IO;
-using COT_VCF.Infrastructure;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Infrastructure;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 public enum StudyRunState { Running, Completed, CompletedWithErrors, Cancelled, Failed }
 public enum StudyRunIntent { AllSelected, ResumeInterrupted, RetryFailed, RebuildSelected }

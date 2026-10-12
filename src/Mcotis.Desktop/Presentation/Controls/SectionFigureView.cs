@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Media;
-using COT_VCF.Application.Quantities;
+using Mcotis.Desktop.Application.Quantities;
 
-namespace COT_VCF.Presentation.Controls;
+namespace Mcotis.Desktop.Presentation.Controls;
 
 /// <summary>
 /// Draws the cross-section of an assigned section to scale from its stored outlines: back to front, a tube with its

@@ -2,10 +2,10 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
-using COT_VCF.Application;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
 /// Edit → VCF Geometry. Reads the VCF system from the working model (02 Truss Height chord groups), shows its parameters
@@ -624,7 +624,7 @@ public partial class VcfGeometryWindow : Window
 
     private static IEnumerable<string>? SafePins(GeometryModel geometry)
     {
-        try { return COT_VCF.Application.FemStudyService.FindPinSupportPoints(geometry); }
+        try { return Mcotis.Desktop.Application.FemStudyService.FindPinSupportPoints(geometry); }
         catch { return null; }
     }
 

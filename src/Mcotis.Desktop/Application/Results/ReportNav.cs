@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>The one immutable navigation zone shared by every study report — the <b>Result Library</b>.
 /// Every report renders the same block in the same place; each entry links to a sibling report in the same

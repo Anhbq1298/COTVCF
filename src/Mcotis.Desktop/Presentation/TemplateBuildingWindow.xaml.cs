@@ -3,7 +3,7 @@ using System.Windows.Controls;
 using Mcotis.Application;
 using Mcotis.Core;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public partial class TemplateBuildingWindow : Window
 {

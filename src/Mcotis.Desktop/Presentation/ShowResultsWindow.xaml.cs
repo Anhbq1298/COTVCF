@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
-using COT_VCF.Application;
+using Mcotis.Desktop.Application;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 public enum ShowResultPickerKind { All, Deflection, MemberForces, Reactions }
 

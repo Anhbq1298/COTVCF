@@ -1,7 +1,7 @@
 using System.Windows;
-using COT_VCF.Presentation.Controls;
+using Mcotis.Desktop.Presentation.Controls;
 
-namespace COT_VCF.Presentation;
+namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
 /// Display → View Options, laid out like SAP2000's Display Options: the form is edited, then Apply / OK writes it to the

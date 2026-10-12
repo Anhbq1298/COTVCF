@@ -1,4 +1,4 @@
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 public sealed record SupportReactionStudyDto(
     string BaselineModelName,

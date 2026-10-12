@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application.Design;
+namespace Mcotis.Desktop.Application.Design;
 
 /// <summary>FEM forces at one station of a member: axial tension positive (SAP convention), in-plane shear and moment.</summary>
 public sealed record DesignStation(double AxialKN, double ShearKN, double MomentKNm);

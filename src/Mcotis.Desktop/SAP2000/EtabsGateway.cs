@@ -1,11 +1,11 @@
-using COT_VCF.Application.Etabs;
-using COT_VCF.Infrastructure;
+using Mcotis.Desktop.Application.Etabs;
+using Mcotis.Desktop.Infrastructure;
 using CSiAPIv1;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace COT_VCF.SAP2000;
+namespace Mcotis.Desktop.SAP2000;
 
 /// <summary>
 /// File → Import From ETABS / Export to ETABS: attaches to the running ETABS through CSI's cross-product API (CSiAPIv1,

@@ -2,7 +2,7 @@ using System.IO;
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace COT_VCF.Application;
+namespace Mcotis.Desktop.Application;
 
 public enum DevelopmentStatus { Done, InProgress, Planned }
 
@@ -16,7 +16,7 @@ public sealed record DevelopmentLogEntry(DateOnly Date, string Title, Developmen
 /// </summary>
 public static class DevelopmentLog
 {
-    public const string ResourceName = "COTVCF.DevelopmentLog.md";
+    public const string ResourceName = "Mcotis.DevelopmentLog.md";
     public static readonly string[] Fields = ["Status", "Who", "Where", "What", "Checks"];
     private static readonly Regex Heading = new(@"^## (\d{4}-\d{2}-\d{2}) · (.+)$", RegexOptions.Compiled);
     private static readonly Regex Field = new(@"^- (\w+): (.*)$", RegexOptions.Compiled);

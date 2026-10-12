@@ -1,8 +1,8 @@
 using System.Globalization;
-using COT_VCF.Domain;
-using COT_VCF.Domain.Results;
+using Mcotis.Desktop.Domain;
+using Mcotis.Desktop.Domain.Results;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 // Tab 06A: which candidates of a study are "qualified". Pure functions over values that were already extracted —
 // no SAP, no I/O. A candidate qualifies when it passes every active criterion; a result a criterion needs but

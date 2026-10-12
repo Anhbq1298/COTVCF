@@ -1,9 +1,9 @@
 using System.Globalization;
 using System.IO;
 using System.Text.Json;
-using COT_VCF.Domain;
+using Mcotis.Desktop.Domain;
 
-namespace COT_VCF.Application.Results;
+namespace Mcotis.Desktop.Application.Results;
 
 /// <summary>What a report starts its Print Report setup from: the header / footer texts, the logo (already
 /// embedded) and the default sheet, as set on Tab 06 when the report was generated. Serialized (camelCase) into the
@@ -251,7 +251,7 @@ window.reportPrint = (function(){
   const PAPERS = { A4: [210, 297], A3: [297, 420], Letter: [215.9, 279.4] };     // mm, portrait
   const BAND = { top: 16, bottom: 13, side: 10 };     // mm of a sheet taken by the header band, the footer band, each side margin
   const PX = 96 / 25.4;                               // CSS px per mm
-  const KEY = "cotvcf.printSetup.v1";                 // the user's latest setup, kept by this browser
+  const KEY = "mcotis.printSetup.v1";                 // the user's latest setup, kept by this browser
   const TEXTS = ["company", "project", "jobNumber", "revision", "preparedBy", "checkedBy", "footerNote"];
   const ORDER = [["info", "info"], ["legend", "legends"], ["note", "generalAnnotations"], ["summary", "summary"], ["chart", "charts"], ["source", "sourceTables"]];
 
@@ -645,10 +645,10 @@ window.reportPrint = (function(){
   // ---- one report of a package: a page that prints several reports as one document loads each in a frame
   // ("#print=package"). It hands over the setup to print with, is told how many sheets this report makes, and
   // answers with this report's place in the page numbers of the whole document.
-  const tell = message => { try { window.parent.postMessage(Object.assign({ cotvcf: "print" }, message), "*"); } catch (e) { } };
+  const tell = message => { try { window.parent.postMessage(Object.assign({ mcotis: "print" }, message), "*"); } catch (e) { } };
   if (packaged) window.addEventListener("message", e => {
     const m = e.data;
-    if (!m || m.cotvcf !== "print" || e.source !== window.parent) return;
+    if (!m || m.mcotis !== "print" || e.source !== window.parent) return;
     if (m.type === "setup"){
       if (m.setup && typeof m.setup === "object"){ const d = defaults(m.setup); Object.keys(d).forEach(k => { S[k] = d[k]; }); }
       if (S.active) relay(); else enter();
