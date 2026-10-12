@@ -47,8 +47,9 @@ public partial class App : System.Windows.Application
             printStore: new ReportPrintSettingsStore(), quantityTakeoff: quantityTakeoff);
         // File → Import From ETABS reads the running ETABS on a lane of its own (read-only).
         viewModel.Etabs = etabs = new EtabsGateway();
-        // Open the built-in model before showing the window so startup never displays the blank chooser.
-        viewModel.LoadDefaultFemModel();
+        // Open the built-in model before showing the window so startup never displays the blank chooser: the tied arch
+        // system (File → Load TAS…), or the VCF model (File → Load VCF…) should TAS not load.
+        viewModel.LoadStartupModel();
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
         // The model view opens on its own; the Define / Run / Result … pane appears when a menu item is chosen.

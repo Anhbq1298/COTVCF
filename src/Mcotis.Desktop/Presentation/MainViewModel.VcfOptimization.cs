@@ -239,6 +239,10 @@ public sealed partial class MainViewModel
             $"({settings.GeometryCount:N0} geometry × {settings.ForceCount:N0} load × {settings.SectionCount:N0} section variants).";
     }
 
+    /// <summary>The cable sections Optimization TAS can try for the tie: the model's cable library (the VCF cable section first).</summary>
+    internal IReadOnlyList<string> TasCableSectionNames() =>
+        CableSections.Select(section => section.Name).Prepend(TiedArchSystem.CableSection).Distinct(StringComparer.Ordinal).ToArray();
+
     /// <summary>The frame sections Optimization TAS can try: the section library of the open model.</summary>
     internal IReadOnlyList<string> TasSectionNames()
     {
@@ -261,7 +265,7 @@ public sealed partial class MainViewModel
         const string note = "Max defl. and Uplift = largest downward and largest upward displacement of a top chord (deck) joint in the result chosen under Deflection Check (Result column); Limit = span L (bays × spacing) / ratio; Check OK when δ ≤ limit and uplift ≤ its limit. Each case is the tied arch system of its H1, H2, bays and spacing — the parabolic arch, the TAS layout — with the deck loads (SW + SDL) and LL × spacing × B × n (half at the end joints) and the sections tried per role. Total cost = Σ member cost per metre × length, as for Optimization VCF. Run → Analysis Options and Define → Load Cases apply. Each case is built in memory; the open model is not changed.";
         await RunOptimizationAsync("Optimization TAS", settings.CombinationCount, settings.SpanRatio, settings.UpliftLimitMm,
             $"δ in {settings.DeflectionResult ?? "every solved result"} ≤ L / {settings.SpanRatio:0.###} and uplift ≤ {settings.UpliftLimitMm:0.###} mm",
-            note, "", () => new TasOptimizationRunner(TasOptimizationInputs(), settings));
+            note, $"cable not fitted within {FemTargetFitPercent:0.###}%", () => new TasOptimizationRunner(TasOptimizationInputs(), settings));
     }
 
     /// <summary>What an Optimization TAS case takes from the open model: the TAS template, each member's properties with a
@@ -273,8 +277,30 @@ public sealed partial class MainViewModel
         EnsureSections();
         var library = FrameSections.ToDictionary(section => section.Name, StringComparer.Ordinal);
         var weights = Application.Etabs.EtabsImport.Convert(template).SectionWeights;
+        // the tie's strand sections: the model's cable library, with the VCF cable section it is built with
+        // (and their materials) — a snapshot, so the run never changes the open model's libraries
+        var strands = CableSections.ToDictionary(section => section.Name, StringComparer.Ordinal);
+        var strandMaterials = Materials.ToDictionary(material => material.Name, StringComparer.Ordinal);
+        if (!strands.ContainsKey(TiedArchSystem.CableSection))
+        {
+            var (vcfCable, strandMaterial) = VcfCableSection();
+            strands[vcfCable.Name] = vcfCable;
+            strandMaterials.TryAdd(strandMaterial.Name, strandMaterial);
+        }
         FemSectionProperties Properties(FemSectionProperties member, string sectionName)
         {
+            if (member.IsCable)
+            {
+                if (!strands.TryGetValue(sectionName, out var strand))
+                    throw new InvalidOperationException($"Cable section '{sectionName}' is not in the cable section library (Define → Section Properties → Cable Sections).");
+                var material = strandMaterials.GetValueOrDefault(strand.Material)
+                    ?? throw new InvalidOperationException($"Cable section '{sectionName}' has no material {strand.Material} in the library.");
+                return member with
+                {
+                    SectionName = strand.Name, MaterialName = strand.Material, AreaM2 = strand.Area, GrossAreaM2 = strand.Area,
+                    ElasticModulusKNPerM2 = material.ElasticModulus, UnitWeightKNPerM3 = material.WeightPerVolume, UnitMassTPerM3 = material.MassPerVolume,
+                };
+            }
             if (!library.TryGetValue(sectionName, out var section))
                 throw new InvalidOperationException($"Section '{sectionName}' is not in the frame section library (Define → Section Properties → Frame Sections).");
             var property = PropertiesFor(member with { SectionName = sectionName }, section);

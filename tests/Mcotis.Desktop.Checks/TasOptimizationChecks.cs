@@ -17,6 +17,15 @@ internal static class TasOptimizationChecks
     {
         var d = TiedArchParameters.Default;
 
+        // Mcotis opens with the tied arch system (App startup), ready to run
+        var opened = EtabsImportChecks.NewViewModel(out _);
+        opened.LoadStartupModel();
+        Check(opened.TiedArchParameters == d && opened.OfflineModelName == "TAS - Tied Arch System" && opened.CanRunFemAnalysis &&
+              opened.State.Geometry.Points.Count == 30 && opened.State.Geometry.Members.Count == 59,
+            $"Mcotis opens with the tied arch system ({opened.OfflineModelName}: {opened.State.Geometry.Points.Count} joints, {opened.State.Geometry.Members.Count} frames), ready to run");
+
+        CheckElevatedCable(d);
+
         // the form's start: geometry fixed at the model, the loads of the storeys above over their ranges
         var start = TasOptimization.Start(d);
         Check(TasOptimization.Validate(start).Count == 0 && start.GeometryCount == 1 && start.ForceCount == 9 * 8 * 3 * 6 && start.CombinationCount == 1296,
@@ -71,6 +80,61 @@ internal static class TasOptimizationChecks
               TasOptimization.Validate(lowDeck).Any(problem => problem.Contains("H2", StringComparison.Ordinal)) &&
               TasOptimization.Validate(one with { SpanRatio = 0 }).Any(problem => problem.StartsWith("Deflection limit", StringComparison.Ordinal)),
             "bays below 6 at the minimum corner, H2 not above H1 and a span ratio of 0 are refused before the run");
+    }
+
+    /// <summary>Edit → Tied Arch System with an elevated cable: the arch springs at H0 on columns of its own section, pinned
+    /// on the ground; the tie joins the springing points, meets its target in the Pretension case, and the other cases
+    /// continue from that prestressed state.</summary>
+    private static void CheckElevatedCable(TiedArchParameters d)
+    {
+        var p = d with { ElevatedCable = true, CableHeight = 10, CablePretension = 20_000 };
+        var vm = EtabsImportChecks.NewViewModel(out _);
+        var summary = vm.ApplyTiedArchSystem(p);
+        var g = vm.State.Geometry;
+        var tie = g.Members.SingleOrDefault(member => member.Kind == Mcotis.Desktop.Domain.MemberKind.Cable);
+        var columns = g.Members.Where(member => member.Name is "COLL-0" or "COLR-0").ToArray();
+        var sectionOf = vm.FemSectionProperties.ToDictionary(property => property.MemberName, property => property.SectionName);
+        Check(summary.ReadyToRun && vm.TiedArchParameters == p && tie is { Name: "TIE", Start: "1@EL10", End: "2@EL10" } && columns.Length == 2 &&
+              columns.All(column => sectionOf[column.Name] == "RSC 3.52x2.64 P" && g.Points[column.Start].Position.Z == 0 && g.Points[column.End].Position.Z == 10) &&
+              sectionOf["TIE"] == "192T15.7" && vm.State.Cables.Single() is { CableName: "TIE", LoadPattern: "Pretension", TargetForce: 20_000 } &&
+              FemStudyService.FindPinSupportPoints(g).SequenceEqual(["1@Base", "2@Base"]) &&
+              g.Points.Values.Max(point => point.Position.Z) == 43 && g.Points.ContainsKey("8@EL40"),
+            $"with an elevated cable the arch springs at H0 = 10 m on columns of the arch section pinned on the ground, the tie TIE (192T15.7) joins " +
+            $"1@EL10 and 2@EL10 with a 20,000 kN target, the crown is at 40 m and the deck at 43 m — {string.Join(" | ", summary.Lines.Where(line => line.StartsWith("Tab 03", StringComparison.Ordinal) || line.StartsWith("Ready", StringComparison.Ordinal) || line.StartsWith("Not ready", StringComparison.Ordinal)))}");
+
+        var rise = ArchRise.Find(g, vm.FemPinSupportPoints, member => sectionOf.GetValueOrDefault(member));
+        Check(rise is { Support: "1@EL10", Crown: "8@EL40", Rise: 30 },
+            $"the viewer still dimensions H1 = {rise?.Rise:0.###} m, from the springing {rise?.Support} (on its column) to the crown {rise?.Crown}");
+
+        var sls = vm.FemCaseRows.SingleOrDefault(row => row.Name == Sls);
+        Check(vm.FemCaseRows.Single(row => row.Name == "Pretension").CableTargetForces && sls is not null && sls.InitialCase == "Pretension" &&
+              vm.FemCombinationRows.All(row => row.Name != Sls),
+            $"the Pretension case meets the tie's target; {Sls} is a case continuing from it ({sls?.Definition})");
+
+        var runs = FemModelFileChecks.Analyze(vm);
+        Check(runs.Count == 1, "the elevated system solves: " + vm.FemProgressText);
+        var run = runs[0];
+        var pretension = run.ResultFor("Pretension").Cables.Single(cable => cable.MemberName == "TIE").AxialForceKN;
+        var loaded = run.ResultFor(Sls);
+        var tieLoaded = loaded.Cables.Single(cable => cable.MemberName == "TIE").AxialForceKN;
+        var deck = TasOptimizationRunner.TopChord(g, p).ToHashSet(StringComparer.Ordinal);
+        var deflection = loaded.Joints.Where(joint => deck.Contains(joint.PointName)).Max(joint => -joint.UZM * 1000);
+        Check(Math.Abs(pretension - 20_000) <= 20_000 * vm.FemTargetFitPercent / 100 + 1 && tieLoaded > pretension && deflection > 0,
+            $"the run meets the tie's target in Pretension ({pretension:N0} kN) and the loaded {Sls} pulls it harder ({tieLoaded:N0} kN); deck deflection {deflection:0.0} mm");
+
+        // Optimization TAS on the elevated system: H0 and the tie's pretension are in its space; a case with the model's
+        // inputs is the model, and the pretension steps as the VCF cables do
+        var start = TasOptimization.Start(p);
+        var one = Fixed(start, p) with { DeflectionResult = Sls };
+        Check(start.ElevatedCable && start.Geometry.ContainsKey("H0") && start.CableForce.IsFixed && start.CableForce.Min == 20_000 && TasOptimization.Validate(one).Count == 0,
+            "Optimization TAS of the elevated system has H0 among its geometry ranges and the tie's 20,000 kN pretension");
+        var rows = Optimize(vm, one);
+        Check(rows.Length == 1 && rows[0].MaxDeflectionMm is { } same && Math.Abs(same - deflection) < 1e-6 && rows[0].Status.StartsWith("Analysed", StringComparison.Ordinal),
+            $"a case with the elevated system's inputs deflects as Run FEM Analysis ({rows.FirstOrDefault()?.Deflection} mm vs {deflection:0.0} mm; {rows.FirstOrDefault()?.Status})");
+        rows = Optimize(vm, one with { CableForce = new VcfForceSpan(10_000, 30_000), CableSteps = 3 });
+        Check(rows.Length == 3 && vm.VcfOptimizationColumns.Single().Label == "TIE [kN]" && rows.Select(row => row.Values[0]).SequenceEqual(["10000", "20000", "30000"]) &&
+              Math.Abs(rows[1].MaxDeflectionMm!.Value - deflection) < 1e-6 && rows.Select(row => row.MaxDeflectionMm!.Value).Distinct().Count() == 3,
+            $"the tie's pretension 10,000 … 30,000 kN in 3 steps: {string.Join(" / ", rows.Select(row => row.Deflection))} mm");
     }
 
     /// <summary>The settings with every load fixed at the model's.</summary>

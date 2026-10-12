@@ -19,7 +19,9 @@ public interface IOptimizationRunner
 /// Optimization → Optimization TAS: the search space of the tied arch system — a range per geometry input (H1, H2, bays,
 /// spacing; keys as in <see cref="TasOptimization.GeometryParameters"/>), a range per load of the storeys above (SW, SDL,
 /// LL, floors n, tributary width B; <see cref="TasOptimization.LoadParameters"/>) and the candidate sections per member
-/// role — with the deflection check of Optimization VCF, read on the top chord (deck) joints.
+/// role — with the deflection check of Optimization VCF, read on the top chord (deck) joints. A system with an elevated
+/// cable (<see cref="ElevatedCable"/>) also has H0 among its geometry ranges and the tie's pretension, stepped as the VCF
+/// cables are: <see cref="CableSteps"/> values from <see cref="CableForce"/> Min to Max.
 /// </summary>
 public sealed record TasOptimizationSettings(
     IReadOnlyDictionary<string, VcfRange> Geometry,
@@ -27,7 +29,18 @@ public sealed record TasOptimizationSettings(
     IReadOnlyDictionary<TiedArchRole, IReadOnlyList<string>> RoleSections)
 {
     public long GeometryCount => Product(Geometry.Values.Select(range => (long)range.Count));
-    public long ForceCount => Product(Loads.Values.Select(range => (long)range.Count));
+    public long ForceCount => Product(Loads.Values.Select(range => (long)range.Count).Append(CableStepCount));
+
+    /// <summary>The open system has the elevated cable: H0 and the tie's pretension are part of the space.</summary>
+    public bool ElevatedCable { get; init; }
+    /// <summary>The tie's pretension [kN] from the first to the last step.</summary>
+    public VcfForceSpan CableForce { get; init; } = VcfForceSpan.Fixed(0);
+    /// <summary>The number of pretension steps (1 keeps it at Min).</summary>
+    public int CableSteps { get; init; } = 1;
+    /// <summary>Pretension variants: the steps when the force varies, else 1.</summary>
+    public long CableStepCount => ElevatedCable && CableSteps > 1 && !CableForce.IsFixed ? CableSteps : 1;
+    /// <summary>The tie's pretension at step <paramref name="step"/> (0-based).</summary>
+    public double CableForceAt(int step) => CableForce.At(CableStepCount > 1 ? (double)Math.Clamp(step, 0, (int)CableStepCount - 1) / (CableStepCount - 1) : 0);
     public long SectionCount => Product(RoleSections.Values.Select(names => (long)Math.Max(1, names.Count)));
     public long CombinationCount => Product([GeometryCount, ForceCount, SectionCount]);
 
@@ -48,6 +61,8 @@ public static class TasOptimization
     public static readonly VcfOptimization.Parameter DeckHeight = new("H2", "H2 — support → top chord", "m", 1);
     public static readonly VcfOptimization.Parameter Bays = new("Bays", "Number of bays (even)", "", 2, Whole: true);
     public static readonly VcfOptimization.Parameter Spacing = new("Spacing", "Spacing of vertical lines", "m", 1);
+    /// <summary>The elevated cable's height (a geometry range only for a system with the elevated cable).</summary>
+    public static readonly VcfOptimization.Parameter CableHeight = new("H0", "H0 — ground → cable and springing", "m", 1);
     public static readonly VcfOptimization.Parameter SelfWeight = new("SW", "SW — slab self-weight", "kPa", 1);
     public static readonly VcfOptimization.Parameter SuperimposedDead = new("SDL", "SDL — superimposed dead", "kPa", 1);
     public static readonly VcfOptimization.Parameter Live = new("LL", "LL — live load", "kPa", 2.5);
@@ -59,28 +74,40 @@ public static class TasOptimization
 
     private static double Value(TiedArchParameters p, VcfOptimization.Parameter parameter) => parameter.Key switch
     {
-        "H1" => p.ArchRise, "H2" => p.DeckHeight, "Bays" => p.Bays, "Spacing" => p.BaySpacing,
+        "H1" => p.ArchRise, "H2" => p.DeckHeight, "Bays" => p.Bays, "Spacing" => p.BaySpacing, "H0" => p.CableHeight,
         "SW" => p.SelfWeight, "SDL" => p.SuperimposedDead, "LL" => p.Live, "Floors" => p.Floors, _ => p.TributaryWidth,
     };
 
     /// <summary>The form's start: the geometry fixed at <paramref name="p"/>, the loads over the ranges of the storeys above
-    /// (SW 7–15 kPa @ 1, SDL 3–10 kPa @ 1, LL 5–10 kPa @ 2.5, n 5–10 @ 1) with B fixed, no section candidates.</summary>
+    /// (SW 7–15 kPa @ 1, SDL 3–10 kPa @ 1, LL 5–10 kPa @ 2.5, n 5–10 @ 1) with B fixed, no section candidates; with an
+    /// elevated cable also H0 and the tie's pretension, fixed at the system's.</summary>
     public static TasOptimizationSettings Start(TiedArchParameters p) => new(
-        GeometryParameters.ToDictionary(parameter => parameter.Key, parameter => VcfRange.Fixed(Value(p, parameter), parameter.DefaultStep), StringComparer.Ordinal),
+        GeometryParametersOf(p.ElevatedCable).ToDictionary(parameter => parameter.Key, parameter => VcfRange.Fixed(Value(p, parameter), parameter.DefaultStep), StringComparer.Ordinal),
         new Dictionary<string, VcfRange>(StringComparer.Ordinal)
         {
             [SelfWeight.Key] = new(7, 15, 1), [SuperimposedDead.Key] = new(3, 10, 1), [Live.Key] = new(5, 10, 2.5),
             [Floors.Key] = new(5, 10, 1), [Width.Key] = VcfRange.Fixed(p.TributaryWidth, Width.DefaultStep),
         },
-        new Dictionary<TiedArchRole, IReadOnlyList<string>>());
+        new Dictionary<TiedArchRole, IReadOnlyList<string>>())
+    {
+        ElevatedCable = p.ElevatedCable,
+        CableForce = VcfForceSpan.Fixed(p.CablePretension),
+    };
 
-    /// <summary>The parameters with each range reduced to one value by <paramref name="pick"/>.</summary>
+    /// <summary>The geometry ranges of a system: H1, H2, bays, spacing, and H0 with the elevated cable.</summary>
+    public static IReadOnlyList<VcfOptimization.Parameter> GeometryParametersOf(bool elevatedCable) =>
+        elevatedCable ? [.. GeometryParameters, CableHeight] : GeometryParameters;
+
+    /// <summary>The parameters with each range reduced to one value by <paramref name="pick"/> (the tie's pretension too).</summary>
     public static TiedArchParameters ParametersAt(TasOptimizationSettings settings, Func<VcfRange, double> pick)
     {
         double V(VcfOptimization.Parameter parameter) =>
-            (GeometryParameters.Contains(parameter) ? settings.Geometry : settings.Loads).TryGetValue(parameter.Key, out var range) ? pick(range) : double.NaN;
+            (LoadParameters.Contains(parameter) ? settings.Loads : settings.Geometry).TryGetValue(parameter.Key, out var range) ? pick(range) : double.NaN;
+        var force = settings.CableForce;
         return new TiedArchParameters(V(ArchRise), V(DeckHeight), (int)Math.Round(V(Bays)), V(Spacing), V(Width), V(SelfWeight), V(SuperimposedDead), V(Live),
-            (int)Math.Round(V(Floors)));
+            (int)Math.Round(V(Floors)), settings.ElevatedCable,
+            settings.ElevatedCable ? V(CableHeight) : TiedArchParameters.DefaultCableHeight,
+            settings.ElevatedCable ? pick(new VcfRange(force.Min, force.Max, Math.Max(force.Max - force.Min, 1))) : TiedArchParameters.DefaultCablePretension);
     }
 
     /// <summary>Unreadable ranges, the check limits, and the lowest / highest corner failing
@@ -89,13 +116,19 @@ public static class TasOptimization
     public static IReadOnlyList<string> Validate(TasOptimizationSettings settings)
     {
         var problems = new List<string>();
-        foreach (var (parameter, ranges) in GeometryParameters.Select(item => (item, settings.Geometry)).Concat(LoadParameters.Select(item => (item, settings.Loads))))
+        foreach (var (parameter, ranges) in GeometryParametersOf(settings.ElevatedCable).Select(item => (item, settings.Geometry)).Concat(LoadParameters.Select(item => (item, settings.Loads))))
         {
             if (!ranges.TryGetValue(parameter.Key, out var range)) { problems.Add($"{parameter.Label}: no range."); continue; }
             if (range.Problem(parameter.Whole) is { } problem) problems.Add($"{parameter.Label}: {problem}");
         }
         if (!double.IsFinite(settings.SpanRatio) || settings.SpanRatio <= 0) problems.Add("Deflection limit: span / ratio needs a ratio greater than zero.");
         if (!double.IsFinite(settings.UpliftLimitMm) || settings.UpliftLimitMm < 0) problems.Add("Uplift limit: enter a number of at least 0 mm.");
+        if (settings.ElevatedCable)
+        {
+            if (settings.CableSteps < 1) problems.Add("Cable force steps: enter a whole number of at least 1.");
+            if (settings.CableForce.Problem() is { } problem) problems.Add($"Cable force {TiedArchSystem.CableName}: {problem}");
+            else if (settings.CableForce.Min < 0) problems.Add($"Cable force {TiedArchSystem.CableName}: must not be negative.");
+        }
         if (problems.Count > 0) return problems;
         foreach (var (corner, pick) in new (string, Func<VcfRange, double>)[] { ("minimum", range => range.Min), ("maximum", range => range.Max) })
             problems.AddRange(ParametersAt(settings, pick).GeometryProblems().Select(problem => $"At the {corner} of every range: {problem}"));
@@ -137,8 +170,12 @@ public sealed class TasOptimizationRunner : IOptimizationRunner
         this.inputs = inputs;
         this.settings = settings;
         var axes = new List<VcfOptimizationAxis>();
-        foreach (var parameter in TasOptimization.GeometryParameters)
+        foreach (var parameter in TasOptimization.GeometryParametersOf(settings.ElevatedCable))
             axes.Add(new("geometry:" + parameter.Key, Label(parameter), settings.Geometry[parameter.Key].Values().Cast<object>().ToArray()));
+        // the tie's pretension steps, as the VCF cables step (one axis; its column shows the force)
+        if (settings.CableStepCount > 1)
+            axes.Add(new(VcfOptimizationRunner.CableStepKey, $"{TiedArchSystem.CableName} [kN]",
+                Enumerable.Range(0, (int)settings.CableStepCount).Select(step => (object)new VcfCableStep(step, settings.CableForceAt(step))).ToArray()));
         foreach (var parameter in TasOptimization.LoadParameters)
             axes.Add(new("load:" + parameter.Key, Label(parameter), settings.Loads[parameter.Key].Values().Cast<object>().ToArray()));
         foreach (var (role, sections) in settings.RoleSections.OrderBy(pair => pair.Key))
@@ -181,8 +218,12 @@ public sealed class TasOptimizationRunner : IOptimizationRunner
             Convert.ToDouble(item.Values[Axes.ToList().FindIndex(axis => axis.Key == prefix + parameter.Key)], CultureInfo.InvariantCulture);
         double G(VcfOptimization.Parameter parameter) => V(parameter, "geometry:");
         double L(VcfOptimization.Parameter parameter) => V(parameter, "load:");
+        var stepAxis = Axes.ToList().FindIndex(axis => axis.Key == VcfOptimizationRunner.CableStepKey);
+        var pretension = stepAxis >= 0 && item.Values[stepAxis] is VcfCableStep step ? step.ForceKN : settings.CableForceAt(0);
         return new TiedArchParameters(G(TasOptimization.ArchRise), G(TasOptimization.DeckHeight), (int)Math.Round(G(TasOptimization.Bays)), G(TasOptimization.Spacing),
-            L(TasOptimization.Width), L(TasOptimization.SelfWeight), L(TasOptimization.SuperimposedDead), L(TasOptimization.Live), (int)Math.Round(L(TasOptimization.Floors)));
+            L(TasOptimization.Width), L(TasOptimization.SelfWeight), L(TasOptimization.SuperimposedDead), L(TasOptimization.Live), (int)Math.Round(L(TasOptimization.Floors)),
+            settings.ElevatedCable, settings.ElevatedCable ? G(TasOptimization.CableHeight) : TiedArchParameters.DefaultCableHeight,
+            settings.ElevatedCable ? pretension : TiedArchParameters.DefaultCablePretension);
     }
 
     /// <summary>Builds and analyses one case. Never throws for an invalid or non-converging case — the result says why.</summary>
@@ -193,7 +234,7 @@ public sealed class TasOptimizationRunner : IOptimizationRunner
             var p = ParametersOf(item);
             if (p.GeometryProblems() is { Count: > 0 } problems) return Failed(item, "Invalid geometry: " + string.Join(" ", problems));
             var imported = EtabsImport.Convert(TiedArchSystem.Build(inputs.Template, p));
-            var geometry = imported.Geometry;
+            var geometry = TiedArchSystem.WithCable(imported.Geometry, p);
 
             var chosen = new Dictionary<TiedArchRole, string>();
             for (var axis = 0; axis < Axes.Count; axis++)
@@ -205,13 +246,20 @@ public sealed class TasOptimizationRunner : IOptimizationRunner
                 var section = TiedArchSystem.RoleOf(member.SectionName) is { } role && chosen.TryGetValue(role, out var candidate) ? candidate : member.SectionName!;
                 properties[member.MemberName] = inputs.Properties(member, section) with { MemberName = member.MemberName };
             }
+            // the tie: the VCF cable's strand section, or the case's cable candidate
+            if (p.ElevatedCable)
+                properties[TiedArchSystem.CableName] = inputs.Properties(
+                    new FemSectionProperties(TiedArchSystem.CableName, 0, 0, null, SectionName: TiedArchSystem.CableSection),
+                    chosen.TryGetValue(TiedArchRole.Cable, out var cable) ? cable : TiedArchSystem.CableSection) with { MemberName = TiedArchSystem.CableName };
             var (cost, costNote) = Cost(geometry, properties);
             VcfOptimizationResult CaseFailed(string reason) => Failed(item, reason) with { CostSgd = cost, CostNote = costNote };
 
             var plan = FemLoadPlan.Build(inputs.Patterns, inputs.Cases, inputs.Combinations, imported.Loading, properties, geometry, [], inputs.PretensionPatterns, []);
             var supports = FemStudyService.FindPinSupportPoints(geometry);
             var candidateModel = new FemStudyCandidate($"TAS{item.Index + 1:00000}", "L", "H", "P",
-                new TrussCandidate(1, p.DeckHeight, 0, "Bottom", 0, 0, 0), [], new Dictionary<string, double>(StringComparer.Ordinal));
+                new TrussCandidate(1, p.DeckHeight, 0, "Bottom", 0, 0, 0), [],
+                p.ElevatedCable ? new Dictionary<string, double>(StringComparer.Ordinal) { [TiedArchSystem.CableName] = p.CablePretension }
+                    : new Dictionary<string, double>(StringComparer.Ordinal));
             var failure = new FailureCapture();
             var runs = fem.Analyze(geometry, [], [], [], supports, [candidateModel], properties, failure, cancellationToken,
                 inputs.TargetFitPercent, inputs.TargetFitIterations, inputs.FrameMeshSegments, plan, inputs.CableSag);
@@ -233,7 +281,7 @@ public sealed class TasOptimizationRunner : IOptimizationRunner
             var (name, point, deflection) = checkedJoints.MaxBy(entry => entry.Mm);
             var (_, upliftPoint, risen) = checkedJoints.MinBy(entry => entry.Mm);
             var uplift = -risen;
-            return new(item, deflection, name, point, true, null, p.Span, p.Span * 1000 / settings.SpanRatio,
+            return new(item, deflection, name, point, results.Values.All(result => result.TargetFitConverged), null, p.Span, p.Span * 1000 / settings.SpanRatio,
                 cost, costNote, Math.Max(0, uplift), uplift > 0 ? upliftPoint : null, settings.UpliftLimitMm);
         }
         catch (OperationCanceledException) { throw; }
@@ -243,9 +291,9 @@ public sealed class TasOptimizationRunner : IOptimizationRunner
         }
     }
 
-    /// <summary>The top chord (deck) joints of a built system: those at H2.</summary>
+    /// <summary>The top chord (deck) joints of a built system: those at its deck elevation (H2, or H0 + H2 with an elevated cable).</summary>
     public static IEnumerable<string> TopChord(GeometryModel geometry, TiedArchParameters p) =>
-        geometry.Points.Values.Where(point => Math.Abs(point.Position.Z - p.DeckHeight) < 1e-6).Select(point => point.Name);
+        geometry.Points.Values.Where(point => Math.Abs(point.Position.Z - p.DeckElevation) < 1e-6).Select(point => point.Name);
 
     private static VcfOptimizationResult Failed(VcfOptimizationCase item, string reason) => new(item, null, null, null, false, reason);
 

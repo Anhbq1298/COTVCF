@@ -811,7 +811,7 @@ public sealed class ModelCanvas : FrameworkElement
             memberLocations.Clear();
             foreach (var member in Model.Members)
                 if (screenPoints.TryGetValue(member.Start, out var a) && screenPoints.TryGetValue(member.End, out var b)) memberLocations[member.Name] = (a, b, member.Kind);
-            if (ShowDimensions) DrawDimensions(dc, projected.Values, Screen);
+            if (ShowDimensions) DrawDimensions(dc, projected.Values, Screen, arch is not null);
             if (arch is not null) DrawArchHeight(dc, arch, minX, Screen);
 
             var deflectionView = FemResult is not null && FemResultMode == FemResultMode.DeflectedShape;
@@ -1413,7 +1413,8 @@ public sealed class ModelCanvas : FrameworkElement
 
     private static string Metres(double value) => value.ToString("0.###", CultureInfo.CurrentCulture);
 
-    private void DrawDimensions(DrawingContext dc, IEnumerable<Point> modelPoints, Func<Point, Point> screen)
+    /// <param name="archSpan">An arch model: its overall span is the arch's span L, support to support.</param>
+    private void DrawDimensions(DrawingContext dc, IEnumerable<Point> modelPoints, Func<Point, Point> screen, bool archSpan = false)
     {
         var points = modelPoints.ToArray();
         var xs = Levels(points.Select(point => point.X));
@@ -1460,7 +1461,8 @@ public sealed class ModelCanvas : FrameworkElement
             dc.DrawLine(extension, new Point(end, chainY + 4), new Point(end, totalY + 4));
             dc.DrawLine(pen, new Point(left, totalY), new Point(end, totalY));
             Tick(new Point(left, totalY)); Tick(new Point(end, totalY));
-            var total = Label(betweenColumns ? $"Span {Metres(spanTo - spanFrom)} m (between mega columns)" : $"{horizontal} span {Metres(spanTo - spanFrom)} m", 11, bold: true);
+            var total = Label(betweenColumns ? $"Span {Metres(spanTo - spanFrom)} m (between mega columns)"
+                : archSpan ? $"Span L = {Metres(spanTo - spanFrom)} m" : $"{horizontal} span {Metres(spanTo - spanFrom)} m", 11, bold: true);
             dc.DrawText(total, new Point((left + end) / 2 - total.Width / 2, totalY - total.Height - 1));
         }
 

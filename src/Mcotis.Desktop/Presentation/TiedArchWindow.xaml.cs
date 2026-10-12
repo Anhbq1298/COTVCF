@@ -49,6 +49,9 @@ public partial class TiedArchWindow : Window
             SuperimposedDeadBox.SelectedItem = p.SuperimposedDead;
             LiveBox.SelectedItem = p.Live;
             FloorsBox.SelectedItem = p.Floors;
+            ElevatedCableBox.IsChecked = p.ElevatedCable;
+            CableHeightBox.Text = Text(p.CableHeight);
+            CablePretensionBox.Text = Text(p.CablePretension);
         }
         finally { loading = false; }
         Refresh();
@@ -72,7 +75,14 @@ public partial class TiedArchWindow : Window
             problems = ["Choose SW, SDL, LL and the number of floors."];
             return null;
         }
-        var p = new TiedArchParameters(Number(ArchRiseBox)!.Value, Number(DeckHeightBox)!.Value, (int)bays, Number(SpacingBox)!.Value, Number(WidthBox)!.Value, sw, sdl, ll, floors);
+        var elevated = ElevatedCableBox.IsChecked == true;
+        if (elevated && (Number(CableHeightBox) is null || Number(CablePretensionBox) is null))
+        {
+            problems = [Number(CableHeightBox) is null ? "H0: enter a number." : "Cable pretension: enter a number."];
+            return null;
+        }
+        var p = new TiedArchParameters(Number(ArchRiseBox)!.Value, Number(DeckHeightBox)!.Value, (int)bays, Number(SpacingBox)!.Value, Number(WidthBox)!.Value, sw, sdl, ll, floors,
+            elevated, Number(CableHeightBox) ?? TiedArchParameters.DefaultCableHeight, Number(CablePretensionBox) ?? TiedArchParameters.DefaultCablePretension);
         problems = p.Problems();
         return problems.Count == 0 ? p : null;
     }
@@ -84,6 +94,15 @@ public partial class TiedArchWindow : Window
 
     private void Refresh()
     {
+        // H0 and the Cable Force sheet belong to the elevated cable
+        var elevated = ElevatedCableBox.IsChecked == true;
+        CableHeightLabel.Visibility = CableHeightBox.Visibility = CableHeightUnit.Visibility = elevated ? Visibility.Visible : Visibility.Collapsed;
+        CableSheet.IsEnabled = elevated;
+        CableNameText.Text = TiedArchSystem.CableName;
+        CableSectionText.Text = TiedArchSystem.CableSection;
+        CableSheetNote.Text = elevated
+            ? "One cable ties the two springing points of the arch at H0, pretensioned in the Pretension load pattern."
+            : "Tick With elevated cable on the Geometry sheet to tie the arch with a cable.";
         var p = FormParameters(out var problems);
         SpanText.Text = Number(BaysBox) is { } bays && Number(SpacingBox) is { } spacing ? Text(bays * spacing) : "—";
         OkButton.IsEnabled = ApplyButton.IsEnabled = p is not null;
@@ -99,11 +118,13 @@ public partial class TiedArchWindow : Window
         UlsText.Text = $"ULS = (1.35 SW + 1.35 SDL + 1.5 LL) × s × B × n{Environment.NewLine}    = {Text(1.35 * (p.SelfWeight + p.SuperimposedDead) + 1.5 * p.Live)} × {area} = {p.UlsPointLoad:N0} kN";
         LoadNote.Text = $"Applied to the model as DEAD_above (SW + SDL) {p.DeadPointLoad:N0} kN and LL_above (LL) {p.LivePointLoad:N0} kN on each " +
                         "inner top chord joint, half at the two end joints (half a bay each); LL_left / LL_right load each half. " +
-                        "The ULS and SLS combinations of the model apply the factors.";
+                        (p.ElevatedCable
+                            ? $"The tie {TiedArchSystem.CableName} is pretensioned to {p.CablePretension:N0} kN in the Pretension case; SLS and ULS continue from it, with the factors."
+                            : "The ULS and SLS combinations of the model apply the factors.");
         try
         {
             var (geometry, supports, sections) = viewModel.PreviewTiedArch(p);
-            var deck = geometry.Points.Values.Where(point => Math.Abs(point.Position.Z - p.DeckHeight) < 1e-6).OrderBy(point => point.Position.X).ToArray();
+            var deck = geometry.Points.Values.Where(point => Math.Abs(point.Position.Z - p.DeckElevation) < 1e-6).OrderBy(point => point.Position.X).ToArray();
             Preview.Model = geometry;
             Preview.PinSupportPoints = supports;
             Preview.MemberSections = sections;

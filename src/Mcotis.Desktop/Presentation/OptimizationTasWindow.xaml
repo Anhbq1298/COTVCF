@@ -59,6 +59,32 @@
       </StackPanel>
      </ScrollViewer>
     </TabItem>
+    <TabItem x:Name="CableSheet" Header="Cable Force">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+      <StackPanel>
+       <!-- the tie's pretension steps as the VCF cables step: at step j of n it is at Min + (Max − Min) × j / (n − 1) -->
+       <DockPanel Margin="0,0,0,8" LastChildFill="False">
+        <TextBlock DockPanel.Dock="Left" Text="Pretension [kN] · target force in the Pretension case" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+        <TextBox x:Name="CableStepsBox" DockPanel.Dock="Right" Width="48" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="Input_Changed"
+                 AutomationProperties.Name="Cable force steps" ToolTip="Number of force steps: step 1 is Min, the last step Max"/>
+        <TextBlock DockPanel.Dock="Right" Text="Steps" VerticalAlignment="Center" Margin="0,0,6,0"/>
+       </DockPanel>
+       <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="90"/><ColumnDefinition Width="90"/><ColumnDefinition Width="30"/></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <TextBlock Grid.Column="1" Text="Min" Style="{StaticResource ColumnHeader}"/>
+        <TextBlock Grid.Column="2" Text="Max" Style="{StaticResource ColumnHeader}"/>
+        <TextBlock x:Name="CableNameText" Grid.Row="1" VerticalAlignment="Center"/>
+        <TextBox x:Name="CableMinBox" Grid.Row="1" Grid.Column="1" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" Margin="0,2,4,2" TextChanged="Input_Changed"
+                 AutomationProperties.Name="Cable force min"/>
+        <TextBox x:Name="CableMaxBox" Grid.Row="1" Grid.Column="2" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" Margin="0,2,4,2" TextChanged="Input_Changed"
+                 AutomationProperties.Name="Cable force max"/>
+        <TextBlock Grid.Row="1" Grid.Column="3" Text="kN" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+       </Grid>
+       <TextBlock x:Name="CableNote" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+      </StackPanel>
+     </ScrollViewer>
+    </TabItem>
     <TabItem Header="Storey Force">
      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
       <StackPanel>

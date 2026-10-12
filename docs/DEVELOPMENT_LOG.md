@@ -18,6 +18,32 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-12 · Tied arch system with an elevated cable
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Edit → Tied Arch System… → Geometry (With elevated cable, H0) and Cable Force; Optimization → Optimization TAS…
+  → Geometry (H0), Cable Force and Sections (tie cable)
+- What: With elevated cable ticked, the arch springs at H0 (default 10 m) from the top of two columns of the arch's own
+  section, pinned on the ground, and one cable — TIE, the VCF model's strand section 192T15.7 — ties the two springing
+  points; H1 and H2 are measured from the springing (deck at H0 + H2). The Cable Force sheet sets the tie's target force
+  (default 20,000 kN) in the Pretension load pattern. As for the VCF cables, the Pretension case applies it with the
+  self-weight and fits the tie to it, and the SLS / ULS cases (and the P-Δ ULS cases) continue from it, prestressed then
+  loaded. Optimization TAS of such a system adds H0 to its geometry ranges, the tie's pretension in steps (min / max /
+  steps, as Optimization VCF) and the tie among its section roles; each case is fitted and run with its cable. The
+  viewer still dimensions H1 from the springing.
+- Checks: --etabs-import (the elevated system is built, pinned on the ground, meets the tie's target in Pretension and
+  solves; Optimization TAS reproduces its run and steps the pretension); --result-tools-ui (the forms show and hide H0
+  and Cable Force)
+
+## 2026-10-12 · Mcotis opens with the tied arch system
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Starting Mcotis
+- What: The app now opens with the tied arch system — TAS - Tied Arch System, as File → Load TAS… opens it, ready to run —
+  instead of the VCF model. File → Load VCF… still opens the VCF model; should TAS not load, the VCF model opens
+  instead and the status bar says why.
+- Checks: --etabs-import (a fresh start opens TAS with 30 joints and 59 frames, ready to run)
+
 ## 2026-10-12 · Optimization TAS
 - Status: Done
 - Who: Philip Pham, Claude
@@ -31,7 +57,8 @@ continues on the next lines, indented by two spaces):
   System would (an odd number of bays or H2 not above H1 is skipped with the reason), analyses it with the internal FEM
   and lists it in the Optimization Results table — the same table, run loop, checks and cost as Optimization VCF, which
   now share one loop. The default space is 1,296 cases. Needs the tied arch system open (File → Load TAS… or Edit →
-  Tied Arch System…); the open model is not changed.
+  Tied Arch System…); the open model is not changed. The span of an arch is L: the model view labels it "Span L = 120 m",
+  and the form and the results give the limit as L/250 (480 mm for TAS).
 - Checks: --etabs-import (a case with the model's inputs deflects as Run FEM Analysis of Load TAS; odd bays skipped;
   section candidates change the result; bad ranges refused); --result-tools-ui; --fem-model (Optimization VCF unchanged)
 

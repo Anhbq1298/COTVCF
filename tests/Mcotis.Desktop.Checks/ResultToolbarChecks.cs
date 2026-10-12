@@ -356,15 +356,42 @@ internal static class ResultToolbarChecks
         static string Kn(double value) => value.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
         var startCount = tas.SpaceText;
         var loads = tas.LoadText;
+        var limit = tas.LimitShown;
         tas.SetRange("Bays", "max", "14");
         Idle();
-        Check(startCount.EndsWith($"{Kn(1296)} combinations", StringComparison.Ordinal) &&
+        Check(startCount.EndsWith($"{Kn(1296)} combinations", StringComparison.Ordinal) && limit.StartsWith("limit L/250 = 480.0 mm", StringComparison.Ordinal) &&
               loads.Contains($"SLS {Kn(9_000)} … {Kn(42_000)} kN", StringComparison.Ordinal) && loads.Contains($"ULS {Kn(12_600)} … {Kn(58_500)} kN", StringComparison.Ordinal) &&
               tas.SpaceText.EndsWith($"{Kn(2592)} combinations", StringComparison.Ordinal) && tas.OkButton.IsEnabled && !tas.RunButton.IsEnabled &&
               tas.FormSettings().Geometry["Bays"].Values().SequenceEqual([12.0, 14.0]) && tas.Preview.Model.Points.Count == 30,
-            $"Optimization TAS opens on the TAS system with 1,296 combinations and the SLS / ULS point load range ({loads}); 12 … 14 bays doubles them; " +
+            $"Optimization TAS opens on the TAS system with 1,296 combinations, the limit L/250 ({limit}) and the SLS / ULS point load range ({loads}); 12 … 14 bays doubles them; " +
             "Run waits for the tied arch system to be open");
         tas.Close();
+
+        // with the elevated cable: Edit → Tied Arch System shows H0 and its Cable Force sheet; Optimization TAS has H0, the
+        // tie's pretension and the tie among its section roles
+        var elevated = EtabsImportChecks.NewViewModel(out _);
+        elevated.ApplyTiedArchSystem(Mcotis.Desktop.Application.Etabs.TiedArchParameters.Default with { ElevatedCable = true });
+        var edit = new TiedArchWindow(elevated) { Owner = window };
+        edit.Show();
+        Idle();
+        var shown = edit.ElevatedCableBox.IsChecked == true && edit.CableHeightBox.Visibility == Visibility.Visible && edit.CableSheet.IsEnabled &&
+                    edit.CableHeightBox.Text == "10" && edit.CablePretensionBox.Text == "20000" && edit.CableSectionText.Text == "192T15.7" && edit.Preview.Model.Members.Any(member => member.Kind == MemberKind.Cable);
+        edit.ElevatedCableBox.IsChecked = false;
+        Idle();
+        var hidden = edit.CableHeightBox.Visibility == Visibility.Collapsed && !edit.CableSheet.IsEnabled && edit.Preview.Model.Members.All(member => member.Kind != MemberKind.Cable);
+        edit.Close();
+        var optimize = new OptimizationTasWindow(elevated) { Owner = window };
+        optimize.Show();
+        Idle();
+        optimize.CableStepsBox.Text = "3";
+        optimize.CableMaxBox.Text = "30000";
+        Idle();
+        var settings = optimize.FormSettings();
+        Check(shown && hidden && optimize.CableSheet.IsEnabled && settings.ElevatedCable && settings.Geometry.ContainsKey("H0") && settings.CableStepCount == 3 &&
+              optimize.SpaceText.EndsWith($"{Kn(1296 * 3)} combinations", StringComparison.Ordinal) && optimize.Preview.Model.Members.Any(member => member.Kind == MemberKind.Cable),
+            "with the elevated cable, Edit → Tied Arch System shows H0 = 10 m and the tie (192T15.7, 20,000 kN) on Cable Force, and hides both without it; " +
+            "Optimization TAS adds H0 and the tie's pretension steps (3 steps triple the cases)");
+        optimize.Close();
     }
 
     /// <summary>One form per member (asked for by the user, 2026-10-12: the separate Member Assignments form was redundant):

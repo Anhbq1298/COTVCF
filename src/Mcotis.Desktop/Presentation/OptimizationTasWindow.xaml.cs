@@ -47,18 +47,20 @@ public partial class OptimizationTasWindow : Window
         {
             foreach (var grid in new[] { GeometryGrid, LoadGrid, FrameGrid }) { grid.Children.Clear(); grid.RowDefinitions.Clear(); }
             geometry.Clear(); loads.Clear(); roleSections.Clear();
-            var start = kept ?? TasOptimization.Start(current);
+            // kept settings of a system with (or without) the elevated cable do not fit the other
+            var start = kept is not null && kept.ElevatedCable == current.ElevatedCable ? kept : TasOptimization.Start(current);
             AddHeader(GeometryGrid, "Input");
-            foreach (var parameter in TasOptimization.GeometryParameters)
+            foreach (var parameter in TasOptimization.GeometryParametersOf(current.ElevatedCable))
                 geometry[parameter.Key] = AddRange(GeometryGrid, parameter, start.Geometry[parameter.Key]);
             AddHeader(LoadGrid, "Load");
             foreach (var parameter in TasOptimization.LoadParameters)
                 loads[parameter.Key] = AddRange(LoadGrid, parameter, start.Loads[parameter.Key]);
 
             var frames = viewModel.TasSectionNames();
-            foreach (var role in Enum.GetValues<TiedArchRole>())
+            foreach (var role in Enum.GetValues<TiedArchRole>().Where(role => role != TiedArchRole.Cable || current.ElevatedCable))
             {
-                var picker = new CandidatePicker(frames, start.RoleSections.TryGetValue(role, out var picked) ? picked : [], Refresh);
+                var names = role == TiedArchRole.Cable ? viewModel.TasCableSectionNames() : frames;
+                var picker = new CandidatePicker(names, start.RoleSections.TryGetValue(role, out var picked) ? picked : [], Refresh);
                 roleSections[role] = picker;
                 var row = FrameGrid.RowDefinitions.Count;
                 FrameGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -76,6 +78,15 @@ public partial class OptimizationTasWindow : Window
             DeflectionResultCombo.SelectedItem = chosen is not null && DeflectionResultCombo.Items.Contains(chosen) ? chosen : null;
             SpanRatioBox.Text = (kept?.SpanRatio ?? VcfOptimization.DefaultSpanRatio).ToString("0.###", CultureInfo.CurrentCulture);
             UpliftLimitBox.Text = (kept?.UpliftLimitMm ?? VcfOptimization.DefaultUpliftLimitMm).ToString("0.###", CultureInfo.CurrentCulture);
+            // Cable Force: the tie of a system with the elevated cable
+            CableSheet.IsEnabled = current.ElevatedCable;
+            CableNameText.Text = $"{TiedArchSystem.CableName} (tie at H0)";
+            CableStepsBox.Text = start.CableSteps.ToString(CultureInfo.CurrentCulture);
+            CableMinBox.Text = start.CableForce.Min.ToString("0.###", CultureInfo.CurrentCulture);
+            CableMaxBox.Text = start.CableForce.Max.ToString("0.###", CultureInfo.CurrentCulture);
+            CableNote.Text = current.ElevatedCable
+                ? "The tie is fitted to this force in the Pretension case of each case (as the VCF cables); SLS and ULS continue from it. Min = Max keeps it fixed."
+                : "The open system has no elevated cable — tick With elevated cable on Edit → Tied Arch System to tie the arch.";
         }
         finally { loading = false; }
         Refresh();
@@ -134,6 +145,9 @@ public partial class OptimizationTasWindow : Window
         DeflectionResult = DeflectionResultCombo.SelectedItem as string,
         SpanRatio = Number(SpanRatioBox),
         UpliftLimitMm = Number(UpliftLimitBox),
+        ElevatedCable = current.ElevatedCable,
+        CableForce = new VcfForceSpan(Number(CableMinBox), Number(CableMaxBox)),
+        CableSteps = int.TryParse(CableStepsBox.Text, NumberStyles.Integer, CultureInfo.CurrentCulture, out var steps) ? steps : 0,
     };
 
     private void Input_Changed(object sender, RoutedEventArgs e) => Refresh();
@@ -179,7 +193,7 @@ public partial class OptimizationTasWindow : Window
         if (!valid) { LimitText.Text = ""; return; }
         var (low, high) = (TasOptimization.ParametersAt(settings, range => range.Min).Span * 1000 / settings.SpanRatio,
             TasOptimization.ParametersAt(settings, range => range.Max).Span * 1000 / settings.SpanRatio);
-        LimitText.Text = "limit " + (Math.Abs(high - low) < 0.05 ? $"{low:0.0} mm" : $"{low:0.0} … {high:0.0} mm") +
+        LimitText.Text = $"limit L/{settings.SpanRatio:0.###} = " + (Math.Abs(high - low) < 0.05 ? $"{low:0.0} mm" : $"{low:0.0} … {high:0.0} mm") +
             (settings.DeflectionResult is null ? " · no result chosen: largest over every solved result" : "");
     }
 
@@ -192,7 +206,7 @@ public partial class OptimizationTasWindow : Window
         try
         {
             var (model, supports, sections) = viewModel.PreviewTiedArch(p);
-            var deck = model.Points.Values.Where(point => Math.Abs(point.Position.Z - p.DeckHeight) < 1e-6).OrderBy(point => point.Position.X).ToArray();
+            var deck = model.Points.Values.Where(point => Math.Abs(point.Position.Z - p.DeckElevation) < 1e-6).OrderBy(point => point.Position.X).ToArray();
             Preview.Model = model;
             Preview.PinSupportPoints = supports;
             Preview.MemberSections = sections;
@@ -214,6 +228,7 @@ public partial class OptimizationTasWindow : Window
 
     internal string SpaceText => SpaceSummary.Text;
     internal string LoadText => LoadSummary.Text;
+    internal string LimitShown => LimitText.Text;
 
     private void Reset_Click(object sender, RoutedEventArgs e) => Load(null);
     private void Ok_Click(object sender, RoutedEventArgs e) => Confirm(run: false);

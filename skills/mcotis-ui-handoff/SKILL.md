@@ -201,6 +201,10 @@ earlier tall-header / large-button / blue-block look.
     and Sections (candidates per `TiedArchRole`), the same deflection check (read on the top chord joints, limit L / ratio)
     and preview corners; `TasOptimizationRunner` builds each case with `TiedArchSystem.Build` and runs through the shared
     `MainViewModel.RunOptimizationAsync` loop into the same `OptimizationResultsWindow`, whose title follows the run.
+    **Edit → Tied Arch System…** has sheets Geometry and Cable Force: **With elevated cable** raises the arch on H0 columns of
+    the arch section (pins on the ground) and ties the springing with the cable TIE (VCF strand 192T15.7, target force in
+    the Pretension pattern; SLS / ULS cases continue from the Pretension case). Optimization TAS then adds H0, a Cable Force
+    sheet (min / max / steps) and the tie cable role.
     **Optimization VCF…** opens the modal `OptimizationVcfWindow`: the Edit → VCF Geometry inputs as a
     search space — sheet **Geometry** has Min / Max / Step (and the value count n) per parameter (bays, bay width, truss
     depth, clear height, back-span, back-stay height; keys shared with VcfGeometryWindow). The middle chord is **not** a

@@ -44,7 +44,7 @@ public partial class OptimizationResultsWindow : Window
             Binding = new Binding(nameof(VcfOptimizationRow.Deflection)), SortMemberPath = nameof(VcfOptimizationRow.MaxDeflectionMm) });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "Span [m]", MinWidth = 70, ElementStyle = numeric, Binding = new Binding(nameof(VcfOptimizationRow.Span)) });
         var ratio = viewModel.OptimizationSpanRatio;
-        ResultsGrid.Columns.Add(new DataGridTextColumn { Header = $"Limit span/{ratio:0.###} [mm]", MinWidth = 110, ElementStyle = numeric, Binding = new Binding(nameof(VcfOptimizationRow.Limit)) });
+        ResultsGrid.Columns.Add(new DataGridTextColumn { Header = viewModel.OptimizationTitle == "Optimization TAS" ? $"Limit L/{ratio:0.###} [mm]" : $"Limit span/{ratio:0.###} [mm]", MinWidth = 110, ElementStyle = numeric, Binding = new Binding(nameof(VcfOptimizationRow.Limit)) });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "δ / limit", MinWidth = 70, ElementStyle = numeric,
             Binding = new Binding(nameof(VcfOptimizationRow.Ratio)), SortMemberPath = nameof(VcfOptimizationRow.Utilisation) });
         var uplift = viewModel.OptimizationUpliftLimitMm;
