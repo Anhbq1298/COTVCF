@@ -29,7 +29,7 @@ internal static class TemplateBuildingChecks
         double imposed = 2 * (4 + 6) * (10 + 12) + 3 * 5 * (7 + 9); // 680 kN, direct independent grid accounting
         var compiled = ModelCompiler.Compile(d);
         Check.Assert(compiled.Success, "spatial template compiles with full 3D DOFs");
-        var solved = LinearStaticSolver.Solve(compiled.Model!, d.LoadCases.Keys.Single());
+        var solved = StaticSolver.Solve(compiled.Model!, d.LoadCases.Keys.Single());
         Check.Assert(solved.Success && Math.Abs(solved.Result!.Joints.Sum(j => j.Reactions[2]) - imposed) < imposed * 1e-9,
             "summed vertical reactions balance the independently counted 680 kN line loading");
         Check.Assert(solved.Result!.Joints.All(j => j.Displacements.All(double.IsFinite)) &&
@@ -37,7 +37,7 @@ internal static class TemplateBuildingChecks
         double frameWeight = d.Frames.Values.Sum(f => d.Points[f.StartPointId].Position.DistanceTo(d.Points[f.EndPointId].Position) * .02 * 78.5);
         var weighted = new DocumentSession();
         weighted.Execute(TemplateBuilding.Create(input with { IncludeSelfWeight = true }));
-        var weightedResult = LinearStaticSolver.Solve(ModelCompiler.Compile(weighted.Document).Model!, weighted.Document.LoadCases.Keys.Single());
+        var weightedResult = StaticSolver.Solve(ModelCompiler.Compile(weighted.Document).Model!, weighted.Document.LoadCases.Keys.Single());
         Check.Assert(weightedResult.Success && Math.Abs(weightedResult.Result!.Joints.Sum(j => j.Reactions[2]) - imposed - frameWeight) < 1e-6, "optional member self-weight adds once to the entered beam line loads");
         session.Undo(); Check.Assert(ReferenceEquals(session.Document, original), "template generation is one undoable transaction");
         session.Redo(); Check.Assert(ReferenceEquals(session.Document, d), "redo restores exactly the same generated IDs and loads");
@@ -53,7 +53,7 @@ internal static class TemplateBuildingChecks
             plane.Execute(TemplateBuilding.Create(input with { XBayWidths = xz ? [4] : [], YBayWidths = xz ? [] : [5], BaseRestraint = Restraint.Pinned }));
             var pc = ModelCompiler.Compile(plane.Document);
             Check.Assert(pc.Success && plane.Document.Settings.ActiveDofs == (xz ? DofMask.XZ : DofMask.YZ), "zero bays in one direction selects the corresponding planar DOFs");
-            Check.Assert(LinearStaticSolver.Solve(pc.Model!, plane.Document.LoadCases.Keys.Single()).Success, "pinned-base planar building is stable and solvable");
+            Check.Assert(StaticSolver.Solve(pc.Model!, plane.Document.LoadCases.Keys.Single()).Success, "pinned-base planar building is stable and solvable");
         }
         var folder = Path.Combine(Path.GetTempPath(), "Mcotis-template-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);

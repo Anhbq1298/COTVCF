@@ -9,6 +9,7 @@ namespace Mcotis.Desktop.Presentation;
 public sealed record NativeJointRow(string Point, double UX, double UY, double UZ, double RX, double RY, double RZ,
     double FX, double FY, double FZ, double MX, double MY, double MZ);
 public sealed record NativeFrameRow(string Frame, string End, double N, double V2, double V3, double T, double M2, double M3);
+public sealed record NativeCableRow(string Cable, double Tension, string State, double? Target, double Pretension, double? FitStage, double? Sag, double? StiffnessRatio);
 public sealed record NativeLoadRow(string Frame, string Pattern, string Direction, double Start, double End, double QI, double QJ);
 
 /// <summary>The desktop adapter owns a native session. The libraries never read legacy geometry or presentation types.</summary>
@@ -17,15 +18,15 @@ public sealed class NativeModelViewModel : Observable
     public DocumentSession Session { get; }
     public DocumentLifecycle Files { get; }
     public AnalysisResultTracker Results { get; }
-    private LinearStaticResult? result;
+    private StaticResult? result;
     private ModelDocument? resultInput;
     private bool busy;
     public bool Busy { get => busy; private set { if (Set(ref busy, value)) Notify(nameof(Editable)); } }
     public bool Editable => !Busy;
-    private string message = "Ready. Linear static frames; 600 free DOFs / 2,400 total DOFs maximum.";
+    private string message = "Ready. Static analysis of frames and cables; 600 free DOFs / 2,400 total DOFs maximum.";
     public string Message { get => message; set => Set(ref message, value); }
     public string Title => $"Mcotis · Native model · {(Session.FilePath is null ? "TemplateBuilding" : System.IO.Path.GetFileName(Session.FilePath))}{(Session.IsDirty ? " *" : "")}";
-    public string Summary => $"{Session.Document.Points.Count} points · {Session.Document.Frames.Count} frames · DOFs: {Session.Document.Settings.ActiveDofs} · Results: {Results.State}" +
+    public string Summary => $"{Session.Document.Points.Count} points · {Session.Document.Frames.Count} frames · {Session.Document.Cables.Count} cables · DOFs: {Session.Document.Settings.ActiveDofs} · Results: {Results.State}" +
         (result is not null && resultInput is not null ? $" ({resultInput.LoadCases[result.LoadCaseId].Name}, revision {result.Revision})" : "");
     public GeometryModel Geometry => new(Session.Document.Points.Values.ToDictionary(p => p.Name, p => new StructuralPoint(p.Name, new(p.Position.X, p.Position.Y, p.Position.Z))),
         Session.Document.Frames.Values.Select(f => new StructuralMember(f.Name, Session.Document.Points[f.StartPointId].Name, Session.Document.Points[f.EndPointId].Name, MemberKind.Frame))
@@ -40,6 +41,8 @@ public sealed class NativeModelViewModel : Observable
     public IEnumerable<NativeFrameRow> Frames => result is null || resultInput is null ? [] : result.Frames.OrderBy(f => resultInput.Frames[f.ParentObjectId].Name, StringComparer.Ordinal).SelectMany(f => Enumerable.Range(0, 2).Select(end => new NativeFrameRow(
         resultInput.Frames[f.ParentObjectId].Name, end == 0 ? "I" : "J", f.LocalEndActions[6 * end], f.LocalEndActions[6 * end + 1], f.LocalEndActions[6 * end + 2],
         f.LocalEndActions[6 * end + 3], f.LocalEndActions[6 * end + 4], f.LocalEndActions[6 * end + 5])));
+    public IEnumerable<NativeCableRow> Cables => result is null || resultInput is null ? [] : result.Cables.OrderBy(c => resultInput.Cables[c.ParentObjectId].Name, StringComparer.Ordinal).Select(c => new NativeCableRow(
+        resultInput.Cables[c.ParentObjectId].Name, c.Tension, c.Active ? "Taut" : "Slack", c.TargetForce, c.AppliedPretension, c.FitStageTension, c.Sag, c.TangentStiffnessRatio));
     public IEnumerable<NativeLoadRow> Loads => Session.Document.Loads.Values.OfType<FrameDistributedLoad>().OrderBy(l => Session.Document.Frames[l.TargetId].Name, StringComparer.Ordinal).Select(l => new NativeLoadRow(
         Session.Document.Frames[l.TargetId].Name, Session.Document.LoadPatterns[l.PatternId].Name, l.Direction.ToString(), l.RelativeStart, l.RelativeEnd, l.ValueStart, l.ValueEnd));
 
@@ -59,7 +62,7 @@ public sealed class NativeModelViewModel : Observable
     {
         var id = SelectedCase?.Id;
         SelectedCase = Cases.FirstOrDefault(c => c.Id == id) ?? Cases.FirstOrDefault();
-        foreach (var name in new[] { nameof(Session), nameof(Title), nameof(Summary), nameof(Geometry), nameof(Supports), nameof(Cases), nameof(Joints), nameof(Frames), nameof(Loads) }) Notify(name);
+        foreach (var name in new[] { nameof(Session), nameof(Title), nameof(Summary), nameof(Geometry), nameof(Supports), nameof(Cases), nameof(Joints), nameof(Frames), nameof(Cables), nameof(Loads) }) Notify(name);
     }
     public async Task RunAsync(CancellationToken cancellationToken = default)
     {
@@ -67,19 +70,24 @@ public sealed class NativeModelViewModel : Observable
         if (SelectedCase is not { } loadCase) { Message = "Select an existing load case."; return; }
         Busy = true;
         var run = Results.Begin();
-        Message = "Compiling model and solving linear static frames…";
+        Message = "Compiling the model and solving…";
         try
         {
             var outcome = await Task.Run(() =>
             {
                 var compiled = ModelCompiler.Compile(run.Input, run.Revision);
-                return compiled.Success ? LinearStaticSolver.Solve(compiled.Model!, loadCase.Id, cancellationToken: cancellationToken)
-                    : new LinearStaticOutcome(null, compiled.Issues);
+                return compiled.Success ? StaticSolver.Solve(compiled.Model!, loadCase.Id, cancellationToken: cancellationToken)
+                    : new StaticOutcome(null, compiled.Issues);
             }, cancellationToken);
             if (outcome.Success)
             {
                 result = outcome.Result; resultInput = run.Input; Results.Complete(run);
-                Message = $"Case {loadCase.Name}: {result!.Diagnostics.SolvedDofCount} DOFs solved; scaled residual {result.Diagnostics.ScaledResidual:G4}. Translations m, rotations rad, reactions kN / kN·m.";
+                var d = result!.Diagnostics;
+                Message = $"Case {loadCase.Name}: {d.SolvedDofCount} DOFs solved; scaled residual {d.ScaledResidual:G4}" +
+                    (d.NonlinearIterations > 0 ? $"; cable equilibrium in {d.NonlinearIterations} iterations" : "") +
+                    (d.CableFit is { } fit ? $"; cable target forces met within {fit.WorstDeviationPercent:G3}% in {fit.Iterations} fitting runs" : "") +
+                    ". Translations m, rotations rad, forces kN, moments kN·m." +
+                    string.Concat(outcome.Issues.Where(i => i.Severity == Mcotis.Core.ValidationSeverity.Warning).Select(i => $"{Environment.NewLine}Note — {i.Message}"));
             }
             else
             {

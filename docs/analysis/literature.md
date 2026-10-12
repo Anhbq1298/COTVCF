@@ -4,7 +4,9 @@ Repository note (2026-10-12): this is the supplied research register. Book/PDF d
 claims, not independently inspected source passages in this implementation. See [foundation-status.md](foundation-status.md)
 for the actual code audit, inspected ALG-04 behavioral evidence and tests, and
 [spatial-static-verification.md](spatial-static-verification.md) for the 3D linear static engine: the B1 passages for
-ALG-01/02/03/05 were inspected there and the code is cross-checked numerically. No record has been promoted to
+ALG-01/02/03/05 were inspected there and the code is cross-checked numerically, and
+[cable-static-verification.md](cable-static-verification.md) for cables, target forces, staged cases and split frames
+(CABLE-01…04, CASE-01, TOPO-01: coded and cross-checked numerically; their source texts were not inspected). No record has been promoted to
 SOURCE_VERIFIED or RELEASED — that needs a reviewer's approval; the mass-based P-Delta gate remains open.
 
 **Status:** living research / verification register — not a declaration that all equations or algorithms have been verified.
@@ -62,6 +64,13 @@ SOURCE_VERIFIED or RELEASED — that needs a reviewer's approval; the mass-based
 | ALG-12 | Modal participation, mass normalization and effective masses | C6; independent vibration source needed | OPEN | mass-orthogonality and sum participation checks |
 | ALG-13 | Full instability diagnosis using factorization/nullspace and scaled residual | B1 §§2.6–2.10 partial background; B2 Chs.7–9; CSI standard solver behavior source TBD | OPEN | 6 rigid modes, rank-deficient frame, near-singular springs |
 | ALG-14 | Stiffness from converged P-Delta state used in subsequent modal/static | C3/C4 | DOCUMENTED_BEHAVIOR | frequency shift under compression, consistent stiffness state |
+| TOPO-01 | A frame is connected at every point on its axis; one element per piece | Application rule | CODED; cross-checked (closed forms, OpenSeesPy, archived planar solver); reviewer pending | Done: see cable-static-verification.md |
+| STAT-01 | Internal actions and the deflected line at stations along a frame | Statics and the beam of ALG-01 | CODED; cross-checked (closed forms, the same frame with joints at the stations, archived planar solver stations); not compared with OpenSeesPy; reviewer pending | Done: see cable-static-verification.md |
+| CABLE-01 | Straight tension-only cable with a lack of fit, small displacements | Kanno 2011 as cited by the archived solver; not inspected | CODED; cross-checked (closed forms, OpenSeesPy, archived planar solver); reviewer pending | Done: slack/taut, pretension, 3D rotation |
+| CABLE-02 | Cable sag: shallow parabola and Ernst's equivalent stiffness | Irvine 1981; Ernst 1965 as cited by the archived solver; not inspected | CODED; numerical evidence only (closed forms, exact catenary for one cable, archived planar solver); no independent program; reviewer pending | Open: an independent program; steep or slack-heavy cables |
+| CABLE-03 | Equilibrium as energy minimum: Newton, line search, Levenberg shift | Nocedal & Wright 2006 as cited by the archived solver; not inspected | CODED; cross-checked; residual, stability and balance gates at run time; reviewer pending | Done: see record |
+| CABLE-04 | Cable target forces: Newton on pretensions, finite-difference Jacobian, minimum-norm correction | Own algorithm | CODED; cross-checked (closed forms, OpenSeesPy pretension recovery, archived planar solver iterates); reviewer pending | Open: nested fit stages; unmet targets are refused |
+| CASE-01 | Staged nonlinear static cases carry earlier loads and the fit stage's pretension | Follows from CABLE-01/02 | CODED; cross-checked; reviewer pending | Done: see record |
 
 **Warning:** Standard numerical linear algebra equations in this register are *proposed implementation targets* until audited against the listed source. Their appearance here does not certify an exact CSI implementation.
 

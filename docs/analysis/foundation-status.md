@@ -24,7 +24,7 @@ six-component restraints/releases, independent Frame/Cable/Shell objects and imm
 provides transactional commands, revision/dirty state, Undo/Redo and hash-linked results. Persistence already provides
 atomic JSON files. These implementations are reused.
 
-`src/Mcotis.Desktop/Geometry/PlanarFrameSolver.cs` remains the desktop's XZ frame/cable solver (three equations per used point).
+`PlanarFrameSolver` (then `src/Mcotis.Desktop/Geometry/`) was the desktop's XZ frame/cable solver when this was written (three equations per used point). It was archived on 2026-10-12 to `tests/Mcotis.Desktop.Checks/Archive/`; the application now analyses with the general solver.
 `src/Mcotis.Desktop/Application/FemStudyService.cs` is its workflow boundary. No legacy solver, integration, MB or presentation
 code changes are part of this milestone. The new library has no reference to the desktop application, WPF, SQLite, CSI or MathNet.
 
@@ -87,11 +87,12 @@ not happened because this milestone has no numerical solver.
 
 1. Done in part — see [spatial-static-verification.md](spatial-static-verification.md): the B1 passages for
    ALG-01/02/03/05 are inspected and recorded; reviewer approval is still missing.
-2. Done for frames without cables — same record: the 3D kernel, dense assembly and solver, six legacy XZ models and
-   twelve independently specified OpenSeesPy models. Still open: cables and target-force fitting, frames with
-   interior joints, the default model, a sparse solver and instability diagnostics.
-3. Wire staged DOF editing and a persistent analysis badge into the future standalone desktop. The current app
-   does not yet expose this library or a Set Degrees of Freedom dialog.
+2. Done for frames — same record: the 3D kernel, dense assembly and solver, six legacy XZ models and twelve
+   independently specified OpenSeesPy models. Done later the same day for cables, target-force fitting, staged cases,
+   cable sag, frames with interior joints and the default model: [cable-static-verification.md](cable-static-verification.md).
+   Still open: a sparse solver and instability diagnostics.
+3. Wire staged DOF editing and a persistent analysis badge into the future standalone desktop. The native
+   workspace exposes the library and its DOF options; the main window runs the same solver with fixed XZ DOFs.
 4. Preserve separate geometric-stiffness, mass, modal and diagnostics gates. ALG-09 remains blocked pending the
    mass-based story P-Delta derivation. Do not label an invented approximation as CSI's method.
 

@@ -35,7 +35,7 @@ internal static class PlanarFrameChecks
             ["BC"] = section with { MemberName = "BC" }
         };
 
-        var result = new PlanarFrameSolver().Solve(geometry, sections,
+        var result = new FemSolver().Solve(geometry, sections,
             new Dictionary<string, FemSectionProperties>(), new Dictionary<string, double>(),
             [new("B", 0, -loadKN)], ["A", "C"]);
         var expectedDeflectionMm = loadKN * Math.Pow(spanM, 3) / (48 * modulusKNPerM2 * inertiaM4) * 1000;
@@ -55,7 +55,7 @@ internal static class PlanarFrameChecks
                             FemResultTable.Build(result, FemResultMode.DeflectedShape).Count == 3,
                         "Each FEM Results mode produces the expected member, support, or joint rows");
 
-        var meshed = new PlanarFrameSolver().Solve(geometry, sections,
+        var meshed = new FemSolver().Solve(geometry, sections,
             new Dictionary<string, FemSectionProperties>(), new Dictionary<string, double>(),
             [new("B", 0, -loadKN)], ["A", "C"], frameMeshSegments: 10);
         var quarter = meshed.Frames.Single(frame => frame.MemberName == "AB").Stations!.Single(station => Math.Abs(station.Fraction - 0.5) < 1e-12);
@@ -68,7 +68,7 @@ internal static class PlanarFrameChecks
               Math.Abs(meshed.MaximumAbsoluteMomentKNm - loadKN * spanM / 4) < 1e-6,
             "A 10-segment frame mesh keeps joint results and recovers analytical quarter-span moment and deflection");
 
-        var continuous = new PlanarFrameSolver().Solve(new GeometryModel(new Dictionary<string, StructuralPoint>(StringComparer.Ordinal)
+        var continuous = new FemSolver().Solve(new GeometryModel(new Dictionary<string, StructuralPoint>(StringComparer.Ordinal)
             {
                 ["A"] = new("A", new(0, 0, 0)), ["M"] = new("M", new(2, 0, 0)), ["B"] = new("B", new(5, 0, 0)), ["C"] = new("C", new(10, 0, 0))
             }, [new("AM", "A", "M", MemberKind.Frame), new("MB", "M", "B", MemberKind.Frame), new("BC", "B", "C", MemberKind.Frame)]),
@@ -95,7 +95,7 @@ internal static class PlanarFrameChecks
         var udlCase = new FemCaseLoads("UDL", new FemLoadSet([], [new FemMemberLoad("Beam", FemLoadDirection.Gravity, 0, 1, udl, udl)], []), 0);
         var pointCase = new FemCaseLoads("PL", new FemLoadSet([], [], [new FemMemberPointLoad("Beam", FemLoadDirection.GlobalZ, 0.3, -loadKN)]), 0);
         var bothCase = new FemCaseLoads("BOTH", FemLoadSet.Sum([udlCase.Loads, pointCase.Loads]), 0);
-        var memberLoadResults = new PlanarFrameSolver().SolveCases(beamOnly, beamSection, new Dictionary<string, FemSectionProperties>(),
+        var memberLoadResults = new FemSolver().SolveCases(beamOnly, beamSection, new Dictionary<string, FemSectionProperties>(),
             new Dictionary<string, double>(), FemLoadSet.Empty, [udlCase, pointCase, bothCase], ["A", "C"], frameMeshSegments: 10);
         var udlResult = memberLoadResults["UDL"];
         var midspan = udlResult.Frames.Single().Stations!.Single(station => Math.Abs(station.Fraction - 0.5) < 1e-12);
@@ -108,7 +108,7 @@ internal static class PlanarFrameChecks
         {
             ["Beam"] = section with { MemberName = "Beam", ReleaseStartRotation = true, ReleaseEndRotation = true }
         };
-        var releasedUdl = new PlanarFrameSolver().SolveCases(beamOnly, releasedSection, new Dictionary<string, FemSectionProperties>(),
+        var releasedUdl = new FemSolver().SolveCases(beamOnly, releasedSection, new Dictionary<string, FemSectionProperties>(),
             new Dictionary<string, double>(), FemLoadSet.Empty, [udlCase], ["A", "C"], frameMeshSegments: 10)["UDL"];
         var releasedMid = releasedUdl.Frames.Single().Stations!.Single(station => Math.Abs(station.Fraction - 0.5) < 1e-12);
         Check(Math.Abs(releasedMid.MomentKNm - udl * spanM * spanM / 8) < 1e-6 &&
@@ -157,7 +157,7 @@ internal static class PlanarFrameChecks
         var (patternRows, caseRows, comboRows) = FemLoadPlan.RowsFromSap(sapLoading, ["LIVE"], []);
         var plan = FemLoadPlan.Build(patternRows, caseRows, comboRows, sapLoading, planSections, geometry, ["LIVE"], [], ["B"]);
         var (fitLoads, planCases) = plan.ForCandidate([new FemAppliedLoad("B", 0, -30, "LIVE")]);
-        var planResults = plan.Complete(new PlanarFrameSolver().SolveCases(geometry, planSections, new Dictionary<string, FemSectionProperties>(),
+        var planResults = plan.Complete(new FemSolver().SolveCases(geometry, planSections, new Dictionary<string, FemSectionProperties>(),
             new Dictionary<string, double>(), fitLoads, planCases, ["A", "C"], frameMeshSegments: 4));
         double TotalRz(string name) => planResults[name].SupportReactions.Sum(reaction => reaction.ReactionZKN);
         var deadTotal = weight * spanM + 20 + 4 * spanM / 2;
@@ -208,7 +208,7 @@ internal static class PlanarFrameChecks
         {
             ["Chord"] = section with { MemberName = "Chord" }, ["Post"] = section with { MemberName = "Post" }
         };
-        var chord = new PlanarFrameSolver().Solve(chordGeometry, chordSections,
+        var chord = new FemSolver().Solve(chordGeometry, chordSections,
             new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["Tie"] = new("Tie", 0.001, modulusKNPerM2, null) },
             new Dictionary<string, double>(), [new("B", 0, -loadKN)], ["A", "C"], frameMeshSegments: 10);
         var chordStations = chord.Frames.Single(frame => frame.MemberName == "Chord").Stations!;
@@ -240,7 +240,7 @@ internal static class PlanarFrameChecks
         {
             ["Cable-BD"] = new("Cable-BD", 0.01, modulusKNPerM2, null)
         };
-        var slackResult = new PlanarFrameSolver().Solve(cableGeometry, beamProperties, cableProperties,
+        var slackResult = new FemSolver().Solve(cableGeometry, beamProperties, cableProperties,
             new Dictionary<string, double> { ["Cable-BD"] = 100 }, [new("B", 0, 500)], ["A", "C", "D"]);
         Check(!slackResult.Cables.Single().Active && slackResult.Cables.Single().AxialForceKN == 0,
             "Pretensioned cable switches cleanly to slack under opposing uplift");
@@ -249,12 +249,12 @@ internal static class PlanarFrameChecks
             "Damped cable equilibrium converges and balances support reactions after cable slackening");
 
         var targets = new Dictionary<string, double> { ["Cable-BD"] = 100 };
-        var unfitted = new PlanarFrameSolver().Solve(cableGeometry, beamProperties, cableProperties,
+        var unfitted = new FemSolver().Solve(cableGeometry, beamProperties, cableProperties,
             targets, [], ["A", "C", "D"]);
-        var fitted = new PlanarFrameSolver().Solve(cableGeometry, beamProperties, cableProperties,
+        var fitted = new FemSolver().Solve(cableGeometry, beamProperties, cableProperties,
             targets, [new("B", 0, -50)], ["A", "C", "D"], targetFitPercent: 1);
         var fittedCable = fitted.Cables.Single();
-        var fittedUnloaded = new PlanarFrameSolver().Solve(cableGeometry, beamProperties, cableProperties,
+        var fittedUnloaded = new FemSolver().Solve(cableGeometry, beamProperties, cableProperties,
             new Dictionary<string, double> { ["Cable-BD"] = fittedCable.AppliedPretensionKN }, [], ["A", "C", "D"]);
         Check(Math.Abs(unfitted.Cables.Single().AxialForceKN - 100) > 1 &&
               fittedCable.PretensionStageForceKN is double stage && Math.Abs(stage - 100) <= 1 &&
@@ -267,7 +267,7 @@ internal static class PlanarFrameChecks
               Math.Abs(fittedCable.FitRatios[^1] - 1) <= 0.01 && Math.Abs(fittedCable.FitRatios[^1] * 100 - fittedCable.PretensionStageForceKN!.Value) < 1e-9,
             "Pretension fitting history gives P_result / P_preset per run, ending at the fitted stage force");
 
-        var fittedMeshed = new PlanarFrameSolver().Solve(cableGeometry, beamProperties, cableProperties,
+        var fittedMeshed = new FemSolver().Solve(cableGeometry, beamProperties, cableProperties,
             targets, [new("B", 0, -50)], ["A", "C", "D"], targetFitPercent: 1, frameMeshSegments: 10);
         Check(fittedMeshed.Frames.Zip(fitted.Frames).All(pair =>
                   Math.Abs(pair.First.MomentStartKNm - pair.Second.MomentStartKNm) < 1e-6 &&
@@ -276,7 +276,7 @@ internal static class PlanarFrameChecks
               Math.Abs(fittedMeshed.Cables.Single().AxialForceKN - fittedCable.AxialForceKN) < 1e-6,
             "Meshed frames give the same end forces and cable forces as unmeshed frames for joint loads");
 
-        var overloaded = new PlanarFrameSolver().Solve(cableGeometry, beamProperties, cableProperties,
+        var overloaded = new FemSolver().Solve(cableGeometry, beamProperties, cableProperties,
             targets, [new("B", 0, -200)], ["A", "C", "D"], targetFitPercent: 1);
         Check(overloaded.Cables.Single().PretensionStageForceKN is double overloadedStage && Math.Abs(overloadedStage - 100) <= 1 &&
               overloaded.Cables.Single().AxialForceKN > 150,
@@ -290,12 +290,12 @@ internal static class PlanarFrameChecks
         {
             ["Cable-BE"] = new("Cable-BE", 0.01, modulusKNPerM2, null)
         };
-        var coupled = new PlanarFrameSolver().Solve(coupledGeometry, beamProperties, coupledCables,
+        var coupled = new FemSolver().Solve(coupledGeometry, beamProperties, coupledCables,
             new Dictionary<string, double> { ["Cable-BD"] = 100, ["Cable-BE"] = 99.5 }, [], ["A", "C", "D", "E"], targetFitPercent: 1);
         Check(coupled.Cables.All(cable => cable.PretensionStageForceKN is double force && Math.Abs(force - cable.TargetForceKN) <= 0.01 * cable.TargetForceKN) &&
               coupled.TargetFitIterations <= 10,
             "Opposing cables on one joint are fitted together to their separate targets");
-        var infeasible = new PlanarFrameSolver().Solve(coupledGeometry, beamProperties, coupledCables,
+        var infeasible = new FemSolver().Solve(coupledGeometry, beamProperties, coupledCables,
             new Dictionary<string, double> { ["Cable-BD"] = 100, ["Cable-BE"] = 60 }, [new("B", 0, -10)], ["A", "C", "D", "E"],
             targetFitPercent: 1, maximumTargetFitIterations: 20);
         var infeasibleRows = FemCableFitRow.FromRun(new FemStudyRun("L01_H01_P02", "L01", "H01", "P02", infeasible)).ToArray();
@@ -319,9 +319,9 @@ internal static class PlanarFrameChecks
             ["Cable-MD"] = new("Cable-MD", 0.01, modulusKNPerM2, null)
         };
         var segmentedTargets = new Dictionary<string, double> { ["Cable-BM"] = 100, ["Cable-MD"] = 100 };
-        var segmentedTaut = new PlanarFrameSolver().Solve(segmentedGeometry, beamProperties, segmentedCables,
+        var segmentedTaut = new FemSolver().Solve(segmentedGeometry, beamProperties, segmentedCables,
             segmentedTargets, [new("B", 0, -50)], ["A", "C", "D"], targetFitPercent: 1);
-        var segmentedSlack = new PlanarFrameSolver().Solve(segmentedGeometry, beamProperties, segmentedCables,
+        var segmentedSlack = new FemSolver().Solve(segmentedGeometry, beamProperties, segmentedCables,
             segmentedTargets, [new("B", 0, 5000)], ["A", "C", "D"], targetFitPercent: 1);
         Check(segmentedTaut.Cables.All(cable => cable.PretensionStageForceKN is double force && Math.Abs(force - 100) <= 1) &&
               segmentedSlack.Cables.All(cable => !cable.Active) &&
@@ -379,7 +379,7 @@ internal static class PlanarFrameChecks
         // the loads each case ends up with: the stage's self-weight is carried into the cases that continue from it
         var plan = FemLoadPlan.Build(patterns, cases, [], SapFemLoading.Empty, sections, geometry, tab01, pretension, ["B"]);
         var (fitLoads, planCases) = plan.ForCandidate([new FemAppliedLoad("B", 0, -30, "DEAD_ABOVE"), new FemAppliedLoad("B", 0, -10, "LL_ABOVE")]);
-        var results = new PlanarFrameSolver().SolveCases(geometry, sections, new Dictionary<string, FemSectionProperties>(),
+        var results = new FemSolver().SolveCases(geometry, sections, new Dictionary<string, FemSectionProperties>(),
             new Dictionary<string, double>(), fitLoads, planCases, ["A", "C"], frameMeshSegments: 4);
         double TotalRz(string name) => results[name].SupportReactions.Sum(reaction => reaction.ReactionZKN);
         Check(plan.FitCase == "Pretension" && plan.FitCases.SequenceEqual(["Pretension"]) && planCases.All(item => item.PretensionFactor == 1) &&
@@ -444,7 +444,7 @@ internal static class PlanarFrameChecks
             geometry.Members.Where(member => member.Kind == MemberKind.Frame).ToArray());
         double Along(double fx, double fz)
         {
-            var joint = new PlanarFrameSolver().Solve(beamOnly, beams, new Dictionary<string, FemSectionProperties>(), new Dictionary<string, double>(),
+            var joint = new FemSolver().Solve(beamOnly, beams, new Dictionary<string, FemSectionProperties>(), new Dictionary<string, double>(),
                 [new("B", fx, fz)], ["A", "C"]).Joints.Single(item => item.PointName == "B");
             return cos * joint.UXM + sin * joint.UZM;
         }
@@ -470,9 +470,9 @@ internal static class PlanarFrameChecks
             px == 0 && pz == 0 ? [] : [new FemJointLoad("B", px, pz)],
             cableWeight == 0 ? [] : [new FemMemberLoad("Stay", FemLoadDirection.Gravity, 0, 1, cableWeight, cableWeight)], []);
         FemAnalysisResult Solve(double pretension, double cableWeight, bool sag, double px = 0, double pz = 0, double? fit = null) =>
-            new PlanarFrameSolver().SolveCases(geometry, beams, stay, new Dictionary<string, double> { ["Stay"] = pretension },
+            new FemSolver().SolveCases(geometry, beams, stay, new Dictionary<string, double> { ["Stay"] = pretension },
                 Loads(cableWeight), [new FemCaseLoads("Case", Loads(cableWeight, px, pz), 1)], ["A", "C", "E"], default, fit,
-                PlanarFrameSolver.DefaultTargetFitIterations, 1, sag)["Case"];
+                FemSolver.DefaultTargetFitIterations, 1, sag)["Case"];
         bool Same(double value, double expected) => Math.Abs(value - expected) <= 1e-6 * Math.Max(100, Math.Abs(expected));
 
         // a taut stay (about 3,000 kN once the beam has given way under it): the sag is a small correction
@@ -516,7 +516,7 @@ internal static class PlanarFrameChecks
             [.. geometry.Members.Where(member => member.Kind == MemberKind.Frame), new("Hanger", "B", "D", MemberKind.Cable)]);
         var hanger = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["Hanger"] = new("Hanger", area, modulusKNPerM2, null) };
         var hangerLoads = new FemLoadSet([], [new FemMemberLoad("Hanger", FemLoadDirection.Gravity, 0, 1, weight, weight)], []);
-        FemCableResponse Hanger(bool sag) => new PlanarFrameSolver().SolveCases(vertical, beams, hanger, new Dictionary<string, double> { ["Hanger"] = 100 },
+        FemCableResponse Hanger(bool sag) => new FemSolver().SolveCases(vertical, beams, hanger, new Dictionary<string, double> { ["Hanger"] = 100 },
             FemLoadSet.Empty, [new FemCaseLoads("Case", hangerLoads, 1)], ["A", "C", "D"], cableSag: sag)["Case"].Cables.Single();
         Check(Hanger(true).SagM is null && Hanger(true).AxialForceKN == Hanger(false).AxialForceKN,
             "A vertical cable does not sag under its own weight: only the load normal to the chord counts");
@@ -543,7 +543,7 @@ internal static class PlanarFrameChecks
         var (patternRows, caseRows, comboRows) = FemLoadPlan.RowsFromSap(sapLoading, [], []);
         var plan = FemLoadPlan.Build(patternRows, caseRows, comboRows, sapLoading, planSections, geometry, [], [], []);
         var (planFitLoads, planCases) = plan.ForCandidate([]);
-        FemCableResponse Dead(bool sag) => plan.Complete(new PlanarFrameSolver().SolveCases(geometry, beams, stay, new Dictionary<string, double> { ["Stay"] = 0 },
+        FemCableResponse Dead(bool sag) => plan.Complete(new FemSolver().SolveCases(geometry, beams, stay, new Dictionary<string, double> { ["Stay"] = 0 },
             planFitLoads, planCases, ["A", "C", "E"], cableSag: sag))["DEAD"].Cables.Single();
         Check(Same(Dead(true).AxialForceKN, Reference(0, weight, true)) && Dead(true).SagM is > 0 &&
               Same(Dead(false).AxialForceKN, Reference(0, weight, false)) && Dead(false).SagM is null &&
@@ -569,7 +569,7 @@ internal static class PlanarFrameChecks
               stages[1].Cases.All(item => item.PretensionFactor == 1),
             "Each case that applies the target-force pattern is a pretension stage of its own; a case continuing from one belongs to that stage");
         var stageTargets = new Dictionary<string, double> { ["Stay"] = 1500 };
-        var stageResults = stages.SelectMany(stage => new PlanarFrameSolver().SolveCases(geometry, beams, planSections.Where(pair => pair.Key == "Stay").ToDictionary(pair => pair.Key, pair => pair.Value),
+        var stageResults = stages.SelectMany(stage => new FemSolver().SolveCases(geometry, beams, planSections.Where(pair => pair.Key == "Stay").ToDictionary(pair => pair.Key, pair => pair.Value),
             stageTargets, stage.FitLoads, stage.Cases, ["A", "C", "E"], default, 0.01, cableSag: true)).ToDictionary(pair => pair.Key, pair => pair.Value.Cables.Single());
         Check(Math.Abs(stageResults["Pretension"].AxialForceKN - 1500) <= 0.15 + 1e-9 && Math.Abs(stageResults["PT only"].AxialForceKN - 1500) <= 0.15 + 1e-9 &&
               stageResults["Staged"].AppliedPretensionKN == stageResults["Pretension"].AppliedPretensionKN &&

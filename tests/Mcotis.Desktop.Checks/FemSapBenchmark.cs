@@ -234,7 +234,7 @@ internal static class FemSapBenchmark
         {
             var failures = new Failures();
             var runs = service.Analyze(state.Baseline, top, middle, bottom, supports, which, properties, failures, default, tolerance,
-                PlanarFrameSolver.DefaultTargetFitIterations, mesh, loadPlan, cableSag);
+                FemSolver.DefaultTargetFitIterations, mesh, loadPlan, cableSag);
             if (failures.Items.Count > 0) throw new InvalidOperationException("FEM cases did not solve: " + string.Join(" | ", failures.Items.Take(5)));
             return runs;
         }
@@ -302,7 +302,7 @@ internal static class FemSapBenchmark
         var everyCase = Plan(row => row.Supported, sections);
         var subset = candidates.Where((_, index) => index % 15 == 0).ToArray();
         var subsetRuns = service.Analyze(state.Baseline, top, middle, bottom, supports, subset, sections, null, default, tolerance,
-            PlanarFrameSolver.DefaultTargetFitIterations, mesh, everyCase, true);
+            FemSolver.DefaultTargetFitIterations, mesh, everyCase, true);
         Check(everyCase.FitCases.Count > 1 && subsetRuns.Count == subset.Length && subsetRuns.All(run =>
                 run.ResultFor(reference.CableCase).Cables.Zip(physical[run.Id].ResultFor(reference.CableCase).Cables)
                     .All(pair => Math.Abs(pair.First.AxialForceKN - pair.Second.AxialForceKN) < 1e-6 * Math.Max(1, pair.Second.AxialForceKN))),

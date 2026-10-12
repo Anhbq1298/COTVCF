@@ -8,10 +8,10 @@ public sealed partial class MainViewModel
     internal void ApplyPlanarAnalysisSettings(AnalysisSettings settings)
     {
         if (!CanEditFemModel) throw new InvalidOperationException("Unlock the model and finish any active run before changing analysis settings.");
-        if (settings.ActiveDofs != DofMask.XZ) throw new ArgumentException("The planar cable/frame solver requires the XZ DOF preset.");
+        if (settings.ActiveDofs != DofMask.XZ) throw new ArgumentException("This workspace's model is planar: it is analysed with the XZ degrees of freedom.");
         if (!double.IsFinite(settings.CableFitTolerancePercent) || settings.CableFitTolerancePercent <= 0 || settings.CableFitTolerancePercent >= 100 ||
             settings.CableFitMaxIterations < 1 || settings.CableFitMaxIterations > 10000 || settings.FrameMeshSegments < 1 ||
-            settings.FrameMeshSegments > Geometry.PlanarFrameSolver.MaximumFrameMeshSegments)
+            settings.FrameMeshSegments > Application.FemSolver.MaximumFrameMeshSegments)
             throw new ArgumentException("Invalid cable fitting or frame mesh settings.");
         if (settings == PlanarAnalysisSettings) return;
         FemTargetFitPercent = settings.CableFitTolerancePercent;

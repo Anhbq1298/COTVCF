@@ -182,7 +182,7 @@ internal static class FemModelFileChecks
             {
                 ["AB"] = property with { MemberName = "AB" }, ["BC"] = property with { MemberName = "BC" },
             };
-            var result = new PlanarFrameSolver().Solve(beam, frames, new Dictionary<string, FemSectionProperties>(),
+            var result = new FemSolver().Solve(beam, frames, new Dictionary<string, FemSectionProperties>(),
                 new Dictionary<string, double>(), [new("B", 0, -100)], ["A", "C"]);
             return -result.Joints.Single(joint => joint.PointName == "B").UZM;
         }

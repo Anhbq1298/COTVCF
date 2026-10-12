@@ -886,7 +886,7 @@ public sealed partial class MainViewModel : Observable
             Set(ref femTargetFitPercent, value);
         }
     }
-    private int femTargetFitIterations = PlanarFrameSolver.DefaultTargetFitIterations;
+    private int femTargetFitIterations = FemSolver.DefaultTargetFitIterations;
     /// <summary>Maximum pretension adjustments per FEM case while fitting cable tensions to their targets.</summary>
     public int FemTargetFitIterations
     {
@@ -1012,15 +1012,15 @@ public sealed partial class MainViewModel : Observable
     public const int FemViewPage = 2;
     public const int FemResultsPage = FemAnalysisPage;
 
-    private int femFrameMeshSegments = PlanarFrameSolver.DefaultFrameMeshSegments;
+    private int femFrameMeshSegments = FemSolver.DefaultFrameMeshSegments;
     /// <summary>Number of equal sub-elements each frame is divided into for the FEM (cables are not meshed).</summary>
     public int FemFrameMeshSegments
     {
         get => femFrameMeshSegments;
         set
         {
-            if (value < 1 || value > PlanarFrameSolver.MaximumFrameMeshSegments)
-                throw new ArgumentOutOfRangeException(nameof(value), $"Enter between 1 and {PlanarFrameSolver.MaximumFrameMeshSegments} segments per frame.");
+            if (value < 1 || value > FemSolver.MaximumFrameMeshSegments)
+                throw new ArgumentOutOfRangeException(nameof(value), $"Enter between 1 and {FemSolver.MaximumFrameMeshSegments} segments per frame.");
             if (Set(ref femFrameMeshSegments, value)) Notify(nameof(SharedViewerFrameMeshSegments));
         }
     }
@@ -1979,7 +1979,7 @@ public sealed partial class MainViewModel : Observable
             FemLogLine($"Pin supports: {string.Join(", ", supports)}.");
             FemLogLine($"Settings: target-force fitting ±{targetFitPercent:0.###}% · max {targetFitIterations:N0} fitting runs · frame mesh {frameMeshSegments} segments (cables unmeshed) · " +
                 (cableSag ? "cable sag ON (parabolic cable under the load each case puts on it)." : "cable sag OFF (straight tension-only cables)."));
-            FemLogLine("Split frames at joints and mesh → fit cable pretension in its stage → apply the loads → tension-only equilibrium → recover member forces.");
+            FemLogLine("General solver (Mcotis.Analysis), XZ degrees of freedom: split frames at joints → fit cable pretension in its stage → apply the loads → tension-only equilibrium → recover member forces at the mesh stations.");
             var failure = new FemFailureReport();
             // The model's own geometry: no Tab 02 height change, so the chord groups are not passed.
             var results = await Task.Run(() => femStudy.Analyze(baseline, [], [], [], supports, [model], properties, failure,

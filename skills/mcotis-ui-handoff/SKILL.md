@@ -29,11 +29,22 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
 - **Native building UI** (user, 2026-10-12): **Edit → TemplateBuilding…** is available even on a blank/locked legacy
   model and creates a new native workspace, preserving the main window's model. Per-bay X/Y widths, per-storey
   heights and beam line loads, general section properties, fixed/pinned bases and optional self-weight. Native
-  Save/Open `.mcotis`, Undo/Redo, DOF options, async linear static frame analysis and result tables. Main **File →
+  Save/Open `.mcotis`, Undo/Redo, DOF options, async static analysis (**Run → Run Analysis**, F5) and result tables,
+  including **Cable results**. Main **File →
   Open Native Model…** reopens saved native input. Main **Run → Analysis Options…** now opens a staged WPF dialog:
   fixed XZ DOFs plus the real planar cable-fit tolerance/iterations/mesh/sag; the native dialog offers 3D/planar/custom
-  DOFs and marks cable/mesh controls inactive. Native limits: frames only, 600 free / 2,400 total DOFs, no result-file
-  storage, no slabs/diaphragms, no native cable/P-Delta/modal solver. Full scope: `docs/native-building-ui.md`;
+  DOFs and marks cable/mesh controls inactive. Native engine since 2026-10-12: `Mcotis.Analysis.StaticSolver` — frames
+  split at points lying on them, tension-only cables, cable target forces, staged nonlinear cases, cable sag; validated
+  before its results were shown (`docs/analysis/cable-static-verification.md`). Native limits: 600 free / 2,400 total
+  DOFs, small displacements, no result-file storage, no slabs/diaphragms, no shells/P-Delta/modal; the template form
+  creates frames only. **One solver everywhere** (user, 2026-10-12: "put in archive for planar frame solver and do the
+  general solver now", then "use general solver every where"): the main window's Run FEM Analysis and Optimization VCF
+  run it too, through `Application/FemSolver.cs` (same inputs, options, result types and numbers as before; XZ degrees
+  of freedom because the main window's model is planar). `PlanarFrameSolver` is no longer in the application: it is
+  in `tests/Mcotis.Desktop.Checks/Archive/`, frozen, the baseline of `--general-solver`. Where this document still
+  describes `PlanarFrameSolver` internals (`SolveEquilibrium`, `WithSag`, `Assemble` …), read them as the archived
+  baseline: the same laws now live in `Mcotis.Analysis` (`StaticSolver`, `CableElement`). The main window is the
+  standalone application — the user does not want it called "Tab 07" (2026-10-12). **Validate before showing a result** (same message): see AGENTS.md. Full scope: `docs/native-building-ui.md`;
   checks `--template-building-ui`. Preserve Apply/OK/Cancel semantics and the result current/stale state.
 - `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/` and `.work/` wherever they are.
 - The app is a WPF app targeting `net8.0-windows`, `x64`, with SAP2000 API reference `CSiAPIv1.dll`.
@@ -665,7 +676,7 @@ earlier tall-header / large-button / blue-block look.
   in-plane shear releases, and rotated local axes combined with in-plane releases. P-Δ, large-displacement
   geometry updates and SAP analysis settings are not modeled.
 - **Cable sag** (`FemCableSag`, Analysis checkbox `Cable sag`, default on → `FemStudyService.Analyze(…, cableSag)` →
-  `PlanarFrameSolver.SolveCases(…, cableSag)`; the solver API itself defaults to off) is the one geometric
+  `FemSolver.SolveCases(…, cableSag)` → `Mcotis.Analysis.StaticSolver`; the solver API itself defaults to off) is the one geometric
   nonlinearity. `WithSag` gives each cable the load normal to its chord in the load set being solved (uniform-
   equivalent; self-weight w → w·cos θ, so a vertical cable or a case without load on the cable stays straight).
   `SaggingTension` solves `T/k − a/T² = Δℓ + P/k`, `a = w_n²L³/24` (shallow parabola; unique positive root — no

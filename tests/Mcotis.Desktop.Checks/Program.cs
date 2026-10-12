@@ -31,6 +31,11 @@ internal static class Program
                 SpatialFrameRegressionChecks.Run();
                 return 0;
             }
+            if (args.Contains("--general-solver"))
+            {
+                GeneralSolverParityChecks.Run();
+                return 0;
+            }
             if (args.Contains("--fem-db"))
             {
                 FemDatabaseChecks.Run();
@@ -1453,6 +1458,7 @@ internal static class Program
             MegaColumnChecks.Run();
             FemDatabaseChecks.Run();
             FemModelFileChecks.Run();
+            GeneralSolverParityChecks.Run();
             SapImportChecks.Run();
             EtabsImportChecks.Run();
             EtabsExportChecks.Run();

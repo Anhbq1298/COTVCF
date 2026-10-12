@@ -11,8 +11,11 @@ public readonly record struct DofKey(ObjectId PointId, DofComponent Component);
 public sealed record CompiledDof(DofKey Key, int FullIndex, int? ReducedIndex, DofState State, InactiveDofReason InactiveReason);
 
 public sealed record CompiledPoint(ObjectId Id, Xyz Position, DofMask ElementDofs);
+/// <summary>One analysis member. A frame with points lying inside its length is one member per piece between
+/// consecutive points, in order from its start; <paramref name="RelativeStart"/> and <paramref name="RelativeEnd"/>
+/// place the piece on its frame (0 and 1 for a whole frame). A cable is always one member.</summary>
 public sealed record CompiledMember(ObjectId ParentObjectId, ObjectKind Kind, ObjectId StartPointId, ObjectId EndPointId,
-    DofMask SupportedDofs);
+    DofMask SupportedDofs, double RelativeStart = 0, double RelativeEnd = 1);
 
 /// <summary>Immutable topology/DOF snapshot. Not a stiffness assembly or a declaration that a numerical solver exists.</summary>
 public sealed class CompiledModel
@@ -30,7 +33,7 @@ public sealed class CompiledModel
         PointLoadsByPattern = pointLoads;
     }
 
-    public const string CompilerVersion = "topology-dofs-1";
+    public const string CompilerVersion = "topology-dofs-2";
     public ModelDocument Input { get; }
     public ObjectId DocumentId => Input.DocumentId;
     public string InputHash => Input.AnalysisInputHash;
@@ -51,9 +54,14 @@ public sealed record CompilationResult(CompiledModel? Model, ImmutableArray<Vali
 }
 
 /// <summary>Reads only the native snapshot. Validates DOF compatibility without modifying/projecting the model,
-/// guessing supports, meshing, or evaluating an unverified element kernel.</summary>
+/// guessing supports, meshing, or evaluating an unverified element kernel. A frame is connected to every point that
+/// lies on its axis between its ends (within <see cref="Tolerances.Length"/>): it is compiled as one member per piece.
+/// Cables are never split.</summary>
 public static class ModelCompiler
 {
+    /// <summary>A point this close [m] to a frame's axis, but not on it, is reported: it looks connected and is not.</summary>
+    public const double NearFrameDistance = 1e-3;
+
     public static CompilationResult Compile(ModelDocument document, long revision = 0)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -73,9 +81,39 @@ public static class ModelCompiler
 
         foreach (var frame in document.Frames.Values.OrderBy(item => item.Id))
         {
-            members.Add(new(frame.Id, ObjectKind.Frame, frame.StartPointId, frame.EndPointId, DofMask.Full3D));
-            used[frame.StartPointId] |= DofMask.Full3D;
-            used[frame.EndPointId] |= DofMask.Full3D;
+            var start = document.Points[frame.StartPointId].Position;
+            var axis = document.Points[frame.EndPointId].Position - start;
+            double length = axis.Length;
+            var stops = new List<(double Relative, ObjectId PointId)> { (0, frame.StartPointId) };
+            foreach (var point in document.Points.Values.Where(item => length > Tolerances.Length && item.Id != frame.StartPointId && item.Id != frame.EndPointId)
+                         .Select(item => (Point: item, Relative: (item.Position - start).Dot(axis) / (length * length)))
+                         .OrderBy(item => item.Relative).ThenBy(item => item.Point.Id))
+            {
+                double along = point.Relative * length, offset = point.Point.Position.DistanceTo(start + axis * point.Relative);
+                if (along <= -Tolerances.Length || along >= length + Tolerances.Length) continue;
+                if (offset > Tolerances.Length)
+                {
+                    if (offset <= NearFrameDistance && along > Tolerances.Length && along < length - Tolerances.Length)
+                        Issue(ValidationSeverity.Warning, "analysis.frame.nearPoint", ObjectKind.Point, point.Point.Id,
+                            $"Point '{point.Point.Name}' is {offset * 1000:0.###} mm from the axis of frame '{frame.Name}', not on it: it is not connected to that frame.");
+                    continue;
+                }
+                if (along - stops[^1].Relative * length <= Tolerances.Length || length - along <= Tolerances.Length)
+                {
+                    Error("analysis.frame.coincidentPoint", ObjectKind.Point, point.Point.Id,
+                        $"Point '{point.Point.Name}' lies on frame '{frame.Name}' at the same position as another of its points; merge them.");
+                    continue;
+                }
+                stops.Add((point.Relative, point.Point.Id));
+            }
+            stops.Add((1, frame.EndPointId));
+            for (int piece = 0; piece + 1 < stops.Count; piece++)
+            {
+                members.Add(new(frame.Id, ObjectKind.Frame, stops[piece].PointId, stops[piece + 1].PointId, DofMask.Full3D,
+                    stops[piece].Relative, stops[piece + 1].Relative));
+                used[stops[piece].PointId] |= DofMask.Full3D;
+                used[stops[piece + 1].PointId] |= DofMask.Full3D;
+            }
             if (document.AssignmentOfFrame(frame.Id).SectionId is null)
                 Error("analysis.section", ObjectKind.Frame, frame.Id, $"Frame '{frame.Name}' needs a section for analysis.");
         }

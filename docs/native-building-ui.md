@@ -32,13 +32,21 @@ native deflection contours are not connected yet. Edited inputs mark existing re
 
 The native engine retains its documented capability limits, including 600 free / 2,400 total DOFs. The template
 form allows up to 400 points for model creation/persistence, but larger free-DOF counts can still exceed the run limit.
-It has no cable, shell, P-Delta, modal, staged or nonlinear analysis. Template UI does not change the numerical source
-verification gates or establish production readiness.
+Since the general solver (2026-10-12) **Run → Run Analysis** also solves a native model that has cables: tension-only
+cables, cable target forces fitted in the case set to fit them, nonlinear static cases continuing from another, and
+cable sag. The **Cable results** tab lists each cable's tension, whether it is taut or slack, its target, the applied
+pretension, its tension at the fit stage, its sag and its remaining stiffness. Warnings of a run that succeeded (a
+joint rotation nothing reaches, a translation held by slack cables only) are shown under the result line. There is
+no shell, P-Delta or modal analysis. The template form still creates frames only. Template UI does not change the
+numerical source verification gates or establish production readiness; the evidence is in
+[analysis/cable-static-verification.md](analysis/cable-static-verification.md).
 
-The main window's **Run → Analysis Options…** is the existing planar solver's form. It shows fixed XZ DOFs and edits
-actual cable target-fitting tolerance, maximum iterations, frame mesh (1–100) and cable sag. Individual cable target
-forces remain in the cable assignments/load patterns. Native options show cable/mesh settings as inactive because
-the native frame engine does not use them. Locked/running legacy models show their options read-only.
+The main window's **Run → Analysis Options…** is the form of the main window's own run. That run uses the same
+general solver; because the main window's model is planar, the form shows fixed XZ DOFs. It edits the
+cable target-fitting tolerance, maximum iterations, frame mesh (1–100: the stations each frame piece is read at,
+which changes no joint result) and cable sag. Individual cable target
+forces remain in the cable assignments/load patterns. Native options still show the cable/mesh settings as inactive;
+the native engine reads the fitting tolerance, the iteration limit and the sag setting from the model, and needs no mesh. Locked/running legacy models show their options read-only.
 
 Verification: `dotnet run --project tests/Mcotis.Checks` includes template topology, line-load accounting, support
 reactions, self-weight, planar cases, invalid input, Undo/Redo and Save/Open. `--template-building-ui` on

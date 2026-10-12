@@ -72,6 +72,56 @@ internal static class DenseAlgebra
         return result;
     }
 
+    /// <summary>The least-squares solution of a·x = b of smallest length, by a one-sided Jacobi singular value
+    /// decomposition (Hestenes). For small dense systems that may be rank deficient: a singular value below
+    /// max(m, n)·ε·σmax counts as zero, so a direction the system does not determine gets no correction.
+    /// <paramref name="relativeCutoff"/> raises that threshold to a fraction of σmax, for a matrix whose entries are
+    /// themselves only known to that accuracy (finite differences).</summary>
+    public static double[] MinimumNormSolve(double[,] a, double[] b, double relativeCutoff = 0)
+    {
+        int m = a.GetLength(0), n = a.GetLength(1);
+        var u = (double[,])a.Clone();
+        var v = new double[n, n];
+        for (int i = 0; i < n; i++) v[i, i] = 1;
+        for (int sweep = 0; sweep < 60; sweep++)
+        {
+            double largest = 0;
+            for (int p = 0; p < n - 1; p++)
+            for (int q = p + 1; q < n; q++)
+            {
+                double alpha = 0, beta = 0, gamma = 0;
+                for (int i = 0; i < m; i++) { alpha += u[i, p] * u[i, p]; beta += u[i, q] * u[i, q]; gamma += u[i, p] * u[i, q]; }
+                if (gamma == 0) continue;
+                largest = Math.Max(largest, Math.Abs(gamma) / Math.Sqrt(alpha * beta));
+                double zeta = (beta - alpha) / (2 * gamma);
+                double t = zeta == 0 ? 1 : Math.Sign(zeta) / (Math.Abs(zeta) + Math.Sqrt(1 + zeta * zeta));
+                double c = 1 / Math.Sqrt(1 + t * t), s = c * t;
+                for (int i = 0; i < m; i++) { double up = u[i, p], uq = u[i, q]; u[i, p] = c * up - s * uq; u[i, q] = s * up + c * uq; }
+                for (int i = 0; i < n; i++) { double vp = v[i, p], vq = v[i, q]; v[i, p] = c * vp - s * vq; v[i, q] = s * vp + c * vq; }
+            }
+            if (largest <= 1e-15) break;
+        }
+        // a·v = u, whose columns are now orthogonal: their lengths are the singular values.
+        var squared = new double[n];
+        double maximum = 0;
+        for (int j = 0; j < n; j++)
+        {
+            for (int i = 0; i < m; i++) squared[j] += u[i, j] * u[i, j];
+            maximum = Math.Max(maximum, Math.Sqrt(squared[j]));
+        }
+        double cutoff = maximum * Math.Max(Math.Max(m, n) * 2.220446049250313e-16, relativeCutoff);
+        var x = new double[n];
+        for (int j = 0; j < n; j++)
+        {
+            if (!(Math.Sqrt(squared[j]) > cutoff)) continue;
+            double projection = 0;
+            for (int i = 0; i < m; i++) projection += u[i, j] * b[i];
+            projection /= squared[j];
+            for (int i = 0; i < n; i++) x[i] += v[i, j] * projection;
+        }
+        return x;
+    }
+
     /// <summary>Infinity-norm backward error in the diagonally equilibrated system; not a condition estimate.</summary>
     public static double ScaledResidual(double[,] a, double[] x, double[] b)
     {

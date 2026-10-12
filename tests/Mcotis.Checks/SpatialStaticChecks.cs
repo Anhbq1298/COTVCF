@@ -140,9 +140,9 @@ internal static class SpatialStaticChecks
         return compiled.Model!;
     }
 
-    private static LinearStaticResult Solve(ModelDocument document)
+    private static StaticResult Solve(ModelDocument document)
     {
-        var outcome = LinearStaticSolver.Solve(Compile(document), Case);
+        var outcome = StaticSolver.Solve(Compile(document), Case);
         Assert(outcome.Success, "Static solution available: " + string.Join("; ", outcome.Issues));
         Assert(outcome.Result!.Diagnostics.ScaledResidual < 1e-10, "Scaled backward error is within the configured acceptance tolerance");
         Assert(outcome.Result.InputHash == document.AnalysisInputHash && outcome.Result.Revision == 17, "Results retain snapshot identity and revision");
@@ -314,16 +314,25 @@ internal static class SpatialStaticChecks
 
     private static void FailureCases()
     {
-        void Refuse(ModelDocument document, string code, LinearStaticOptions? options = null)
+        void Refuse(ModelDocument document, string code, StaticOptions? options = null)
         {
             var hash = document.AnalysisInputHash;
-            var outcome = LinearStaticSolver.Solve(Compile(document), Case, options);
+            var outcome = StaticSolver.Solve(Compile(document), Case, options);
             Assert(outcome.Result is null && outcome.Issues.Any(issue => issue.Code == code), "Refused safely with diagnostic " + code);
             Assert(document.AnalysisInputHash == hash, "Solving/refusing never edits its native snapshot");
         }
         var unsupported = Unloaded().Edit();
-        unsupported.PutLoadCase(new(Case, "Nonlinear", LoadCaseType.NonlinearStatic, [new(Pattern, 1)]));
+        var earlier = ObjectId.New();
+        unsupported.PutLoadCase(new(earlier, "Earlier", LoadCaseType.LinearStatic, [new(Pattern, 1)]));
+        unsupported.PutLoadCase(new(Case, "Continued", LoadCaseType.LinearStatic, [new(Pattern, 1)]) { InitialCaseId = earlier });
         Refuse(unsupported.Commit().Document, "static.case.unsupported");
+        var fitting = Unloaded().Edit();
+        fitting.PutLoadCase(new(Case, "Fitting", LoadCaseType.LinearStatic, [new(Pattern, 1)]) { FitCableTargetForces = true });
+        Refuse(fitting.Commit().Document, "static.case.unsupported");
+        var afterLinear = Unloaded().Edit();
+        afterLinear.PutLoadCase(new(earlier, "Earlier", LoadCaseType.LinearStatic, [new(Pattern, 1)]));
+        afterLinear.PutLoadCase(new(Case, "Continued", LoadCaseType.NonlinearStatic, [new(Pattern, 1)]) { InitialCaseId = earlier });
+        Refuse(afterLinear.Commit().Document, "static.case.initialLinear");
         var mechanism = Unloaded().Edit();
         mechanism.SetRestraint([Point(1)], Restraint.Free);
         Refuse(mechanism.Commit().Document, "static.matrix.unstable");
@@ -337,18 +346,13 @@ internal static class SpatialStaticChecks
         var loadedRelease = Named("released-propped-beam").Edit();
         loadedRelease.PutLoad(new PointLoad(ObjectId.New(), Pattern, Point(2), default, new(0, 5, 0)));
         Refuse(loadedRelease.Commit().Document, "static.matrix.unstable");
-        var interior = Unloaded().Edit();
-        var midpoint = Point(3); interior.AddPoint(new(2, 0, 0), "P3", midpoint);
-        var branchEnd = Point(4); interior.AddPoint(new(2, 2, 0), "P4", branchEnd);
-        interior.AddFrame(midpoint, branchEnd, "F2", Frame(2)); interior.SetFrameSection([Frame(2)], Section);
-        Refuse(interior.Commit().Document, "static.interiorJoint.unsupported");
         var overflow = Unloaded().Edit();
         overflow.PutLoad(new PointLoad(Id(7), Pattern, Point(2), new(1e308, 0, 0)));
         overflow.PutLoadCase(new(Case, "Overflow", LoadCaseType.LinearStatic, [new(Pattern, 1e308)]));
         Refuse(overflow.Commit().Document, "static.assembly.nonfinite");
-        Throws<OperationCanceledException>(() => LinearStaticSolver.Solve(Compile(Unloaded()), Case, cancellationToken: new(true)), "Cancellation never returns a completed result");
+        Throws<OperationCanceledException>(() => StaticSolver.Solve(Compile(Unloaded()), Case, cancellationToken: new(true)), "Cancellation never returns a completed result");
         var compiled = Compile(Unloaded());
-        Assert(!LinearStaticSolver.Solve(compiled, ObjectId.New()).Success, "A missing case fails explicitly");
+        Assert(!StaticSolver.Solve(compiled, ObjectId.New()).Success, "A missing case fails explicitly");
         var restrained = Unloaded().Edit(); restrained.SetRestraint([Point(2)], Restraint.Fixed);
         Assert(Solve(restrained.Commit().Document).Diagnostics.SolvedDofCount == 0, "A fully restrained model recovers reactions without inventing free equations");
     }

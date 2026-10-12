@@ -3,9 +3,11 @@
 Repository note (2026-10-12): this is the supplied planning specification. See [foundation-status.md](foundation-status.md)
 for audited module names, implemented scope and verification evidence. Work targets the standalone library projects under `src/` (`Mcotis.Core`, `Mcotis.Analysis` …);
 native units remain kN/m/t, Cable remains its own object, and the existing desktop/MB behavior is preserved.
-The model/DOF compiler foundation is coded, and a limited dense 3D linear static frame engine is coded and cross-checked
-([spatial-static-verification.md](spatial-static-verification.md)); cables, shells, diagnostics, P-Delta, modal analysis, the
-DOF dialog and reviewer approval of the source records remain open.
+The model/DOF compiler foundation is coded, and a dense 3D static engine for frames and tension-only cables is coded
+and cross-checked ([spatial-static-verification.md](spatial-static-verification.md),
+[cable-static-verification.md](cable-static-verification.md)); shells, a sparse solver, diagnostics, P-Delta, modal
+analysis and reviewer approval of the source records remain open. On 2026-10-12 the planar solver was archived and
+the application was put on this engine.
 
 Status: TECHNICAL IMPLEMENTATION SPECIFICATION / NOT YET IMPLEMENTED
 

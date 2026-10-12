@@ -18,6 +18,28 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-12 · One solver everywhere: the general 3D solver runs the application
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis and Run → Optimization VCF in the main window; Run → Run Analysis and the new Cable
+  results tab in the native workspace (Edit → TemplateBuilding… / File → Open Native Model…); code in
+  src/Mcotis.Analysis (StaticSolver) and src/Mcotis.Desktop/Application/FemSolver.cs
+- What: Every analysis in Mcotis now runs the general solver of the standalone system: 3D frames connected at every
+  point lying on them, tension-only cables with sag, cable target forces fitted in the case set to fit them, staged
+  nonlinear cases, and internal forces and the deflected line at stations along every frame. The main window's model
+  is planar, so it is run with the XZ degrees of freedom; its inputs, options and result views are unchanged, and so
+  are its numbers — on the default model all 11,361 values of a run agree with the planar solver to that solver's own
+  tolerance, and the stored SAP2000 study compares as before (cable forces within 3.8 %, deflections 3.2 %). In the
+  native workspace Run Linear Static is now Run Analysis, and a model with cables shows their results. The planar
+  solver is archived: it is no longer in the application and is kept, frozen, with the checks as the comparison
+  baseline. Limits: small displacements; no shells, P-Delta or modal; about 1,000 joints in the main window, 600 free
+  DOFs in the native workspace. With cable sag on, loads along the cables must be in the same proportion in every
+  case (as self-weight is) and not act across a vertical cable; otherwise the run says so. The native workspace
+  refuses target forces it cannot meet; the main window keeps showing the closest pretension with its note.
+  Evidence: docs/analysis/cable-static-verification.md.
+- Checks: dotnet run --project tests/Mcotis.Checks (2,705 checks); default offline Mcotis.Desktop.Checks;
+  --general-solver; --fem; --fem-sap; --template-building-ui; --dev-log
+
 ## 2026-10-12 · The old name is gone: everything is Mcotis
 - Status: Done
 - Who: markbui, Claude

@@ -1,3 +1,4 @@
+using Mcotis.Desktop.Checks.Archive;
 using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Geometry;
 using Mcotis.Analysis;
@@ -69,7 +70,7 @@ internal static class SpatialFrameRegressionChecks
         editor.SetSettings(AnalysisSettings.Default with { ActiveDofs = DofMask.XZ, FrameMeshSegments = 1, CableSag = false });
         var compiled = ModelCompiler.Compile(editor.Commit().Document);
         if (!compiled.Success) throw new Exception(name + " compile failed: " + string.Join("; ", compiled.Issues));
-        var solved = LinearStaticSolver.Solve(compiled.Model!, loadCase);
+        var solved = StaticSolver.Solve(compiled.Model!, loadCase);
         if (!solved.Success) throw new Exception(name + " solve failed: " + string.Join("; ", solved.Issues));
         var spatial = solved.Result!;
         void Near(double actual, double expected, double absolute = 1e-8, double relative = 1e-7)

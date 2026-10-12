@@ -127,9 +127,33 @@ internal static class DofCompilationChecks
         s.Execute(DocumentCommands.AssignFrameSection([Member], null));
         RefuseCompile(s, "analysis.section");
         s.Undo();
-        s.Execute(DocumentCommands.AddPoint(ObjectId.New(), new(2, 0, 0)));
+        s.Execute(DocumentCommands.AddPoint(ObjectId.New(), new(2, 0, 1)));
         RefuseCompile(s, "analysis.disconnected.point");
         s.Undo();
+        // A point on a frame's axis is connected to it: the frame is one member per piece.
+        var onFrame = ObjectId.New();
+        s.Execute(DocumentCommands.AddPoint(onFrame, new(1, 0, 0)));
+        var split = Compile(s);
+        Assert(split.Members.Length == 2 && split.Members.All(member => member.ParentObjectId == Member && member.Kind == ObjectKind.Frame) &&
+               split.Members[0] is { RelativeStart: 0, RelativeEnd: 0.25 } first && first.StartPointId == A && first.EndPointId == onFrame &&
+               split.Members[1] is { RelativeStart: 0.25, RelativeEnd: 1 } second && second.StartPointId == onFrame && second.EndPointId == B,
+            "A frame is compiled as one member per piece between the points lying on it, in order from its start");
+        Assert(split.Points.Single(point => point.Id == onFrame).ElementDofs == DofMask.Full3D && split.FreeDofCount == 6,
+            "A point lying on a frame has the frame's degrees of freedom there");
+        s.Execute(DocumentCommands.AddPoint(ObjectId.New(), new(1, 0, 0)));
+        RefuseCompile(s, "analysis.frame.coincidentPoint");
+        s.Undo();
+        s.Execute(DocumentCommands.AddPoint(ObjectId.New(), new(4, 0, 0)));
+        RefuseCompile(s, "analysis.frame.coincidentPoint");
+        s.Undo();
+        s.Undo();
+        s.Execute(DocumentCommands.AddPoint(ObjectId.New(), new(2, 0, 0.0005)));
+        var near = ModelCompiler.Compile(s.Document);
+        Assert(!near.Success && near.Issues.Any(issue => issue.Code == "analysis.frame.nearPoint" && issue.Severity == ValidationSeverity.Warning) &&
+               near.Issues.Any(issue => issue.Code == "analysis.disconnected.point"),
+            "A point half a millimetre off a frame's axis is not connected to it, and that is said");
+        s.Undo();
+        Assert(Compile(Frame()).Members is [{ RelativeStart: 0, RelativeEnd: 1 }], "A frame with no point on it is one member");
         var result = ModelCompiler.Compile(s.Document);
         Assert(result.Success && result.Issues.Any(issue => issue.Code == "dof.restraint.inactive"), "Inactive support components are retained and explicitly reported");
         s.Execute(DocumentCommands.PutLoad(new PointLoad(ObjectId.New(), Pattern, A, new(-10, 0, -20), new(0, 30, 0))));

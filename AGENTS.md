@@ -29,6 +29,18 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
   depend on them, on the desktop application, on WPF, on SQLite or on CSI libraries. `Mcotis.Checks` verifies this.
 - The existing application is `src/Mcotis.Desktop`. It keeps working until a feature has moved to the new system. The
   MB menu stays last on the menu bar, after a separator.
+- One solver (user, 2026-10-12: "use general solver every where"): every analysis runs `Mcotis.Analysis.StaticSolver`.
+  The application reaches it through `src/Mcotis.Desktop/Application/FemSolver.cs`, which hands over the application's
+  planar model with the XZ degrees of freedom; the native workspace calls it directly. Put no numerical method in the
+  application. The main window is the standalone application — do not call it "Tab 07".
+- The planar frame solver is archived (user, 2026-10-12): it is no longer part of the application. It lives, frozen,
+  in `tests/Mcotis.Desktop.Checks/Archive/PlanarFrameSolver.cs`, only as the baseline `--general-solver` compares the
+  application's analysis with. Do not develop it and do not call it from `src/`.
+- Validate before showing a result (user, 2026-10-12): nothing a new solver capability computes is put in a result
+  view, a report or a document as a result until it has passed its checks against closed forms, against the archived
+  planar solver where that covers the case, and against OpenSees where it can be modelled there. Record the evidence
+  and its limits in `docs/analysis/`; the current records are `spatial-static-verification.md` and
+  `cable-static-verification.md`.
 
 ## Repository Layout
 

@@ -63,8 +63,8 @@ public partial class AnalysisOptionsWindow : Window
                     throw new ArgumentException("Cable fitting tolerance must be greater than 0% and less than 100%.");
                 if (!int.TryParse(Iterations.Text, out var iterations) || iterations < 1 || iterations > 10000)
                     throw new ArgumentException("Enter between 1 and 10,000 fitting iterations.");
-                if (!int.TryParse(Mesh.Text, out var mesh) || mesh < 1 || mesh > PlanarFrameSolver.MaximumFrameMeshSegments)
-                    throw new ArgumentException($"Enter between 1 and {PlanarFrameSolver.MaximumFrameMeshSegments} mesh segments per frame.");
+                if (!int.TryParse(Mesh.Text, out var mesh) || mesh < 1 || mesh > Application.FemSolver.MaximumFrameMeshSegments)
+                    throw new ArgumentException($"Enter between 1 and {Application.FemSolver.MaximumFrameMeshSegments} mesh segments per frame.");
                 next = next with { CableFitTolerancePercent = tolerance, CableFitMaxIterations = iterations, FrameMeshSegments = mesh, CableSag = Sag.IsChecked == true };
             }
             if (next != current) commit(next);

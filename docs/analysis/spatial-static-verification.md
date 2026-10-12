@@ -8,12 +8,18 @@ applies to the tested frame cases and does not establish readiness for general p
 This record keeps the levels of evidence apart. Nothing here is `SOURCE_VERIFIED` in the sense of
 [literature.md](literature.md): that status needs an independent reviewer's approval, which has not been given.
 
+**Later on 2026-10-12** the engine became the general `StaticSolver` (formulation `spatial-static-2`): it also solves
+tension-only cables, cable target forces, staged cases and frames with points lying on them. Those have their own
+record, [cable-static-verification.md](cable-static-verification.md). The linear frame path this record describes
+is unchanged, and every check listed here passes against the general solver as it did before.
+
 ## What the engine is
 
-`src/Mcotis.Analysis`: `SpatialFrameElement`, `LinearStaticSolver`, `DenseAlgebra` (formulation
-`spatial-eb-linear-1`). A small dense engine for validating the 3D formulation, not the production solver.
+`src/Mcotis.Analysis`: `SpatialFrameElement`, `StaticSolver` (`LinearStaticSolver` when this was written),
+`DenseAlgebra`. A small dense engine for validating the 3D formulation, not the production solver.
 
-- Prismatic Euler–Bernoulli frames, small displacements, one element per native frame. No shear deformation, no offsets.
+- Prismatic Euler–Bernoulli frames, small displacements, one element per native frame (per piece of a frame that
+  has points lying on it, since the later change). No shear deformation, no offsets.
 - Loads: point forces and moments; frame point loads; linearly varying frame line loads over any part of the
   length; self-weight (weight density × section area × weight modifier × the pattern's self-weight multiplier, along −Z).
 - Member-end moment releases M2 / M3 by static condensation; the released end rotations are recovered.
@@ -22,11 +28,11 @@ This record keeps the levels of evidence apart. Nothing here is `SOURCE_VERIFIED
   reported apart from support reactions.
 - Units as in the document: kN, m; rotations in radians.
 
-It refuses, with a diagnostic and no result: nonlinear or staged load cases, cable target fitting, any model that holds
-a cable, shells (in the compiler), axial / shear / torsion releases, a point lying inside a frame's length, zero bending
+It refuses, with a diagnostic and no result: shells (in the compiler), axial / shear / torsion releases, zero bending
 stiffness, zero torsional stiffness outside a plane preset, more than 2400 full or 600 free DOFs, a stiffness matrix
 that is not symmetric or not positive definite at the pivot tolerance, and a scaled residual above 1e-10. A joint
-rotation that no stiffness reaches (all connected ends released) is left out and reported, not stabilised.
+rotation that no stiffness reaches (all connected ends released) is left out and reported, not stabilised. What it
+refuses of cables and staged cases is listed in the cable record.
 
 ## Conventions the code uses
 
@@ -75,7 +81,7 @@ local 2 gives zero force only with it, and bending in the 1–3 plane matches th
 ## Numerical evidence
 
 All of it runs in `dotnet run --project tests/Mcotis.Checks` (group *Spatial linear static engineering benchmarks*,
-1083 checks) unless stated.
+1086 checks) unless stated.
 
 | Evidence | What it shows | Result |
 |---|---|---|
@@ -84,7 +90,7 @@ All of it runs in `dotnet run --project tests/Mcotis.Checks` (group *Spatial lin
 | Closed forms | Cantilever under each of the six tip actions; uniform load; partial triangular load; propped cantilever with a released end; simply supported two-element beam | agree to 1e-9 relative |
 | Free-body equilibrium | For all 12 benchmark models: applied loads, reactions and suppressed-DOF forces sum to zero force and zero moment about the origin, the applied resultants worked out from the stored loads | zero to 1e-8 / 1e-7 |
 | Transformations | Orthonormal right-handed axes; a rigid rotation of model and loads rotates the response; stiffness scaling | pass |
-| Refusals | Tested nonlinear/staged setup, unsupported shear release, size limit, zero torsion, loaded released rotation, interior joint, nonfinite assembly and singular/near-singular cases return no result | pass for the listed checks; not exhaustive branch coverage |
+| Refusals | A linear case that continues from another or fits target forces, a nonlinear case after a linear one, unsupported shear release, size limit, zero torsion, loaded released rotation, nonfinite assembly and singular/near-singular cases return no result | pass for the listed checks; not exhaustive branch coverage |
 | OpenSeesPy | 12 models built from the physical specification with `elasticBeamColumn` and the `Linear` transformation: displacements, reactions and local end actions, 516 numbers | largest difference 2.1e-15 in displacement or rotation, 2.1e-12 in force or moment |
 | Legacy planar solver | Six XZ models solved by the existing `PlanarFrameSolver` and by this engine with the XZ mask: point, line and member point loads, end releases, a portal, section roll of 30° and 90° (`dotnet run --project tests/Mcotis.Desktop.Checks -- --spatial-frame-regression`) | displacements to 1e-10, reactions and end actions to 1e-8 absolute + 1e-7 relative |
 
@@ -100,8 +106,8 @@ fixture on 2026-10-12.
 - The orientation vectors in the specification were chosen to give the native default axes. The comparison therefore
   checks the stiffness, transformation, loads and releases for those axes; it is not an independent check of the
   default-axis rule itself.
-- The legacy comparison covers the planar cases listed. It does not cover cables, target-force fitting, cable sag,
-  staged cases, meshing with interior joints, or the default model — the engine refuses those.
+- The legacy comparison in this record covers the planar frame cases listed. Cables, target-force fitting, cable sag,
+  staged cases, frames with joints inside their length and the default model are compared in the cable record.
 - Only moment releases are implemented. Release combinations that make a member a mechanism are caught by the
   factorisation, not classified.
 - The dense factorisation and its pivot test are adequate for these sizes. Conditioning is not estimated, and a failed
@@ -110,7 +116,7 @@ fixture on 2026-10-12.
 
 ## Still open
 
-Cables and target-force fitting; shells; shear-flexible frames; offsets; axial, shear and torsion releases; frames
-with interior joints (automatic splitting); a sparse solver and instability diagnostics; P-Delta; mass and modal
-analysis; the desktop dialog for degrees of freedom. The desktop application still analyses with `PlanarFrameSolver`;
-nothing in the user interface reaches this engine yet.
+Shells; shear-flexible frames; offsets; axial, shear and torsion releases; a sparse solver and instability
+diagnostics; P-Delta and large displacements; mass and modal analysis. Since 2026-10-12 every analysis of the
+application runs this engine — the main window with the XZ degrees of freedom, the native workspace directly — and
+`PlanarFrameSolver` is archived with the checks as the comparison baseline.

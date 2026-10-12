@@ -7,13 +7,13 @@
     <MenuItem Header="_Save" Click="Save_Click" InputGestureText="Ctrl+S"/><MenuItem Header="Save _As…" Click="SaveAs_Click"/></MenuItem>
    <MenuItem Header="_Edit"><MenuItem Header="_TemplateBuilding…" Click="Template_Click" ToolTip="Create another building in a new native model window"/>
     <Separator/><MenuItem Header="_Undo" Click="Undo_Click" IsEnabled="{Binding Session.CanUndo}"/><MenuItem Header="_Redo" Click="Redo_Click" IsEnabled="{Binding Session.CanRedo}"/></MenuItem>
-   <MenuItem Header="_Run"><MenuItem Header="Analysis _Options…" Click="Options_Click"/><MenuItem Header="_Run Linear Static" Click="Run_Click" InputGestureText="F5"/></MenuItem>
+   <MenuItem Header="_Run"><MenuItem Header="Analysis _Options…" Click="Options_Click"/><MenuItem Header="_Run Analysis" Click="Run_Click" InputGestureText="F5"/></MenuItem>
   </Menu>
   <StackPanel DockPanel.Dock="Top" Margin="8,4">
    <TextBlock Text="{Binding Summary}" FontWeight="SemiBold"/>
    <WrapPanel Margin="0,6,0,2" IsEnabled="{Binding Editable}">
     <TextBlock Text="Load case" Margin="0,0,8,0"/><ComboBox ItemsSource="{Binding Cases}" SelectedItem="{Binding SelectedCase}" DisplayMemberPath="Name" Width="190" AutomationProperties.Name="Analysis load case"/>
-    <Button Content="Analysis Options…" Margin="8,0" Click="Options_Click"/><Button Content="Run Linear Static" Click="Run_Click"/>
+    <Button Content="Analysis Options…" Margin="8,0" Click="Options_Click"/><Button Content="Run Analysis" Click="Run_Click"/>
    </WrapPanel>
   </StackPanel>
   <Border DockPanel.Dock="Bottom" Background="{StaticResource Surface}" Padding="8" BorderBrush="{StaticResource Border}" BorderThickness="0,1,0,0">
@@ -40,6 +40,15 @@
       <DataGrid.Columns><DataGridTextColumn Header="Frame" Binding="{Binding Frame}"/><DataGridTextColumn Header="End" Binding="{Binding End}"/>
        <DataGridTextColumn Header="N (kN)" Binding="{Binding N, StringFormat=G6}"/><DataGridTextColumn Header="V2 (kN)" Binding="{Binding V2, StringFormat=G6}"/><DataGridTextColumn Header="V3 (kN)" Binding="{Binding V3, StringFormat=G6}"/>
        <DataGridTextColumn Header="T (kN·m)" Binding="{Binding T, StringFormat=G6}"/><DataGridTextColumn Header="M2 (kN·m)" Binding="{Binding M2, StringFormat=G6}"/><DataGridTextColumn Header="M3 (kN·m)" Binding="{Binding M3, StringFormat=G6}"/>
+      </DataGrid.Columns>
+     </DataGrid>
+    </TabItem>
+    <TabItem Header="Cable results">
+     <DataGrid ItemsSource="{Binding Cables}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
+      <DataGrid.Columns><DataGridTextColumn Header="Cable" Binding="{Binding Cable}"/><DataGridTextColumn Header="Tension (kN)" Binding="{Binding Tension, StringFormat=G6}"/>
+       <DataGridTextColumn Header="State" Binding="{Binding State}"/><DataGridTextColumn Header="Target (kN)" Binding="{Binding Target, StringFormat=G6}"/>
+       <DataGridTextColumn Header="Applied pretension (kN)" Binding="{Binding Pretension, StringFormat=G6}"/><DataGridTextColumn Header="At fit stage (kN)" Binding="{Binding FitStage, StringFormat=G6}"/>
+       <DataGridTextColumn Header="Sag (m)" Binding="{Binding Sag, StringFormat=G4}"/><DataGridTextColumn Header="Stiffness / (EA/L)" Binding="{Binding StiffnessRatio, StringFormat=G4}"/>
       </DataGrid.Columns>
      </DataGrid>
     </TabItem>

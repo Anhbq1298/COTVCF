@@ -8,9 +8,19 @@ thay cho việc port nguyên solver planar. Foundation đã có: `Mcotis.Analysi
 migration schema 1 → XZ, mapping sáu DOF và diagnostics. Đã có thêm một engine tuyến tính 3D cho frame (dense, dùng để
 kiểm chứng công thức): `LinearStaticSolver`, đối chiếu với lời giải giải tích, OpenSeesPy và solver planar hiện tại —
 phạm vi, nguồn công thức và bằng chứng ở [analysis/spatial-static-verification.md](analysis/spatial-static-verification.md).
-Engine này chưa xử lý cable, shell, frame có nút ở giữa. WPF đầu tiên đã nối vào engine qua
-**Edit → TemplateBuilding…**: model workspace riêng, native Save/Open, Undo/Redo, DOF options, chạy linear static
-và bảng kết quả. Chưa phải desktop migration đầy đủ; xem [phạm vi UI](native-building-ui.md). Chi tiết và source gates:
+**Cập nhật solver tổng quát (2026-10-12, người dùng: "put in archive for planar frame solver and do the general
+solver now, confirm you need to validate before putting in terms of result", sau đó "use general solver every
+where"):** mọi phép phân tích của Mcotis nay chạy một solver: `Mcotis.Analysis.StaticSolver`. Nó xử lý frame tự nối
+tại các điểm nằm trên nó, cable chỉ chịu kéo, target force của cable, các case nonlinear nối tiếp nhau, cable sag, và
+nội lực / đường đàn hồi tại các station dọc frame. Cửa sổ chính (ứng dụng standalone) gọi nó qua
+`src/Mcotis.Desktop/Application/FemSolver.cs` với DOF XZ vì model của cửa sổ chính là phẳng; native workspace gọi trực
+tiếp. Solver planar đã đưa vào archive: không còn nằm trong app, chỉ giữ ở
+`tests/Mcotis.Desktop.Checks/Archive/PlanarFrameSolver.cs` (đóng băng) làm mốc đối chiếu. Kết quả đã được đối chiếu
+với lời giải giải tích, solver planar (default model như app chạy: 11.361 giá trị) và OpenSees **trước khi** hiển thị:
+[analysis/cable-static-verification.md](analysis/cable-static-verification.md). Chưa có shell, P-Delta, modal, solver
+sparse. WPF đầu tiên đã nối vào engine qua
+**Edit → TemplateBuilding…**: model workspace riêng, native Save/Open, Undo/Redo, DOF options, **Run Analysis**
+và bảng kết quả (kể cả bảng cable). Chưa phải desktop migration đầy đủ; xem [phạm vi UI](native-building-ui.md). Chi tiết và source gates:
 [analysis/foundation-status.md](analysis/foundation-status.md), [implementation plan](analysis/IMPLEMENTATION_PLAN.md),
 [literature register](analysis/literature.md). P-Delta và modal vẫn là các giai đoạn sau.
 
@@ -101,7 +111,7 @@ initial case hoặc combination; tên trùng. Một frame chưa gán section v�
 | `src/Mcotis.Application` | `DocumentSession`, commands, Undo/Redo, New/Open/Save, result state, contracts | Có |
 | `src/Mcotis.Persistence` | File `.mcotis`, migration, atomic save | Có |
 | `tests/Mcotis.Checks` | Checks offline của hệ mới | Có |
-| `src/Mcotis.Analysis` | Immutable topology/DOF compiler; engine tuyến tính 3D cho frame | Có compiler và engine frame (dense); cable, shell, solver sparse chưa có |
+| `src/Mcotis.Analysis` | Immutable topology/DOF compiler; `StaticSolver` 3D cho frame và cable | Có compiler và solver dense: frame (tự chia tại điểm nằm trên nó), cable tension-only, target force, staged case, sag; shell và solver sparse chưa có |
 | `src/Mcotis.Desktop` | App WPF hiện tại; TemplateBuilding workspace đã dùng các thư viện native | Native Save/Open, DOF options, linear static và result tables đã có; migration đầy đủ còn ở giai đoạn 6 |
 | `tests/Mcotis.Desktop.Checks` | Checks offline của app | Có |
 
@@ -135,21 +145,23 @@ Dialog làm việc trên dữ liệu tạm: Apply = validate + commit; OK = comm
 | **1 — Core document** | Native model, ID, `NameIndex`, `NamingService`, validators | Unique Name; rename không làm hỏng references | Xong |
 | **2 — Document lifecycle** | `DocumentSession`, New / Open / Save / Save As | Save đúng document đang mở; Open lỗi giữ nguyên model | Xong ở tầng thư viện |
 | **3 — Edit commands** | Commands, Undo/Redo, change sets, revision, dirty, result state | Mọi thao tác phục hồi được; invalidation nhất quán | Xong ở tầng thư viện |
-| **4 — Analysis boundary** | Shared 3D engine, planar DOF presets, snapshot từ `ModelDocument`; capability check (chặn Shell…); results gắn document ID + input hash | Numerical source gates + XZ regression + analytical/OpenSeesPy checks | Compiler và engine frame tuyến tính 3D xong, đã đối chiếu; còn cable, shell, frame có nút giữa, solver sparse, và nối vào app |
+| **4 — Analysis boundary** | Shared 3D engine, planar DOF presets, snapshot từ `ModelDocument`; capability check (chặn Shell…); results gắn document ID + input hash | Numerical source gates + XZ regression + analytical/OpenSeesPy checks | Compiler và `StaticSolver` xong cho frame và cable (target force, staged case, sag, frame có nút giữa, station dọc frame), đã đối chiếu ba nguồn kể cả default model; toàn bộ app đã chạy trên engine này và solver planar đã archive. Còn shell, solver sparse, diagnostics |
 | **5 — Hệ VCF trên native model** | Generator VCF tạo/sinh lại geometry qua command, giữ ID bằng `GenerationKey`; tên theo vai trò | Đổi số bay giữ ID và assignments của object không đổi | |
 | **6 — Desktop** | `Mcotis.Desktop`: shell, các ViewModel ở mục 5, selection chung, viewport đọc document | Tạo → lưu → mở → phân tích → xem kết quả hoàn toàn trên hệ mới | |
 | **7 — Persistence hoàn chỉnh** | Autosave nền theo revision, recovery, results store, đọc file `.cotfem.db` cũ, default model dạng `.mcotis` | Recovery không báo thành công giả; file cũ mở được | |
 | **8 — Release** | CI, đo hiệu năng, đóng gói; gỡ phần app cũ đã được thay | App chạy trọn vẹn trên máy không có SAP/ETABS | |
 
 Thứ tự 4 → 6 khác plan cũ (ViewModel trước, Analysis sau): đưa solver sang trước cho phép đối chiếu số với kết quả
-hiện có (default model: SLS 39.6 mm, ULS 46.3 mm) trước khi động vào UI.
+hiện có trước khi động vào UI. (Ghi chú 2026-10-12: default model hiện tại cho độ võng lớn nhất Pretension 22.9 mm,
+SLS 243.8 mm, ULS 392.5 mm ở cả solver planar lẫn `StaticSolver`; hai con số 39.6 mm / 46.3 mm từng ghi ở đây không
+được solver nào tái hiện, chưa rõ nguồn.)
 
 Shell: geometry, assignments và persistence đã có; chưa có shell solver. Capability check ở giai đoạn 4 phải chặn
 chạy model có Shell và nói rõ lý do.
 
 ## 7. Checks
 
-`dotnet run --project tests/Mcotis.Checks` — 1447 checks, không cần SAP2000, WPF hay database:
+`dotnet run --project tests/Mcotis.Checks` — 2705 checks, không cần SAP2000, WPF hay database:
 
 | Nhóm | Nội dung |
 |---|---|
@@ -161,10 +173,14 @@ chạy model có Shell và nói rõ lý do.
 | Native file | Round-trip; Save đúng dữ liệu đang thấy; Open lỗi giữ nguyên model; file thiếu/thừa field bị từ chối; migration không ghi file gốc; atomic save |
 | DOF compilation | Full 3D/plane/custom masks, deterministic mapping, support loads, failed compilation, immutable snapshot, schema-1 migration |
 | Spatial static | Ma trận 12×12 kiểm bằng tích phân độc lập, lời giải giải tích, cân bằng toàn cục, các trường hợp từ chối, đối chiếu OpenSeesPy (12 model) |
+| General static | Frame chia tại điểm nằm trên nó, cable tension-only, target force (một cable, hai cable tương tác, hai cable nối tiếp), staged case, sag so với lời giải kín và catenary chính xác, xoay cả kết cấu trong không gian, các trường hợp từ chối, đối chiếu OpenSeesPy (4 model có cable, 11 lời giải) |
 | Independence | Core, Application, Persistence và Analysis không tham chiếu WPF / SQLite / CSI |
 
-Còn thiếu so với danh sách của plan cũ: UX (Cancel dialog, selection đồng bộ) — thuộc giai đoạn 6; Analysis so với
-solver — giai đoạn 4.
+`dotnet run --project tests/Mcotis.Desktop.Checks -- --general-solver` đối chiếu phép phân tích của app (`FemSolver` →
+`StaticSolver`) với solver planar đã archive trên cùng dữ liệu đầu vào: một cable truss và default model như app chạy.
+`--fem` (58 checks lời giải kín của app) và `--fem-sap` (study SAP2000 đã lưu) nay cũng chạy qua solver tổng quát.
+
+Còn thiếu so với danh sách của plan cũ: UX (Cancel dialog, selection đồng bộ) — thuộc giai đoạn 6.
 
 ## 8. Việc còn để ngỏ
 

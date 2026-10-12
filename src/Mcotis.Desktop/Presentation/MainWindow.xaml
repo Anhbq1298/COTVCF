@@ -84,7 +84,7 @@
     <MenuItem Header="Cancel Study" Command="{Binding CancelStudy}"/>
     <Separator/>
     <MenuItem Header="Run _FEM Analysis" Command="{Binding RunFemAnalysis}"
-              ToolTip="Solve the model as it is defined — one run of the internal 2D frame model. SAP2000 is not read or written. Many cases belong to the parametric study (Optimization VCF)."/>
+              ToolTip="Solve the model as it is defined — one run of Mcotis's own solver, in the model's XZ plane. SAP2000 is not read or written. Many cases belong to the parametric study (Optimization VCF)."/>
     <MenuItem Header="_Unlock FEM Model" Command="{Binding UnlockFemModel}"
               ToolTip="Delete this revision's FEM output databases, clear Post-Processing and enable editing"/>
     <MenuItem Header="Cancel FEM Analysis" Command="{Binding CancelFemAnalysis}"/>

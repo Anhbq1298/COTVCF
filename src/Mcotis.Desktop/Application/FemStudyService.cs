@@ -96,7 +96,7 @@ public sealed record FemProgress(int Completed, int Total, string CandidateId, F
 public sealed class FemStudyService
 {
     public const int MaxCandidates = StudyCompositionService.MaxPreviewRows;
-    private readonly PlanarFrameSolver solver = new();
+    private readonly FemSolver solver = new();
     private readonly TrussGeometryService geometryBuilder = new();
 
     public BigInteger CandidateCount(ApplicationState state)
@@ -250,13 +250,13 @@ public sealed class FemStudyService
         IProgress<FemProgress>? progress = null,
         CancellationToken cancellationToken = default,
         double? targetFitPercent = null,
-        int maximumTargetFitIterations = PlanarFrameSolver.DefaultTargetFitIterations,
+        int maximumTargetFitIterations = FemSolver.DefaultTargetFitIterations,
         int frameMeshSegments = 1,
         FemLoadPlan? loadPlan = null,
         bool cableSag = false)
     {
-        if (frameMeshSegments is < 1 or > PlanarFrameSolver.MaximumFrameMeshSegments)
-            throw new ArgumentOutOfRangeException(nameof(frameMeshSegments), $"Frame mesh must be between 1 and {PlanarFrameSolver.MaximumFrameMeshSegments} segments per frame.");
+        if (frameMeshSegments is < 1 or > FemSolver.MaximumFrameMeshSegments)
+            throw new ArgumentOutOfRangeException(nameof(frameMeshSegments), $"Frame mesh must be between 1 and {FemSolver.MaximumFrameMeshSegments} segments per frame.");
         var frameProperties = sectionProperties.Where(pair => pair.Value.InPlaneInertiaM4 is not null)
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         var cableProperties = sectionProperties.Where(pair => pair.Value.InPlaneInertiaM4 is null)
