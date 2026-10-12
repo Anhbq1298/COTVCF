@@ -872,7 +872,8 @@ public partial class MainWindow : Window
             || (sender as FrameworkElement)?.Tag is not string tag
             || !Enum.TryParse<Mcotis.Desktop.Domain.ColumnDesignType>(tag, out var type)) return;
         var dialog = new DesignReferenceWindow(vm.DesignBasis(type), vm.DesignMemberOptions(type), vm.DesignCaseNames(), vm.DesignDefaultCases(),
-            vm.DesignRunId, member => vm.DesignSectionDefaults(type, member), SharedViewer.SelectedMembers) { Owner = this };
+            vm.DesignRunId, member => vm.DesignSectionDefaults(type, member), SharedViewer.SelectedMembers,
+            (members, cases) => vm.DesignMemberInputs(type, members, cases), vm.Materials.ToArray()) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is not { } basis) return;
         vm.SetDesignBasis(basis);
         var title = Mcotis.Desktop.Domain.ColumnDesignCodes.Title(type);

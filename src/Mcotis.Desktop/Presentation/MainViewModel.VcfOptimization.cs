@@ -39,6 +39,10 @@ public sealed partial class MainViewModel
 
     public ObservableCollection<VcfOptimizationRow> VcfOptimizationRows { get; } = [];
 
+    private StudyReport optimizationReport = StudyReport.Empty;
+    /// <summary>The Chart page of the last run (<see cref="OptimizationStudy"/>): figures and summary, built when the run ends.</summary>
+    public StudyReport OptimizationReport { get => optimizationReport; private set => Set(ref optimizationReport, value); }
+
     /// <summary>The axes of the last run that vary (one results column each).</summary>
     public IReadOnlyList<VcfOptimizationAxis> VcfOptimizationColumns { get; private set; } = [];
 
@@ -126,6 +130,15 @@ public sealed partial class MainViewModel
     {
         if (IsBusy || IsVcfOptimizationRunning) return;
         VcfOptimizationRows.Clear();
+        OptimizationReport = StudyReport.Empty;
+        var collected = new List<VcfOptimizationResult>();
+        IReadOnlyList<VcfOptimizationAxis> runAxes = [];
+        void Report()
+        {
+            var resultName = collected.Select(result => result.GoverningResult).FirstOrDefault(name => !string.IsNullOrEmpty(name)) ?? "every solved result";
+            OptimizationReport = OptimizationStudy.Build(runAxes, collected, resultName, criterion,
+                (title == "Optimization TAS" ? "L / " : "span / ") + spanRatio.ToString("0.###", CultureInfo.CurrentCulture));
+        }
         VcfOptimizationBest = "";
         VcfOptimizationPercent = 0;
         OptimizationTitle = title;
@@ -154,6 +167,7 @@ public sealed partial class MainViewModel
         {
             VcfOptimizationProgress = "Preparing the cases from the model…";
             var runner = prepare();
+            runAxes = runner.Axes;
             var columns = runner.Axes.Select((axis, index) => (axis, index)).Where(entry => entry.axis.Varies).ToArray();
             VcfOptimizationColumns = columns.Select(entry => entry.axis).ToArray();
             Notify(nameof(VcfOptimizationColumns));
@@ -165,6 +179,7 @@ public sealed partial class MainViewModel
             var progress = new Progress<VcfOptimizationResult>(result =>
             {
                 analysed++;
+                collected.Add(result);
                 var values = columns.Select(entry => VcfOptimizationRunner.Text(result.Case.Values[entry.index])).ToArray();
                 var utilisation = result.MaxDeflectionMm is { } d && result.LimitMm is { } l && l > 0 ? d / l : (double?)null;
                 var row = new VcfOptimizationRow(result.Case.Index + 1, values, result.MaxDeflectionMm,
@@ -204,11 +219,13 @@ public sealed partial class MainViewModel
                 " · working model and SAP2000 unchanged.";
             Message = VcfOptimizationProgress;
             if (best is not null) VcfOptimizationBest = Best(best, cheapest, passing, analysed, criterion, final: true);
+            Report();
         }
         catch (OperationCanceledException)
         {
             VcfOptimizationProgress = $"Cancelled after {VcfOptimizationRows.Count:N0} cases.";
             Message = VcfOptimizationProgress;
+            Report();     // the cases analysed so far
         }
         catch (Exception ex)
         {

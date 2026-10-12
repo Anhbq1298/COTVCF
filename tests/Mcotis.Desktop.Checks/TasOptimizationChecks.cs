@@ -28,8 +28,9 @@ internal static class TasOptimizationChecks
 
         // the form's start: geometry fixed at the model, the loads of the storeys above over their ranges
         var start = TasOptimization.Start(d);
-        Check(TasOptimization.Validate(start).Count == 0 && start.GeometryCount == 1 && start.ForceCount == 9 * 8 * 3 * 6 && start.CombinationCount == 1296,
-            $"Optimization TAS starts from the model's geometry with SW 7–15 @ 1, SDL 3–10 @ 1, LL 5–10 @ 2.5, n 5–10 @ 1: {start.CombinationCount:N0} combinations");
+        Check(TasOptimization.Validate(start).Count == 0 && start.GeometryCount == 4 && start.Geometry["h"] == new VcfRange(2, 5, 1) && start.ForceCount == 9 * 8 * 3 * 6 &&
+              start.CombinationCount == 4 * 1296 && TasOptimization.ParametersAt(start, range => range.Max).DeckHeight == 35,
+            $"Optimization TAS starts from the model's geometry with h 2–5 @ 1 (H2 = H1 + h: 32 … 35 m) and SW 7–15 @ 1, SDL 3–10 @ 1, LL 5–10 @ 2.5, n 5–10 @ 1: {start.CombinationCount:N0} combinations");
 
         // one case with the model's own inputs is the model: its deck deflection is that of Run FEM Analysis
         var reference = EtabsImportChecks.NewViewModel(out _);
@@ -65,6 +66,14 @@ internal static class TasOptimizationChecks
               rows.Count(row => row.MaxDeflectionMm is not null) == 4 && Math.Abs(same.MaxDeflectionMm!.Value - expected) < 1e-6 &&
               rows.Single(row => row.Values.SequenceEqual(["25", "10"])).Span == "100",
             $"H1 25 … 30 × bays 10 … 12: 6 cases, the 2 with 11 bays skipped ({odd.FirstOrDefault()?.Status}), the H1 30 / 12 bays case is the model");
+        // the Chart sheet of the results window: the run's parametric study, utilisation against L / ratio
+        var study = vm.OptimizationReport;
+        Check(study.Charts.Count > 0 && study.Charts.Select(chart => chart.Number).SequenceEqual(Enumerable.Range(1, study.Charts.Count)) &&
+              study.Charts.All(chart => chart.Series.Any(series => series.Points.Count > 0) && chart.Series.All(series => series.Points.All(point => double.IsFinite(point.Y)))) &&
+              study.Charts.Any(chart => chart.XTitle.Contains("H1", StringComparison.Ordinal)) &&
+              study.Charts.Any(chart => chart.YTitle.Contains("L / 250", StringComparison.Ordinal) || chart.Title.Contains("L / 250", StringComparison.Ordinal)) &&
+              study.Summary.Count > 0,
+            $"after Optimization TAS runs, the Chart sheet holds {study.Charts.Count} numbered figures of the study (e.g. Figure 1: {study.Charts.FirstOrDefault()?.Title}) and a summary");
 
         // a section per role: the top chord tried with two sections gives two different answers
         var sections = one with { RoleSections = new Dictionary<TiedArchRole, IReadOnlyList<string>> { [TiedArchRole.Deck] = ["CFT Deck 700x400x20", "CFT Brace 700x700x25"] } };
@@ -75,7 +84,7 @@ internal static class TasOptimizationChecks
 
         // what the form refuses
         var tooFew = one with { Geometry = new Dictionary<string, VcfRange>(one.Geometry, StringComparer.Ordinal) { [TasOptimization.Bays.Key] = new(4, 12, 2) } };
-        var lowDeck = one with { Geometry = new Dictionary<string, VcfRange>(one.Geometry, StringComparer.Ordinal) { [TasOptimization.DeckHeight.Key] = new(30, 33, 1) } };
+        var lowDeck = one with { Geometry = new Dictionary<string, VcfRange>(one.Geometry, StringComparer.Ordinal) { [TasOptimization.DeckRise.Key] = new(0, 3, 1) } };
         Check(TasOptimization.Validate(tooFew).Any(problem => problem.StartsWith("At the minimum", StringComparison.Ordinal) && problem.Contains("even", StringComparison.Ordinal)) &&
               TasOptimization.Validate(lowDeck).Any(problem => problem.Contains("H2", StringComparison.Ordinal)) &&
               TasOptimization.Validate(one with { SpanRatio = 0 }).Any(problem => problem.StartsWith("Deflection limit", StringComparison.Ordinal)),
@@ -137,9 +146,13 @@ internal static class TasOptimizationChecks
             $"the tie's pretension 10,000 … 30,000 kN in 3 steps: {string.Join(" / ", rows.Select(row => row.Deflection))} mm");
     }
 
-    /// <summary>The settings with every load fixed at the model's.</summary>
+    /// <summary>The settings with h and every load fixed at the model's.</summary>
     private static TasOptimizationSettings Fixed(TasOptimizationSettings settings, TiedArchParameters p) => settings with
     {
+        Geometry = new Dictionary<string, VcfRange>(settings.Geometry, StringComparer.Ordinal)
+        {
+            [TasOptimization.DeckRise.Key] = VcfRange.Fixed(p.DeckHeight - p.ArchRise, 1),
+        },
         Loads = new Dictionary<string, VcfRange>(StringComparer.Ordinal)
         {
             [TasOptimization.SelfWeight.Key] = VcfRange.Fixed(p.SelfWeight, 1), [TasOptimization.SuperimposedDead.Key] = VcfRange.Fixed(p.SuperimposedDead, 1),

@@ -18,6 +18,25 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Optimization results: Run and Chart sheets
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Optimization → Optimization VCF… / Optimization TAS… → Run Optimization; Optimization → Optimization Results… →
+  Run and Chart
+- What: The results window has two sheets. Run is the case table as before. Chart is the parametric study of the run,
+  written like the results section of a paper: up to 20 numbered figures — for every response that varies, its main
+  effect against every parameter that varies (the mean over the other parameters with the min … max band; deflection,
+  utilisation δ / limit with the 1.0 line, base horizontal force of one end, total cost, cost per metre of span, mass,
+  base vertical force, max cable tension, frame axial force and moment, uplift), a sensitivity ranking (swing of each key
+  response per parameter, as % of its mean), cost against utilisation for every case (passing / failing) and an
+  interaction plot of the two parameters that move the deflection most — then a summary (study, compliance, each key
+  response with its governing parameter, elasticity and linearity, the optimum, limitations) and numbered conclusions;
+  Copy Summary puts the text on the clipboard. Each case now also records the base reactions of one end (the sum over
+  the two column bases left of the middle — over all four the horizontal force is zero), the largest frame axial force,
+  moment and cable tension in the deflection result, and the system mass.
+- Checks: --optimization-study (known main effects, sensitivities, figure set, summary, one-end base force); the default
+  suite (a 4-case run on the default model gives its Chart sheet)
+
 ## 2026-10-12 · Tied arch system with an elevated cable
 - Status: Done
 - Who: Philip Pham, Claude
@@ -49,14 +68,15 @@ continues on the next lines, indented by two spaces):
 - Who: Philip Pham, Claude
 - Where: Optimization → Optimization TAS…; Optimization → Optimization Results…
 - What: The parametric study of the tied arch system, run as Optimization VCF is. The form has min / max / step for H1,
-  H2, the number of bays and their spacing (sheet Geometry, starting fixed at the open system) and for the storeys above
+  h (H2 = H1 + h, so the top chord is always above the arch crown; 2–5 m @ 1 by default), the number of bays and their
+  spacing (sheet Geometry, the others starting fixed at the open system) and for the storeys above
   — SW 7–15 kPa @ 1, SDL 3–10 @ 1, LL 5–10 @ 2.5, floors n 5–10 @ 1 and the tributary width B (sheet Storey Force, with
   the SLS / ULS point load per deck joint) — candidate sections per role (arch rib, top chord, mega column, end strut,
   strut, brace), the deflection check (max δ of a top chord joint in the chosen result ≤ L / ratio, uplift limit) and a
   preview at the minimum, current or maximum corner. Run Optimization builds every case in memory as Edit → Tied Arch
-  System would (an odd number of bays or H2 not above H1 is skipped with the reason), analyses it with the internal FEM
+  System would (an odd number of bays is skipped with the reason), analyses it with the internal FEM
   and lists it in the Optimization Results table — the same table, run loop, checks and cost as Optimization VCF, which
-  now share one loop. The default space is 1,296 cases. Needs the tied arch system open (File → Load TAS… or Edit →
+  now share one loop. The default space is 5,184 cases. Needs the tied arch system open (File → Load TAS… or Edit →
   Tied Arch System…); the open model is not changed. The span of an arch is L: the model view labels it "Span L = 120 m",
   and the form and the results give the limit as L/250 (480 mm for TAS).
 - Checks: --etabs-import (a case with the model's inputs deflects as Run FEM Analysis of Load TAS; odd bays skipped;

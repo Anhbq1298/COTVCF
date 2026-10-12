@@ -864,6 +864,15 @@ internal static class FemModelFileChecks
               Defl(3) > Defl(1) && Defl(4) > Defl(2) && Defl(2) > Defl(1) && Defl(4) > Defl(3) &&
               vm.VcfOptimizationBest.Contains("case 1", StringComparison.Ordinal),
             $"Run Optimization analyses every case (4) and reports its max deflection: wider bays and more live load deflect more ({Defl(1):0.0} … {Defl(4):0.0} mm); the least is named");
+        var study = vm.OptimizationReport;
+        StudySensitivity? Swing(string metric, string parameter) =>
+            study.Sensitivities.FirstOrDefault(s => s.Metric.StartsWith(metric, StringComparison.Ordinal) && s.Parameter == parameter);
+        Check(study.Charts.Count is >= 8 and <= OptimizationStudy.MaxCharts && study.Charts[0].Title.StartsWith("Max deflection δ vs", StringComparison.Ordinal) &&
+              Swing("Base horizontal", $"qz {live.LoadName} [kPa]") is { SwingPercent: > 0, Direction: > 0 } &&
+              Swing("Total cost", $"qz {live.LoadName} [kPa]") is { SwingPercent: 0 } && Swing("Total cost", "Bay [m]") is { SwingPercent: > 0 } &&
+              study.Summary.Any(entry => entry.Heading == "Compliance") && study.Conclusions.Count > 0,
+            $"The run's Chart sheet: {study.Charts.Count} figures from the 4 cases; the base horizontal force of one end grows with the live load, " +
+            "the cost follows the bay width and not the load; summary and conclusions written");
 
         // the study case that takes every input at the model's own value is the run of Run FEM Analysis: one model, two entries
         // (the optimization reads the deflection on the bottom chord points, BTrPt… — so does this comparison)

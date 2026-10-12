@@ -359,11 +359,11 @@ internal static class ResultToolbarChecks
         var limit = tas.LimitShown;
         tas.SetRange("Bays", "max", "14");
         Idle();
-        Check(startCount.EndsWith($"{Kn(1296)} combinations", StringComparison.Ordinal) && limit.StartsWith("limit L/250 = 480.0 mm", StringComparison.Ordinal) &&
+        Check(startCount.EndsWith($"{Kn(4 * 1296)} combinations", StringComparison.Ordinal) && limit.StartsWith("limit L/250 = 480.0 mm", StringComparison.Ordinal) &&
               loads.Contains($"SLS {Kn(9_000)} … {Kn(42_000)} kN", StringComparison.Ordinal) && loads.Contains($"ULS {Kn(12_600)} … {Kn(58_500)} kN", StringComparison.Ordinal) &&
-              tas.SpaceText.EndsWith($"{Kn(2592)} combinations", StringComparison.Ordinal) && tas.OkButton.IsEnabled && !tas.RunButton.IsEnabled &&
+              tas.SpaceText.EndsWith($"{Kn(2 * 4 * 1296)} combinations", StringComparison.Ordinal) && tas.OkButton.IsEnabled && !tas.RunButton.IsEnabled &&
               tas.FormSettings().Geometry["Bays"].Values().SequenceEqual([12.0, 14.0]) && tas.Preview.Model.Points.Count == 30,
-            $"Optimization TAS opens on the TAS system with 1,296 combinations, the limit L/250 ({limit}) and the SLS / ULS point load range ({loads}); 12 … 14 bays doubles them; " +
+            $"Optimization TAS opens on the TAS system with 5,184 combinations (h 2 … 5 m), the limit L/250 ({limit}) and the SLS / ULS point load range ({loads}); 12 … 14 bays doubles them; " +
             "Run waits for the tied arch system to be open");
         tas.Close();
 
@@ -388,7 +388,7 @@ internal static class ResultToolbarChecks
         Idle();
         var settings = optimize.FormSettings();
         Check(shown && hidden && optimize.CableSheet.IsEnabled && settings.ElevatedCable && settings.Geometry.ContainsKey("H0") && settings.CableStepCount == 3 &&
-              optimize.SpaceText.EndsWith($"{Kn(1296 * 3)} combinations", StringComparison.Ordinal) && optimize.Preview.Model.Members.Any(member => member.Kind == MemberKind.Cable),
+              optimize.SpaceText.EndsWith($"{Kn(4 * 1296 * 3)} combinations", StringComparison.Ordinal) && optimize.Preview.Model.Members.Any(member => member.Kind == MemberKind.Cable),
             "with the elevated cable, Edit → Tied Arch System shows H0 = 10 m and the tie (192T15.7, 20,000 kN) on Cable Force, and hides both without it; " +
             "Optimization TAS adds H0 and the tie's pretension steps (3 steps triple the cases)");
         optimize.Close();

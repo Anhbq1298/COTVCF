@@ -46,6 +46,11 @@ internal static class Program
                 SapImportChecks.Run();
                 return 0;
             }
+            if (args.Contains("--optimization-study"))
+            {
+                OptimizationStudyChecks.Run();
+                return 0;
+            }
             if (args.Contains("--dev-log"))
             {
                 DevelopmentLogChecks.Run();
@@ -1448,6 +1453,7 @@ internal static class Program
             ViewerResultDisplayChecks.Run();
             StudyExecutionChecks.Run();
             OptimizationChecks.Run();
+            OptimizationStudyChecks.Run();
             CableForceReportChecks.Run();
             ReportPrintChecks.Run();
             FemRunReportChecks.Run();

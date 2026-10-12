@@ -159,13 +159,18 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Designs every member of <paramref name="basis"/> with the forces of the FEM run.</summary>
-    internal IReadOnlyList<ColumnMemberDesign> RunColumnDesign(ColumnDesignBasis basis)
+    internal IReadOnlyList<ColumnMemberDesign> RunColumnDesign(ColumnDesignBasis basis) =>
+        DesignMemberInputs(basis.Type, basis.Members, basis.LoadCases).Select(input => ColumnDesignEngine.Design(basis, input)).ToArray();
+
+    /// <summary>The FEM forces of <paramref name="members"/> under <paramref name="loadCases"/> (empty: all) in the design
+    /// candidate, as the design engine and the optimisation take them.</summary>
+    internal IReadOnlyList<DesignMemberInput> DesignMemberInputs(ColumnDesignType type, IReadOnlyList<string> members, IReadOnlyList<string> loadCases)
     {
         var run = SelectedFemRun ?? FemRuns.FirstOrDefault();
         if (run is null) return [];
-        var cases = basis.LoadCases.Count > 0 ? basis.LoadCases : DesignCaseNames();
-        var options = DesignMemberOptions(basis.Type).ToDictionary(option => option.Member, StringComparer.Ordinal);
-        return basis.Members.Select(member =>
+        var cases = loadCases.Count > 0 ? loadCases : DesignCaseNames();
+        var options = DesignMemberOptions(type).ToDictionary(option => option.Member, StringComparer.Ordinal);
+        return members.Select(member =>
         {
             var forces = cases.Select(name =>
             {
@@ -176,7 +181,7 @@ public sealed partial class MainViewModel
                 return new DesignCaseForces(name, stations);
             }).ToArray();
             var option = options.GetValueOrDefault(member);
-            return ColumnDesignEngine.Design(basis, new DesignMemberInput(member, option?.Section ?? "", option?.LengthM ?? 0, forces));
+            return new DesignMemberInput(member, option?.Section ?? "", option?.LengthM ?? 0, forces);
         }).ToArray();
     }
 }

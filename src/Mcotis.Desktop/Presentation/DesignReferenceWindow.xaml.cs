@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using Mcotis.Desktop.Application.Design;
 using Mcotis.Desktop.Domain;
 
 namespace Mcotis.Desktop.Presentation;
@@ -36,6 +37,11 @@ public partial class DesignReferenceWindow : Window
         new("Steel tube", "H  depth / D diameter", "mm", [Cft], s => s.TubeDepth, (s, v) => s with { TubeDepth = v }),
         new("Steel tube", "B  width (rectangular)", "mm", [Cft], s => s.TubeWidth, (s, v) => s with { TubeWidth = v }),
         new("Steel tube", "t  wall thickness", "mm", [Cft], s => s.TubeThickness, (s, v) => s with { TubeThickness = v }),
+        new("Bars inside the tube", "Bars per B face / on the circle (0 = none)", "no.", [Cft], s => s.TubeReinforced ? s.BarsAlongWidth : 0,
+            (s, v) => s with { TubeReinforced = v >= 2, BarsAlongWidth = v >= 2 ? (int)v : s.BarsAlongWidth }, Integer: true, Positive: false),
+        new("Bars inside the tube", "Bars per H face (excl. corners)", "no.", [Cft], s => s.BarsAlongDepth, (s, v) => s with { BarsAlongDepth = (int)v }, Integer: true, Positive: false),
+        new("Bars inside the tube", "Bar Ø", "mm", [Cft], s => s.BarDiameter, (s, v) => s with { BarDiameter = v }),
+        new("Bars inside the tube", "Cover to the tube's inside face", "mm", [Cft], s => s.Cover, (s, v) => s with { Cover = v }),
         new("Encased steel I section", "h  steel depth", "mm", [Src, Mega], s => s.SteelDepth, (s, v) => s with { SteelDepth = v }),
         new("Encased steel I section", "b  flange width", "mm", [Src, Mega], s => s.SteelWidth, (s, v) => s with { SteelWidth = v }),
         new("Encased steel I section", "tf  flange", "mm", [Src, Mega], s => s.FlangeThickness, (s, v) => s with { FlangeThickness = v }),
@@ -75,7 +81,9 @@ public partial class DesignReferenceWindow : Window
 
     public DesignReferenceWindow(ColumnDesignBasis basis, IReadOnlyList<DesignMemberOption> memberOptions, IReadOnlyList<string> caseNames,
         IReadOnlyList<string> defaultCases, string? runId, Func<string, ColumnSectionInput> sectionFromMember,
-        IReadOnlyList<string>? viewerSelection = null)
+        IReadOnlyList<string>? viewerSelection = null,
+        Func<IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<DesignMemberInput>>? memberForces = null,
+        IReadOnlyList<MaterialProperty>? materials = null)
     {
         InitializeComponent();
         type = basis.Type;
@@ -108,6 +116,7 @@ public partial class DesignReferenceWindow : Window
         CaseList.ItemsSource = cases;
         RunText.Text = runId is null ? "No FEM results — run the FEM analysis first." : "Forces from the FEM analysis of the model (Run → Run FEM Analysis).";
         Show(basis);
+        InitOptimization(basis, memberForces, materials);
     }
 
     private void BuildSectionFields()
@@ -204,25 +213,35 @@ public partial class DesignReferenceWindow : Window
 
     private void Run_Click(object sender, RoutedEventArgs e)
     {
-        void Fail(string message, int tab) { StatusText.Text = message; Tabs.SelectedIndex = tab; }
+        if (ReadBasis() is not { } basis) return;
+        Result = basis;
+        DialogResult = true;
+    }
+
+    /// <summary>The design basis as the form holds it, checked; null (with the problem shown and its tab selected) when
+    /// something is missing or invalid.</summary>
+    private ColumnDesignBasis? ReadBasis(bool requireMembers = true)
+    {
+        ColumnDesignBasis? Fail(string message, int tab) { StatusText.Text = message; Tabs.SelectedIndex = tab; return null; }
         if (!TryNumber(GammaCBox.Text, 1.0, out var gammaC) || !TryNumber(GammaSBox.Text, 1.0, out var gammaS) || !TryNumber(GammaABox.Text, 1.0, out var gammaA))
-        { Fail("Partial factors must be numbers of 1.0 or more.", 0); return; }
+        { return Fail("Partial factors must be numbers of 1.0 or more.", 0);  }
         if (!TryLength(LengthYBox.Text, out var lengthY) || !TryLength(LengthZBox.Text, out var lengthZ))
-        { Fail("Key in both effective lengths in m (greater than 0).", 0); return; }
+        { return Fail("Key in both effective lengths in m (greater than 0).", 0);  }
         var section = shownSection with { Tube = tubeBox.SelectedItem is TubeShape tube ? tube : TubeShape.Rectangular };
         foreach (var (field, box) in fieldBoxes)
         {
             if (!double.TryParse(box.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || value < 0 || field.Positive && value <= 0 ||
                 field.Integer && value != Math.Floor(value))
-            { Fail($"{field.Label}: enter a {(field.Integer ? "whole " : "")}number{(field.Positive ? " greater than 0" : "")}.", 1); return; }
+            { return Fail($"{field.Label}: enter a {(field.Integer ? "whole " : "")}number{(field.Positive ? " greater than 0" : "")}.", 1);  }
             section = field.Set(section, value);
         }
-        if (SectionProblem(section) is { } problem) { Fail(problem, 1); return; }
+        if (SectionProblem(section) is { } problem) { return Fail(problem, 1);  }
         var chosenMembers = members.Where(member => member.IsChecked).Select(member => member.Name).ToArray();
         var chosenCases = cases.Where(item => item.IsChecked).Select(item => item.Name).ToArray();
-        if (chosenMembers.Length == 0) { Fail("Tick at least one member to design.", 2); return; }
-        if (cases.Count > 0 && chosenCases.Length == 0) { Fail("Tick at least one load case or combination.", 2); return; }
-        Result = new ColumnDesignBasis
+        if (requireMembers && chosenMembers.Length == 0) return Fail("Tick at least one member to design.", 2);
+        if (cases.Count > 0 && chosenCases.Length == 0) return Fail("Tick at least one load case or combination.", 2);
+        StatusText.Text = "";
+        return new ColumnDesignBasis
         {
             Type = type,
             DesignCode = (string)CodeBox.SelectedItem,
@@ -238,7 +257,6 @@ public partial class DesignReferenceWindow : Window
             Members = chosenMembers,
             LoadCases = chosenCases,
         };
-        DialogResult = true;
     }
 
     /// <summary>Geometry that cannot be built: walls thicker than half the tube, steel larger than the concrete, bars that do not fit.</summary>

@@ -58,7 +58,10 @@ public sealed record TasOptimizationSettings(
 public static class TasOptimization
 {
     public static readonly VcfOptimization.Parameter ArchRise = new("H1", "H1 — support → arch crown", "m", 1);
-    public static readonly VcfOptimization.Parameter DeckHeight = new("H2", "H2 — support → top chord", "m", 1);
+    /// <summary>The top chord's height above the arch crown: H2 = H1 + h, so the deck is always above the arch.</summary>
+    public static readonly VcfOptimization.Parameter DeckRise = new("h", "h — arch crown → top chord (H2 = H1 + h)", "m", 1);
+    /// <summary>The h range the form starts with: 2 … 5 m in steps of 1 m.</summary>
+    public static VcfRange DefaultDeckRise { get; } = new(2, 5, 1);
     public static readonly VcfOptimization.Parameter Bays = new("Bays", "Number of bays (even)", "", 2, Whole: true);
     public static readonly VcfOptimization.Parameter Spacing = new("Spacing", "Spacing of vertical lines", "m", 1);
     /// <summary>The elevated cable's height (a geometry range only for a system with the elevated cable).</summary>
@@ -69,12 +72,12 @@ public static class TasOptimization
     public static readonly VcfOptimization.Parameter Floors = new("Floors", "Number of floors n", "", 1, Whole: true);
     public static readonly VcfOptimization.Parameter Width = new("B", "Tributary width B", "m", 1);
 
-    public static IReadOnlyList<VcfOptimization.Parameter> GeometryParameters { get; } = [ArchRise, DeckHeight, Bays, Spacing];
+    public static IReadOnlyList<VcfOptimization.Parameter> GeometryParameters { get; } = [ArchRise, DeckRise, Bays, Spacing];
     public static IReadOnlyList<VcfOptimization.Parameter> LoadParameters { get; } = [SelfWeight, SuperimposedDead, Live, Floors, Width];
 
     private static double Value(TiedArchParameters p, VcfOptimization.Parameter parameter) => parameter.Key switch
     {
-        "H1" => p.ArchRise, "H2" => p.DeckHeight, "Bays" => p.Bays, "Spacing" => p.BaySpacing, "H0" => p.CableHeight,
+        "H1" => p.ArchRise, "h" => p.DeckHeight - p.ArchRise, "Bays" => p.Bays, "Spacing" => p.BaySpacing, "H0" => p.CableHeight,
         "SW" => p.SelfWeight, "SDL" => p.SuperimposedDead, "LL" => p.Live, "Floors" => p.Floors, _ => p.TributaryWidth,
     };
 
@@ -82,7 +85,8 @@ public static class TasOptimization
     /// (SW 7–15 kPa @ 1, SDL 3–10 kPa @ 1, LL 5–10 kPa @ 2.5, n 5–10 @ 1) with B fixed, no section candidates; with an
     /// elevated cable also H0 and the tie's pretension, fixed at the system's.</summary>
     public static TasOptimizationSettings Start(TiedArchParameters p) => new(
-        GeometryParametersOf(p.ElevatedCable).ToDictionary(parameter => parameter.Key, parameter => VcfRange.Fixed(Value(p, parameter), parameter.DefaultStep), StringComparer.Ordinal),
+        GeometryParametersOf(p.ElevatedCable).ToDictionary(parameter => parameter.Key,
+            parameter => parameter == DeckRise ? DefaultDeckRise : VcfRange.Fixed(Value(p, parameter), parameter.DefaultStep), StringComparer.Ordinal),
         new Dictionary<string, VcfRange>(StringComparer.Ordinal)
         {
             [SelfWeight.Key] = new(7, 15, 1), [SuperimposedDead.Key] = new(3, 10, 1), [Live.Key] = new(5, 10, 2.5),
@@ -104,7 +108,7 @@ public static class TasOptimization
         double V(VcfOptimization.Parameter parameter) =>
             (LoadParameters.Contains(parameter) ? settings.Loads : settings.Geometry).TryGetValue(parameter.Key, out var range) ? pick(range) : double.NaN;
         var force = settings.CableForce;
-        return new TiedArchParameters(V(ArchRise), V(DeckHeight), (int)Math.Round(V(Bays)), V(Spacing), V(Width), V(SelfWeight), V(SuperimposedDead), V(Live),
+        return new TiedArchParameters(V(ArchRise), V(ArchRise) + V(DeckRise), (int)Math.Round(V(Bays)), V(Spacing), V(Width), V(SelfWeight), V(SuperimposedDead), V(Live),
             (int)Math.Round(V(Floors)), settings.ElevatedCable,
             settings.ElevatedCable ? V(CableHeight) : TiedArchParameters.DefaultCableHeight,
             settings.ElevatedCable ? pick(new VcfRange(force.Min, force.Max, Math.Max(force.Max - force.Min, 1))) : TiedArchParameters.DefaultCablePretension);
@@ -112,7 +116,8 @@ public static class TasOptimization
 
     /// <summary>Unreadable ranges, the check limits, and the lowest / highest corner failing
     /// <see cref="TiedArchParameters.GeometryProblems"/>. Single cases inside the space that cannot be built (an odd number
-    /// of bays, H2 not above H1) are skipped by the run, as Optimization VCF skips its invalid ones.</summary>
+    /// of bays) are skipped by the run, as Optimization VCF skips its invalid ones. H2 = H1 + h with h &gt; 0, so the top chord
+    /// is always above the arch crown.</summary>
     public static IReadOnlyList<string> Validate(TasOptimizationSettings settings)
     {
         var problems = new List<string>();
@@ -123,6 +128,8 @@ public static class TasOptimization
         }
         if (!double.IsFinite(settings.SpanRatio) || settings.SpanRatio <= 0) problems.Add("Deflection limit: span / ratio needs a ratio greater than zero.");
         if (!double.IsFinite(settings.UpliftLimitMm) || settings.UpliftLimitMm < 0) problems.Add("Uplift limit: enter a number of at least 0 mm.");
+        if (settings.Geometry.TryGetValue(DeckRise.Key, out var rise) && rise.Problem() is null && rise.Min <= 0)
+            problems.Add($"{DeckRise.Label}: min must be greater than 0 m, so the top chord stays above the arch crown.");
         if (settings.ElevatedCable)
         {
             if (settings.CableSteps < 1) problems.Add("Cable force steps: enter a whole number of at least 1.");
@@ -220,7 +227,7 @@ public sealed class TasOptimizationRunner : IOptimizationRunner
         double L(VcfOptimization.Parameter parameter) => V(parameter, "load:");
         var stepAxis = Axes.ToList().FindIndex(axis => axis.Key == VcfOptimizationRunner.CableStepKey);
         var pretension = stepAxis >= 0 && item.Values[stepAxis] is VcfCableStep step ? step.ForceKN : settings.CableForceAt(0);
-        return new TiedArchParameters(G(TasOptimization.ArchRise), G(TasOptimization.DeckHeight), (int)Math.Round(G(TasOptimization.Bays)), G(TasOptimization.Spacing),
+        return new TiedArchParameters(G(TasOptimization.ArchRise), G(TasOptimization.ArchRise) + G(TasOptimization.DeckRise), (int)Math.Round(G(TasOptimization.Bays)), G(TasOptimization.Spacing),
             L(TasOptimization.Width), L(TasOptimization.SelfWeight), L(TasOptimization.SuperimposedDead), L(TasOptimization.Live), (int)Math.Round(L(TasOptimization.Floors)),
             settings.ElevatedCable, settings.ElevatedCable ? G(TasOptimization.CableHeight) : TiedArchParameters.DefaultCableHeight,
             settings.ElevatedCable ? pretension : TiedArchParameters.DefaultCablePretension);
@@ -282,7 +289,7 @@ public sealed class TasOptimizationRunner : IOptimizationRunner
             var (_, upliftPoint, risen) = checkedJoints.MinBy(entry => entry.Mm);
             var uplift = -risen;
             return new(item, deflection, name, point, results.Values.All(result => result.TargetFitConverged), null, p.Span, p.Span * 1000 / settings.SpanRatio,
-                cost, costNote, Math.Max(0, uplift), uplift > 0 ? upliftPoint : null, settings.UpliftLimitMm);
+                cost, costNote, Math.Max(0, uplift), uplift > 0 ? upliftPoint : null, settings.UpliftLimitMm, OptimizationResponses.Of(geometry, properties, results[name]));
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or KeyNotFoundException)

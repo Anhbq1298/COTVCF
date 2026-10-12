@@ -134,6 +134,124 @@
      </GroupBox>
     </Grid>
    </TabItem>
+
+   <!-- CFT only: the cheapest section for the ticked members and load cases over the ranges below (CftOptimizer). -->
+   <TabItem x:Name="OptimizationTab" Header="Optimization">
+    <Grid Margin="0,6,0,0">
+     <Grid.ColumnDefinitions><ColumnDefinition Width="3*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="1.1*" MinWidth="200"/></Grid.ColumnDefinitions>
+     <Grid.RowDefinitions><RowDefinition Height="*" MinHeight="200"/><RowDefinition Height="Auto"/><RowDefinition Height="1.1*" MinHeight="150"/></Grid.RowDefinitions>
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,4,0">
+      <StackPanel>
+       <GroupBox Header="Effective length (as on Design Basis)">
+        <StackPanel Orientation="Horizontal">
+         <TextBlock Text="l0,y" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptLengthYBox" Width="70" Style="{StaticResource Field}" AutomationProperties.Name="Optimization effective length major axis"/>
+         <TextBlock Text="m" Style="{StaticResource Label}" Margin="4,0,20,6"/>
+         <TextBlock Text="l0,z" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptLengthZBox" Width="70" Style="{StaticResource Field}" AutomationProperties.Name="Optimization effective length minor axis"/>
+         <TextBlock Text="m" Style="{StaticResource Label}" Margin="4,0,0,6"/>
+        </StackPanel>
+       </GroupBox>
+       <GroupBox Header="Steel tube — size range (mm)">
+        <Grid>
+         <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="72"/><ColumnDefinition Width="72"/><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+         <TextBlock Text="Shape" Style="{StaticResource Label}"/>
+         <ComboBox x:Name="OptShapeBox" Grid.Column="1" Grid.ColumnSpan="2" Style="{StaticResource Field}" SelectionChanged="OptShape_Changed" AutomationProperties.Name="Optimization tube shape"/>
+         <CheckBox x:Name="OptSquareBox" Grid.Column="3" Grid.ColumnSpan="2" Content="Square (B = H)" VerticalAlignment="Center" Margin="6,0,0,6" IsChecked="True" Click="OptShape_Changed"/>
+         <TextBlock Grid.Row="1" Grid.Column="1" Text="min" Style="{StaticResource Caption}" Margin="2,0,0,2"/>
+         <TextBlock Grid.Row="1" Grid.Column="2" Text="max" Style="{StaticResource Caption}" Margin="2,0,0,2"/>
+         <TextBlock Grid.Row="1" Grid.Column="3" Text="step" Style="{StaticResource Caption}" Margin="2,0,0,2"/>
+         <TextBlock x:Name="OptDepthLabel" Grid.Row="2" Text="H  depth (in-plane)" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptDepthMin" Grid.Row="2" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptDepthMax" Grid.Row="2" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptDepthStep" Grid.Row="2" Grid.Column="3" Margin="0,0,4,6"/>
+         <TextBlock x:Name="OptWidthLabel" Grid.Row="3" Text="B  width" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptWidthMin" Grid.Row="3" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptWidthMax" Grid.Row="3" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptWidthStep" Grid.Row="3" Grid.Column="3" Margin="0,0,4,6"/>
+         <TextBlock Grid.Row="4" Text="t  wall thickness" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptThickMin" Grid.Row="4" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptThickMax" Grid.Row="4" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptThickStep" Grid.Row="4" Grid.Column="3" Margin="0,0,4,6"/>
+        </Grid>
+       </GroupBox>
+       <GroupBox Header="Grades (stepped grade by grade)">
+        <Grid>
+         <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="110"/><ColumnDefinition Width="30"/><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+         <TextBlock Text="Structural steel" Style="{StaticResource Label}"/>
+         <ComboBox x:Name="OptSteelFrom" Grid.Column="1" Style="{StaticResource Field}" SelectionChanged="OptGrades_Changed" AutomationProperties.Name="Lowest steel grade"/>
+         <TextBlock Grid.Column="2" Text="to" Style="{StaticResource Label}" Margin="8,0,0,6"/>
+         <ComboBox x:Name="OptSteelTo" Grid.Column="3" Style="{StaticResource Field}" SelectionChanged="OptGrades_Changed" AutomationProperties.Name="Highest steel grade"/>
+         <TextBlock Grid.Column="4" Text="fy by plate thickness, EN 10025" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="8,0,0,6"/>
+         <TextBlock Grid.Row="1" Text="Concrete" Style="{StaticResource Label}"/>
+         <ComboBox x:Name="OptConcreteFrom" Grid.Row="1" Grid.Column="1" Style="{StaticResource Field}" SelectionChanged="OptGrades_Changed" AutomationProperties.Name="Lowest concrete grade"/>
+         <TextBlock Grid.Row="1" Grid.Column="2" Text="to" Style="{StaticResource Label}" Margin="8,0,0,6"/>
+         <ComboBox x:Name="OptConcreteTo" Grid.Row="1" Grid.Column="3" Style="{StaticResource Field}" SelectionChanged="OptGrades_Changed" AutomationProperties.Name="Highest concrete grade"/>
+        </Grid>
+       </GroupBox>
+       <GroupBox Header="Bars inside the tube">
+        <Grid>
+         <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="110"/><ColumnDefinition Width="30"/><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+         <CheckBox x:Name="OptRebarBox" Grid.ColumnSpan="5" Content="Also try reinforced options (the unreinforced tube is always tried)" Margin="0,0,0,6"/>
+         <TextBlock Grid.Row="1" Text="Bar Ø (mm, list)" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptBarDiameters" Grid.Row="1" Grid.Column="1" Style="{StaticResource Field}" Text="25, 32, 40" AutomationProperties.Name="Bar diameters"/>
+         <TextBlock Grid.Row="1" Grid.Column="3" Text="cover to tube" Style="{StaticResource Label}" HorizontalAlignment="Right"/>
+         <TextBox x:Name="OptCover" Grid.Row="1" Grid.Column="4" Width="60" HorizontalAlignment="Left" Style="{StaticResource Field}" Text="50" AutomationProperties.Name="Bar cover"/>
+         <TextBlock Grid.Row="2" Text="Bars per face" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptBarsMin" Grid.Row="2" Grid.Column="1" Style="{StaticResource Field}" Text="3" AutomationProperties.Name="Minimum bars per face"/>
+         <TextBlock Grid.Row="2" Grid.Column="2" Text="to" Style="{StaticResource Label}" Margin="8,0,0,6"/>
+         <TextBox x:Name="OptBarsMax" Grid.Row="2" Grid.Column="3" Style="{StaticResource Field}" Text="5" AutomationProperties.Name="Maximum bars per face"/>
+         <TextBlock Grid.Row="2" Grid.Column="4" Text="corners included; CHS: 4(n−1) bars" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="8,0,0,6"/>
+        </Grid>
+       </GroupBox>
+       <GroupBox Header="Unit costs (SGD) — from the material library; edit to use your rates">
+        <DataGrid x:Name="OptRates" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column" MaxHeight="190"
+                  AutomationProperties.Name="Unit costs">
+         <DataGrid.Columns>
+          <DataGridTextColumn Header="Material" Binding="{Binding Kind}" IsReadOnly="True" Width="90"/>
+          <DataGridTextColumn Header="Grade" Binding="{Binding Grade}" IsReadOnly="True" Width="90"/>
+          <DataGridTextColumn Header="Rate" Binding="{Binding Rate, StringFormat={}{0:0.##}}" Width="90"/>
+          <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" IsReadOnly="True" Width="*"/>
+         </DataGrid.Columns>
+        </DataGrid>
+       </GroupBox>
+      </StackPanel>
+     </ScrollViewer>
+
+     <DockPanel Grid.Row="1" Margin="0,2,0,6">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+       <Button x:Name="OptRunButton" Content="▶ Run" MinWidth="80" Margin="0,0,6,0" Click="OptRun_Click" ToolTip="Search the ranges for the cheapest passing sections (ticked members and load cases)"/>
+       <Button x:Name="OptStopButton" Content="Stop" MinWidth="60" Margin="0,0,6,0" IsEnabled="False" Click="OptStop_Click"/>
+       <Button x:Name="OptUseButton" Content="Use Selected" MinWidth="96" IsEnabled="False" Click="OptUse_Click" ToolTip="Put the selected section on the Section tab; Run Design then gives its full report"/>
+      </StackPanel>
+      <TextBlock x:Name="OptStatus" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{StaticResource Muted}" FontSize="11"/>
+     </DockPanel>
+
+     <DataGrid x:Name="OptResults" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" HeadersVisibility="Column"
+               SelectionChanged="OptResults_SelectionChanged" MouseDoubleClick="OptUse_Click" AutomationProperties.Name="Optimization results">
+      <DataGrid.Columns>
+       <DataGridTextColumn Header="#" Binding="{Binding Rank}" Width="30"/>
+       <DataGridTextColumn Header="Section" Binding="{Binding Candidate.Size}" Width="*" MinWidth="130"/>
+       <DataGridTextColumn Header="Steel" Binding="{Binding Steel}" Width="92"/>
+       <DataGridTextColumn Header="Concrete" Binding="{Binding Candidate.ConcreteGrade}" Width="72"/>
+       <DataGridTextColumn Header="Bars" Binding="{Binding Candidate.Rebar}" Width="64"/>
+       <DataGridTextColumn Header="Steel kg/m" Binding="{Binding Candidate.SteelKgPerM, StringFormat={}{0:N0}}" Width="72"/>
+       <DataGridTextColumn Header="Conc. m³/m" Binding="{Binding Candidate.ConcreteM3PerM, StringFormat={}{0:0.000}}" Width="74"/>
+       <DataGridTextColumn Header="SGD / m" Binding="{Binding Candidate.CostPerM, StringFormat={}{0:N0}}" Width="70"/>
+       <DataGridTextColumn Header="Util." Binding="{Binding Check.MaxUtilization, StringFormat={}{0:0.00}}" Width="44"/>
+       <DataGridTextColumn Header="Governs" Binding="{Binding Check.Governing}" Width="*" MinWidth="110"/>
+      </DataGrid.Columns>
+     </DataGrid>
+
+     <GroupBox Grid.Column="2" Grid.RowSpan="3" Header="Load cases / combinations to design">
+      <DockPanel>
+       <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+        <Button Content="All" MinWidth="56" Margin="0,0,6,0" Tag="all" Click="CasePick_Click"/>
+        <Button Content="None" MinWidth="56" Tag="none" Click="CasePick_Click"/>
+       </StackPanel>
+       <TextBlock x:Name="OptMembersText" DockPanel.Dock="Top" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+       <ListBox x:Name="OptCaseList" ItemTemplate="{StaticResource CheckItem}" BorderThickness="1" BorderBrush="{StaticResource Border}" AutomationProperties.Name="Optimization load cases"/>
+      </DockPanel>
+     </GroupBox>
+    </Grid>
+   </TabItem>
   </TabControl>
  </DockPanel>
 </Window>
