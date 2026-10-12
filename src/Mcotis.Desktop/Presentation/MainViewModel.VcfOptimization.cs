@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Windows.Input;
 using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Etabs;
 using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Geometry;
 
@@ -90,19 +91,57 @@ public sealed partial class MainViewModel
     {
         if (IsBusy || IsVcfOptimizationRunning) return;
         SetVcfOptimization(settings);
+        var fitPercent = FemTargetFitPercent;
+        await RunOptimizationAsync("Optimization VCF", settings.CombinationCount, settings.SpanRatio, settings.UpliftLimitMm,
+            $"δ in {settings.DeflectionResult ?? "every solved result"} ≤ span / {settings.SpanRatio:0.###} and uplift ≤ {settings.UpliftLimitMm:0.###} mm",
+            VcfResultsNote, $"pretension not fitted within {fitPercent:0.###}%", () =>
+            {
+                // The cases vary the model Mcotis holds — the same one Run FEM Analysis solves; SAP2000 is not read.
+                var inputs = new VcfOptimizationInputs(
+                    VcfGeometry.Analyze(State.Geometry, State.Truss), HeldFemProperties(), SectionSwapper(), femSapLoading,
+                    FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), Tab01Patterns, PretensionPatterns,
+                    State.AppliedPoints.Select(point => point.PointName).ToArray(), State.Cables.ToArray(),
+                    FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre());
+                return new VcfOptimizationRunner(inputs, settings);
+            });
+    }
+
+    private const string VcfResultsNote = "Max defl. and Uplift = largest downward and largest upward displacement of a bottom chord point (BTrPt…) in the result chosen under Deflection Check (Result column); Limit = span between the mega columns / ratio; Check OK when δ ≤ limit and uplift ≤ its limit. Total cost = Σ member cost per metre × length (gross area × material unit cost, as on Define → Materials; composite sections from their concrete, steel and reinforcement). Run → Analysis Options and Define → Load Cases apply. Each case is built in memory; the working model and SAP2000 are not changed.";
+
+    // ---- what the results window shows: the run that filled it ----
+    private string optimizationTitle = "Optimization VCF";
+    /// <summary>The study the results belong to: "Optimization VCF" or "Optimization TAS".</summary>
+    public string OptimizationTitle { get => optimizationTitle; private set => Set(ref optimizationTitle, value); }
+    private string optimizationResultsNote = VcfResultsNote;
+    public string OptimizationResultsNote { get => optimizationResultsNote; private set => Set(ref optimizationResultsNote, value); }
+    /// <summary>The span ratio and uplift limit of the run shown (the results' column headers).</summary>
+    public double OptimizationSpanRatio { get; private set; } = VcfOptimization.DefaultSpanRatio;
+    public double OptimizationUpliftLimitMm { get; private set; } = VcfOptimization.DefaultUpliftLimitMm;
+
+    /// <summary>The run loop of the Optimization menu: prepares the runner on the UI thread, analyses every case off it and
+    /// lists each as it completes, with the passing count, the cheapest passing case and the least deflection. Cancel
+    /// Optimization stops it. Shared by Optimization VCF and Optimization TAS.</summary>
+    private async Task RunOptimizationAsync(string title, long combinations, double spanRatio, double upliftLimitMm, string criterion,
+        string resultsNote, string unfittedNote, Func<IOptimizationRunner> prepare)
+    {
+        if (IsBusy || IsVcfOptimizationRunning) return;
         VcfOptimizationRows.Clear();
         VcfOptimizationBest = "";
         VcfOptimizationPercent = 0;
-        if (settings.CombinationCount > VcfOptimizationRunner.MaxCases)
+        OptimizationTitle = title;
+        OptimizationResultsNote = resultsNote;
+        OptimizationSpanRatio = spanRatio;
+        OptimizationUpliftLimitMm = upliftLimitMm;
+        if (combinations > VcfOptimizationRunner.MaxCases)
         {
-            VcfOptimizationProgress = $"{settings.CombinationCount:N0} combinations — the limit for one run is {VcfOptimizationRunner.MaxCases:N0}. Narrow the ranges or widen the steps.";
-            Warn("Optimization VCF", VcfOptimizationProgress);
+            VcfOptimizationProgress = $"{combinations:N0} combinations — the limit for one run is {VcfOptimizationRunner.MaxCases:N0}. Narrow the ranges or widen the steps.";
+            Warn(title, VcfOptimizationProgress);
             return;
         }
         if (State.Model is null || !(State.IsSapConnected || IsOfflineModel))
         {
-            VcfOptimizationProgress = "Open a model before running the optimization: File → Load VCF… or Load MCOTiS Config, or Connect SAP.";
-            Warn("Optimization VCF", VcfOptimizationProgress);
+            VcfOptimizationProgress = "Open a model before running the optimization: File → Load VCF… or Load TAS…, Load MCOTiS Config, or Connect SAP.";
+            Warn(title, VcfOptimizationProgress);
             return;
         }
 
@@ -113,15 +152,8 @@ public sealed partial class MainViewModel
         var analysed = 0;
         try
         {
-            // The cases vary the model Mcotis holds — the same one Run FEM Analysis solves; SAP2000 is not read.
             VcfOptimizationProgress = "Preparing the cases from the model…";
-            var properties = HeldFemProperties();
-            var inputs = new VcfOptimizationInputs(
-                VcfGeometry.Analyze(State.Geometry, State.Truss), properties, SectionSwapper(), femSapLoading,
-                FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), Tab01Patterns, PretensionPatterns,
-                State.AppliedPoints.Select(point => point.PointName).ToArray(), State.Cables.ToArray(),
-                FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre());
-            var runner = new VcfOptimizationRunner(inputs, settings);
+            var runner = prepare();
             var columns = runner.Axes.Select((axis, index) => (axis, index)).Where(entry => entry.axis.Varies).ToArray();
             VcfOptimizationColumns = columns.Select(entry => entry.axis).ToArray();
             Notify(nameof(VcfOptimizationColumns));
@@ -130,7 +162,6 @@ public sealed partial class MainViewModel
             VcfOptimizationRow? best = null;
             var passing = 0;
             VcfOptimizationRow? cheapest = null;
-            var criterion = $"δ in {settings.DeflectionResult ?? "every solved result"} ≤ span / {settings.SpanRatio:0.###} and uplift ≤ {settings.UpliftLimitMm:0.###} mm";
             var progress = new Progress<VcfOptimizationResult>(result =>
             {
                 analysed++;
@@ -139,7 +170,7 @@ public sealed partial class MainViewModel
                 var row = new VcfOptimizationRow(result.Case.Index + 1, values, result.MaxDeflectionMm,
                     result.MaxDeflectionMm is { } mm ? mm.ToString("0.0", CultureInfo.CurrentCulture) : "—",
                     result.GoverningResult ?? "", result.Point ?? "",
-                    result.Failure ?? (result.PretensionFitted ? "Analysed" : $"Analysed · pretension not fitted within {inputs.TargetFitPercent:0.###}%"),
+                    result.Failure ?? (result.PretensionFitted ? "Analysed" : "Analysed · " + unfittedNote),
                     result.SpanM is { } span ? span.ToString("0.###", CultureInfo.CurrentCulture) : "",
                     result.LimitMm is { } limit ? limit.ToString("0.0", CultureInfo.CurrentCulture) : "",
                     utilisation, utilisation is { } u ? u.ToString("0.00", CultureInfo.CurrentCulture) : "",
@@ -147,7 +178,7 @@ public sealed partial class MainViewModel
                     result.CostSgd, result.CostSgd is { } sgd ? sgd.ToString("N0", CultureInfo.CurrentCulture) : "—",
                     result.MaxUpliftMm, result.MaxUpliftMm is { } up ? up.ToString("0.0", CultureInfo.CurrentCulture) : "—", result.UpliftPoint ?? "");
                 if (result.UpliftPasses == false)
-                    row = row with { Status = row.Status + $" · uplift {row.Uplift} mm at {row.UpliftPoint} is above the {settings.UpliftLimitMm:0.###} mm limit" };
+                    row = row with { Status = row.Status + $" · uplift {row.Uplift} mm at {row.UpliftPoint} is above the {upliftLimitMm:0.###} mm limit" };
                 if (result.CostNote is { } costNote) row = row with { Status = row.Status + " · " + costNote };
                 VcfOptimizationRows.Add(row);
                 if (row.MaxDeflectionMm is { } value && (best?.MaxDeflectionMm is not { } least || value < least)) best = row;
@@ -183,7 +214,7 @@ public sealed partial class MainViewModel
         {
             VcfOptimizationProgress = $"Optimization failed: {ex.Message}";
             Message = ex.Message;
-            Warn("Optimization VCF", ex.Message);
+            Warn(title, ex.Message);
         }
         finally
         {
@@ -193,5 +224,69 @@ public sealed partial class MainViewModel
             IsBusy = false;
             Update();
         }
+    }
+
+    // ---- Optimization → Optimization TAS: the search space of the tied arch system and its run ----
+
+    /// <summary>The ranges confirmed in Optimization TAS, or null before the first OK.</summary>
+    public TasOptimizationSettings? TasOptimizationSettings { get; private set; }
+
+    internal void SetTasOptimization(TasOptimizationSettings settings)
+    {
+        TasOptimizationSettings = settings;
+        Notify(nameof(TasOptimizationSettings));
+        Message = $"Optimization TAS: {settings.CombinationCount:N0} combinations kept " +
+            $"({settings.GeometryCount:N0} geometry × {settings.ForceCount:N0} load × {settings.SectionCount:N0} section variants).";
+    }
+
+    /// <summary>The frame sections Optimization TAS can try: the section library of the open model.</summary>
+    internal IReadOnlyList<string> TasSectionNames()
+    {
+        EnsureSections();
+        return FrameSections.Select(section => section.Name).ToArray();
+    }
+
+    /// <summary>Runs every combination of the tied arch system's <paramref name="settings"/> and fills <see cref="VcfOptimizationRows"/>
+    /// (the same results table as Optimization VCF). Needs the tied arch system open (File → Load TAS… or Edit → Tied Arch System).</summary>
+    internal async Task RunTasOptimizationAsync(TasOptimizationSettings settings)
+    {
+        if (IsBusy || IsVcfOptimizationRunning) return;
+        SetTasOptimization(settings);
+        if (TiedArchParameters is null)
+        {
+            VcfOptimizationProgress = "Open the tied arch system first: File → Load TAS… or Edit → Tied Arch System…";
+            Warn("Optimization TAS", VcfOptimizationProgress);
+            return;
+        }
+        const string note = "Max defl. and Uplift = largest downward and largest upward displacement of a top chord (deck) joint in the result chosen under Deflection Check (Result column); Limit = span L (bays × spacing) / ratio; Check OK when δ ≤ limit and uplift ≤ its limit. Each case is the tied arch system of its H1, H2, bays and spacing — the parabolic arch, the TAS layout — with the deck loads (SW + SDL) and LL × spacing × B × n (half at the end joints) and the sections tried per role. Total cost = Σ member cost per metre × length, as for Optimization VCF. Run → Analysis Options and Define → Load Cases apply. Each case is built in memory; the open model is not changed.";
+        await RunOptimizationAsync("Optimization TAS", settings.CombinationCount, settings.SpanRatio, settings.UpliftLimitMm,
+            $"δ in {settings.DeflectionResult ?? "every solved result"} ≤ L / {settings.SpanRatio:0.###} and uplift ≤ {settings.UpliftLimitMm:0.###} mm",
+            note, "", () => new TasOptimizationRunner(TasOptimizationInputs(), settings));
+    }
+
+    /// <summary>What an Optimization TAS case takes from the open model: the TAS template, each member's properties with a
+    /// library section (as Import From ETABS works them out, Section Designer sections with their true self-weight), the
+    /// load case rows, the analysis options and the cost per metre.</summary>
+    internal TasOptimizationInputs TasOptimizationInputs()
+    {
+        var template = ReadTasTemplate().Model;
+        EnsureSections();
+        var library = FrameSections.ToDictionary(section => section.Name, StringComparer.Ordinal);
+        var weights = Application.Etabs.EtabsImport.Convert(template).SectionWeights;
+        FemSectionProperties Properties(FemSectionProperties member, string sectionName)
+        {
+            if (!library.TryGetValue(sectionName, out var section))
+                throw new InvalidOperationException($"Section '{sectionName}' is not in the frame section library (Define → Section Properties → Frame Sections).");
+            var property = PropertiesFor(member with { SectionName = sectionName }, section);
+            if (weights.TryGetValue(sectionName, out var weight) && property.GrossAreaM2 > 0)
+                property = property with
+                {
+                    UnitWeightKNPerM3 = weight.WeightPerLengthKNPerM / property.GrossAreaM2,
+                    UnitMassTPerM3 = weight.MassPerLengthTPerM / property.GrossAreaM2,
+                };
+            return property;
+        }
+        return new TasOptimizationInputs(template, Properties, FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(),
+            PretensionPatterns, FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre());
     }
 }

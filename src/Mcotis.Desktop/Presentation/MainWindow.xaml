@@ -169,8 +169,10 @@
    <MenuItem x:Name="OptimizationMenu" Header="_Optimization" HeaderTemplate="{StaticResource HighlightedMenuHeader}" IsEnabled="{Binding HasUsableModelGeometry}">
     <MenuItem Header="_Optimization VCF…" Click="OptimizationVcf_Click" AutomationProperties.Name="Optimization VCF"
               ToolTip="Set the VCF search space — min / max / step for bays, bay width, truss depth (middle chord kept at 0.5 × depth), clear height, back-span and back-stay height, and candidate sections per chord, mega column and cable; Run Optimization analyses every combination and lists the max deflection of each case"/>
+    <MenuItem Header="Optimization _TAS…" Click="OptimizationTas_Click" AutomationProperties.Name="Optimization TAS"
+              ToolTip="Set the tied arch system search space — min / max / step for H1, H2, bays and spacing and for the storeys above (SW, SDL, LL, floors, B), and candidate sections per role; Run Optimization analyses every combination and lists the max deflection, check and cost of each case"/>
     <MenuItem Header="Optimization _Results…" Click="OptimizationResults_Click" AutomationProperties.Name="Optimization Results"
-              ToolTip="Every case of the last Optimization VCF run with its max deflection (sortable)"/>
+              ToolTip="Every case of the last Optimization VCF or Optimization TAS run with its max deflection (sortable)"/>
     <MenuItem Header="_Cancel Optimization" Click="CancelOptimization_Click" IsEnabled="{Binding IsVcfOptimizationRunning}"/>
    </MenuItem>
    <!-- MB (the SAP2000 study pages) is kept for reference only: last on the bar, set apart by a separator. -->

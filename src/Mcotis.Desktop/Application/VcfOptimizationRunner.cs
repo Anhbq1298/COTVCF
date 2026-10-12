@@ -73,7 +73,7 @@ public sealed record VcfOptimizationResult(
 /// (<see cref="VcfOptimization.CableTargets"/>: every cable steps together, the fan cables by their length) — and analysed
 /// with the same internal FEM as Run → Run FEM Analysis. The working model is never changed.
 /// </summary>
-public sealed class VcfOptimizationRunner
+public sealed class VcfOptimizationRunner : IOptimizationRunner
 {
     public const int MaxCases = 10_000;
     public const string CableStepKey = "cable:step";

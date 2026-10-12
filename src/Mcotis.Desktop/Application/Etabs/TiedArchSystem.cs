@@ -34,7 +34,9 @@ public sealed record TiedArchParameters(double ArchRise, double DeckHeight, int 
     /// <summary>Height of the arch's parabola through the two supports and the crown at mid-span, x from the left support.</summary>
     public double ArchHeightAt(double x) => 4 * ArchRise * x * (Span - x) / (Span * Span);
 
-    public IReadOnlyList<string> Problems()
+    /// <summary>What makes the system impossible to build: the heights, the bays (even, 6–40), the spacing and width, and
+    /// loads that are not numbers ≥ 0. Optimization TAS checks every case with this.</summary>
+    public IReadOnlyList<string> GeometryProblems()
     {
         var problems = new List<string>();
         if (!(ArchRise > 0)) problems.Add("H1 (support → arch crown) must be greater than zero.");
@@ -43,9 +45,18 @@ public sealed record TiedArchParameters(double ArchRise, double DeckHeight, int 
             problems.Add("Number of bays: an even number from 6 to 40 (the crown is the joint at mid-span; three braced bays at each end).");
         if (!(BaySpacing > 0)) problems.Add("Bay spacing must be greater than zero.");
         if (!(TributaryWidth > 0)) problems.Add("Tributary width B must be greater than zero.");
+        if (!(SelfWeight >= 0 && SuperimposedDead >= 0 && Live >= 0)) problems.Add("SW, SDL and LL must be numbers of at least 0 kPa.");
+        if (Floors < 1) problems.Add("Number of floors n must be at least 1.");
+        return problems;
+    }
+
+    /// <summary><see cref="GeometryProblems"/> and the loads of Edit → Tied Arch System, which are chosen from their steps.</summary>
+    public IReadOnlyList<string> Problems()
+    {
+        var problems = new List<string>(GeometryProblems());
         void Choice<T>(string name, T value, IReadOnlyList<T> choices, string unit)
         {
-            if (!choices.Contains(value)) problems.Add($"{name}: choose {string.Join(", ", choices)} {unit}.".Replace("  ", " "));
+            if (!choices.Contains(value)) problems.Add($"{name}: choose {string.Join(", ", choices)} {unit}".TrimEnd() + ".");
         }
         Choice("SW", SelfWeight, SelfWeightChoices, "kPa");
         Choice("SDL", SuperimposedDead, SuperimposedDeadChoices, "kPa");
@@ -57,6 +68,9 @@ public sealed record TiedArchParameters(double ArchRise, double DeckHeight, int 
     private static double[] Steps(double min, double max, double step) =>
         Enumerable.Range(0, (int)Math.Round((max - min) / step) + 1).Select(index => min + index * step).ToArray();
 }
+
+/// <summary>The members of the tied arch system that share a section: Optimization TAS tries candidate sections per role.</summary>
+public enum TiedArchRole { Arch, Deck, MegaColumn, EndStrut, Strut, Brace }
 
 /// <summary>
 /// Builds the tied arch system of Edit → Tied Arch System from <see cref="TiedArchParameters"/>, laid out as the TAS model
@@ -72,11 +86,32 @@ public static class TiedArchSystem
 {
     private const string Column = "SRC MegaCol 1000x1200", Arch = "RSC 3.52x2.64 P", Deck = "CFT Deck 700x400x20",
         EndStrut = "CFT Strut-E 850x850x35", Strut = "CFT Strut 650x650x25", Brace = "CFT Brace 700x700x25";
+
+    /// <summary>The section each role of the system is built with (the TAS model's).</summary>
+    public static IReadOnlyDictionary<TiedArchRole, string> RoleSections { get; } = new Dictionary<TiedArchRole, string>
+    {
+        [TiedArchRole.Arch] = Arch, [TiedArchRole.Deck] = Deck, [TiedArchRole.MegaColumn] = Column,
+        [TiedArchRole.EndStrut] = EndStrut, [TiedArchRole.Strut] = Strut, [TiedArchRole.Brace] = Brace,
+    };
+
+    /// <summary>The role of a member of a built system, from the section it was built with; null for another section.</summary>
+    public static TiedArchRole? RoleOf(string? builtSection) =>
+        RoleSections.Where(pair => pair.Value == builtSection).Select(pair => (TiedArchRole?)pair.Key).FirstOrDefault();
+
+    public static string Title(TiedArchRole role) => role switch
+    {
+        TiedArchRole.Arch => "Arch rib",
+        TiedArchRole.Deck => "Top chord (deck)",
+        TiedArchRole.MegaColumn => "Mega column",
+        TiedArchRole.EndStrut => "End strut",
+        TiedArchRole.Strut => "Strut",
+        _ => "Brace",
+    };
     private static readonly string[] PinnedStart = ["M2I", "M3I"], PinnedEnd = ["M2J", "M3J"], Pinned = ["M2I", "M3I", "M2J", "M3J"];
 
     public static EtabsModel Build(EtabsModel template, TiedArchParameters p)
     {
-        if (p.Problems() is { Count: > 0 } problems) throw new InvalidOperationException(string.Join(" ", problems));
+        if (p.GeometryProblems() is { Count: > 0 } problems) throw new InvalidOperationException(string.Join(" ", problems));
         var missing = new[] { Column, Arch, Deck, EndStrut, Strut, Brace }.Where(name => template.Sections.All(section => section.Name != name)).ToArray();
         if (missing.Length > 0) throw new InvalidOperationException($"The TAS model is missing the section(s) {string.Join(", ", missing)}.");
 

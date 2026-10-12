@@ -92,8 +92,8 @@ earlier tall-header / large-button / blue-block look.
   Result · Post-Processing · Display · Design · Help | Optimization | MB**. Menu items reuse the existing commands; navigation is presentation only
   (`MainViewModel.Menu.cs`, click handlers in `MainWindow.xaml.cs`). Do not bring the rail or the toolbar buttons back.
   **Optimization is a tab of its own, after a separator, and highlighted** (user, 2026-10-12: "thêm 1 separator for tab
-  optimization, highlight this tab") — `OptimizationMenu` holds Optimization VCF…, Optimization Results… and Cancel
-  Optimization, which left the Run menu. The highlight is the `HighlightedMenuHeader` header template of `Theme.xaml`
+  optimization, highlight this tab") — `OptimizationMenu` holds Optimization VCF…, Optimization TAS…, Optimization
+  Results… and Cancel Optimization, which left the Run menu. The highlight is the `HighlightedMenuHeader` header template of `Theme.xaml`
   (accent text on the pale `Selected` chip): the menu's `Header` stays the string `_Optimization`, which the window and
   the checks read, and the drop-down keeps the normal colours. Placing it between Help and MB was the implementer's choice.
   **MB is last, after a separator** (user, 2026-10-12: the MB pages are for reference only) — `MbMenuSeparator`, a
@@ -195,7 +195,12 @@ earlier tall-header / large-button / blue-block look.
   - **Assign**: Joint Restraints (Pin Supports).
   - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Analysis Options.
   - **Optimization** (its own tab since 2026-10-12; wherever this document says "Run → Optimization VCF", read
-    "Optimization → Optimization VCF"): Optimization VCF…, Optimization Results…, Cancel Optimization.
+    "Optimization → Optimization VCF"): Optimization VCF…, Optimization TAS…, Optimization Results…, Cancel Optimization.
+    **Optimization TAS…** (2026-10-12) is the same study for the tied arch system: the modal `OptimizationTasWindow` has
+    sheets Geometry (H1, H2, bays, spacing), Storey Force (SW, SDL, LL, floors n, B; SLS / ULS point load per deck joint)
+    and Sections (candidates per `TiedArchRole`), the same deflection check (read on the top chord joints, limit L / ratio)
+    and preview corners; `TasOptimizationRunner` builds each case with `TiedArchSystem.Build` and runs through the shared
+    `MainViewModel.RunOptimizationAsync` loop into the same `OptimizationResultsWindow`, whose title follows the run.
     **Optimization VCF…** opens the modal `OptimizationVcfWindow`: the Edit → VCF Geometry inputs as a
     search space — sheet **Geometry** has Min / Max / Step (and the value count n) per parameter (bays, bay width, truss
     depth, clear height, back-span, back-stay height; keys shared with VcfGeometryWindow). The middle chord is **not** a

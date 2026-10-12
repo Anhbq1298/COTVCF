@@ -344,10 +344,27 @@ internal static class ResultToolbarChecks
         var at = Array.IndexOf(bar, optimization);
         Check(bar[at - 1] is Separator && bar[at - 2] is MenuItem { Header: "_Help" } && bar[at + 1] is Separator && bar[at + 2] is MenuItem { Header: "_MB" } &&
               ReferenceEquals(optimization.HeaderTemplate, window.FindResource("HighlightedMenuHeader")) &&
-              optimization.Items.OfType<MenuItem>().Select(item => ((string)item.Header).Replace("_", "")).SequenceEqual(["Optimization VCF…", "Optimization Results…", "Cancel Optimization"]) &&
+              optimization.Items.OfType<MenuItem>().Select(item => ((string)item.Header).Replace("_", "")).SequenceEqual(["Optimization VCF…", "Optimization TAS…", "Optimization Results…", "Cancel Optimization"]) &&
               !window.MainMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "_Run")).Items.OfType<MenuItem>()
                   .Any(item => (item.Header as string)?.Contains("Optimization", StringComparison.Ordinal) == true),
             "Optimization is a tab of its own on the menu bar — after a separator, highlighted, before MB — and Run no longer lists it");
+
+        // Optimization → Optimization TAS: the form starts from the TAS system with the storeys' ranges; it runs only on the tied arch system
+        var tas = new OptimizationTasWindow(vm) { Owner = window };
+        tas.Show();
+        Idle();
+        static string Kn(double value) => value.ToString("N0", System.Globalization.CultureInfo.CurrentCulture);
+        var startCount = tas.SpaceText;
+        var loads = tas.LoadText;
+        tas.SetRange("Bays", "max", "14");
+        Idle();
+        Check(startCount.EndsWith($"{Kn(1296)} combinations", StringComparison.Ordinal) &&
+              loads.Contains($"SLS {Kn(9_000)} … {Kn(42_000)} kN", StringComparison.Ordinal) && loads.Contains($"ULS {Kn(12_600)} … {Kn(58_500)} kN", StringComparison.Ordinal) &&
+              tas.SpaceText.EndsWith($"{Kn(2592)} combinations", StringComparison.Ordinal) && tas.OkButton.IsEnabled && !tas.RunButton.IsEnabled &&
+              tas.FormSettings().Geometry["Bays"].Values().SequenceEqual([12.0, 14.0]) && tas.Preview.Model.Points.Count == 30,
+            $"Optimization TAS opens on the TAS system with 1,296 combinations and the SLS / ULS point load range ({loads}); 12 … 14 bays doubles them; " +
+            "Run waits for the tied arch system to be open");
+        tas.Close();
     }
 
     /// <summary>One form per member (asked for by the user, 2026-10-12: the separate Member Assignments form was redundant):

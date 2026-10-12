@@ -7,7 +7,7 @@ using Mcotis.Desktop.Application;
 namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
-/// Optimization VCF results: one row per analysed case — the values of the inputs that vary in the run, the largest
+/// Optimization VCF / Optimization TAS results: one row per analysed case — the values of the inputs that vary in the run, the largest
 /// downward deflection of a bottom chord point against span / ratio, its largest uplift against the uplift limit, the
 /// check of both, the load case / combination and point where the deflection occurs, and the case status. Columns follow the
 /// run (<see cref="MainViewModel.VcfOptimizationColumns"/>).
@@ -28,7 +28,7 @@ public partial class OptimizationResultsWindow : Window
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainViewModel.VcfOptimizationColumns)) BuildColumns();
+        if (e.PropertyName is nameof(MainViewModel.VcfOptimizationColumns) or nameof(MainViewModel.OptimizationTitle)) BuildColumns();
     }
 
     private void BuildColumns()
@@ -43,11 +43,11 @@ public partial class OptimizationResultsWindow : Window
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "Max defl. [mm]", MinWidth = 96, ElementStyle = numeric,
             Binding = new Binding(nameof(VcfOptimizationRow.Deflection)), SortMemberPath = nameof(VcfOptimizationRow.MaxDeflectionMm) });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "Span [m]", MinWidth = 70, ElementStyle = numeric, Binding = new Binding(nameof(VcfOptimizationRow.Span)) });
-        var ratio = viewModel.VcfOptimizationSettings?.SpanRatio ?? VcfOptimization.DefaultSpanRatio;
+        var ratio = viewModel.OptimizationSpanRatio;
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = $"Limit span/{ratio:0.###} [mm]", MinWidth = 110, ElementStyle = numeric, Binding = new Binding(nameof(VcfOptimizationRow.Limit)) });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "δ / limit", MinWidth = 70, ElementStyle = numeric,
             Binding = new Binding(nameof(VcfOptimizationRow.Ratio)), SortMemberPath = nameof(VcfOptimizationRow.Utilisation) });
-        var uplift = viewModel.VcfOptimizationSettings?.UpliftLimitMm ?? VcfOptimization.DefaultUpliftLimitMm;
+        var uplift = viewModel.OptimizationUpliftLimitMm;
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = $"Uplift ≤ {uplift:0.###} [mm]", MinWidth = 96, ElementStyle = numeric,
             Binding = new Binding(nameof(VcfOptimizationRow.Uplift)), SortMemberPath = nameof(VcfOptimizationRow.MaxUpliftMm) });
         ResultsGrid.Columns.Add(new DataGridTextColumn { Header = "Check", Binding = new Binding(nameof(VcfOptimizationRow.Check)), MinWidth = 54, ElementStyle = CheckStyle() });

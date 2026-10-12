@@ -815,6 +815,17 @@ public partial class MainWindow : Window
         _ = vm.RunVcfOptimizationAsync(settings);
     }
 
+    // Optimization → Optimization TAS: ranges of the tied arch system's inputs and candidate sections; OK keeps them, Run runs them
+    private void OptimizationTas_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        var dialog = new OptimizationTasWindow(vm) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Result is not { } settings) return;
+        if (!dialog.RunRequested) { vm.SetTasOptimization(settings); return; }
+        OptimizationResults_Click(sender, e);
+        _ = vm.RunTasOptimizationAsync(settings);
+    }
+
     private void CancelOptimization_Click(object sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.CancelVcfOptimization();
 
     // Run → Optimization Results: the table of the last (or running) optimization, one instance brought forward on repeat

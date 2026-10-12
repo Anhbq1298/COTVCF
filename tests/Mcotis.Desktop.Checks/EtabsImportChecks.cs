@@ -30,6 +30,7 @@ internal static class EtabsImportChecks
         CheckImport();
         CheckLoadTas();
         CheckTiedArch();
+        TasOptimizationChecks.Run();
         CheckLiveImportWithStandIn();
     }
 
@@ -439,7 +440,7 @@ internal static class EtabsImportChecks
         }
     }
 
-    private static MainViewModel NewViewModel(out FemModelFileChecks.SapDouble sap)
+    internal static MainViewModel NewViewModel(out FemModelFileChecks.SapDouble sap)
     {
         sap = FemModelFileChecks.SapDouble.Create(null!, GeometryModel.Empty, refuseAll: true);
         var state = new ApplicationState();

@@ -18,6 +18,23 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-12 · Optimization TAS
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Optimization → Optimization TAS…; Optimization → Optimization Results…
+- What: The parametric study of the tied arch system, run as Optimization VCF is. The form has min / max / step for H1,
+  H2, the number of bays and their spacing (sheet Geometry, starting fixed at the open system) and for the storeys above
+  — SW 7–15 kPa @ 1, SDL 3–10 @ 1, LL 5–10 @ 2.5, floors n 5–10 @ 1 and the tributary width B (sheet Storey Force, with
+  the SLS / ULS point load per deck joint) — candidate sections per role (arch rib, top chord, mega column, end strut,
+  strut, brace), the deflection check (max δ of a top chord joint in the chosen result ≤ L / ratio, uplift limit) and a
+  preview at the minimum, current or maximum corner. Run Optimization builds every case in memory as Edit → Tied Arch
+  System would (an odd number of bays or H2 not above H1 is skipped with the reason), analyses it with the internal FEM
+  and lists it in the Optimization Results table — the same table, run loop, checks and cost as Optimization VCF, which
+  now share one loop. The default space is 1,296 cases. Needs the tied arch system open (File → Load TAS… or Edit →
+  Tied Arch System…); the open model is not changed.
+- Checks: --etabs-import (a case with the model's inputs deflects as Run FEM Analysis of Load TAS; odd bays skipped;
+  section candidates change the result; bad ranges refused); --result-tools-ui; --fem-model (Optimization VCF unchanged)
+
 ## 2026-10-12 · Edit → Tied Arch System
 - Status: Done
 - Who: Philip Pham, Claude
@@ -246,6 +263,29 @@ continues on the next lines, indented by two spaces):
   open SAP2000 model in, ready to run (chord groups, cable targets, Tab 01 fitted to the SAP joint loads). Export to
   SAP2000 previews, then writes the Mcotis model into the open SAP2000 model (not saved).
 - Checks: --sap-import; offline suite
+
+## 2026-10-11 · New Config, the blank model and the desktop build
+- Status: Done
+- Who: markbui
+- Where: File → New Config; the start screen (Load Default Template / Continue with Blank Model); Edit → VCF System…;
+  build-desktop.ps1
+- What: A new configuration can start blank: define the materials and frame / cable sections, then create the VCF
+  system under Edit → VCF System…, which gives the new members the sections chosen there. The start screen offers the
+  built-in template (now File → Load VCF…) or a blank model; menus that need geometry stay off until there is some.
+  build-desktop.ps1 builds the app (FreshBuild configuration) into bin/ and puts a Mcotis shortcut on the desktop.
+- Checks: --blank-ui; --fem-db; --fem-model
+
+## 2026-10-11 · Result pickers, result values and the toolbar
+- Status: Done
+- Who: markbui
+- Where: Result → Show Deformed Shape… (F5), Show Member Forces… (F6), Show Joint Reactions… (F7); the toolbar;
+  Post-Processing → Output Settings; Display → View Options
+- What: F5 / F6 / F7 open a picker for the load case (and N, V or M for member forces) of the deflection, member force
+  and reaction views. Values on the model view are written in compact units with a fixed number of decimals (MN, MN·m)
+  and never upside down; the stored results stay in kN and kN·m. Cable force diagrams are scaled so crossing cables
+  stay legible, and Optimization VCF shows its force ranges in MN. The toolbar buttons are regrouped with new icons,
+  and Output Settings moved under Post-Processing.
+- Checks: --result-tools-ui; ViewerResultDisplayChecks (default offline suite)
 
 ## 2026-10-11 · Frame local axes
 - Status: Done
