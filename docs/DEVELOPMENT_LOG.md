@@ -18,6 +18,21 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Help → User Guide
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Help → User Guide (F1); docs/USER_GUIDE.md
+- What: An encyclopedia of Mcotis, like a wiki: an article for every function — where to find it, what it does, how to use
+  it and what to watch out for — in categories that follow the menu bar (Getting started, Files and models, Define, Edit,
+  Assign, Run, Results, Design, Optimization, MB study, Reference). The window has the contents by category with a search
+  box (every word must match; Enter opens the first result or a results page), and each article shows an infobox with its
+  category and menu path, its lead, a contents box, its sections, See also and the articles that link to it; links
+  between articles navigate, with Back / Forward / Main page. The text is docs/USER_GUIDE.md, built into the app: whoever
+  adds or changes a function updates its article (one `# Title` with Category, Where and See also lines, then Markdown
+  with [[links]]).
+- Checks: --user-guide (format, every link resolves, the app carries the current guide, every menu command of the main
+  window is covered, search, and the window's main page, article page and navigation)
+
 ## 2026-10-13 · Column design optimization (RC, CFT, steel encased, mega column)
 - Status: Done
 - Who: Philip Pham, Claude

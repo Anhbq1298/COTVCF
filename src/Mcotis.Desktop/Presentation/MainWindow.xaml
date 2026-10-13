@@ -157,6 +157,9 @@
               ToolTip="Several concrete-encased steel profiles: CTBUH / ArcelorMittal (2016) simplified method on SS EN 1994-1-1 6.7.3, high-strength materials per BCA BC4:2025"/>
    </MenuItem>
    <MenuItem Header="_Help">
+    <MenuItem Header="_User Guide" Click="ShowUserGuide" InputGestureText="F1" AutomationProperties.Name="User Guide"
+              ToolTip="The encyclopedia of Mcotis: an article for every function — where to find it, what it does and how to use it (docs/USER_GUIDE.md)"/>
+    <Separator/>
     <MenuItem Header="_Workflow Help" Click="ShowWorkflowHelp"/>
     <MenuItem Header="_FEM Procedure" Click="ShowFemHelp"/>
     <Separator/>
