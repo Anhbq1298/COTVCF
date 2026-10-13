@@ -135,7 +135,7 @@
     </Grid>
    </TabItem>
 
-   <!-- CFT only: the cheapest section for the ticked members and load cases over the ranges below (CftOptimizer). -->
+   <!-- The cheapest section of the column type for the ticked members and load cases over the ranges below (ColumnOptimizer). -->
    <TabItem x:Name="OptimizationTab" Header="Optimization">
     <Grid Margin="0,6,0,0">
      <Grid.ColumnDefinitions><ColumnDefinition Width="3*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="1.1*" MinWidth="200"/></Grid.ColumnDefinitions>
@@ -152,7 +152,21 @@
          <TextBlock Text="m" Style="{StaticResource Label}" Margin="4,0,0,6"/>
         </StackPanel>
        </GroupBox>
-       <GroupBox Header="Steel tube — size range (mm)">
+       <GroupBox x:Name="OptOutlineGroup" Header="Concrete outline — size range (mm)">
+        <Grid>
+         <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="72"/><ColumnDefinition Width="72"/><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+         <CheckBox x:Name="OptOutlineSquareBox" Grid.ColumnSpan="5" Content="Square (b = h)" Margin="0,0,0,6" IsChecked="True" Click="OptShape_Changed"/>
+         <TextBlock Grid.Row="1" Grid.Column="1" Text="min" Style="{StaticResource Caption}" Margin="2,0,0,2"/>
+         <TextBlock Grid.Row="1" Grid.Column="2" Text="max" Style="{StaticResource Caption}" Margin="2,0,0,2"/>
+         <TextBlock Grid.Row="1" Grid.Column="3" Text="step" Style="{StaticResource Caption}" Margin="2,0,0,2"/>
+         <TextBlock Grid.Row="2" Text="h  depth (in-plane)" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptOutlineDepthMin" Grid.Row="2" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptOutlineDepthMax" Grid.Row="2" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptOutlineDepthStep" Grid.Row="2" Grid.Column="3" Margin="0,0,4,6"/>
+         <TextBlock x:Name="OptOutlineWidthLabel" Grid.Row="3" Text="b  width" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptOutlineWidthMin" Grid.Row="3" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptOutlineWidthMax" Grid.Row="3" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptOutlineWidthStep" Grid.Row="3" Grid.Column="3" Margin="0,0,4,6"/>
+        </Grid>
+       </GroupBox>
+       <GroupBox x:Name="OptTubeGroup" Header="Steel tube — size range (mm)">
         <Grid>
          <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="72"/><ColumnDefinition Width="72"/><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
          <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
@@ -170,35 +184,68 @@
          <TextBox x:Name="OptThickMin" Grid.Row="4" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptThickMax" Grid.Row="4" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptThickStep" Grid.Row="4" Grid.Column="3" Margin="0,0,4,6"/>
         </Grid>
        </GroupBox>
+       <GroupBox x:Name="OptProfileGroup" Header="Encased steel I section — size range (mm)">
+        <Grid>
+         <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="72"/><ColumnDefinition Width="72"/><ColumnDefinition Width="72"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+         <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+         <TextBlock Grid.Column="1" Text="min" Style="{StaticResource Caption}" Margin="2,0,0,2"/>
+         <TextBlock Grid.Column="2" Text="max" Style="{StaticResource Caption}" Margin="2,0,0,2"/>
+         <TextBlock Grid.Column="3" Text="step" Style="{StaticResource Caption}" Margin="2,0,0,2"/>
+         <TextBlock Grid.Row="1" Text="h  profile depth" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptProfileDepthMin" Grid.Row="1" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptProfileDepthMax" Grid.Row="1" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptProfileDepthStep" Grid.Row="1" Grid.Column="3" Margin="0,0,4,6"/>
+         <TextBlock Grid.Row="2" Text="b  flange width" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptProfileWidthMin" Grid.Row="2" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptProfileWidthMax" Grid.Row="2" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptProfileWidthStep" Grid.Row="2" Grid.Column="3" Margin="0,0,4,6"/>
+         <TextBlock Grid.Row="3" Text="tf  flange" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptFlangeMin" Grid.Row="3" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptFlangeMax" Grid.Row="3" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptFlangeStep" Grid.Row="3" Grid.Column="3" Margin="0,0,4,6"/>
+         <TextBlock Grid.Row="4" Text="tw  web" Style="{StaticResource Label}"/>
+         <TextBox x:Name="OptWebMin" Grid.Row="4" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptWebMax" Grid.Row="4" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptWebStep" Grid.Row="4" Grid.Column="3" Margin="0,0,4,6"/>
+         <StackPanel x:Name="OptMegaRow" Grid.Row="5" Grid.ColumnSpan="5" Orientation="Horizontal" Margin="0,0,0,4">
+          <TextBlock Text="Profiles" Style="{StaticResource Label}" Width="122"/>
+          <CheckBox x:Name="OptFourProfiles" Content="4" IsChecked="True" VerticalAlignment="Center" Margin="0,0,12,6"/>
+          <CheckBox x:Name="OptSixProfiles" Content="6" VerticalAlignment="Center" Margin="0,0,24,6"/>
+          <TextBlock Text="edge distance (face to profile)" Style="{StaticResource Label}"/>
+          <TextBox x:Name="OptProfileEdge" Width="60" Style="{StaticResource Field}" Text="160" AutomationProperties.Name="Profile edge distance"/>
+          <TextBlock Text="mm" Style="{StaticResource Label}" Margin="4,0,0,6"/>
+         </StackPanel>
+        </Grid>
+       </GroupBox>
        <GroupBox Header="Grades (stepped grade by grade)">
         <Grid>
          <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="110"/><ColumnDefinition Width="30"/><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
          <Grid.RowDefinitions><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-         <TextBlock Text="Structural steel" Style="{StaticResource Label}"/>
+         <TextBlock x:Name="OptSteelLabel" Text="Structural steel" Style="{StaticResource Label}"/>
          <ComboBox x:Name="OptSteelFrom" Grid.Column="1" Style="{StaticResource Field}" SelectionChanged="OptGrades_Changed" AutomationProperties.Name="Lowest steel grade"/>
-         <TextBlock Grid.Column="2" Text="to" Style="{StaticResource Label}" Margin="8,0,0,6"/>
+         <TextBlock x:Name="OptSteelToLabel" Grid.Column="2" Text="to" Style="{StaticResource Label}" Margin="8,0,0,6"/>
          <ComboBox x:Name="OptSteelTo" Grid.Column="3" Style="{StaticResource Field}" SelectionChanged="OptGrades_Changed" AutomationProperties.Name="Highest steel grade"/>
-         <TextBlock Grid.Column="4" Text="fy by plate thickness, EN 10025" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="8,0,0,6"/>
+         <TextBlock x:Name="OptSteelNote" Grid.Column="4" Text="fy by plate thickness, EN 10025" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="8,0,0,6"/>
          <TextBlock Grid.Row="1" Text="Concrete" Style="{StaticResource Label}"/>
          <ComboBox x:Name="OptConcreteFrom" Grid.Row="1" Grid.Column="1" Style="{StaticResource Field}" SelectionChanged="OptGrades_Changed" AutomationProperties.Name="Lowest concrete grade"/>
          <TextBlock Grid.Row="1" Grid.Column="2" Text="to" Style="{StaticResource Label}" Margin="8,0,0,6"/>
          <ComboBox x:Name="OptConcreteTo" Grid.Row="1" Grid.Column="3" Style="{StaticResource Field}" SelectionChanged="OptGrades_Changed" AutomationProperties.Name="Highest concrete grade"/>
         </Grid>
        </GroupBox>
-       <GroupBox Header="Bars inside the tube">
+       <GroupBox x:Name="OptBarsGroup" Header="Bars inside the tube">
         <Grid>
          <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="110"/><ColumnDefinition Width="30"/><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-         <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
+         <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
          <CheckBox x:Name="OptRebarBox" Grid.ColumnSpan="5" Content="Also try reinforced options (the unreinforced tube is always tried)" Margin="0,0,0,6"/>
          <TextBlock Grid.Row="1" Text="Bar Ø (mm, list)" Style="{StaticResource Label}"/>
          <TextBox x:Name="OptBarDiameters" Grid.Row="1" Grid.Column="1" Style="{StaticResource Field}" Text="25, 32, 40" AutomationProperties.Name="Bar diameters"/>
-         <TextBlock Grid.Row="1" Grid.Column="3" Text="cover to tube" Style="{StaticResource Label}" HorizontalAlignment="Right"/>
+         <TextBlock x:Name="OptCoverLabel" Grid.Row="1" Grid.Column="3" Text="cover to tube" Style="{StaticResource Label}" HorizontalAlignment="Right"/>
          <TextBox x:Name="OptCover" Grid.Row="1" Grid.Column="4" Width="60" HorizontalAlignment="Left" Style="{StaticResource Field}" Text="50" AutomationProperties.Name="Bar cover"/>
          <TextBlock Grid.Row="2" Text="Bars per face" Style="{StaticResource Label}"/>
          <TextBox x:Name="OptBarsMin" Grid.Row="2" Grid.Column="1" Style="{StaticResource Field}" Text="3" AutomationProperties.Name="Minimum bars per face"/>
          <TextBlock Grid.Row="2" Grid.Column="2" Text="to" Style="{StaticResource Label}" Margin="8,0,0,6"/>
          <TextBox x:Name="OptBarsMax" Grid.Row="2" Grid.Column="3" Style="{StaticResource Field}" Text="5" AutomationProperties.Name="Maximum bars per face"/>
-         <TextBlock Grid.Row="2" Grid.Column="4" Text="corners included; CHS: 4(n−1) bars" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="8,0,0,6"/>
+         <TextBlock x:Name="OptBarsNote" Grid.Row="2" Grid.Column="4" Text="corners included; CHS: 4(n−1) bars" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="8,0,0,6"/>
+         <StackPanel x:Name="OptDepthBarsRow" Grid.Row="3" Grid.ColumnSpan="5" Orientation="Horizontal">
+          <TextBlock Text="Bars per h face" Style="{StaticResource Label}" Width="122"/>
+          <CheckBox x:Name="OptUniformBars" Content="same spacing as the b faces" IsChecked="True" VerticalAlignment="Center" Margin="0,0,16,6"/>
+          <TextBlock Text="or between corners" Style="{StaticResource Label}"/>
+          <TextBox x:Name="OptDepthBarsMin" Width="44" Style="{StaticResource Field}" Text="1" AutomationProperties.Name="Minimum bars per h face"/>
+          <TextBlock Text="to" Style="{StaticResource Label}" Margin="6,0,6,6"/>
+          <TextBox x:Name="OptDepthBarsMax" Width="44" Style="{StaticResource Field}" Text="3" AutomationProperties.Name="Maximum bars per h face"/>
+         </StackPanel>
         </Grid>
        </GroupBox>
        <GroupBox Header="Unit costs (SGD) — from the material library; edit to use your rates">
