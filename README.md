@@ -1,4 +1,22 @@
-# COT VCF Parametric Automation
+# Mcotis
+
+**Mcotis** — *Meinhardt Cities of Tomorrow Integrated Structures* (formerly COT VCF Parametric Automation).
+
+**Standalone building workflow:** **Edit → TemplateBuilding…** opens a WPF form for X/Y bay counts, individual bay
+widths (m), storey heights (m), and downward floor-beam line loads (kN/m). Review the general beam/column properties
+and fixed/pinned base supports, then **Create Model** opens a native workspace. Save/Open `.mcotis`, Undo/Redo,
+**Run → Analysis Options…** (Full 3D / XZ / YZ / XY / custom DOFs), and **Run Analysis** use the standalone libraries.
+Joint displacement/reaction and frame local end-action tables show the result case and current/stale state.
+**File → Open Native Model…** reopens a saved building without going through the template form.
+
+The native engine solves 3D frames and tension-only cables — cable target forces, staged nonlinear cases, cable
+sag — with small displacements and at most 600 free / 2,400 total DOFs; a frame is connected at every point lying on
+it. It has no shells, P-Delta or modal analysis. Its results were checked against closed forms, the archived planar
+solver and OpenSees before being shown ([record](docs/analysis/cable-static-verification.md)). Templates have rigid
+beam-column connections and no slabs or diaphragms. The cable results of a native model appear in its **Cable
+results** table. The main window runs the same solver: its model is planar, so it is analysed with the XZ degrees of
+freedom, and **Run → Analysis Options… → Cable Force Fitting** edits the fitting tolerance, iteration limit, frame
+stations and cable sag of that run. The planar solver it used before is archived with the checks as the baseline. See [native UI scope](docs/native-building-ui.md).
 
 WPF / .NET 8 desktop application for defining structural-study candidates from an existing SAP2000 model, then building and analyzing one isolated child `.sdb` model per selected combination.
 
@@ -97,22 +115,51 @@ The connected instance is worker 1 and processes candidates. The study pool borr
 
 ## Tab 7 — FEM
 
-Tab 7 runs every loading × truss-height × cable-pretension combination configured in Tabs 1–3. It uses the
-existing project configuration loaded through **Load Config**; the file picker starts in the repository
-`tests` folder when available. The example project file in that folder contains the input sections for all three
-candidate dimensions.
+**Run → Run FEM Analysis** solves the model once, as it is defined: its own geometry (no Tab 2 height change), the
+Tab 1 loads and the Tab 3 cable target forces. A range entered in Tab 1 or Tab 3 is an input of the parametric study,
+not of this run; it enters with its first value, and Run → Analysis Options names what the run uses. Many cases —
+other loadings, geometries, pretensions or sections — are the parametric study: **Run → Optimization VCF** with the
+internal solver, or the Tab 5 study with SAP2000.
 
-The analysis is internal and read-only with respect to SAP2000. **Read Properties** transfers each assigned
-frame/cable section, effective material (including the CSI `None` override sentinel), A, E, in-plane I, frame
-stiffness modifiers, and in-plane end releases into the FEM property grid before running. Isotropic materials use
-SAP's isotropic modulus API; tendon materials use the uniaxial modulus API. The results report peak downward
-joint displacement, axial force, bending moment, and support reaction per candidate. Auto-detected lowest column
+**Load cases are defined in the app** (Define → Load Cases / Load Combinations), with SAP2000's setup for a cable
+structure as the default — the same staging, solved by the internal FEM:
+
+| Case | Type | Definition | Continues from |
+| --- | --- | --- | --- |
+| `Pretension` | Nonlinear Static | 1 × target-force pattern + 1 × self-weight — the cable targets are met here | — |
+| `SLS: 1.0DL+1.0LL` | Nonlinear Static | 1 × dead + 1 × live (the Tab 1 loads) | `Pretension` |
+| `ULS: 1.35DL+1.5LL` | Nonlinear Static | 0.35 × self-weight + 1.35 × dead + 1.5 × live | `Pretension` |
+
+A case that continues from another starts with that case's loads and fitted cable pretension on the structure, so ULS
+carries 1.0 + 0.35 = 1.35 of the self-weight. **Default Setup** builds these from the self-weight pattern, the load
+patterns of Tab 1 (dead or live by pattern type, else by name) and the target-force pattern of Tab 3; the built-in model
+opens on them. **SAP Cases** shows the cases saved from SAP2000 instead, and **+ Add** / **- Remove** with the editable
+Case, Definition and From columns define others.
+
+The loads and the cable forces are part of the parametric set-up of the model, **Edit → VCF System**: the **Storey Force**
+sheet takes the tributary width B, the number of storeys, one qz per load pattern and the loaded points — chosen from a
+list (**+ Add**), picked on the preview by a click or a window (**+ Add Selected**) and taken off with **- Remove**; the
+preview shows a load arrow at each. The **Cable Force** sheet takes the target force of each cable. They are the data of Tab 1 and Tab 3 with **one fixed value each** —
+no range there. A range is an input of an optimization run (**Run → Optimization VCF**), set when it is run.
+
+The flow is the one of SAP2000: **Define → Load Patterns** (add or remove patterns of the model — name, type, self-weight
+multiplier), give them their loads in **Edit → VCF System**, define the load cases, then **Run**. Run first opens **Set
+Load Cases to Run** — every case with its status and its action, Run or Do Not Run — and **Run Now** analyses the model
+as it is at that moment: its geometry, section assignments, loads and cable target forces.
+
+The analysis is internal and never calls SAP2000. It uses the sections, materials and loading the model holds: those
+of the default model, of a model opened with **Load Model**, or the ones **File → Read FEM Properties from SAP**
+brings in from a connected model — each assigned frame/cable section, effective material (including the CSI `None`
+override sentinel), A, E, in-plane I, frame stiffness modifiers, and in-plane end releases. Isotropic materials use
+SAP's isotropic modulus API; tendon materials use the uniaxial modulus API. After Connect SAP or Refresh the run asks
+for that read first; it does not fetch the data itself. The results report peak downward
+joint displacement, axial force, bending moment, and support reaction of the run. Auto-detected lowest column
 bases are drawn as pin symbols and modeled with X/Z translations fixed and in-plane rotation free.
 
-Tab 07 contains **Analysis** and **Results** subtabs. Results selects a completed internal `Lxx_Hxx_Pxx`
-combination and displays Axial Force, Bending Moment, Shear, Reactions, or Deflected Shape in the shared model
-preview, with a matching numeric table. These are the internal FEM candidate results, not saved SAP2000 load-case
-results; the selected loading combination is assembled from the Tab 1 definitions. Axial, bending, and shear
+The Result menu displays Axial Force, Bending Moment, Shear, Reactions, or Deflected Shape of the run for the selected
+load case or combination in the shared model
+preview, with a matching numeric table. These are the internal FEM results, not saved SAP2000 load-case
+results; the Tab 1 loads are assembled from the Tab 1 definitions. Axial, bending, and shear
 results draw filled blue-positive/red-negative diagrams (positive axial force is tension); reactions draw support
 vectors; the deformed shape is visually magnified. Diagram widths are auto-scaled for display, while the adjacent
 table retains calculated values and units.
@@ -128,10 +175,11 @@ prestressed state, so loads that alone exceed a target do not block fitting. As 
 member-end joint lying on it (within 1 mm), so a full-length chord connects to the verticals and cable anchors
 along it; each piece is then meshed into N equal sub-elements (Analysis → Frame mesh, default 10; cables are not meshed); interior mesh nodes are condensed onto the
 frame joints and recovered as stations for force diagrams and the deflected shape. Cable equilibrium uses damped Newton iterations with a potential-
-energy line search, so cables can transition between taut and slack without a Boolean active-set toggle loop.
+energy line search, so cables can transition between taut and slack without a Boolean active-set toggle loop. Next to
+the equilibrium, where a step changes the energy by less than the round-off of the energy sum, a full Newton step is
+accepted when it at least halves the residual; convergence is always judged by the residual.
 It rejects non-planar geometry, tendons, SAP advanced local axes, axial or in-plane shear releases, and rotated
-local axes with in-plane releases. It does not run SAP2000 analysis cases. The full candidate space is limited to
-50,000 cases.
+local axes with in-plane releases. It does not run SAP2000 analysis cases.
 
 **Cable sag** (Analysis → Cable sag, on by default) is the one geometric nonlinearity included. A cable that a load
 case loads along its length — its self-weight, typically — hangs in a shallow parabola, and its tension T follows
@@ -219,7 +267,7 @@ about 1.5 s, model, units and lock state unchanged.
    writes the `.sdb` once more; the run journal accounts for that gap, and without a journal entry up to 15 minutes
    are accepted). This needs no SAP2000 at all.
 2. Otherwise the model is read through an **isolated, read-only SAP2000 workflow**: the candidate's `.sdb` is copied
-   into a private folder (`%LocalAppData%\COTVCF\QuantityRead`), a separate SAP2000 instance opens the copy, the
+   into a private folder (`%LocalAppData%\Mcotis\QuantityRead`), a separate SAP2000 instance opens the copy, the
    same tables are read through the database-tables API (`GetAvailableTables`, `GetTableForDisplayArray`), and the
    instance is closed without saving. SAP2000 never opens the candidate's own files, and the connected SAP2000 — its
    model, units and lock state — is not involved. The application is busy while this runs; **Cancel** or another
@@ -259,46 +307,58 @@ of this tab.
 
 ## Project configuration
 
-The COT VCF project JSON stores the configuration for Tabs 1–5 and their study selections; loading a project never writes to SAP2000. **New Config** clears the current configuration and active file identity while retaining the connected SAP model and session baseline; the next save asks for a new file. Existing files and Print Setup preferences are retained. **Save Config** updates the current tab section, while **Save All** validates and saves all sections atomically. Saved configuration is checked against the connected model before it is applied. Configuration and workflow controls are enabled only after SAP connects successfully, and disable again if the connection is lost.
+The Mcotis project JSON stores the configuration for Tabs 1–5 and their study selections; loading a project never writes to SAP2000. **New Config** clears the current configuration and active file identity while retaining the connected SAP model and session baseline; the next save asks for a new file. Existing files and Print Setup preferences are retained. **Save Config** updates the current tab section, while **Save All** validates and saves all sections atomically. Saved configuration is checked against the connected model before it is applied. Configuration and workflow controls are enabled only after SAP connects successfully, and disable again if the connection is lost.
 
 ## Build and run
 
 Requirements: Windows x64, .NET 8 Desktop Runtime, and a local SAP2000 installation providing `CSiAPIv1.dll` (SAP2000 26 is the project default; the installed SAP2000 27 API also builds). The API DLL is not committed.
 
 ```powershell
-dotnet build COTVCF.sln
-dotnet run --project COTVCF.csproj
+dotnet build MCOTiS.sln
+dotnet run --project src/Mcotis.Desktop/Mcotis.Desktop.csproj
 ```
 
 For a different SAP2000 installation:
 
 ```powershell
-dotnet build COTVCF.sln '-p:SapInstallDir=C:\Your SAP2000 folder'
+dotnet build MCOTiS.sln '-p:SapInstallDir=C:\Your SAP2000 folder'
 ```
 
 Default executable:
 
-`bin\Debug\net8.0-windows\win-x64\COT VCF tools.exe`
+`bin\Debug\net8.0-windows\win-x64\Mcotis.exe`
 
 ## Checks
 
+The default test commands are deliberately small for everyday development; the extensive numerical and historical
+regressions are retained but run on demand. For changes to FEM mathematics, geometry/DOF handling, instability
+diagnostics, nonlinear cables or results, use the full tests before merging.
+
 ```powershell
-dotnet run --project tests\COT_VCF.Checks.csproj
-dotnet run --project tests\COT_VCF.Checks.csproj -- --study-ui
-dotnet run --project tests\COT_VCF.Checks.csproj -- --fem
-dotnet run --project tests\COT_VCF.Checks.csproj -- --fem-sap
-dotnet run --project tests\COT_VCF.Checks.csproj -- --quantity-study "<baseline>.sdb"
-dotnet run --project tests\COT_VCF.Checks.csproj -- --quantity-connected
+# Everyday smoke checks (no SAP2000 required)
+dotnet run --project tests\Mcotis.Checks
+dotnet run --project tests\Mcotis.Desktop.Checks
+
+# Full validation, before releasing or changing the engineering solver
+dotnet run --project tests\Mcotis.Checks -- --full
+dotnet run --project tests\Mcotis.Desktop.Checks -- --full
+
+# Targeted subsystem verification, as applicable
+dotnet run --project tests\Mcotis.Desktop.Checks -- --study-ui
+dotnet run --project tests\Mcotis.Desktop.Checks -- --fem
+dotnet run --project tests\Mcotis.Desktop.Checks -- --fem-sap
+dotnet run --project tests\Mcotis.Desktop.Checks -- --quantity-study "<baseline>.sdb"
+dotnet run --project tests\Mcotis.Desktop.Checks -- --quantity-connected
 ```
 
-The first command runs offline workflow and guarded SAP-write tests using test doubles, including the Tab 8 quantity take-off (calculation, candidate records, source selection, the isolated read against API doubles, and the tab's loading / stale-request / connection behaviour). The second opens the WPF smoke test and checks workflow/FEM/quantity bindings. The third runs the internal FEM analytical and candidate-composition checks. The fourth compares the internal FEM with a completed SAP2000 study, like for like, from the fixture in `tests/fem-sap-benchmark` (offline; report in `.work/fem-vs-sap`). The fifth prints the quantity take-off of every candidate of a study on disk from the candidates' own text exports (offline; reads only). The sixth is live but read-only: it attaches to the running SAP2000, takes off the model open in it through the API exactly as Tab 8's *Connected model* does, prints the values as SAP2000 hands them over, and confirms that the model, its units and its lock state are unchanged. Live SAP checks are intentionally separate because they require SAP2000: `--quantity-live "<candidate>.sdb"` runs the isolated Tab 8 read on one candidate — it starts its own SAP2000 on a private copy, never attaches to a running one — and compares the result with that candidate's text export.
+The default desktop command checks essential inputs, workflow reset, reliability, database persistence and development-log integrity (native `.mcotis` persistence is covered by the core smoke suite). The **full desktop** command runs the original offline workflow and guarded SAP-write tests using test doubles, including the Tab 8 quantity take-off (calculation, candidate records, source selection, the isolated read against API doubles, and the tab's loading / stale-request / connection behaviour). The targeted `--study-ui` check validates WPF bindings. `--fem` runs the legacy planar analytical checks, while `--fem-sap` compares the internal FEM with a completed SAP2000 study using an offline fixture. The quantity flags check a study on disk and the connected-model quantity workflow, respectively. These are optional for unrelated changes.
 
 The checks project takes the same `-p:SapInstallDir=...` as the application when SAP2000 26 is not the installed version.
 
 ## Implementation boundaries
 
 - UI → ViewModel → application services → SAP gateway.
-- All CSI calls live under `src/SAP2000` and execute through dedicated STA lanes.
+- All CSI calls live under `src/Mcotis.Desktop/SAP2000` and execute through dedicated STA lanes.
 - SAP units, model identity, object existence, baseline coordinates, and return codes are verified around writes.
 - Recovery JSON is written before guarded write batches; failed batches attempt rollback.
 - Tab 8 writes nothing: it reads candidate text exports, and where SAP2000 is needed it uses a separate instance on a private copy of the model.

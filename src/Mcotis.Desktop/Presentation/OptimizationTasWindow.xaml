@@ -1,0 +1,136 @@
+<Window x:Class="Mcotis.Desktop.Presentation.OptimizationTasWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="clr-namespace:Mcotis.Desktop.Presentation" xmlns:c="clr-namespace:Mcotis.Desktop.Presentation.Controls"
+        Title="Optimization TAS" Icon="{x:Static p:AppIcon.Window}" Width="1180" Height="760" MinWidth="900" MinHeight="560"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
+ <!-- Optimization → Optimization TAS: the inputs of Edit → Tied Arch System as a search space — min / max / step for H1,
+      H2, bays and spacing and for the loads of the storeys above, and candidate sections per member role — with a preview
+      at the minimum, current or maximum corner. OK keeps the settings; Run Optimization keeps them and analyses every
+      combination (the same run and results as Optimization VCF). -->
+ <Window.Resources>
+  <Style x:Key="FormButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0"/></Style>
+  <Style x:Key="ColumnHeader" TargetType="TextBlock" BasedOn="{StaticResource Caption}"><Setter Property="HorizontalAlignment" Value="Right"/><Setter Property="Margin" Value="0,0,4,2"/></Style>
+ </Window.Resources>
+ <DockPanel Margin="10">
+  <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0" LastChildFill="False">
+   <Button DockPanel.Dock="Left" Content="Reset Form to Current Model" MinWidth="220" Click="Reset_Click"/>
+   <Button DockPanel.Dock="Right" Content="Cancel" Style="{StaticResource FormButton}" IsCancel="True"/>
+   <Button x:Name="OkButton" DockPanel.Dock="Right" Content="OK" Style="{StaticResource FormButton}" IsDefault="True" Click="Ok_Click"/>
+   <Button x:Name="RunButton" DockPanel.Dock="Right" Content="Run Optimization" Style="{StaticResource FormButton}" MinWidth="130" Click="Run_Click"
+           ToolTipService.ShowOnDisabled="True"/>
+  </DockPanel>
+
+  <!-- deflection check, on the top chord (deck) joints: the result it is read from, the limit L / ratio and the uplift limit -->
+  <Border DockPanel.Dock="Bottom" Margin="0,10,0,0" Padding="8,6" Background="{StaticResource Raised}" BorderBrush="{StaticResource Border}" BorderThickness="1">
+   <StackPanel Orientation="Horizontal">
+    <TextBlock Text="DEFLECTION CHECK" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+    <TextBlock Text="max δ in" VerticalAlignment="Center" Margin="0,0,6,0"
+               ToolTip="Largest downward displacement of a top chord (deck) joint — both limits are read on the top chord joints, where the storeys sit"/>
+    <ComboBox x:Name="DeflectionResultCombo" Width="280" SelectionChanged="Input_Changed" AutomationProperties.Name="Deflection result"
+              ToolTip="The load case / combination the deflection is read from (those set to run on Define → Load Cases / Load Combinations)"/>
+    <TextBlock Text="≤ L /" VerticalAlignment="Center" Margin="10,0,6,0"/>
+    <TextBox x:Name="SpanRatioBox" Width="60" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="Input_Changed"
+             AutomationProperties.Name="Span ratio" ToolTip="Deflection limit = span L (bays × spacing) / this ratio"/>
+    <TextBlock Text="uplift ≤" VerticalAlignment="Center" Margin="14,0,6,0"/>
+    <TextBox x:Name="UpliftLimitBox" Width="48" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="Input_Changed"
+             AutomationProperties.Name="Uplift limit mm" ToolTip="Largest upward displacement a top chord joint may have in that result"/>
+    <TextBlock Text="mm" VerticalAlignment="Center" Margin="4,0,0,0" Foreground="{StaticResource Muted}"/>
+    <TextBlock x:Name="LimitText" VerticalAlignment="Center" Margin="10,0,0,0" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}"/>
+   </StackPanel>
+  </Border>
+
+  <Grid>
+   <Grid.ColumnDefinitions><ColumnDefinition Width="500"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+
+   <TabControl Background="{StaticResource Surface}" AutomationProperties.Name="Optimization TAS sheets">
+    <TabControl.Resources>
+     <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}"><Setter Property="Height" Value="26"/><Setter Property="Width" Value="NaN"/><Setter Property="MinWidth" Value="0"/><Setter Property="Padding" Value="12,0"/></Style>
+    </TabControl.Resources>
+    <TabItem Header="Geometry">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+      <StackPanel>
+       <Grid x:Name="GeometryGrid">
+        <Grid.ColumnDefinitions>
+         <ColumnDefinition Width="*"/><ColumnDefinition Width="74"/><ColumnDefinition Width="74"/><ColumnDefinition Width="64"/>
+         <ColumnDefinition Width="30"/><ColumnDefinition Width="40"/>
+        </Grid.ColumnDefinitions>
+       </Grid>
+       <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                  Text="Values run from Min in steps of Step up to Max (an off-step Max is not added). Min = Max keeps the input fixed. The arch is the parabola through the two supports and the crown (H1 at mid-span); span L = bays × spacing. Cases that cannot be built — an odd number of bays, H2 not above H1 — are skipped by the run."/>
+      </StackPanel>
+     </ScrollViewer>
+    </TabItem>
+    <TabItem x:Name="CableSheet" Header="Cable Force">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+      <StackPanel>
+       <!-- the tie's pretension steps as the VCF cables step: at step j of n it is at Min + (Max − Min) × j / (n − 1) -->
+       <DockPanel Margin="0,0,0,8" LastChildFill="False">
+        <TextBlock DockPanel.Dock="Left" Text="Pretension [kN] · target force in the Pretension case" Style="{StaticResource Caption}" VerticalAlignment="Center"/>
+        <TextBox x:Name="CableStepsBox" DockPanel.Dock="Right" Width="48" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" TextChanged="Input_Changed"
+                 AutomationProperties.Name="Cable force steps" ToolTip="Number of force steps: step 1 is Min, the last step Max"/>
+        <TextBlock DockPanel.Dock="Right" Text="Steps" VerticalAlignment="Center" Margin="0,0,6,0"/>
+       </DockPanel>
+       <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="90"/><ColumnDefinition Width="90"/><ColumnDefinition Width="30"/></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <TextBlock Grid.Column="1" Text="Min" Style="{StaticResource ColumnHeader}"/>
+        <TextBlock Grid.Column="2" Text="Max" Style="{StaticResource ColumnHeader}"/>
+        <TextBlock x:Name="CableNameText" Grid.Row="1" VerticalAlignment="Center"/>
+        <TextBox x:Name="CableMinBox" Grid.Row="1" Grid.Column="1" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" Margin="0,2,4,2" TextChanged="Input_Changed"
+                 AutomationProperties.Name="Cable force min"/>
+        <TextBox x:Name="CableMaxBox" Grid.Row="1" Grid.Column="2" TextAlignment="Right" FontFamily="{StaticResource MonoFont}" Margin="0,2,4,2" TextChanged="Input_Changed"
+                 AutomationProperties.Name="Cable force max"/>
+        <TextBlock Grid.Row="1" Grid.Column="3" Text="kN" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
+       </Grid>
+       <TextBlock x:Name="CableNote" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+      </StackPanel>
+     </ScrollViewer>
+    </TabItem>
+    <TabItem Header="Storey Force">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+      <StackPanel>
+       <TextBlock Text="Point load on each top chord joint: SLS = (SW + SDL + LL) × spacing × B × n; ULS = (1.35 SW + 1.35 SDL + 1.5 LL) × spacing × B × n (half at the two end joints)"
+                  Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,4"/>
+       <Grid x:Name="LoadGrid">
+        <Grid.ColumnDefinitions>
+         <ColumnDefinition Width="*"/><ColumnDefinition Width="74"/><ColumnDefinition Width="74"/><ColumnDefinition Width="64"/>
+         <ColumnDefinition Width="30"/><ColumnDefinition Width="40"/>
+        </Grid.ColumnDefinitions>
+       </Grid>
+       <TextBlock x:Name="LoadSummary" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0"/>
+       <TextBlock Style="{StaticResource Hint}" Margin="0,6,0,0"
+                  Text="SW + SDL go on DEAD_above and LL on LL_above (LL_left / LL_right on each half); the model's ULS and SLS combinations apply the factors."/>
+      </StackPanel>
+     </ScrollViewer>
+    </TabItem>
+    <TabItem Header="Sections">
+     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+      <StackPanel>
+       <TextBlock Text="FRAME SECTIONS · CANDIDATES PER ROLE" Style="{StaticResource Subheading}"/>
+       <Grid x:Name="FrameGrid">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="120"/><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+       </Grid>
+       <TextBlock x:Name="SectionHint" Style="{StaticResource Hint}" Margin="0,8,0,0"
+                  Text="Tick the sections to try per role; none ticked keeps the TAS section. Candidates come from Define → Section Properties → Frame Sections."/>
+      </StackPanel>
+     </ScrollViewer>
+    </TabItem>
+   </TabControl>
+
+   <DockPanel Grid.Column="2">
+    <TextBlock x:Name="ProblemText" DockPanel.Dock="Bottom" Foreground="{StaticResource Error}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+    <TextBlock x:Name="SpaceSummary" DockPanel.Dock="Bottom" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+     <ComboBox x:Name="PreviewCorner" DockPanel.Dock="Right" Width="170" SelectionChanged="Input_Changed" AutomationProperties.Name="Preview at"
+               ToolTip="The corner of the ranges shown: every input at its minimum, the open model, or every input at its maximum">
+      <ComboBoxItem Content="Minimum"/><ComboBoxItem Content="Current" IsSelected="True"/><ComboBoxItem Content="Maximum"/>
+     </ComboBox>
+     <TextBlock DockPanel.Dock="Right" Text="Preview at" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+     <TextBlock Text="PREVIEW · SLS point loads [kN] at one corner of the ranges; the open model is not changed" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0" TextTrimming="CharacterEllipsis"/>
+    </DockPanel>
+    <Border BorderBrush="{StaticResource Border}" BorderThickness="1">
+     <c:Structural2DViewer x:Name="Preview" ShowPointLabels="False" ShowDimensions="True" AutomationProperties.Name="Optimization TAS preview"/>
+    </Border>
+   </DockPanel>
+  </Grid>
+ </DockPanel>
+</Window>

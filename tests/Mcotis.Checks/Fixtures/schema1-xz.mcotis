@@ -1,0 +1,24 @@
+{
+  "format": "Mcotis.Document", "schemaVersion": 1,
+  "documentId": "00000000-0000-0000-0000-000000000010", "savedUtc": "2026-10-12T00:00:00Z",
+  "units": { "force": "kN", "length": "m", "mass": "t" },
+  "settings": { "cableFitTolerancePercent": 10, "cableFitMaxIterations": 100, "frameMeshSegments": 10, "cableSag": true },
+  "nameSequence": {},
+  "materials": [{ "id": "00000000-0000-0000-0000-000000000004", "name": "Steel", "type": "Steel", "elasticModulus": 200000000, "poissonRatio": 0.3, "weightDensity": 77, "massDensity": 7.85 }],
+  "frameSections": [{ "id": "00000000-0000-0000-0000-000000000005", "name": "Beam", "materialId": "00000000-0000-0000-0000-000000000004", "shape": "General", "area": 0.01, "inertia33": 0.0008, "inertia22": 0.0004, "torsionConstant": 0.00001, "shearArea2": 0, "shearArea3": 0, "dimensions": {} }],
+  "cableSections": [], "shellSections": [],
+  "points": [
+    { "id": "00000000-0000-0000-0000-000000000001", "name": "A", "x": 0, "y": 0, "z": 0 },
+    { "id": "00000000-0000-0000-0000-000000000002", "name": "B", "x": 4, "y": 0, "z": 0 }
+  ],
+  "frames": [{ "id": "00000000-0000-0000-0000-000000000003", "name": "Beam", "startPointId": "00000000-0000-0000-0000-000000000001", "endPointId": "00000000-0000-0000-0000-000000000002" }],
+  "cables": [], "shells": [],
+  "restraints": [{ "pointId": "00000000-0000-0000-0000-000000000001", "ux": true, "uy": true, "uz": true, "rx": true, "ry": true, "rz": true }],
+  "frameAssignments": [{ "frameId": "00000000-0000-0000-0000-000000000003", "sectionId": "00000000-0000-0000-0000-000000000005", "localAxisAngle": 0,
+    "startRelease": { "axial": false, "shear2": false, "shear3": false, "torsion": false, "moment2": false, "moment3": false },
+    "endRelease": { "axial": false, "shear2": false, "shear3": false, "torsion": false, "moment2": false, "moment3": false },
+    "modifiers": { "area": 1, "inertia33": 1, "inertia22": 1, "torsion": 1, "mass": 1, "weight": 1 }
+  }],
+  "cableAssignments": [], "shellAssignments": [],
+  "loadPatterns": [], "loads": [], "loadCases": [], "loadCombinations": []
+}

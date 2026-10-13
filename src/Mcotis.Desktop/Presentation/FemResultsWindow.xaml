@@ -1,0 +1,104 @@
+<Window x:Class="Mcotis.Desktop.Presentation.FemResultsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:Mcotis.Desktop.Presentation" Title="FEM Results" Icon="{x:Static p:AppIcon.Window}" Width="1000" Height="650" MinWidth="650" MinHeight="420" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Background}">
+ <Grid Margin="10"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                         <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <TextBlock Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <ComboBox Grid.Column="1" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
+                                          IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
+                                          ToolTip="Load case or linear-additive combination shown in the table, the viewer and the Cable Target Fit Result column."/>
+                         </Grid>
+  <TabControl x:Name="ResultTopics" Grid.Row="1">
+   <TabItem Header="Member / joint results">
+                        <Grid Margin="2,2,6,2">
+                         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+                         <WrapPanel Grid.Row="1" Margin="0,0,0,6">
+                                <RadioButton Content="Axial force" GroupName="FemResultMode" Margin="0,0,12,0"
+                                                                                 IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=AxialForce}"/>
+                                <RadioButton Content="Bending" GroupName="FemResultMode" Margin="0,0,12,0"
+                                                                                 IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=BendingMoment}"/>
+                                <RadioButton Content="Shear" GroupName="FemResultMode" Margin="0,0,12,0"
+                                                                                 IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=Shear}"/>
+                                <RadioButton Content="Reactions" GroupName="FemResultMode" Margin="0,0,12,0"
+                                                                                 IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=Reactions}"/>
+                                <RadioButton Content="Deflection" GroupName="FemResultMode"
+                                                                                 IsChecked="{Binding FemResultMode, Converter={StaticResource EnumMatch}, ConverterParameter=DeflectedShape}"/>
+                                <CheckBox Content="Result values" Margin="16,0,0,0" IsChecked="{Binding ShowFemAxialValues}"
+                                          ToolTip="Label N, V or M along each frame and tension along each cable. Large values use MN or MN·m; hover for the value at an exact station."/>
+                         </WrapPanel>
+                         <TextBlock Grid.Row="2" Text="{Binding FemResultSummary}" Style="{StaticResource Caption}" Margin="0,0,0,6"/>
+                         <DataGrid x:Name="FemResultRowsGrid" Grid.Row="3" ItemsSource="{Binding FemResultRows}" IsReadOnly="True" IsEnabled="{Binding IsIdle}"
+                                                                 AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single"
+                                                                 ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                                <DataGrid.Columns>
+                                 <DataGridTextColumn Header="Member / Joint" Binding="{Binding ObjectName}" Width="1.3*" MinWidth="96"/>
+                                 <DataGridTextColumn Binding="{Binding StartValue, StringFormat=F4}" Width="1*" MinWidth="78" ElementStyle="{StaticResource NumericCell}" >
+                                  <DataGridTextColumn.Header><TextBlock><TextBlock.Style><Style TargetType="TextBlock">
+                                   <Setter Property="Text" Value="I-end"/>
+                                   <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.FemResultMode, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="Reactions"><Setter Property="Text" Value="Rx [kN]"/></DataTrigger>
+                                    <DataTrigger Binding="{Binding DataContext.FemResultMode, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="DeflectedShape"><Setter Property="Text" Value="Ux [m]"/></DataTrigger>
+                                   </Style.Triggers>
+                                  </Style></TextBlock.Style></TextBlock></DataGridTextColumn.Header>
+                                 </DataGridTextColumn>
+                                 <DataGridTextColumn Binding="{Binding EndValue, StringFormat=F4}" Width="1*" MinWidth="78" ElementStyle="{StaticResource NumericCell}" >
+                                  <DataGridTextColumn.Header><TextBlock><TextBlock.Style><Style TargetType="TextBlock">
+                                   <Setter Property="Text" Value="J-end"/>
+                                   <Style.Triggers>
+                                    <DataTrigger Binding="{Binding DataContext.FemResultMode, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="Reactions"><Setter Property="Text" Value="Rz [kN]"/></DataTrigger>
+                                    <DataTrigger Binding="{Binding DataContext.FemResultMode, RelativeSource={RelativeSource AncestorType=DataGrid}}" Value="DeflectedShape"><Setter Property="Text" Value="Uz [m]"/></DataTrigger>
+                                   </Style.Triggers>
+                                  </Style></TextBlock.Style></TextBlock></DataGridTextColumn.Header>
+                                 </DataGridTextColumn>
+                                 <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width=".8*" MinWidth="68"/>
+                                </DataGrid.Columns>
+                         </DataGrid>
+                        </Grid>
+   </TabItem>
+   <TabItem Header="Cable target fit">
+     <Border  BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+      <Grid Margin="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+       <StackPanel>
+        <TextBlock Text="CABLE TARGET FIT" Style="{StaticResource Subheading}"/>
+        <TextBlock Text="kN · pretension stage fitted to target, then loaded · sag and stiffness of the result shown" Style="{StaticResource Caption}" TextWrapping="Wrap"/>
+       </StackPanel>
+       <DataGrid Grid.Row="1" ItemsSource="{Binding FemRunCableFitRows}" IsReadOnly="True"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto" EnableRowVirtualization="True"
+                 AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single">
+        <DataGrid.Columns>
+         <DataGridTextColumn Header="Cable" Binding="{Binding CableName}" Width=".9*" MinWidth="60"/>
+         <DataGridTextColumn Header="Target" Binding="{Binding TargetForceKN, StringFormat=F1}" Width=".8*" MinWidth="62" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="Pretension" Binding="{Binding PretensionStageForceKN, StringFormat=F1}" Width=".8*" MinWidth="62" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="Dev. %" Binding="{Binding DeviationPercent, StringFormat=+0.00;-0.00;0.00}" Width=".6*" MinWidth="52" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTemplateColumn Header="Status" Width=".7*" MinWidth="62">
+          <DataGridTemplateColumn.CellTemplate>
+           <DataTemplate>
+            <TextBlock x:Name="StatusText" Text="{Binding Status}" ToolTip="{Binding FitFailure}" VerticalAlignment="Center" Margin="4,0"/>
+            <DataTemplate.Triggers>
+             <DataTrigger Binding="{Binding Status}" Value="Not fitted">
+              <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Warning}"/>
+              <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold"/>
+             </DataTrigger>
+             <DataTrigger Binding="{Binding Status}" Value="Failed">
+              <Setter TargetName="StatusText" Property="Foreground" Value="{StaticResource Error}"/>
+              <Setter TargetName="StatusText" Property="FontWeight" Value="SemiBold"/>
+             </DataTrigger>
+            </DataTemplate.Triggers>
+           </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+         </DataGridTemplateColumn>
+         <DataGridTextColumn Header="Result" Binding="{Binding ResultForceKN, StringFormat=F1}" Width=".8*" MinWidth="62" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Header="Applied P" Binding="{Binding AppliedPretensionKN, StringFormat=F1}" Width=".8*" MinWidth="70" ElementStyle="{StaticResource NumericCell}"/>
+         <DataGridTextColumn Binding="{Binding SagMm, StringFormat=F1}" Width=".6*" MinWidth="56" ElementStyle="{StaticResource NumericCell}">
+          <DataGridTextColumn.Header><TextBlock Text="Sag mm" ToolTip="Mid-span sag of the cable below its chord in the result shown: w·cos θ·L² / 8T. Blank when the cable is straight — Cable sag off, no load along the cable in this case, a vertical cable, or a combination."/></DataGridTextColumn.Header>
+         </DataGridTextColumn>
+         <DataGridTextColumn Binding="{Binding StiffnessPercent, StringFormat=F1}" Width=".6*" MinWidth="58" ElementStyle="{StaticResource NumericCell}">
+          <DataGridTextColumn.Header><TextBlock Text="Stiff. %" ToolTip="Axial stiffness the sagging cable keeps, in % of EA / L (Ernst's equivalent modulus over E). Near 100 % = the sag does not matter here."/></DataGridTextColumn.Header>
+         </DataGridTextColumn>
+         <DataGridTextColumn Header="Iter." Binding="{Binding FitIterations}" Width=".4*" MinWidth="36" ElementStyle="{StaticResource NumericCell}"/>
+        </DataGrid.Columns>
+       </DataGrid>
+      </Grid>
+     </Border>   </TabItem>
+  </TabControl>
+ </Grid>
+</Window>

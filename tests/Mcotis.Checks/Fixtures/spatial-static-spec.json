@@ -1,0 +1,32 @@
+{
+  "units": "kN, m, t, s",
+  "section": { "E": 200000000, "nu": 0.3, "A": 0.01, "Iy": 0.0004, "Iz": 0.0008, "J": 0.00001 },
+  "cases": [
+    { "name": "combined-cantilever", "mask": "Full3D", "nodes": [[0,0,0],[4,0,0]], "fix": [[1,1,1,1,1,1],[0,0,0,0,0,0]],
+      "frames": [{"i":1,"j":2,"vecxz":[0,-1,0]}], "nodal": [{"node":2,"values":[10,20,-30,40,50,-60]}] },
+    { "name": "vertical-cantilever", "mask": "Full3D", "nodes": [[0,0,0],[0,0,4]], "fix": [[1,1,1,1,1,1],[0,0,0,0,0,0]],
+      "frames": [{"i":1,"j":2,"vecxz":[0,1,0]}], "nodal": [{"node":2,"values":[5,-8,-20,2,3,4]}] },
+    { "name": "inclined-cantilever", "mask": "Full3D", "nodes": [[0,0,0],[3,4,5]], "fix": [[1,1,1,1,1,1],[0,0,0,0,0,0]],
+      "frames": [{"i":1,"j":2,"vecxz":[4,-3,0]}], "nodal": [{"node":2,"values":[5,-8,-20,2,3,4]}] },
+    { "name": "rolled-cantilever", "mask": "Full3D", "nodes": [[0,0,0],[4,0,0]], "fix": [[1,1,1,1,1,1],[0,0,0,0,0,0]],
+      "frames": [{"i":1,"j":2,"roll":90,"vecxz":[0,0,-1]}], "nodal": [{"node":2,"values":[5,-8,-20,2,3,4]}] },
+    { "name": "space-portal", "mask": "Full3D", "nodes": [[0,0,0],[0,0,4],[3,2,4],[3,2,0]],
+      "fix": [[1,1,1,1,1,1],[0,0,0,0,0,0],[0,0,0,0,0,0],[1,1,1,1,1,1]],
+      "frames": [{"i":1,"j":2,"vecxz":[0,1,0]},{"i":2,"j":3,"vecxz":[2,-3,0]},{"i":4,"j":3,"vecxz":[0,1,0]},{"i":1,"j":3,"vecxz":[2,-3,0]}],
+      "nodal": [{"node":2,"values":[5,2,-8,1,2,3]},{"node":3,"values":[-1,4,-10,-2,1,0]}] },
+    { "name": "uniform-cantilever", "mask": "Full3D", "nodes": [[0,0,0],[4,0,0]], "fix": [[1,1,1,1,1,1],[0,0,0,0,0,0]],
+      "frames": [{"i":1,"j":2,"vecxz":[0,-1,0],"udlGlobal":[0,0,-2]}] },
+    { "name": "released-propped-beam", "mask": "Full3D", "nodes": [[0,0,0],[4,0,0]], "fix": [[1,1,1,1,1,1],[0,0,1,0,0,0]],
+      "frames": [{"i":1,"j":2,"vecxz":[0,-1,0],"udlGlobal":[0,0,-2],"releasez":2}], "omitNodeRotation": [[2,4]] },
+    { "name": "pin-pin-released", "mask": "XZ", "nodes": [[0,0,0],[4,0,0]], "fix": [[1,0,1,0,0,0],[0,0,1,0,0,0]],
+      "frames": [{"i":1,"j":2,"vecxz":[0,-1,0],"udlGlobal":[0,0,-2],"releasez":3}], "omitNodeRotation": [[1,4],[2,4]] },
+    { "name": "legacy-xz-two-element", "mask": "XZ", "nodes": [[0,0,0],[5,0,0],[10,0,0]], "fix": [[1,0,1,0,0,0],[0,0,0,0,0,0],[1,0,1,0,0,0]],
+      "frames": [{"i":1,"j":2,"vecxz":[0,-1,0]},{"i":2,"j":3,"vecxz":[0,-1,0]}], "nodal": [{"node":2,"values":[0,0,-100,0,0,0]}] },
+    { "name": "member-point-cantilever", "mask": "Full3D", "nodes": [[0,0,0],[4,0,0]], "fix": [[1,1,1,1,1,1],[0,0,0,0,0,0]],
+      "frames": [{"i":1,"j":2,"vecxz":[0,-1,0],"pointGlobal":[0,0,-11],"pointAt":0.3}] },
+    { "name": "local-uniform-cantilever", "mask": "Full3D", "nodes": [[0,0,0],[4,0,0]], "fix": [[1,1,1,1,1,1],[0,0,0,0,0,0]],
+      "frames": [{"i":1,"j":2,"vecxz":[0,-1,0],"udlLocal":[1,2,-3]}] },
+    { "name": "reversed-cantilever", "mask": "Full3D", "nodes": [[0,0,0],[4,0,0]], "fix": [[1,1,1,1,1,1],[0,0,0,0,0,0]],
+      "frames": [{"i":2,"j":1,"vecxz":[0,1,0]}], "nodal": [{"node":2,"values":[10,20,-30,40,50,-60]}] }
+  ]
+}

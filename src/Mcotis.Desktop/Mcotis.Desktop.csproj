@@ -1,0 +1,110 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Platform Configuration -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+    <SapInstallDir Condition="'$(SapInstallDir)' == '' and '$(Configuration)' == 'FreshBuild' and Exists('C:\Program Files\Computers and Structures\SAP2000 27\CSiAPIv1.dll')">C:\Program Files\Computers and Structures\SAP2000 27</SapInstallDir>
+    <!-- A machine that has SAP2000 27 and not 26 builds against 27 without being told. -->
+    <SapInstallDir Condition="'$(SapInstallDir)' == '' and !Exists('C:\Program Files\Computers and Structures\SAP2000 26\CSiAPIv1.dll') and Exists('C:\Program Files\Computers and Structures\SAP2000 27\CSiAPIv1.dll')">C:\Program Files\Computers and Structures\SAP2000 27</SapInstallDir>
+    <SapInstallDir Condition="'$(SapInstallDir)' == ''">C:\Program Files\Computers and Structures\SAP2000 26</SapInstallDir>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- The repository root, two levels up: where .git, .githooks, docs and the built app's bin folder are. -->
+    <RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\'))</RepoRoot>
+    
+    <!-- Code Features -->
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    
+    <!-- Build Output Configuration -->
+    
+    <!-- Assembly Info -->
+    <!-- Brand: Mcotis (Meinhardt Cities of Tomorrow Integrated Structures). AssemblyName is the .exe/.dll file name and the
+         pack:// assembly token used by the theme, the icon and the test host. -->
+    <AssemblyName>Mcotis</AssemblyName>
+    <RootNamespace>Mcotis.Desktop</RootNamespace>
+    <Title>Mcotis — Meinhardt Cities of Tomorrow Integrated Structures</Title>
+    <Product>Mcotis</Product>
+    <Description>Mcotis — Meinhardt Cities of Tomorrow Integrated Structures</Description>
+    <Company>Meinhardt</Company>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
+    <!-- The app's own logo (the truss glyph of Theme.xaml "AppLogo") for the exe, the taskbar and shortcuts. -->
+    <ApplicationIcon>Presentation\AppIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Debug Configuration -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+
+  <!-- Release Configuration -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <DefineConstants>TRACE</DefineConstants>
+  </PropertyGroup>
+
+  <!-- FreshBuild replaces the repository's bin folder with a complete app at its root. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'FreshBuild'">
+    <DebugSymbols>false</DebugSymbols>
+    <DebugType>none</DebugType>
+    <Optimize>true</Optimize>
+    <DefineConstants>TRACE</DefineConstants>
+    <OutputPath>$(RepoRoot)bin\</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
+  </PropertyGroup>
+
+  <!-- The development log is compulsory: every build makes this clone use the repository's commit hooks (.githooks/commit-msg
+       refuses a commit that changes the app without a docs/DEVELOPMENT_LOG.md entry). Harmless where git is absent. -->
+  <Target Name="InstallGitHooks" BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true' and Exists('$(RepoRoot).git') and Exists('$(RepoRoot).githooks\commit-msg')">
+    <Exec Command="git config core.hooksPath .githooks" WorkingDirectory="$(RepoRoot)" ContinueOnError="true" StandardOutputImportance="low" />
+  </Target>
+
+  <Target Name="ClearFreshBuildOutput" BeforeTargets="PrepareForBuild"
+          Condition="'$(Configuration)' == 'FreshBuild' and '$(DesignTimeBuild)' != 'true'">
+    <RemoveDir Directories="$(RepoRoot)bin" />
+  </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Mcotis.Application\Mcotis.Application.csproj" />
+    <ProjectReference Include="..\Mcotis.Analysis\Mcotis.Analysis.csproj" />
+    <ProjectReference Include="..\Mcotis.Persistence\Mcotis.Persistence.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="CSiAPIv1"><HintPath>$(SapInstallDir)\CSiAPIv1.dll</HintPath><Private>true</Private></Reference>
+    <InternalsVisibleTo Include="Mcotis.Desktop.Checks" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The default MCOTiS configuration is a bundled SQLite input database, loaded at startup without SAP2000. -->
+    <!-- The software logo: window icons (Theme.xaml AppLogo); AppIcon.ico is made from the same picture. -->
+    <Resource Include="Presentation\AppLogo.png" />
+    <Resource Include="Presentation\AppIcon.ico" />
+    <EmbeddedResource Include="Resources\Default.cotfem.db" LogicalName="Mcotis.Default.cotfem.db" />
+    <!-- File → Load TAS…: the CoT 120 m composite arch deck as ETABS wrote it (.e2k), imported like Import From ETABS. -->
+    <EmbeddedResource Include="Resources\TAS-CoT120.e2k" LogicalName="Mcotis.TAS-CoT120.e2k" />
+    <!-- Help → Development Plans shows the development log; keeping it is compulsory (AGENTS.md, .githooks/commit-msg). -->
+    <EmbeddedResource Include="$(RepoRoot)docs\DEVELOPMENT_LOG.md" LogicalName="Mcotis.DevelopmentLog.md" Link="DEVELOPMENT_LOG.md" />
+    <!-- Help → User Guide shows the user guide; whoever adds or changes a function updates its article. -->
+    <EmbeddedResource Include="$(RepoRoot)docs\USER_GUIDE.md" LogicalName="Mcotis.UserGuide.md" Link="USER_GUIDE.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Tab 06 only: derive consolidated .xlsx and HTML reports from the study's raw JSON package. -->
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+    <!-- Portable FEM input/working/output databases. The app checkpoints to a single file before atomic Save. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.12" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,35 @@
+<Window x:Class="Mcotis.Desktop.Presentation.DefineSectionsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:Mcotis.Desktop.Presentation" Title="Define · Sections" Icon="{x:Static p:AppIcon.Window}" Width="1100" Height="620" MinWidth="640" MinHeight="360" WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Background}">
+ <!-- Define → Sections pop-out: the SAP member properties the FEM uses (read-only; same bindings as before). -->
+ <DockPanel Margin="10">
+  <Button DockPanel.Dock="Bottom" Content="Close" IsCancel="True" HorizontalAlignment="Right" Margin="0,8,0,0" Click="Close_Click"/>
+ <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
+  <Grid Margin="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+   <DockPanel>
+    <TextBlock Text="SAP MEMBER PROPERTIES" Style="{StaticResource Subheading}"/>
+    <TextBlock DockPanel.Dock="Right" Text="Read-only · A and I include modifiers · w = γ·A·mod w (self-weight)" Style="{StaticResource Caption}"/>
+   </DockPanel>
+   <DataGrid x:Name="FemPropertiesGrid" Grid.Row="1" ItemsSource="{Binding FemSectionProperties}" IsReadOnly="True" IsEnabled="{Binding IsIdle}"
+             ScrollViewer.HorizontalScrollBarVisibility="Auto" FrozenColumnCount="1"
+             AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single">
+    <DataGrid.Columns>
+     <DataGridTextColumn Header="Member" Binding="{Binding MemberName}" Width="Auto" MinWidth="60"/>
+     <DataGridTextColumn Header="Section" Binding="{Binding SectionName}" Width="Auto" MinWidth="60"/>
+     <DataGridTextColumn Header="Mat." Binding="{Binding MaterialName}" Width="Auto" MinWidth="44"/>
+     <DataGridTextColumn Header="A [m²]" Binding="{Binding AreaM2, StringFormat=F5}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+     <DataGridTextColumn Header="E [GPa]" Binding="{Binding ElasticModulusGPa, StringFormat=F2}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+     <DataGridTextColumn Header="I [m⁴]" Binding="{Binding InPlaneInertiaM4, StringFormat=F7}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+     <DataGridTextColumn Header="Rel." Binding="{Binding EndRotationReleases}" Width="Auto"/>
+     <DataGridTextColumn Header="γ [kN/m³]" Binding="{Binding UnitWeightKNPerM3, StringFormat=F2}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+     <DataGridTextColumn Header="ρ [t/m³]" Binding="{Binding UnitMassTPerM3, StringFormat=F3}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+     <DataGridTextColumn Header="w [kN/m]" Binding="{Binding WeightPerLengthKNPerM, StringFormat=F3}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+     <DataGridTextColumn Header="m [t/m]" Binding="{Binding MassPerLengthTPerM, StringFormat=F4}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+     <DataGridTextColumn Header="Mod A" Binding="{Binding AreaModifier, StringFormat=0.###}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+     <DataGridTextColumn Header="Mod I" Binding="{Binding InertiaModifierOrNull, StringFormat=0.###}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+     <DataGridTextColumn Header="Mod m" Binding="{Binding MassModifier, StringFormat=0.###}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+     <DataGridTextColumn Header="Mod w" Binding="{Binding WeightModifier, StringFormat=0.###}" Width="Auto" ElementStyle="{StaticResource NumericCell}"/>
+    </DataGrid.Columns>
+   </DataGrid>
+  </Grid>
+ </Border>
+ </DockPanel>
+</Window>

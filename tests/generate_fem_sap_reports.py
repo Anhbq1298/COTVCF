@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def literal(name):
     """Reuse the project's print engine verbatim, without maintaining a second copy."""
-    source = (ROOT / 'src/Application/Results/ReportPrintEngine.cs').read_text(encoding='utf-8')
+    source = (ROOT / 'src/Mcotis.Desktop/Application/Results/ReportPrintEngine.cs').read_text(encoding='utf-8')
     match = re.search(r'const string ' + name + r'\s*=\s*"""(.*?)""";', source, re.S)
     if not match:
         raise ValueError('Cannot find print engine literal ' + name)

@@ -1,0 +1,90 @@
+<Window x:Class="Mcotis.Desktop.Presentation.ViewOptionsWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:Mcotis.Desktop.Presentation"
+        Title="Display Options" Icon="{x:Static p:AppIcon.Window}" Width="600" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
+ <!-- Display → View Options (SAP2000-style Display Options): the form is edited first, then Apply / OK writes it to the
+      model view; Close discards. Every option drives an existing viewer setting. -->
+ <Window.Resources>
+  <Style TargetType="GroupBox">
+   <Setter Property="Margin" Value="0,0,0,10"/>
+   <Setter Property="Padding" Value="8,6,8,4"/>
+   <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
+   <Setter Property="Background" Value="{StaticResource Raised}"/>
+  </Style>
+  <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}"><Setter Property="Margin" Value="4,4,0,4"/></Style>
+  <Style TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}"><Setter Property="Margin" Value="4,4,0,4"/></Style>
+  <Style x:Key="FormButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0"/></Style>
+ </Window.Resources>
+ <DockPanel Margin="8">
+  <!-- form actions -->
+  <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+   <Border Height="1" Background="{StaticResource Border}" Margin="0,0,0,10"/>
+   <Button x:Name="ResetDefaultsButton" Content="Reset Form to Default Values" Width="290" Margin="0,0,0,6" Click="ResetDefaults_Click"/>
+   <Button x:Name="ResetCurrentButton" Content="Reset Form to Current Window Settings" Width="290" Margin="0,0,0,10" Click="ResetCurrent_Click"/>
+   <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+    <Button x:Name="OkButton" Content="OK" Style="{StaticResource FormButton}" IsDefault="True" Click="Ok_Click"/>
+    <Button x:Name="CloseButton" Content="Close" Style="{StaticResource FormButton}" IsCancel="True" Click="Close_Click"/>
+    <Button x:Name="ApplyButton" Content="Apply" Style="{StaticResource FormButton}" Click="Apply_Click"/>
+   </StackPanel>
+  </StackPanel>
+
+  <TabControl x:Name="OptionTabs" Background="{StaticResource Surface}">
+   <TabControl.Resources>
+    <Style TargetType="TabItem" BasedOn="{StaticResource {x:Type TabItem}}"><Setter Property="Height" Value="26"/><Setter Property="Padding" Value="10,0"/></Style>
+   </TabControl.Resources>
+
+   <!-- ============ Object Options ============ -->
+   <TabItem Header="Object Options">
+    <Grid Margin="8">
+     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions>
+     <StackPanel>
+      <GroupBox Header="Labels">
+       <StackPanel>
+        <CheckBox x:Name="PointLabels" Content="Point labels"/>
+        <CheckBox x:Name="FrameLabels" Content="Frame labels"/>
+        <CheckBox x:Name="CableLabels" Content="Cable / tendon labels"/>
+        <CheckBox x:Name="MemberSizes" Content="Member size (section name)" ToolTip="Label each frame and cable with its assigned SAP section (FEM panes)."/>
+       </StackPanel>
+      </GroupBox>
+     </StackPanel>
+     <StackPanel Grid.Column="2">
+      <GroupBox Header="Show">
+       <StackPanel>
+        <CheckBox x:Name="Dimensions" Content="Dimensions" AutomationProperties.Name="Show dimensions"
+                  ToolTip="Bay spans and overall span below the model; level heights, overall height and node elevations beside it."/>
+        <CheckBox x:Name="Loading" Content="Loading arrows" ToolTip="Tab 01 load arrows; with a completed case selected, each arrow is labelled with its Fz (FEM panes)."/>
+        <CheckBox x:Name="FrameMesh" Content="Frame mesh" ToolTip="Each frame broken into its FEM mesh segments (FEM panes). Cables are not meshed."/>
+        <CheckBox x:Name="FrameLocalAxes" Content="Frame local axes (1 / 2 / 3)" ToolTip="Show the assigned frame local axes; select frames to isolate their axes."/>
+       </StackPanel>
+      </GroupBox>
+     </StackPanel>
+    </Grid>
+   </TabItem>
+
+   <!-- ============ General Options ============ -->
+   <TabItem Header="General Options">
+    <Grid Margin="8">
+     <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="10"/><ColumnDefinition/></Grid.ColumnDefinitions>
+     <StackPanel>
+      <GroupBox Header="View Type">
+       <StackPanel>
+        <RadioButton x:Name="PlaneXY" GroupName="ViewType" Content="Plan (XY)"/>
+        <RadioButton x:Name="PlaneXZ" GroupName="ViewType" Content="Elevation (XZ)"/>
+        <RadioButton x:Name="PlaneYZ" GroupName="ViewType" Content="Elevation (YZ)"/>
+        <RadioButton x:Name="Plane3D" GroupName="ViewType" Content="Extrude (3D, members to section size)"/>
+       </StackPanel>
+      </GroupBox>
+     </StackPanel>
+     <StackPanel Grid.Column="2">
+      <GroupBox Header="Results">
+       <StackPanel>
+        <CheckBox x:Name="AxialValues" Content="Frame / cable result values" ToolTip="Show N, V or M along each frame, and cable tension along each cable. Values above 1000 kN or kN·m display in MN or MN·m."/>
+        <CheckBox x:Name="Undeformed" Content="Undeformed shape guide" ToolTip="Light dashed undeformed geometry under the deflected shape."/>
+        <CheckBox x:Name="DeflectionContour" Content="Deflection contour |U|" ToolTip="Colour the deflected shape by displacement magnitude."/>
+       </StackPanel>
+      </GroupBox>
+     </StackPanel>
+    </Grid>
+   </TabItem>
+  </TabControl>
+ </DockPanel>
+</Window>

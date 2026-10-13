@@ -1,0 +1,5982 @@
+{
+  "format": "Mcotis.FemModel",
+  "version": 1,
+  "savedUtc": "2026-10-10T09:29:12.7706078Z",
+  "model": {
+    "path": "C:\\Projects\\CoT\\Template Model\\COT Framing_V1.2_100m.sdb",
+    "version": "27.1.0",
+    "unitsCode": 6,
+    "forceUnit": "kN",
+    "lengthUnit": "m",
+    "isLocked": false,
+    "name": "COT Framing_V1.2_100m.sdb",
+    "units": "kN / m"
+  },
+  "sessionBaseline": {
+    "points": {
+      "TTrPt001": {
+        "name": "TTrPt001",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "TTrPt011": {
+        "name": "TTrPt011",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt011": {
+        "name": "BTrPt011",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "BTrPt001": {
+        "name": "BTrPt001",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "BTrPt002": {
+        "name": "BTrPt002",
+        "position": {
+          "x": -40,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "TTrPt002": {
+        "name": "TTrPt002",
+        "position": {
+          "x": -40,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt003": {
+        "name": "BTrPt003",
+        "position": {
+          "x": -30,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "TTrPt003": {
+        "name": "TTrPt003",
+        "position": {
+          "x": -30,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt004": {
+        "name": "BTrPt004",
+        "position": {
+          "x": -20,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt004": {
+        "name": "MTrPt004",
+        "position": {
+          "x": -20,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt004": {
+        "name": "TTrPt004",
+        "position": {
+          "x": -20,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt005": {
+        "name": "BTrPt005",
+        "position": {
+          "x": -10,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt005": {
+        "name": "MTrPt005",
+        "position": {
+          "x": -10,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt005": {
+        "name": "TTrPt005",
+        "position": {
+          "x": -10,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt006": {
+        "name": "BTrPt006",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt006": {
+        "name": "MTrPt006",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt006": {
+        "name": "TTrPt006",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt007": {
+        "name": "BTrPt007",
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt007": {
+        "name": "MTrPt007",
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt007": {
+        "name": "TTrPt007",
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt008": {
+        "name": "BTrPt008",
+        "position": {
+          "x": 20,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt008": {
+        "name": "MTrPt008",
+        "position": {
+          "x": 20,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt008": {
+        "name": "TTrPt008",
+        "position": {
+          "x": 20,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt009": {
+        "name": "BTrPt009",
+        "position": {
+          "x": 30,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt009": {
+        "name": "MTrPt009",
+        "position": {
+          "x": 30,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt009": {
+        "name": "TTrPt009",
+        "position": {
+          "x": 30,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt010": {
+        "name": "BTrPt010",
+        "position": {
+          "x": 40,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt010": {
+        "name": "MTrPt010",
+        "position": {
+          "x": 40,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt010": {
+        "name": "TTrPt010",
+        "position": {
+          "x": 40,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "MTrPt011": {
+        "name": "MTrPt011",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "MTrPt001": {
+        "name": "MTrPt001",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "MTrPt002": {
+        "name": "MTrPt002",
+        "position": {
+          "x": -40,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "MTrPt003": {
+        "name": "MTrPt003",
+        "position": {
+          "x": -30,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "198": {
+        "name": "198",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      },
+      "199": {
+        "name": "199",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      },
+      "200": {
+        "name": "200",
+        "position": {
+          "x": -60,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      },
+      "201": {
+        "name": "201",
+        "position": {
+          "x": -60,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "202": {
+        "name": "202",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "203": {
+        "name": "203",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "204": {
+        "name": "204",
+        "position": {
+          "x": 60,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "205": {
+        "name": "205",
+        "position": {
+          "x": 60,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      }
+    },
+    "members": [
+      {
+        "name": "TopChord",
+        "start": "TTrPt001",
+        "end": "TTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "BottomChord",
+        "start": "BTrPt011",
+        "end": "BTrPt001",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM001",
+        "start": "BTrPt004",
+        "end": "MTrPt004",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM002",
+        "start": "MTrPt004",
+        "end": "TTrPt004",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM003",
+        "start": "BTrPt005",
+        "end": "MTrPt005",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM004",
+        "start": "MTrPt005",
+        "end": "TTrPt005",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM005",
+        "start": "BTrPt006",
+        "end": "MTrPt006",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM006",
+        "start": "MTrPt006",
+        "end": "TTrPt006",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM007",
+        "start": "BTrPt007",
+        "end": "MTrPt007",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM008",
+        "start": "MTrPt007",
+        "end": "TTrPt007",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM009",
+        "start": "BTrPt008",
+        "end": "MTrPt008",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM010",
+        "start": "MTrPt008",
+        "end": "TTrPt008",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM011",
+        "start": "BTrPt009",
+        "end": "MTrPt009",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM012",
+        "start": "MTrPt009",
+        "end": "TTrPt009",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM013",
+        "start": "BTrPt010",
+        "end": "MTrPt010",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM014",
+        "start": "MTrPt010",
+        "end": "TTrPt010",
+        "kind": "Frame"
+      },
+      {
+        "name": "170",
+        "start": "BTrPt011",
+        "end": "TTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM015",
+        "start": "MTrPt005",
+        "end": "MTrPt006",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM016",
+        "start": "MTrPt006",
+        "end": "MTrPt007",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM017",
+        "start": "MTrPt007",
+        "end": "MTrPt008",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM018",
+        "start": "MTrPt008",
+        "end": "MTrPt009",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM019",
+        "start": "MTrPt009",
+        "end": "MTrPt010",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM020",
+        "start": "MTrPt010",
+        "end": "MTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM021",
+        "start": "MTrPt001",
+        "end": "MTrPt002",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM022",
+        "start": "MTrPt002",
+        "end": "MTrPt003",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM023",
+        "start": "MTrPt003",
+        "end": "MTrPt004",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM024",
+        "start": "MTrPt004",
+        "end": "MTrPt005",
+        "kind": "Frame"
+      },
+      {
+        "name": "181",
+        "start": "BTrPt001",
+        "end": "TTrPt001",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM025",
+        "start": "BTrPt002",
+        "end": "MTrPt002",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM026",
+        "start": "MTrPt002",
+        "end": "TTrPt002",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM027",
+        "start": "BTrPt003",
+        "end": "MTrPt003",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM028",
+        "start": "MTrPt003",
+        "end": "TTrPt003",
+        "kind": "Frame"
+      },
+      {
+        "name": "186",
+        "start": "198",
+        "end": "BTrPt001",
+        "kind": "Frame"
+      },
+      {
+        "name": "187",
+        "start": "199",
+        "end": "BTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "188",
+        "start": "200",
+        "end": "201",
+        "kind": "Frame"
+      },
+      {
+        "name": "189",
+        "start": "201",
+        "end": "202",
+        "kind": "Frame"
+      },
+      {
+        "name": "190",
+        "start": "203",
+        "end": "204",
+        "kind": "Frame"
+      },
+      {
+        "name": "191",
+        "start": "204",
+        "end": "205",
+        "kind": "Frame"
+      },
+      {
+        "name": "Cable1a-2",
+        "start": "TTrPt001",
+        "end": "201",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable1b-2",
+        "start": "TTrPt011",
+        "end": "204",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable2a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt002",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable2b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt010",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable3a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt003",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable3b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt009",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable4a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt004",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable4b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt008",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable5a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt005",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable5b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt007",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable6a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt006",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable6b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt006",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable7a-2",
+        "start": "201",
+        "end": "198",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable7b-2",
+        "start": "204",
+        "end": "199",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable8a-2",
+        "start": "202",
+        "end": "200",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable8b-2",
+        "start": "203",
+        "end": "205",
+        "kind": "Cable"
+      }
+    ]
+  },
+  "geometry": {
+    "points": {
+      "TTrPt001": {
+        "name": "TTrPt001",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "TTrPt011": {
+        "name": "TTrPt011",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt011": {
+        "name": "BTrPt011",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "BTrPt001": {
+        "name": "BTrPt001",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "BTrPt002": {
+        "name": "BTrPt002",
+        "position": {
+          "x": -40,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "TTrPt002": {
+        "name": "TTrPt002",
+        "position": {
+          "x": -40,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt003": {
+        "name": "BTrPt003",
+        "position": {
+          "x": -30,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "TTrPt003": {
+        "name": "TTrPt003",
+        "position": {
+          "x": -30,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt004": {
+        "name": "BTrPt004",
+        "position": {
+          "x": -20,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt004": {
+        "name": "MTrPt004",
+        "position": {
+          "x": -20,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt004": {
+        "name": "TTrPt004",
+        "position": {
+          "x": -20,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt005": {
+        "name": "BTrPt005",
+        "position": {
+          "x": -10,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt005": {
+        "name": "MTrPt005",
+        "position": {
+          "x": -10,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt005": {
+        "name": "TTrPt005",
+        "position": {
+          "x": -10,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt006": {
+        "name": "BTrPt006",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt006": {
+        "name": "MTrPt006",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt006": {
+        "name": "TTrPt006",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt007": {
+        "name": "BTrPt007",
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt007": {
+        "name": "MTrPt007",
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt007": {
+        "name": "TTrPt007",
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt008": {
+        "name": "BTrPt008",
+        "position": {
+          "x": 20,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt008": {
+        "name": "MTrPt008",
+        "position": {
+          "x": 20,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt008": {
+        "name": "TTrPt008",
+        "position": {
+          "x": 20,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt009": {
+        "name": "BTrPt009",
+        "position": {
+          "x": 30,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt009": {
+        "name": "MTrPt009",
+        "position": {
+          "x": 30,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt009": {
+        "name": "TTrPt009",
+        "position": {
+          "x": 30,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt010": {
+        "name": "BTrPt010",
+        "position": {
+          "x": 40,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt010": {
+        "name": "MTrPt010",
+        "position": {
+          "x": 40,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt010": {
+        "name": "TTrPt010",
+        "position": {
+          "x": 40,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "MTrPt011": {
+        "name": "MTrPt011",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "MTrPt001": {
+        "name": "MTrPt001",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "MTrPt002": {
+        "name": "MTrPt002",
+        "position": {
+          "x": -40,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "MTrPt003": {
+        "name": "MTrPt003",
+        "position": {
+          "x": -30,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "198": {
+        "name": "198",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      },
+      "199": {
+        "name": "199",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      },
+      "200": {
+        "name": "200",
+        "position": {
+          "x": -60,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      },
+      "201": {
+        "name": "201",
+        "position": {
+          "x": -60,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "202": {
+        "name": "202",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "203": {
+        "name": "203",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "204": {
+        "name": "204",
+        "position": {
+          "x": 60,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "205": {
+        "name": "205",
+        "position": {
+          "x": 60,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      }
+    },
+    "members": [
+      {
+        "name": "TopChord",
+        "start": "TTrPt001",
+        "end": "TTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "BottomChord",
+        "start": "BTrPt011",
+        "end": "BTrPt001",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM001",
+        "start": "BTrPt004",
+        "end": "MTrPt004",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM002",
+        "start": "MTrPt004",
+        "end": "TTrPt004",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM003",
+        "start": "BTrPt005",
+        "end": "MTrPt005",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM004",
+        "start": "MTrPt005",
+        "end": "TTrPt005",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM005",
+        "start": "BTrPt006",
+        "end": "MTrPt006",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM006",
+        "start": "MTrPt006",
+        "end": "TTrPt006",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM007",
+        "start": "BTrPt007",
+        "end": "MTrPt007",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM008",
+        "start": "MTrPt007",
+        "end": "TTrPt007",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM009",
+        "start": "BTrPt008",
+        "end": "MTrPt008",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM010",
+        "start": "MTrPt008",
+        "end": "TTrPt008",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM011",
+        "start": "BTrPt009",
+        "end": "MTrPt009",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM012",
+        "start": "MTrPt009",
+        "end": "TTrPt009",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM013",
+        "start": "BTrPt010",
+        "end": "MTrPt010",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM014",
+        "start": "MTrPt010",
+        "end": "TTrPt010",
+        "kind": "Frame"
+      },
+      {
+        "name": "170",
+        "start": "BTrPt011",
+        "end": "TTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM015",
+        "start": "MTrPt005",
+        "end": "MTrPt006",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM016",
+        "start": "MTrPt006",
+        "end": "MTrPt007",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM017",
+        "start": "MTrPt007",
+        "end": "MTrPt008",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM018",
+        "start": "MTrPt008",
+        "end": "MTrPt009",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM019",
+        "start": "MTrPt009",
+        "end": "MTrPt010",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM020",
+        "start": "MTrPt010",
+        "end": "MTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM021",
+        "start": "MTrPt001",
+        "end": "MTrPt002",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM022",
+        "start": "MTrPt002",
+        "end": "MTrPt003",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM023",
+        "start": "MTrPt003",
+        "end": "MTrPt004",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM024",
+        "start": "MTrPt004",
+        "end": "MTrPt005",
+        "kind": "Frame"
+      },
+      {
+        "name": "181",
+        "start": "BTrPt001",
+        "end": "TTrPt001",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM025",
+        "start": "BTrPt002",
+        "end": "MTrPt002",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM026",
+        "start": "MTrPt002",
+        "end": "TTrPt002",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM027",
+        "start": "BTrPt003",
+        "end": "MTrPt003",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM028",
+        "start": "MTrPt003",
+        "end": "TTrPt003",
+        "kind": "Frame"
+      },
+      {
+        "name": "186",
+        "start": "198",
+        "end": "BTrPt001",
+        "kind": "Frame"
+      },
+      {
+        "name": "187",
+        "start": "199",
+        "end": "BTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "188",
+        "start": "200",
+        "end": "201",
+        "kind": "Frame"
+      },
+      {
+        "name": "189",
+        "start": "201",
+        "end": "202",
+        "kind": "Frame"
+      },
+      {
+        "name": "190",
+        "start": "203",
+        "end": "204",
+        "kind": "Frame"
+      },
+      {
+        "name": "191",
+        "start": "204",
+        "end": "205",
+        "kind": "Frame"
+      },
+      {
+        "name": "Cable1a-2",
+        "start": "TTrPt001",
+        "end": "201",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable1b-2",
+        "start": "TTrPt011",
+        "end": "204",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable2a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt002",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable2b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt010",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable3a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt003",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable3b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt009",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable4a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt004",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable4b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt008",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable5a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt005",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable5b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt007",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable6a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt006",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable6b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt006",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable7a-2",
+        "start": "201",
+        "end": "198",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable7b-2",
+        "start": "204",
+        "end": "199",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable8a-2",
+        "start": "202",
+        "end": "200",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable8b-2",
+        "start": "203",
+        "end": "205",
+        "kind": "Cable"
+      }
+    ]
+  },
+  "baseline": {
+    "points": {
+      "TTrPt001": {
+        "name": "TTrPt001",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "TTrPt011": {
+        "name": "TTrPt011",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt011": {
+        "name": "BTrPt011",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "BTrPt001": {
+        "name": "BTrPt001",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "BTrPt002": {
+        "name": "BTrPt002",
+        "position": {
+          "x": -40,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "TTrPt002": {
+        "name": "TTrPt002",
+        "position": {
+          "x": -40,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt003": {
+        "name": "BTrPt003",
+        "position": {
+          "x": -30,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "TTrPt003": {
+        "name": "TTrPt003",
+        "position": {
+          "x": -30,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt004": {
+        "name": "BTrPt004",
+        "position": {
+          "x": -20,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt004": {
+        "name": "MTrPt004",
+        "position": {
+          "x": -20,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt004": {
+        "name": "TTrPt004",
+        "position": {
+          "x": -20,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt005": {
+        "name": "BTrPt005",
+        "position": {
+          "x": -10,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt005": {
+        "name": "MTrPt005",
+        "position": {
+          "x": -10,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt005": {
+        "name": "TTrPt005",
+        "position": {
+          "x": -10,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt006": {
+        "name": "BTrPt006",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt006": {
+        "name": "MTrPt006",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt006": {
+        "name": "TTrPt006",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt007": {
+        "name": "BTrPt007",
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt007": {
+        "name": "MTrPt007",
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt007": {
+        "name": "TTrPt007",
+        "position": {
+          "x": 10,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt008": {
+        "name": "BTrPt008",
+        "position": {
+          "x": 20,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt008": {
+        "name": "MTrPt008",
+        "position": {
+          "x": 20,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt008": {
+        "name": "TTrPt008",
+        "position": {
+          "x": 20,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt009": {
+        "name": "BTrPt009",
+        "position": {
+          "x": 30,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt009": {
+        "name": "MTrPt009",
+        "position": {
+          "x": 30,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt009": {
+        "name": "TTrPt009",
+        "position": {
+          "x": 30,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "BTrPt010": {
+        "name": "BTrPt010",
+        "position": {
+          "x": 40,
+          "y": 0,
+          "z": 0,
+          "isFinite": true
+        }
+      },
+      "MTrPt010": {
+        "name": "MTrPt010",
+        "position": {
+          "x": 40,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "TTrPt010": {
+        "name": "TTrPt010",
+        "position": {
+          "x": 40,
+          "y": 0,
+          "z": 20,
+          "isFinite": true
+        }
+      },
+      "MTrPt011": {
+        "name": "MTrPt011",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "MTrPt001": {
+        "name": "MTrPt001",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "MTrPt002": {
+        "name": "MTrPt002",
+        "position": {
+          "x": -40,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "MTrPt003": {
+        "name": "MTrPt003",
+        "position": {
+          "x": -30,
+          "y": 0,
+          "z": 10,
+          "isFinite": true
+        }
+      },
+      "198": {
+        "name": "198",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      },
+      "199": {
+        "name": "199",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      },
+      "200": {
+        "name": "200",
+        "position": {
+          "x": -60,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      },
+      "201": {
+        "name": "201",
+        "position": {
+          "x": -60,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "202": {
+        "name": "202",
+        "position": {
+          "x": -50,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "203": {
+        "name": "203",
+        "position": {
+          "x": 50,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "204": {
+        "name": "204",
+        "position": {
+          "x": 60,
+          "y": 0,
+          "z": -10,
+          "isFinite": true
+        }
+      },
+      "205": {
+        "name": "205",
+        "position": {
+          "x": 60,
+          "y": 0,
+          "z": -20,
+          "isFinite": true
+        }
+      }
+    },
+    "members": [
+      {
+        "name": "TopChord",
+        "start": "TTrPt001",
+        "end": "TTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "BottomChord",
+        "start": "BTrPt011",
+        "end": "BTrPt001",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM001",
+        "start": "BTrPt004",
+        "end": "MTrPt004",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM002",
+        "start": "MTrPt004",
+        "end": "TTrPt004",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM003",
+        "start": "BTrPt005",
+        "end": "MTrPt005",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM004",
+        "start": "MTrPt005",
+        "end": "TTrPt005",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM005",
+        "start": "BTrPt006",
+        "end": "MTrPt006",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM006",
+        "start": "MTrPt006",
+        "end": "TTrPt006",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM007",
+        "start": "BTrPt007",
+        "end": "MTrPt007",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM008",
+        "start": "MTrPt007",
+        "end": "TTrPt007",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM009",
+        "start": "BTrPt008",
+        "end": "MTrPt008",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM010",
+        "start": "MTrPt008",
+        "end": "TTrPt008",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM011",
+        "start": "BTrPt009",
+        "end": "MTrPt009",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM012",
+        "start": "MTrPt009",
+        "end": "TTrPt009",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM013",
+        "start": "BTrPt010",
+        "end": "MTrPt010",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM014",
+        "start": "MTrPt010",
+        "end": "TTrPt010",
+        "kind": "Frame"
+      },
+      {
+        "name": "170",
+        "start": "BTrPt011",
+        "end": "TTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM015",
+        "start": "MTrPt005",
+        "end": "MTrPt006",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM016",
+        "start": "MTrPt006",
+        "end": "MTrPt007",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM017",
+        "start": "MTrPt007",
+        "end": "MTrPt008",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM018",
+        "start": "MTrPt008",
+        "end": "MTrPt009",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM019",
+        "start": "MTrPt009",
+        "end": "MTrPt010",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM020",
+        "start": "MTrPt010",
+        "end": "MTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM021",
+        "start": "MTrPt001",
+        "end": "MTrPt002",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM022",
+        "start": "MTrPt002",
+        "end": "MTrPt003",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM023",
+        "start": "MTrPt003",
+        "end": "MTrPt004",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM024",
+        "start": "MTrPt004",
+        "end": "MTrPt005",
+        "kind": "Frame"
+      },
+      {
+        "name": "181",
+        "start": "BTrPt001",
+        "end": "TTrPt001",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM025",
+        "start": "BTrPt002",
+        "end": "MTrPt002",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM026",
+        "start": "MTrPt002",
+        "end": "TTrPt002",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM027",
+        "start": "BTrPt003",
+        "end": "MTrPt003",
+        "kind": "Frame"
+      },
+      {
+        "name": "VRM028",
+        "start": "MTrPt003",
+        "end": "TTrPt003",
+        "kind": "Frame"
+      },
+      {
+        "name": "186",
+        "start": "198",
+        "end": "BTrPt001",
+        "kind": "Frame"
+      },
+      {
+        "name": "187",
+        "start": "199",
+        "end": "BTrPt011",
+        "kind": "Frame"
+      },
+      {
+        "name": "188",
+        "start": "200",
+        "end": "201",
+        "kind": "Frame"
+      },
+      {
+        "name": "189",
+        "start": "201",
+        "end": "202",
+        "kind": "Frame"
+      },
+      {
+        "name": "190",
+        "start": "203",
+        "end": "204",
+        "kind": "Frame"
+      },
+      {
+        "name": "191",
+        "start": "204",
+        "end": "205",
+        "kind": "Frame"
+      },
+      {
+        "name": "Cable1a-2",
+        "start": "TTrPt001",
+        "end": "201",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable1b-2",
+        "start": "TTrPt011",
+        "end": "204",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable2a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt002",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable2b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt010",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable3a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt003",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable3b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt009",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable4a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt004",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable4b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt008",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable5a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt005",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable5b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt007",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable6a-2",
+        "start": "TTrPt001",
+        "end": "BTrPt006",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable6b-2",
+        "start": "TTrPt011",
+        "end": "BTrPt006",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable7a-2",
+        "start": "201",
+        "end": "198",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable7b-2",
+        "start": "204",
+        "end": "199",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable8a-2",
+        "start": "202",
+        "end": "200",
+        "kind": "Cable"
+      },
+      {
+        "name": "Cable8b-2",
+        "start": "203",
+        "end": "205",
+        "kind": "Cable"
+      }
+    ]
+  },
+  "loadPatterns": [
+    "DEAD",
+    "DEAD_ABOVE",
+    "LL_ABOVE",
+    "Pretension"
+  ],
+  "loadCaseNames": [
+    "DEAD",
+    "DEAD_ABOVE_NL",
+    "DEAD_NL",
+    "LL_ABOVE_NL",
+    "MODAL",
+    "NL SLS001: 1.0DL\u002B1.0LL",
+    "NL SLS001: 1.0DL\u002B1.0LL-staged",
+    "NL ULS001: 1.35DL\u002B1.5LL",
+    "NL ULS001: 1.35DL\u002B1.5LL-staged",
+    "Pretension",
+    "Pretension Onlyh [For Ref]"
+  ],
+  "project": {
+    "configVersion": "1.0",
+    "units": {
+      "length": "m",
+      "force": "kN",
+      "pressure": "kPa"
+    },
+    "model": {
+      "originalFileName": "COT Framing_V1.2_100m.sdb",
+      "fileName": "COT Framing_V1.2_100m.sdb",
+      "points": [
+        {
+          "name": "198",
+          "x": -50,
+          "y": 0,
+          "z": -20
+        },
+        {
+          "name": "199",
+          "x": 50,
+          "y": 0,
+          "z": -20
+        },
+        {
+          "name": "200",
+          "x": -60,
+          "y": 0,
+          "z": -20
+        },
+        {
+          "name": "201",
+          "x": -60,
+          "y": 0,
+          "z": -10
+        },
+        {
+          "name": "202",
+          "x": -50,
+          "y": 0,
+          "z": -10
+        },
+        {
+          "name": "203",
+          "x": 50,
+          "y": 0,
+          "z": -10
+        },
+        {
+          "name": "204",
+          "x": 60,
+          "y": 0,
+          "z": -10
+        },
+        {
+          "name": "205",
+          "x": 60,
+          "y": 0,
+          "z": -20
+        },
+        {
+          "name": "BTrPt001",
+          "x": -50,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "BTrPt002",
+          "x": -40,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "BTrPt003",
+          "x": -30,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "BTrPt004",
+          "x": -20,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "BTrPt005",
+          "x": -10,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "BTrPt006",
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "BTrPt007",
+          "x": 10,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "BTrPt008",
+          "x": 20,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "BTrPt009",
+          "x": 30,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "BTrPt010",
+          "x": 40,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "BTrPt011",
+          "x": 50,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "name": "MTrPt001",
+          "x": -50,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "MTrPt002",
+          "x": -40,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "MTrPt003",
+          "x": -30,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "MTrPt004",
+          "x": -20,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "MTrPt005",
+          "x": -10,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "MTrPt006",
+          "x": 0,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "MTrPt007",
+          "x": 10,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "MTrPt008",
+          "x": 20,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "MTrPt009",
+          "x": 30,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "MTrPt010",
+          "x": 40,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "MTrPt011",
+          "x": 50,
+          "y": 0,
+          "z": 10
+        },
+        {
+          "name": "TTrPt001",
+          "x": -50,
+          "y": 0,
+          "z": 20
+        },
+        {
+          "name": "TTrPt002",
+          "x": -40,
+          "y": 0,
+          "z": 20
+        },
+        {
+          "name": "TTrPt003",
+          "x": -30,
+          "y": 0,
+          "z": 20
+        },
+        {
+          "name": "TTrPt004",
+          "x": -20,
+          "y": 0,
+          "z": 20
+        },
+        {
+          "name": "TTrPt005",
+          "x": -10,
+          "y": 0,
+          "z": 20
+        },
+        {
+          "name": "TTrPt006",
+          "x": 0,
+          "y": 0,
+          "z": 20
+        },
+        {
+          "name": "TTrPt007",
+          "x": 10,
+          "y": 0,
+          "z": 20
+        },
+        {
+          "name": "TTrPt008",
+          "x": 20,
+          "y": 0,
+          "z": 20
+        },
+        {
+          "name": "TTrPt009",
+          "x": 30,
+          "y": 0,
+          "z": 20
+        },
+        {
+          "name": "TTrPt010",
+          "x": 40,
+          "y": 0,
+          "z": 20
+        },
+        {
+          "name": "TTrPt011",
+          "x": 50,
+          "y": 0,
+          "z": 20
+        }
+      ],
+      "cables": [
+        {
+          "name": "Cable1a-2",
+          "pointI": "TTrPt001",
+          "pointJ": "201",
+          "pointICoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": -60,
+            "y": 0,
+            "z": -10
+          }
+        },
+        {
+          "name": "Cable1b-2",
+          "pointI": "TTrPt011",
+          "pointJ": "204",
+          "pointICoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": 60,
+            "y": 0,
+            "z": -10
+          }
+        },
+        {
+          "name": "Cable2a-2",
+          "pointI": "TTrPt001",
+          "pointJ": "BTrPt002",
+          "pointICoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": -40,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "Cable2b-2",
+          "pointI": "TTrPt011",
+          "pointJ": "BTrPt010",
+          "pointICoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": 40,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "Cable3a-2",
+          "pointI": "TTrPt001",
+          "pointJ": "BTrPt003",
+          "pointICoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": -30,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "Cable3b-2",
+          "pointI": "TTrPt011",
+          "pointJ": "BTrPt009",
+          "pointICoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": 30,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "Cable4a-2",
+          "pointI": "TTrPt001",
+          "pointJ": "BTrPt004",
+          "pointICoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": -20,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "Cable4b-2",
+          "pointI": "TTrPt011",
+          "pointJ": "BTrPt008",
+          "pointICoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": 20,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "Cable5a-2",
+          "pointI": "TTrPt001",
+          "pointJ": "BTrPt005",
+          "pointICoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": -10,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "Cable5b-2",
+          "pointI": "TTrPt011",
+          "pointJ": "BTrPt007",
+          "pointICoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": 10,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "Cable6a-2",
+          "pointI": "TTrPt001",
+          "pointJ": "BTrPt006",
+          "pointICoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "Cable6b-2",
+          "pointI": "TTrPt011",
+          "pointJ": "BTrPt006",
+          "pointICoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "Cable7a-2",
+          "pointI": "201",
+          "pointJ": "198",
+          "pointICoordinate": {
+            "x": -60,
+            "y": 0,
+            "z": -10
+          },
+          "pointJCoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": -20
+          }
+        },
+        {
+          "name": "Cable7b-2",
+          "pointI": "204",
+          "pointJ": "199",
+          "pointICoordinate": {
+            "x": 60,
+            "y": 0,
+            "z": -10
+          },
+          "pointJCoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": -20
+          }
+        },
+        {
+          "name": "Cable8a-2",
+          "pointI": "202",
+          "pointJ": "200",
+          "pointICoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": -10
+          },
+          "pointJCoordinate": {
+            "x": -60,
+            "y": 0,
+            "z": -20
+          }
+        },
+        {
+          "name": "Cable8b-2",
+          "pointI": "203",
+          "pointJ": "205",
+          "pointICoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": -10
+          },
+          "pointJCoordinate": {
+            "x": 60,
+            "y": 0,
+            "z": -20
+          }
+        }
+      ],
+      "frames": [
+        {
+          "name": "BottomChord",
+          "pointI": "BTrPt011",
+          "pointJ": "BTrPt001",
+          "pointICoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": 0
+          },
+          "pointJCoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "TopChord",
+          "pointI": "TTrPt001",
+          "pointJ": "TTrPt011",
+          "pointICoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": 20
+          },
+          "pointJCoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": 20
+          }
+        },
+        {
+          "name": "VRM001",
+          "pointI": "BTrPt004",
+          "pointJ": "MTrPt004",
+          "pointICoordinate": {
+            "x": -20,
+            "y": 0,
+            "z": 0
+          },
+          "pointJCoordinate": {
+            "x": -20,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM002",
+          "pointI": "MTrPt004",
+          "pointJ": "TTrPt004",
+          "pointICoordinate": {
+            "x": -20,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": -20,
+            "y": 0,
+            "z": 20
+          }
+        },
+        {
+          "name": "VRM003",
+          "pointI": "BTrPt005",
+          "pointJ": "MTrPt005",
+          "pointICoordinate": {
+            "x": -10,
+            "y": 0,
+            "z": 0
+          },
+          "pointJCoordinate": {
+            "x": -10,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM004",
+          "pointI": "MTrPt005",
+          "pointJ": "TTrPt005",
+          "pointICoordinate": {
+            "x": -10,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": -10,
+            "y": 0,
+            "z": 20
+          }
+        },
+        {
+          "name": "VRM005",
+          "pointI": "BTrPt006",
+          "pointJ": "MTrPt006",
+          "pointICoordinate": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "pointJCoordinate": {
+            "x": 0,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM006",
+          "pointI": "MTrPt006",
+          "pointJ": "TTrPt006",
+          "pointICoordinate": {
+            "x": 0,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 0,
+            "y": 0,
+            "z": 20
+          }
+        },
+        {
+          "name": "VRM007",
+          "pointI": "BTrPt007",
+          "pointJ": "MTrPt007",
+          "pointICoordinate": {
+            "x": 10,
+            "y": 0,
+            "z": 0
+          },
+          "pointJCoordinate": {
+            "x": 10,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM008",
+          "pointI": "MTrPt007",
+          "pointJ": "TTrPt007",
+          "pointICoordinate": {
+            "x": 10,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 10,
+            "y": 0,
+            "z": 20
+          }
+        },
+        {
+          "name": "VRM009",
+          "pointI": "BTrPt008",
+          "pointJ": "MTrPt008",
+          "pointICoordinate": {
+            "x": 20,
+            "y": 0,
+            "z": 0
+          },
+          "pointJCoordinate": {
+            "x": 20,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM010",
+          "pointI": "MTrPt008",
+          "pointJ": "TTrPt008",
+          "pointICoordinate": {
+            "x": 20,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 20,
+            "y": 0,
+            "z": 20
+          }
+        },
+        {
+          "name": "VRM011",
+          "pointI": "BTrPt009",
+          "pointJ": "MTrPt009",
+          "pointICoordinate": {
+            "x": 30,
+            "y": 0,
+            "z": 0
+          },
+          "pointJCoordinate": {
+            "x": 30,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM012",
+          "pointI": "MTrPt009",
+          "pointJ": "TTrPt009",
+          "pointICoordinate": {
+            "x": 30,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 30,
+            "y": 0,
+            "z": 20
+          }
+        },
+        {
+          "name": "VRM013",
+          "pointI": "BTrPt010",
+          "pointJ": "MTrPt010",
+          "pointICoordinate": {
+            "x": 40,
+            "y": 0,
+            "z": 0
+          },
+          "pointJCoordinate": {
+            "x": 40,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM014",
+          "pointI": "MTrPt010",
+          "pointJ": "TTrPt010",
+          "pointICoordinate": {
+            "x": 40,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 40,
+            "y": 0,
+            "z": 20
+          }
+        },
+        {
+          "name": "VRM015",
+          "pointI": "MTrPt005",
+          "pointJ": "MTrPt006",
+          "pointICoordinate": {
+            "x": -10,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 0,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM016",
+          "pointI": "MTrPt006",
+          "pointJ": "MTrPt007",
+          "pointICoordinate": {
+            "x": 0,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 10,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM017",
+          "pointI": "MTrPt007",
+          "pointJ": "MTrPt008",
+          "pointICoordinate": {
+            "x": 10,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 20,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM018",
+          "pointI": "MTrPt008",
+          "pointJ": "MTrPt009",
+          "pointICoordinate": {
+            "x": 20,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 30,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM019",
+          "pointI": "MTrPt009",
+          "pointJ": "MTrPt010",
+          "pointICoordinate": {
+            "x": 30,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 40,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM020",
+          "pointI": "MTrPt010",
+          "pointJ": "MTrPt011",
+          "pointICoordinate": {
+            "x": 40,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": 50,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM021",
+          "pointI": "MTrPt001",
+          "pointJ": "MTrPt002",
+          "pointICoordinate": {
+            "x": -50,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": -40,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM022",
+          "pointI": "MTrPt002",
+          "pointJ": "MTrPt003",
+          "pointICoordinate": {
+            "x": -40,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": -30,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM023",
+          "pointI": "MTrPt003",
+          "pointJ": "MTrPt004",
+          "pointICoordinate": {
+            "x": -30,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": -20,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM024",
+          "pointI": "MTrPt004",
+          "pointJ": "MTrPt005",
+          "pointICoordinate": {
+            "x": -20,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": -10,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM025",
+          "pointI": "BTrPt002",
+          "pointJ": "MTrPt002",
+          "pointICoordinate": {
+            "x": -40,
+            "y": 0,
+            "z": 0
+          },
+          "pointJCoordinate": {
+            "x": -40,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM026",
+          "pointI": "MTrPt002",
+          "pointJ": "TTrPt002",
+          "pointICoordinate": {
+            "x": -40,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": -40,
+            "y": 0,
+            "z": 20
+          }
+        },
+        {
+          "name": "VRM027",
+          "pointI": "BTrPt003",
+          "pointJ": "MTrPt003",
+          "pointICoordinate": {
+            "x": -30,
+            "y": 0,
+            "z": 0
+          },
+          "pointJCoordinate": {
+            "x": -30,
+            "y": 0,
+            "z": 10
+          }
+        },
+        {
+          "name": "VRM028",
+          "pointI": "MTrPt003",
+          "pointJ": "TTrPt003",
+          "pointICoordinate": {
+            "x": -30,
+            "y": 0,
+            "z": 10
+          },
+          "pointJCoordinate": {
+            "x": -30,
+            "y": 0,
+            "z": 20
+          }
+        }
+      ],
+      "loadPatterns": [
+        "DEAD_ABOVE",
+        "LL_ABOVE",
+        "Pretension"
+      ],
+      "loadCases": [
+        "DEAD",
+        "DEAD_ABOVE_NL",
+        "DEAD_NL",
+        "LL_ABOVE_NL",
+        "MODAL",
+        "NL SLS001: 1.0DL\u002B1.0LL",
+        "NL SLS001: 1.0DL\u002B1.0LL-staged",
+        "NL ULS001: 1.35DL\u002B1.5LL",
+        "NL ULS001: 1.35DL\u002B1.5LL-staged",
+        "Pretension",
+        "Pretension Onlyh [For Ref]"
+      ]
+    },
+    "tab02Loading": {
+      "tributaryWidth": 12,
+      "numberOfStories": 10,
+      "appliedPoints": [
+        "TTrPt001",
+        "TTrPt002",
+        "TTrPt003",
+        "TTrPt004",
+        "TTrPt005",
+        "TTrPt006",
+        "TTrPt007",
+        "TTrPt008",
+        "TTrPt009",
+        "TTrPt010",
+        "TTrPt011"
+      ],
+      "loadDefinitions": [
+        {
+          "loadName": "DEAD_ABOVE",
+          "incrementEnabled": false,
+          "fixedQz": 10
+        },
+        {
+          "loadName": "LL_ABOVE",
+          "incrementEnabled": true,
+          "minQz": 5,
+          "maxQz": 10,
+          "stepQz": 2.5
+        }
+      ]
+    },
+    "tab03TrussHeight": {
+      "topPoints": [
+        "TTrPt001",
+        "TTrPt002",
+        "TTrPt003",
+        "TTrPt004",
+        "TTrPt005",
+        "TTrPt006",
+        "TTrPt007",
+        "TTrPt008",
+        "TTrPt009",
+        "TTrPt010",
+        "TTrPt011"
+      ],
+      "middlePoints": [
+        "MTrPt001",
+        "MTrPt002",
+        "MTrPt003",
+        "MTrPt004",
+        "MTrPt005",
+        "MTrPt006",
+        "MTrPt007",
+        "MTrPt008",
+        "MTrPt009",
+        "MTrPt010",
+        "MTrPt011"
+      ],
+      "bottomPoints": [
+        "BTrPt001",
+        "BTrPt002",
+        "BTrPt003",
+        "BTrPt004",
+        "BTrPt005",
+        "BTrPt006",
+        "BTrPt007",
+        "BTrPt008",
+        "BTrPt009",
+        "BTrPt010",
+        "BTrPt011"
+      ],
+      "referenceElevation": "Middle",
+      "minDeltaH": 0,
+      "maxDeltaH": 10,
+      "stepDeltaH": 2
+    },
+    "tab04CableForce": {
+      "cables": [
+        {
+          "cableName": "Cable1a-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Range",
+          "minForce": 100000,
+          "maxForce": 105000,
+          "stepForce": 10000,
+          "syncMode": "Independent",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable1b-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 15000,
+          "syncMode": "SameValues",
+          "referenceCableName": "Cable1a-2",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable2a-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 30000,
+          "syncMode": "Independent",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable2b-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 5000,
+          "syncMode": "SameValues",
+          "referenceCableName": "Cable2a-2",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable3a-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 30000,
+          "syncMode": "Independent",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable3b-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 7500,
+          "syncMode": "SameValues",
+          "referenceCableName": "Cable3a-2",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable4a-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Range",
+          "minForce": 40000,
+          "maxForce": 40000,
+          "syncMode": "SameStep",
+          "referenceCableName": "Cable6a-2",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable4b-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Range",
+          "minForce": 40000,
+          "maxForce": 40000,
+          "syncMode": "SameStep",
+          "referenceCableName": "Cable6a-2",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable5a-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 30000,
+          "syncMode": "Independent",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable5b-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 12500,
+          "syncMode": "SameValues",
+          "referenceCableName": "Cable5a-2",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable6a-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Range",
+          "minForce": 40000,
+          "maxForce": 40000,
+          "stepForce": 5000,
+          "syncMode": "Independent",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable6b-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 15000,
+          "syncMode": "SameValues",
+          "referenceCableName": "Cable6a-2",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable7a-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 30000,
+          "syncMode": "Independent",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable7b-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 30000,
+          "syncMode": "SameValues",
+          "referenceCableName": "Cable7a-2",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable8a-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 30000,
+          "syncMode": "Independent",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        },
+        {
+          "cableName": "Cable8b-2",
+          "pretensionLoadCase": "Pretension",
+          "mode": "Fixed",
+          "fixedForce": 30000,
+          "syncMode": "SameValues",
+          "referenceCableName": "Cable8a-2",
+          "sectionName": "192T15.7",
+          "sectionAreaM2": 0.028802317797652074,
+          "designCapacityKN": 55991.70579863564
+        }
+      ],
+      "cableStrengthMpa": 2160,
+      "strengthReductionFactor": 0.9
+    },
+    "tab05OutputSettings": {
+      "outputGroupPrefix": "[O]-",
+      "deflectionPointNames": [
+        "BTrPt001",
+        "BTrPt002",
+        "BTrPt003",
+        "BTrPt004",
+        "BTrPt005",
+        "BTrPt006",
+        "BTrPt007",
+        "BTrPt008",
+        "BTrPt009",
+        "BTrPt010",
+        "BTrPt011"
+      ],
+      "memberForceGroups": [
+        {
+          "id": "9f0e374f09154c47a20a22846bc3f6d3",
+          "name": "TopChord",
+          "sapGroupName": "[O]-TopChord",
+          "frameNames": [
+            "TopChord"
+          ]
+        },
+        {
+          "id": "14e1f73179ed4fbb9b6606373d9693f9",
+          "name": "BottomChord",
+          "sapGroupName": "[O]-BottomChord",
+          "frameNames": [
+            "BottomChord"
+          ]
+        },
+        {
+          "id": "387807e0472546d998088f6b4775515f",
+          "name": "VRM",
+          "sapGroupName": "[O]-VRM",
+          "frameNames": [
+            "VRM001",
+            "VRM002",
+            "VRM003",
+            "VRM004",
+            "VRM005",
+            "VRM006",
+            "VRM007",
+            "VRM008",
+            "VRM009",
+            "VRM010",
+            "VRM011",
+            "VRM012",
+            "VRM013",
+            "VRM014",
+            "VRM015",
+            "VRM016",
+            "VRM017",
+            "VRM018",
+            "VRM019",
+            "VRM020",
+            "VRM021",
+            "VRM022",
+            "VRM023",
+            "VRM024",
+            "VRM025",
+            "VRM026",
+            "VRM027",
+            "VRM028"
+          ]
+        }
+      ],
+      "foundationLeftPointNames": [
+        "198",
+        "200"
+      ],
+      "foundationRightPointNames": [
+        "199",
+        "205"
+      ],
+      "cableNames": [
+        "Cable1a-2",
+        "Cable1b-2",
+        "Cable2a-2",
+        "Cable2b-2",
+        "Cable3a-2",
+        "Cable3b-2",
+        "Cable4a-2",
+        "Cable4b-2",
+        "Cable5a-2",
+        "Cable5b-2",
+        "Cable6a-2",
+        "Cable6b-2",
+        "Cable7a-2",
+        "Cable7b-2",
+        "Cable8a-2",
+        "Cable8b-2"
+      ],
+      "cableResultLoadCase": "NL ULS001: 1.35DL\u002B1.5LL-staged",
+      "deflectionOutputCaseName": "NL SLS001: 1.0DL\u002B1.0LL-staged",
+      "memberForceResultLoadCase": "NL ULS001: 1.35DL\u002B1.5LL-staged",
+      "foundationReactionResultLoadCase": "NL ULS001: 1.35DL\u002B1.5LL-staged",
+      "deflectionLimitMinMm": 100,
+      "deflectionLimitMaxMm": 200,
+      "deflectionCriterionEnabled": true,
+      "cableCriterionEnabled": true,
+      "maxCableUtilization": 1
+    },
+    "tab05IterationStudy": {
+      "studyMode": "FixPretension",
+      "fixedHeightCandidateId": "H01",
+      "fixedPretensionCandidateId": "P01",
+      "outputDirectory": "C:\\Projects\\CoT\\Template Model\\Study",
+      "excludedIterationKeys": [],
+      "useCandidateFilters": false
+    },
+    "presentTabs": "All"
+  },
+  "sectionProperties": [
+    {
+      "memberName": "170",
+      "areaM2": 5.365609756097562,
+      "elasticModulusKNPerM2": 40999999.99999999,
+      "inPlaneInertiaM4": 3.986800609756098,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "MegaCol_1.5x3_C70/85-1",
+      "materialName": "C70/85",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 24.992617659999993,
+      "unitMassTPerM3": 2.5485376999999994,
+      "grossAreaM2": 5.365609756097562,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Equivalent",
+        "depth": 2.9860243129162813,
+        "width": 1.3841751882841449,
+        "flangeThickness": 0,
+        "webThickness": 0,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 134.1006331469122,
+      "massPerLengthTPerM": 13.67445874690244,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 40.99999999999999,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "181",
+      "areaM2": 5.365609756097562,
+      "elasticModulusKNPerM2": 40999999.99999999,
+      "inPlaneInertiaM4": 3.986800609756098,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "MegaCol_1.5x3_C70/85-1",
+      "materialName": "C70/85",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 24.992617659999993,
+      "unitMassTPerM3": 2.5485376999999994,
+      "grossAreaM2": 5.365609756097562,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Equivalent",
+        "depth": 2.9860243129162813,
+        "width": 1.3841751882841449,
+        "flangeThickness": 0,
+        "webThickness": 0,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 134.1006331469122,
+      "massPerLengthTPerM": 13.67445874690244,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 40.99999999999999,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "186",
+      "areaM2": 5.365609756097562,
+      "elasticModulusKNPerM2": 40999999.99999999,
+      "inPlaneInertiaM4": 3.986800609756098,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "MegaCol_1.5x3_C70/85-1",
+      "materialName": "C70/85",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 24.992617659999993,
+      "unitMassTPerM3": 2.5485376999999994,
+      "grossAreaM2": 5.365609756097562,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Equivalent",
+        "depth": 2.9860243129162813,
+        "width": 1.3841751882841449,
+        "flangeThickness": 0,
+        "webThickness": 0,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 134.1006331469122,
+      "massPerLengthTPerM": 13.67445874690244,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 40.99999999999999,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "187",
+      "areaM2": 5.365609756097562,
+      "elasticModulusKNPerM2": 40999999.99999999,
+      "inPlaneInertiaM4": 3.986800609756098,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "MegaCol_1.5x3_C70/85-1",
+      "materialName": "C70/85",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 24.992617659999993,
+      "unitMassTPerM3": 2.5485376999999994,
+      "grossAreaM2": 5.365609756097562,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Equivalent",
+        "depth": 2.9860243129162813,
+        "width": 1.3841751882841449,
+        "flangeThickness": 0,
+        "webThickness": 0,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 134.1006331469122,
+      "massPerLengthTPerM": 13.67445874690244,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 40.99999999999999,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "188",
+      "areaM2": 8.36560975609756,
+      "elasticModulusKNPerM2": 40999999.99999999,
+      "inPlaneInertiaM4": 6.215005792682927,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "MegaCol_2.5x3_C70/85",
+      "materialName": "C70/85",
+      "localAngleDeg": 90,
+      "unitWeightKNPerM3": 24.992617659999993,
+      "unitMassTPerM3": 2.5485376999999994,
+      "grossAreaM2": 8.36560975609756,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Equivalent",
+        "depth": 2.377627398076267,
+        "width": 2.985812907651147,
+        "flangeThickness": 0,
+        "webThickness": 0,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 209.07848612691214,
+      "massPerLengthTPerM": 21.320071846902433,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 40.99999999999999,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "189",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "190",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "191",
+      "areaM2": 8.36560975609756,
+      "elasticModulusKNPerM2": 40999999.99999999,
+      "inPlaneInertiaM4": 6.215005792682927,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "MegaCol_2.5x3_C70/85",
+      "materialName": "C70/85",
+      "localAngleDeg": 90,
+      "unitWeightKNPerM3": 24.992617659999993,
+      "unitMassTPerM3": 2.5485376999999994,
+      "grossAreaM2": 8.36560975609756,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Equivalent",
+        "depth": 2.377627398076267,
+        "width": 2.985812907651147,
+        "flangeThickness": 0,
+        "webThickness": 0,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 209.07848612691214,
+      "massPerLengthTPerM": 21.320071846902433,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 40.99999999999999,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "BottomChord",
+      "areaM2": 5.98609756097561,
+      "elasticModulusKNPerM2": 40999999.99999999,
+      "inPlaneInertiaM4": 2.5787250000000004,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "CFT_SHS[1200x2000x150_S460]_C70/85",
+      "materialName": "C70/85",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 24.992617659999993,
+      "unitMassTPerM3": 2.5485376999999994,
+      "grossAreaM2": 5.98609756097561,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Equivalent",
+        "depth": 2.2736376014647277,
+        "width": 1.4504238597517947,
+        "flangeThickness": 0,
+        "webThickness": 0,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 149.60824761692191,
+      "massPerLengthTPerM": 15.255795310024387,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 40.99999999999999,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable1a-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable1b-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable2a-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable2b-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable3a-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable3b-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable4a-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable4b-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable5a-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable5b-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable6a-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable6b-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable7a-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable7b-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable8a-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "Cable8b-2",
+      "areaM2": 0.028802317797652074,
+      "elasticModulusKNPerM2": 196500599.8511997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "192T15.7",
+      "materialName": "HDPE Galvanised Strand T15.7 \u2013 Y1860S7",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959918,
+      "grossAreaM2": 0.028802317797652074,
+      "modifiers": [
+        1,
+        1,
+        1
+      ],
+      "isCable": true,
+      "areaModifier": 1,
+      "inertiaModifier": "NaN",
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 2.2169968890605443,
+      "massPerLengthTPerM": 0.22607075704643392,
+      "elasticModulusGPa": 196.5005998511997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "TopChord",
+      "areaM2": 5.98609756097561,
+      "elasticModulusKNPerM2": 40999999.99999999,
+      "inPlaneInertiaM4": 2.5787250000000004,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "CFT_SHS[1200x2000x150_S460]_C70/85",
+      "materialName": "C70/85",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 24.992617659999993,
+      "unitMassTPerM3": 2.5485376999999994,
+      "grossAreaM2": 5.98609756097561,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Equivalent",
+        "depth": 2.2736376014647277,
+        "width": 1.4504238597517947,
+        "flangeThickness": 0,
+        "webThickness": 0,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 149.60824761692191,
+      "massPerLengthTPerM": 15.255795310024387,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 40.99999999999999,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM001",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM002",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM003",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM004",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM005",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM006",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM007",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM008",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM009",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM010",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM011",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM012",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM013",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM014",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM015",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM016",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM017",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM018",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM019",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM020",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM021",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM022",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM023",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM024",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM025",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM026",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM027",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    },
+    {
+      "memberName": "VRM028",
+      "areaM2": 0.5184,
+      "elasticModulusKNPerM2": 209999999.99999997,
+      "inPlaneInertiaM4": 0.10202111999999997,
+      "releaseStartRotation": false,
+      "releaseEndRotation": false,
+      "sectionName": "SHS_1200x1200x120_S460",
+      "materialName": "S460",
+      "localAngleDeg": 0,
+      "unitWeightKNPerM3": 76.97286394226478,
+      "unitMassTPerM3": 7.849047379959917,
+      "grossAreaM2": 0.5184,
+      "modifiers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "shape": {
+        "kind": "Box",
+        "depth": 1.2,
+        "width": 1.2,
+        "flangeThickness": 0.12,
+        "webThickness": 0.12,
+        "bottomWidth": 0,
+        "bottomFlangeThickness": 0
+      },
+      "isCable": false,
+      "areaModifier": 1,
+      "inertiaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1,
+      "weightPerLengthKNPerM": 39.90273266767006,
+      "massPerLengthTPerM": 4.068946161771221,
+      "inertiaModifierOrNull": 1,
+      "elasticModulusGPa": 209.99999999999997,
+      "endRotationReleases": "None"
+    }
+  ],
+  "loading": {
+    "patterns": [
+      {
+        "name": "DEAD",
+        "type": "Dead",
+        "selfWeightMultiplier": 1
+      },
+      {
+        "name": "DEAD_ABOVE",
+        "type": "Dead",
+        "selfWeightMultiplier": 0
+      },
+      {
+        "name": "LL_ABOVE",
+        "type": "Live",
+        "selfWeightMultiplier": 0
+      },
+      {
+        "name": "Pretension",
+        "type": "Other",
+        "selfWeightMultiplier": 0
+      }
+    ],
+    "jointLoads": [
+      {
+        "pattern": "LL_ABOVE",
+        "load": {
+          "pointName": "TTrPt001",
+          "fxKN": 0,
+          "fzKN": -6000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "DEAD_ABOVE",
+        "load": {
+          "pointName": "TTrPt001",
+          "fxKN": 0,
+          "fzKN": -12000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "LL_ABOVE",
+        "load": {
+          "pointName": "TTrPt011",
+          "fxKN": 0,
+          "fzKN": -6000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "DEAD_ABOVE",
+        "load": {
+          "pointName": "TTrPt011",
+          "fxKN": 0,
+          "fzKN": -12000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "LL_ABOVE",
+        "load": {
+          "pointName": "TTrPt005",
+          "fxKN": 0,
+          "fzKN": -12000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "DEAD_ABOVE",
+        "load": {
+          "pointName": "TTrPt005",
+          "fxKN": 0,
+          "fzKN": -24000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "LL_ABOVE",
+        "load": {
+          "pointName": "TTrPt007",
+          "fxKN": 0,
+          "fzKN": -12000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "DEAD_ABOVE",
+        "load": {
+          "pointName": "TTrPt007",
+          "fxKN": 0,
+          "fzKN": -24000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "LL_ABOVE",
+        "load": {
+          "pointName": "TTrPt009",
+          "fxKN": 0,
+          "fzKN": -12000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "DEAD_ABOVE",
+        "load": {
+          "pointName": "TTrPt009",
+          "fxKN": 0,
+          "fzKN": -24000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "LL_ABOVE",
+        "load": {
+          "pointName": "TTrPt003",
+          "fxKN": 0,
+          "fzKN": -12000,
+          "myKNm": 0
+        }
+      },
+      {
+        "pattern": "DEAD_ABOVE",
+        "load": {
+          "pointName": "TTrPt003",
+          "fxKN": 0,
+          "fzKN": -24000,
+          "myKNm": 0
+        }
+      }
+    ],
+    "memberLoads": [],
+    "memberPointLoads": [],
+    "gravityLoads": [],
+    "cases": [
+      {
+        "name": "MODAL",
+        "type": "Modal",
+        "supported": false,
+        "loads": [],
+        "note": "Not a static case \u2014 not used by the internal FEM."
+      },
+      {
+        "name": "DEAD_NL",
+        "type": "Nonlinear Static",
+        "supported": true,
+        "loads": [
+          {
+            "item1": "DEAD",
+            "item2": 1
+          }
+        ]
+      },
+      {
+        "name": "DEAD_ABOVE_NL",
+        "type": "Nonlinear Static",
+        "supported": true,
+        "loads": [
+          {
+            "item1": "DEAD_ABOVE",
+            "item2": 1
+          }
+        ]
+      },
+      {
+        "name": "LL_ABOVE_NL",
+        "type": "Nonlinear Static",
+        "supported": true,
+        "loads": [
+          {
+            "item1": "LL_ABOVE",
+            "item2": 1
+          }
+        ]
+      },
+      {
+        "name": "DEAD",
+        "type": "Linear Static",
+        "supported": true,
+        "loads": [
+          {
+            "item1": "DEAD",
+            "item2": 1
+          }
+        ]
+      },
+      {
+        "name": "NL ULS001: 1.35DL\u002B1.5LL",
+        "type": "Nonlinear Static",
+        "supported": true,
+        "loads": [
+          {
+            "item1": "DEAD",
+            "item2": 1.35
+          },
+          {
+            "item1": "DEAD_ABOVE",
+            "item2": 1.35
+          },
+          {
+            "item1": "LL_ABOVE",
+            "item2": 1.5
+          }
+        ]
+      },
+      {
+        "name": "NL SLS001: 1.0DL\u002B1.0LL",
+        "type": "Nonlinear Static",
+        "supported": true,
+        "loads": [
+          {
+            "item1": "DEAD",
+            "item2": 1
+          },
+          {
+            "item1": "DEAD_ABOVE",
+            "item2": 1
+          },
+          {
+            "item1": "LL_ABOVE",
+            "item2": 1
+          }
+        ]
+      },
+      {
+        "name": "Pretension",
+        "type": "Nonlinear Static",
+        "supported": true,
+        "loads": [
+          {
+            "item1": "Pretension",
+            "item2": 1
+          },
+          {
+            "item1": "DEAD",
+            "item2": 1
+          }
+        ]
+      },
+      {
+        "name": "NL ULS001: 1.35DL\u002B1.5LL-staged",
+        "type": "Nonlinear Static",
+        "supported": true,
+        "loads": [
+          {
+            "item1": "DEAD_ABOVE",
+            "item2": 1.35
+          },
+          {
+            "item1": "LL_ABOVE",
+            "item2": 1.5
+          },
+          {
+            "item1": "DEAD",
+            "item2": 0.35
+          }
+        ],
+        "initialCase": "Pretension"
+      },
+      {
+        "name": "NL SLS001: 1.0DL\u002B1.0LL-staged",
+        "type": "Nonlinear Static",
+        "supported": true,
+        "loads": [
+          {
+            "item1": "DEAD_ABOVE",
+            "item2": 1
+          },
+          {
+            "item1": "LL_ABOVE",
+            "item2": 1
+          }
+        ],
+        "initialCase": "Pretension"
+      },
+      {
+        "name": "Pretension Onlyh [For Ref]",
+        "type": "Nonlinear Static",
+        "supported": true,
+        "loads": [
+          {
+            "item1": "Pretension",
+            "item2": 1
+          }
+        ]
+      }
+    ],
+    "combinations": [],
+    "warnings": []
+  },
+  "patternRows": [
+    {
+      "name": "DEAD",
+      "type": "Dead",
+      "selfWeightMultiplier": 1,
+      "role": "",
+      "loads": "self-weight"
+    },
+    {
+      "name": "DEAD_ABOVE",
+      "type": "Dead",
+      "selfWeightMultiplier": 0,
+      "role": "Tab 01 study loads",
+      "loads": "6 joint \u00B7 \u002B Tab 01 per case"
+    },
+    {
+      "name": "LL_ABOVE",
+      "type": "Live",
+      "selfWeightMultiplier": 0,
+      "role": "Tab 01 study loads",
+      "loads": "6 joint \u00B7 \u002B Tab 01 per case"
+    },
+    {
+      "name": "Pretension",
+      "type": "Other",
+      "selfWeightMultiplier": 0,
+      "role": "Tab 03 cable target force",
+      "loads": "target forces"
+    }
+  ],
+  "caseRows": [
+    {
+      "name": "MODAL",
+      "type": "Modal",
+      "definition": "",
+      "initialCase": "",
+      "run": false,
+      "supported": false,
+      "source": "SAP",
+      "note": "Not a static case \u2014 not used by the internal FEM."
+    },
+    {
+      "name": "DEAD_NL",
+      "type": "Nonlinear Static",
+      "definition": "1 DEAD",
+      "initialCase": "",
+      "run": true,
+      "supported": true,
+      "source": "SAP",
+      "note": ""
+    },
+    {
+      "name": "DEAD_ABOVE_NL",
+      "type": "Nonlinear Static",
+      "definition": "1 DEAD_ABOVE",
+      "initialCase": "",
+      "run": true,
+      "supported": true,
+      "source": "SAP",
+      "note": ""
+    },
+    {
+      "name": "LL_ABOVE_NL",
+      "type": "Nonlinear Static",
+      "definition": "1 LL_ABOVE",
+      "initialCase": "",
+      "run": true,
+      "supported": true,
+      "source": "SAP",
+      "note": ""
+    },
+    {
+      "name": "DEAD",
+      "type": "Linear Static",
+      "definition": "1 DEAD",
+      "initialCase": "",
+      "run": true,
+      "supported": true,
+      "source": "SAP",
+      "note": ""
+    },
+    {
+      "name": "NL ULS001: 1.35DL\u002B1.5LL",
+      "type": "Nonlinear Static",
+      "definition": "1.35 DEAD \u002B 1.35 DEAD_ABOVE \u002B 1.5 LL_ABOVE",
+      "initialCase": "",
+      "run": true,
+      "supported": true,
+      "source": "SAP",
+      "note": ""
+    },
+    {
+      "name": "NL SLS001: 1.0DL\u002B1.0LL",
+      "type": "Nonlinear Static",
+      "definition": "1 DEAD \u002B 1 DEAD_ABOVE \u002B 1 LL_ABOVE",
+      "initialCase": "",
+      "run": true,
+      "supported": true,
+      "source": "SAP",
+      "note": ""
+    },
+    {
+      "name": "Pretension",
+      "type": "Nonlinear Static",
+      "definition": "1 Pretension \u002B 1 DEAD",
+      "initialCase": "",
+      "run": true,
+      "supported": true,
+      "source": "SAP",
+      "note": ""
+    },
+    {
+      "name": "NL ULS001: 1.35DL\u002B1.5LL-staged",
+      "type": "Nonlinear Static",
+      "definition": "1.35 DEAD_ABOVE \u002B 1.5 LL_ABOVE \u002B 0.35 DEAD",
+      "initialCase": "Pretension",
+      "run": true,
+      "supported": true,
+      "source": "SAP",
+      "note": ""
+    },
+    {
+      "name": "NL SLS001: 1.0DL\u002B1.0LL-staged",
+      "type": "Nonlinear Static",
+      "definition": "1 DEAD_ABOVE \u002B 1 LL_ABOVE",
+      "initialCase": "Pretension",
+      "run": true,
+      "supported": true,
+      "source": "SAP",
+      "note": ""
+    },
+    {
+      "name": "Pretension Onlyh [For Ref]",
+      "type": "Nonlinear Static",
+      "definition": "1 Pretension",
+      "initialCase": "",
+      "run": true,
+      "supported": true,
+      "source": "SAP",
+      "note": ""
+    }
+  ],
+  "combinationRows": [],
+  "settings": {
+    "targetFitPercent": 10,
+    "targetFitIterations": 100,
+    "frameMeshSegments": 10,
+    "cableSag": true
+  }
+}

@@ -1,0 +1,3 @@
+numpy==2.5.4
+openseespy==3.8.0.0
+openseespywin==3.8.0.0; sys_platform == 'win32'
