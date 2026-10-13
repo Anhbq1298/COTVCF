@@ -26,6 +26,12 @@ public sealed class FemSolver
     public const int MaximumFrameMeshSegments = 100;
     private const double PlanarityToleranceM = 1e-7;
 
+    /// <summary>The digits of accuracy lost from which the solver reports a degree of freedom: a warning from the
+    /// first, severe above the second. They change what a run reports, never its results.</summary>
+    public StabilityThresholds StabilityThresholds { get; init; } = StabilityThresholds.Default;
+    /// <summary>Iterations an equilibrium with cables may take before the case is reported as not converged.</summary>
+    public int MaximumEquilibriumIterations { get; init; } = new StaticOptions().MaximumNonlinearIterations;
+
     /// <summary>Single loading (joint loads only) with the pretension applied — the one-case entry point.</summary>
     public FemAnalysisResult Solve(
         GeometryModel geometry,
@@ -384,11 +390,17 @@ public sealed class FemSolver
                     Outcome = report.Diagnostics is { } done
                         ? new(done.MinimumScaledPivot, done.EquilibriumError, done.CableFit?.WorstDeviationPercent, done.CableFit?.Converged ?? true, done.CableFit?.Failure)
                         : null,
+                    FailureCode = report.Kind == StaticProgressKind.Failed ? report.Issue?.Code : null,
+                    // the fit stage is solved first, as a solve of its own: a case that fails while fitting failed in that stage
+                    PrerequisiteFailed = report.Kind == StaticProgressKind.Failed && report.FitRun > 0 && caseNames.ContainsKey(report.CaseId),
+                    Stability = report.Stability is { } assessed ? FemStabilityReport.From(assessed, model) : null,
                 });
             });
         }
         // The engine is dense. These limits are where its memory, not its method, ends: about 1,000 joints.
-        var outcomes = StaticSolver.Solve(model, wanted, new StaticOptions(MaximumFullDofs: 6000, MaximumFreeDofs: 3000, AcceptClosestFit: true),
+        var outcomes = StaticSolver.Solve(model, wanted,
+            new StaticOptions(MaximumFullDofs: 6000, MaximumFreeDofs: 3000, MaximumNonlinearIterations: MaximumEquilibriumIterations,
+                AcceptClosestFit: true, Stability: StabilityThresholds),
             cancellationToken, follow);
         StaticResult Result(Native.ObjectId id) => outcomes[id].Result ?? throw Refused(outcomes[id].Issues);
 
@@ -496,6 +508,14 @@ public sealed record FemEquilibriumProgress(string CaseName, bool FitStage, FemE
     public bool Pretensioned { get; init; }
     /// <summary>Of a case that converged: what the solver checked before returning its result.</summary>
     public FemEquilibriumOutcome? Outcome { get; init; }
+    /// <summary>Of a case without a result: the solver's code for why.</summary>
+    public string? FailureCode { get; init; }
+    /// <summary>The case failed in the stage it continues from — while the cable target forces were fitted — not in
+    /// its own equilibrium.</summary>
+    public bool PrerequisiteFailed { get; init; }
+    /// <summary>Of a case that has ended: the numerical stability the solver assessed, joint by joint. Null when it
+    /// assessed none — a case refused before it was solved, an iteration that did not converge.</summary>
+    public FemStabilityReport? Stability { get; init; }
 }
 
 /// <param name="SmallestPivot">Smallest scaled pivot of the stiffness factorized at the solution — the tangent

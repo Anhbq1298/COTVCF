@@ -19,6 +19,13 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   pack URIs read `/Mcotis;component/Presentation/Theme.xaml`, without `src/`. The fixtures `tests/fem-sap-benchmark` and
   `tests/etabs-import` stay where they were, and the checks are run from the repository root.
 - `MCOTiS.sln` includes the app, the libraries and both check projects; the desktop build script targets the app project directly.
+- **Legacy MB Tabs 01–05 are archived** (user, 2026-10-13: "bỏ hết tab 01-05 và đưa vào mục archive của dự án"):
+  Loading, Truss Height, Pretension, Output Settings and Iteration no longer appear in the main window or the MB
+  menu. Their frozen XAML and page-only code-behind are under `archive/Mcotis.Desktop/LegacyTabs01To05/` and are not
+  compiled. Five inert `WorkflowTabs` slots preserve the established indices of Post-Processing, Optimization, FEM
+  and Quantities. The legacy state/configuration and study services remain only as compatibility seams for existing
+  model files and current VCF/TAS/optimization code; do not navigate to or restore slots 0–4. Run Study / Cancel Study
+  were removed from the active Run menu. Later sections describing those five pages are historical reference only.
 - **The standalone system** (user, 2026-10-12: "ignore SAP2000 and the MB tab completely … stand on our own feet and
   develop a new system") is the library projects `src/Mcotis.Core`, `src/Mcotis.Application`, `src/Mcotis.Persistence`
   and `src/Mcotis.Analysis`, with their checks in `tests/Mcotis.Checks`. The desktop now references them for the
@@ -181,8 +188,8 @@ earlier tall-header / large-button / blue-block look.
     live: `--etabs-export-live` starts a **private hidden ETABS** (`EtabsGateway.StartPrivateAsync`, never the user's), exports
     the CoT model into its blank model, previews again (143 matched, nothing to change), imports it back and runs it: same
     members, joint loads, deflections and reactions (self-weight within 3·10⁻⁶ — ETABS keeps the weight modifier to ~6 figures).
-  - **MB**: 01 Loading … 06A Optimization, 08 Quantities (each with its status as the gesture text; 06A disabled
-    without raw data). Choosing one sets `SelectedTab`; the page fills the left pane.
+  - **MB**: only the remaining reference pages 06A Optimization and 08 Quantities. Legacy pages 01–05 are archived;
+    no active menu, command or startup flow may select them.
   - **Define**: Materials, Section Properties, Load Patterns, Load Cases / Load Combinations · Result Load Case.
     There is no Define → Loading: the loads of the model are entered in Edit → VCF System (Storey Force / Cable Force),
     one fixed value each — see Tab 07 FEM, "The flow the user set". The 01 Loading page stays under MB with its ranges;
@@ -198,7 +205,8 @@ earlier tall-header / large-button / blue-block look.
     Tab 03 cables (followers of a removed cable become Independent) and Tab 04 output entries; FEM results are cleared and the
     model becomes an offline "· edited" model — SAP2000 is never written.
   - **Assign**: Joint Restraints (Pin Supports).
-  - **Run**: Run Study, Cancel Study · Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Analysis Options.
+  - **Run**: Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Analysis Options. The legacy Run Study /
+    Cancel Study commands are no longer exposed.
   - **Optimization** (its own tab since 2026-10-12; wherever this document says "Run → Optimization VCF", read
     "Optimization → Optimization VCF"): Optimization VCF…, Optimization TAS…, Optimization Results…, Cancel Optimization.
     **Optimization TAS…** (2026-10-12) is the same study for the tied arch system: the modal `OptimizationTasWindow` has
@@ -312,8 +320,9 @@ earlier tall-header / large-button / blue-block look.
   **Load Default Template** and **Continue with Blank Model**. The template uses File → Load VCF…; Continue hides
   the choice and keeps the model empty. New Config clears the active working-session manifest.
 - The `WorkflowTabs` TabControl stays (indices unchanged) but its tab strip is hidden (`ItemContainerStyle` →
-  `Collapsed`). A one-line pane header above it shows `PaneMenu  ›  PaneTitle` (e.g. `MB › 01  LOADING`,
-  `Define › SECTIONS`) with the page status (`PaneStatus`) on the right and, offline, the `OfflineModelSummary` line.
+  `Collapsed`). Slots 0–4 are inert compatibility placeholders for the archived pages. A one-line pane header above
+  the active content shows `PaneMenu  ›  PaneTitle` (for example `Define › SECTIONS`) with the page status
+  (`PaneStatus`) on the right and, offline, the `OfflineModelSummary` line.
 - The pane header has an **✕** (`ClosePaneButton`, shown while the shared viewer is) that hides the left pane — the
   params column goes to 0 (its MinWidth is dropped too) and the viewer takes the full width. Any MB / Define / Assign /
   Run / Result / Display item opens the pane again (`OpenPane`). At startup the pane is closed (`App.OnStartup` → `ClosePane`), so the app
@@ -538,9 +547,9 @@ earlier tall-header / large-button / blue-block look.
     the model (a connected run used to re-read SAP2000 and overwrite those edits). After Connect / Refresh the held
     inputs are marked out of date (`femInputsOutdated`) and the run asks for Read FEM Properties from SAP instead of
     fetching them. Not yet exercised against a live SAP2000 — only against the SAP stand-in of the checks.
-  - **Many cases = the parametric study**: Run → Optimization VCF (internal solver) and Run → Run Study (Tab 05,
-    SAP2000). `FemStudyService.Compose` — the Cartesian Tab 01 × 02 × 03 space — stays for the SAP2000 benchmark
-    (`--fem-sap`); the app does not run it.
+  - **Many cases = the parametric study**: Optimization → Optimization VCF (internal solver). The archived Tab 05
+    study has no active menu command; `FemStudyService.Compose` — the Cartesian legacy Tab 01 × 02 × 03 space — stays
+    only as a compatibility/reference seam for the SAP2000 benchmark (`--fem-sap`).
   - No candidate picker anywhere in the FEM results: Run Monitor, Define → Result Load Case, Show Results and the
     Results Table choose a load case only (`FemRuns` holds the one run, or nothing after a failed run).
 - **Load cases are defined in the app** (Define → Load Cases / Load Combinations, `MainViewModel.LoadCases.cs`,
@@ -663,21 +672,55 @@ earlier tall-header / large-button / blue-block look.
   Dropdowns filter the diagram and tables; View Results opens FemResultsWindow with the same selections.
   There are no floating result buttons on the model view (removed on request): the result type is chosen in Show
   Results (toolbar) or the Result menu. Solver behavior is unchanged.
-- Run Analysis — after Run Now in Set Load Cases to Run — opens the non-modal FEM Run Monitor (FemRunMonitorWindow; reopen with Analysis → Monitor): status
-  (Running / Finished / No result) over a bar that counts the load cases ended (`FemMonitorProgress`; it only moves
-  from side to side until the first has, `FemMonitorIndeterminate`), then — asked for by the user, 2026-10-12: "khi ấn
-  analysis hãy hiện thanh chạy equilibrium bao gồm bao nhiêu active dof... các joint có converge hay không" — the
-  degrees of freedom of the run (`FemMonitorDofText`: active · solved · restrained) and where the equilibrium stands
-  (`FemMonitorEquilibriumText`: fitting run, iteration, out-of-balance against the accepted value, joints in
-  equilibrium, the joint and movement where it is largest; after the run, the outcome), and the table **Equilibrium
-  by load case** (`FemEquilibriumRows`, one `FemEquilibriumRow` per case, the target fit first: Load case · Solved
-  DOFs · Iterations · Out-of-balance · Accepted · Joints converged · Largest at · Status = Converged / Not converged
-  / Unstable / Failed / Stopped, the reason as the status tooltip). The numbers come from the solver's own reports
-  (`StaticSolver.Solve(..., progress)` → `FemSolver` → `FemStudyService.Analyze(..., equilibrium)` →
-  `MainViewModel.FemEquilibriumReport`, shown at most every 80 ms); never compute them in the view. Then the live log
-  inside a collapsed Diagnostic details expander (FemLog, one line per step, with a line per case's equilibrium), Cable dropdown (default Cable1a-2) and Loadcase/Loadcomb dropdown — no Candidate
-  dropdown and no Follow latest, there is one run — and ConvergenceChart of P_result/P_preset per pretension-fitting run (run 0 = 0, line at 1, ±tol
-  band) from FemCableResponse.FitHistoryKN. Help is a window (HelpWindow) with Workflow and FEM procedure topics;
+- Run Analysis — after Run Now in Set Load Cases to Run — opens the non-modal FEM Run Monitor (`FemRunMonitorWindow`;
+  reopen with Run → Analysis Monitor). **Laid out again on 2026-10-13 at the user's request** (a written specification:
+  the application's own type, no SAP2000-style console, load cases that open, numerical stability by joint and degree
+  of freedom). It replaced the blue fixed-width analysis log of the day before and the "Equilibrium by Load Case" tab —
+  do not bring either back, and do not put a solver name, a source line or "SAP2000" in this window.
+  - **Layers**: `Mcotis.Analysis` assesses (`StaticStability` on every outcome and progress report —
+    `StabilityDiagnostics.cs`) → `FemSolver` names the joints (`FemEquilibriumProgress.Stability` =
+    `FemStabilityReport`, plus `FailureCode`, `PrerequisiteFailed`) → `Application/FemRunMonitor` (no WPF; takes the
+    reports on the solving thread, hands out `FemRunSnapshot`s; `Classify` is the one place a status is decided) →
+    `MainViewModel.FemMonitor` (`FemRunMonitorViewModel`; `FemMonitorPump` shows a snapshot at most every 80 ms) → the
+    window. **Never compute a status, a count or a digit in the view or the view model**; the words for a condition
+    are in `FemStabilityText`.
+  - **Header**: status (Running / Completed / Completed with Warnings / Failed / Cancelled), the bar counting the load
+    cases ended (side to side until the first has), `Degrees of freedom  123 active | 115 solved | 8 restrained` as
+    the equations were assembled (asked for by the user, 2026-10-12), start time, elapsed time (a 500 ms timer in the
+    window calls `FemMonitor.Tick`), and the reason of a run that failed.
+  - **Tab "Load Cases"**, one scrolling page: the note NUMERICAL STABILITY — INFORMATION (once, before the cases; its
+    header closes it, `IsNoteExpanded`; it states the thresholds in force); MODEL INFORMATION in two columns under
+    Model Name = `CurrentFileName` — the file as it is named on disk, with its real extension; do not write `.mcotis`
+    for a `.cotfem.db` — with load cases and combinations counted apart, shells 0 (the app has none) and the support
+    summary; then LOAD CASES, one entry per **solve**: per pretension stage `<case> — cable target-force fit`, then
+    its cases. A combination is a superposition, not a solve: never an entry. Entries are planned as Pending from
+    `FemLoadPlan.StagesFor` when the run starts.
+  - **An entry**: header `> n  name   ✓ status   hh:mm:ss`, the whole header a `ToggleButton` (`SectionToggle`), a 1 px
+    solid line under each. Statuses and colours: Converged green · Converged with Warnings amber · Not Converged /
+    Numerical Instability / Failed red · Pending / Cancelled grey · Running accent. Several stay open; a failed one
+    opens itself once; nothing is ever closed for the user. Its detail (`CaseDetail`) is built only while it is open.
+    Open: Convergence / Numerical Stability / Instabilities (0 = none detected — never write a residual as zero), the
+    details in two columns, the table when a degree of freedom is reported, and ANALYSIS LOG — a read-only `TextBox`
+    in the UI font, one line per thing the solver reported (600 iteration lines kept per case).
+  - **The table**: Joint · X · Y · Z · UX · UY · UZ · RX · RY · RZ · Remarks, always the six columns. A cell is a
+    number of digits lost (amber from the warning threshold, red above the severe one), `∞` (bold red: a singularity
+    the solver identified), `-` (inactive: off in the XZ plane, or not used at a cable joint), `R` (restrained) or
+    `N/A` (on, without an estimate). Digits show one decimal, more where one would read as the other side of a
+    threshold. Remarks: "Numerical accuracy warning", "Ill-conditioned", "Nearly singular", "Singular (∞) — possible
+    mechanism / no stiffness and no restraint / held by slack cables only". **Never write a plain "mechanism"**, never
+    stand a number in for ∞ or for a missing estimate, never show 0 where there is none.
+  - **Numerical instability is not non-convergence**: `static.matrix.unstable` → Numerical Instability;
+    `static.nonlinear.*` → Not Converged, stability "Not assessed"; `static.residual` / `static.equilibrium` with
+    degrees of freedom reported → Numerical Instability (the solver withheld a factorized result). A case whose
+    cable target-force fit failed reads Failed and says the fit failed; the fit has its own entry.
+  - Thresholds 6 / 11 digits are `FemSolver.StabilityThresholds` (`StaticOptions.Stability`); they change what is
+    listed, never a result. There is no control for them in the app yet. Method, limits and the checks:
+    `docs/solver/numerical-stability-diagnostics.md`. Checks: `--run-monitor` (also in the default run),
+    `--run-monitor-ui`, `--template-building-ui`; the estimate itself in `tests/Mcotis.Checks`.
+  - **Tab "Cable Target-Force Convergence"** (unchanged): Cable dropdown (default Cable1a-2) and target-stage dropdown —
+    no Candidate dropdown and no Follow latest, there is one run — and ConvergenceChart of P_result/P_preset per
+    pretension-fitting run (run 0 = 0, line at 1, ±tol band) from FemCableResponse.FitHistoryKN.
+  Help is a window (HelpWindow) with Workflow and FEM procedure topics;
   the ⓘ next to Monitor and top-bar Help on Tab 07 open the FEM procedure directly. Keep the topic concise:
   preparation, inputs, run settings, results and main limitations; omit debug logs and algorithm details.
   Keep the FEM procedure text in sync with the solver. Frame moments use one sign

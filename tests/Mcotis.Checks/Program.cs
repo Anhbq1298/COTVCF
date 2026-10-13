@@ -19,6 +19,7 @@ internal static class Program
             ("3D topology and DOF compilation", DofCompilationChecks.Run),
             ("Spatial linear static engineering benchmarks", SpatialStaticChecks.Run),
             ("General static solver: split frames, cables, target forces, stages and sag", GeneralStaticChecks.Run),
+            ("Numerical stability diagnostics: digits lost, singular and nearly singular stiffness", StabilityDiagnosticsChecks.Run),
             ("TemplateBuilding generation, loading and analysis", TemplateBuildingChecks.Run),
             ("Independence", IndependenceChecks.Run),
         ];

@@ -3,6 +3,11 @@
 Bản chỉnh ngày 2026-10-12. Thay cho bản plan 10 mục trước đó, và thay cho các quyết định về Lock/Unlock, SQLite và
 "stable ID theo tên" trong [fem-database-plan.md](fem-database-plan.md) đối với hệ mới.
 
+**Cập nhật UI legacy (2026-10-13):** theo yêu cầu mới, các trang MB 01–05 đã rời khỏi ứng dụng và được
+giữ đông băng tại `archive/Mcotis.Desktop/LegacyTabs01To05/`. Năm slot rỗng chỉ giữ index của các trang còn lại;
+không được khôi phục navigation vào slot 0–4. Kiểu dữ liệu/config cũ còn lại chỉ để mở file cũ và phục vụ
+VCF/TAS/optimization hiện hành trong khi quá trình chuyển sang hệ standalone tiếp tục.
+
 **Cập nhật 3D (2026-10-12):** theo yêu cầu mới, tầng analysis sẽ dùng chung model XYZ và DOF presets cho 3D/XZ/XY/YZ,
 thay cho việc port nguyên solver planar. Foundation đã có: `Mcotis.Analysis.ModelCompiler`, DOF settings lưu ở schema 2,
 migration schema 1 → XZ, mapping sáu DOF và diagnostics. Đã có thêm một engine tuyến tính 3D cho frame (dense, dùng để
@@ -111,7 +116,7 @@ initial case hoặc combination; tên trùng. Một frame chưa gán section v�
 | `src/Mcotis.Application` | `DocumentSession`, commands, Undo/Redo, New/Open/Save, result state, contracts | Có |
 | `src/Mcotis.Persistence` | File `.mcotis`, migration, atomic save | Có |
 | `tests/Mcotis.Checks` | Checks offline của hệ mới | Có |
-| `src/Mcotis.Analysis` | Immutable topology/DOF compiler; `StaticSolver` 3D cho frame và cable | Có compiler và solver dense: frame (tự chia tại điểm nằm trên nó), cable tension-only, target force, staged case, sag; shell và solver sparse chưa có |
+| `src/Mcotis.Analysis` | Immutable topology/DOF compiler; `StaticSolver` 3D cho frame và cable | Có compiler và solver dense: frame (tự chia tại điểm nằm trên nó), cable tension-only, target force, staged case, sag, chẩn đoán ổn định số theo từng DOF; shell và solver sparse chưa có |
 | `src/Mcotis.Desktop` | App WPF hiện tại; TemplateBuilding workspace đã dùng các thư viện native | Native Save/Open, DOF options, linear static và result tables đã có; migration đầy đủ còn ở giai đoạn 6 |
 | `tests/Mcotis.Desktop.Checks` | Checks offline của app | Có |
 
@@ -145,7 +150,7 @@ Dialog làm việc trên dữ liệu tạm: Apply = validate + commit; OK = comm
 | **1 — Core document** | Native model, ID, `NameIndex`, `NamingService`, validators | Unique Name; rename không làm hỏng references | Xong |
 | **2 — Document lifecycle** | `DocumentSession`, New / Open / Save / Save As | Save đúng document đang mở; Open lỗi giữ nguyên model | Xong ở tầng thư viện |
 | **3 — Edit commands** | Commands, Undo/Redo, change sets, revision, dirty, result state | Mọi thao tác phục hồi được; invalidation nhất quán | Xong ở tầng thư viện |
-| **4 — Analysis boundary** | Shared 3D engine, planar DOF presets, snapshot từ `ModelDocument`; capability check (chặn Shell…); results gắn document ID + input hash | Numerical source gates + XZ regression + analytical/OpenSeesPy checks | Compiler và `StaticSolver` xong cho frame và cable (target force, staged case, sag, frame có nút giữa, station dọc frame), đã đối chiếu ba nguồn kể cả default model; toàn bộ app đã chạy trên engine này và solver planar đã archive. Còn shell, solver sparse, diagnostics |
+| **4 — Analysis boundary** | Shared 3D engine, planar DOF presets, snapshot từ `ModelDocument`; capability check (chặn Shell…); results gắn document ID + input hash | Numerical source gates + XZ regression + analytical/OpenSeesPy checks | Compiler và `StaticSolver` xong cho frame và cable (target force, staged case, sag, frame có nút giữa, station dọc frame), đã đối chiếu ba nguồn kể cả default model; toàn bộ app đã chạy trên engine này và solver planar đã archive. Chẩn đoán ổn định số đã có (2026-10-13): số chữ số chính xác bị mất theo từng DOF, stiffness suy biến / gần suy biến và các DOF tham gia — [solver/numerical-stability-diagnostics.md](solver/numerical-stability-diagnostics.md). Còn shell, solver sparse |
 | **5 — Hệ VCF trên native model** | Generator VCF tạo/sinh lại geometry qua command, giữ ID bằng `GenerationKey`; tên theo vai trò | Đổi số bay giữ ID và assignments của object không đổi | |
 | **6 — Desktop** | `Mcotis.Desktop`: shell, các ViewModel ở mục 5, selection chung, viewport đọc document | Tạo → lưu → mở → phân tích → xem kết quả hoàn toàn trên hệ mới | |
 | **7 — Persistence hoàn chỉnh** | Autosave nền theo revision, recovery, results store, đọc file `.cotfem.db` cũ, default model dạng `.mcotis` | Recovery không báo thành công giả; file cũ mở được | |
@@ -161,7 +166,7 @@ chạy model có Shell và nói rõ lý do.
 
 ## 7. Checks
 
-`dotnet run --project tests/Mcotis.Checks` — 2767 checks, không cần SAP2000, WPF hay database:
+`dotnet run --project tests/Mcotis.Checks` — 2904 checks, không cần SAP2000, WPF hay database:
 
 | Nhóm | Nội dung |
 |---|---|
@@ -174,6 +179,7 @@ chạy model có Shell và nói rõ lý do.
 | DOF compilation | Full 3D/plane/custom masks, deterministic mapping, support loads, failed compilation, immutable snapshot, schema-1 migration |
 | Spatial static | Ma trận 12×12 kiểm bằng tích phân độc lập, lời giải giải tích, cân bằng toàn cục, các trường hợp từ chối, đối chiếu OpenSeesPy (12 model) |
 | General static | Frame chia tại điểm nằm trên nó, cable tension-only, target force (một cable, hai cable tương tác, hai cable nối tiếp), staged case, sag so với lời giải kín và catenary chính xác, xoay cả kết cấu trong không gian, các trường hợp từ chối, đối chiếu OpenSeesPy (4 model có cable, 11 lời giải) |
+| Stability diagnostics | Ước lượng số chữ số bị mất log10(Kii·(K⁻¹)ii) so với lời giải kín, với nghịch đảo tính độc lập và với chuyển vị của chính solver; khung ổn định 2D / 3D, cơ cấu phẳng, quay tự do trong 3D, gần suy biến (không báo ∞), suy biến, không hội tụ (không coi là mất ổn định), DOF không hoạt động, các case độc lập với nhau |
 | Independence | Core, Application, Persistence và Analysis không tham chiếu WPF / SQLite / CSI |
 
 `dotnet run --project tests/Mcotis.Desktop.Checks -- --general-solver` đối chiếu phép phân tích của app (`FemSolver` →
@@ -186,7 +192,8 @@ Còn thiếu so với danh sách của plan cũ: UX (Cancel dialog, selection đ
 
 1. **Tên object do VCF generator sinh**: giữ quy ước theo vai trò hiện tại (`TTrPt001`, `BTrPt…`, `Cable9a-2`) hay
    chuyển sang `P1` / `F1` / `C1`. Hệ mới hỗ trợ cả hai; cần chốt trước giai đoạn 5.
-2. **Các lối vào SAP/MB còn nằm ngoài menu MB**: File → Read FEM Properties from SAP, Run → Run Study / Cancel Study,
-   Post-Processing → Study Reports…, nút *Get From SAP2000* trong Define Materials / Sections. Hiện giữ nguyên.
+2. **Các lối vào SAP/MB còn nằm ngoài menu MB**: File → Read FEM Properties from SAP,
+   Post-Processing → Study Reports…, nút *Get From SAP2000* trong Define Materials / Sections. Hiện giữ nguyên;
+   Run Study / Cancel Study đã rời khỏi menu cùng các trang MB 01–05.
 3. **Save As và document ID**: bản sao giữ hay đổi `DocumentId` — quyết định cùng results store (giai đoạn 7).
 4. **Tendon**: chưa có trong model. Khi cần sẽ là một object riêng như Cable, không phải một loại Frame.

@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -133,8 +135,26 @@ internal static class TemplateBuildingUiChecks
             PresentationTraceSources.DataBindingSource.Listeners.Remove(listener);
         }
     }
-    /// <summary>The run monitor of the main window: empty before a run; after Run Analysis on the default model, the
-    /// analysis log it opens on, the degrees of freedom of the run and one line per load case with its equilibrium.</summary>
+    /// <summary>The run monitor alone, with the binding errors it reports.</summary>
+    internal static void RunMonitorOnly()
+    {
+        var folder = Path.GetFullPath(Path.Combine(".work", "run-monitor-ui-" + Guid.NewGuid().ToString("N")));
+        Directory.CreateDirectory(folder);
+        var bindings = new StringWriter();
+        var listener = new TextWriterTraceListener(bindings);
+        PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
+        PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
+        try
+        {
+            RunMonitor(folder);
+            Check(string.IsNullOrWhiteSpace(bindings.ToString()), "the run monitor has no reported binding errors: " + bindings);
+        }
+        finally { PresentationTraceSources.DataBindingSource.Listeners.Remove(listener); }
+    }
+
+    /// <summary>The run monitor of the main window: what it says before a run; after Run Analysis on the default model,
+    /// the run, the model in numbers and one entry per load case that opens on its diagnostics and its log; and, for a
+    /// run the solver refuses, the table of the joints and degrees of freedom it reports.</summary>
     private static void RunMonitor(string folder)
     {
         var state = StudyComposerChecks.CreateState();
@@ -151,48 +171,80 @@ internal static class TemplateBuildingUiChecks
             run.Items.OfType<MenuItem>().Single(m => Equals(m.Header, "Analysis _Monitor")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             Idle();
             var monitor = shell.OwnedWindows.OfType<FemRunMonitorWindow>().Single();
-            TextBlock Line(string property) => Visuals<TextBlock>(monitor).Single(text =>
-                System.Windows.Data.BindingOperations.GetBindingExpression(text, TextBlock.TextProperty)?.ParentBinding.Path.Path == property);
-            var bar = Visuals<ProgressBar>(monitor).Single();
-            Check(monitor.Views.Items.OfType<TabItem>().Select(tab => tab.Header).SequenceEqual(["Analysis Log", "Equilibrium by Load Case", "Cable Target-Force Convergence"]) &&
-                  ReferenceEquals(monitor.Views.SelectedItem, monitor.LogTab) && monitor.LogBox.IsVisible && monitor.LogBox.Text.Length == 0 &&
-                  monitor.EquilibriumGrid.Items.Count == 0 && !Line(nameof(MainViewModel.FemMonitorDofText)).IsVisible &&
-                  !Line(nameof(MainViewModel.FemMonitorEquilibriumText)).IsVisible && bar.Value == 0 && !bar.IsIndeterminate,
-                "before a run the monitor opens on an empty analysis log, its equilibrium table is empty, and the lines that describe a run take no room");
+            var bar = monitor.RunProgress;
+            static double Top(FrameworkElement element, Window window) => element.TransformToAncestor(window).Transform(new Point()).Y;
+            Check(monitor.Views.Items.OfType<TabItem>().Select(tab => tab.Header).SequenceEqual(["Load Cases", "Cable Target-Force Convergence"]) &&
+                  ReferenceEquals(monitor.Views.SelectedItem, monitor.RunTab) && monitor.CaseList.Items.Count == 0 && monitor.NoCasesText.IsVisible &&
+                  monitor.RunStatusText.Text == "No analysis run yet" && !monitor.DofText.IsVisible && !monitor.ModelPanel.IsVisible && bar.Value == 0 && !bar.IsIndeterminate,
+                "before a run the monitor has two views — Load Cases and the cable convergence, no equilibrium table — and says that nothing has run: no cases, no model, no degrees of freedom");
+            Check(monitor.StabilityNote.IsVisible && monitor.StabilityNoteText.IsVisible &&
+                  monitor.StabilityNoteText.Text.Contains("Numerical stability is assessed using estimated digits of accuracy lost during matrix solution.", StringComparison.Ordinal) &&
+                  monitor.StabilityNoteText.Text.Contains("A value of ∞ indicates that a singularity has been identified", StringComparison.Ordinal) &&
+                  monitor.StabilityNoteText.Text.Contains("reaches 6 digits", StringComparison.Ordinal) && monitor.StabilityNoteText.Text.Contains("above 11 digits", StringComparison.Ordinal) &&
+                  Top(monitor.StabilityNote, monitor) < Top(monitor.CaseList, monitor),
+                "the note on numerical stability stands once, before the load cases, with the thresholds the run reports by: a warning from 6 digits lost, severe above 11");
+            monitor.StabilityNoteToggle.IsChecked = false; Idle();
+            Check(!monitor.StabilityNoteText.IsVisible && monitor.StabilityNote.IsVisible && !vm.FemMonitor.IsNoteExpanded, "… and it can be closed: its heading stays, its text goes");
 
             var runs = FemModelFileChecks.Analyze(vm); Idle();
-            Snapshot(monitor, ".work/run-monitor-log-ui.png");
-            var shownLog = monitor.LogBox.Text.Split(Environment.NewLine);
-            Check(runs.Count == 1 && ReferenceEquals(monitor.Views.SelectedItem, monitor.LogTab) && monitor.LogBox.IsVisible && monitor.LogBox.IsReadOnly &&
-                  shownLog.Take(vm.FemLog.Count).SequenceEqual(vm.FemLog) && shownLog.Length == vm.FemLog.Count + 1 && shownLog[^1].Length == 0 &&
-                  shownLog[0].StartsWith(" B E G I N   A N A L Y S I S ", StringComparison.Ordinal) &&
-                  shownLog[^2].StartsWith(" A N A L Y S I S   C O M P L E T E ", StringComparison.Ordinal) &&
-                  shownLog.Count(line => line == FemRunLog.Stable) == vm.FemEquilibriumRows.Count,
-                $"Run Analysis writes the analysis log into the monitor as SAP2000 does: {vm.FemLog.Count} lines from BEGIN ANALYSIS to ANALYSIS COMPLETE, a stability check for every case solved");
-            Check(ReferenceEquals(monitor.LogBox.Foreground, monitor.FindResource("Accent")) && ReferenceEquals(monitor.LogBox.Background, monitor.FindResource("Raised")) &&
-                  ReferenceEquals(monitor.LogBox.FontFamily, monitor.FindResource("MonoFont")) && monitor.LogBox.TextWrapping == TextWrapping.NoWrap &&
-                  monitor.LogBox.VerticalOffset > 0 && monitor.LogBox.VerticalOffset + monitor.LogBox.ViewportHeight >= monitor.LogBox.ExtentHeight - 1,
-                "… in the look of that log — blue fixed-width text on white, lines not wrapped — and scrolled to its newest line");
-            monitor.Views.SelectedItem = monitor.EquilibriumTab; Idle();
             Snapshot(monitor, ".work/run-monitor-ui.png");
-            Check(monitor.EquilibriumGrid.IsVisible && ReferenceEquals(shell.OwnedWindows.OfType<FemRunMonitorWindow>().Single(), monitor) &&
-                  vm.FemEquilibriumRows.Count >= 2 && monitor.EquilibriumGrid.Items.Count == vm.FemEquilibriumRows.Count &&
-                  monitor.EquilibriumGrid.Columns.Select(column => column.Header is TextBlock header ? header.Text : column.Header as string)
-                      .SequenceEqual(["Load case", "Solved DOFs", "Iterations", "Out-of-balance", "Accepted", "Joints converged", "Largest at", "Status"]),
-                $"Run Analysis fills the monitor's equilibrium table: {vm.FemEquilibriumRows.Count} load cases, each with its solved degrees of freedom, iterations, out-of-balance, joints converged and status");
-            var shown = Visuals<DataGridRow>(monitor.EquilibriumGrid).ToArray();
-            var statuses = shown.SelectMany(row => Visuals<TextBlock>(row)).Where(text => text.Name == "StatusText").ToArray();
-            Check(shown.Length > 0 && statuses.Length == shown.Length &&
-                  statuses.All(text => text.Text == FemEquilibriumRow.Converged && ReferenceEquals(text.Foreground, monitor.FindResource("Success"))),
-                $"… every line shown ({shown.Length}) reads Converged, in the colour of a good result");
-            var dofs = Line(nameof(MainViewModel.FemMonitorDofText));
-            var outcome = Line(nameof(MainViewModel.FemMonitorEquilibriumText));
-            Check(dofs.IsVisible && dofs.Text == vm.FemMonitorDofText && dofs.Text.Contains(" active", StringComparison.Ordinal) && dofs.Text.Contains(" solved", StringComparison.Ordinal) &&
-                  outcome.IsVisible && outcome.Text.StartsWith("Equilibrium reached in every load case", StringComparison.Ordinal) && bar.Value == 1 && !bar.IsIndeterminate,
-                $"… above it the degrees of freedom of the run and the outcome, with the bar full: {dofs.Text} {outcome.Text}");
+            var shown = vm.FemMonitor;
+            var headers = Visuals<ToggleButton>(monitor.CaseList).ToArray();
+            Check(runs.Count == 1 && shown.Cases.Count >= 2 && headers.Length == shown.Cases.Count && monitor.CaseList.Items.Count == shown.Cases.Count &&
+                  monitor.RunStatusText.Text == shown.StatusText && shown.Status is FemRunStatus.Completed or FemRunStatus.CompletedWithWarnings && bar.Value == 1 && !bar.IsIndeterminate &&
+                  !monitor.NoCasesText.IsVisible && !monitor.StabilityNoteText.IsVisible,
+                $"Run Analysis fills the monitor: {shown.StatusText}, the bar full, {shown.Cases.Count} load cases each under its own header; the note stays closed");
+            Check(monitor.DofText.IsVisible && Regex.IsMatch(monitor.DofText.Text, @"^\d+ active \| \d+ solved \| \d+ restrained$") && monitor.DofText.Text == shown.DofText &&
+                  Regex.IsMatch(monitor.ElapsedText.Text, @"^\d\d:\d\d:\d\d$") && monitor.ModelPanel.IsVisible && monitor.ModelNameText.Text == vm.CurrentFileName &&
+                  monitor.ModelLeft.Items.Count == 5 && monitor.ModelRight.Items.Count == 5 &&
+                  Visuals<TextBlock>(monitor).All(text => !text.Text.Contains("SAP2000", StringComparison.OrdinalIgnoreCase) && !text.Text.Contains("solver", StringComparison.OrdinalIgnoreCase)),
+                $"… above them the run — {monitor.DofText.Text}, elapsed {monitor.ElapsedText.Text} — and the model information in two columns under the name of its file, '{monitor.ModelNameText.Text}'; no solver name and no SAP2000 anywhere");
+            var statuses = Visuals<TextBlock>(monitor.CaseList).Where(text => text.Name == "CaseStatusText").ToArray();
+            Check(statuses.Length == shown.Cases.Count && statuses.Zip(shown.Cases).All(pair => pair.First.Text == pair.Second.StatusText &&
+                      ReferenceEquals(pair.First.Foreground, monitor.FindResource(pair.Second.Status == FemCaseStatus.Converged ? "Success" : "Warning"))),
+                "… every load case has its own status, in its colour: " + string.Join(", ", shown.Cases.Select(item => $"{item.Number} {item.Name} — {item.StatusText}")));
+            var lines = Enumerable.Range(0, monitor.CaseList.Items.Count).Select(index => (DependencyObject)monitor.CaseList.ItemContainerGenerator.ContainerFromIndex(index))
+                .Select(container => Visuals<Border>(container).Last(border => border.Height == 1)).ToArray();
+            Check(lines.Length == shown.Cases.Count && lines.All(line => ReferenceEquals(line.Background, monitor.FindResource("Border")) && line.ActualWidth >= monitor.CaseList.ActualWidth - 1),
+                "… the load cases are separated by a solid line across the list");
+            Check(!Visuals<TextBox>(monitor.CaseList).Any() && !Visuals<DataGrid>(monitor.CaseList).Any() && shown.Cases.All(item => !item.IsExpanded),
+                "closed, a load case is one line: nothing of its diagnostics or its log is built until it is opened");
+
+            headers[0].IsChecked = true; headers[^1].IsChecked = true; Idle();
+            Snapshot(monitor, ".work/run-monitor-open-ui.png");
+            var logs = Visuals<TextBox>(monitor.CaseList).ToArray();
+            Check(shown.Cases[0].IsExpanded && shown.Cases[^1].IsExpanded && shown.Cases.Count(item => item.IsExpanded) == 2 && logs.Length == 2,
+                "a load case opens from its header, and two stay open at once");
+            var detail = Visuals<TextBlock>(monitor.CaseList.ItemContainerGenerator.ContainerFromIndex(0)).Select(text => text.Text).ToArray();
+            int At(string label) => Array.IndexOf(detail, label);
+            Check(At("Convergence") >= 0 && detail[At("Convergence") + 1] == "Passed" && detail[At("Numerical Stability") + 1] == shown.Cases[0].StabilityText &&
+                  detail[At("Instabilities") + 1] == "0" && detail.Contains("ANALYSIS LOG") && detail.Contains("Nonlinear convergence") && detail.Contains("Largest loss of accuracy"),
+                $"… on Convergence: Passed · Numerical Stability: {shown.Cases[0].StabilityText} · Instabilities: 0, the details of its convergence, and its own analysis log");
+            Check(logs[0].IsReadOnly && logs[0].Text == shown.Cases[0].LogText && logs[0].Text.Contains("Analysis started.", StringComparison.Ordinal) &&
+                  ReferenceEquals(logs[0].FontFamily, monitor.FindResource("UiFont")) && ReferenceEquals(logs[0].Foreground, monitor.FindResource("Text")) &&
+                  logs[0].TextWrapping == TextWrapping.Wrap && monitor.FontFamily.Source == "Segoe UI" && monitor.FontSize == 12 &&
+                  Visuals<TextBox>(monitor).All(box => !ReferenceEquals(box.Foreground, monitor.FindResource("Accent")) && !ReferenceEquals(box.FontFamily, monitor.FindResource("MonoFont"))),
+                "… the log is in the application's own type — Segoe UI 12, dark on light, wrapped — not a blue fixed-width console");
+
+            // A run the solver refuses, as the monitor holds it: a portal that sways freely.
+            var refused = RunMonitorChecks.SwayingPortal();
+            vm.FemMonitor.Apply(refused.Run); Idle();
+            Snapshot(monitor, ".work/run-monitor-instability-ui.png");
+            var grid = Visuals<DataGrid>(monitor.CaseList).Single();
+            Check(monitor.RunStatusText.Text == "Failed" && ReferenceEquals(monitor.RunStatusText.Foreground, monitor.FindResource("Error")) && shown.Cases.Single().IsExpanded &&
+                  grid.Columns.Select(column => column.Header as string).SequenceEqual(["Joint", "X", "Y", "Z", "UX", "UY", "UZ", "RX", "RY", "RZ", "Remarks"]) && grid.Items.Count == 4,
+                "a load case that failed opens itself on the table of its joints: Joint · X · Y · Z · UX · UY · UZ · RX · RY · RZ · Remarks");
+            var cells = Visuals<DataGridRow>(grid).SelectMany(row => Visuals<TextBlock>(row)).ToArray();
+            var infinite = cells.Where(text => text.Text == "∞").ToArray();
+            Check(infinite.Length == 6 && infinite.All(text => text.FontWeight == FontWeights.Bold && ReferenceEquals(text.Foreground, monitor.FindResource("Error"))) &&
+                  cells.Count(text => text.Text == "-") == 12 && cells.Count(text => text.Text == "R") == 4 && cells.Count(text => text.Text == "N/A") == 2 &&
+                  cells.Where(text => text.Text is "-" or "R" or "N/A").All(text => ReferenceEquals(text.Foreground, monitor.FindResource("Muted"))) &&
+                  cells.Any(text => text.Text == "UX, RY: Singular (∞) — possible mechanism") && cells.Any(text => text.Text == "3.000"),
+                "… ∞ in bold red where a singularity was identified, - for the degrees of freedom the plane switches off, R at the supports, N/A without an estimate, coordinates to the millimetre and the remarks naming the degrees of freedom");
+
             monitor.Views.SelectedItem = monitor.ConvergenceTab; Idle();
             Check(Visuals<Mcotis.Desktop.Presentation.Controls.ConvergenceChart>(monitor).Single() is { IsVisible: true } chart && chart.Ratios.Count > 0,
-                "… and the third view is the cable target-force convergence chart, with the fitting runs of the monitored cable");
+                "… and the second view is the cable target-force convergence chart, with the fitting runs of the monitored cable");
         }
         finally { shell.Close(); }
     }

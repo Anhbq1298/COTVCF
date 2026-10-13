@@ -61,6 +61,13 @@ public static class VcfGeometry
     public static VcfGeometryAnalysis Analyze(GeometryModel geometry, TrussHeightConfiguration truss) =>
         Analyze(geometry, truss.TopPoints, truss.MiddlePoints, truss.BottomPoints);
 
+    /// <summary>Whether <paramref name="geometry"/> and its chord groups describe a VCF system this editor can read.</summary>
+    public static bool CanAnalyze(GeometryModel geometry, TrussHeightConfiguration truss)
+    {
+        try { Analyze(geometry, truss); return true; }
+        catch (InvalidOperationException) { return false; }
+    }
+
     public static VcfGeometryAnalysis Analyze(VcfTopology topology) =>
         Analyze(topology.Geometry, topology.TopPoints, topology.MiddlePoints, topology.BottomPoints);
 

@@ -13,6 +13,12 @@ tension-only cables, cable target forces, staged cases and frames with points ly
 record, [cable-static-verification.md](cable-static-verification.md). The linear frame path this record describes
 is unchanged, and every check listed here passes against the general solver as it did before.
 
+**2026-10-13** the solver also reports the numerical stability of every case it factorizes: an estimate of the digits
+of accuracy lost at each solved degree of freedom, and, when a stiffness cannot be factorized, the movements without
+stiffness and the degrees of freedom that move in them. It is a diagnostic — no result of this record depends on it,
+and the checks listed here pass as before. Its formulation, thresholds, limits and verification have their own
+record: [../solver/numerical-stability-diagnostics.md](../solver/numerical-stability-diagnostics.md).
+
 ## What the engine is
 
 `src/Mcotis.Analysis`: `SpatialFrameElement`, `StaticSolver` (`LinearStaticSolver` when this was written),

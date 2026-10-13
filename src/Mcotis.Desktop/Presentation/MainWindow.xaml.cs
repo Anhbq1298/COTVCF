@@ -1,10 +1,8 @@
 using Mcotis.Desktop.Application;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Threading;
 
 namespace Mcotis.Desktop.Presentation;
 
@@ -95,8 +93,8 @@ public partial class MainWindow : Window
         return $"Selected: {Count(frames, "Frame")} · {Count(cables, "Cable")} · {Count(points, "Point")} · {Count(shells, "Shell")}";
     }
 
-    // The model preview is one shared viewer hoisted out of the TabControl. Tabs 01-04 (Loading, Truss,
-        // The shared preview appears on tabs 01-04 and 07 FEM; tabs 05-06A and 08 Quantities use full width.
+    // Tabs 01-05 are archived. The shared model viewer now belongs to the active FEM workspace;
+    // the remaining report/reference pages use the full width.
     private void WorkflowTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (ReferenceEquals(e.OriginalSource, WorkflowTabs)) ApplyViewerLayout();
@@ -105,7 +103,7 @@ public partial class MainWindow : Window
     private void ApplyViewerLayout()
     {
         if (ParamsColumn is null) return;
-        bool showViewer = WorkflowTabs.SelectedIndex is >= 0 and <= 3 || WorkflowTabs.SelectedIndex == 7;     // 01-04 and 07 FEM
+        bool showViewer = WorkflowTabs.SelectedIndex == 7;
         if (!showViewer) paneClosed = false;     // a full-width page is the pane itself
         bool showPane = !paneClosed;
 
@@ -142,18 +140,9 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ValidateEditors(object sender, MouseButtonEventArgs e)
-    {
-        if (!CommitEditors()) e.Handled = true;
-    }
-
     private bool CommitEditors()
     {
-        bool valid = LoadDefinitionsGrid.CommitEdit(DataGridEditingUnit.Cell, true) &&
-            LoadDefinitionsGrid.CommitEdit(DataGridEditingUnit.Row, true) &&
-            Cables.CommitEdit(DataGridEditingUnit.Cell, true) &&
-            Cables.CommitEdit(DataGridEditingUnit.Row, true) &&
-            FemPatternRowsGrid.CommitEdit(DataGridEditingUnit.Cell, true) &&
+        bool valid = FemPatternRowsGrid.CommitEdit(DataGridEditingUnit.Cell, true) &&
             FemPatternRowsGrid.CommitEdit(DataGridEditingUnit.Row, true) &&
             FemCaseRowsGrid.CommitEdit(DataGridEditingUnit.Cell, true) &&
             FemCaseRowsGrid.CommitEdit(DataGridEditingUnit.Row, true);
@@ -161,143 +150,6 @@ public partial class MainWindow : Window
         if (valid && !HasErrors(this) && !hiddenErrors) return true;
         MessageBox.Show(this, "Correct the highlighted numeric inputs before continuing.", "Review inputs", MessageBoxButton.OK, MessageBoxImage.Information);
         return false;
-    }
-
-    private void AppliedPoints_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (DataContext is not MainViewModel vm) return;
-        vm.SelectedAppliedPoint = AppliedPointsGrid.SelectedItem as Domain.AppliedPoint;
-        if (vm.SelectedAppliedPoint is not null) AppliedPointsGrid.ScrollIntoView(vm.SelectedAppliedPoint);
-    }
-
-    private void Cables_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (DataContext is not MainViewModel vm) return;
-        vm.SelectedCable = Cables.SelectedItem as Domain.CablePretensionConfig;
-        if (vm.SelectedCable is not null) Cables.ScrollIntoView(vm.SelectedCable);
-    }
-
-    private void AddLoad_Click(object sender, RoutedEventArgs e)
-    {
-        Dispatcher.BeginInvoke(() =>
-        {
-            if (LoadDefinitionsGrid.Items.Count == 0) return;
-            var row = LoadDefinitionsGrid.Items[^1];
-            LoadDefinitionsGrid.SelectedItem = row;
-            LoadDefinitionsGrid.ScrollIntoView(row);
-            LoadDefinitionsGrid.CurrentCell = new DataGridCellInfo(row, LoadDefinitionsGrid.Columns[0]);
-            LoadDefinitionsGrid.BeginEdit();
-        }, DispatcherPriority.Input);
-    }
-
-    private void ViewCandidates_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel vm) return;
-        if (!CommitEditors()) return;
-        if (vm.CreateLoadingCandidatePreview() is not { } preview) return;
-
-        var dialog = new Window
-        {
-            Title = "Loading Candidates",
-            Icon = AppIcon.Window,
-            Owner = this,
-            Width = 920,
-            Height = 600,
-            MinWidth = 720,
-            MinHeight = 420,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner
-        };
-        var panel = new DockPanel { Margin = new Thickness(20) };
-        var summary = new TextBlock
-        {
-            Text = $"{preview.CaseCount} candidates for loading cases, applied at {vm.State.AppliedPoints.Count} locations.",
-            Foreground = (Brush)FindResource("Accent"),
-            FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(0, 0, 0, 12)
-        };
-        DockPanel.SetDock(summary, Dock.Top);
-        panel.Children.Add(summary);
-
-        var close = new Button
-        {
-            Content = "Close",
-            IsCancel = true,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 12, 0, 0)
-        };
-        close.Click += (_, _) => dialog.Close();
-        DockPanel.SetDock(close, Dock.Bottom);
-        panel.Children.Add(close);
-
-        var grid = new DataGrid
-        {
-            ItemsSource = preview.Rows,
-            IsReadOnly = true,
-            CanUserDeleteRows = false,
-            SelectionMode = DataGridSelectionMode.Extended,
-            FrozenColumnCount = 2
-        };
-        grid.Columns.Add(new DataGridTextColumn { Header = "Applied Pt", Binding = new Binding(nameof(Domain.LoadingCandidate.AppliedPt)), Width = new DataGridLength(1.2, DataGridLengthUnitType.Star), MinWidth = 110 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Case", Binding = new Binding(nameof(Domain.LoadingCandidate.Case)), Width = new DataGridLength(1.4, DataGridLengthUnitType.Star), MinWidth = 130 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "qz", Binding = new Binding(nameof(Domain.LoadingCandidate.Qz)) { StringFormat = "F2" }, Width = new DataGridLength(.8, DataGridLengthUnitType.Star), MinWidth = 80, ElementStyle = (Style)FindResource("NumericCell") });
-        grid.Columns.Add(new DataGridTextColumn { Header = "TribArea", Binding = new Binding(nameof(Domain.LoadingCandidate.TribArea)) { StringFormat = "F3" }, Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 95, ElementStyle = (Style)FindResource("NumericCell") });
-        grid.Columns.Add(new DataGridTextColumn { Header = "NStories", Binding = new Binding(nameof(Domain.LoadingCandidate.NStories)), Width = new DataGridLength(.8, DataGridLengthUnitType.Star), MinWidth = 80, ElementStyle = (Style)FindResource("NumericCell") });
-        grid.Columns.Add(new DataGridTextColumn { Header = "FzkN", Binding = new Binding(nameof(Domain.LoadingCandidate.FzKn)) { StringFormat = "F3" }, Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 95, ElementStyle = (Style)FindResource("NumericCell") });
-        panel.Children.Add(grid);
-        dialog.Content = panel;
-        dialog.ShowDialog();
-    }
-
-    private void ViewTrussCandidates_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel vm) return;
-        if (!CommitEditors()) return;
-        if (vm.CreateTrussCandidates() is not { } rows) return;
-
-        var dialog = new Window
-        {
-            Title = "Truss Height Candidates",
-            Icon = AppIcon.Window,
-            Owner = this,
-            Width = 780,
-            Height = 560,
-            MinWidth = 620,
-            MinHeight = 380,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner
-        };
-        var panel = new DockPanel { Margin = new Thickness(16) };
-        var summary = new TextBlock
-        {
-            Text = $"{rows.Count} candidates  ·  baseline H₀ {vm.State.Truss.BaselineHeight:F4} {vm.LengthUnit}  ·  {vm.State.Truss.Reference} chord fixed  ·  select a row to preview it",
-            Foreground = (Brush)FindResource("Accent"),
-            FontWeight = FontWeights.SemiBold,
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 0, 0, 10)
-        };
-        DockPanel.SetDock(summary, Dock.Top);
-        panel.Children.Add(summary);
-
-        var close = new Button { Content = "Close", IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
-        close.Click += (_, _) => dialog.Close();
-        DockPanel.SetDock(close, Dock.Bottom);
-        panel.Children.Add(close);
-
-        var num = (Style)FindResource("NumericCell");
-        var grid = new DataGrid { ItemsSource = rows, IsReadOnly = true, CanUserDeleteRows = false, SelectionMode = DataGridSelectionMode.Single, FrozenColumnCount = 2 };
-        grid.Columns.Add(new DataGridTextColumn { Header = "#", Binding = new Binding(nameof(Domain.TrussCandidate.Index)), Width = new DataGridLength(.5, DataGridLengthUnitType.Star), MinWidth = 38, ElementStyle = num });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Height (m)", Binding = new Binding(nameof(Domain.TrussCandidate.Height)) { StringFormat = "F3" }, Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 82, ElementStyle = num });
-        grid.Columns.Add(new DataGridTextColumn { Header = "ΔH (m)", Binding = new Binding(nameof(Domain.TrussCandidate.DeltaH)) { StringFormat = "+0.000;-0.000;0.000" }, Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 76, ElementStyle = num });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Reference", Binding = new Binding(nameof(Domain.TrussCandidate.Reference)), Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 78 });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Top ΔZ", Binding = new Binding(nameof(Domain.TrussCandidate.TopDz)) { StringFormat = "+0.000;-0.000;0.000" }, Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 72, ElementStyle = num });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Mid ΔZ", Binding = new Binding(nameof(Domain.TrussCandidate.MidDz)) { StringFormat = "+0.000;-0.000;0.000" }, Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 72, ElementStyle = num });
-        grid.Columns.Add(new DataGridTextColumn { Header = "Bot ΔZ", Binding = new Binding(nameof(Domain.TrussCandidate.BotDz)) { StringFormat = "+0.000;-0.000;0.000" }, Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 72, ElementStyle = num });
-        grid.SelectionChanged += (_, _) =>
-        {
-            if (grid.SelectedItem is Domain.TrussCandidate c) vm.State.Truss.CurrentHeight = c.Height;
-        };
-        panel.Children.Add(grid);
-        dialog.Content = panel;
-        dialog.ShowDialog();
     }
 
     private static bool HasErrors(DependencyObject item)
@@ -308,7 +160,7 @@ public partial class MainWindow : Window
         return false;
     }
 
-    // ---- Menu bar: MB opens a workflow page; Define / Assign / Run / Display open an FEM pane; Result shows an output ----
+    // ---- Menu bar: MB opens a remaining reference page; Define / Assign / Run / Display open an FEM pane; Result shows an output ----
     private static int MenuTag(object sender) => sender is FrameworkElement { Tag: string tag } && int.TryParse(tag, out var value) ? value : -1;
 
     private void MbMenu_Click(object sender, RoutedEventArgs e)
@@ -329,7 +181,7 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel vm) return;
         if (vm.FemCaseRows.Count > 0 && MessageBox.Show(this,
                 "Replace the load cases and combinations with the default setup?\n\n" +
-                "Pretension (cable target forces + self-weight) first, then SLS and ULS continuing from it with the Tab 01 loads.",
+                "Pretension (cable target forces + self-weight) first, then SLS and ULS continuing from it with the assigned model loads.",
                 "Default Load Cases", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         vm.ApplyDefaultFemLoadCases();
     }
@@ -520,7 +372,7 @@ public partial class MainWindow : Window
     {
         if (DataContext is not MainViewModel vm || !vm.CanImportFromSap) return;
         if (vm.HasWorkingModel && MessageBox.Show(this,
-                "Import the model open in SAP2000? It replaces the current model and its Tabs 01–05 in Mcotis (save the configuration first to keep it)." +
+                "Import the model open in SAP2000? It replaces the current Mcotis working model, including its geometry, assignments, loads and cases (save the configuration first to keep it)." +
                 $"{Environment.NewLine}{Environment.NewLine}SAP2000 is only read, never written.",
                 "Import From SAP2000", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK) != MessageBoxResult.OK) return;
         SharedViewer.ClearSelection();
@@ -545,7 +397,7 @@ public partial class MainWindow : Window
         const string title = "Import From ETABS";
         if (DataContext is not MainViewModel vm || !vm.CanImportFromEtabs) return;
         if (vm.HasWorkingModel && MessageBox.Show(this,
-                "Import the model open in ETABS? It replaces the current model and its Tabs 01–05 in Mcotis (save the configuration first to keep it)." +
+                "Import the model open in ETABS? It replaces the current Mcotis working model, including its geometry, assignments, loads and cases (save the configuration first to keep it)." +
                 $"{Environment.NewLine}{Environment.NewLine}ETABS is only read, never written.",
                 title, MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK) != MessageBoxResult.OK) return;
         SharedViewer.ClearSelection();
@@ -578,7 +430,7 @@ public partial class MainWindow : Window
         const string title = "Load TAS";
         if (DataContext is not MainViewModel vm || !vm.CanImportFromEtabs) return;
         if (vm.HasWorkingModel && MessageBox.Show(this,
-                "Load the TAS model (CoT 120 m composite arch deck)? It replaces the current model and its Tabs 01–05 in Mcotis (save the configuration first to keep it).",
+                "Load the TAS model (CoT 120 m composite arch deck)? It replaces the current Mcotis working model, including its geometry, assignments, loads and cases (save the configuration first to keep it).",
                 title, MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.OK) != MessageBoxResult.OK) return;
         SharedViewer.ClearSelection();
         try
@@ -776,7 +628,24 @@ public partial class MainWindow : Window
     private VcfGeometryWindow? vcfGeometryWindow;
     private void VcfGeometry_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel vm) return;
+        if (DataContext is not MainViewModel vm || !vm.CanEditVcfGeometry) return;
+        if (vm.NeedsVcfModelReplacement)
+        {
+            const string title = "VCF System";
+            if (MessageBox.Show(this,
+                    "This model is not a VCF system. Replace it with the built-in VCF model?\n\n" +
+                    "The current geometry, assignments, loads and cases in Mcotis will be replaced. " +
+                    "Save the current configuration first if you need to keep it. SAP2000 will not be changed.",
+                    title, MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+            SharedViewer.ClearSelection();
+            vm.ReplaceCurrentWithVcfModel();
+            if (vm.NeedsVcfModelReplacement || !vm.CanEditVcfGeometry)
+            {
+                MessageBox.Show(this, "The built-in VCF model could not be loaded. The VCF editor was not opened.\n\n" + vm.Message,
+                    title, MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+        }
         if (vcfGeometryWindow is null)
         {
             vcfGeometryWindow = new VcfGeometryWindow(vm) { Owner = this };

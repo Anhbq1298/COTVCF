@@ -18,6 +18,58 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Run monitor: load cases that open on convergence, numerical stability by joint and DOF, and their own log
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis → the run monitor (also Run → Analysis Monitor, and the toolbar): tab "Load Cases",
+  beside "Cable Target-Force Convergence"
+- What: The run monitor is laid out again, in the application's own type; the SAP2000-style blue fixed-width log and
+  the "Equilibrium by Load Case" tab are gone. On top: the run — Running, Completed, Completed with Warnings, Failed
+  or Cancelled — the bar counting the load cases ended, the degrees of freedom as the equations were assembled
+  (active | solved | restrained), start and elapsed time. Then a note on numerical stability that can be closed; the
+  model in numbers under the name of its file (joints, restrained joints, frames, cables, shells, load patterns, load
+  assignments, load cases and combinations counted apart, the supports); and one entry per solve of the run — per
+  pretension stage the fit of its cable target forces, then its cases; a combination is not a solve and is not
+  listed. An entry reads Pending, Running, Converged, Converged with Warnings, Not Converged, Numerical Instability,
+  Failed or Cancelled with its time; a click opens it, several stay open, a failed one opens itself. Open, it shows
+  Convergence, Numerical Stability and Instabilities (0 = none detected), the convergence in detail (iterations,
+  tolerance satisfied or not, out-of-balance as measured, fitting runs, the checks the solver made), and its own log
+  of what the solver reported, in order. When a degree of freedom is reported, a table lists the affected joints by
+  name with their global coordinates and the six columns UX UY UZ RX RY RZ: the digits of accuracy lost (amber from
+  6, red above 11), ∞ in bold red where a singularity was identified, - for a degree of freedom that is off, R for
+  a restrained one, N/A where there is no estimate; the remarks name the degrees of freedom.
+  The numbers are the solver's: it now estimates the digits lost at every solved degree of freedom as
+  log10(Kii·(K⁻¹)ii) — which does not depend on the elimination order and is not CSI's number — and, when it cannot
+  factorize a stiffness, finds the movements without stiffness and the degrees of freedom that move in them. A small
+  pivot stays a finite number; ∞ is kept for an exactly zero stiffness, a joint only slack cables hold, and a
+  movement the stiffness does not resist at double precision ("possible mechanism"). Non-convergence is not reported
+  as an instability. The solution itself is untouched: results are what they were. Known limits: the thresholds
+  (6 / 11) are options of the solver without a control in the app yet; the native workspace receives the same
+  diagnostics but does not show them yet. Method, thresholds, differences from CSI and limits:
+  docs/solver/numerical-stability-diagnostics.md.
+- Checks: dotnet run --project tests/Mcotis.Checks (2,904 checks, 137 of them new); --run-monitor; --run-monitor-ui;
+  default offline Mcotis.Desktop.Checks; --general-solver; --fem; --fem-sap; --template-building-ui; --dev-log
+
+## 2026-10-13 · Archive legacy MB Tabs 01–05
+- Status: Done
+- Who: Codex
+- Where: Main window; MB menu; `archive/Mcotis.Desktop/LegacyTabs01To05/`
+- What: Removed Loading, Truss Height, Pretension, Output Settings and Iteration from the active desktop UI and
+  archived their exact XAML and page-only code-behind outside the compiled project. Five inert slots retain the
+  established indices of the remaining pages; legacy data/configuration seams stay only for file compatibility and
+  the current VCF/TAS/optimization workflows. Run Study and Cancel Study are no longer exposed.
+- Checks: default offline Mcotis.Desktop.Checks; --dev-log
+
+## 2026-10-13 · VCF System can replace a non-VCF working model
+- Status: Done
+- Who: Codex
+- Where: Edit → VCF System…
+- What: On a TAS or another model without valid VCF chord groups, VCF System now asks before replacing the entire
+  Mcotis working model with the built-in VCF configuration, then opens the VCF editor; it never shows the unrelated
+  model as a VCF preview and never writes SAP2000. Cancel keeps the current model. An existing VCF still opens directly,
+  and a blank New Config still creates its first VCF after frame and cable sections have been defined.
+- Checks: default offline Mcotis.Desktop.Checks; --etabs-import; --dev-log
+
 ## 2026-10-13 · Run monitor opens on an analysis log laid out like SAP2000's
 - Status: Done
 - Who: markbui, Claude

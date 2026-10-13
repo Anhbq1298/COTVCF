@@ -36,6 +36,18 @@ internal static class Program
                 GeneralSolverParityChecks.Run();
                 return 0;
             }
+            if (args.Contains("--run-monitor"))
+            {
+                RunMonitorChecks.Run();
+                return 0;
+            }
+            if (args.Contains("--run-monitor-ui"))
+            {
+                var app = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/Presentation/Theme.xaml", UriKind.Relative) });
+                TemplateBuildingUiChecks.RunMonitorOnly();
+                return 0;
+            }
             if (args.Contains("--fem-db"))
             {
                 FemDatabaseChecks.Run();
@@ -141,7 +153,7 @@ internal static class Program
                 var uiSap = new FakeSap { Snapshot = new(uiState.Model!, uiState.Geometry, uiState.LoadPatterns.ToArray()) };
                 var uiWorkflow = new WorkflowService(uiSap, uiState);
                 var uiConfig = new Mcotis.Desktop.Configuration.ConfigService(uiSap, uiState, uiWorkflow);
-                var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection(), uiConfig) { SelectedTab = 0 };
+                var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection(), uiConfig) { SelectedTab = 7 };
                 var window = new Mcotis.Desktop.Presentation.MainWindow { DataContext = vm, Width = 1400, Height = 810 };
                 window.Show();
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -166,136 +178,34 @@ internal static class Program
                 var mbItems = TopMenu("MB").Items.OfType<MenuItem>().Select(item => (string)item.Header).ToArray();
                 var fileCommands = TopMenu("File").Items.OfType<MenuItem>().Select(item => item.Command).ToArray();
                 var runCommands = TopMenu("Run").Items.OfType<MenuItem>().Select(item => item.Command).ToArray();
-                Assert(mbItems.SequenceEqual(["01  Loading", "02  Truss Height", "03  Pretension", "04  Output Settings", "05  Iteration",
-                           "06A  Optimization", "08  Quantities"]) &&
+                Assert(mbItems.SequenceEqual(["06A  Optimization", "08  Quantities"]) &&
                        new[] { vm.NewConfig, vm.LoadFemModel, vm.SaveFemModel, vm.ReadFemProperties }.All(fileCommands.Contains) &&
                        !fileCommands.Contains(vm.LoadConfig) && !fileCommands.Contains(vm.SaveAllConfig) &&
-                       new[] { vm.RunStudyFromToolbar, vm.RunFemAnalysis, vm.CancelFemAnalysis }.All(runCommands.Contains),
-                    "MB lists pages 01-05, 06A and 08; File holds config commands; Run holds analysis commands");
+                       new[] { vm.RunFemAnalysis, vm.CancelFemAnalysis }.All(runCommands.Contains) &&
+                       !runCommands.Contains(vm.RunStudyFromToolbar) && !runCommands.Contains(vm.CancelStudy),
+                    "Legacy MB Tabs 01-05 and their Run Study commands are absent; MB retains only 06A and 08");
                 var workflowTabsRail = FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs");
+                var archivedSlots = workflowTabsRail.Items.Cast<object>().Take(5).OfType<TabItem>().ToArray();
                 Assert(workflowTabsRail.Items.OfType<TabItem>().All(tab => tab.Visibility == Visibility.Collapsed) &&
-                       vm.PaneMenu == "MB" && vm.PaneTitle == "01  LOADING",
-                    "The left tab rail is hidden; the pane header names the page opened from MB");
+                       archivedSlots.Length == 5 && archivedSlots.All(tab => tab.Content is null && !tab.IsEnabled) &&
+                       vm.SelectedTab == 7 && vm.PaneMenu == "Define" && vm.PaneTitle == "LOAD PATTERNS" &&
+                       window.SharedViewerPane.Visibility == Visibility.Visible,
+                    "Tabs 01-05 are inert index placeholders; the active window opens on the FEM workspace");
                 window.Width = window.MinWidth;
                 window.UpdateLayout();
                 var toolbarCommands = new[] { vm.Connect, vm.Refresh };
                 var toolbarButtons = FindVisuals<Button>(window).Where(button => toolbarCommands.Contains(button.Command)).ToArray();
-                var movedCommands = new[] { vm.NewConfig, vm.SaveFemModel, vm.LoadFemModel, vm.RunStudyFromToolbar };
+                var activeFileCommands = new[] { vm.NewConfig, vm.SaveFemModel, vm.LoadFemModel };
                 Assert(toolbarButtons.Length == 2 && toolbarButtons.All(button =>
                 {
                     var position = button.TransformToAncestor(window).Transform(new Point());
                     return position.X >= 0 && position.X + button.ActualWidth <= window.ActualWidth;
-                }) && movedCommands.Take(3).All(command => FindVisuals<Button>(window.TopToolbar).Any(button => ReferenceEquals(button.Command, command))) &&
-                       FindVisuals<Button>(window.TopToolbar).Any(button => ReferenceEquals(button.Command, vm.RunFemAnalysis)) &&
-                       FindVisuals<Button>(window.TopToolbar).Select(button => System.Windows.Automation.AutomationProperties.GetName(button)).ToArray() is var toolNames &&
-                       new[] { "Zoom extents", "Zoom in", "Zoom out", "3D view", "XY view", "XZ view", "YZ view", "View Options" }.All(toolNames.Contains),
-                    "The top bar keeps Connect SAP and Refresh within the minimum window width; the tool icons (new/open/save/print, run, zoom, views) sit on the same line");
+                }) && activeFileCommands.All(command => FindVisuals<Button>(window.TopToolbar).Any(button => ReferenceEquals(button.Command, command))) &&
+                       FindVisuals<Button>(window.TopToolbar).Any(button => ReferenceEquals(button.Command, vm.RunFemAnalysis)),
+                    "The top bar retains active file, connection and FEM-analysis controls after the legacy tabs are archived");
                 window.Width = 1400;
                 window.UpdateLayout();
-                var loadPatternPickers = FindVisuals<ComboBox>(window)
-                    .Where(combo => combo.Items.Cast<object>().OfType<string>().Contains("LIVE"))
-                    .ToArray();
-                Assert(loadPatternPickers.Length == uiState.LoadDefinitions.Count && loadPatternPickers.All(combo => !combo.IsEditable),
-                    "Tab 1 renders one read-only SAP load-pattern dropdown per definition");
-                var loadingBitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-                loadingBitmap.Render(window);
-                var loadingEncoder = new PngBitmapEncoder(); loadingEncoder.Frames.Add(BitmapFrame.Create(loadingBitmap));
-                Directory.CreateDirectory(".work");
-                using (var stream = File.Create(".work/loading-tab.png")) loadingEncoder.Save(stream);
 
-                vm.SelectedTab = 2;
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                window.UpdateLayout();
-                var refreshCableSectionsButton = FindVisuals<Button>(window)
-                    .Single(button => button.Name == "RefreshCableSectionsButton");
-                Assert(refreshCableSectionsButton.Content is Viewbox && vm.RefreshCableSections.CanExecute(null),
-                    "Cable tab renders an enabled icon-only section/area refresh action");
-                vm.RefreshCableSections.Execute(null);
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                var refreshedCable = uiState.Cables.Single();
-                Assert(uiSap.CableSectionReadCount == 1 && uiSap.Writes == 0 &&
-                       refreshedCable.SectionName == "SEC_CABLE" &&
-                       Math.Abs((refreshedCable.SectionAreaM2 ?? 0) - 0.001) < 1e-12 &&
-                       Math.Abs((refreshedCable.DesignCapacityKN ?? 0) - 930) < 1e-9,
-                    "Cable section refresh reads SAP once and updates section, area, and capacity without writing the model");
-                vm.CableStrengthMpa = 2160;
-                Assert(Math.Abs((refreshedCable.DesignCapacityKN ?? 0) - 1080) < 1e-9,
-                    "Changing fpu immediately recomputes the derived cable design capacity");
-                var cableGrid = FindVisuals<DataGrid>(window).Single(grid => grid.Name == "Cables");
-                var immutableCableColumns = cableGrid.Columns.Where(column =>
-                    column.Header is TextBlock header && header.Text is "Section" or "Area m²" or "Capacity kN").ToArray();
-                Assert(immutableCableColumns.Length == 3 && immutableCableColumns.All(column =>
-                           column is DataGridTextColumn && column.IsReadOnly && column.CellStyle?.Setters
-                               .OfType<Setter>().Any(setter => setter.Property == DataGridCell.BackgroundProperty) == true),
-                    "Section, area, and capacity render as grey read-only text columns");
-
-                vm.SelectedTab = 4;
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                window.UpdateLayout();
-                Assert(vm.StudyIterations.Count == 36, "Tab 5 UI binds the expected Fix Pretension rows");
-                vm.RequestedWorkerCount = 3;
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "Total SAP2000 Instances") &&
-                       vm.RunStudyToolTip.Contains("starts 2 additional processes", StringComparison.Ordinal) &&
-                       vm.RunStudyLabel.StartsWith("Build & Analyze", StringComparison.Ordinal),
-                    "Tab 5 counts the baseline as instance 1 and clearly labels build plus analysis");
-                var pretensionPicker = FindVisuals<ComboBox>(window)
-                    .Single(combo => combo.Items.Cast<object>().OfType<StudyPretensionCandidate>().Any());
-                pretensionPicker.SelectedValue = "P02";
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                window.UpdateLayout();
-                Assert(vm.FixedPretensionCandidateId == "P02" &&
-                       Equals(pretensionPicker.SelectedValue, "P02") &&
-                       pretensionPicker.SelectedItem is StudyPretensionCandidate { Id: "P02" } &&
-                       vm.StudyIterations.All(row => row.PretensionCandidateId == "P02"),
-                    "Tab 5 switches directly from P01 to P02 without clearing the ComboBox");
-                uiState.Study.FixedPretensionCandidateId = "";
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                window.UpdateLayout();
-                Assert(vm.FixedPretensionCandidateId == "P01" && vm.StudyIterations.Count == 36 &&
-                       vm.StudyIterations.All(row => row.PretensionCandidateId == "P01"),
-                    "Tab 5 restores P01 when the fixed-pretension selection is transiently cleared");
-                uiState.Study.Mode = IterationStudyMode.FixHeight;
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                var heightPicker = FindVisuals<ComboBox>(window)
-                    .Single(combo => combo.Items.Cast<object>().OfType<StudyHeightCandidate>().Any());
-                heightPicker.SelectedValue = "H02";
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                window.UpdateLayout();
-                Assert(vm.FixedHeightCandidateId == "H02" &&
-                       Equals(heightPicker.SelectedValue, "H02") &&
-                       heightPicker.SelectedItem is StudyHeightCandidate { Id: "H02" } &&
-                       vm.StudyIterations.All(row => row.HeightCandidateId == "H02"),
-                    "Tab 5 switches directly from H01 to H02 without clearing the ComboBox");
-                var grids = FindVisuals<DataGrid>(window).ToArray();
-                Assert(grids.Any(grid => grid.Name == "StudyPreviewGrid" && grid.Items.Count == 36 && grid.Columns.Count == 10 &&
-                                         grid.Columns.Any(column => Equals(column.Header, "Resume"))),
-                    "Study Preview DataGrid renders joint-load, cable-target, worker, status, resume, run, and open columns");
-
-                vm.StudyWorkers.Add(new SapWorkerSnapshot
-                {
-                    WorkerId = 1,
-                    State = SapWorkerState.Busy,
-                    CurrentIterationId = "L01_H02_P01",
-                    CurrentStage = StudyWorkerStage.ApplyingLoading,
-                    CurrentModelPath = @"C:\Models\Study\L01_H02_P01\Mcotis_L01_H02_P01.sdb",
-                    CompletedCount = 3,
-                    LastMessage = "Applying loading candidate."
-                });
-                window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
-                window.UpdateLayout();
-                Assert(FindVisuals<TextBlock>(window).Any(text => text.Text == "Gate: OCCUPIED") &&
-                       FindVisuals<TextBlock>(window).Any(text => text.Text == "Applying Loading"),
-                    "Worker monitor renders worker gate and current stage text");
-                Assert(window.StudyValidationPanel.ActualHeight > 0 &&
-                       window.StudyValidationPanel.TransformToAncestor(window).Transform(new Point()).Y < window.ActualHeight,
-                    "Study validation panel remains visible with the worker monitor expanded");
-
-                var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-                bitmap.Render(window);
-                var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
-                Directory.CreateDirectory(".work");
-                using (var stream = File.Create(".work/study-tab.png")) encoder.Save(stream);
                 vm.SelectedTab = 5;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
@@ -358,12 +268,9 @@ internal static class Program
                 Assert(!window.SharedViewer.ShowDimensions, "Display -> Dimensions turns the dimension overlay off");
                 dimensionsItem.IsChecked = true;
                 Assert(window.Icon is System.Windows.Media.Imaging.BitmapFrame { Decoder.Frames.Count: >= 8 } && ReferenceEquals(window.Icon, AppIcon.Window), "The window icon is the software logo, from the multi-size icon file");
-                OpenMenu("Edit", "VCF System");
-                var vcfWindow = window.OwnedWindows.OfType<VcfGeometryWindow>().Single();
-                vcfWindow.UpdateLayout();
-                Assert(vcfWindow.IsVisible && vcfWindow.Preview.Model.Points.Count == uiState.Geometry.Points.Count,
-                    "Edit -> VCF System opens its own window with a preview of the model");
-                vcfWindow.Close();
+                Assert(TopMenu("Edit").Items.OfType<MenuItem>().Any(item =>
+                           (item.Header as string)?.Replace("_", "").StartsWith("VCF System", StringComparison.Ordinal) == true),
+                    "Edit retains the VCF System command; non-VCF models ask before replacing their geometry");
                 // Cable Force / Storey Force panes on the default model (10 bays of 10 m, B 12 m, 10 storeys)
                 var (defaultVm, _, _, _) = FemModelFileChecks.DefaultModelApp();
                 var forcesWindow = new VcfGeometryWindow(defaultVm) { Owner = window };
@@ -1006,8 +913,8 @@ internal static class Program
                 var optimizationTab = window.OptimizationTab;
                 Assert(!vm.HasRawData && !optimizationTab.IsEnabled && vm.OptimizationTabStatus == "Needs raw data" &&
                        TopMenu("MB").Items.OfType<MenuItem>().Single(item => Equals(item.Header, "06A  Optimization")) is { IsEnabled: false } &&
-                       mbItems.ToList().IndexOf("06A  Optimization") == mbItems.ToList().IndexOf("05  Iteration") + 1,
-                    "Tab 06A Optimization follows Tab 05 under MB and stays disabled until the study has raw data");
+                       mbItems.SequenceEqual(["06A  Optimization", "08  Quantities"]),
+                    "MB starts with the remaining 06A Optimization page, disabled until legacy raw data is available, followed by 08 Quantities");
                 vm.SelectedTab = 6;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 window.UpdateLayout();
@@ -1357,7 +1264,7 @@ internal static class Program
                 var vm = new MainViewModel(uiState, uiWorkflow, new NoSelection(), uiConfig);
                 var window = new Mcotis.Desktop.Presentation.MainWindow { DataContext = vm };
                 window.Show();
-                for (int i = 0; i < 5; i++)
+                foreach (var i in new[] { 5, 6, 7, 8 })
                 {
                     vm.SelectedTab = i;
                     window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
@@ -1366,8 +1273,8 @@ internal static class Program
                     bitmap.Render(window);
                     var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
                     Directory.CreateDirectory(".work");
-                    using var stream = File.Create($".work/ui-tab-{i + 1}.png"); encoder.Save(stream);
-                    Console.WriteLine($"PASS: tab {i + 1} created and rendered with live model geometry.");
+                    using var stream = File.Create($".work/ui-page-{i}.png"); encoder.Save(stream);
+                    Console.WriteLine($"PASS: active workflow page {i} created and rendered.");
                 }
                 window.Close(); bindingListener.Flush();
                 if (bindingLog.ToString().Length > 0) throw new Exception("WPF binding errors: " + bindingLog);
@@ -1466,6 +1373,7 @@ internal static class Program
             FemDatabaseChecks.Run();
             FemModelFileChecks.Run();
             GeneralSolverParityChecks.Run();
+            RunMonitorChecks.Run();
             SapImportChecks.Run();
             EtabsImportChecks.Run();
             EtabsExportChecks.Run();

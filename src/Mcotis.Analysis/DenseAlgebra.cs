@@ -54,6 +54,28 @@ internal sealed class ScaledCholesky
         for (int i = 0; i < n; i++) x[i] /= scale[i];
         return x;
     }
+
+    /// <summary>Kᵢᵢ·(K⁻¹)ᵢᵢ of every equation: the diagonal of the inverse of the scaled matrix, whose own diagonal is 1.
+    /// With K = D·L·Lᵀ·D it is the squared length of column i of L⁻¹; one column is held at a time.</summary>
+    public double[] ScaledInverseDiagonal(CancellationToken cancellationToken = default)
+    {
+        int n = scale.Length;
+        var diagonal = new double[n];
+        var column = new double[n];
+        for (int p = 0; p < n; p++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            // L·x = e_p: x is zero above row p
+            for (int k = p; k < n; k++)
+            {
+                double value = k == p ? 1 : 0;
+                for (int j = p; j < k; j++) value -= lower[k, j] * column[j];
+                column[k] = value / lower[k, k];
+                diagonal[p] += column[k] * column[k];
+            }
+        }
+        return diagonal;
+    }
 }
 
 internal sealed class FactorizationFailure(int index, double pivot) : Exception("Nonpositive or too small stiffness pivot")

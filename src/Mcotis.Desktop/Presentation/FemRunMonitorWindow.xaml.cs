@@ -1,54 +1,41 @@
-using System.Collections.Specialized;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 
 namespace Mcotis.Desktop.Presentation;
 
-/// <summary>Non-modal window opened by Run Analysis: progress, then three views of the run — the analysis log (laid
-/// out like SAP2000's, and what the window opens on), the equilibrium of every load case as a table, and the cable
-/// convergence chart.</summary>
+/// <summary>Non-modal window opened by Run Analysis. The run on top — status, progress, the equations and the clock —
+/// then the note on numerical stability, the model in numbers and one entry per load case, which opens on its
+/// convergence, its numerical stability by joint and degree of freedom, and its own log. The cable convergence chart
+/// is on the second tab. Everything shown comes from <see cref="MainViewModel.FemMonitor"/>.</summary>
 public partial class FemRunMonitorWindow : Window
 {
     private readonly MainViewModel viewModel;
-    private int shownLines;
-    private bool rewrite = true, queued;
+    private readonly DispatcherTimer clock;
 
     public FemRunMonitorWindow(MainViewModel viewModel)
     {
         this.viewModel = viewModel;
         InitializeComponent();
         DataContext = viewModel;
-        ((INotifyCollectionChanged)viewModel.FemLog).CollectionChanged += LogChanged;
-        Closed += (_, _) => ((INotifyCollectionChanged)viewModel.FemLog).CollectionChanged -= LogChanged;
-        ShowLog();
+        // the elapsed time of a run that is going; the run reports only when the solver does
+        clock = new(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => viewModel.FemMonitor.Tick(DateTime.Now), Dispatcher);
+        Closed += (_, _) => clock.Stop();
     }
 
-    private void LogChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    /// <summary>The wheel moves a table or a log inside a load case only while that can still move; then the page.</summary>
+    private void ScrollRun(object sender, MouseWheelEventArgs e)
     {
-        // Lines are only ever added at the end while a run goes; anything else (a new run, old lines dropped) means
-        // the text has to be written again. The log can change many times in one go, so the box is brought up to date
-        // once, afterwards.
-        if (e.Action != NotifyCollectionChangedAction.Add) rewrite = true;
-        if (queued) return;
-        queued = true;
-        Dispatcher.BeginInvoke(DispatcherPriority.Background, ShowLog);
-    }
-
-    /// <summary>Brings the log box up to date with the run's log and keeps its newest line in view.</summary>
-    private void ShowLog()
-    {
-        queued = false;
-        var lines = viewModel.FemLog;
-        if (rewrite || lines.Count < shownLines)
+        for (var at = e.OriginalSource as DependencyObject; at is not null && !ReferenceEquals(at, RunScroll);
+             at = at is Visual ? VisualTreeHelper.GetParent(at) : LogicalTreeHelper.GetParent(at))
         {
-            LogBox.Text = string.Concat(lines.Select(line => line + Environment.NewLine));
-            rewrite = false;
+            if (at is ScrollViewer inner && inner.ScrollableHeight > 0 &&
+                (e.Delta < 0 ? inner.VerticalOffset < inner.ScrollableHeight : inner.VerticalOffset > 0)) return;
         }
-        else if (lines.Count > shownLines)
-            LogBox.AppendText(string.Concat(lines.Skip(shownLines).Select(line => line + Environment.NewLine)));
-        else return;
-        shownLines = lines.Count;
-        LogBox.ScrollToEnd();
+        RunScroll.ScrollToVerticalOffset(RunScroll.VerticalOffset - e.Delta);
+        e.Handled = true;
     }
 
     private void CloseWindow(object sender, RoutedEventArgs e) => Close();

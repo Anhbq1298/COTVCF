@@ -332,17 +332,25 @@ internal static class PlanarFrameChecks
             "A cable split at a joint that only cables reach is reported as unstable, naming the joint and the movement, with what to change in the model");
         // The main window has no option for the degrees of freedom of cable joints, so nothing it says points to one.
         var segmentedFit = segmentedReports.Items.Last(item => item.FitStage);
+        var segmentedRun = GeneralSolverParityChecks.MonitorOf(segmentedReports.Items, completed: false);
+        var segmentedCase = segmentedRun.Cases.Single(item => item.FitStage);
         Check(!segmented.Contains("Analysis Options", StringComparison.Ordinal) &&
               segmentedFit.State == FemEquilibriumState.Unstable && segmentedFit.Failure!.Contains("'M' UX", StringComparison.Ordinal) &&
               !segmentedFit.Failure.Contains("Analysis Options", StringComparison.Ordinal) &&
-              FemEquilibriumRow.From(segmentedFit) is { Status: FemEquilibriumRow.Unstable, Case: "Target fit" } unstableRow && unstableRow.Detail == segmentedFit.Failure,
-            "… without pointing to a degree-of-freedom option this window does not have, and the run monitor's line for the case reads Unstable with the reason");
-        var segmentedLog = GeneralSolverParityChecks.LogOf(segmentedReports.Items);
-        int segmentedError = Array.IndexOf(segmentedLog, FemRunLog.Error);
-        Check(segmentedError > 0 && segmentedLog[segmentedError + 1].StartsWith(" 'M' UX has no stiffness and no restraint", StringComparison.Ordinal) &&
-              segmentedLog.Contains(" CASE NOT SOLVED: THE MODEL IS UNSTABLE") && !segmentedLog.Contains(FemRunLog.Stable) &&
-              segmentedLog.All(line => line.Length <= 78),
-            "… and in the analysis log the case ends with an error block that names the joint and the movement, not with a stability check");
+              segmentedCase is { Status: FemCaseStatus.NumericalInstability, Label: "Cable target-force fit" } && segmentedRun.Status == FemRunStatus.Failed,
+            "… without pointing to a degree-of-freedom option this window does not have, and the run monitor's entry for the case reads Numerical Instability");
+        var segmentedStability = segmentedCase.Stability!;
+        var jointM = segmentedStability.Joints.Single();
+        Check(segmentedStability is { State: Mcotis.Analysis.StabilityState.Singular, Instabilities: 1, Warnings: 0, Stage: Mcotis.Analysis.StabilityStage.EquilibriumIteration, Iteration: 1 } &&
+              jointM is { Joint: "M", X: 0, Y: 0, Z: 2.5 } &&
+              jointM.Dofs.Select(dof => FemStabilityText.Cell(dof, segmentedStability)).SequenceEqual(["∞", "-", "N/A", "-", "-", "-"]) &&
+              FemStabilityText.Remarks(jointM, segmentedStability) == "UX: Singular (∞) — no stiffness and no restraint",
+            "… its numerical stability names the joint by its own name and coordinates, M at (0, 0, 2.5): UX singular, ∞; UZ without an estimate, N/A; UY, RX, RY, RZ are not degrees of freedom of a cable joint in this plane, -");
+        Check(segmentedCase.Log.Any(entry => entry.Level == FemLogLevel.Error && entry.Text.StartsWith("'M' UX has no stiffness and no restraint", StringComparison.Ordinal)) &&
+              segmentedCase.Log.Any(entry => entry.Text == "M UX: Singular (∞) — no stiffness and no restraint.") &&
+              segmentedCase.Log[^1].Text == "Analysis ended without a result: numerical instability." &&
+              segmentedCase.Log.All(entry => !entry.Text.StartsWith("Analysis completed", StringComparison.Ordinal)),
+            "… and its log ends with the error that names the joint and the movement, not with a completed analysis");
         // The same cable as one member is the stable model: taut it meets its target, pushed it goes slack.
         var oneCableGeometry = new GeometryModel(cableGeometry.Points, [.. cableGeometry.Members.Where(member => member.Kind == MemberKind.Frame), new("Cable-BD", "B", "D", MemberKind.Cable)]);
         var oneCable = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["Cable-BD"] = new("Cable-BD", 0.01, modulusKNPerM2, null) };

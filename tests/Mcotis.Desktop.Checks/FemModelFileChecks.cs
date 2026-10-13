@@ -359,7 +359,7 @@ internal static class FemModelFileChecks
         var runs = Analyze(vm);
         var midSpan = runs.SelectMany(run => run.Loads ?? []).Where(load => load.PointName == "TTrPt006").Select(load => load.FzKN).Order().ToArray();
         Check(warnings.Count == 0 && silent.Reads == 0 && runs.Count == 1 && runs[0].Id == FemStudyService.ModelRunId && vm.FemCableFitRows.All(row => !row.Failed) &&
-              midSpan.SequenceEqual([-12000.0, -6000.0]) && vm.FemStatus == "ANALYSIS COMPLETE" && vm.FemMonitorProgressText == "Finished" &&
+              midSpan.SequenceEqual([-12000.0, -6000.0]) && vm.FemStatus == "ANALYSIS COMPLETE" && vm.FemMonitor.Status is FemRunStatus.Completed or FemRunStatus.CompletedWithWarnings &&
               vm.FemProgressText.StartsWith("Analysis complete", StringComparison.Ordinal),
             $"Run Analysis on the default model is one run of the model as defined, without SAP2000 (mid-span Fz {string.Join(" / ", midSpan)} kN): " +
             vm.FemProgressText + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
@@ -713,9 +713,9 @@ internal static class FemModelFileChecks
     {
         var analysis = VcfGeometry.Analyze(state.Geometry, state.Truss);
         var p = analysis.Parameters;
-        Check(analysis.Bays == 10 && analysis.UniformBays && Near(p.BayWidth, 10) && Near(p.TrussDepth, 20) && Near(p.MiddleChordHeight, 10) &&
+        Check(vm.CanEditVcfGeometry && !vm.NeedsVcfModelReplacement && analysis.Bays == 10 && analysis.UniformBays && Near(p.BayWidth, 10) && Near(p.TrussDepth, 20) && Near(p.MiddleChordHeight, 10) &&
               Near(p.ClearHeight, 20) && p.BackSpan is { } span && Near(span, 10) && p.BackStayHeight is { } stay && Near(stay, 10),
-            "VCF Geometry reads the default model: 10 bays of 10 m, truss depth 20 m, middle chord 10 m, clear height 20 m, back-span 10 m, back-stay 10 m");
+            "VCF System is available for the default VCF model and reads it: 10 bays of 10 m, truss depth 20 m, middle chord 10 m, clear height 20 m, back-span 10 m, back-stay 10 m");
         Check(analysis.Roles["TopChord"] == VcfMemberRole.TopChord && analysis.Roles["VRM015"] == VcfMemberRole.MiddleChord &&
               analysis.Roles["BottomChord"] == VcfMemberRole.BottomChord && analysis.Roles["VRM001"] == VcfMemberRole.VerticalChord &&
               new[] { "170", "181", "186", "187" }.All(name => analysis.Roles[name] == VcfMemberRole.MegaColumn) &&
