@@ -16,6 +16,18 @@ internal static class GeneralStaticChecks
     private const double Ec = 1.6e8, Ac = .002, Gamma = 77, CableEA = Ec * Ac, CableWeight = Gamma * Ac;
     private const double TipStiffness = 3 * Es * Iz / (4.0 * 4 * 4);   // cantilever of 4 m: 3EI/L³
 
+    /// <summary>Fast engineering gate for ordinary edits. Full verification retains the
+    /// station-by-station, stress, refusal and independent OpenSees comparison matrix.</summary>
+    public static void RunSmoke()
+    {
+        NonlinearFrameCases();
+        CableOnCantilever();
+        TargetForcesAndStages();
+        RigidRotationAndPlanePreset();
+        CableSag();
+        ProgressReports();
+    }
+
     public static void Run()
     {
         Numerics();
