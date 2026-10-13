@@ -571,6 +571,12 @@ public partial class MainWindow : Window
             };
             if (picker is { } kind) { OpenResultPicker(kind); e.Handled = true; return; }
         }
+        if (e.Key == System.Windows.Input.Key.F1 && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.None)
+        {
+            OpenUserGuide(null);
+            e.Handled = true;
+            return;
+        }
         if (e.Key == System.Windows.Input.Key.F4 && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.None &&
             DataContext is MainViewModel { HasWorkingModel: true } vm)
         {
@@ -767,6 +773,23 @@ public partial class MainWindow : Window
     private void ShowFemHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.FemProcedure);
 
     private void ShowDevelopmentPlans(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.DevelopmentPlans);
+
+    // Help → User Guide (F1): one window, brought to the front when it is open already
+    private UserGuideWindow? userGuideWindow;
+    private void ShowUserGuide(object sender, RoutedEventArgs e) => OpenUserGuide(null);
+
+    internal void OpenUserGuide(string? article)
+    {
+        if (userGuideWindow is null)
+        {
+            userGuideWindow = new UserGuideWindow { Owner = this };
+            userGuideWindow.Closed += (_, _) => userGuideWindow = null;
+            userGuideWindow.Show();
+        }
+        if (article is not null) userGuideWindow.Open(article);
+        if (userGuideWindow.WindowState == WindowState.Minimized) userGuideWindow.WindowState = WindowState.Normal;
+        userGuideWindow.Activate();
+    }
 
     private void ShowHelpTopic(HelpWindow.Topic topic)
     {

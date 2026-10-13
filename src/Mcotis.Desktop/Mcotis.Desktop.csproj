@@ -96,6 +96,8 @@
     <EmbeddedResource Include="Resources\TAS-CoT120.e2k" LogicalName="Mcotis.TAS-CoT120.e2k" />
     <!-- Help → Development Plans shows the development log; keeping it is compulsory (AGENTS.md, .githooks/commit-msg). -->
     <EmbeddedResource Include="$(RepoRoot)docs\DEVELOPMENT_LOG.md" LogicalName="Mcotis.DevelopmentLog.md" Link="DEVELOPMENT_LOG.md" />
+    <!-- Help → User Guide shows the user guide; whoever adds or changes a function updates its article. -->
+    <EmbeddedResource Include="$(RepoRoot)docs\USER_GUIDE.md" LogicalName="Mcotis.UserGuide.md" Link="USER_GUIDE.md" />
   </ItemGroup>
 
   <ItemGroup>

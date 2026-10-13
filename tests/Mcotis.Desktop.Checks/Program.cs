@@ -63,6 +63,11 @@ internal static class Program
                 OptimizationStudyChecks.Run();
                 return 0;
             }
+            if (args.Contains("--user-guide"))
+            {
+                UserGuideChecks.Run();
+                return 0;
+            }
             if (args.Contains("--dev-log"))
             {
                 DevelopmentLogChecks.Run();
@@ -1378,6 +1383,7 @@ internal static class Program
             EtabsImportChecks.Run();
             EtabsExportChecks.Run();
             DevelopmentLogChecks.Run();
+            UserGuideChecks.Run();
             ColumnDesignChecks.Run();
             Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
         }
