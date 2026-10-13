@@ -186,7 +186,7 @@ A number of separate linear cases using exactly the same Kt and compatible resul
 
 ### 4.4 Modal (Eigen), after mass-source support
 
-Create MassSource as native named object with stable ObjectId. First release supports material self mass plus explicitly assigned nodal masses; adding load-pattern-converted mass is a gated enhancement requiring sign, gravity g and self-mass double-count QA. Define gravity convention and kN/m/t consistent SI: kN*s²/m = tonne.
+Create MassSource as native named object with stable ObjectId. **Revised 2026-10-13 requirement:** first release includes automatic element self mass (SW fixed at factor 1.0), optionally assigned nodal masses, **and user-selected additional gravity load patterns with editable mass factors** via Define → Mass Source. Pattern-generated SW is always excluded from load-derived mass to avoid double counting; only explicit gravity assignments are converted by g. Signed gravity, discretization and invalid-mass handling require independent source/equation verification; see [MASS_SOURCE_IMPLEMENTATION_PLAN.md](MASS_SOURCE_IMPLEMENTATION_PLAN.md). Define gravity convention and kN/m/t consistent SI: kN*s²/m = tonne.
 
 On reduced active DOFs, solve
 
@@ -358,6 +358,8 @@ Files: Mcotis.Analysis/SpatialFrameElement.cs, StaticSolver.cs, CableElement.cs;
 **Gate:** WINDX independent linear loads share a Kt and superpose; nonlinear child results do not masquerade as linear.
 
 ### PR-06 — Mass source + Modal Eigen
+
+**Updated acceptance:** Include UI Define → Mass Source, SW automatic via material rho and mass modifier, selectable additional DEAD/SDL/LIVE/etc gravity load patterns/factors, generated SW exclusion, mass-source inventory and negative/unsupported diagnostics before declaring modal MVP done. Track implementation in [MASS_SOURCE_IMPLEMENTATION_PLAN.md](MASS_SOURCE_IMPLEMENTATION_PLAN.md).
 Files: Core mass definitions + compiled mass + generalized eigensolver + modal result/presentation.
 - Source reviewed for mass matrix/eigen/participation; one mass-source backend, no fabricated shell masses.
 - Modes from unstressed or prior converged PDelta/nonlinear state.
