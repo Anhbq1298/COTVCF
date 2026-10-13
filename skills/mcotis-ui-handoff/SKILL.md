@@ -143,6 +143,13 @@ earlier tall-header / large-button / blue-block look.
   Results… and Cancel Optimization, which left the Run menu. The highlight is the `HighlightedMenuHeader` header template of `Theme.xaml`
   (accent text on the pale `Selected` chip): the menu's `Header` stays the string `_Optimization`, which the window and
   the checks read, and the drop-down keeps the normal colours. It is the final menu, after one vertical separator.
+  **Only the optimization of the open system is enabled** (user, 2026-10-13: "if current system is vcf then greyed out
+  the tas then vice versa"): `MainViewModel.CanOptimizeVcf` (the geometry reads as a VCF system —
+  `VcfGeometry.CanAnalyze`) and `CanOptimizeTas` (`TiedArchParameters` is set) are bound to the two items' `IsEnabled`
+  and guard their click handlers; on a model that is neither system both are greyed. Both are in the list `Update()`
+  notifies, and `CanOptimizeTas` is notified again where `tasParameters` is set, because that happens after the
+  import's own `Update()`. Greyed items keep their tooltip (`ToolTipService.ShowOnDisabled`). Checks:
+  `--result-tools-ui`, `--etabs-import`.
   - **File**: New Config, Load Config…, Save Config (**Ctrl+S**), Save Config As… (**Ctrl+Shift+S**) · Load VCF… · Load TAS… ·
     Read FEM Properties from SAP. Save (`SaveFemModel`) overwrites the active configuration and asks for a file only when
     there is none; Save As (`SaveFemModelAs`, asked for by the user 2026-10-12) always asks, starting from the active

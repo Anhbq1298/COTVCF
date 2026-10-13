@@ -18,6 +18,20 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Optimization menu: only the optimization of the system that is open is offered
+- Status: Done
+- Who: markbui, Claude
+- Where: Optimization → Optimization VCF… / Optimization TAS…
+- What: Each optimization varies its own system, so the menu now follows the model that is open. On a VCF system
+  Optimization VCF is offered and Optimization TAS is greyed; with the tied arch system open (File → Load TAS… or
+  Edit → Tied Arch System…) it is the other way round; on a model that is neither — an imported ETABS model, a blank
+  one — both are greyed. Before, both were always enabled, whatever model was open. A greyed item still shows its
+  tooltip, which begins with the system it is for. Optimization Results… stays available: it shows the last run.
+- Checks: --result-tools-ui (the menu in the main window on the VCF model, the tied arch system and back; this suite
+  had also still expected the archived MB menu after Optimization — corrected); --etabs-import (every model the
+  application can hold, and that the menu is told when the system changes); --full of Mcotis.Desktop.Checks;
+  --user-guide; --dev-log
+
 ## 2026-10-13 · Load cases: Load Case Data for the four types; the run follows a plan and solves what a case needs first
 - Status: Done
 - Who: markbui, Codex, Claude

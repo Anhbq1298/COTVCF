@@ -670,7 +670,7 @@ public partial class MainWindow : Window
     // Run → Optimization VCF: ranges (min / max / step) of the VCF inputs and candidate sections; OK keeps them
     private void OptimizationVcf_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel vm) return;
+        if (DataContext is not MainViewModel { CanOptimizeVcf: true } vm) return;   // greyed for any other system
         var dialog = new OptimizationVcfWindow(vm) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is not { } settings) return;
         if (!dialog.RunRequested) { vm.SetVcfOptimization(settings); return; }
@@ -681,7 +681,7 @@ public partial class MainWindow : Window
     // Optimization → Optimization TAS: ranges of the tied arch system's inputs and candidate sections; OK keeps them, Run runs them
     private void OptimizationTas_Click(object sender, RoutedEventArgs e)
     {
-        if (DataContext is not MainViewModel vm) return;
+        if (DataContext is not MainViewModel { CanOptimizeTas: true } vm) return;   // greyed for any other system
         var dialog = new OptimizationTasWindow(vm) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is not { } settings) return;
         if (!dialog.RunRequested) { vm.SetTasOptimization(settings); return; }

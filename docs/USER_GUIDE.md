@@ -642,6 +642,8 @@ See also: Optimization results and charts; VCF System; Materials
 
 The parametric study of the VCF system: every combination of geometry, cable force, storey force and section variants is built in memory and analysed with the Mcotis solver.
 
+The command is available while the open model is a VCF system (File → Load VCF… or Edit → [[VCF System]]). With another system open it is greyed; the tied arch system has [[Optimization TAS]].
+
 - **Ranges** (min / max / step): bays, bay width, truss depth (middle chord at half depth), clear height, back-span, back-stay height; cable forces; storey loads.
 - **Sections**: candidate sections per chord, mega column and cable.
 - **Check**: max deflection of a bottom chord point in the chosen result ≤ span / ratio, and the uplift limit.
@@ -655,6 +657,8 @@ Where: Optimization → Optimization TAS…
 See also: Optimization results and charts; Tied Arch System
 
 The parametric study of the tied arch system, run like [[Optimization VCF]].
+
+The command is available while the tied arch system is open (File → Load TAS… or Edit → [[Tied Arch System]]). With another system open it is greyed; a VCF system has [[Optimization VCF]].
 
 - **Geometry**: H1, h (H2 = H1 + h, so the deck stays above the crown), bays (an odd number is skipped) and spacing; H0 with an elevated cable.
 - **Storey Force**: SW, SDL, LL, floors n and tributary width B.

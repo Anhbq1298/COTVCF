@@ -67,6 +67,7 @@ public sealed partial class MainViewModel
         var (template, path) = ReadTasTemplate();
         var summary = ImportEtabsModel(EtabsFrameChains.Join(template), TasInfo(template, path), Path.GetFileName(path), "the built-in TAS model", TasName);
         tasParameters = TiedArchParameters.Default;
+        Notify(nameof(CanOptimizeTas));
         return summary;
     }
 
@@ -114,6 +115,7 @@ public sealed partial class MainViewModel
             $"Edit → Tied Arch System (H1 {parameters.ArchRise:0.###} m, H2 {parameters.DeckHeight:0.###} m, L {parameters.Span:0.###} m" +
             (parameters.ElevatedCable ? $", elevated cable at H0 {parameters.CableHeight:0.###} m)" : ")"), TasName, TieCable(parameters));
         tasParameters = parameters;
+        Notify(nameof(CanOptimizeTas));
         return summary;
     }
 

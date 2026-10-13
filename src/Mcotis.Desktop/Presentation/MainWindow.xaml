@@ -157,10 +157,13 @@
         highlighted (the header template; the Header stays a string, which the window and the checks read). -->
    <Separator x:Name="OptimizationMenuSeparator" Style="{StaticResource MenuBarSeparator}"/>
    <MenuItem x:Name="OptimizationMenu" Header="_Optimization" HeaderTemplate="{StaticResource HighlightedMenuHeader}" IsEnabled="{Binding HasUsableModelGeometry}">
+    <!-- Each optimization varies its own system: only the one of the open model is enabled, the other is greyed. -->
     <MenuItem Header="_Optimization VCF…" Click="OptimizationVcf_Click" AutomationProperties.Name="Optimization VCF"
-              ToolTip="Set the VCF search space — min / max / step for bays, bay width, truss depth (middle chord kept at 0.5 × depth), clear height, back-span and back-stay height, and candidate sections per chord, mega column and cable; Run Optimization analyses every combination and lists the max deflection of each case"/>
+              IsEnabled="{Binding CanOptimizeVcf}" ToolTipService.ShowOnDisabled="True"
+              ToolTip="For a VCF system (File → Load VCF… or Edit → VCF System…). Set the VCF search space — min / max / step for bays, bay width, truss depth (middle chord kept at 0.5 × depth), clear height, back-span and back-stay height, and candidate sections per chord, mega column and cable; Run Optimization analyses every combination and lists the max deflection of each case"/>
     <MenuItem Header="Optimization _TAS…" Click="OptimizationTas_Click" AutomationProperties.Name="Optimization TAS"
-              ToolTip="Set the tied arch system search space — min / max / step for H1, H2, bays and spacing and for the storeys above (SW, SDL, LL, floors, B), and candidate sections per role; Run Optimization analyses every combination and lists the max deflection, check and cost of each case"/>
+              IsEnabled="{Binding CanOptimizeTas}" ToolTipService.ShowOnDisabled="True"
+              ToolTip="For the tied arch system (File → Load TAS… or Edit → Tied Arch System…). Set its search space — min / max / step for H1, H2, bays and spacing and for the storeys above (SW, SDL, LL, floors, B), and candidate sections per role; Run Optimization analyses every combination and lists the max deflection, check and cost of each case"/>
     <MenuItem Header="Optimization _Results…" Click="OptimizationResults_Click" AutomationProperties.Name="Optimization Results"
               ToolTip="Every case of the last Optimization VCF or Optimization TAS run with its max deflection (sortable)"/>
     <MenuItem Header="_Cancel Optimization" Click="CancelOptimization_Click" IsEnabled="{Binding IsVcfOptimizationRunning}"/>
