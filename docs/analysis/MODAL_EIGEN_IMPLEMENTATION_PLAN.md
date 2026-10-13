@@ -6,6 +6,8 @@
 >
 > **Normative guard:** UI/DB schemas may ship independently; no numerical modal result may be shown as validated before source-by-equation inspection, benchmark verification, and reviewer sign-off. A modal case requiring an unsupported element or prestressed state must fail visibly, never switch silently to first-order elastic stiffness.
 
+> **2026-10-13 USER REQUIREMENT UPDATE:** The modal MVP **must** include **Define → Mass Source**, automatically include structural SW as element selfmass factor 1.0, and support selectable additional load patterns with editable mass multipliers **from the first release**. Generated SW inside selected load patterns is excluded so it cannot be counted twice. The complete actionable checklist, code map and source links are in [MASS_SOURCE_IMPLEMENTATION_PLAN.md](MASS_SOURCE_IMPLEMENTATION_PLAN.md). Any earlier references here to load-pattern mass being “later” or user-toggleable selfmass are superseded by this requirement.
+
 ## 1. Design decisions / definition of done
 
 **MVP is eigenvectors, not Ritz, response-spectrum, time history, damping, material plasticity, eigen-buckling, or CSI solver emulation.** One or more named `ModalEigen` load cases are defined at `Define → Load Cases`. They have a stable `ObjectId`, Run flag, an explicit or inherited Mass Source, requested number of modes, and a stiffness source:
@@ -64,10 +66,13 @@ public sealed record ModalCaseOptions(
 
 public sealed record MassSource(
     ObjectId Id, string Name,
-    bool IncludeElementSelfMass,
     bool IncludeAdditionalMass,
     ImmutableArray<MassFromLoadPattern> LoadPatternMass
-) : INamedObject;
+) : INamedObject
+{
+    // In every source selfmass is included once; there is no user toggle.
+    public bool IncludeElementSelfMass => true;
+}
 
 public readonly record struct MassFromLoadPattern(ObjectId PatternId, double Factor);
 
@@ -95,12 +100,14 @@ public sealed record JointMassAssignment(
 
 ## 4. Physical mass source and mass inventory
 
+**User-facing workflow:** Define → Mass Source → Add/Modify a named source → SW read-only 1.0 (automatic element self mass) → Add SDL/LIVE/etc load patterns with editable factors → Preview source-by-source physical and free mass → select Mass Source in Define → Load Cases → Modal. Never rely on a static load pattern literally named SW to compute automatic selfmass. Additional patterns containing a generated SelfWeightMultiplier contribute only their *explicit assigned* eligible gravity loads. See [MASS_SOURCE_IMPLEMENTATION_PLAN.md](MASS_SOURCE_IMPLEMENTATION_PLAN.md).
+
 ### 4.1 Required first-release sources
 
 1. **Element self mass** from volume × material mass density; per frame segment use `rho * A * L * MassModifier`. Existing material density unit t/m³; force kN, length m, time s so inertial translation has units t = kN·s²/m.
 2. **Additional joint masses** explicitly entered for any active translation and optional direct rotational inertia. Require finite nonnegative values; reject a negative *effective* mass matrix. Physical non-diagonal joint inertial tensors require a separate validated later feature.
 3. **Frame/cable additional line mass**, if enabled after source review; distinguish from element self-mass and from equivalent static gravity loads; retain mass along frame split segments without duplication.
-4. **Load-pattern-derived mass** (second milestone, not a prerequisite to basic eigen): selectable named patterns with signed factors, compute equivalent gravity weight distribution / g and document where lumping occurs. Exclude horizontal forces, moments, prestress and self-equilibrating loading; avoid self-weight double counting.
+4. **Load-pattern-derived mass (mandatory MVP)**: the user selects named additional gravity patterns and multipliers in Define → Mass Source. Interpret **explicit assigned gravity loads** only; never add pattern-generated SW again. Convert eligible downward weight / g with signed gravity directions and verified lumping. Unsupported horizontal/moment/prestress, shell or ambiguous imported loading must be reported/blocked instead of guessed. [Full checklist](MASS_SOURCE_IMPLEMENTATION_PLAN.md).
 
 **Important**: In CSI, Element Self Mass and Specified Load Patterns can be selected together; overlapping self-weight must be avoided. CSI's SAP2000 help describes load pattern gravity conversion, signed mass before combination and warnings/clipping for negative effective mass. MCOTiS should be more conservative initially: reject invalid negative combined effective mass rather than silently clip it. See `MODAL_SOURCE_QA.md`. The mass definition must distinguish weight `W` [kN] from mass `W/g` [t], with **g = 9.80665 m/s² by default** in native SI (configurable under documented engineering convention only).
 
@@ -411,6 +418,8 @@ Companion PDelta nonlinear endpoint -----> MOD-07 prestressed / PDelta modal
 ```
 
 ### MOD-01 — Mass source, point mass, DTOs and case configuration
+
+**Required parallel tickets:** MASS_SOURCE_IMPLEMENTATION_PLAN.md MS-00 through MS-02. SW is fixed and on. Load patterns are selectable and persisted by ID; not deferred.
 **Code:** `Core/Mass.cs` (new), `Core/Loads.cs`, `ModelDocument.cs`, `DocumentEditor.cs`, `DocumentValidator.cs`, `Naming.cs`, `AnalysisInputHasher.cs`; `Persistence/NativeDocumentFile.cs`, `NativeDocumentFormat.cs`; Desktop DTOs.
 - Define MassSource as immutable named definition + per-joint assignments, modal case ID references, cycle/type validation.
 - Plan migrations together with companion case plan; v1/v3 compatibility.
@@ -418,6 +427,8 @@ Companion PDelta nonlinear endpoint -----> MOD-07 prestressed / PDelta modal
 - **Done:** an eigen case and mass source survive save/open; no solver needed.
 
 ### MOD-02 — Mass assembly and inventory
+
+**Required parallel tickets:** MS-03 (automatic rho×A×L selfmass) and **MS-04 (selected load patterns converted to gravity mass, excluding generated SW)**. The original mass assembler task is not complete if it cannot assemble the user-selected pattern multipliers.
 **Code:** `Analysis/Modal/MassAssembler.cs`, `ModalMassInventory.cs`, per-frame/cable mass adapters.
 - Total mass from material rho, A, L, mass modifiers; split frames using compiled segments.
 - Explicit rule for lumped frame/cable mass and nodal masses; M symmetric, PSD, units checked.
@@ -443,6 +454,8 @@ Companion PDelta nonlinear endpoint -----> MOD-07 prestressed / PDelta modal
 - **Done:** effective mass invariance to eigenvector scale/sign, complete benchmark participation sum near 100% where applicable.
 
 ### MOD-06 — Native unstressed modal end-to-end
+
+**Release requirement:** Define → Mass Source tab and mass inventory UI (MS-05), source-identity persistence, automatically included SW + user selected SDL/LIVE/etc patterns, with negative/unsupported/double-count safeguards. An elastic eigen-only SW implementation is an internal intermediate, **not** completion of MOD-06.
 **Code:** `Application/CaseExecutionCoordinator.cs` (from companion plan), native adapter/viewmodel, UI editor, persistence.
 - Modal cases on elastic frame models and 2D truss DOF presets with correctly defined masses; automatic DAG.
 - Existing `StaticSolver` untouched for static numerical response except shared assembly extraction.
@@ -468,7 +481,7 @@ Companion PDelta nonlinear endpoint -----> MOD-07 prestressed / PDelta modal
 
 ### Explicitly deferred tickets
 
-- MOD-10 load-pattern-derived mass and robust duplicate-weight detector (can be advanced to MOD-02 when verified); full rotational participation with CoM reference.
+- MOD-10 **only further advanced mass-source options** (e.g. explicit additional area/line mass on newly supported element types and rotational participation with reviewed CoM reference). **Load-pattern-derived gravity mass and SW deduplication are part of MVP MS-04/MOD-02**, not postponed.
 - MOD-11 consistent frame mass and mass/rotation coupling, dynamic release verification.
 - MOD-12 sparse shift-invert eigensolver for larger models; user frequency shift/cutoff controls then enabled.
 - MOD-13 Ritz vectors; response spectrum, modal time history, damping, dynamic load combinations and design-code reports.
@@ -537,3 +550,22 @@ See `MODAL_SOURCE_QA.md` in the same folder for exact web citations, formula sup
 8. Keep only the 10 focused fixtures as an engineering acceptance suite with parametrization; run complete old static checks before merge.
 9. Require independent reference comparison and explicit source approval of mass operator, massless DOF reduction, generalized eigen and modal participation.
 10. Mark done only after model save→open→modal solve→results→edit parent/mass→staleness behavior works for a 2D and 3D model without CSI installed.
+
+## 13. Integrated TODO / QA gates for Modal + Mass Source
+
+Track all substantive work with checkboxes; use [Mass Source MS-00…MS-07](MASS_SOURCE_IMPLEMENTATION_PLAN.md) for exact code locations, matrix formulas, database schema and independent benchmarks.
+
+- [ ] Domain: ModalEigen typed case; named/default MassSource; stable ObjectId links; automatic structural SW policy enforced in Core.
+- [ ] Define → Mass Source tab (main and native workspace), including locked SW 1.0 display, additional-pattern selection, mass multipliers and source inventory.
+- [ ] Persist/migrate native .mcotis, desktop .cotfem.db, legacy .cotfem.json with unchanged old static load patterns.
+- [ ] Validate physical rho×A×L mass and separate gamma/static SW behavior; verify total mass unaffected by member splitting.
+- [ ] Assemble eligible explicit downward gravity load assignments from selected patterns using factor/g with **all generated SW contributions excluded**.
+- [ ] Negative-mass/unsupported-pattern/ambiguous-import failures show exact affected pattern/object/joint, never silent clipping.
+- [ ] Massless DOF condenser, symmetric generalized eigen solver, original-matrix residuals and normalized results independently checked.
+- [ ] UX/UY/UZ effective and cumulative participation derived from assembled M and actual free DOF influence vectors.
+- [ ] Modal case selects Mass Source, optionally inherits parent source when stiffness is end of nonlinear case; parent failures block.
+- [ ] End-to-end report includes SW contribution, additional pattern factors/masses, excluded generated SW, total/free mass and modal status.
+- [ ] 2D/3D workspace runs and reopened result database reproduce eigenvalues without CSI.
+- [ ] Source-by-equation QA and focused MS-01…MS-10/M-01…M-10 benchmark evidence reviewed before release.
+
+**Release gate:** MOD-06 remains incomplete until MS-04 selectable load-pattern mass is implemented and validated. This revision supersedes the previous optional/deferred status of load-based mass.
