@@ -42,9 +42,11 @@ numerical source verification gates or establish production readiness; the evide
 [analysis/cable-static-verification.md](analysis/cable-static-verification.md).
 
 The main window's **Run → Analysis Options…** is the form of the main window's own run. That run uses the same
-general solver; because the main window's model is planar, its degrees of freedom are not a choice, and the form has
-no Degrees of Freedom tab there (user, 2026-10-12: a tab of boxes that cannot be changed is redundant). The run
-monitor states the degrees of freedom of each run instead. The form edits the
+general solver. Because the main window's model is planar, its Degrees of Freedom tab offers only what that model
+can change (user, 2026-10-12: a tab of boxes that cannot be changed is redundant; 2026-10-13: the tab is wanted, to
+change degrees of freedom): RY for the model, and UX and UZ for cable joints. UX and UZ of the model stay on — the
+model spans its plane — and there is no preset. The run monitor states the degrees of freedom of each run. On its
+other tab the form edits the
 cable target-fitting tolerance, maximum iterations, frame mesh (1–100: the stations each frame piece is read at,
 which changes no joint result) and cable sag. Individual cable target
 forces remain in the cable assignments/load patterns. In the native options the same four settings are active: the

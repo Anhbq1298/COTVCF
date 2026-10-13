@@ -10,7 +10,9 @@ namespace Mcotis.Desktop.Application;
 /// system — <see cref="StaticSolver"/> in <c>Mcotis.Analysis</c>, the same engine the native workspace runs — and
 /// gives the results back in the application's result types. No numerical method lives here.
 /// <para>The application's model is planar (joints in one XZ plane, loads in X and Z, pin supports), so the engine
-/// runs it with the XZ degrees of freedom. What it solves, from which sources and how it was checked is recorded in
+/// runs it with degrees of freedom of the XZ plane: UX, UZ and RY unless Analysis Options switches one of them off,
+/// and at a joint only cables reach those set there for cable joints. A degree of freedom that is off is held at
+/// every joint. What it solves, from which sources and how it was checked is recorded in
 /// <c>docs/analysis/cable-static-verification.md</c>; it replaced the planar solver on 2026-10-12, after reproducing
 /// that solver's results on the same input (<c>--general-solver</c>).</para>
 /// <para>The model is passed on as the application always analysed it: a frame is split at every joint within
@@ -45,12 +47,14 @@ public sealed class FemSolver
         int maximumTargetFitIterations = DefaultTargetFitIterations,
         int frameMeshSegments = 1,
         bool cableSag = false,
-        IProgress<FemEquilibriumProgress>? equilibrium = null)
+        IProgress<FemEquilibriumProgress>? equilibrium = null,
+        Native.DofMask activeDofs = Native.DofMask.XZ,
+        Native.DofMask cableDofs = Native.DofMask.Translations)
     {
         var caseLoads = new FemLoadSet(loads.Select(load => new FemJointLoad(load.PointName, load.FxKN, load.FzKN)).ToArray(), [], []);
         return SolveCases(geometry, frameSections, cableSections, cablePretensionsKN, FemLoadSet.Empty,
             [new FemCaseLoads("Default", caseLoads, 1)], pinSupportPoints, cancellationToken, targetFitPercent,
-            maximumTargetFitIterations, frameMeshSegments, cableSag, equilibrium)["Default"];
+            maximumTargetFitIterations, frameMeshSegments, cableSag, equilibrium, activeDofs, cableDofs)["Default"];
     }
 
     /// <summary>
@@ -60,6 +64,9 @@ public sealed class FemSolver
     /// the pretension itself. <paramref name="frameMeshSegments"/> is the number of intervals each frame piece is read
     /// at for diagrams and the deflected line; no result at a joint depends on it. <paramref name="equilibrium"/> is
     /// told how the equilibrium of each case goes while it is solved; it is called on the solving thread.
+    /// <paramref name="activeDofs"/> are the degrees of freedom of the model, among UX, UZ and RY;
+    /// <paramref name="cableDofs"/> those of a joint only cables reach, among the active ones. One that is off is held
+    /// at every joint it would belong to; a load on it is refused, never dropped.
     /// </summary>
     public IReadOnlyDictionary<string, FemAnalysisResult> SolveCases(
         GeometryModel geometry,
@@ -74,10 +81,14 @@ public sealed class FemSolver
         int maximumTargetFitIterations = DefaultTargetFitIterations,
         int frameMeshSegments = 1,
         bool cableSag = false,
-        IProgress<FemEquilibriumProgress>? equilibrium = null)
+        IProgress<FemEquilibriumProgress>? equilibrium = null,
+        Native.DofMask activeDofs = Native.DofMask.XZ,
+        Native.DofMask cableDofs = Native.DofMask.Translations)
     {
         ArgumentNullException.ThrowIfNull(geometry);
         if (cases.Count == 0) throw new InvalidOperationException("At least one load case is required.");
+        if ((activeDofs & ~Native.DofMask.XZ) != 0 || (activeDofs & Native.DofMask.Translations) == 0)
+            throw new InvalidOperationException("This model is planar: its degrees of freedom are UX, UZ and RY, with at least one of UX and UZ on.");
         var frameMembers = geometry.Members.Where(member => member.Kind == MemberKind.Frame).ToArray();
         if (frameMembers.Length == 0) throw new InvalidOperationException("The connected model has no frame members to analyze.");
         var cableMembers = geometry.Members.Where(member => member.Kind == MemberKind.Cable && cableSections.ContainsKey(member.Name)).ToArray();
@@ -337,17 +348,17 @@ public sealed class FemSolver
         }
         // Without a tolerance the target is applied as the pretension itself: that is the first fitting run, taken as it is.
         editor.SetSettings(new Native.AnalysisSettings(targetFitPercent ?? 50, fitted ? maximumTargetFitIterations : 1, frameMeshSegments, cableSag)
-            { ActiveDofs = Native.DofMask.XZ });
+            { ActiveDofs = activeDofs, CableDofs = cableDofs });
 
         var document = editor.Commit().Document;
-        // In this window the degrees of freedom of cable joints are those of its plane, UX and UZ, and it has no option
-        // for them: what can be changed is the model.
-        static string Said(Native.ValidationIssue issue) => issue.Message.Replace(StaticSolver.CableJointOption, "", StringComparison.Ordinal);
+        // What the engine says goes on as it is — it names the option for the degrees of freedom of cable joints, which
+        // Analysis Options has — with what can be changed in the model instead.
+        static string Said(Native.ValidationIssue issue) => issue.Message;
         static InvalidOperationException Refused(IEnumerable<Native.ValidationIssue> issues)
         {
             var errors = issues.Where(issue => issue.Severity == Native.ValidationSeverity.Error).ToArray();
             string hint = errors.Any(issue => issue.Code == "static.matrix.unstable" && issue.Message.Contains("cable", StringComparison.OrdinalIgnoreCase))
-                ? " In this window a joint that only cables reach moves in UX and UZ: model a cable that runs through such a joint as one cable, and hold every cable end with a frame or a support."
+                ? " In the model: model a cable that runs through such a joint as one cable, and hold every cable end with a frame or a support."
                 : "";
             return new(string.Join(" ", errors.Select(Said).Distinct().Take(3)) + hint);
         }

@@ -24,7 +24,12 @@ public sealed record VcfOptimizationInputs(
     int TargetFitIterations,
     int FrameMeshSegments,
     bool CableSag,
-    Func<FemSectionProperties, (double? SgdPerM, string? Missing)>? CostPerMetre = null);
+    Func<FemSectionProperties, (double? SgdPerM, string? Missing)>? CostPerMetre = null)
+{
+    /// <summary>The degrees of freedom of Analysis Options: those of the model, and those of a joint only cables reach.</summary>
+    public Mcotis.Core.DofMask ActiveDofs { get; init; } = Mcotis.Core.DofMask.XZ;
+    public Mcotis.Core.DofMask CableDofs { get; init; } = Mcotis.Core.DofMask.Translations;
+}
 
 /// <summary>One variable of the search space: its key ("geometry:Bay", "cable:step", "storey:LL", "role:TopChord",
 /// "section:Cable1a-2"), a column label and its values (numbers, cable steps, or section names).</summary>
@@ -219,7 +224,8 @@ public sealed class VcfOptimizationRunner : IOptimizationRunner
                 new TrussCandidate(1, depth, 0, "Bottom", 0, 0, 0), loads, targets);
             var failure = new FailureCapture();
             var runs = fem.Analyze(geometry, model.TopPoints, model.MiddlePoints, model.BottomPoints, supports, [candidate], properties,
-                failure, cancellationToken, inputs.TargetFitPercent, inputs.TargetFitIterations, inputs.FrameMeshSegments, plan, inputs.CableSag);
+                failure, cancellationToken, inputs.TargetFitPercent, inputs.TargetFitIterations, inputs.FrameMeshSegments, plan, inputs.CableSag,
+                activeDofs: inputs.ActiveDofs, cableDofs: inputs.CableDofs);
             if (runs.Count == 0) return Failed(failure.Message ?? "The case did not reach equilibrium.");
             var run = runs[0];
             IReadOnlyDictionary<string, FemAnalysisResult> results = run.Results ?? new Dictionary<string, FemAnalysisResult> { [plan.ResultNames.FirstOrDefault() ?? "Result"] = run.Result };

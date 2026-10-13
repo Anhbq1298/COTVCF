@@ -6,7 +6,12 @@ using Mcotis.Desktop.Geometry;
 
 namespace Mcotis.Desktop.Presentation;
 
-/// <summary>Edits a private form. Only Apply/OK calls the supplied commit; Cancel discards uncommitted edits.</summary>
+/// <summary>Edits a private form. Only Apply/OK calls the supplied commit; Cancel discards uncommitted edits.
+/// <para><c>planar</c> is the main window, whose model spans the XZ plane: its Degrees of Freedom tab offers the
+/// choices that model has — RY for the model, UX and UZ for a joint only cables reach — and shows nothing that could
+/// not be changed (user, 2026-10-12, of a tab of boxes that were all disabled: "tab này hơi thừa"; asked for again on
+/// 2026-10-13, to change degrees of freedom). UX and UZ of the model are not among them: the solver refuses a
+/// translation that is off unless every joint has the same coordinate along it.</para></summary>
 public partial class AnalysisOptionsWindow : Window
 {
     private readonly Action<AnalysisSettings> commit;
@@ -18,9 +23,9 @@ public partial class AnalysisOptionsWindow : Window
         this.commit = commit; this.planar = planar; current = settings;
         InitializeComponent();
         foreach (var box in Boxes) box.Click += (_, _) => Preset.SelectedIndex = 4;
-        SetMask(planar ? DofMask.XZ : settings.ActiveDofs);
+        SetMask(planar ? settings.ActiveDofs & DofMask.XZ : settings.ActiveDofs);
         Preset.SelectedIndex = settings.ActiveDofs switch { DofMask.Full3D => 0, DofMask.XZ => 1, DofMask.YZ => 2, DofMask.XY => 3, _ => 4 };
-        Preset.IsEnabled = DofEditors.IsEnabled = CableDofEditors.IsEnabled = !planar && editable;
+        Preset.IsEnabled = DofEditors.IsEnabled = CableDofEditors.IsEnabled = editable;
         // the main window's model is planar: its cable joints move in the plane
         var cableMask = planar ? settings.CableDofs & DofMask.XZ : settings.CableDofs;
         for (int i = 0; i < 6; i++) CableBoxes[i].IsChecked = (cableMask & (DofMask)(1 << i)) != 0;
@@ -34,10 +39,19 @@ public partial class AnalysisOptionsWindow : Window
             (planar ? " This window's model is analysed in its XZ plane; the run monitor shows the degrees of freedom of each run." : "");
         if (planar)
         {
-            // The degrees of freedom are not a choice in the main window — its model is planar — so the tab would only
-            // show boxes that cannot be changed (user, 2026-10-12: "tab này hơi thừa, nhất là cho cable").
-            DofTab.Visibility = Visibility.Collapsed;
-            Tabs.SelectedItem = FittingTab;
+            // Only the choices this model has, each of them a box that can be changed: no preset — there is one plane
+            // — no box for UX and UZ, which stay on, for UY, RX, RZ, or for the rotation of a cable joint.
+            Preset.Visibility = Visibility.Collapsed;
+            foreach (var box in new[] { UX, UZ, UY, RX, RZ, CableUY, CableRX, CableRY, CableRZ }) box.Visibility = Visibility.Collapsed;
+            DofEditors.Rows = CableDofEditors.Rows = 1;
+            DofEditors.Columns = 1;
+            RY.Content = "RY — rotation of the joints";
+            DofNote.Text = "This model spans its XZ plane: UX and UZ are always on, and UY, RX and RZ are not degrees of freedom of it. " +
+                "With RY off no joint turns: the rotation is held at every joint, as by a support — it is not released — " +
+                "and a moment applied to a joint is refused, not dropped.";
+            CableDofNote.Text = "A joint that only cables reach has these degrees of freedom, among those that are on; a cable holds no rotation. " +
+                "A cable gives stiffness along its own line only: a movement left on that nothing else holds — another member or a restraint — " +
+                "makes the model unstable, and the run monitor names the joint. Switching it off here holds it at those joints.";
             MinHeight = 0;
             SizeToContent = SizeToContent.Height;
         }
@@ -67,7 +81,6 @@ public partial class AnalysisOptionsWindow : Window
             for (int i = 0; i < 6; i++) if (Boxes[i].IsChecked == true) mask |= (DofMask)(1 << i);
             if ((mask & DofMask.Translations) == 0) throw new ArgumentException("Select at least one translational DOF.");
             var next = current with { ActiveDofs = mask };
-            if (!planar)
             {
                 DofMask cable = DofMask.None;
                 for (int i = 0; i < 6; i++) if (CableBoxes[i].IsChecked == true) cable |= (DofMask)(1 << i);

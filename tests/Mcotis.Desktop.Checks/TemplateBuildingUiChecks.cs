@@ -104,17 +104,35 @@ internal static class TemplateBuildingUiChecks
             legacy.LoadDefaultFemModel(replaceCurrent: true);
             var cable = new AnalysisOptionsWindow(legacy.PlanarAnalysisSettings, legacy.ApplyPlanarAnalysisSettings, planar: true);
             cable.Show(); Idle(); Snapshot(cable, ".work/analysis-options-main-window.png");
-            Check(cable.DofTab.Visibility != Visibility.Visible && !cable.UX.IsVisible && !cable.CableUX.IsVisible &&
-                  ReferenceEquals(cable.Tabs.SelectedItem, cable.FittingTab) && cable.Tolerance.IsVisible && cable.Sag.IsVisible,
-                "the main window's analysis options have no Degrees of Freedom tab — nothing on it could be changed there — and open on the cable settings");
-            Check(cable.ActualHeight < 500 && cable.CableScope.Text.Contains("XZ plane", StringComparison.Ordinal),
-                $"… the form is as tall as what is left on it ({cable.ActualHeight:0} px against the 560 px of the two-tab form), and says the model is analysed in its plane");
+            CheckBox[] offered = [cable.RY, cable.CableUX, cable.CableUZ];
+            CheckBox[] notOffered = [cable.UX, cable.UZ, cable.UY, cable.RX, cable.RZ, cable.CableUY, cable.CableRX, cable.CableRY, cable.CableRZ];
+            Check(cable.DofTab.IsVisible && ReferenceEquals(cable.Tabs.SelectedItem, cable.DofTab) && cable.Tabs.Items.Count == 2 &&
+                  offered.All(box => box.IsVisible && box.IsEnabled && box.IsChecked == true) && notOffered.All(box => !box.IsVisible) && !cable.Preset.IsVisible,
+                "the main window's analysis options have a Degrees of Freedom tab with the choices its planar model has — RY for the model, UX and UZ for cable joints — " +
+                "every box a choice: no preset to pick, and no box for what cannot be changed (UX and UZ of the model, UY, RX, RZ, the rotation of a cable joint)");
+            Check(cable.ActualHeight < 500 && cable.DofNote.Text.Contains("UX and UZ are always on", StringComparison.Ordinal) && cable.DofNote.Text.Contains("held at every joint", StringComparison.Ordinal),
+                $"… the form is as tall as what is on it ({cable.ActualHeight:0} px), and says why: the model spans its plane, and a rotation that is off is held at every joint, not released");
+            cable.Tabs.SelectedItem = cable.FittingTab; Idle();
             cable.Tolerance.Text = "5"; cable.Iterations.Text = "150"; cable.Mesh.Text = "8"; cable.Sag.IsChecked = false;
-            // Apply still hands over the XZ degrees of freedom the form no longer shows; the main window refuses any other.
-            Check(cable.ApplyForm() && legacy.FemTargetFitPercent == 5 && legacy.FemTargetFitIterations == 150 && legacy.FemFrameMeshSegments == 8 && !legacy.FemCableSag,
-                "cable fitting form updates the actual planar analysis inputs");
+            Check(cable.Tolerance.IsVisible && cable.ApplyForm() && legacy.FemTargetFitPercent == 5 && legacy.FemTargetFitIterations == 150 && legacy.FemFrameMeshSegments == 8 && !legacy.FemCableSag &&
+                  legacy.FemActiveDofs == DofMask.XZ && legacy.FemCableDofs == (DofMask.UX | DofMask.UZ),
+                "cable fitting form updates the actual planar analysis inputs, and leaves the degrees of freedom as they were");
             cable.Mesh.Text = "101";
             Check(!cable.ApplyForm() && legacy.FemFrameMeshSegments == 8, "invalid cable-form mesh count leaves applied settings unchanged");
+            cable.Mesh.Text = "8";
+            cable.Tabs.SelectedItem = cable.DofTab; Idle();
+            cable.RY.IsChecked = false; cable.CableUX.IsChecked = false;
+            Check(cable.ApplyForm() && legacy.FemActiveDofs == (DofMask.UX | DofMask.UZ) && legacy.FemCableDofs == DofMask.UZ &&
+                  legacy.PlanarAnalysisSettings is { ActiveDofs: DofMask.UX | DofMask.UZ, CableDofs: DofMask.UZ, CableFitTolerancePercent: 5 },
+                "Apply switches RY off for the model and UX off for cable joints: the run takes the degrees of freedom of the form");
+            cable.CableUZ.IsChecked = false;
+            Check(!cable.ApplyForm() && cable.ErrorText.Text.Contains("cable joints", StringComparison.Ordinal) && legacy.FemCableDofs == DofMask.UZ,
+                "cable joints without a translation are refused, and what was applied stays: " + cable.ErrorText.Text);
+            Check(MainViewModel.DofProblem(DofMask.Full3D, DofMask.UX | DofMask.UZ) is not null && MainViewModel.DofProblem(DofMask.XZ, DofMask.UX | DofMask.RY) is not null &&
+                  MainViewModel.DofProblem(DofMask.UZ | DofMask.RY, DofMask.UX | DofMask.UZ) is not null && MainViewModel.DofProblem(DofMask.UX | DofMask.UZ, DofMask.UX) is null,
+                "the main window refuses degrees of freedom out of its plane, a translation of the plane switched off and a rotation for a cable joint, whoever asks");
+            foreach (var box in offered) box.IsChecked = true;
+            Check(cable.ApplyForm() && legacy.FemActiveDofs == DofMask.XZ && legacy.FemCableDofs == (DofMask.UX | DofMask.UZ), "and every degree of freedom of the plane can be switched on again");
             cable.Close();
             var shell = new MainWindow { DataContext = legacy };
             shell.Show(); Idle();
@@ -243,7 +261,7 @@ internal static class TemplateBuildingUiChecks
                 "… ∞ in bold red where a singularity was identified, - for the degrees of freedom the plane switches off, R at the supports, N/A without an estimate, coordinates to the millimetre and the remarks naming the degrees of freedom");
 
             monitor.Views.SelectedItem = monitor.ConvergenceTab; Idle();
-            Check(Visuals<Mcotis.Desktop.Presentation.Controls.ConvergenceChart>(monitor).Single() is { IsVisible: true } chart && chart.Ratios.Count > 0,
+            Check(Visuals<Mcotis.Desktop.Presentation.Controls.ConvergenceChart>(monitor).Single() is { IsVisible: true, Ratios.Count: > 0 },
                 "… and the second view is the cable target-force convergence chart, with the fitting runs of the monitored cable");
         }
         finally { shell.Close(); }

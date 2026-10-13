@@ -18,6 +18,28 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Analysis Options: degrees of freedom in the main window
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Analysis Options… → tab "Degrees of Freedom" (beside "Cable Force Fitting"; also the toolbar)
+- What: The main window's Analysis Options have a Degrees of Freedom tab again, with the choices its planar model
+  has, each one a box that can be changed. For the model: RY, the rotation of the joints — switched off, no joint
+  turns: the rotation is held at every joint, as by a support (it is not a release), and a moment applied to a joint
+  is refused instead of dropped. For cable joints: UX and UZ — a joint that only cables reach has the ones that are
+  ticked. Switching UX off there holds such a joint sideways, so a cable modelled in two segments through a joint
+  nothing else reaches can be analysed; it used to stop the run as unstable, and the message of that instability now
+  names this option. UX and UZ of the model are not offered: the model spans its XZ plane, and the solver refuses a
+  translation that is off unless every joint has the same coordinate along it; UY, RX and RZ are not degrees of
+  freedom of a planar model. The settings are used by Run FEM Analysis, Optimization VCF and Optimization TAS, are
+  saved with the configuration (a file from before opens with everything on), and changing them clears the
+  results. The run monitor counts and lists the degrees of freedom of each run accordingly, with "-" for one that is
+  off. The form of the native workspace (Edit → TemplateBuilding…) is unchanged: it still offers 3D, the plane
+  presets and custom sets.
+- Checks: --fem (a cable in two segments with UX off for cable joints gives the tension, deflection and reactions of
+  the one cable); --run-monitor (RY off against PL³/24EI; the counts of the run; a moment on a rotation that is off
+  refused; a translation of the plane refused); --template-building-ui (the form); default offline
+  Mcotis.Desktop.Checks; --user-guide; --dev-log
+
 ## 2026-10-13 · Run monitor: load cases that open on convergence, numerical stability by joint and DOF, and their own log
 - Status: Done
 - Who: markbui, Claude

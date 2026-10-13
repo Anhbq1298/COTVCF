@@ -396,7 +396,18 @@ Category: Run
 Where: Run → Analysis Options…
 See also: Run FEM Analysis
 
-The active degrees of freedom, the cable fitting tolerance and iteration limit, the frame mesh (segments per frame) and cable sag.
+The degrees of freedom of the analysis, and the settings of the cable target-force fit. OK and Apply use the form for the next run and clear the results of the last one; a locked model shows the form read-only.
+
+## Degrees of Freedom
+The model of the main window spans its XZ plane: UX and UZ are always on, and UY, RX and RZ are not degrees of freedom of it. What can be chosen:
+
+- **RY — rotation of the joints.** Switched off, no joint turns: the rotation is held at every joint, as by a support. It is not a release — a frame still bends between its joints — and a moment applied to a joint is refused, not dropped.
+- **Degrees of freedom of cable joints: UX, UZ.** A joint that only cables reach has the ones that are ticked. A cable gives stiffness along its own line only, so a movement left on that nothing else holds makes the model unstable, and the [[Analysis monitor]] names the joint. Switching it off holds it at those joints: with UX off, a vertical cable modelled in two segments through a joint nothing else reaches is analysed as the one cable it is.
+
+The monitor counts the degrees of freedom of each run (active | solved | restrained) and shows "-" for one that is off.
+
+## Cable Force Fitting
+The tolerance of the cable target-force fit (%), its maximum number of fitting iterations, the frame mesh — the number of stations each frame is read at, which changes no joint result — and cable sag.
 
 # Analysis monitor
 Category: Run

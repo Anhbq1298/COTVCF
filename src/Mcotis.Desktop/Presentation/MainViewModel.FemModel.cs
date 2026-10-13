@@ -270,6 +270,8 @@ public sealed partial class MainViewModel
                 TargetFitIterations = FemTargetFitIterations,
                 FrameMeshSegments = FemFrameMeshSegments,
                 CableSag = FemCableSag,
+                ActiveDofs = DofNames(FemActiveDofs),
+                CableJointDofs = DofNames(FemCableDofs),
             },
         };
     }
@@ -388,6 +390,7 @@ public sealed partial class MainViewModel
             FemTargetFitIterations = file.Settings.TargetFitIterations;
             FemFrameMeshSegments = file.Settings.FrameMeshSegments;
             FemCableSag = file.Settings.CableSag;
+            RestoreFemDofs(file.Settings.ActiveDofs, file.Settings.CableJointDofs);
 
             offlineModelPath = path;
             isDefaultModel = isDefault;

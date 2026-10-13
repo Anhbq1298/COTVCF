@@ -27,7 +27,7 @@
       <CheckBox x:Name="RY" Content="RY — Y rotation" Margin="0,5"/>
       <CheckBox x:Name="RZ" Content="RZ — Z rotation" Margin="0,5"/>
      </UniformGrid>
-     <TextBlock Text="Inactive DOFs are excluded globally. Point restraints are separate support assignments. Plane presets require geometry and loads in that plane." TextWrapping="Wrap" Margin="0,12,0,6"/>
+     <TextBlock x:Name="DofNote" Text="Inactive DOFs are excluded globally. Point restraints are separate support assignments. Plane presets require geometry and loads in that plane." TextWrapping="Wrap" Margin="0,12,0,6"/>
      <TextBlock Text="Degrees of freedom of cable joints" FontWeight="SemiBold" Margin="0,10,0,6"/>
      <UniformGrid x:Name="CableDofEditors" Columns="3" Rows="2">
       <CheckBox x:Name="CableUX" Content="UX" Margin="0,5" AutomationProperties.Name="Cable joints UX"/>
@@ -37,7 +37,7 @@
       <CheckBox x:Name="CableRY" Content="RY" Margin="0,5" AutomationProperties.Name="Cable joints RY"/>
       <CheckBox x:Name="CableRZ" Content="RZ" Margin="0,5" AutomationProperties.Name="Cable joints RZ"/>
      </UniformGrid>
-     <TextBlock Text="A joint that only cables reach has these degrees of freedom, among the active ones; the others are switched off there. A cable gives stiffness along its own line only: a movement left on that nothing else holds — another member or a restraint — makes the model unstable, and the analysis reports it." TextWrapping="Wrap" Margin="0,8,0,6"/>
+     <TextBlock x:Name="CableDofNote" Text="A joint that only cables reach has these degrees of freedom, among the active ones; the others are switched off there. A cable gives stiffness along its own line only: a movement left on that nothing else holds — another member or a restraint — makes the model unstable, and the analysis reports it." TextWrapping="Wrap" Margin="0,8,0,6"/>
      <TextBlock x:Name="ScopeText" TextWrapping="Wrap" Foreground="{StaticResource Muted}"/>
     </StackPanel>
    </TabItem>

@@ -1956,6 +1956,7 @@ public sealed partial class MainViewModel : Observable
             var targetFitIterations = FemTargetFitIterations;
             var frameMeshSegments = FemFrameMeshSegments;
             var cableSag = FemCableSag;
+            var (activeDofs, cableDofs) = (FemActiveDofs, FemCableDofs);
             FemMonitorTolerancePercent = targetFitPercent;
             // the members the run analyses: every frame, and the cables that have a section
             var analysed = baseline.Members.Where(member => member.Kind == MemberKind.Frame ||
@@ -1978,7 +1979,7 @@ public sealed partial class MainViewModel : Observable
             try
             {
                 results = await Task.Run(() => femStudy.Analyze(baseline, [], [], [], supports, [model], properties, failure,
-                    cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan, cableSag, equilibrium), cancellationToken);
+                    cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan, cableSag, equilibrium, activeDofs, cableDofs), cancellationToken);
             }
             finally { equilibrium.Show(ended: false); }
             if (results.Count == 0)

@@ -21,6 +21,7 @@ internal static class RunMonitorChecks
         TargetsNotMet();
         CaseIndependence();
         PrerequisiteFailure();
+        DegreesOfFreedom();
         Bookkeeping();
     }
 
@@ -46,7 +47,7 @@ internal static class RunMonitorChecks
     private static (FemRunSnapshot Run, FemRunMonitorViewModel Shown, IReadOnlyDictionary<string, FemAnalysisResult>? Results, string? Refusal) Solve(
         GeometryModel geometry, Dictionary<string, FemSectionProperties> frames, Dictionary<string, FemSectionProperties>? cables, string[] pins,
         FemCaseLoads[] cases, Dictionary<string, double>? targets = null, FemLoadSet? fitLoads = null, double? fitPercent = null, int fitIterations = 100,
-        FemSolver? solver = null)
+        FemSolver? solver = null, Mcotis.Core.DofMask activeDofs = Mcotis.Core.DofMask.XZ, Mcotis.Core.DofMask cableDofs = Mcotis.Core.DofMask.Translations)
     {
         var monitor = new FemRunMonitor();
         IReadOnlyDictionary<string, FemAnalysisResult>? results = null;
@@ -54,7 +55,7 @@ internal static class RunMonitorChecks
         try
         {
             results = (solver ?? new FemSolver()).SolveCases(geometry, frames, cables ?? new Dictionary<string, FemSectionProperties>(), targets ?? new Dictionary<string, double>(), fitLoads ?? FemLoadSet.Empty, cases, pins,
-                targetFitPercent: fitPercent, maximumTargetFitIterations: fitIterations, equilibrium: monitor);
+                targetFitPercent: fitPercent, maximumTargetFitIterations: fitIterations, equilibrium: monitor, activeDofs: activeDofs, cableDofs: cableDofs);
         }
         catch (InvalidOperationException ex) { refusal = ex.Message; }
         monitor.End(completed: results is not null, note: refusal);
@@ -258,6 +259,49 @@ internal static class RunMonitorChecks
             "a case that continues from a cable target-force fit that failed reads Failed and says where it failed — in the fit, which has its own entry reading Numerical Instability");
         Check(unstressed is { Status: FemCaseStatus.NumericalInstability, Last.PrerequisiteFailed: false } && unstressed.Stability!.Joints.Single().Joint == "M",
             "… while a case that does not continue from the fit is judged on its own solution: the same joint M is unstable in it, and it says so itself");
+    }
+
+    /// <summary>The degrees of freedom of Analysis Options: one that is switched off is held at every joint and is no
+    /// equation; a load on it is refused; out of the plane there is none.</summary>
+    private static void DegreesOfFreedom()
+    {
+        var geometry = Geometry([("A", 0, 0), ("B", 3, 0), ("C", 6, 0)], ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame));
+        var frames = Sections(Frame("AB"), Frame("BC"));
+        FemCaseLoads[] load = [Loads("Load", "B", 0, -10)];
+        var free = Solve(geometry, frames, null, ["A", "C"], load);
+        // RY off: no joint turns, so each half of the beam is built in at one end and guided at the other, 12EI/L³ each.
+        var guided = Solve(geometry, frames, null, ["A", "C"], load, activeDofs: Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ, solver: new FemSolver { StabilityThresholds = new(1e-9, 11) });
+        double expected = -10 * 27 / (24 * E * Inertia), moved = guided.Results!["Load"].Joints.Single(joint => joint.PointName == "B").UZM;
+        Check(guided.Results is not null && Math.Abs(moved - expected) < 1e-12 && guided.Results["Load"].Joints.All(joint => joint.RotationRad == 0) &&
+              Math.Abs(free.Results!["Load"].Joints.Single(joint => joint.PointName == "B").UZM - -10 * 216 / (48 * E * Inertia)) < 1e-12,
+            $"with RY switched off the joints do not turn: the mid-span joint moves PL³/24EI = {expected * 1000:0.#####} mm ({moved * 1000:0.#####} mm), against PL³/48EI of the span with RY on");
+        Check(guided.Run is { ActiveDofs: 6, SolvedDofs: 2, RestrainedDofs: 4 } && free.Run is { ActiveDofs: 9, SolvedDofs: 5, RestrainedDofs: 4 } &&
+              guided.Shown.DofText == "6 active | 2 solved | 4 restrained",
+            "… and the run monitor counts the degrees of freedom of the run as it was assembled: 6 active | 2 solved | 4 restrained, against 9 | 5 | 4");
+        // where joints are listed — a stiffness contrast of 1e7 along the beam — the rotation that is off reads '-'
+        var listed = Solve(Geometry([("A", 0, 0), ("B", 4, 0), ("C", 8, 0), ("D", 0, -3)],
+                ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame), ("DA", "D", "A", MemberKind.Frame)),
+            Sections(Frame("AB", 1e-4), Frame("BC", 1e-3 * 1e6), Frame("DA")), null, ["A", "D"], [Loads("Pull", "C", 5, -1)],
+            activeDofs: Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ);
+        var rows = listed.Shown.Cases.Single().Rows;
+        Check(listed.Results is not null && rows.Select(row => row.Joint).SequenceEqual(["B", "C"]) &&
+              rows.All(row => row.UX is { Text: "7.0", Level: FemCellLevel.Warning } && row.RY is { Text: "-", Level: FemCellLevel.Muted } && row.UY.Text == "-" && Number(row.UZ.Text) is not null),
+            "… where joints are listed, a degree of freedom that is off reads '-': nothing is reported against it — B and C, UX 7.0, RY -");
+
+        string Refusal(Mcotis.Core.DofMask active, FemCaseLoads[] cases)
+        {
+            try { new FemSolver().SolveCases(geometry, frames, new Dictionary<string, FemSectionProperties>(), new Dictionary<string, double>(), FemLoadSet.Empty, cases, ["A", "C"], activeDofs: active); }
+            catch (InvalidOperationException ex) { return ex.Message; }
+            return "";
+        }
+        string turned = Refusal(Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ, [new("Moment", new([new("B", 0, -10, 4)], [], []), 0)]);
+        Check(turned.Contains("'B'", StringComparison.Ordinal) && turned.Contains("RY", StringComparison.Ordinal) && turned.Contains("inactive", StringComparison.OrdinalIgnoreCase),
+            "a moment on a joint whose rotation is switched off is refused, not dropped: " + turned);
+        string sideways = Refusal(Mcotis.Core.DofMask.UZ | Mcotis.Core.DofMask.RY, load);
+        Check(sideways.Contains("lies outside the common plane/line required when UX is inactive", StringComparison.Ordinal),
+            "a translation of the plane cannot be switched off for a model that spans it — which is why Analysis Options does not offer it: " + sideways[..Math.Min(sideways.Length, 110)] + "…");
+        Check(Refusal(Mcotis.Core.DofMask.Full3D, load).Contains("planar", StringComparison.Ordinal) && Refusal(Mcotis.Core.DofMask.RY, load).Contains("planar", StringComparison.Ordinal),
+            "degrees of freedom out of the plane, or no translation at all, are refused before anything is solved: this model is planar");
     }
 
     /// <summary>What the monitor does with a run as a whole: the solves it plans, a run that is cancelled, a run that stops.</summary>

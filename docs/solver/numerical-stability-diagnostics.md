@@ -250,7 +250,7 @@ assessment.
 ## 8. Verification
 
 `dotnet run --project tests/Mcotis.Checks` — group *Numerical stability diagnostics* (137 checks, no SAP2000, no WPF);
-`dotnet run --project tests/Mcotis.Desktop.Checks -- --run-monitor` (32 checks, the application's solver through the
+`dotnet run --project tests/Mcotis.Desktop.Checks -- --run-monitor` (38 checks, the application's solver through the
 monitor and its view model); `-- --run-monitor-ui` (15 checks, the window). Models are solved in the checks; no
 value shown is supplied by a check.
 

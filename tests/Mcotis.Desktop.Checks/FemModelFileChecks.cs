@@ -1192,6 +1192,19 @@ internal static class FemModelFileChecks
             Check(asked.Count == 2 && File.GetLastWriteTimeUtc(first) == firstWritten && vm.FemProgressText.StartsWith("Saved MCOTiS config second", StringComparison.Ordinal),
                 "after Save As, Save overwrites the new file: it is the active configuration");
 
+            // The degrees of freedom of Analysis Options go with the configuration; a file from before them has all on.
+            var (before, _, _, _) = DefaultModelApp();
+            before.OpenFemModelFile(first);
+            vm.ApplyPlanarAnalysisSettings(vm.PlanarAnalysisSettings with { ActiveDofs = Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ, CableDofs = Mcotis.Core.DofMask.UZ });
+            vm.SaveFemModel.Execute(null);
+            var (reopened, _, _, _) = DefaultModelApp();
+            reopened.OpenFemModelFile(second);
+            Check(before.FemActiveDofs == Mcotis.Core.DofMask.XZ && before.FemCableDofs == (Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ) &&
+                  reopened.FemActiveDofs == (Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ) && reopened.FemCableDofs == Mcotis.Core.DofMask.UZ &&
+                  reopened.PlanarAnalysisSettings == vm.PlanarAnalysisSettings,
+                "the degrees of freedom of Analysis Options are saved with the configuration and come back when it is opened — RY off, UZ alone for cable joints; " +
+                "the file saved before they were changed opens with every one on");
+
             answer = null;
             var files = Directory.GetFiles(folder).Length;
             var message = vm.FemProgressText;

@@ -55,6 +55,11 @@ public sealed class FemSettingsDto
     public int TargetFitIterations { get; set; } = 100;
     public int FrameMeshSegments { get; set; } = 10;
     public bool CableSag { get; set; } = true;
+    /// <summary>The degrees of freedom of the model, by name, among UX, UZ and RY. A file written before this
+    /// existed has all three.</summary>
+    public List<string> ActiveDofs { get; set; } = ["UX", "UZ", "RY"];
+    /// <summary>Those of a joint only cables reach, among UX and UZ.</summary>
+    public List<string> CableJointDofs { get; set; } = ["UX", "UZ"];
 }
 
 public static class FemModelFile

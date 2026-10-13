@@ -105,7 +105,8 @@ public sealed partial class MainViewModel
                     VcfGeometry.Analyze(State.Geometry, State.Truss), HeldFemProperties(), SectionSwapper(), femSapLoading,
                     FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), Tab01Patterns, PretensionPatterns,
                     State.AppliedPoints.Select(point => point.PointName).ToArray(), State.Cables.ToArray(),
-                    FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre());
+                    FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre())
+                    { ActiveDofs = FemActiveDofs, CableDofs = FemCableDofs };
                 return new VcfOptimizationRunner(inputs, settings);
             });
     }
@@ -330,6 +331,7 @@ public sealed partial class MainViewModel
             return property;
         }
         return new TasOptimizationInputs(template, Properties, FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(),
-            PretensionPatterns, FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre());
+            PretensionPatterns, FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre())
+            { ActiveDofs = FemActiveDofs, CableDofs = FemCableDofs };
     }
 }

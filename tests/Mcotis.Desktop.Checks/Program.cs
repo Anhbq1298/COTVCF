@@ -737,12 +737,12 @@ internal static class Program
                 window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
                 {
                     var options = window.OwnedWindows.OfType<AnalysisOptionsWindow>().Single();
-                    analysisFormOpened = options.IsVisible && options.DofTab.Visibility != Visibility.Visible && !options.UX.IsVisible &&
-                        options.Sag.IsVisible && options.Sag.IsChecked == vm.FemCableSag;
+                    analysisFormOpened = options.IsVisible && options.DofTab.IsVisible && options.RY.IsVisible && options.RY.IsEnabled && !options.UX.IsVisible && !options.UY.IsVisible &&
+                        options.CableUX.IsVisible && options.Sag.IsChecked == vm.FemCableSag;
                     options.Close();
                 }));
                 OpenMenu("Run", "Analysis Options");
-                Assert(analysisFormOpened, "Run -> Analysis Options opens the staged cable fitting form, without a Degrees of Freedom tab: this window has no choice of them");
+                Assert(analysisFormOpened, "Run -> Analysis Options opens the staged form on its Degrees of Freedom tab — RY of the model and the translations of cable joints, each a choice — with the cable fitting tab beside it");
                 vm.SelectedTab = 7; vm.FemPane = MainViewModel.FemPaneAnalysisOptions;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var sagBox = FindVisuals<CheckBox>(window).Single(box => Equals(box.Content, "Cable sag"));

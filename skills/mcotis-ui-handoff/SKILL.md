@@ -39,8 +39,8 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   Save/Open `.mcotis`, Undo/Redo, DOF options, async static analysis (**Run → Run Analysis**, F5) and result tables,
   including **Cable results**. Main **File →
   Open Native Model…** reopens saved native input. Main **Run → Analysis Options…** now opens a staged WPF dialog:
-  fixed XZ DOFs plus the real planar cable-fit tolerance/iterations/mesh/sag; the native dialog offers 3D/planar/custom
-  DOFs and marks cable/mesh controls inactive. Native engine since 2026-10-12: `Mcotis.Analysis.StaticSolver` — frames
+  the degrees of freedom its planar model can change (see **No silent restraint** below) plus the real planar cable-fit
+  tolerance/iterations/mesh/sag; the native dialog offers 3D/planar/custom DOFs and marks cable/mesh controls inactive. Native engine since 2026-10-12: `Mcotis.Analysis.StaticSolver` — frames
   split at points lying on them, tension-only cables, cable target forces, staged nonlinear cases, cable sag; validated
   before its results were shown (`docs/analysis/cable-static-verification.md`). Native limits: 600 free / 2,400 total
   DOFs, small displacements, no result-file storage, no slabs/diaphragms, no shells/P-Delta/modal; the template form
@@ -53,8 +53,19 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   baseline: the same laws now live in `Mcotis.Analysis` (`StaticSolver`, `CableElement`). The main window is the
   standalone application — the user does not want it called "Tab 07" (2026-10-12). **No silent restraint** (user,
   2026-10-12): the native Analysis Options has "Degrees of freedom of cable joints" (`AnalysisSettings.CableDofs`,
-  default UX UY UZ; fixed UX UZ in the main window, whose Analysis Options has **no Degrees of Freedom tab** — the
-  user, 2026-10-12: "tab này hơi thừa, nhất là cho cable"; do not bring it back there), and a movement that is on and that nothing holds is reported as
+  default UX UY UZ). **The main window has a Degrees of Freedom tab too, since 2026-10-13** (user: "analysis option,
+  add the menu to change degree of freedom"). The day before the user had it removed because every box on it was
+  disabled ("tab này hơi thừa, nhất là cho cable") — so it shows **only boxes that can be changed**: `RY — rotation of
+  the joints` for the model (off = the rotation is held at every joint, as by a support, not released; a moment on a
+  joint is then refused) and `UX` / `UZ` for cable joints (default both; UX off holds a joint only cables reach
+  sideways, which is what lets a cable in two segments be analysed). No preset, no UX / UZ of the model — the model
+  spans its XZ plane and the compiler refuses a translation that is off unless every joint has the same coordinate
+  along it (`dof.geometry`) — and no UY / RX / RZ. Do not add disabled boxes back, and do not offer 3D there: the main
+  window's members hold in-plane properties only. State: `MainViewModel.FemActiveDofs` / `FemCableDofs`
+  (`MainViewModel.AnalysisOptions.cs`, `DofProblem` is the one rule) → `FemStudyService.Analyze(…, activeDofs,
+  cableDofs)` → `FemSolver`; the optimizations carry them in their inputs; saved as `FemSettingsDto.ActiveDofs` /
+  `CableJointDofs` (names; an older file has everything on). The solver's hint "or switch it off for cable joints
+  (Analysis Options → Degrees of Freedom)" is no longer stripped from main-window messages. A movement that is on and that nothing holds is reported as
   an unstable model in both windows — a segmented cable through a cable-only joint or a free cable end now stops a
   main-window run. Native files are schema 3. **Validate before showing a result** (same message): see AGENTS.md. Full scope: `docs/native-building-ui.md`;
   checks `--template-building-ui`. Preserve Apply/OK/Cancel semantics and the result current/stale state.

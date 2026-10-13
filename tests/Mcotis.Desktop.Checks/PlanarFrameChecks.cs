@@ -330,15 +330,15 @@ internal static class PlanarFrameChecks
         Check(segmented.Contains("'M' UX has no stiffness and no restraint", StringComparison.Ordinal) && segmented.Contains("unstable", StringComparison.Ordinal) &&
               segmented.Contains("model a cable that runs through such a joint as one cable", StringComparison.Ordinal),
             "A cable split at a joint that only cables reach is reported as unstable, naming the joint and the movement, with what to change in the model");
-        // The main window has no option for the degrees of freedom of cable joints, so nothing it says points to one.
+        // Analysis Options has the degrees of freedom of cable joints: what the solver says of that option goes on as it is.
         var segmentedFit = segmentedReports.Items.Last(item => item.FitStage);
         var segmentedRun = GeneralSolverParityChecks.MonitorOf(segmentedReports.Items, completed: false);
         var segmentedCase = segmentedRun.Cases.Single(item => item.FitStage);
-        Check(!segmented.Contains("Analysis Options", StringComparison.Ordinal) &&
+        Check(segmented.Contains("or switch it off for cable joints (Analysis Options → Degrees of Freedom)", StringComparison.Ordinal) &&
               segmentedFit.State == FemEquilibriumState.Unstable && segmentedFit.Failure!.Contains("'M' UX", StringComparison.Ordinal) &&
-              !segmentedFit.Failure.Contains("Analysis Options", StringComparison.Ordinal) &&
+              segmentedFit.Failure.Contains("Analysis Options → Degrees of Freedom", StringComparison.Ordinal) &&
               segmentedCase is { Status: FemCaseStatus.NumericalInstability, Label: "Cable target-force fit" } && segmentedRun.Status == FemRunStatus.Failed,
-            "… without pointing to a degree-of-freedom option this window does not have, and the run monitor's entry for the case reads Numerical Instability");
+            "… and with the option that holds it — the degrees of freedom of cable joints, in Analysis Options; the run monitor's entry for the case reads Numerical Instability");
         var segmentedStability = segmentedCase.Stability!;
         var jointM = segmentedStability.Joints.Single();
         Check(segmentedStability is { State: Mcotis.Analysis.StabilityState.Singular, Instabilities: 1, Warnings: 0, Stage: Mcotis.Analysis.StabilityStage.EquilibriumIteration, Iteration: 1 } &&
@@ -361,6 +361,25 @@ internal static class PlanarFrameChecks
               oneSlack.Cables.All(cable => !cable.Active) &&
               Math.Abs(oneSlack.SupportReactions.Sum(reaction => reaction.ReactionZKN) + 5000) < 1e-3,
             "The same cable as one member solves both taut and fully slack");
+        // With UX switched off for cable joints, the joint between the two segments is held sideways and moves along the
+        // cable: the two segments in line are the one cable. Both fitted closely, so that the two runs can be compared.
+        var asOne = new FemSolver().Solve(oneCableGeometry, beamProperties, oneCable, oneTarget, [new("B", 0, -50)], ["A", "C", "D"], targetFitPercent: 1e-6);
+        var inTwoReports = new GeneralSolverParityChecks.EquilibriumReports();
+        var inTwo = new FemSolver().Solve(segmentedGeometry, beamProperties, segmentedCables, segmentedTargets, [new("B", 0, -50)], ["A", "C", "D"], targetFitPercent: 1e-6,
+            equilibrium: inTwoReports, cableDofs: Mcotis.Core.DofMask.UZ);
+        double tension = asOne.Cables.Single().AxialForceKN;
+        var (jointB, jointBOne, jointM2) = (inTwo.Joints.Single(joint => joint.PointName == "B"), asOne.Joints.Single(joint => joint.PointName == "B"), inTwo.Joints.Single(joint => joint.PointName == "M"));
+        Check(inTwo.TargetFitConverged && asOne.TargetFitConverged && inTwo.Cables.Count == 2 && inTwo.Cables.All(cable => cable.Active && Math.Abs(cable.AxialForceKN - tension) < 1e-3) &&
+              Math.Abs(jointB.UZM - jointBOne.UZM) < 1e-8 && Math.Abs(jointB.UXM - jointBOne.UXM) < 1e-12 && jointM2.UXM == 0 &&
+              Math.Abs(jointM2.UZM - jointB.UZM / 2) < 1e-6 &&
+              inTwo.SupportReactions.Zip(asOne.SupportReactions).All(pair => pair.First.PointName == pair.Second.PointName && Math.Abs(pair.First.ReactionZKN - pair.Second.ReactionZKN) < 1e-3),
+            $"With UX switched off for cable joints the cable in two segments is solved, and is the one cable: tension {tension:0.###} kN in both segments, " +
+            $"the same deflection of the beam ({jointB.UZM * 1000:0.####} mm) and the same reactions; the joint between the segments does not move sideways and moves half as far as the beam along the cable");
+        var inTwoRun = GeneralSolverParityChecks.MonitorOf(inTwoReports.Items);
+        // UX, UZ, RY at the three joints of the beam; UZ alone at the joint between the segments and at the anchor.
+        Check(inTwoRun.Status == FemRunStatus.Completed && inTwoRun.Cases.Count == 2 && inTwoRun.Cases.All(item => item is { Status: FemCaseStatus.Converged, Stability.Instabilities: 0 }) &&
+              inTwoRun is { ActiveDofs: 11, SolvedDofs: 6, RestrainedDofs: 5 },
+            $"… and the run monitor reads Completed, both solves Converged with zero instabilities, on the degrees of freedom that are left: {inTwoRun.ActiveDofs} active | {inTwoRun.SolvedDofs} solved | {inTwoRun.RestrainedDofs} restrained");
 
         CableSag(section, modulusKNPerM2);
         SapModelTextReader();
