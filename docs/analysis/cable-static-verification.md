@@ -80,7 +80,7 @@ Everything below runs offline. Counts and differences are those of the runs of 2
 
 ### 1. Closed forms and independent scalar solutions
 
-`dotnet run --project tests/Mcotis.Checks`, group *General static solver* (`GeneralStaticChecks.cs`, 1,273 checks
+`dotnet run --project tests/Mcotis.Checks -- --full`, group *General static solver* (`GeneralStaticChecks.cs`, 1,273 checks
 with the OpenSees comparison). Every expected value is worked out in the check file, not taken from the solver.
 
 | Subject | What is compared |
@@ -187,7 +187,7 @@ digit. The main window's run monitor shows them (`FemEquilibriumProgress`), one 
 ## Reproduce
 
 ```
-dotnet run --project tests/Mcotis.Checks
+dotnet run --project tests/Mcotis.Checks -- --full
 dotnet run --project tests/Mcotis.Desktop.Checks -- --general-solver
 dotnet run --project tests/Mcotis.Desktop.Checks -- --fem
 dotnet run --project tests/Mcotis.Desktop.Checks -- --fem-sap
