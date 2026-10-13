@@ -1356,36 +1356,51 @@ internal static class Program
             Assert(state.Preview.Points["bot"].Position.Z == -1, "Apply followed by preview has no drift");
             try { workflow.RefreshAsync().GetAwaiter().GetResult(); } catch (InvalidOperationException) { }
             Assert(!state.BaselineCaptured && state.Truss.TopPoints.Contains("top") && state.PointLoads.Count == 2, "External geometry changes invalidate baseline but preserve setup");
+            // Default: essential checks only. Full historical/solver parity, report and
+            // integration checks remain opt-in via --full or their existing --flags.
+            bool full = args.Contains("--full", StringComparer.OrdinalIgnoreCase);
             NumericInputChecks.Run();
             CheckNewConfiguration();
-            OutputSettingsChecks.Run();
+            if (full) OutputSettingsChecks.Run();
             ReliabilityChecks.Run();
-            StudyComposerChecks.Run();
-            PlanarFrameChecks.Run();
-            SpatialFrameRegressionChecks.Run();
-            ViewerResultDisplayChecks.Run();
-            StudyExecutionChecks.Run();
-            OptimizationChecks.Run();
-            OptimizationStudyChecks.Run();
-            CableForceReportChecks.Run();
-            ReportPrintChecks.Run();
-            FemRunReportChecks.Run();
-            MemberForceReportChecks.Run();
-            SupportReactionReportChecks.Run();
-            GatewayChecks.Run();
-            QuantityTakeoffChecks.Run();
-            MegaColumnChecks.Run();
+            if (full)
+            {
+                StudyComposerChecks.Run();
+                PlanarFrameChecks.Run();
+                SpatialFrameRegressionChecks.Run();
+                ViewerResultDisplayChecks.Run();
+                StudyExecutionChecks.Run();
+                OptimizationChecks.Run();
+                OptimizationStudyChecks.Run();
+                CableForceReportChecks.Run();
+                ReportPrintChecks.Run();
+                FemRunReportChecks.Run();
+                MemberForceReportChecks.Run();
+                SupportReactionReportChecks.Run();
+                GatewayChecks.Run();
+                QuantityTakeoffChecks.Run();
+                MegaColumnChecks.Run();
+            }
             FemDatabaseChecks.Run();
-            FemModelFileChecks.Run();
-            GeneralSolverParityChecks.Run();
-            RunMonitorChecks.Run();
-            SapImportChecks.Run();
-            EtabsImportChecks.Run();
-            EtabsExportChecks.Run();
+            if (full)
+            {
+                FemModelFileChecks.Run();
+                GeneralSolverParityChecks.Run();
+                RunMonitorChecks.Run();
+                SapImportChecks.Run();
+                EtabsImportChecks.Run();
+                EtabsExportChecks.Run();
+            }
             DevelopmentLogChecks.Run();
-            UserGuideChecks.Run();
-            ColumnDesignChecks.Run();
-            Console.WriteLine("All workflow and SAP write-boundary checks passed."); return 0;
+            if (full)
+            {
+                UserGuideChecks.Run();
+                ColumnDesignChecks.Run();
+            }
+            Console.WriteLine(full
+                ? "All workflow and SAP write-boundary checks passed (full suite)."
+                : "Quick desktop smoke checks passed. Run with --full for all checks or choose a targeted --flag.");
+            return 0;
         }
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
     }

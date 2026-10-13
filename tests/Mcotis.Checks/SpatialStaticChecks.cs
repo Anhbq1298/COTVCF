@@ -12,6 +12,17 @@ internal static class SpatialStaticChecks
     private const double E = 2e8, A = .01, Iy = .0004, Iz = .0008, J = .00001, L = 4;
     private static JsonElement spec;
 
+    /// <summary>Fast gate: closed-form 3D solutions, equilibrium and safe rejection of unstable systems.
+    /// The exhaustive element matrix and OpenSees comparisons stay in Run() for full verification.</summary>
+    public static void RunSmoke()
+    {
+        using var input = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "spatial-static-spec.json")));
+        spec = input.RootElement;
+        CantileversAndLoads();
+        GlobalEquilibrium();
+        FailureCases();
+    }
+
     public static void Run()
     {
         using var input = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "spatial-static-spec.json")));
