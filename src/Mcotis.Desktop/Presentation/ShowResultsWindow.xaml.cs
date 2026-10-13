@@ -47,10 +47,11 @@ public partial class ShowResultsWindow : Window
         foreach (var item in Outputs.Items.OfType<ListBoxItem>())
         {
             var tag = item.Tag as string;
-            item.Visibility = kind == ShowResultPickerKind.All ||
+            // the cable target fit is offered for a model with cables only
+            item.Visibility = (tag != "CableFit" || viewModel.HasCableMembers) && (kind == ShowResultPickerKind.All ||
                 kind == ShowResultPickerKind.Deflection && tag == "DeflectedShape" ||
                 kind == ShowResultPickerKind.Reactions && tag == "Reactions" ||
-                kind == ShowResultPickerKind.MemberForces && tag is "AxialForce" or "Shear" or "BendingMoment"
+                kind == ShowResultPickerKind.MemberForces && tag is "AxialForce" or "Shear" or "BendingMoment")
                 ? Visibility.Visible : Visibility.Collapsed;
         }
         var preferred = kind switch

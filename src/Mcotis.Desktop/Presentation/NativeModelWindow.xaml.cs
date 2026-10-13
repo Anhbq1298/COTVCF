@@ -28,7 +28,7 @@ public partial class NativeModelWindow : Window
     }
     private void Template_Click(object sender, RoutedEventArgs e) => CreateTemplate(this);
     private void Options_Click(object sender, RoutedEventArgs e) => new AnalysisOptionsWindow(Model.Session.Document.Settings,
-        settings => Model.Session.Execute(DocumentCommands.SetSettings(settings))) { Owner = this }.ShowDialog();
+        settings => Model.Session.Execute(DocumentCommands.SetSettings(settings)), cables: Model.Session.Document.Cables.Count > 0) { Owner = this }.ShowDialog();
     private async void Run_Click(object sender, RoutedEventArgs e) => await Model.RunAsync();
     private void Undo_Click(object sender, RoutedEventArgs e) { if (Model.Editable) Model.Session.Undo(); }
     private void Redo_Click(object sender, RoutedEventArgs e) { if (Model.Editable) Model.Session.Redo(); }

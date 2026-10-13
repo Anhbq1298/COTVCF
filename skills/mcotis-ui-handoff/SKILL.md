@@ -143,6 +143,16 @@ earlier tall-header / large-button / blue-block look.
   Results… and Cancel Optimization, which left the Run menu. The highlight is the `HighlightedMenuHeader` header template of `Theme.xaml`
   (accent text on the pale `Selected` chip): the menu's `Header` stays the string `_Optimization`, which the window and
   the checks read, and the drop-down keeps the normal colours. It is the final menu, after one vertical separator.
+  **Cable force fitting is shown only for a model with cables** (user, 2026-10-13: "the cable fitting force only visible
+  for system that has cabled model"): `MainViewModel.HasCableMembers` (a cable member in `State.Geometry`; in the list
+  `Update()` notifies). Bound through `BoolVisibility` on Result → Cable target fit, the results table's
+  `CableFitTab`, the run monitor's `ConvergenceTab` and the fitting / cable-sag row of the analysis pane; read by
+  `ShowResultsWindow.Configure` and by `FemCableFitView` (false without cables, so no window opens on a hidden tab).
+  `AnalysisOptionsWindow(…, cables:)`: without cables the second tab is "Frame Mesh" — `HideCableSettings` takes the
+  tolerance, iterations and sag rows out and leaves their values alone; the native window passes
+  `Document.Cables.Count > 0`. Add a new cable-fit view under the same property. Left as they are: the cable-joint
+  degrees of freedom, and Purpose / Cable Target Forces of the load cases. Checks: `--template-building-ui`,
+  `--result-tools-ui`, `--etabs-import`.
   **Only the optimization of the open system is enabled** (user, 2026-10-13: "if current system is vcf then greyed out
   the tas then vice versa"): `MainViewModel.CanOptimizeVcf` (the geometry reads as a VCF system —
   `VcfGeometry.CanAnalyze`) and `CanOptimizeTas` (`TiedArchParameters` is set) are bound to the two items' `IsEnabled`

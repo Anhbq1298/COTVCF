@@ -18,6 +18,23 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Cable force fitting is shown only for a model that has cables
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Analysis Options…; Result → Cable target fit; Show Results; Results Table; Run → Analysis Monitor
+- What: A model without cables has no cable target forces to fit, so what belongs to that fit is no longer shown for
+  it. In Analysis Options the second tab is "Cable Force Fitting" — tolerance, fitting iterations, frame mesh, cable
+  sag — when the model has cables, and "Frame Mesh" with the mesh alone when it has none; the settings that are not
+  shown keep their values. Also not shown without cables: Result → Cable target fit, its choice in Show Results, its
+  tab of the Results Table, and the Cable Target-Force Convergence tab of the run monitor. With the tied arch system
+  they appear as soon as it has its elevated cable. The native model window follows the same rule for its Analysis
+  Options. Not changed: the degrees of freedom of cable joints on the first tab, and Purpose / Cable Target Forces
+  in Load Case Data and the Load Cases table.
+- Checks: --template-building-ui (the form with and without cables; Apply keeps what is not shown);
+  --result-tools-ui (the tied arch system against the VCF system, in the main window and its three result windows);
+  --etabs-import (which models have cables); --run-monitor-ui; --full of Mcotis.Desktop.Checks; --user-guide;
+  --dev-log
+
 ## 2026-10-13 · Optimization menu: only the optimization of the system that is open is offered
 - Status: Done
 - Who: markbui, Claude

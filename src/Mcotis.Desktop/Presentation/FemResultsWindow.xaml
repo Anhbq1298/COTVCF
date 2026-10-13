@@ -54,7 +54,7 @@
                          </DataGrid>
                         </Grid>
    </TabItem>
-   <TabItem Header="Cable target fit">
+   <TabItem x:Name="CableFitTab" Header="Cable target fit" Visibility="{Binding HasCableMembers, Converter={StaticResource BoolVisibility}}">
      <Border  BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}">
       <Grid Margin="8"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
        <StackPanel>

@@ -12,14 +12,17 @@ namespace Mcotis.Desktop.Presentation;
 /// (user, 2026-10-12, of a tab of boxes that were all disabled: "tab này hơi thừa"; 2026-10-13: set them freely
 /// rather than fixed, "if not proper then report in the log", and "make the planar use 3d as 3d is default"). So the
 /// form refuses no set the model might not be analysable with: the run does, in the run monitor. Only the notes
-/// differ: they say what full 3D means for a model in a plane.</para></summary>
+/// differ: they say what full 3D means for a model in a plane.</para>
+/// <para><c>cables</c>: the model has cables. The settings of the cable force fitting — tolerance, iterations, cable
+/// sag — are shown only then (user, 2026-10-13); without cables the second tab is "Frame Mesh" and holds the mesh
+/// alone. The settings that are not shown keep the values they have.</para></summary>
 public partial class AnalysisOptionsWindow : Window
 {
     private readonly Action<AnalysisSettings> commit;
     private readonly bool planar;
     private AnalysisSettings current;
 
-    public AnalysisOptionsWindow(AnalysisSettings settings, Action<AnalysisSettings> commit, bool planar = false, bool editable = true)
+    public AnalysisOptionsWindow(AnalysisSettings settings, Action<AnalysisSettings> commit, bool planar = false, bool editable = true, bool cables = true)
     {
         this.commit = commit; this.planar = planar; current = settings;
         InitializeComponent();
@@ -34,8 +37,11 @@ public partial class AnalysisOptionsWindow : Window
         Sag.IsChecked = settings.CableSag;
         Tolerance.IsEnabled = Iterations.IsEnabled = Mesh.IsEnabled = Sag.IsEnabled = editable;
         ScopeText.Text = "Static analysis of frames and cables. Shell, P-Delta and modal analysis are not available.";
-        CableScope.Text = "These settings are used by Run Analysis: the fitting when a load case fits cable target forces, cable sag for every case with cables. The mesh is the number of stations each frame is read at; it changes no joint result." +
+        CableScope.Text = (cables
+                ? "These settings are used by Run Analysis: the fitting when a load case fits cable target forces, cable sag for every case with cables. The mesh is the number of stations each frame is read at; it changes no joint result."
+                : "The mesh is the number of stations each frame is read at by Run Analysis; it changes no joint result. The model has no cables, so the settings of the cable force fitting are not shown.") +
             (planar ? " The Run Monitor shows the degrees of freedom of each run." : "");
+        if (!cables) HideCableSettings();
         if (planar)
         {
             // The same choices as the native workspace. What differs is what they mean for a model that lies in a plane.
@@ -52,6 +58,15 @@ public partial class AnalysisOptionsWindow : Window
         if (!editable) { ErrorText.Text = "Model locked or analysis running. Close this form and unlock / finish the run before editing."; }
         CanCommit = editable;
         OkButton.IsEnabled = ApplyButton.IsEnabled = editable;
+    }
+
+    /// <summary>A model without cables: the tab is the frame mesh alone. The boxes that go keep their values, so
+    /// Apply writes the settings back as they were.</summary>
+    private void HideCableSettings()
+    {
+        FittingTab.Header = "Frame Mesh";
+        ToleranceRow.Height = IterationsRow.Height = SagRow.Height = new GridLength(0);
+        ToleranceLabel.Visibility = Tolerance.Visibility = IterationsLabel.Visibility = Iterations.Visibility = Sag.Visibility = CableTargetNote.Visibility = Visibility.Collapsed;
     }
 
     private bool CanCommit { get; }

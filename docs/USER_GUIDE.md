@@ -437,6 +437,8 @@ The monitor counts the degrees of freedom of each run (active | solved | restrai
 ## Cable Force Fitting
 The tolerance of the cable target-force fit (%), its maximum number of fitting iterations, the frame mesh — the number of stations each frame is read at, which changes no joint result — and cable sag.
 
+This tab is shown for a model that has cables. For a model without cables — the tied arch system without its elevated cable, for instance — the tab is **Frame Mesh** and holds the mesh alone; the cable settings keep their values for when the model has cables again. The same goes for the results of the fit: Result → Cable target fit, its choice in Show Results, its tab of the Results Table and the Cable Target-Force Convergence tab of the [[Analysis monitor]] are shown only for a model with cables.
+
 # Analysis monitor
 Category: Run
 Where: Run → Analysis Monitor
@@ -478,7 +480,7 @@ Click the header to open a case; several can stay open, and a case that failed o
 Numerical Instability and Not Converged are different outcomes: the first is a stiffness the solver cannot rely on, the second an equilibrium iteration that did not converge. For an instability, review the joints listed for missing restraints, disconnected members, mechanisms or very different stiffnesses meeting at a joint.
 
 ## Cable Target-Force Convergence
-Each cable's result / target per fitting run, for the stage that fits the cable target forces.
+Each cable's result / target per fitting run, for the stage that fits the cable target forces. The tab is shown for a model that has cables.
 
 # Unlock FEM Model
 Category: Run

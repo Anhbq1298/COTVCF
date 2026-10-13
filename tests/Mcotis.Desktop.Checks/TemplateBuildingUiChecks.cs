@@ -156,6 +156,18 @@ internal static class TemplateBuildingUiChecks
             foreach (var box in joints.Take(3)) box.IsChecked = true;
             Check(cable.ApplyForm() && legacy.FemActiveDofs == DofMask.Full3D && legacy.FemCableDofs == DofMask.Translations, "and Full 3D can be chosen again");
             cable.Close();
+            // a model without cables: the second tab is the frame mesh alone, and what is not shown keeps its value
+            var held = legacy.PlanarAnalysisSettings;
+            var noCables = new AnalysisOptionsWindow(held, legacy.ApplyPlanarAnalysisSettings, planar: true, cables: false);
+            noCables.Show(); Idle();
+            noCables.Tabs.SelectedItem = noCables.FittingTab; Idle(); Snapshot(noCables, ".work/analysis-options-no-cables.png");
+            bool meshAlone = Equals(noCables.FittingTab.Header, "Frame Mesh") && noCables.Mesh.IsVisible && !noCables.Tolerance.IsVisible && !noCables.Iterations.IsVisible &&
+                             !noCables.Sag.IsVisible && !noCables.CableTargetNote.IsVisible && noCables.CableScope.Text.Contains("The model has no cables", StringComparison.Ordinal);
+            noCables.Mesh.Text = "6";
+            Check(Equals(cable.FittingTab.Header, "Cable Force Fitting") && meshAlone && noCables.ApplyForm() && legacy.PlanarAnalysisSettings == held with { FrameMeshSegments = 6 },
+                "Analysis Options shows the cable force fitting — tolerance, iterations, cable sag — for a model with cables only: without cables the tab is Frame Mesh, with the mesh alone, " +
+                "and Apply leaves the settings that are not shown as they were");
+            noCables.Close();
             var shell = new MainWindow { DataContext = legacy };
             shell.Show(); Idle();
             var edit = shell.MainMenu.Items.OfType<MenuItem>().Single(m => Equals(m.Header, "_Edit"));

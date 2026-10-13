@@ -69,8 +69,13 @@ internal static class EtabsImportChecks
         bool Last(string name, bool value) => told.LastOrDefault(item => item.Name == name) is { Name: not null } last && last.Value == value;
         switching.LoadTasModel();
         bool onTas = switching.CanOptimizeTas && !switching.CanOptimizeVcf && Last(nameof(MainViewModel.CanOptimizeTas), true) && Last(nameof(MainViewModel.CanOptimizeVcf), false);
+        bool noCables = !switching.HasCableMembers;
         switching.ReplaceCurrentWithVcfModel();
         bool onVcf = switching.CanOptimizeVcf && !switching.CanOptimizeTas && Last(nameof(MainViewModel.CanOptimizeVcf), true) && Last(nameof(MainViewModel.CanOptimizeTas), false);
+        bool cables = switching.HasCableMembers;
+        switching.ApplyTiedArchSystem(TiedArchParameters.Default with { ElevatedCable = true });
+        Check(noCables && cables && switching.HasCableMembers && switching.CanOptimizeTas,
+            "the model has cables — what the cable force fitting is shown for — on the VCF system and on the tied arch system with its elevated cable, not on the tied arch system without it");
         switching.ApplyTiedArchSystem(TiedArchParameters.Default with { ArchRise = 32 });
         bool edited = switching.CanOptimizeTas && !switching.CanOptimizeVcf && Last(nameof(MainViewModel.CanOptimizeTas), true);
         switching.ImportFromE2kFile(E2k);

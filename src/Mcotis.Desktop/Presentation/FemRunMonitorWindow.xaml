@@ -342,7 +342,8 @@
    </TabItem>
 
    <!-- Convergence of the cable target-force fit -->
-   <TabItem x:Name="ConvergenceTab" Header="Cable Target-Force Convergence" Width="226">
+   <TabItem x:Name="ConvergenceTab" Header="Cable Target-Force Convergence" Width="226"
+            Visibility="{Binding HasCableMembers, Converter={StaticResource BoolVisibility}}">
     <Grid Margin="8">
      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
      <DockPanel Margin="0,0,0,6" LastChildFill="False">

@@ -24,7 +24,8 @@ public partial class MainWindow : Window
     private void AnalysisOptions_Click(object sender, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel vm)
-            new AnalysisOptionsWindow(vm.PlanarAnalysisSettings, vm.ApplyPlanarAnalysisSettings, planar: true, editable: vm.CanEditFemModel) { Owner = this }.ShowDialog();
+            new AnalysisOptionsWindow(vm.PlanarAnalysisSettings, vm.ApplyPlanarAnalysisSettings, planar: true, editable: vm.CanEditFemModel,
+                cables: vm.HasCableMembers) { Owner = this }.ShowDialog();
     }
     // Remembers the user's dragged split so it survives visits to the full-width tabs.
     private GridLength paramsColumnWidth = new(2, GridUnitType.Star);

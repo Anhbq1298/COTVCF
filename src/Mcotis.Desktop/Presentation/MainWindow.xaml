@@ -102,7 +102,8 @@
     <MenuItem Header="_Shear forces" Tag="Shear" Click="FemResultMenu_Click" IsEnabled="{Binding HasFemResults}"/>
     <MenuItem Header="Support _reactions" Tag="Reactions" Click="FemResultMenu_Click" IsEnabled="{Binding HasFemResults}"/>
     <MenuItem Header="_Deflection" Tag="DeflectedShape" Click="FemResultMenu_Click" IsEnabled="{Binding HasFemResults}"/>
-    <MenuItem Header="_Cable target fit" Tag="CableFit" Click="FemResultMenu_Click" IsEnabled="{Binding HasFemResults}"/>
+    <MenuItem Header="_Cable target fit" Tag="CableFit" Click="FemResultMenu_Click" IsEnabled="{Binding HasFemResults}"
+              Visibility="{Binding HasCableMembers, Converter={StaticResource BoolVisibility}}"/>
     <Separator/>
     <MenuItem Header="Show _Results…" Click="ShowResults_Click" ToolTip="Choose the load case / combo and the output to draw on the model"/>
     <MenuItem Header="Results _Table…" Click="OpenFemResultsClick" IsEnabled="{Binding HasFemResults}"
@@ -531,7 +532,7 @@
         </Border>
         <TextBlock Text="{Binding FemRunSummary}" FontFamily="{StaticResource MonoFont}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"
                    ToolTip="Run Analysis solves the model once as currently defined. Legacy study ranges, when present in an older file, enter this run with their first value."/>
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,6"
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,6" Visibility="{Binding HasCableMembers, Converter={StaticResource BoolVisibility}}"
                     ToolTip="Cable pretensions are adjusted together under the target-force case loads to meet their assigned targets within this tolerance. Loaded cases then use the fitted pretension.">
          <TextBlock Text="Target-force fitting ±" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
          <TextBox Width="44" MinHeight="0" Padding="4,0" VerticalContentAlignment="Center" FontFamily="{StaticResource MonoFont}" TextAlignment="Right"
@@ -552,8 +553,9 @@
                   IsEnabled="{Binding CanEditFemModel}"
                   Text="{Binding FemFrameMeshSegments, Mode=TwoWay, UpdateSourceTrigger=LostFocus, ValidatesOnExceptions=True}"/>
          <TextBlock Text="segments per frame" FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
-         <Border Width="1" Background="{StaticResource Border}" Margin="10,1,10,1"/>
+         <Border Width="1" Background="{StaticResource Border}" Margin="10,1,10,1" Visibility="{Binding HasCableMembers, Converter={StaticResource BoolVisibility}}"/>
          <CheckBox Content="Cable sag" IsChecked="{Binding FemCableSag}" IsEnabled="{Binding CanEditFemModel}" VerticalAlignment="Center" FontSize="11"
+                   Visibility="{Binding HasCableMembers, Converter={StaticResource BoolVisibility}}"
                    AutomationProperties.Name="FEM cable sag"
                    ToolTip="Geometric nonlinearity of the cables. A cable that a load case loads along its length — its self-weight, when the case includes a pattern with a self-weight multiplier — hangs in a shallow parabola instead of a straight line. Its tension then follows T/k − (w·cos θ)²·L³ / 24T² = extension + P/k, its stiffness drops to Ernst's equivalent EA/L ÷ (1 + (w·cos θ·L)²·EA / 12T³), and it never goes fully slack. Negligible for highly tensioned cables; it matters for long or lightly tensioned ones. Off = straight tension-only cables."/>
         </StackPanel>
