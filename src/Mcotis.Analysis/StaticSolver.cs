@@ -81,8 +81,11 @@ public enum StaticProgressKind { Started, Equilibrium, Finished, Failed }
 /// <param name="Joints">Joints with a solved degree of freedom.</param>
 /// <param name="JointsInBalance">Those of them whose every solved degree of freedom is within the tolerance.</param>
 /// <param name="Worst">Where the out-of-balance is largest.</param>
+/// <param name="Scale">The force a cable equilibrium is judged against — the largest applied load or cable pretension,
+/// at least 1 kN: <paramref name="OutOfBalance"/> over it is the relative unbalance, <paramref name="Tolerance"/> over
+/// it the relative tolerance. 1 for a linear case, whose two measures are relative already.</param>
 public sealed record StaticBalance(int Iteration, double OutOfBalance, double Tolerance, int Joints, int JointsInBalance,
-    DofKey? Worst, bool Linear = false);
+    DofKey? Worst, bool Linear = false, double Scale = 1);
 
 /// <summary>What a run tells a view that follows it: a case started, where its equilibrium iteration stands, how it
 /// ended. Nothing of the solution depends on it. Reports are made on the solving thread, one after the other.</summary>
@@ -94,8 +97,9 @@ public sealed record StaticBalance(int Iteration, double OutOfBalance, double To
 /// <see cref="StaticProgressKind.Finished"/>: the number of fitting runs its pretension took.</param>
 /// <param name="Balance">The last equilibrium measured; null before the first.</param>
 /// <param name="Issue">On <see cref="StaticProgressKind.Failed"/>: the first error.</param>
+/// <param name="Diagnostics">On <see cref="StaticProgressKind.Finished"/>: those of the result.</param>
 public sealed record StaticProgress(ObjectId CaseId, StaticProgressKind Kind, int ActiveDofs, int RestrainedDofs, int SolvedDofs,
-    int FitRun, StaticBalance? Balance, ValidationIssue? Issue = null);
+    int FitRun, StaticBalance? Balance, ValidationIssue? Issue = null, StaticDiagnostics? Diagnostics = null);
 
 /// <summary>The static solver of the standalone system: 3D frames and cables on the compiled model, with the DOFs the
 /// model selects. Dense; sized for verification and for models up to its limits.
@@ -171,12 +175,12 @@ public static class StaticSolver
             return new(null, issues.ToImmutableArray());
         }
 
-        private void Report(StaticProgressKind kind, ValidationIssue? issue = null, int? fitRuns = null) =>
-            progress?.Report(new(requested, kind, activeDofs, restrainedDofs, solvedDofs, fitRuns ?? fitRun, balance, issue));
+        private void Report(StaticProgressKind kind, ValidationIssue? issue = null, int? fitRuns = null, StaticDiagnostics? diagnostics = null) =>
+            progress?.Report(new(requested, kind, activeDofs, restrainedDofs, solvedDofs, fitRuns ?? fitRun, balance, issue, diagnostics));
 
         /// <summary>Records how far each joint is from equilibrium and reports it. <paramref name="size"/> holds one
         /// value per solved degree of freedom, in the order of <paramref name="free"/>.</summary>
-        private void Measure(int[] free, double[] size, int iteration, double tolerance, bool linear = false)
+        private void Measure(int[] free, double[] size, int iteration, double tolerance, bool linear = false, double scale = 1)
         {
             var joints = new Dictionary<ObjectId, bool>();
             int worst = -1;
@@ -187,7 +191,7 @@ public static class StaticSolver
                 if (worst < 0 || size[i] > size[worst]) worst = i;
             }
             balance = new(iteration, worst < 0 ? 0 : size[worst], tolerance, joints.Count, joints.Values.Count(within => within),
-                worst < 0 ? null : model.Dofs[free[worst]].Key, linear);
+                worst < 0 ? null : model.Dofs[free[worst]].Key, linear, scale);
             Report(StaticProgressKind.Equilibrium);
         }
 
@@ -444,10 +448,11 @@ public static class StaticSolver
                 Error("static.recovery.nonfinite", ObjectKind.LoadCase, caseId, "Force/reaction recovery overflowed; no results returned.");
                 return Failed();
             }
-            Report(StaticProgressKind.Finished, fitRuns: cableFit?.Iterations ?? 0);
-            return new(new(model.DocumentId, model.InputHash, model.Revision, caseId, joints, frames, cables,
-                new(free.Length, residual, minimumPivot, unconnectedRotations.ToImmutableArray(), nonlinearIterations,
-                    equilibriumError, cableFit)), issues.ToImmutableArray());
+            var diagnostics = new StaticDiagnostics(free.Length, residual, minimumPivot, unconnectedRotations.ToImmutableArray(),
+                nonlinearIterations, equilibriumError, cableFit);
+            Report(StaticProgressKind.Finished, fitRuns: cableFit?.Iterations ?? 0, diagnostics: diagnostics);
+            return new(new(model.DocumentId, model.InputHash, model.Revision, caseId, joints, frames, cables, diagnostics),
+                issues.ToImmutableArray());
         }
 
         private void Unstable(int fullIndex, double pivot)
@@ -634,7 +639,7 @@ public static class StaticSolver
                 var residual = Residual(assembly, pretension, displacement);
                 norm = Norm(residual);
                 if (!double.IsFinite(norm)) break;
-                if (progress is not null) Measure(free, free.Select(i => Math.Abs(residual[i])).ToArray(), iteration, tolerance);
+                if (progress is not null) Measure(free, free.Select(i => Math.Abs(residual[i])).ToArray(), iteration, tolerance, scale: scale);
                 if (norm <= tolerance) return (displacement, iteration, norm / scale);
 
                 var tangent = Tangent(assembly, pretension, displacement, free, regularize: true);

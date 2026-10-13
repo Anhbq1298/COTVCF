@@ -93,7 +93,7 @@
               ToolTip="Delete this revision's FEM output databases, clear Post-Processing and enable editing"/>
     <MenuItem Header="Cancel FEM Analysis" Command="{Binding CancelFemAnalysis}"/>
     <MenuItem Header="Analysis _Monitor" Click="OpenFemMonitorClick"
-              ToolTip="Open analysis progress and cable convergence. Diagnostic details are collapsed by default."/>
+              ToolTip="Open the run monitor: the analysis log, the equilibrium of every load case and the cable convergence."/>
     <Separator/>
     <MenuItem Header="Analysis _Options…" Click="AnalysisOptions_Click" AutomationProperties.Name="Analysis Options"/>
    </MenuItem>
@@ -1823,7 +1823,7 @@
                  ToolTip="Solve the model as it is defined, once: a linear-elastic 2D XZ Euler-Bernoulli frame model, tension-only cables (with sag, when Cable sag is on), and pin supports. Uses the sections, materials and loading held in the model; SAP2000 is not read or written."/>
          <Button Content="Cancel" Command="{Binding CancelFemAnalysis}"/>
          <Button Content="Monitor" Click="OpenFemMonitorClick" Margin="0,0,4,0"
-                 ToolTip="Open analysis progress and cable convergence. Diagnostic details are collapsed by default."/>
+                 ToolTip="Open the run monitor: the analysis log, the equilibrium of every load case and the cable convergence."/>
          <TextBlock Style="{StaticResource InlineHelpIcon}" MouseLeftButtonUp="ShowFemHelp"
                     ToolTip="FEM procedure — click to open the documentation under Help."
                     AutomationProperties.Name="FEM procedure help"/>

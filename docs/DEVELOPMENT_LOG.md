@@ -18,6 +18,29 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Run monitor opens on an analysis log laid out like SAP2000's
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis → the run monitor (also Run → Analysis Monitor): the new tab "Analysis Log", beside
+  "Equilibrium by Load Case" and "Cable Target-Force Convergence"
+- What: Under the bar the run monitor now has three tabs instead of panels one above the other, and it opens on the
+  analysis log. The log is laid out like the analysis log of SAP2000 — blue fixed-width text, section titles spaced
+  out with the time at the right, NAME = value lines — and says what this solver does, in its own terms. It begins
+  with the model in numbers (joints, restraints, frames, cables, load patterns, load assignments, cases and
+  combinations), the load cases to be solved and the analysis options, then the equations of the run: active degrees
+  of freedom, restrained, solved. Every solve has a block, the fit of the cable target forces first: how it starts
+  (from zero, or from the pretension fitted for its stage), one line per equilibrium iteration — fitting run,
+  iteration, unbalance, relative unbalance, joints converged, where the unbalance is largest — with the trial
+  pretensions of a fitting run counted in one line, and at the end the stability check of the converged state, the
+  smallest scaled pivot, the resultant of the internal forces, what the fit reached and the time. The log closes with
+  the largest axial force, deflection and number of slack cables of every load case and combination, the output
+  database and ANALYSIS COMPLETE. A case that is unstable or does not converge ends with an error block that names
+  the joint and the movement; a run that fails or is cancelled closes with ANALYSIS INCOMPLETE. Text in the log can
+  be selected and copied. The log replaces the collapsed "Diagnostic details" list; the equilibrium table and the
+  convergence chart are as before, each on its own tab. The results of a run are unchanged.
+- Checks: dotnet run --project tests/Mcotis.Checks (2,767 checks); default offline Mcotis.Desktop.Checks; --fem;
+  --fem-sap; --general-solver; --template-building-ui; --dev-log
+
 ## 2026-10-13 · Optimization results: Run and Chart sheets
 - Status: Done
 - Who: Philip Pham, Claude

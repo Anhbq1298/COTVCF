@@ -13,11 +13,7 @@
   <Grid.RowDefinitions>
    <RowDefinition Height="Auto"/>
    <RowDefinition Height="8"/>
-   <RowDefinition Height="Auto"/>
-   <RowDefinition Height="8"/>
    <RowDefinition Height="*"/>
-   <RowDefinition Height="8"/>
-   <RowDefinition Height="Auto"/>
    <RowDefinition Height="Auto"/>
   </Grid.RowDefinitions>
 
@@ -37,12 +33,21 @@
    </StackPanel>
   </Border>
 
-  <!-- Equilibrium of every load case -->
-  <Border Grid.Row="2" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
-   <StackPanel>
-    <TextBlock Text="EQUILIBRIUM BY LOAD CASE" Style="{StaticResource Subheading}"/>
+  <TabControl x:Name="Views" Grid.Row="2">
+   <!-- The analysis log, laid out and coloured like the analysis log of SAP2000: it is what the monitor opens on -->
+   <TabItem x:Name="LogTab" Header="Analysis Log">
+    <TextBox x:Name="LogBox" IsReadOnly="True" IsReadOnlyCaretVisible="False" IsUndoEnabled="False" AcceptsReturn="True" TextWrapping="NoWrap"
+             FontFamily="{StaticResource MonoFont}" FontSize="12" Foreground="{StaticResource Accent}" Background="{StaticResource Raised}"
+             BorderThickness="0" Padding="8,6" VerticalContentAlignment="Top"
+             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+             AutomationProperties.Name="Analysis log"
+             ToolTip="The log of the run: the model, the equations, every load case with its equilibrium iterations and stability check. Select text to copy it."/>
+   </TabItem>
+
+   <!-- Equilibrium of every load case -->
+   <TabItem x:Name="EquilibriumTab" Header="Equilibrium by Load Case">
     <DataGrid x:Name="EquilibriumGrid" ItemsSource="{Binding FemEquilibriumRows}" IsReadOnly="True" CanUserDeleteRows="False" SelectionMode="Single"
-              MinHeight="52" MaxHeight="178" AutomationProperties.Name="Equilibrium by load case">
+              BorderThickness="0" AutomationProperties.Name="Equilibrium by load case">
      <DataGrid.Columns>
       <DataGridTextColumn Header="Load case" Binding="{Binding Case}" Width="1.5*" MinWidth="130"/>
       <DataGridTextColumn Header="Solved DOFs" Binding="{Binding SolvedDofs}" Width=".75*" MinWidth="88" ElementStyle="{StaticResource NumericCell}"/>
@@ -91,37 +96,28 @@
       </DataGridTemplateColumn>
      </DataGrid.Columns>
     </DataGrid>
-   </StackPanel>
-  </Border>
+   </TabItem>
 
-  <!-- Convergence chart -->
-  <Border Grid.Row="4" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
-   <Grid>
-    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <DockPanel Margin="0,0,0,6" LastChildFill="False">
-     <TextBlock Text="CABLE TARGET-FORCE CONVERGENCE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,12,0"/>
-     <TextBlock Text="Cable" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
-     <ComboBox Width="130" ItemsSource="{Binding FemMonitorCableNames}" SelectedItem="{Binding FemMonitorCable}" VerticalAlignment="Center"
-               ToolTip="Cable whose P_result / P_preset history is charted."/>
-     <TextBlock Text="Target stage" FontSize="11" VerticalAlignment="Center" Margin="12,0,4,0"/>
-     <ComboBox Width="240" ItemsSource="{Binding FemMonitorTargetStages}" SelectedItem="{Binding FemMonitorTargetStage}" VerticalAlignment="Center"
-               ToolTip="Only stages that fit the specified cable target forces. Subsequent load cases are viewed under Results."/>
-    </DockPanel>
-    <c:ConvergenceChart Grid.Row="1" Ratios="{Binding FemMonitorRatios}" TolerancePercent="{Binding FemMonitorTolerancePercent}"
-                        EmptyText="No pretension-fitting history for this cable yet."/>
-    <TextBlock Grid.Row="2" Text="{Binding FemMonitorChartSummary}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
-   </Grid>
-  </Border>
+   <!-- Convergence chart -->
+   <TabItem x:Name="ConvergenceTab" Header="Cable Target-Force Convergence">
+    <Grid Margin="8">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <DockPanel Margin="0,0,0,6" LastChildFill="False">
+      <TextBlock Text="Cable" FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
+      <ComboBox Width="130" ItemsSource="{Binding FemMonitorCableNames}" SelectedItem="{Binding FemMonitorCable}" VerticalAlignment="Center"
+                ToolTip="Cable whose P_result / P_preset history is charted."/>
+      <TextBlock Text="Target stage" FontSize="11" VerticalAlignment="Center" Margin="12,0,4,0"/>
+      <ComboBox Width="240" ItemsSource="{Binding FemMonitorTargetStages}" SelectedItem="{Binding FemMonitorTargetStage}" VerticalAlignment="Center"
+                ToolTip="Only stages that fit the specified cable target forces. Subsequent load cases are viewed under Results."/>
+     </DockPanel>
+     <c:ConvergenceChart Grid.Row="1" Ratios="{Binding FemMonitorRatios}" TolerancePercent="{Binding FemMonitorTolerancePercent}"
+                         EmptyText="No pretension-fitting history for this cable yet."/>
+     <TextBlock Grid.Row="2" Text="{Binding FemMonitorChartSummary}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+    </Grid>
+   </TabItem>
+  </TabControl>
 
-  <!-- Live log -->
-  <Border Grid.Row="6" BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" Padding="8">
-   <Expander Header="Diagnostic details" IsExpanded="False">
-    <ListBox x:Name="LogList" MaxHeight="150" ItemsSource="{Binding FemLog}" FontFamily="{StaticResource MonoFont}" FontSize="11"
-             ScrollViewer.HorizontalScrollBarVisibility="Auto" VirtualizingPanel.IsVirtualizing="True" BorderThickness="1"/>
-   </Expander>
-  </Border>
-
-  <DockPanel Grid.Row="7" Margin="0,8,0,0" LastChildFill="False">
+  <DockPanel Grid.Row="3" Margin="0,8,0,0" LastChildFill="False">
    <TextBlock DockPanel.Dock="Left" Text="One run of the model as it is defined. SAP2000 is not read or written." Style="{StaticResource Caption}" VerticalAlignment="Center"/>
    <Button DockPanel.Dock="Right" Content="Close" Click="CloseWindow" Margin="0"/>
    <Button DockPanel.Dock="Right" Content="Cancel Analysis" Command="{Binding CancelFemAnalysis}"/>

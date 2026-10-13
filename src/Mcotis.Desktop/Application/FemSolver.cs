@@ -356,6 +356,7 @@ public sealed class FemSolver
         if (equilibrium is not null)
         {
             var caseNames = caseIds.ToDictionary(item => item.Id, item => item.Case.Name);
+            var carrying = caseIds.Where(item => pretensioned && item.Case.PretensionFactor != 0).Select(item => item.Id).ToHashSet();
             int ended = 0;
             follow = new DirectProgress<StaticProgress>(report =>
             {
@@ -376,7 +377,14 @@ public sealed class FemSolver
                     report.ActiveDofs, report.RestrainedDofs, report.SolvedDofs, report.FitRun, balance?.Iteration ?? 0, balance?.Linear ?? false,
                     balance?.OutOfBalance, balance?.Tolerance, balance?.Joints ?? 0, balance?.JointsInBalance ?? 0,
                     balance?.Worst is { } worst ? document.Points[worst.PointId].Name : null, balance?.Worst?.Component.ToString(),
-                    (double)ended / wanted.Count, report.Issue is { } issue ? Said(issue) : null));
+                    (double)ended / wanted.Count, report.Issue is { } issue ? Said(issue) : null)
+                {
+                    Scale = balance?.Scale ?? 1,
+                    Pretensioned = !caseNames.ContainsKey(report.CaseId) || carrying.Contains(report.CaseId),
+                    Outcome = report.Diagnostics is { } done
+                        ? new(done.MinimumScaledPivot, done.EquilibriumError, done.CableFit?.WorstDeviationPercent, done.CableFit?.Converged ?? true, done.CableFit?.Failure)
+                        : null,
+                });
             });
         }
         // The engine is dense. These limits are where its memory, not its method, ends: about 1,000 joints.
@@ -479,7 +487,23 @@ public enum FemEquilibriumState { Running, Converged, NotConverged, Unstable, Fa
 public sealed record FemEquilibriumProgress(string CaseName, bool FitStage, FemEquilibriumState State,
     int ActiveDofs, int RestrainedDofs, int SolvedDofs, int FitRun, int Iteration, bool Linear,
     double? OutOfBalance, double? Tolerance, int Joints, int JointsInEquilibrium, string? WorstJoint, string? WorstDof,
-    double Fraction, string? Failure = null);
+    double Fraction, string? Failure = null)
+{
+    /// <summary>The force the out-of-balance of an iterated case is judged against — its largest applied load or cable
+    /// pretension, at least 1 kN: out-of-balance over it is the relative unbalance. 1 for a case solved directly.</summary>
+    public double Scale { get; init; } = 1;
+    /// <summary>The case carries a fitted cable pretension: the fit stage itself, or a case continuing from it.</summary>
+    public bool Pretensioned { get; init; }
+    /// <summary>Of a case that converged: what the solver checked before returning its result.</summary>
+    public FemEquilibriumOutcome? Outcome { get; init; }
+}
+
+/// <param name="SmallestPivot">Smallest scaled pivot of the stiffness factorized at the solution — the tangent
+/// stiffness at the converged state for an iterated case. All pivots positive: the stiffness is positive definite.</param>
+/// <param name="ResultantError">Resultant force and moment of all internal forces, relative to their size; it must vanish.</param>
+/// <param name="FitDeviationPercent">Largest deviation of a cable from its target force after the fit; null without one.</param>
+/// <param name="FitMet">False when the targets were not met within the tolerance and the closest pretension is used.</param>
+public sealed record FemEquilibriumOutcome(double SmallestPivot, double ResultantError, double? FitDeviationPercent, bool FitMet, string? FitFailure);
 
 /// <summary>Passes a report on at once, on the thread that makes it; <see cref="Progress{T}"/> would post it, and it
 /// could arrive after the run has returned.</summary>

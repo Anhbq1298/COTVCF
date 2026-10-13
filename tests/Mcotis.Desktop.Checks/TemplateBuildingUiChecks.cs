@@ -134,7 +134,7 @@ internal static class TemplateBuildingUiChecks
         }
     }
     /// <summary>The run monitor of the main window: empty before a run; after Run Analysis on the default model, the
-    /// degrees of freedom of the run and one line per load case with its equilibrium.</summary>
+    /// analysis log it opens on, the degrees of freedom of the run and one line per load case with its equilibrium.</summary>
     private static void RunMonitor(string folder)
     {
         var state = StudyComposerChecks.CreateState();
@@ -154,13 +154,28 @@ internal static class TemplateBuildingUiChecks
             TextBlock Line(string property) => Visuals<TextBlock>(monitor).Single(text =>
                 System.Windows.Data.BindingOperations.GetBindingExpression(text, TextBlock.TextProperty)?.ParentBinding.Path.Path == property);
             var bar = Visuals<ProgressBar>(monitor).Single();
-            Check(monitor.EquilibriumGrid.IsVisible && monitor.EquilibriumGrid.Items.Count == 0 && !Line(nameof(MainViewModel.FemMonitorDofText)).IsVisible &&
+            Check(monitor.Views.Items.OfType<TabItem>().Select(tab => tab.Header).SequenceEqual(["Analysis Log", "Equilibrium by Load Case", "Cable Target-Force Convergence"]) &&
+                  ReferenceEquals(monitor.Views.SelectedItem, monitor.LogTab) && monitor.LogBox.IsVisible && monitor.LogBox.Text.Length == 0 &&
+                  monitor.EquilibriumGrid.Items.Count == 0 && !Line(nameof(MainViewModel.FemMonitorDofText)).IsVisible &&
                   !Line(nameof(MainViewModel.FemMonitorEquilibriumText)).IsVisible && bar.Value == 0 && !bar.IsIndeterminate,
-                "before a run the monitor's equilibrium table is empty, and the lines that describe a run take no room");
+                "before a run the monitor opens on an empty analysis log, its equilibrium table is empty, and the lines that describe a run take no room");
 
             var runs = FemModelFileChecks.Analyze(vm); Idle();
+            Snapshot(monitor, ".work/run-monitor-log-ui.png");
+            var shownLog = monitor.LogBox.Text.Split(Environment.NewLine);
+            Check(runs.Count == 1 && ReferenceEquals(monitor.Views.SelectedItem, monitor.LogTab) && monitor.LogBox.IsVisible && monitor.LogBox.IsReadOnly &&
+                  shownLog.Take(vm.FemLog.Count).SequenceEqual(vm.FemLog) && shownLog.Length == vm.FemLog.Count + 1 && shownLog[^1].Length == 0 &&
+                  shownLog[0].StartsWith(" B E G I N   A N A L Y S I S ", StringComparison.Ordinal) &&
+                  shownLog[^2].StartsWith(" A N A L Y S I S   C O M P L E T E ", StringComparison.Ordinal) &&
+                  shownLog.Count(line => line == FemRunLog.Stable) == vm.FemEquilibriumRows.Count,
+                $"Run Analysis writes the analysis log into the monitor as SAP2000 does: {vm.FemLog.Count} lines from BEGIN ANALYSIS to ANALYSIS COMPLETE, a stability check for every case solved");
+            Check(ReferenceEquals(monitor.LogBox.Foreground, monitor.FindResource("Accent")) && ReferenceEquals(monitor.LogBox.Background, monitor.FindResource("Raised")) &&
+                  ReferenceEquals(monitor.LogBox.FontFamily, monitor.FindResource("MonoFont")) && monitor.LogBox.TextWrapping == TextWrapping.NoWrap &&
+                  monitor.LogBox.VerticalOffset > 0 && monitor.LogBox.VerticalOffset + monitor.LogBox.ViewportHeight >= monitor.LogBox.ExtentHeight - 1,
+                "… in the look of that log — blue fixed-width text on white, lines not wrapped — and scrolled to its newest line");
+            monitor.Views.SelectedItem = monitor.EquilibriumTab; Idle();
             Snapshot(monitor, ".work/run-monitor-ui.png");
-            Check(runs.Count == 1 && ReferenceEquals(shell.OwnedWindows.OfType<FemRunMonitorWindow>().Single(), monitor) &&
+            Check(monitor.EquilibriumGrid.IsVisible && ReferenceEquals(shell.OwnedWindows.OfType<FemRunMonitorWindow>().Single(), monitor) &&
                   vm.FemEquilibriumRows.Count >= 2 && monitor.EquilibriumGrid.Items.Count == vm.FemEquilibriumRows.Count &&
                   monitor.EquilibriumGrid.Columns.Select(column => column.Header is TextBlock header ? header.Text : column.Header as string)
                       .SequenceEqual(["Load case", "Solved DOFs", "Iterations", "Out-of-balance", "Accepted", "Joints converged", "Largest at", "Status"]),
@@ -175,6 +190,9 @@ internal static class TemplateBuildingUiChecks
             Check(dofs.IsVisible && dofs.Text == vm.FemMonitorDofText && dofs.Text.Contains(" active", StringComparison.Ordinal) && dofs.Text.Contains(" solved", StringComparison.Ordinal) &&
                   outcome.IsVisible && outcome.Text.StartsWith("Equilibrium reached in every load case", StringComparison.Ordinal) && bar.Value == 1 && !bar.IsIndeterminate,
                 $"… above it the degrees of freedom of the run and the outcome, with the bar full: {dofs.Text} {outcome.Text}");
+            monitor.Views.SelectedItem = monitor.ConvergenceTab; Idle();
+            Check(Visuals<Mcotis.Desktop.Presentation.Controls.ConvergenceChart>(monitor).Single() is { IsVisible: true } chart && chart.Ratios.Count > 0,
+                "… and the third view is the cable target-force convergence chart, with the fitting runs of the monitored cable");
         }
         finally { shell.Close(); }
     }

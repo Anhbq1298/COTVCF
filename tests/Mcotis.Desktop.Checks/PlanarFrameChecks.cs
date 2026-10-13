@@ -337,6 +337,12 @@ internal static class PlanarFrameChecks
               !segmentedFit.Failure.Contains("Analysis Options", StringComparison.Ordinal) &&
               FemEquilibriumRow.From(segmentedFit) is { Status: FemEquilibriumRow.Unstable, Case: "Target fit" } unstableRow && unstableRow.Detail == segmentedFit.Failure,
             "… without pointing to a degree-of-freedom option this window does not have, and the run monitor's line for the case reads Unstable with the reason");
+        var segmentedLog = GeneralSolverParityChecks.LogOf(segmentedReports.Items);
+        int segmentedError = Array.IndexOf(segmentedLog, FemRunLog.Error);
+        Check(segmentedError > 0 && segmentedLog[segmentedError + 1].StartsWith(" 'M' UX has no stiffness and no restraint", StringComparison.Ordinal) &&
+              segmentedLog.Contains(" CASE NOT SOLVED: THE MODEL IS UNSTABLE") && !segmentedLog.Contains(FemRunLog.Stable) &&
+              segmentedLog.All(line => line.Length <= 78),
+            "… and in the analysis log the case ends with an error block that names the joint and the movement, not with a stability check");
         // The same cable as one member is the stable model: taut it meets its target, pushed it goes slack.
         var oneCableGeometry = new GeometryModel(cableGeometry.Points, [.. cableGeometry.Members.Where(member => member.Kind == MemberKind.Frame), new("Cable-BD", "B", "D", MemberKind.Cable)]);
         var oneCable = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["Cable-BD"] = new("Cable-BD", 0.01, modulusKNPerM2, null) };
