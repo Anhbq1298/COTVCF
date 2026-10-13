@@ -1382,9 +1382,9 @@ internal static class Program
                 MegaColumnChecks.Run();
             }
             FemDatabaseChecks.Run();
-            FemModelFileChecks.Run();
             if (full)
             {
+                FemModelFileChecks.Run();
                 GeneralSolverParityChecks.Run();
                 RunMonitorChecks.Run();
                 SapImportChecks.Run();
