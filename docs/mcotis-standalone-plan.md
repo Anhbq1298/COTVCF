@@ -166,7 +166,7 @@ chạy model có Shell và nói rõ lý do.
 
 ## 7. Checks
 
-`dotnet run --project tests/Mcotis.Checks` — 2904 checks, không cần SAP2000, WPF hay database:
+`dotnet run --project tests/Mcotis.Checks -- --full` — full verification (historically 2904 checks), không cần SAP2000, WPF hay database:
 
 | Nhóm | Nội dung |
 |---|---|
