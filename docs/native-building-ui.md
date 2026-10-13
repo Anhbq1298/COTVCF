@@ -56,7 +56,7 @@ there. A cable gives stiffness along its own line only, so a movement left on th
 member, a restraint — makes the model unstable, and Run reports it with the joint and the movement instead of
 solving. In the main window cable joints move in UX and UZ; that is fixed and not shown as an option. Locked/running legacy models show their options read-only.
 
-Verification: `dotnet run --project tests/Mcotis.Checks` includes template topology, line-load accounting, support
+Verification: `dotnet run --project tests/Mcotis.Checks -- --full` includes template topology, line-load accounting, support
 reactions, self-weight, planar cases, invalid input, Undo/Redo and Save/Open. `--template-building-ui` on
 `tests/Mcotis.Desktop.Checks` checks staged forms, native runs, diagnostics, result state, Save/Open and WPF bindings;
 it captures the forms in `.work/*-ui.png`. Existing numerical benchmarks remain unchanged.
