@@ -130,6 +130,7 @@ public sealed partial class MainViewModel
             CableSections.Clear();
             TendonSections.Clear();
             ResetMaterialLibrary();
+            ResetFemDofs();
             femSapLoading = SapFemLoading.Empty;
             SetFemLoadRows([], [], []);
             offlineLoadCaseNames = [];
@@ -262,14 +263,34 @@ public sealed partial class MainViewModel
             TendonSections = TendonSections.Count > 0 ? TendonSections.ToList() : null,
             Loading = femSapLoading,
             PatternRows = FemPatternRows.Select(row => new FemPatternRowDto(row.Name, row.Type, row.SelfWeightMultiplier, row.Role, row.Loads)).ToList(),
-            CaseRows = FemCaseRows.Select(row => new FemDefinitionRowDto(row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note, row.CableTargetForces)).ToList(),
-            CombinationRows = FemCombinationRows.Select(row => new FemDefinitionRowDto(row.Name, row.Type, row.Definition, null, row.Run, row.Supported, row.Source, row.Note)).ToList(),
+            // A row is saved with its identity; the case it continues from, or takes its stiffness from, is named here
+            // and resolved to that case's identity where the rows are completed (FemCaseSchema). An option that is the
+            // default is left out: the row then says what a row has always said.
+            CaseRows = FemCaseRows.Select(row => new FemDefinitionRowDto(row.Name,
+                // the type as text: a case of the application says what it is; one read from another program keeps
+                // that program's word for it, unless Load Case Data gave it another type
+                row.Source == "App" || row.Options.Kind != Mcotis.Core.CaseKind.NonlinearStatic ? row.CaseType : row.Type,
+                row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note, row.CableTargetForces)
+            {
+                Id = row.Id.ToString("D"),
+                CaseKind = row.Options.Kind == Mcotis.Core.CaseKind.NonlinearStatic ? null : row.Options.Kind.ToString(),
+                GeometricMode = row.Options.GeometricMode == Mcotis.Core.GeometricNonlinearity.None ? null : row.Options.GeometricMode.ToString(),
+                StiffnessSourceCase = row.Options.StiffnessSourceCase,
+                NonlinearControls = row.Options.Controls is { } controls
+                    ? new(controls.MaxLoadSteps, controls.MaxIterationsPerStep, controls.RelativeResidualTolerance, controls.RelativeDisplacementTolerance) : null,
+                Modal = row.Options.MassSource is { } mass
+                    ? new(mass, femMassSources.FirstOrDefault(source => source.Name.Equals(mass, StringComparison.OrdinalIgnoreCase))?.Id, row.Options.RequestedModes ?? 0) : null,
+            }).ToList(),
+            CombinationRows = FemCombinationRows.Select(row => new FemDefinitionRowDto(row.Name, row.Type, row.Definition, null, row.Run, row.Supported, row.Source, row.Note) { Id = row.Id.ToString("D") }).ToList(),
+            MassSources = femMassSources.Count > 0 ? femMassSources.ToList() : null,
             Settings = new FemSettingsDto
             {
                 TargetFitPercent = FemTargetFitPercent,
                 TargetFitIterations = FemTargetFitIterations,
                 FrameMeshSegments = FemFrameMeshSegments,
                 CableSag = FemCableSag,
+                ActiveDofs = DofNames(FemActiveDofs),
+                CableJointDofs = DofNames(FemCableDofs),
             },
         };
     }
@@ -388,6 +409,7 @@ public sealed partial class MainViewModel
             FemTargetFitIterations = file.Settings.TargetFitIterations;
             FemFrameMeshSegments = file.Settings.FrameMeshSegments;
             FemCableSag = file.Settings.CableSag;
+            RestoreFemDofs(file.Settings.ActiveDofs, file.Settings.CableJointDofs, starting: isDefault);
 
             offlineModelPath = path;
             isDefaultModel = isDefault;
@@ -426,17 +448,32 @@ public sealed partial class MainViewModel
         }
     }
 
+    /// <summary>The mass sources of the configuration, as it holds them. There is no editor for them yet: they are
+    /// kept and saved again.</summary>
+    private List<FemMassSourceDto> femMassSources = [];
+
     private void RestoreFemLoadRows(FemModelFileDto file)
     {
         SetFemLoadRows(
             file.PatternRows.Select(row => new FemPatternRow(row.Name, row.Type, row.SelfWeightMultiplier, row.Role, row.Loads)).ToArray(),
             file.CaseRows.Select(row =>
             {
-                var restored = new FemCaseRow(row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note);
+                // the row as it was saved: its identity, and its kind and what belongs to it — kept even where this
+                // workspace cannot solve every kind yet; the load-case form can edit the stored options
+                var restored = new FemCaseRow(row.Name, row.Type, row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note)
+                {
+                    Id = Guid.TryParse(row.Id, out var id) ? id : Guid.NewGuid(),
+                    Options = new(FemCaseSchema.KindOf(row), FemCaseSchema.GeometricOf(row), row.StiffnessSourceCase,
+                        row.NonlinearControls is { } controls
+                            ? new(controls.MaxLoadSteps, controls.MaxIterationsPerStep, controls.RelativeResidualTolerance, controls.RelativeDisplacementTolerance) : null,
+                        row.Modal?.MassSource, row.Modal?.RequestedModes),
+                };
                 restored.CableTargetForces = row.CableTargetForces ?? Terms(restored).Any(term => PretensionPatterns.Contains(term.Name, StringComparer.OrdinalIgnoreCase));
                 return restored;
             }).ToArray(),
-            file.CombinationRows.Select(row => new FemCombinationRow(row.Name, row.Type, row.Definition, row.Run, row.Supported, row.Source, row.Note)).ToArray());
+            file.CombinationRows.Select(row => new FemCombinationRow(row.Name, row.Type, row.Definition, row.Run, row.Supported, row.Source, row.Note)
+                { Id = Guid.TryParse(row.Id, out var id) ? id : Guid.NewGuid() }).ToArray());
+        femMassSources = (file.MassSources ?? []).ToList();
         FemLoadWarnings.Clear();
         foreach (var warning in femSapLoading.Warnings) FemLoadWarnings.Add(warning);
         Notify(nameof(FemLoadSummary));
@@ -475,8 +512,7 @@ public sealed partial class MainViewModel
         SelectedFemRun = null;
         FemRuns.Clear();
         FemCableFitRows.Clear();
-        FemLog.Clear();
-        ClearFemEquilibrium();
+        FemMonitor.Reset();
         FemProgressText = "";
         NotifyFemMonitorChart();
     }

@@ -218,6 +218,7 @@ internal static class DofCompilationChecks
         older["settings"]!.AsObject().Remove("cableDofs");
         Throws<DocumentFileException>(() => NativeDocumentFormat.Deserialize(older.ToJsonString()), "The current schema cannot silently default missing cable-joint degrees of freedom");
         older["schemaVersion"] = 2;
+        LoadCasesAsSchema3(older);
         Assert(NativeDocumentFormat.Deserialize(older.ToJsonString()).Settings.CableDofs == DofMask.Translations, "A schema-2 file opens with the translations for its cable joints");
         var compiled = ModelCompiler.Compile(migrated).Model!;
         Assert(compiled.FreeDofCount == 3 && compiled.Dofs.Length == 12 && compiled.Input.Points[B].Position == new Xyz(4, 0, 0),

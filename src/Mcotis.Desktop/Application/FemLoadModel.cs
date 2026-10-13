@@ -71,6 +71,9 @@ public abstract class FemDefinitionRow(string name, string type, string definiti
     private string name = name;
     private string definition = definition;
     private bool run = run && supported;
+    /// <summary>The identity of the row. A rename does not change it: what refers to the row in a saved
+    /// configuration refers to this, not to its name.</summary>
+    public Guid Id { get; init; } = Guid.NewGuid();
     /// <summary>Set by the owner of the table: what is wrong with a new name for this row (taken, …), or null.</summary>
     public Func<FemDefinitionRow, string, string?>? NameProblem { get; set; }
     /// <summary>Set by the owner of the table: called after a rename with the previous name, so references can follow.</summary>
@@ -95,8 +98,8 @@ public abstract class FemDefinitionRow(string name, string type, string definiti
         get => definition;
         set
         {
-            FemLoadDefinition.Parse(value); // syntax check; throws for the binding's validation
-            Set(ref definition, value.Trim());
+            if (!string.IsNullOrWhiteSpace(value)) FemLoadDefinition.Parse(value); // syntax check; modal cases are empty
+            if (Set(ref definition, value.Trim()) && this is FemCaseRow row) row.Notify(nameof(FemCaseRow.LoadsOrMass));
         }
     }
     public bool Run { get => run; set => Set(ref run, value && Supported); }
@@ -106,11 +109,83 @@ public abstract class FemDefinitionRow(string name, string type, string definiti
     public string Note { get; } = note;
 }
 
+/// <summary>What a load case is beyond its loads, as version 2 of the configuration holds it
+/// (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md): its kind, its geometric nonlinearity, the case whose end
+/// stiffness it uses, its own iteration controls, its mass source and number of modes. The default is what every
+/// case of this workspace has been so far: a nonlinear static case on its own stiffness, without second-order
+/// effects. Load Case Data sets the others; a case that has one of them is defined, saved and planned, but it is not
+/// solved (<see cref="NotSolvedYet"/>) until that analysis is verified — never as a default case in its place.</summary>
+public sealed record FemCaseOptions(Mcotis.Core.CaseKind Kind = Mcotis.Core.CaseKind.NonlinearStatic,
+    Mcotis.Core.GeometricNonlinearity GeometricMode = Mcotis.Core.GeometricNonlinearity.None, string? StiffnessSourceCase = null,
+    Mcotis.Core.StaticSolveControls? Controls = null, string? MassSource = null, int? RequestedModes = null)
+{
+    public static FemCaseOptions Default { get; } = new();
+    public bool IsDefault => this == Default;
+    /// <summary>The case ends in a state another case can continue from, and in a stiffness another can use.</summary>
+    public bool ProducesState => Kind is Mcotis.Core.CaseKind.NonlinearStatic or Mcotis.Core.CaseKind.InitialPDelta;
+
+    /// <summary>The kinds as Load Case Data offers them, in its order.</summary>
+    public static IReadOnlyList<Mcotis.Core.CaseKind> Kinds { get; } =
+        [Mcotis.Core.CaseKind.LinearStatic, Mcotis.Core.CaseKind.NonlinearStatic, Mcotis.Core.CaseKind.InitialPDelta, Mcotis.Core.CaseKind.ModalEigen];
+
+    /// <summary>The kind as the application names it.</summary>
+    public static string KindName(Mcotis.Core.CaseKind kind) => kind switch
+    {
+        Mcotis.Core.CaseKind.LinearStatic => "Linear Static",
+        Mcotis.Core.CaseKind.NonlinearStatic => "Nonlinear Static",
+        Mcotis.Core.CaseKind.InitialPDelta => "Initial P-Delta",
+        _ => "Modal (Eigenvectors)",
+    };
+
+    /// <summary>What the tables say of a case that is defined but not solved yet.</summary>
+    public const string Unavailable = "Unavailable — verification pending";
+
+    /// <summary>Why a case with these options has no result in this workspace yet; null for the default.</summary>
+    public string? NotSolvedYet(string caseName)
+    {
+        const string pending = "numerical verification pending (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md)";
+        return Kind == Mcotis.Core.CaseKind.ModalEigen ? $"Load case '{caseName}' is a modal case. Eigenvalue analysis is not available yet — {pending}. Nothing is computed for it."
+            : Kind == Mcotis.Core.CaseKind.InitialPDelta || GeometricMode == Mcotis.Core.GeometricNonlinearity.PDelta
+                ? $"Load case '{caseName}' is analysed with P-Delta. P-Delta is not available yet — {pending}. The case is not solved, and it is not replaced by a first-order analysis."
+            : Kind == Mcotis.Core.CaseKind.LinearStatic
+                ? $"Load case '{caseName}' is linear static{(StiffnessSourceCase is null ? "" : $" on the stiffness at the end of '{StiffnessSourceCase}'")}. " +
+                  $"Linear static cases are not solved in this workspace yet — {pending}. It is not solved as a nonlinear case in its place."
+            : Controls is not null ? $"Load case '{caseName}' sets its own load steps, iterations and tolerances. Case-specific iteration controls are not applied yet — {pending}."
+            : null;
+    }
+}
+
 public sealed class FemCaseRow(string name, string type, string definition, string? initialCase, bool run, bool supported, string source, string note)
     : FemDefinitionRow(name, type, definition, run, supported, source, note)
 {
     private string initialCase = FemLoadPlan.IsNoInitialCase(initialCase) ? "" : initialCase!.Trim();
     private bool cableTargetForces;
+    private FemCaseOptions options = FemCaseOptions.Default;
+    /// <summary>The kind of the case and what belongs to it: Load Case Data sets it, and it follows the rename of the
+    /// case whose stiffness it uses. The case a nonlinear case continues from is <see cref="InitialCase"/>; the case
+    /// whose stiffness a linear or modal case uses is in here — two references, never one for the other.</summary>
+    public FemCaseOptions Options
+    {
+        get => options;
+        internal set
+        {
+            if (!Set(ref options, value)) return;
+            Notify(nameof(CaseType)); Notify(nameof(Geometric)); Notify(nameof(StartsFrom));
+            Notify(nameof(LoadsOrMass)); Notify(nameof(Availability));
+        }
+    }
+    // ---- what the Load Cases table shows of the case ----
+    public string CaseType => FemCaseOptions.KindName(Options.Kind);
+    public string Geometric => !Options.ProducesState ? "" : Options.GeometricMode == Mcotis.Core.GeometricNonlinearity.PDelta ? "P-Delta" : "None";
+    /// <summary>The state a nonlinear case starts from, or the stiffness a linear or modal case uses.</summary>
+    public string StartsFrom => !Options.ProducesState
+        ? Options.StiffnessSourceCase is { Length: > 0 } source ? $"Stiffness of {source}" : "Unstressed stiffness"
+        : InitialCase.Length == 0 ? "Zero" : $"Continues {InitialCase}";
+    public string LoadsOrMass => Options.Kind == Mcotis.Core.CaseKind.ModalEigen
+        ? Options.MassSource is { Length: > 0 } source ? $"{source} · {Options.RequestedModes ?? 0} modes" : "No mass source"
+        : Definition;
+    /// <summary>Whether Run solves the case. A case that is not solved yet says so here; Run says why.</summary>
+    public string Availability => Options.NotSolvedYet(Name) is null ? "Available" : FemCaseOptions.Unavailable;
     public bool CableTargetForces { get => cableTargetForces; set => Set(ref cableTargetForces, value); }
     /// <summary>Nonlinear static case it continues from (its loads are included cumulatively); empty when it starts unstressed.</summary>
     public string InitialCase
@@ -120,7 +195,7 @@ public sealed class FemCaseRow(string name, string type, string definition, stri
         {
             var next = FemLoadPlan.IsNoInitialCase(value) ? "" : value.Trim();
             if (next.Equals(Name, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("A case cannot continue from itself.");
-            Set(ref initialCase, next);
+            if (Set(ref initialCase, next)) Notify(nameof(StartsFrom));
         }
     }
 }
@@ -190,8 +265,18 @@ public sealed class FemLoadPlan
     private readonly IReadOnlySet<string> pretensionPatterns;
     private readonly IReadOnlyDictionary<string, string?> fitStageOf;
 
+    /// <summary>The cases the run solves, in the order of the Load Cases table: those set to run, and those the run
+    /// needs first (<see cref="PrerequisiteRemarks"/>).</summary>
     public IReadOnlyList<string> CaseNames { get; }
+    /// <summary>The cases of <see cref="CaseNames"/> that are not set to run, each with the reason the run solves it:
+    /// a case that is set to run continues from it, or a combination that is set to run adds it up.</summary>
+    public IReadOnlyDictionary<string, string> PrerequisiteRemarks { get; }
     public IReadOnlyList<string> CombinationNames { get; }
+    /// <summary>The result that stands for the run where one result does: the first case that was set to run.</summary>
+    public string PrimaryResultName => CaseNames.FirstOrDefault(name => !PrerequisiteRemarks.ContainsKey(name)) ?? ResultNames[0];
+    /// <summary>The result a finished run shows first: its first combination, else the last case that was set to run.</summary>
+    public string DefaultResultName => CombinationNames.FirstOrDefault()
+        ?? CaseNames.LastOrDefault(name => !PrerequisiteRemarks.ContainsKey(name)) ?? CaseNames[^1];
     /// <summary>Case whose loads (other than the cable target-force pattern) act while the pretension is fitted —
     /// the first of <see cref="FitCases"/>.</summary>
     public string? FitCase { get; }
@@ -207,9 +292,10 @@ public sealed class FemLoadPlan
         IReadOnlyDictionary<string, IReadOnlyList<(string, double)>> resolvedCases, IReadOnlyList<string> caseNames,
         IReadOnlyList<(string, IReadOnlyList<(string, bool, double)>)> combinations, string? fitCase,
         IReadOnlySet<string> tab01Patterns, IReadOnlySet<string> pretensionPatterns, IReadOnlyList<string> notes,
-        IReadOnlyDictionary<string, string?> fitStageOf)
+        IReadOnlyDictionary<string, string?> fitStageOf, IReadOnlyDictionary<string, string> prerequisiteRemarks)
     {
         this.fitStageOf = fitStageOf;
+        PrerequisiteRemarks = prerequisiteRemarks;
         FitCases = caseNames.Select(name => fitStageOf[name]).Where(stage => stage is not null).Select(stage => stage!)
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(stage => string.Equals(stage, fitCase, StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToArray();
         this.patternLoads = patternLoads;
@@ -232,7 +318,7 @@ public sealed class FemLoadPlan
         IReadOnlyList<FemPatternRow> patterns, IReadOnlyList<FemCaseRow> cases, IReadOnlyList<FemCombinationRow> combinationRows,
         SapFemLoading sap, IReadOnlyDictionary<string, FemSectionProperties> sections, GeometryModel geometry,
         IReadOnlyCollection<string> tab01PatternNames, IReadOnlyCollection<string> pretensionPatternNames,
-        IReadOnlyCollection<string> appliedPoints)
+        IReadOnlyCollection<string> appliedPoints, IReadOnlyList<(Guid Id, string Name)>? massSources = null)
     {
         var notes = new List<string>();
         var comparer = StringComparer.OrdinalIgnoreCase;
@@ -283,6 +369,8 @@ public sealed class FemLoadPlan
             if (resolved.TryGetValue(name, out var done)) return done;
             if (!caseRows.TryGetValue(name, out var row)) throw new InvalidOperationException($"Load case '{name}' is not defined.");
             if (!row.Supported) throw new InvalidOperationException($"Load case '{name}' ({row.Type}) is not supported by the internal FEM.");
+            // a case of a kind, or with an option, that is not solved yet is refused — it is never run as a plain nonlinear static case
+            if (row.Options.NotSolvedYet(row.Name) is { } pending) throw new InvalidOperationException(pending);
             if (!visiting.Add(name)) throw new InvalidOperationException($"Load case '{name}' has a circular initial-case chain.");
             var terms = FemLoadDefinition.Parse(row.Definition).Select(term =>
                 patternNames.Contains(term.Name) ? (patterns.First(pattern => comparer.Equals(pattern.Name, term.Name)).Name, term.Factor)
@@ -333,6 +421,37 @@ public sealed class FemLoadPlan
         }
         foreach (var (name, _) in runCombinations) AddCombination(name);
 
+        // The run plan — the one Set Load Cases to Run shows — decides what the run holds: the cases that are ticked,
+        // the cases a ticked combination adds up, and what each of them needs first: the case it continues from, the
+        // case whose stiffness it uses. They are solved in the order of the table, whatever their identities are.
+        // This solver still carries a continued case by its accumulated loads, so it does not read the result of the
+        // case before it; that case is solved and reported all the same, as it will have to be once a state is
+        // handed on. The stiffness of another case is a dependency only: it is never turned into loads of the case
+        // that uses it.
+        var execution = CaseExecutionCoordinator.Plan(cases, combinationRows, massSources);
+        if (!execution.IsValid) throw new InvalidOperationException(execution.Issues[0]);
+        var planned = execution.Cases.Select(item => item.Row.Name).ToHashSet(comparer);
+        neededCases = cases.Where(row => planned.Contains(row.Name)).Select(row => row.Name).ToList();
+        // a case of the run that is not ticked, and why it is there
+        var prerequisites = new Dictionary<string, string>(comparer);
+        var continued = new HashSet<string>(comparer);
+        foreach (var name in neededCases.Where(name => !caseRows[name].Run))
+        {
+            static string Listed(IReadOnlyList<string> names) => names.Count == 1 ? $"'{names[0]}'"
+                : string.Join(", ", names.Take(names.Count - 1).Select(item => $"'{item}'")) + $" and '{names[^1]}'";
+            // in the order of the table, as everything of the run is said
+            string[] Users(Mcotis.Core.CaseDependencyKind kind) => cases.Where(row => execution.Cases.Any(item => ReferenceEquals(item.Row, row) &&
+                item.Dependencies.Any(dependency => dependency.Kind == kind && comparer.Equals(dependency.Source, name)))).Select(row => row.Name).ToArray();
+            var (continuing, reading) = (Users(Mcotis.Core.CaseDependencyKind.ContinueState), Users(Mcotis.Core.CaseDependencyKind.FrozenStiffness));
+            var adding = orderedCombinations.Where(item => item.Item2.Any(term => !term.Item2 && comparer.Equals(term.Item1, name))).Select(item => item.Item1).ToArray();
+            var reasons = new List<string>();
+            if (continuing.Length > 0) reasons.Add($"{Listed(continuing)} {(continuing.Length == 1 ? "continues" : "continue")} from it");
+            if (reading.Length > 0) reasons.Add($"{Listed(reading)} {(reading.Length == 1 ? "uses" : "use")} its stiffness");
+            if (adding.Length > 0) reasons.Add($"{(adding.Length == 1 ? "load combination" : "load combinations")} {Listed(adding)} {(adding.Length == 1 ? "adds" : "add")} it up");
+            prerequisites[name] = "Not set to run: solved because " + string.Join(", and ", reasons) + ".";
+            if (continuing.Length + reading.Length > 0) continued.Add(name);
+        }
+
         if (neededCases.Count == 0) throw new InvalidOperationException("Tick at least one load case or combination to run on FEM → Inputs → Loads.");
         foreach (var name in neededCases) Resolve(name, new HashSet<string>(comparer));
 
@@ -371,8 +490,10 @@ public sealed class FemLoadPlan
         if (stages.Values.Where(stage => stage is not null).Distinct(comparer).Count() > 1)
             notes.Add("Several load cases apply the cable target-force pattern; each is its own pretension stage, and a case uses the stage it continues from.");
 
+        foreach (var name in neededCases.Where(continued.Contains))
+            notes.Add($"Load case '{name}' is not set to run; it is solved because another case of the run needs it first.");
         return new FemLoadPlan(loads, resolved, neededCases, orderedCombinations, fitCase,
-            tab01, pretension, notes, stages);
+            tab01, pretension, notes, stages, prerequisites);
     }
 
     /// <summary>SAP reports "start from zero / unstressed" as an empty name, "None" or "Zero".</summary>

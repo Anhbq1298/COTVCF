@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Mcotis.Analysis;
 using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Geometry;
@@ -9,8 +10,17 @@ namespace Mcotis.Desktop.Application;
 /// The application's analysis. It hands the model the application holds to the general solver of the standalone
 /// system — <see cref="StaticSolver"/> in <c>Mcotis.Analysis</c>, the same engine the native workspace runs — and
 /// gives the results back in the application's result types. No numerical method lives here.
-/// <para>The application's model is planar (joints in one XZ plane, loads in X and Z, pin supports), so the engine
-/// runs it with the XZ degrees of freedom. What it solves, from which sources and how it was checked is recorded in
+/// <para>The application's model lies in one XZ plane (loads in X and Z, pin supports at its lowest joints). The
+/// degrees of freedom are the user's, from Analysis Options, and go to the engine as chosen — never corrected. With
+/// those of the plane (UX, UZ, RY, or fewer) the model is analysed in its plane; a degree of freedom that is off is
+/// held at every joint. With UY, RX or RZ on it is analysed in 3D, its frames with the out-of-plane inertia and the
+/// torsion constant of their sections. Its pins are all on one line, so in 3D nothing holds it out of its plane: it is
+/// free to turn about that line. The loads act in the plane and do no work on that movement, so the engine is asked
+/// to hold it and solve (<see cref="StaticOptions.HoldUnloadedMechanisms"/> — user, 2026-10-13: "ETABS can run
+/// regardless"): the case has its result, the same as in the plane, and the movement is reported joint by joint as a
+/// warning. A movement the loads do act on, and a degree of freedom nothing holds at all, still have no result. A set
+/// the model cannot be analysed with is refused with the reason. What it solves, from which sources and how it was
+/// checked is recorded in
 /// <c>docs/analysis/cable-static-verification.md</c>; it replaced the planar solver on 2026-10-12, after reproducing
 /// that solver's results on the same input (<c>--general-solver</c>).</para>
 /// <para>The model is passed on as the application always analysed it: a frame is split at every joint within
@@ -19,12 +29,18 @@ namespace Mcotis.Desktop.Application;
 /// forces fits them, and the cases continuing from it keep that pretension. Target forces that cannot be met give the
 /// results of the closest pretension found, with the reason in <see cref="FemAnalysisResult.TargetFitFailure"/>.</para>
 /// </summary>
-public sealed class FemSolver
+public sealed partial class FemSolver
 {
     public const int DefaultTargetFitIterations = 100;
     public const int DefaultFrameMeshSegments = 10;
     public const int MaximumFrameMeshSegments = 100;
     private const double PlanarityToleranceM = 1e-7;
+
+    /// <summary>The digits of accuracy lost from which the solver reports a degree of freedom: a warning from the
+    /// first, severe above the second. They change what a run reports, never its results.</summary>
+    public StabilityThresholds StabilityThresholds { get; init; } = StabilityThresholds.Default;
+    /// <summary>Iterations an equilibrium with cables may take before the case is reported as not converged.</summary>
+    public int MaximumEquilibriumIterations { get; init; } = new StaticOptions().MaximumNonlinearIterations;
 
     /// <summary>Single loading (joint loads only) with the pretension applied — the one-case entry point.</summary>
     public FemAnalysisResult Solve(
@@ -39,12 +55,14 @@ public sealed class FemSolver
         int maximumTargetFitIterations = DefaultTargetFitIterations,
         int frameMeshSegments = 1,
         bool cableSag = false,
-        IProgress<FemEquilibriumProgress>? equilibrium = null)
+        IProgress<FemEquilibriumProgress>? equilibrium = null,
+        Native.DofMask activeDofs = Native.DofMask.XZ,
+        Native.DofMask cableDofs = Native.DofMask.Translations)
     {
         var caseLoads = new FemLoadSet(loads.Select(load => new FemJointLoad(load.PointName, load.FxKN, load.FzKN)).ToArray(), [], []);
         return SolveCases(geometry, frameSections, cableSections, cablePretensionsKN, FemLoadSet.Empty,
             [new FemCaseLoads("Default", caseLoads, 1)], pinSupportPoints, cancellationToken, targetFitPercent,
-            maximumTargetFitIterations, frameMeshSegments, cableSag, equilibrium)["Default"];
+            maximumTargetFitIterations, frameMeshSegments, cableSag, equilibrium, activeDofs, cableDofs)["Default"];
     }
 
     /// <summary>
@@ -54,6 +72,12 @@ public sealed class FemSolver
     /// the pretension itself. <paramref name="frameMeshSegments"/> is the number of intervals each frame piece is read
     /// at for diagrams and the deflected line; no result at a joint depends on it. <paramref name="equilibrium"/> is
     /// told how the equilibrium of each case goes while it is solved; it is called on the solving thread.
+    /// <paramref name="activeDofs"/> are the degrees of freedom of the model — those of the plane (UX, UZ, RY) analyse
+    /// it in its plane, any of UY, RX, RZ in 3D;
+    /// <paramref name="cableDofs"/> those of a joint only cables reach, among the active ones. One that is off is held
+    /// at every joint it would belong to; a load on it is refused, never dropped. A set the model cannot be analysed
+    /// with — a translation that is off while the joints are not on one line across it, 3D for frames that hold no
+    /// out-of-plane stiffness — is refused with the reason (<see cref="InvalidOperationException"/>).
     /// </summary>
     public IReadOnlyDictionary<string, FemAnalysisResult> SolveCases(
         GeometryModel geometry,
@@ -68,10 +92,18 @@ public sealed class FemSolver
         int maximumTargetFitIterations = DefaultTargetFitIterations,
         int frameMeshSegments = 1,
         bool cableSag = false,
-        IProgress<FemEquilibriumProgress>? equilibrium = null)
+        IProgress<FemEquilibriumProgress>? equilibrium = null,
+        Native.DofMask activeDofs = Native.DofMask.XZ,
+        Native.DofMask cableDofs = Native.DofMask.Translations)
     {
         ArgumentNullException.ThrowIfNull(geometry);
         if (cases.Count == 0) throw new InvalidOperationException("At least one load case is required.");
+        // The degrees of freedom are the user's: they go to the engine as they are set, and what it cannot analyse it
+        // refuses and reports. With one out of the plane on — UY, RX, RZ — the model is analysed in 3D.
+        if ((activeDofs & Native.DofMask.Translations) == 0)
+            throw new InvalidOperationException($"No translation is switched on: no joint of the model can move. Switch one on {DofOptionPlace}.");
+        var outOfPlane = Native.DegreesOfFreedom.Components.Where(component => Native.DegreesOfFreedom.Contains(activeDofs & ~Native.DofMask.XZ, component)).ToArray();
+        bool spatial = outOfPlane.Length > 0;
         var frameMembers = geometry.Members.Where(member => member.Kind == MemberKind.Frame).ToArray();
         if (frameMembers.Length == 0) throw new InvalidOperationException("The connected model has no frame members to analyze.");
         var cableMembers = geometry.Members.Where(member => member.Kind == MemberKind.Cable && cableSections.ContainsKey(member.Name)).ToArray();
@@ -89,6 +121,18 @@ public sealed class FemSolver
         if (targetFitPercent is double fit && (!double.IsFinite(fit) || fit <= 0 || fit >= 100))
             throw new InvalidOperationException("Target-force fitting tolerance must be greater than 0% and less than 100%.");
         if (maximumTargetFitIterations < 1) throw new InvalidOperationException("Target-force fitting needs at least one iteration.");
+        if (spatial)
+        {
+            // Out of its plane a frame bends about the other axis and twists: stiffness the model must hold, not a
+            // number made up here.
+            var without = frameMembers.Where(member => frameSections.TryGetValue(member.Name, out var held) &&
+                !(held.OutOfPlaneInertiaM4 > 0 && held.TorsionConstantM4 > 0)).Select(member => member.Name).ToArray();
+            if (without.Length > 0)
+                throw new InvalidOperationException($"{string.Join(", ", outOfPlane)} {(outOfPlane.Length == 1 ? "is" : "are")} switched on, so the model is analysed in 3D, and " +
+                    $"{(without.Length == 1 ? "frame" : $"{without.Length} frames —")} {string.Join(", ", without.Take(4).Select(name => $"'{name}'"))}" +
+                    $"{(without.Length > 4 ? $" and {without.Length - 4} more" : "")}{(without.Length == 1 ? " holds" : " — hold")} no bending inertia out of the plane or no torsion constant. " +
+                    $"Give {(without.Length == 1 ? "it" : "them")} a section that has both (Define → Section Properties), or analyse the model in its plane: the XZ plane {DofOptionPlace}.");
+        }
 
         try { return Analyse(); }
         catch (Native.DocumentException ex) { throw new InvalidOperationException(ex.Message, ex); }
@@ -132,8 +176,14 @@ public sealed class FemSolver
             Require(member.Name, properties, inertia: true);
             var (material, section) = (NewId(), NewId());
             double inertia = properties.InPlaneInertiaM4!.Value;
+            // In the plane a frame bends about its local 3 axis, which the engine sets across the plane: Inertia33 is the
+            // in-plane inertia. Inertia22 and the torsion constant act only out of the plane. In 3D they are the
+            // section's; in the plane the engine does not use them and only needs them positive.
+            var stiffness = spatial
+                ? new Native.FrameSectionProperties(properties.AreaM2, inertia, properties.OutOfPlaneInertiaM4!.Value, properties.TorsionConstantM4!.Value)
+                : new Native.FrameSectionProperties(properties.AreaM2, inertia, inertia, 1e-6);
             editor.PutMaterial(new(material, "MF:" + member.Name, Native.MaterialType.Other, properties.ElasticModulusKNPerM2, .3, 0, 0));
-            editor.PutFrameSection(new(section, "SF:" + member.Name, material, Native.FrameSectionShape.General, new(properties.AreaM2, inertia, inertia, 1e-6)));
+            editor.PutFrameSection(new(section, "SF:" + member.Name, material, Native.FrameSectionShape.General, stiffness));
             var pieces = FrameJoints.Pieces(member, points);
             framePieces[member.Name] = pieces.Select((piece, index) =>
             {
@@ -331,22 +381,45 @@ public sealed class FemSolver
         }
         // Without a tolerance the target is applied as the pretension itself: that is the first fitting run, taken as it is.
         editor.SetSettings(new Native.AnalysisSettings(targetFitPercent ?? 50, fitted ? maximumTargetFitIterations : 1, frameMeshSegments, cableSag)
-            { ActiveDofs = Native.DofMask.XZ });
+            { ActiveDofs = activeDofs, CableDofs = cableDofs });
 
         var document = editor.Commit().Document;
-        // In this window the degrees of freedom of cable joints are those of its plane, UX and UZ, and it has no option
-        // for them: what can be changed is the model.
-        static string Said(Native.ValidationIssue issue) => issue.Message.Replace(StaticSolver.CableJointOption, "", StringComparison.Ordinal);
-        static InvalidOperationException Refused(IEnumerable<Native.ValidationIssue> issues)
+        // What the engine says goes on as it is — it names the option for the degrees of freedom of cable joints, which
+        // Analysis Options has — with what can be changed in the model instead. The identities of loads, and the
+        // prefixes this class gives the pieces of a frame and the cables, are made up here and mean nothing to the
+        // user: they are left out, so that a member reads by its own name.
+        static string Said(Native.ValidationIssue issue) => OwnName().Replace(SyntheticId().Replace(issue.Message, ""), "'$1$2'");
+        InvalidOperationException Refused(IEnumerable<Native.ValidationIssue> issues)
         {
             var errors = issues.Where(issue => issue.Severity == Native.ValidationSeverity.Error).ToArray();
-            string hint = errors.Any(issue => issue.Code == "static.matrix.unstable" && issue.Message.Contains("cable", StringComparison.OrdinalIgnoreCase))
-                ? " In this window a joint that only cables reach moves in UX and UZ: model a cable that runs through such a joint as one cable, and hold every cable end with a frame or a support."
-                : "";
-            return new(string.Join(" ", errors.Select(Said).Distinct().Take(3)) + hint);
+            // A translation of the plane is off and the joints are not on one line across it: the engine names every
+            // joint; here they are said once, with the degree of freedom that was switched off.
+            var offLine = errors.Where(issue => issue.Code == "dof.geometry").Select(issue => document.Points[issue.ObjectId].Name).Distinct(StringComparer.Ordinal).ToArray();
+            var off = new[] { Native.DofComponent.UX, Native.DofComponent.UZ }.Where(component => !Native.DegreesOfFreedom.Contains(activeDofs, component)).ToArray();
+            if (offLine.Length > 0 && off.Length == 1)
+            {
+                string axis = off[0] == Native.DofComponent.UX ? "X" : "Z";
+                string joints = string.Join(", ", offLine.Take(4).Select(name => $"'{name}'")) + (offLine.Length > 4 ? $" and {offLine.Length - 4} more" : "");
+                return new($"{off[0]} is switched off, but the joints of the model are not all at one {axis}: {joints} {(offLine.Length == 1 ? "is" : "are")} elsewhere. " +
+                    $"With {off[0]} off no joint moves in {axis}, which only a model whose joints all share one {axis} can be analysed with. " +
+                    $"Switch {off[0]} on {DofOptionPlace}.");
+            }
+            var said = errors.Select(Said).Distinct().ToArray();
+            bool unstable = errors.Any(issue => issue.Code == "static.matrix.unstable");
+            // In 3D nothing holds the model out of its plane. The engine holds that movement while the loads leave it
+            // alone; a case that still has no result in 3D is told where its plane is chosen.
+            string hint = unstable && spatial
+                ? $" With {string.Join(", ", outOfPlane)} on the model is analysed in 3D, where nothing holds it out of its XZ plane. To analyse it in its plane, choose the XZ plane {DofOptionPlace}."
+                : errors.Any(issue => issue.Code == "static.matrix.unstable" && issue.Message.Contains("cable", StringComparison.OrdinalIgnoreCase))
+                ? " In the model: model a cable that runs through such a joint as one cable, and hold every cable end with a frame or a support."
+                : errors.Any(issue => issue.Code.StartsWith("dof.", StringComparison.Ordinal)) ? $" The degrees of freedom are set {DofOptionPlace}." : "";
+            return new(string.Join(" ", said.Take(3)) + (said.Length > 3 ? $" … and {said.Length - 3} more." : "") + hint);
         }
         var compiled = ModelCompiler.Compile(document);
         if (compiled.Model is not { } model) throw Refused(compiled.Issues);
+        // A joint only cables reach that a switched-off degree of freedom holds against the pull of a cable: the engine
+        // says so, so that the hold is not taken for the structure's stiffness. It goes on with every case of the run.
+        var held = compiled.Issues.Where(issue => issue is { Severity: Native.ValidationSeverity.Warning, Code: "dof.cable.held" }).Select(Said).Distinct().ToArray();
         var wanted = caseIds.Select(item => item.Id).ToList();
         if (pretensioned) wanted.Insert(0, fitCase);
 
@@ -384,11 +457,18 @@ public sealed class FemSolver
                     Outcome = report.Diagnostics is { } done
                         ? new(done.MinimumScaledPivot, done.EquilibriumError, done.CableFit?.WorstDeviationPercent, done.CableFit?.Converged ?? true, done.CableFit?.Failure)
                         : null,
+                    FailureCode = report.Kind == StaticProgressKind.Failed ? report.Issue?.Code : null,
+                    // the fit stage is solved first, as a solve of its own: a case that fails while fitting failed in that stage
+                    PrerequisiteFailed = report.Kind == StaticProgressKind.Failed && report.FitRun > 0 && caseNames.ContainsKey(report.CaseId),
+                    Stability = report.Stability is { } assessed ? FemStabilityReport.From(assessed, model) : null,
+                    ModelWarnings = held,
                 });
             });
         }
         // The engine is dense. These limits are where its memory, not its method, ends: about 1,000 joints.
-        var outcomes = StaticSolver.Solve(model, wanted, new StaticOptions(MaximumFullDofs: 6000, MaximumFreeDofs: 3000, AcceptClosestFit: true),
+        var outcomes = StaticSolver.Solve(model, wanted,
+            new StaticOptions(MaximumFullDofs: 6000, MaximumFreeDofs: 3000, MaximumNonlinearIterations: MaximumEquilibriumIterations,
+                AcceptClosestFit: true, Stability: StabilityThresholds, HoldUnloadedMechanisms: true),
             cancellationToken, follow);
         StaticResult Result(Native.ObjectId id) => outcomes[id].Result ?? throw Refused(outcomes[id].Issues);
 
@@ -440,6 +520,15 @@ public sealed class FemSolver
         return results;
         }
     }
+
+    /// <summary>Where the degrees of freedom are set, as a refusal that turns on them tells the user.</summary>
+    private const string DofOptionPlace = "under Run → Analysis Options → Degrees of Freedom";
+
+    [GeneratedRegex(" [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")]
+    private static partial Regex SyntheticId();
+
+    [GeneratedRegex(@"'(?:F:([^']+)#\d+|C:([^']+))'")]
+    private static partial Regex OwnName();
 
     /// <summary>Global (X, Z) components per unit load value for a member whose I→J direction is (c, s), as the
     /// application reads SAP2000's load directions in its XZ model.</summary>
@@ -496,6 +585,17 @@ public sealed record FemEquilibriumProgress(string CaseName, bool FitStage, FemE
     public bool Pretensioned { get; init; }
     /// <summary>Of a case that converged: what the solver checked before returning its result.</summary>
     public FemEquilibriumOutcome? Outcome { get; init; }
+    /// <summary>Of a case without a result: the solver's code for why.</summary>
+    public string? FailureCode { get; init; }
+    /// <summary>The case failed in the stage it continues from — while the cable target forces were fitted — not in
+    /// its own equilibrium.</summary>
+    public bool PrerequisiteFailed { get; init; }
+    /// <summary>Of a case that has ended: the numerical stability the solver assessed, joint by joint. Null when it
+    /// assessed none — a case refused before it was solved, an iteration that did not converge.</summary>
+    public FemStabilityReport? Stability { get; init; }
+    /// <summary>What the solver said of the model before it solved it, that every case of the run stands under: a joint
+    /// only cables reach that a switched-off degree of freedom holds against the pull of a cable, as a support would.</summary>
+    public IReadOnlyList<string> ModelWarnings { get; init; } = [];
 }
 
 /// <param name="SmallestPivot">Smallest scaled pivot of the stiffness factorized at the solution — the tangent

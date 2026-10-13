@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Mcotis.Core;
 using Mcotis.Desktop.Application;
 using Mcotis.Desktop.Domain;
 
@@ -7,7 +8,8 @@ namespace Mcotis.Desktop.Presentation;
 // ---- Define → Load Cases: the load cases are defined in the app ----
 // The default setup is SAP2000's for a cable structure (FemLoadPlan.DefaultSetup): Pretension — the cable target forces
 // with the self-weight — first, then SLS and ULS continuing from it with the Tab 01 loads. The table can also show the
-// cases saved from SAP2000, and either set is edited here: add, remove, name, definition, the case a case continues from.
+// cases saved from SAP2000, and either set is edited here: add, remove, name, and in Load Case Data the type of a case
+// with what belongs to it — the case it continues from or the case whose stiffness it uses, its loads or its mass source.
 // Nothing is written to SAP2000; the rows are saved with the model (Save Model).
 public sealed partial class MainViewModel
 {
@@ -20,6 +22,23 @@ public sealed partial class MainViewModel
     /// the name it shows.</summary>
     public ObservableCollection<string> FemInitialCaseChoices { get; } = [""];
 
+    /// <summary>The mass source a configuration without one is offered: the self mass of its members. It becomes a
+    /// mass source of the configuration when a modal case that names it is saved.</summary>
+    internal const string DefaultMassSourceName = "MS1";
+
+    /// <summary>The mass sources a modal case can name: those of the configuration, or the default one when it has
+    /// none. There is no form for mass sources yet — it comes with modal analysis.</summary>
+    internal IReadOnlyList<string> FemMassSourceChoices => femMassSources.Count > 0 ? femMassSources.Select(source => source.Name).ToArray() : [DefaultMassSourceName];
+
+    /// <summary>The mass sources of the configuration by identity, as the run plan reads them.</summary>
+    internal IReadOnlyList<(Guid Id, string Name)> FemMassSourceReferences => femMassSources
+        .Where(source => Guid.TryParse(source.Id, out _)).Select(source => (Guid.Parse(source.Id), source.Name)).ToArray();
+
+    /// <summary>The mass source of that name; the default one counts as there while the configuration has none.</summary>
+    private bool IsFemMassSource(string? name) => !string.IsNullOrWhiteSpace(name) &&
+        (femMassSources.Count > 0 ? femMassSources.Any(source => source.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase))
+            : name.Trim().Equals(DefaultMassSourceName, StringComparison.OrdinalIgnoreCase));
+
     /// <summary>The model holds load cases read from SAP2000, so the table can show SAP2000's own setup again.</summary>
     public bool HasSapLoadCases => femSapLoading.Cases.Count > 0;
 
@@ -30,6 +49,7 @@ public sealed partial class MainViewModel
         foreach (var row in FemCaseRows) Detach(row);
         foreach (var row in FemCombinationRows) row.PropertyChanged -= LoadRowChanged;
         SelectedFemCaseRow = null;
+        femMassSources = [];   // those of the tables that go; a configuration that is opened brings its own
         FemPatternRows.Clear(); FemCaseRows.Clear(); FemCombinationRows.Clear();
         while (FemInitialCaseChoices.Count > 1) FemInitialCaseChoices.RemoveAt(1);
         foreach (var row in patterns) { row.PropertyChanged += PatternRowChanged; FemPatternRows.Add(row); }
@@ -250,6 +270,9 @@ public sealed partial class MainViewModel
         FemInitialCaseChoices.Insert(listed < 0 ? FemInitialCaseChoices.Count : listed, row.Name);
         foreach (var other in FemCaseRows.Where(other => other.InitialCase.Equals(previous, StringComparison.OrdinalIgnoreCase)).ToArray())
             other.InitialCase = row.Name;
+        // … and the cases that use its stiffness
+        foreach (var other in FemCaseRows.Where(other => previous.Equals(other.Options.StiffnessSourceCase, StringComparison.OrdinalIgnoreCase)))
+            other.Options = other.Options with { StiffnessSourceCase = row.Name };
         FemInitialCaseChoices.Remove(previous);
         foreach (var combination in FemCombinationRows)
         {
@@ -358,15 +381,44 @@ public sealed partial class MainViewModel
         return ["", .. FemCaseRows.Where(other => !blocked.Contains(other.Name)).Select(other => other.Name)];
     }
 
+    /// <summary>What a case can continue from, or take its stiffness from: nothing (""), or a nonlinear static or
+    /// initial P-Delta case — only those end in a state. A case that depends on this one, through either kind of
+    /// reference, is left out: the choice would make it depend on itself.</summary>
+    internal IReadOnlyList<string> StateProducerChoicesFor(FemCaseRow? row)
+    {
+        var blocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (row is not null && FemCaseRows.Contains(row))
+        {
+            blocked.Add(row.Name);
+            for (var grew = true; grew;)
+            {
+                grew = false;
+                foreach (var other in FemCaseRows)
+                    if ((blocked.Contains(other.InitialCase) || blocked.Contains(other.Options.StiffnessSourceCase ?? "")) && blocked.Add(other.Name)) grew = true;
+            }
+        }
+        return ["", .. FemCaseRows.Where(other => !blocked.Contains(other.Name) && other.Options.ProducesState).Select(other => other.Name)];
+    }
+
     /// <summary>What is wrong with a load case as entered in Load Case Data, or null. <paramref name="row"/> is the case
-    /// being modified; null for a new one.</summary>
+    /// being modified; null for a new one. This overload is for a case that keeps its type and options.</summary>
     internal string? FemLoadCaseProblem(FemCaseRow? row, string? name, string? initialCase, IReadOnlyList<(string Pattern, double Factor)> loads)
+        => FemLoadCaseProblem(row, name, initialCase, loads, row?.Options ?? FemCaseOptions.Default, row?.CableTargetForces == true);
+
+    /// <param name="initialCase">The case a nonlinear case continues from; the case whose stiffness a linear or modal
+    /// case uses is in <paramref name="options"/>.</param>
+    /// <param name="options">The type of the case and what belongs to it. What the type may carry is decided by
+    /// <see cref="LoadCaseRules"/>, the rules of the native model.</param>
+    internal string? FemLoadCaseProblem(FemCaseRow? row, string? name, string? initialCase,
+        IReadOnlyList<(string Pattern, double Factor)> loads, FemCaseOptions options, bool cableTargetForces)
     {
         var comparer = StringComparer.OrdinalIgnoreCase;
         name = name?.Trim() ?? "";
         if (row is { Supported: false }) return $"Load case '{row.Name}' ({row.Type}) is not supported by the internal FEM.";
         if ((FemLoadPlan.NameProblem(name) ?? CaseNameProblem(row, name)) is { } nameProblem) return nameProblem;
-        if (loads.Count == 0) return "Add at least one load pattern to the case.";
+        bool modal = options.Kind == CaseKind.ModalEigen;
+        if (!modal && loads.Count == 0) return "Add at least one load pattern to the case.";
+        if (modal && loads.Count > 0) return $"Load case '{name}' is a modal case: it has no loads. Its stiffness and its mass decide its modes.";
         foreach (var (pattern, factor) in loads)
         {
             if (string.IsNullOrWhiteSpace(pattern)) return "Choose the load pattern of every load (or remove the row).";
@@ -376,42 +428,114 @@ public sealed partial class MainViewModel
         }
         if (loads.GroupBy(load => load.Pattern.Trim(), comparer).FirstOrDefault(group => group.Count() > 1) is { } repeated)
             return $"'{repeated.Key}' is listed twice — use one row with the total scale factor.";
-        if (!FemLoadPlan.IsNoInitialCase(initialCase))
+        bool nonlinear = options.ProducesState;
+        // a case others continue from, or take their stiffness from, has to stay a case that ends in a state
+        if (row is not null && !nonlinear && FemCaseRows.Where(other => !ReferenceEquals(other, row) &&
+                (comparer.Equals(other.InitialCase, row.Name) || comparer.Equals(other.Options.StiffnessSourceCase, row.Name)))
+                .Select(other => $"'{other.Name}'").ToArray() is { Length: > 0 } users)
+            return $"{string.Join(", ", users)} {(users.Length == 1 ? "starts" : "start")} from the end of this case, so it has to stay a nonlinear static or initial P-Delta case.";
+        var reference = nonlinear ? initialCase : options.StiffnessSourceCase;
+        if (!FemLoadPlan.IsNoInitialCase(reference))
         {
-            var previous = initialCase!.Trim();
-            if (comparer.Equals(previous, name) || row is not null && comparer.Equals(previous, row.Name)) return "A case cannot continue from itself.";
-            if (!FemCaseRows.Any(other => comparer.Equals(other.Name, previous))) return $"There is no load case '{previous}' to continue from.";
-            if (!InitialCaseChoicesFor(row).Contains(previous, comparer)) return $"'{previous}' continues from this case, so this case cannot continue from it.";
+            var previous = reference!.Trim();
+            string action = nonlinear ? "continue from" : "use the stiffness of";
+            if (comparer.Equals(previous, name) || row is not null && comparer.Equals(previous, row.Name)) return $"A case cannot {action} itself.";
+            if (!FemCaseRows.Any(other => comparer.Equals(other.Name, previous))) return $"There is no load case '{previous}' to {action}.";
+            if (FemCaseRows.First(other => comparer.Equals(other.Name, previous)) is { Options.ProducesState: false } linear)
+                return $"'{linear.Name}' is {linear.CaseType}: only a nonlinear static or initial P-Delta case ends in a state another case can {action}.";
+            if (!StateProducerChoicesFor(row).Contains(previous, comparer))
+                return $"'{previous}' depends on this case, so this case cannot {action} it.";
         }
-        return null;
+
+        // What the type may carry: the rules of the native model, on the case as the form holds it. The cases it
+        // refers to are read from the table.
+        var ids = FemCaseRows.ToDictionary(item => item.Name, item => new ObjectId(item.Id), comparer);
+        var candidateId = row is null ? ObjectId.New() : new ObjectId(row.Id);
+        ids[name] = candidateId;
+        ObjectId? ReferenceId(string? value) => FemLoadPlan.IsNoInitialCase(value) ? null
+            : ids.TryGetValue(value!.Trim(), out var id) ? id : null;
+        var massId = ObjectId.New();
+        var native = new LoadCase(candidateId, name, options.Kind, [.. loads.Select(_ => new LoadCaseComponent(ObjectId.New(), 1))])
+        {
+            InitialCaseId = nonlinear ? ReferenceId(initialCase) : null,
+            StiffnessSourceCaseId = nonlinear ? null : ReferenceId(options.StiffnessSourceCase),
+            GeometricMode = options.GeometricMode,
+            NonlinearControls = options.Controls,
+            ModalOptions = modal && IsFemMassSource(options.MassSource) ? new(massId, options.RequestedModes ?? 0) : null,
+            FitCableTargetForces = cableTargetForces,
+        };
+        LoadCase? CaseOf(ObjectId id)
+        {
+            if (id == candidateId) return native;
+            var other = FemCaseRows.FirstOrDefault(item => new ObjectId(item.Id) == id);
+            if (other is null) return null;
+            return new(id, other.Name, other.Options.Kind, [])
+            {
+                InitialCaseId = ReferenceId(other.InitialCase),
+                StiffnessSourceCaseId = ReferenceId(other.Options.StiffnessSourceCase),
+                GeometricMode = other.Options.GeometricMode,
+            };
+        }
+        return LoadCaseRules.Check(native, CaseOf, id => id == massId).FirstOrDefault() is { Message: { } rule } ? rule : null;
     }
 
     /// <summary>Load Case Data → OK: writes the case — its name, the case it continues from and its loads, a load pattern
-    /// with a scale factor each. A case that is not in the table yet (null, or the one + Add proposed) is added.</summary>
+    /// with a scale factor each. A case that is not in the table yet (null, or the one + Add proposed) is added. This
+    /// overload is for a case that keeps its type and options.</summary>
     internal FemCaseRow? SaveFemLoadCase(FemCaseRow? row, string? name, string? initialCase, IReadOnlyList<(string Pattern, double Factor)> loads, bool cableTargetForces = false)
+        => SaveFemLoadCase(row, name, initialCase, loads, row?.Options ?? FemCaseOptions.Default, cableTargetForces);
+
+    /// <summary>Load Case Data → OK with the type of the case and what belongs to it. Only what the type has is kept:
+    /// a linear or modal case continues from nothing, a nonlinear case uses no other stiffness, and so on.</summary>
+    internal FemCaseRow? SaveFemLoadCase(FemCaseRow? row, string? name, string? initialCase,
+        IReadOnlyList<(string Pattern, double Factor)> loads, FemCaseOptions options, bool cableTargetForces = false)
     {
         if (IsBusy || CommitEditors?.Invoke() == false) return null;
         if (row is not null && !FemCaseRows.Contains(row)) row = null;
-        if (FemLoadCaseProblem(row, name, initialCase, loads) is { } problem)
+        if (FemLoadCaseProblem(row, name, initialCase, loads, options, cableTargetForces) is { } problem)
         {
             Warn("Load Case Data", problem);
             return null;
         }
-        var definition = FemLoadDefinition.Format(loads.Select(load =>
+        var definition = loads.Count == 0 ? "" : FemLoadDefinition.Format(loads.Select(load =>
             (FemPatternRows.First(item => item.Name.Equals(load.Pattern.Trim(), StringComparison.OrdinalIgnoreCase)).Name, load.Factor)));
-        var previous = FemLoadPlan.IsNoInitialCase(initialCase) ? "" : FemCaseRows.First(other => other.Name.Equals(initialCase!.Trim(), StringComparison.OrdinalIgnoreCase)).Name;
+        bool nonlinear = options.Kind is CaseKind.NonlinearStatic or CaseKind.InitialPDelta;
+        var previous = !nonlinear || FemLoadPlan.IsNoInitialCase(initialCase) ? "" : FemCaseRows.First(other => other.Name.Equals(initialCase!.Trim(), StringComparison.OrdinalIgnoreCase)).Name;
+        string? stiffness = nonlinear || FemLoadPlan.IsNoInitialCase(options.StiffnessSourceCase) ? null
+            : FemCaseRows.First(other => other.Name.Equals(options.StiffnessSourceCase!.Trim(), StringComparison.OrdinalIgnoreCase)).Name;
+        options = options with
+        {
+            GeometricMode = options.Kind == CaseKind.InitialPDelta ? GeometricNonlinearity.PDelta
+                : options.Kind is CaseKind.LinearStatic or CaseKind.ModalEigen ? GeometricNonlinearity.None : options.GeometricMode,
+            StiffnessSourceCase = stiffness,
+            MassSource = options.Kind == CaseKind.ModalEigen ? options.MassSource : null,
+            RequestedModes = options.Kind == CaseKind.ModalEigen ? options.RequestedModes : null,
+            Controls = nonlinear ? options.Controls : null,
+        };
+        // the default mass source becomes the configuration's own with the first modal case that names it
+        if (options.MassSource is { } mass && femMassSources.Count == 0 && IsFemMassSource(mass))
+            femMassSources.Add(new(Guid.NewGuid().ToString("D"), DefaultMassSourceName));
+        if (options.MassSource is not null)
+            options = options with { MassSource = femMassSources.First(source => source.Name.Equals(options.MassSource.Trim(), StringComparison.OrdinalIgnoreCase)).Name };
+        // a new case is set to run when Run solves its type; one that is not solved yet is not, so that the cases
+        // beside it go on running — the table says "Unavailable" of it, and Run says why when it is ticked
+        bool solved = options.NotSolvedYet(name!.Trim()) is null;
         if (row is null)
-            AddCaseRow(row = new FemCaseRow(name!.Trim(), FemLoadPlan.StagedCaseType, definition, previous, true, true, "App", ""));
+            AddCaseRow(row = new FemCaseRow(name.Trim(), FemCaseOptions.KindName(options.Kind), definition, previous, solved, true, "App", ""));
         else
         {
             row.Name = name!;
             row.Definition = definition;
             row.InitialCase = previous;
         }
+        row.Options = options;
         SelectedFemCaseRow = row;
-        row.CableTargetForces = cableTargetForces;
+        row.CableTargetForces = options.Kind == CaseKind.NonlinearStatic && cableTargetForces;
         LoadRowChanged(row, new(nameof(FemCaseRow.Definition)));
-        Message = $"Load case '{row.Name}': {row.Definition}" + (row.InitialCase.Length == 0 ? "." : $", continuing from '{row.InitialCase}'.");
+        Message = $"Load case '{row.Name}' ({row.CaseType}): " + (options.Kind == CaseKind.ModalEigen ? row.LoadsOrMass : row.Definition) + (options.ProducesState
+            ? row.InitialCase.Length == 0 ? "." : $", continuing from '{row.InitialCase}'."
+            : options.StiffnessSourceCase is null ? ", on the unstressed stiffness." : $", on the stiffness of '{options.StiffnessSourceCase}'.") +
+            (solved ? "" : " Run does not solve this type yet.");
         return row;
     }
 
@@ -440,11 +564,13 @@ public sealed partial class MainViewModel
         return total;
     }
 
-    /// <summary>Removes a case nothing else depends on; a case others continue from, or a combination uses, stays.</summary>
+    /// <summary>Removes a case nothing else depends on; a case others continue from or take their stiffness from, or a
+    /// combination uses, stays.</summary>
     internal bool RemoveFemLoadCase(FemCaseRow? row)
     {
         if (IsBusy || row is null || !FemCaseRows.Contains(row) || CommitEditors?.Invoke() == false) return false;
-        var followers = FemCaseRows.Where(other => other.InitialCase.Equals(row.Name, StringComparison.OrdinalIgnoreCase)).Select(other => other.Name)
+        var followers = FemCaseRows.Where(other => other.InitialCase.Equals(row.Name, StringComparison.OrdinalIgnoreCase) ||
+                row.Name.Equals(other.Options.StiffnessSourceCase, StringComparison.OrdinalIgnoreCase)).Select(other => other.Name)
             .Concat(FemCombinationRows.Where(combination => Terms(combination).Any(term => term.Name.Equals(row.Name, StringComparison.OrdinalIgnoreCase)))
                 .Select(combination => combination.Name)).ToArray();
         if (followers.Length > 0)

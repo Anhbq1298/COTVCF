@@ -55,6 +55,16 @@ public sealed partial class MainViewModel
     private double vcfOptimizationPercent;
     public double VcfOptimizationPercent { get => vcfOptimizationPercent; private set => Set(ref vcfOptimizationPercent, value); }
 
+    // ---- Optimization menu: each optimization varies its own system, so only the one of the open model is offered ----
+
+    /// <summary>The open model is a VCF system — the one Optimization VCF varies. Another model (the tied arch system,
+    /// a building, an imported model) has no VCF parameters to vary, so the command is greyed.</summary>
+    public bool CanOptimizeVcf => HasModelGeometry && VcfGeometry.CanAnalyze(State.Geometry, State.Truss);
+
+    /// <summary>The open model is the tied arch system (File → Load TAS… or Edit → Tied Arch System…) — the one
+    /// Optimization TAS varies.</summary>
+    public bool CanOptimizeTas => TiedArchParameters is not null;
+
     private bool isVcfOptimizationRunning;
     public bool IsVcfOptimizationRunning
     {
@@ -105,7 +115,8 @@ public sealed partial class MainViewModel
                     VcfGeometry.Analyze(State.Geometry, State.Truss), HeldFemProperties(), SectionSwapper(), femSapLoading,
                     FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), Tab01Patterns, PretensionPatterns,
                     State.AppliedPoints.Select(point => point.PointName).ToArray(), State.Cables.ToArray(),
-                    FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre());
+                    FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre())
+                    { ActiveDofs = FemActiveDofs, CableDofs = FemCableDofs };
                 return new VcfOptimizationRunner(inputs, settings);
             });
     }
@@ -330,6 +341,7 @@ public sealed partial class MainViewModel
             return property;
         }
         return new TasOptimizationInputs(template, Properties, FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(),
-            PretensionPatterns, FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre());
+            PretensionPatterns, FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre())
+            { ActiveDofs = FemActiveDofs, CableDofs = FemCableDofs };
     }
 }

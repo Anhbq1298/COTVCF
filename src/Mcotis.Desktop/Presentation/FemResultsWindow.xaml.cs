@@ -9,5 +9,7 @@ public partial class FemResultsWindow : Window
         InitializeComponent();
         DataContext = viewModel;
     }
-    public void SelectCableFit(bool cableFit) => ResultTopics.SelectedIndex = cableFit ? 1 : 0;
+    /// <summary>Shows the cable target fit, or the results of the members. A model without cables has no fit to show.</summary>
+    public void SelectCableFit(bool cableFit) =>
+        ResultTopics.SelectedIndex = cableFit && DataContext is MainViewModel { HasCableMembers: true } ? 1 : 0;
 }

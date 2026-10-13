@@ -23,6 +23,7 @@ public sealed class DocumentEditor
     private readonly ImmutableDictionary<ObjectId, LoadPattern>.Builder loadPatterns;
     private readonly ImmutableDictionary<ObjectId, LoadCase>.Builder loadCases;
     private readonly ImmutableDictionary<ObjectId, LoadCombination>.Builder loadCombinations;
+    private readonly ImmutableDictionary<ObjectId, MassSource>.Builder massSources;
     private readonly ImmutableDictionary<ObjectId, Restraint>.Builder restraints;
     private readonly ImmutableDictionary<ObjectId, FrameAssignment>.Builder frameAssignments;
     private readonly ImmutableDictionary<ObjectId, CableAssignment>.Builder cableAssignments;
@@ -49,6 +50,7 @@ public sealed class DocumentEditor
         loadPatterns = data.LoadPatterns.ToBuilder();
         loadCases = data.LoadCases.ToBuilder();
         loadCombinations = data.LoadCombinations.ToBuilder();
+        massSources = data.MassSources.ToBuilder();
         restraints = data.Restraints.ToBuilder();
         frameAssignments = data.FrameAssignments.ToBuilder();
         cableAssignments = data.CableAssignments.ToBuilder();
@@ -70,6 +72,7 @@ public sealed class DocumentEditor
     public IReadOnlyDictionary<ObjectId, LoadPattern> LoadPatterns => loadPatterns;
     public IReadOnlyDictionary<ObjectId, LoadCase> LoadCases => loadCases;
     public IReadOnlyDictionary<ObjectId, LoadCombination> LoadCombinations => loadCombinations;
+    public IReadOnlyDictionary<ObjectId, MassSource> MassSources => massSources;
     public IReadOnlyDictionary<ObjectId, LoadAssignment> Loads => loads;
     public AnalysisSettings Settings => settings;
 
@@ -267,6 +270,7 @@ public sealed class DocumentEditor
     public void PutLoadPattern(LoadPattern pattern) => PutNamed(loadPatterns, ObjectKind.LoadPattern, pattern, (item, name) => item with { Name = name });
     public void PutLoadCase(LoadCase loadCase) => PutNamed(loadCases, ObjectKind.LoadCase, loadCase, (item, name) => item with { Name = name });
     public void PutLoadCombination(LoadCombination combination) => PutNamed(loadCombinations, ObjectKind.LoadCombination, combination, (item, name) => item with { Name = name });
+    public void PutMassSource(MassSource massSource) => PutNamed(massSources, ObjectKind.MassSource, massSource, (item, name) => item with { Name = name });
 
     public void SetSettings(AnalysisSettings value)
     {
@@ -361,7 +365,7 @@ public sealed class DocumentEditor
             cables.ToImmutable(), shells.ToImmutable(), materials.ToImmutable(), frameSections.ToImmutable(),
             cableSections.ToImmutable(), shellSections.ToImmutable(), loadPatterns.ToImmutable(), loadCases.ToImmutable(),
             loadCombinations.ToImmutable(), restraints.ToImmutable(), frameAssignments.ToImmutable(),
-            cableAssignments.ToImmutable(), shellAssignments.ToImmutable(), loads.ToImmutable(), settings),
+            cableAssignments.ToImmutable(), shellAssignments.ToImmutable(), loads.ToImmutable(), settings, massSources.ToImmutable()),
             new NameIndex(scopes, sequence.ToImmutable()));
 
         var errors = DocumentValidator.Validate(document).Where(issue => issue.Severity == ValidationSeverity.Error).ToArray();
@@ -448,6 +452,7 @@ public sealed class DocumentEditor
         else if (loadPatterns.TryGetValue(id, out var pattern)) (kind, name) = (ObjectKind.LoadPattern, pattern.Name);
         else if (loadCases.TryGetValue(id, out var loadCase)) (kind, name) = (ObjectKind.LoadCase, loadCase.Name);
         else if (loadCombinations.TryGetValue(id, out var combination)) (kind, name) = (ObjectKind.LoadCombination, combination.Name);
+        else if (massSources.TryGetValue(id, out var massSource)) (kind, name) = (ObjectKind.MassSource, massSource.Name);
         else return false;
         return true;
     }
@@ -467,6 +472,7 @@ public sealed class DocumentEditor
         ObjectKind.LoadPattern => "load pattern",
         ObjectKind.LoadCase => "load case",
         ObjectKind.LoadCombination => "load combination",
+        ObjectKind.MassSource => "mass source",
         _ => "object",
     };
 
@@ -485,6 +491,7 @@ public sealed class DocumentEditor
             case ObjectKind.LoadPattern: loadPatterns[id] = loadPatterns[id] with { Name = name }; break;
             case ObjectKind.LoadCase: loadCases[id] = loadCases[id] with { Name = name }; break;
             case ObjectKind.LoadCombination: loadCombinations[id] = loadCombinations[id] with { Name = name }; break;
+            case ObjectKind.MassSource: massSources[id] = massSources[id] with { Name = name }; break;
         }
     }
 
@@ -503,6 +510,7 @@ public sealed class DocumentEditor
             case ObjectKind.LoadPattern: loadPatterns.Remove(id); break;
             case ObjectKind.LoadCase: loadCases.Remove(id); break;
             case ObjectKind.LoadCombination: loadCombinations.Remove(id); break;
+            case ObjectKind.MassSource: massSources.Remove(id); break;
         }
         ReleaseName(kind, name);
         changes.Record(id, kind, ChangeAspects.Removed);
@@ -554,6 +562,8 @@ public sealed class DocumentEditor
         foreach (var loadCase in loadCases.Values)
         {
             if (loadCase.InitialCaseId is { } initial && removed.TryGetValue(initial, out gone)) throw InUse(gone, $"load case '{loadCase.Name}', which continues from it");
+            if (loadCase.StiffnessSourceCaseId is { } stiffness && removed.TryGetValue(stiffness, out gone)) throw InUse(gone, $"load case '{loadCase.Name}', which uses its stiffness");
+            if (loadCase.ModalOptions is { } modal && removed.TryGetValue(modal.MassSourceId, out gone)) throw InUse(gone, $"load case '{loadCase.Name}'");
             foreach (var component in loadCase.Components)
                 if (removed.TryGetValue(component.PatternId, out gone)) throw InUse(gone, $"load case '{loadCase.Name}'");
         }

@@ -33,12 +33,18 @@ public sealed partial class MainViewModel
         }
     }
 
-    /// <summary>Result → Cable target fit: the result pane and table show the cable fit instead of a diagram.</summary>
+    /// <summary>Result → Cable target fit: the result pane and table show the cable fit instead of a diagram. Only a
+    /// model with cables has one (<see cref="HasCableMembers"/>).</summary>
     public bool FemCableFitView
     {
-        get => femCableFitView;
+        get => femCableFitView && HasCableMembers;
         set { if (Set(ref femCableFitView, value)) NotifyPaneHeader(); }
     }
+
+    /// <summary>The model has cables. What belongs to the fit of cable target forces — the settings of Analysis
+    /// Options, the result and its table, the chart of the run monitor — is shown only then (user, 2026-10-13: "the
+    /// cable fitting force only visible for system that has cabled model"). A model without cables has nothing to fit.</summary>
+    public bool HasCableMembers => State.Geometry.Members.Any(member => member.Kind == Domain.MemberKind.Cable);
 
     private static int FemPageOf(int pane) => pane switch
     {
@@ -91,7 +97,7 @@ public sealed partial class MainViewModel
             FemPaneRestraints => "JOINT RESTRAINTS",
             FemPaneResultSelection => "RESULT LOAD CASE",
             FemPaneAnalysisOptions => "ANALYSIS OPTIONS",
-            FemPaneResults => femCableFitView ? "CABLE TARGET FIT" : FemResultMode switch
+            FemPaneResults => FemCableFitView ? "CABLE TARGET FIT" : FemResultMode switch
             {
                 FemResultMode.AxialForce => "AXIAL FORCES / CABLES",
                 FemResultMode.BendingMoment => "BENDING MOMENTS",

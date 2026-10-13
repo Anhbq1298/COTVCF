@@ -14,6 +14,7 @@ public readonly record struct ObjectId(Guid Value) : IComparable<ObjectId>
 public enum ObjectKind
 {
     Point, Frame, Cable, Shell, Material, FrameSection, CableSection, ShellSection, LoadPattern, LoadCase, LoadCombination, Load, Settings,
+    MassSource,
 }
 
 /// <summary>Every number a document holds is in these units. Conversion belongs to the edges (UI, import), never to the model.</summary>

@@ -153,7 +153,8 @@ internal static class PersistenceChecks
         Refuse(file => Item(file, "frames", s.F2)["id"] = s.F1.ToString(), "Two objects with one id are refused");
         Refuse(file => Item(file, "loads", s.Target).Remove("value"), "A load without the value its type needs is refused");
         Refuse(file => Item(file, "loads", s.Target)["type"] = "wind", "A load of an unknown type is refused");
-        Refuse(file => Item(file, "loadCases", s.Sls)["initialCaseId"] = s.Sls.ToString(), "A file whose load cases run in a circle is refused");
+        Refuse(file => Item(file, "loadCases", s.Sls)["initialState"]!["caseId"] = s.Sls.ToString(), "A file whose load cases run in a circle is refused");
+        Refuse(file => Item(file, "loadCases", s.Sls)["initialCaseId"] = s.Pretension.ToString(), "A reference written as an older schema wrote it is refused — never read beside the one the case states");
         Refuse(file => Item(file, "materials", s.Steel)["elasticModulus"] = 0, "A file whose model is not valid is refused");
         Refuse(file => Item(file, "frameSections", s.Beam)["materialId"] = "steel", "An id that is not an id is refused");
     }
@@ -169,6 +170,7 @@ internal static class PersistenceChecks
         old["schemaVersion"] = 0;
         old["settings"]!.AsObject().Remove("activeDofs");
         old["settings"]!.AsObject().Remove("cableDofs");
+        LoadCasesAsSchema3(old);
         var path = Path.Combine(folder, "schema0" + NativeDocumentFormat.Extension);
         File.WriteAllText(path, old.ToJsonString());
         var bytes = File.ReadAllBytes(path);

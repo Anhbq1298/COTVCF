@@ -19,7 +19,11 @@ public sealed record FemSectionProperties(
     double UnitMassTPerM3 = 0,
     double GrossAreaM2 = 0,
     IReadOnlyList<double>? Modifiers = null,
-    FemSectionShape? Shape = null)
+    FemSectionShape? Shape = null,
+    // A frame out of its plane — what an analysis with UY, RX or RZ on needs: the bending inertia about the axis that
+    // lies in the plane, and the torsion constant, with their modifiers. Null where the section holds none.
+    double? OutOfPlaneInertiaM4 = null,
+    double? TorsionConstantM4 = null)
 {
     public bool IsCable => InPlaneInertiaM4 is null;
     // SAP modifier order — frames: A, As2, As3, J, I22, I33, Mass, Weight; cables: A, Mass, Weight.

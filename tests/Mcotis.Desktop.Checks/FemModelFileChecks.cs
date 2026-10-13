@@ -359,7 +359,7 @@ internal static class FemModelFileChecks
         var runs = Analyze(vm);
         var midSpan = runs.SelectMany(run => run.Loads ?? []).Where(load => load.PointName == "TTrPt006").Select(load => load.FzKN).Order().ToArray();
         Check(warnings.Count == 0 && silent.Reads == 0 && runs.Count == 1 && runs[0].Id == FemStudyService.ModelRunId && vm.FemCableFitRows.All(row => !row.Failed) &&
-              midSpan.SequenceEqual([-12000.0, -6000.0]) && vm.FemStatus == "ANALYSIS COMPLETE" && vm.FemMonitorProgressText == "Finished" &&
+              midSpan.SequenceEqual([-12000.0, -6000.0]) && vm.FemStatus == "ANALYSIS COMPLETE" && vm.FemMonitor.Status is FemRunStatus.Completed or FemRunStatus.CompletedWithWarnings &&
               vm.FemProgressText.StartsWith("Analysis complete", StringComparison.Ordinal),
             $"Run Analysis on the default model is one run of the model as defined, without SAP2000 (mid-span Fz {string.Join(" / ", midSpan)} kN): " +
             vm.FemProgressText + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
@@ -713,9 +713,9 @@ internal static class FemModelFileChecks
     {
         var analysis = VcfGeometry.Analyze(state.Geometry, state.Truss);
         var p = analysis.Parameters;
-        Check(analysis.Bays == 10 && analysis.UniformBays && Near(p.BayWidth, 10) && Near(p.TrussDepth, 20) && Near(p.MiddleChordHeight, 10) &&
+        Check(vm.CanEditVcfGeometry && !vm.NeedsVcfModelReplacement && analysis.Bays == 10 && analysis.UniformBays && Near(p.BayWidth, 10) && Near(p.TrussDepth, 20) && Near(p.MiddleChordHeight, 10) &&
               Near(p.ClearHeight, 20) && p.BackSpan is { } span && Near(span, 10) && p.BackStayHeight is { } stay && Near(stay, 10),
-            "VCF Geometry reads the default model: 10 bays of 10 m, truss depth 20 m, middle chord 10 m, clear height 20 m, back-span 10 m, back-stay 10 m");
+            "VCF System is available for the default VCF model and reads it: 10 bays of 10 m, truss depth 20 m, middle chord 10 m, clear height 20 m, back-span 10 m, back-stay 10 m");
         Check(analysis.Roles["TopChord"] == VcfMemberRole.TopChord && analysis.Roles["VRM015"] == VcfMemberRole.MiddleChord &&
               analysis.Roles["BottomChord"] == VcfMemberRole.BottomChord && analysis.Roles["VRM001"] == VcfMemberRole.VerticalChord &&
               new[] { "170", "181", "186", "187" }.All(name => analysis.Roles[name] == VcfMemberRole.MegaColumn) &&
@@ -1191,6 +1191,43 @@ internal static class FemModelFileChecks
             vm.SaveFemModel.Execute(null);
             Check(asked.Count == 2 && File.GetLastWriteTimeUtc(first) == firstWritten && vm.FemProgressText.StartsWith("Saved MCOTiS config second", StringComparison.Ordinal),
                 "after Save As, Save overwrites the new file: it is the active configuration");
+
+            // The degrees of freedom of Analysis Options go with the configuration; a file from before them has all on.
+            var (before, _, _, _) = DefaultModelApp();
+            before.OpenFemModelFile(first);
+            vm.ApplyPlanarAnalysisSettings(vm.PlanarAnalysisSettings with { ActiveDofs = Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ, CableDofs = Mcotis.Core.DofMask.UZ });
+            vm.SaveFemModel.Execute(null);
+            var (reopened, _, _, _) = DefaultModelApp();
+            reopened.OpenFemModelFile(second);
+            Check(before.FemActiveDofs == Mcotis.Core.DofMask.XZ && before.FemCableDofs == (Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ) &&
+                  reopened.FemActiveDofs == (Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ) && reopened.FemCableDofs == Mcotis.Core.DofMask.UZ &&
+                  reopened.PlanarAnalysisSettings == vm.PlanarAnalysisSettings,
+                "the degrees of freedom of Analysis Options are saved with the configuration and come back when it is opened — RY off, UZ alone for cable joints; " +
+                "the file saved before they were changed opens with every one on");
+
+            // What a model starts with, and what a configuration from before the degrees of freedom were an option
+            // opens with: full 3D for the one, the XZ plane it was analysed in for the other.
+            var old = FemInputDatabase.Read(first).Snapshot.ToLegacy();
+            old.Settings.ActiveDofs = null;
+            old.Settings.CableJointDofs = null;
+            var oldPath = Path.Combine(folder, "before-dofs" + FemModelFile.Extension);
+            FemModelFile.Write(oldPath, old);
+            var checksStart = MainViewModel.StartingDofs;
+            MainViewModel.StartingDofs = Program.ProductStartingDofs;
+            try
+            {
+                var (fresh, _, _, _) = DefaultModelApp();
+                var startedWith = (fresh.FemActiveDofs, fresh.FemCableDofs);
+                fresh.OpenFemModelFile(oldPath);
+                var opened = (fresh.FemActiveDofs, fresh.FemCableDofs);
+                fresh.InitializeBlankMcotisConfiguration();
+                Check(startedWith == (Mcotis.Core.DofMask.Full3D, Mcotis.Core.DofMask.Translations) &&
+                      opened == (Mcotis.Core.DofMask.XZ, Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ) &&
+                      (fresh.FemActiveDofs, fresh.FemCableDofs) == (Mcotis.Core.DofMask.Full3D, Mcotis.Core.DofMask.Translations),
+                    "the default model starts in full 3D, the translations for cable joints; a configuration saved before the degrees of freedom were an option opens in the XZ plane it was analysed in; " +
+                    "and a new, blank model starts in full 3D again");
+            }
+            finally { MainViewModel.StartingDofs = checksStart; }
 
             answer = null;
             var files = Directory.GetFiles(folder).Length;

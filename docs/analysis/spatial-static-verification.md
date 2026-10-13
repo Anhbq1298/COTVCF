@@ -13,6 +13,12 @@ tension-only cables, cable target forces, staged cases and frames with points ly
 record, [cable-static-verification.md](cable-static-verification.md). The linear frame path this record describes
 is unchanged, and every check listed here passes against the general solver as it did before.
 
+**2026-10-13** the solver also reports the numerical stability of every case it factorizes: an estimate of the digits
+of accuracy lost at each solved degree of freedom, and, when a stiffness cannot be factorized, the movements without
+stiffness and the degrees of freedom that move in them. It is a diagnostic — no result of this record depends on it,
+and the checks listed here pass as before. Its formulation, thresholds, limits and verification have their own
+record: [../solver/numerical-stability-diagnostics.md](../solver/numerical-stability-diagnostics.md).
+
 ## What the engine is
 
 `src/Mcotis.Analysis`: `SpatialFrameElement`, `StaticSolver` (`LinearStaticSolver` when this was written),
@@ -80,7 +86,7 @@ local 2 gives zero force only with it, and bending in the 1–3 plane matches th
 
 ## Numerical evidence
 
-All of it runs in `dotnet run --project tests/Mcotis.Checks` (group *Spatial linear static engineering benchmarks*,
+All of it runs in `dotnet run --project tests/Mcotis.Checks -- --full` (group *Spatial linear static engineering benchmarks*,
 1086 checks) unless stated.
 
 | Evidence | What it shows | Result |
@@ -118,5 +124,10 @@ fixture on 2026-10-12.
 
 Shells; shear-flexible frames; offsets; axial, shear and torsion releases; a sparse solver and instability
 diagnostics; P-Delta and large displacements; mass and modal analysis. Since 2026-10-12 every analysis of the
-application runs this engine — the main window with the XZ degrees of freedom, the native workspace directly — and
-`PlanarFrameSolver` is archived with the checks as the comparison baseline.
+application runs this engine — the main window with the degrees of freedom of Analysis Options, full 3D to start
+with, the native workspace directly — and `PlanarFrameSolver` is archived with the checks as the comparison baseline.
+
+Since 2026-10-13 the engine can, when asked (`StaticOptions.HoldUnloadedMechanisms`, the main window only), solve a
+stiffness that is singular by movements the loads do no work on, with those movements held. The method, its
+condition and its evidence — closed forms, the same models restrained, and a model in a plane analysed in 3D against
+its analysis in the plane — are in `docs/solver/numerical-stability-diagnostics.md` §2.4 and §8.

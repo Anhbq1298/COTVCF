@@ -21,8 +21,21 @@ public sealed partial class MainViewModel
     public string? MemberSection(string member) =>
         FemSectionProperties.FirstOrDefault(property => property.MemberName.Equals(member, StringComparison.Ordinal))?.SectionName;
 
-    public bool CanEditVcfGeometry => !IsBusy && !IsFemModelLocked &&
-        (HasUsableModelGeometry || IsOfflineModel && !HasModelGeometry && FrameSections.Count > 0 && CableSections.Count > 0);
+    /// <summary>Whether Edit → VCF System can edit this VCF, replace a different working model with the VCF template,
+    /// or create the first VCF geometry of a blank model whose sections have been defined.</summary>
+    public bool CanEditVcfGeometry => !IsBusy &&
+        (HasModelGeometry
+            ? (NeedsVcfModelReplacement ? HasWorkingModel : !IsFemModelLocked)
+            : !IsFemModelLocked && IsOfflineModel && FrameSections.Count > 0 && CableSections.Count > 0);
+
+    public bool NeedsVcfModelReplacement => HasModelGeometry && !VcfGeometry.CanAnalyze(State.Geometry, State.Truss);
+
+    public string VcfGeometryToolTip => NeedsVcfModelReplacement
+        ? "Replace the current working model with the built-in VCF model, then edit the VCF system. You will be asked before anything is replaced."
+        : "Create or edit the parametric VCF geometry after defining materials and frame/cable sections.";
+
+    /// <summary>Replaces a non-VCF working model through the same complete, SAP-free path as File → Load VCF.</summary>
+    internal void ReplaceCurrentWithVcfModel() => LoadDefaultFemModel(replaceCurrent: true);
 
     /// <summary>The current geometry, or the built-in VCF topology used only as a starting canvas for an untitled model.</summary>
     internal VcfGeometryAnalysis AnalyzeVcfGeometryForEdit()
@@ -203,6 +216,7 @@ public sealed partial class MainViewModel
             return current with
             {
                 AreaM2 = template.AreaM2, ElasticModulusKNPerM2 = template.ElasticModulusKNPerM2, InPlaneInertiaM4 = template.InPlaneInertiaM4,
+                OutOfPlaneInertiaM4 = template.OutOfPlaneInertiaM4, TorsionConstantM4 = template.TorsionConstantM4,
                 SectionName = template.SectionName, MaterialName = template.MaterialName, UnitWeightKNPerM3 = template.UnitWeightKNPerM3,
                 UnitMassTPerM3 = template.UnitMassTPerM3, GrossAreaM2 = template.GrossAreaM2, Modifiers = template.Modifiers, Shape = template.Shape,
             };

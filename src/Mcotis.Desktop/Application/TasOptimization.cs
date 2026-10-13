@@ -157,7 +157,12 @@ public sealed record TasOptimizationInputs(
     int TargetFitIterations,
     int FrameMeshSegments,
     bool CableSag,
-    Func<FemSectionProperties, (double? SgdPerM, string? Missing)>? CostPerMetre = null);
+    Func<FemSectionProperties, (double? SgdPerM, string? Missing)>? CostPerMetre = null)
+{
+    /// <summary>The degrees of freedom of Analysis Options: those of the model, and those of a joint only cables reach.</summary>
+    public Mcotis.Core.DofMask ActiveDofs { get; init; } = Mcotis.Core.DofMask.XZ;
+    public Mcotis.Core.DofMask CableDofs { get; init; } = Mcotis.Core.DofMask.Translations;
+}
 
 /// <summary>
 /// Optimization → Optimization TAS: walks the search space case by case as <see cref="VcfOptimizationRunner"/> does. Each
@@ -269,10 +274,11 @@ public sealed class TasOptimizationRunner : IOptimizationRunner
                     : new Dictionary<string, double>(StringComparer.Ordinal));
             var failure = new FailureCapture();
             var runs = fem.Analyze(geometry, [], [], [], supports, [candidateModel], properties, failure, cancellationToken,
-                inputs.TargetFitPercent, inputs.TargetFitIterations, inputs.FrameMeshSegments, plan, inputs.CableSag);
+                inputs.TargetFitPercent, inputs.TargetFitIterations, inputs.FrameMeshSegments, plan, inputs.CableSag,
+                activeDofs: inputs.ActiveDofs, cableDofs: inputs.CableDofs);
             if (runs.Count == 0) return CaseFailed(failure.Message ?? "The case did not reach equilibrium.");
             var run = runs[0];
-            IReadOnlyDictionary<string, FemAnalysisResult> results = run.Results ?? new Dictionary<string, FemAnalysisResult> { [plan.ResultNames.FirstOrDefault() ?? "Result"] = run.Result };
+            IReadOnlyDictionary<string, FemAnalysisResult> results = run.Results ?? new Dictionary<string, FemAnalysisResult> { [plan.PrimaryResultName] = run.Result };
             if (settings.DeflectionResult is { } wanted)
             {
                 var match = results.Keys.FirstOrDefault(key => string.Equals(key, wanted, StringComparison.OrdinalIgnoreCase));

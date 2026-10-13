@@ -1,0 +1,36 @@
+<!--
+  ARCHIVED 2026-10-13
+  Former entry points for the legacy MB pages. This is a reference fragment,
+  not a complete XAML document, and is not compiled.
+-->
+
+<!-- Post-Processing menu entry -->
+    <MenuItem Header="Post-Processing (_Optimization)" IsEnabled="False" ToolTipService.ShowOnDisabled="True"
+              AutomationProperties.Name="Post-Processing Optimization"
+              ToolTip="Multi-candidate optimization reports will use the MB study report engine in a later release.">
+     <MenuItem.Icon><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D2;" FontSize="14"/></MenuItem.Icon>
+    </MenuItem>
+    <Separator/>
+    <MenuItem Header="Study Reports…" Tag="5" Click="MbMenu_Click"/>
+
+<!-- Top toolbar entry -->
+      <Button Style="{StaticResource ToolbarButton}" Content="&#xE749;" Command="{Binding PrintAllReports}" ToolTip="Print All Reports (06 Post-Processing; available once the reports exist)" AutomationProperties.Name="Print All Reports"/>
+
+<!-- MB top-level menu -->
+   <!-- Remaining MB reference pages. Legacy Tabs 01-05 are archived outside the active application. -->
+   <Separator x:Name="MbMenuSeparator" Style="{StaticResource MenuBarSeparator}"/>
+   <MenuItem Header="_MB" IsEnabled="{Binding HasUsableModelGeometry}">
+    <MenuItem Header="06A  Optimization" Tag="6" Click="MbMenu_Click" InputGestureText="{Binding OptimizationTabStatus}"
+              IsEnabled="{Binding HasRawData}" ToolTipService.ShowOnDisabled="True"
+              ToolTip="Qualify stored legacy-study candidates against acceptance criteria when raw data is available"/>
+    <Separator/>
+    <MenuItem Header="08  Quantities" Tag="8" Click="MbMenu_Click" InputGestureText="{Binding QuantityTabStatus}"/>
+   </MenuItem>
+
+<!-- Connection controls shown only while the MB menu was open -->
+    <StackPanel x:Name="SapConnectionControls" Visibility="Collapsed" DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+     <Button Content="Connect SAP" Command="{Binding Connect}" Style="{StaticResource Primary}"/>
+     <Button Command="{Binding Refresh}" Style="{StaticResource IconButton}" ToolTip="Refresh connection and geometry">
+      <Viewbox Width="15" Height="15"><Path Stroke="{StaticResource Accent}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent" Data="M14,5 A6,6 0 1 0 16,11 M16,11 L16,6 M16,11 L11,11"/></Viewbox>
+     </Button>
+    </StackPanel>

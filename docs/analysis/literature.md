@@ -8,6 +8,10 @@ ALG-01/02/03/05 were inspected there and the code is cross-checked numerically, 
 [cable-static-verification.md](cable-static-verification.md) for cables, target forces, staged cases and split frames
 (CABLE-01…04, CASE-01, TOPO-01: coded and cross-checked numerically; their source texts were not inspected). No record has been promoted to
 SOURCE_VERIFIED or RELEASED — that needs a reviewer's approval; the mass-based P-Delta gate remains open.
+Since 2026-10-13 a load case can *state* P-Delta, a stiffness source, a mass source and modes
+([LOAD_CASE_STATE_REFACTOR_PLAN.md](LOAD_CASE_STATE_REFACTOR_PLAN.md), PR-01/PR-02: CASE-02, CASE-03, PERSIST-01
+below). That is data and files only — ALG-07, ALG-08 and ALG-10…12 are as open as before, and a case that needs
+them is refused at Run.
 
 **Status:** living research / verification register — not a declaration that all equations or algorithms have been verified.
 
@@ -71,6 +75,9 @@ SOURCE_VERIFIED or RELEASED — that needs a reviewer's approval; the mass-based
 | CABLE-03 | Equilibrium as energy minimum: Newton, line search, Levenberg shift | Nocedal & Wright 2006 as cited by the archived solver; not inspected | CODED; cross-checked; residual, stability and balance gates at run time; reviewer pending | Done: see record |
 | CABLE-04 | Cable target forces: Newton on pretensions, finite-difference Jacobian, minimum-norm correction | Own algorithm | CODED; cross-checked (closed forms, OpenSeesPy pretension recovery, archived planar solver iterates); reviewer pending | Open: nested fit stages; unmet targets are refused |
 | CASE-01 | Staged nonlinear static cases carry earlier loads and the fit stage's pretension | Follows from CABLE-01/02 | CODED; cross-checked; reviewer pending | Done: see record |
+| CASE-02 | A nonlinear case continues from the complete converged end state of another: displacements, loads, member and cable forces, active sets | CSI "Initial Conditions" ([C2] of LOAD_CASE_STATE_REFACTOR_PLAN.md §9) | DOCUMENTED_BEHAVIOR; OPEN numerically. Only the reference is coded (`LoadCase.InitialCaseId`, rules, run plan, files). The solver still carries a continued case by its accumulated loads (CASE-01), which is not a state transfer; with P-Delta it is refused | PR-04: child load incremental, parent state retained, independent branches |
+| CASE-03 | A linear static or modal case uses the tangent stiffness frozen at the end of a nonlinear case; the loads of that case are not applied again | CSI "Stiffness to Use" ([C1] of the same) | DOCUMENTED_BEHAVIOR; OPEN numerically. Only the reference is coded (`LoadCase.StiffnessSourceCaseId`); a case that uses it is refused (`static.case.stiffnessSource`) | PR-05: perturbation on a saved Kt, no parent load in the response, superposition on one Kt |
+| PERSIST-01 | A file of an earlier schema opens with every load case meaning what it meant: `.mcotis` 3→4, `.cotfem.db` 1→2, `.cotfem.json` 1→2 | Project rule (LOAD_CASE_STATE_REFACTOR_PLAN.md §5) | CODED; checked on files written by the code before the change; reviewer pending. No numerical content | Done: `Mcotis.Checks` (schema 4 round-trip, `Fixtures/schema3-cases.mcotis`), `--fem-schema` (`tests/fem-schema/v1-default.*`: identities, patterns, factors, flags and revision unchanged) |
 
 **Warning:** Standard numerical linear algebra equations in this register are *proposed implementation targets* until audited against the listed source. Their appearance here does not certify an exact CSI implementation.
 

@@ -97,10 +97,23 @@ internal static class AnalysisInputHasher
         w.Section("load cases", d.LoadCases.Count);
         foreach (var loadCase in d.LoadCases.Values.OrderBy(item => item.Id))
         {
-            w.Id(loadCase.Id); w.Int((int)loadCase.Type); w.OptionalId(loadCase.InitialCaseId); w.Bools(loadCase.Run, loadCase.FitCableTargetForces);
+            w.Id(loadCase.Id); w.Text(loadCase.Kind.ToString()); w.OptionalId(loadCase.InitialCaseId); w.Bools(loadCase.Run, loadCase.FitCableTargetForces);
             w.Int(loadCase.Components.Length);
             foreach (var component in loadCase.Components) { w.Id(component.PatternId); w.Doubles(component.Factor); }
+            // what else decides the result of the case: the stiffness it uses, its second-order effects, its iteration, its modes
+            w.OptionalId(loadCase.StiffnessSourceCaseId); w.Text(loadCase.GeometricMode.ToString());
+            w.Bools(loadCase.NonlinearControls is not null);
+            if (loadCase.NonlinearControls is { } controls)
+            {
+                w.Int(controls.MaxLoadSteps); w.Int(controls.MaxIterationsPerStep);
+                w.Doubles(controls.RelativeResidualTolerance, controls.RelativeDisplacementTolerance);
+            }
+            w.Bools(loadCase.ModalOptions is not null);
+            if (loadCase.ModalOptions is { } modal) { w.Id(modal.MassSourceId); w.Int(modal.RequestedModes); w.Text(modal.MassMatrixKind.ToString()); }
         }
+
+        w.Section("mass sources", d.MassSources.Count);
+        foreach (var massSource in d.MassSources.Values.OrderBy(item => item.Id)) { w.Id(massSource.Id); w.Bools(massSource.IncludeSelfMass); }
 
         w.Section("load combinations", d.LoadCombinations.Count);
         foreach (var combination in d.LoadCombinations.Values.OrderBy(item => item.Id))

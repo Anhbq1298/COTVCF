@@ -27,7 +27,7 @@
       <CheckBox x:Name="RY" Content="RY — Y rotation" Margin="0,5"/>
       <CheckBox x:Name="RZ" Content="RZ — Z rotation" Margin="0,5"/>
      </UniformGrid>
-     <TextBlock Text="Inactive DOFs are excluded globally. Point restraints are separate support assignments. Plane presets require geometry and loads in that plane." TextWrapping="Wrap" Margin="0,12,0,6"/>
+     <TextBlock x:Name="DofNote" Text="Inactive DOFs are excluded globally. Point restraints are separate support assignments. Plane presets require geometry and loads in that plane." TextWrapping="Wrap" Margin="0,12,0,6"/>
      <TextBlock Text="Degrees of freedom of cable joints" FontWeight="SemiBold" Margin="0,10,0,6"/>
      <UniformGrid x:Name="CableDofEditors" Columns="3" Rows="2">
       <CheckBox x:Name="CableUX" Content="UX" Margin="0,5" AutomationProperties.Name="Cable joints UX"/>
@@ -37,22 +37,26 @@
       <CheckBox x:Name="CableRY" Content="RY" Margin="0,5" AutomationProperties.Name="Cable joints RY"/>
       <CheckBox x:Name="CableRZ" Content="RZ" Margin="0,5" AutomationProperties.Name="Cable joints RZ"/>
      </UniformGrid>
-     <TextBlock Text="A joint that only cables reach has these degrees of freedom, among the active ones; the others are switched off there. A cable gives stiffness along its own line only: a movement left on that nothing else holds — another member or a restraint — makes the model unstable, and the analysis reports it." TextWrapping="Wrap" Margin="0,8,0,6"/>
+     <TextBlock x:Name="CableDofNote" Text="A joint that only cables reach has these degrees of freedom, among the active ones; the others are switched off there. A cable gives stiffness along its own line only: a movement left on that nothing else holds — another member or a restraint — makes the model unstable, and the analysis reports it." TextWrapping="Wrap" Margin="0,8,0,6"/>
      <TextBlock x:Name="ScopeText" TextWrapping="Wrap" Foreground="{StaticResource Muted}"/>
     </StackPanel>
    </TabItem>
+   <!-- With cables in the model: "Cable Force Fitting", all four settings. Without: "Frame Mesh", the mesh alone —
+        the rows of the cables are taken out by the code-behind (ShowCableSettings). -->
    <TabItem x:Name="FittingTab" Header="Cable Force Fitting">
     <StackPanel Margin="12">
      <TextBlock x:Name="CableScope" TextWrapping="Wrap" Margin="0,0,0,10"/>
      <Grid>
       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="110"/></Grid.ColumnDefinitions>
-      <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/></Grid.RowDefinitions>
-      <TextBlock Text="Target-force tolerance (%)"/><TextBox x:Name="Tolerance" Grid.Column="1" AutomationProperties.Name="Cable fitting tolerance percent"/>
-      <TextBlock Grid.Row="1" Text="Maximum fitting iterations"/><TextBox x:Name="Iterations" Grid.Row="1" Grid.Column="1" AutomationProperties.Name="Maximum cable fitting iterations"/>
+      <Grid.RowDefinitions>
+       <RowDefinition x:Name="ToleranceRow" Height="32"/><RowDefinition x:Name="IterationsRow" Height="32"/><RowDefinition Height="32"/><RowDefinition x:Name="SagRow" Height="32"/>
+      </Grid.RowDefinitions>
+      <TextBlock x:Name="ToleranceLabel" Text="Target-force tolerance (%)"/><TextBox x:Name="Tolerance" Grid.Column="1" AutomationProperties.Name="Cable fitting tolerance percent"/>
+      <TextBlock x:Name="IterationsLabel" Grid.Row="1" Text="Maximum fitting iterations"/><TextBox x:Name="Iterations" Grid.Row="1" Grid.Column="1" AutomationProperties.Name="Maximum cable fitting iterations"/>
       <TextBlock Grid.Row="2" Text="Mesh segments per frame"/><TextBox x:Name="Mesh" Grid.Row="2" Grid.Column="1" AutomationProperties.Name="Frame mesh segments"/>
       <CheckBox x:Name="Sag" Grid.Row="3" Grid.ColumnSpan="2" Content="Include cable sag"/>
      </Grid>
-     <TextBlock Text="Cable target forces are assigned to individual cables and load patterns. Tolerance is the allowed percentage error relative to each target." TextWrapping="Wrap" Margin="0,12,0,0"/>
+     <TextBlock x:Name="CableTargetNote" Text="Cable target forces are assigned to individual cables and load patterns. Tolerance is the allowed percentage error relative to each target." TextWrapping="Wrap" Margin="0,12,0,0"/>
     </StackPanel>
    </TabItem>
   </TabControl>

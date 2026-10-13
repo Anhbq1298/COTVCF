@@ -18,90 +18,157 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
-## 2026-10-13 · Shared User Guide Word export format
-- Status: Done
-- Who: Philip Pham, Codex
-- Where: Help → User Guide → any article → Export to Word…
-- What: Every article uses A4, Arial 11 throughout (including headings, captions and footer), 1.15 line spacing and margins top/left 1.88 cm, bottom 1.28 cm, right 1.58 cm. Screenshots fit the new content width; the page footer stays inside the smaller bottom margin.
-- Checks: --user-guide (all 62 article exports, styles, margins and screenshot width; valid illustrated Word documents); --dev-log
-
-## 2026-10-13 · Illustrated column design optimization user guide
-- Status: Done
-- Who: Philip Pham, Codex
-- Where: Help → User Guide → Column design optimization
-- What: Eight detailed steps with nine real-dialog screenshots cover the basis, common member/case scope, RC/CFT/steel encased/mega size controls, grades and bars, unit rates, cheapest-first results and Use Selected. A labelled CFT force example demonstrates the actual search; pricing units, search limits, full-design review and separate model assignment are explained.
-- Checks: --column-guide-capture (real dialogs, completed CFT search and Use Selected); --column-design; --user-guide (steps, nine embedded screenshots, links, rendering and Word export); --dev-log
-
-## 2026-10-13 · Detailed Optimization VCF user guide
-- Status: Done
-- Who: Philip Pham, Codex
-- Where: Help → User Guide → Optimization VCF
-- What: Expanded to eight illustrated steps: model preparation, geometry ranges, fan grading and shared cable steps, tributary loading, section candidates, bottom-chord deflection/uplift checks, Run interpretation and Chart refinement. Retains six screenshots and explains the nine-case example, combination counts, synchronization, fitting status, costs and troubleshooting.
-- Checks: --user-guide (article, eight steps, six screenshots, links, rendering and Word export); --dev-log
-
-## 2026-10-13 · Illustrated step-by-step Optimization TAS user guide
-- Status: Done
-- Who: Philip Pham, Codex
-- Where: Help → User Guide → Optimization TAS
-- What: Eight steps cover preparation, Geometry, Storey Force, optional elevated-cable pretension, candidate Sections, the deck deflection/uplift check, Run results and Chart interpretation. Six real dialog screenshots follow a solved nine-case h × LL example; the optional cable screenshot is clearly separated. The article includes range/count rules, load calculations, actual example results, costs, troubleshooting and Word sharing.
-- Checks: --tas-guide-capture (offline real dialogs and nine solved cases); --user-guide (eight steps, six packaged screenshots, links, window rendering and valid Word export); --dev-log
-
-## 2026-10-13 · Export graphical results as numbered report figures
-- Status: Done
-- Who: Philip Pham, Codex
-- Where: Result → Show Results… → Export Result…
-- What: Word and PDF exports now contain captures of the model result diagrams, with Figure numbers and load case/output captions. Select axial/cable forces, bending, shear, reactions or deflection; one figure for each selected case and output. Uses the screen renderer, fitted to the full model with high-resolution images and result labels; preserves the live view. A4, Arial 11, spacing 1.15 and the requested margins remain. Cable target fit stays in Results Table and is not a graphical export option.
-- Checks: --result-export (real model/case captures, distinct diagrams, captions, embedded images, no tables, Word schema/page settings, PDF and dialog save/open); --result-tools-ui
-
-## 2026-10-13 · Export selected analysis results to Word or PDF
-- Status: Done
-- Who: Philip Pham, Codex
-- Where: Result → Show Results… → Export Result…
-- What: Select solved load cases/combinations and all or individual output types, save a Word or PDF report and open it. Portrait A4, Arial 11, 1.15 line spacing; margins top/left 1.88 cm, bottom 1.28 cm, right 1.58 cm. Tables retain frame stations, signed reactions, deflections and cable fit warnings. PDF uses installed Edge or Chrome.
-- Checks: --result-export (selection, stations, units, missing values, warnings, Word schema/page settings, real PDF generation and dialog save/open); rendered PDF A4/Arial 11, margins and repeated headers verified across five pages
-
-## 2026-10-13 · Help → User Guide
-- Status: Done
-- Who: Philip Pham, Claude
-- Where: Help → User Guide (F1); docs/USER_GUIDE.md
-- What: An encyclopedia of Mcotis, like a wiki: an article for every function — where to find it, what it does, how to use
-  it and what to watch out for — in categories that follow the menu bar (Getting started, Files and models, Define, Edit,
-  Assign, Run, Results, Design, Optimization, MB study, Reference). The window has the contents by category with a search
-  box (every word must match; Enter opens the first result or a results page), and each article shows an infobox with its
-  category and menu path, its lead, a contents box, its sections, See also and the articles that link to it; links
-  between articles navigate, with Back / Forward / Main page. Articles can show screenshots with a caption
-  (![caption](images/file.png), the files in docs/user-guide/images, built into the app); Optimization VCF is written as
-  a step-by-step guide with six — the four sheets of the form and the Run and Chart sheets of the results. Export to Word…
-  (guide window, on any article) saves the article as a .docx: A4, 2.54 cm margins, Arial 11 with 1.15 line spacing,
-  headings, bullet and numbered lists, the screenshots scaled to the page width with their captions, the article and
-  page number in the footer. The text is docs/USER_GUIDE.md, built into the app: whoever adds or changes a function
-  updates its article (one `# Title` with Category, Where and See also lines, then Markdown with [[links]]).
-- Checks: --user-guide (format, every link and screenshot resolves, the app carries the current guide, every menu command
-  of the main window is covered, search, the window's pages, screenshots and navigation; the Word export is A4, Arial 11,
-  1.15 spacing, holds the screenshots and is valid Open XML)
-
-## 2026-10-13 · Run monitor opens on an analysis log laid out like SAP2000's
+## 2026-10-13 · Analysis Options: degrees of freedom in the main window
 - Status: Done
 - Who: markbui, Claude
-- Where: Run → Run FEM Analysis → the run monitor (also Run → Analysis Monitor): the new tab "Analysis Log", beside
-  "Equilibrium by Load Case" and "Cable Target-Force Convergence"
-- What: Under the bar the run monitor now has three tabs instead of panels one above the other, and it opens on the
-  analysis log. The log is laid out like the analysis log of SAP2000 — blue fixed-width text, section titles spaced
-  out with the time at the right, NAME = value lines — and says what this solver does, in its own terms. It begins
-  with the model in numbers (joints, restraints, frames, cables, load patterns, load assignments, cases and
-  combinations), the load cases to be solved and the analysis options, then the equations of the run: active degrees
-  of freedom, restrained, solved. Every solve has a block, the fit of the cable target forces first: how it starts
-  (from zero, or from the pretension fitted for its stage), one line per equilibrium iteration — fitting run,
-  iteration, unbalance, relative unbalance, joints converged, where the unbalance is largest — with the trial
-  pretensions of a fitting run counted in one line, and at the end the stability check of the converged state, the
-  smallest scaled pivot, the resultant of the internal forces, what the fit reached and the time. The log closes with
-  the largest axial force, deflection and number of slack cables of every load case and combination, the output
-  database and ANALYSIS COMPLETE. A case that is unstable or does not converge ends with an error block that names
-  the joint and the movement; a run that fails or is cancelled closes with ANALYSIS INCOMPLETE. Text in the log can
-  be selected and copied. The log replaces the collapsed "Diagnostic details" list; the equilibrium table and the
-  convergence chart are as before, each on its own tab. The results of a run are unchanged.
-- Checks: dotnet run --project tests/Mcotis.Checks (2,767 checks); default offline Mcotis.Desktop.Checks; --fem;
-  --fem-sap; --general-solver; --template-building-ui; --dev-log
+- Where: Run → Analysis Options… → tab "Degrees of Freedom" (beside "Cable Force Fitting"; also the toolbar)
+- What: The main window's Analysis Options have a Degrees of Freedom tab again, with the choices its planar model
+  has, each one a box that can be changed. For the model: RY, the rotation of the joints — switched off, no joint
+  turns: the rotation is held at every joint, as by a support (it is not a release), and a moment applied to a joint
+  is refused instead of dropped. For cable joints: UX and UZ — a joint that only cables reach has the ones that are
+  ticked. Switching UX off there holds such a joint sideways, so a cable modelled in two segments through a joint
+  nothing else reaches can be analysed; it used to stop the run as unstable, and the message of that instability now
+  names this option. UX and UZ of the model are not offered: the model spans its XZ plane, and the solver refuses a
+  translation that is off unless every joint has the same coordinate along it; UY, RX and RZ are not degrees of
+  freedom of a planar model. The settings are used by Run FEM Analysis, Optimization VCF and Optimization TAS, are
+  saved with the configuration (a file from before opens with everything on), and changing them clears the
+  results. The run monitor counts and lists the degrees of freedom of each run accordingly, with "-" for one that is
+  off. The form of the native workspace (Edit → TemplateBuilding…) is unchanged: it still offers 3D, the plane
+  presets and custom sets.
+- Checks: --fem (a cable in two segments with UX off for cable joints gives the tension, deflection and reactions of
+  the one cable); --run-monitor (RY off against PL³/24EI; the counts of the run; a moment on a rotation that is off
+  refused; a translation of the plane refused); --template-building-ui (the form); --full of
+  Mcotis.Desktop.Checks and of Mcotis.Checks; --user-guide; --dev-log
+
+## 2026-10-13 · Run monitor: load cases that open on convergence, numerical stability by joint and DOF, and their own log
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis → the run monitor (also Run → Analysis Monitor, and the toolbar): tab "Load Cases",
+  beside "Cable Target-Force Convergence"
+- What: The run monitor is laid out again, in the application's own type; the SAP2000-style blue fixed-width log and
+  the "Equilibrium by Load Case" tab are gone. On top: the run — Running, Completed, Completed with Warnings, Failed
+  or Cancelled — the bar counting the load cases ended, the degrees of freedom as the equations were assembled
+  (active | solved | restrained), start and elapsed time. Then a note on numerical stability that can be closed; the
+  model in numbers under the name of its file (joints, restrained joints, frames, cables, shells, load patterns, load
+  assignments, load cases and combinations counted apart, the supports); and one entry per solve of the run — per
+  pretension stage the fit of its cable target forces, then its cases; a combination is not a solve and is not
+  listed. An entry reads Pending, Running, Converged, Converged with Warnings, Not Converged, Numerical Instability,
+  Failed or Cancelled with its time; a click opens it, several stay open, a failed one opens itself. Open, it shows
+  Convergence, Numerical Stability and Instabilities (0 = none detected), the convergence in detail (iterations,
+  tolerance satisfied or not, out-of-balance as measured, fitting runs, the checks the solver made), and its own log
+  of what the solver reported, in order. When a degree of freedom is reported, a table lists the affected joints by
+  name with their global coordinates and the six columns UX UY UZ RX RY RZ: the digits of accuracy lost (amber from
+  6, red above 11), ∞ in bold red where a singularity was identified, - for a degree of freedom that is off, R for
+  a restrained one, N/A where there is no estimate; the remarks name the degrees of freedom.
+  The numbers are the solver's: it now estimates the digits lost at every solved degree of freedom as
+  log10(Kii·(K⁻¹)ii) — which does not depend on the elimination order and is not CSI's number — and, when it cannot
+  factorize a stiffness, finds the movements without stiffness and the degrees of freedom that move in them. A small
+  pivot stays a finite number; ∞ is kept for an exactly zero stiffness, a joint only slack cables hold, and a
+  movement the stiffness does not resist at double precision ("possible mechanism"). Non-convergence is not reported
+  as an instability. The solution itself is untouched: results are what they were. Known limits: the thresholds
+  (6 / 11) are options of the solver without a control in the app yet; the native workspace receives the same
+  diagnostics but does not show them yet. Method, thresholds, differences from CSI and limits:
+  docs/solver/numerical-stability-diagnostics.md.
+- Checks: dotnet run --project tests/Mcotis.Checks (2,904 checks, 137 of them new); --run-monitor; --run-monitor-ui;
+  default offline Mcotis.Desktop.Checks; --general-solver; --fem; --fem-sap; --template-building-ui; --dev-log
+
+## 2026-10-13 · Run monitor: a closed load case says what was found; technical diagnostics apart
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis → the run monitor (also Run → Analysis Monitor), tab "Load Cases"
+- What: A load case that is closed now says, after its status, what the solver found of it: "Converged · Instabilities:
+  0"; "Converged with Warnings · Instabilities: 0 · Accuracy warnings: 2" (or "Cable target forces not met", "1
+  rotation left out"); "Numerical Instability · 6 affected DOFs"; "Not Converged · 100 iterations · Instabilities:
+  N/A"; "Failed · Cable target-force fit failed"; "Cancelled · Not run". The 0 is the solver's count of severe
+  instabilities in a case whose numerical stability it assessed — not a residual and not digits lost; a case it did
+  not assess reads N/A, never 0. The name and the outcome share the row and both give way in a narrow window; the full
+  line is in the tooltip and is what a screen reader reads. Open, a case keeps its convergence, iterations and cause of
+  failure in view; the measured numbers behind them — scaled backward error, out-of-balance, smallest scaled pivot,
+  resultant of internal forces, largest loss of accuracy — are under "Technical diagnostics", closed until asked for,
+  between the table and the log. The table's coordinate columns read X (m), Y (m), Z (m). The reason of a run that
+  failed is in red, and is also written in the log of every case that was stopped or not run. The note states the
+  thresholds the run was reported by. Nothing of the solver or of its diagnostics changed.
+- Checks: --run-monitor (the closed row for a stable frame, a stiffness contrast, a withheld result, a mechanism, an
+  iteration stopped at its limit, an unmet fit, a failed fit, a planned and a cancelled run); --run-monitor-ui (the
+  rows, Technical diagnostics opening and closing, the table's columns, a refused run); --general-solver; --dev-log
+
+## 2026-10-13 · Load cases: four kinds and references by identity in the model and in every file; older files are upgraded when opened
+- Status: Done
+- Who: markbui, Claude
+- Where: No new window. File → Load Config… / Save Config (.cotfem.db, .cotfem.json); the native window's File → Open /
+  Save (.mcotis); Run → Run FEM Analysis and the native Run → Run Analysis (the refusals)
+- What: First two steps of docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md (PR-01, PR-02). A load case is now one of
+  four kinds — Linear Static, Nonlinear Static, Initial P-Delta, Modal (Eigenvectors) — and keeps two different
+  references apart: the nonlinear case it continues from (its loads are added to that case's end state) and the
+  nonlinear case whose end stiffness a linear or modal case uses (that case's loads are not applied again). It can
+  also hold P-Delta as its geometric nonlinearity, its own load steps / iterations / tolerances, and for a modal case
+  a mass source and a number of modes. The rules are one set for both windows: a linear case does not continue from a
+  case, a modal case has no loads, only a nonlinear or initial P-Delta case can be continued from or lend its
+  stiffness, no case depends on itself; a native model also refuses a combination of a modal case. The order in
+  which cases have to run — a case that is not ticked but is needed runs as a prerequisite; the cases behind a failed
+  one are blocked — is worked out by a run plan in the analysis library. NOTHING NEW IS SOLVED. The form to define
+  these cases and the run by the plan are the entry of Load Case Data above; a case that
+  asks for P-Delta, for modes, for the stiffness of another case or for its own iteration controls is refused at Run
+  with the reason ("P-Delta is not available yet — numerical verification pending … The case is not solved, and it is
+  not replaced by a first-order analysis"). The cases that were solved before give the same numbers. Files: native
+  .mcotis is schema 4, a configuration .cotfem.db is schema 2 and a .cotfem.json is version 2. An older file opens as
+  it was — every case with the meaning, the identity, the load patterns and factors, the run and cable-fit flags it
+  had; nothing is switched on by the upgrade, and the file on disk is not touched until it is saved. A configuration
+  keeps its revision through the upgrade, so its results stay its results. In a configuration a case now refers to
+  another by identity, so renaming a case cannot break what continues from it. A file that contradicts itself —
+  a reference to a case that is not there, two cases under one name, a name and an identity that point to different
+  cases, tables that disagree with the stored model — is refused with the case named, not repaired by a guess.
+  TO KNOW: a file saved by this version is not opened by an earlier build of Mcotis ("newer than this app supports");
+  update before exchanging configurations. The bundled default model is the same model, saved as schema 2.
+- Checks: Mcotis.Checks (group "Load cases: kinds, references, run order, schema 4 and what is not solved yet", and
+  its --full); --fem-schema (the upgrade of a schema-1 database and a version-1 JSON file written by the earlier
+  code, the four kinds through both files, the refusals, the bundled default, a P-Delta case opened, refused at Run
+  and saved again); --fem-db; --fem-model; --full of Mcotis.Desktop.Checks; --dev-log
+
+## 2026-10-13 · Analysis Options: full 3D to start with, every degree of freedom the user's to set; the run goes on where the loads allow and reports the rest
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Analysis Options… → tab "Degrees of Freedom"; the report is in Run → Analysis Monitor
+- What: The main window's Degrees of Freedom tab is now the same as the native workspace's: the preset (Full 3D, XZ,
+  YZ, XY plane, Custom), the six degrees of freedom and those of cable joints, each a box that can be changed. A model
+  starts in Full 3D — the default model, a new blank model — with the translations for cable joints; this replaces the
+  rule of the entry below that only RY could be changed. The set goes to the solver as chosen and is never corrected;
+  the form refuses only a set without a translation. A model of the main window lies in its XZ plane on pin supports
+  that are all on one line, so in Full 3D nothing holds it out of that plane: it can turn about the line of its
+  supports. The loads act in the plane and do no work on that movement, so — as ETABS does — the run goes on: the
+  solver holds that movement, solves, and reports it. Run FEM Analysis then reads Completed with Warnings, every load
+  case "Converged with Warnings · Instabilities: 78 · 1 unloaded movement held" (default model), and the table lists
+  the movement joint by joint — RX of every joint and UY of every joint off the line of the supports, remark
+  "possible mechanism, not loaded: held". The results are those of the XZ plane (default model: displacements within
+  2·10⁻¹² m, forces within 2·10⁻⁶ kN, every case and combination); the displacement along the held movement is given as
+  zero. A movement the loads DO act on — a mechanism under its load — has no result, as before, and neither has a
+  degree of freedom that nothing holds at all (a cable joint with no stiffness sideways: rule of 2026-10-12, unchanged).
+  The same holds in the plane: a mechanism the loads leave alone no longer stops a main-window run. The native
+  workspace is unchanged. A configuration saved before the degrees of freedom were an option opens in the XZ plane it
+  was analysed in. Other sets the model cannot be analysed with stop the run with the reason — "UX is switched off,
+  but the joints of the model are not all at one X: …" — every load case Cancelled · Not run with the reason in its
+  log; a load on a degree of freedom that is off is refused by the joint. A cable joint that a switched-off degree of
+  freedom holds against the pull of an inclined cable is said: the cases read Converged with Warnings and their log
+  names the cable and the joint. In 3D a frame is given the out-of-plane inertia and the torsion constant of its
+  section (a Section Designer section without a torsion constant takes the polar moment, as it does on export);
+  frames that come without them are refused by name. Messages of the solver name a frame or a cable by its own name.
+- Checks: Mcotis.Checks (movements held: a column free to spin, a beam on rollers, a hinged portal, a beam hung from a
+  cable — each to its closed form and to the digit of the same model restrained; refused when the load acts on the
+  movement, and without the option) and its --full; --run-monitor (a rigid portal and a hung beam in Full 3D against
+  the plane; a hinged portal pushed sideways refused; UX off; a cable joint held by an option); --run-monitor-ui (the
+  default model through the window in Full 3D against the XZ plane; UX off); --template-building-ui (the form, the 3D
+  start); --fem-model (what a new model, a blank one and an older file start with); --fem; --general-solver;
+  --fem-sap; --full of Mcotis.Desktop.Checks; --user-guide; --dev-log
+
+## 2026-10-13 · Archive legacy MB Tabs 01–05
+- Status: Done
+- Who: Codex
+- Where: Main window; MB menu; `archive/Mcotis.Desktop/LegacyTabs01To05/`
+- What: Removed Loading, Truss Height, Pretension, Output Settings and Iteration from the active desktop UI and
+  archived their exact XAML and page-only code-behind outside the compiled project. Five inert slots retain the
+  established indices of the remaining pages; legacy data/configuration seams stay only for file compatibility and
+  the current VCF/TAS/optimization workflows. Run Study and Cancel Study are no longer exposed.
+- Checks: default offline Mcotis.Desktop.Checks; --dev-log
 
 ## 2026-10-13 · Column design optimization (RC, CFT, steel encased, mega column)
 - Status: Done
@@ -148,50 +215,325 @@ continues on the next lines, indented by two spaces):
   suite (a 4-case run on the default model gives its Chart sheet); --etabs-import (after an Optimization TAS run over H1
   and bays the Chart sheet holds numbered figures, utilisation against L / 250, and a summary)
 
-## 2026-10-12 · Tied arch system with an elevated cable
+## 2026-10-13 · Run monitor opens on an analysis log laid out like SAP2000's
 - Status: Done
-- Who: Philip Pham, Claude
-- Where: Edit → Tied Arch System… → Geometry (With elevated cable, H0) and Cable Force; Optimization → Optimization TAS…
-  → Geometry (H0), Cable Force and Sections (tie cable)
-- What: With elevated cable ticked, the arch springs at H0 (default 10 m) from the top of two columns of the arch's own
-  section, pinned on the ground, and one cable — TIE, the VCF model's strand section 192T15.7 — ties the two springing
-  points; H1 and H2 are measured from the springing (deck at H0 + H2). The Cable Force sheet sets the tie's target force
-  (default 20,000 kN) in the Pretension load pattern. As for the VCF cables, the Pretension case applies it with the
-  self-weight and fits the tie to it, and the SLS / ULS cases (and the P-Δ ULS cases) continue from it, prestressed then
-  loaded. Optimization TAS of such a system adds H0 to its geometry ranges, the tie's pretension in steps (min / max /
-  steps, as Optimization VCF) and the tie among its section roles; each case is fitted and run with its cable. The
-  viewer still dimensions H1 from the springing.
-- Checks: --etabs-import (the elevated system is built, pinned on the ground, meets the tie's target in Pretension and
-  solves; Optimization TAS reproduces its run and steps the pretension); --result-tools-ui (the forms show and hide H0
-  and Cable Force)
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis → the run monitor (also Run → Analysis Monitor): the new tab "Analysis Log", beside
+  "Equilibrium by Load Case" and "Cable Target-Force Convergence"
+- What: Under the bar the run monitor now has three tabs instead of panels one above the other, and it opens on the
+  analysis log. The log is laid out like the analysis log of SAP2000 — blue fixed-width text, section titles spaced
+  out with the time at the right, NAME = value lines — and says what this solver does, in its own terms. It begins
+  with the model in numbers (joints, restraints, frames, cables, load patterns, load assignments, cases and
+  combinations), the load cases to be solved and the analysis options, then the equations of the run: active degrees
+  of freedom, restrained, solved. Every solve has a block, the fit of the cable target forces first: how it starts
+  (from zero, or from the pretension fitted for its stage), one line per equilibrium iteration — fitting run,
+  iteration, unbalance, relative unbalance, joints converged, where the unbalance is largest — with the trial
+  pretensions of a fitting run counted in one line, and at the end the stability check of the converged state, the
+  smallest scaled pivot, the resultant of the internal forces, what the fit reached and the time. The log closes with
+  the largest axial force, deflection and number of slack cables of every load case and combination, the output
+  database and ANALYSIS COMPLETE. A case that is unstable or does not converge ends with an error block that names
+  the joint and the movement; a run that fails or is cancelled closes with ANALYSIS INCOMPLETE. Text in the log can
+  be selected and copied. The log replaces the collapsed "Diagnostic details" list; the equilibrium table and the
+  convergence chart are as before, each on its own tab. The results of a run are unchanged.
+- Checks: dotnet run --project tests/Mcotis.Checks (2,767 checks); default offline Mcotis.Desktop.Checks; --fem;
+  --fem-sap; --general-solver; --template-building-ui; --dev-log
 
-## 2026-10-12 · Mcotis opens with the tied arch system
+## 2026-10-13 · VCF System can replace a non-VCF working model
 - Status: Done
-- Who: Philip Pham, Claude
-- Where: Starting Mcotis
-- What: The app now opens with the tied arch system — TAS - Tied Arch System, as File → Load TAS… opens it, ready to run —
-  instead of the VCF model. File → Load VCF… still opens the VCF model; should TAS not load, the VCF model opens
-  instead and the status bar says why.
-- Checks: --etabs-import (a fresh start opens TAS with 30 joints and 59 frames, ready to run)
+- Who: Codex
+- Where: Edit → VCF System…
+- What: On a TAS or another model without valid VCF chord groups, VCF System now asks before replacing the entire
+  Mcotis working model with the built-in VCF configuration, then opens the VCF editor; it never shows the unrelated
+  model as a VCF preview and never writes SAP2000. Cancel keeps the current model. An existing VCF still opens directly,
+  and a blank New Config still creates its first VCF after frame and cable sections have been defined.
+- Checks: default offline Mcotis.Desktop.Checks; --etabs-import; --dev-log
 
-## 2026-10-12 · Optimization TAS
+## 2026-10-13 · Help → User Guide
 - Status: Done
 - Who: Philip Pham, Claude
-- Where: Optimization → Optimization TAS…; Optimization → Optimization Results…
-- What: The parametric study of the tied arch system, run as Optimization VCF is. The form has min / max / step for H1,
-  h (H2 = H1 + h, so the top chord is always above the arch crown; 2–5 m @ 1 by default), the number of bays and their
-  spacing (sheet Geometry, the others starting fixed at the open system) and for the storeys above
-  — SW 7–15 kPa @ 1, SDL 3–10 @ 1, LL 5–10 @ 2.5, floors n 5–10 @ 1 and the tributary width B (sheet Storey Force, with
-  the SLS / ULS point load per deck joint) — candidate sections per role (arch rib, top chord, mega column, end strut,
-  strut, brace), the deflection check (max δ of a top chord joint in the chosen result ≤ L / ratio, uplift limit) and a
-  preview at the minimum, current or maximum corner. Run Optimization builds every case in memory as Edit → Tied Arch
-  System would (an odd number of bays is skipped with the reason), analyses it with the internal FEM
-  and lists it in the Optimization Results table — the same table, run loop, checks and cost as Optimization VCF, which
-  now share one loop. The default space is 5,184 cases. Needs the tied arch system open (File → Load TAS… or Edit →
-  Tied Arch System…); the open model is not changed. The span of an arch is L: the model view labels it "Span L = 120 m",
-  and the form and the results give the limit as L/250 (480 mm for TAS).
-- Checks: --etabs-import (a case with the model's inputs deflects as Run FEM Analysis of Load TAS; odd bays skipped;
-  section candidates change the result; bad ranges refused); --result-tools-ui; --fem-model (Optimization VCF unchanged)
+- Where: Help → User Guide (F1); docs/USER_GUIDE.md
+- What: An encyclopedia of Mcotis, like a wiki: an article for every function — where to find it, what it does, how to use
+  it and what to watch out for — in categories that follow the menu bar (Getting started, Files and models, Define, Edit,
+  Assign, Run, Results, Design, Optimization, MB study, Reference). The window has the contents by category with a search
+  box (every word must match; Enter opens the first result or a results page), and each article shows an infobox with its
+  category and menu path, its lead, a contents box, its sections, See also and the articles that link to it; links
+  between articles navigate, with Back / Forward / Main page. Articles can show screenshots with a caption
+  (![caption](images/file.png), the files in docs/user-guide/images, built into the app); Optimization VCF is written as
+  a step-by-step guide with six — the four sheets of the form and the Run and Chart sheets of the results. Export to Word…
+  (guide window, on any article) saves the article as a .docx: A4, 2.54 cm margins, Arial 11 with 1.15 line spacing,
+  headings, bullet and numbered lists, the screenshots scaled to the page width with their captions, the article and
+  page number in the footer. The text is docs/USER_GUIDE.md, built into the app: whoever adds or changes a function
+  updates its article (one `# Title` with Category, Where and See also lines, then Markdown with [[links]]).
+- Checks: --user-guide (format, every link and screenshot resolves, the app carries the current guide, every menu command
+  of the main window is covered, search, the window's pages, screenshots and navigation; the Word export is A4, Arial 11,
+  1.15 spacing, holds the screenshots and is valid Open XML)
+
+## 2026-10-13 · Illustrated step-by-step Optimization TAS user guide
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Help → User Guide → Optimization TAS
+- What: Eight steps cover preparation, Geometry, Storey Force, optional elevated-cable pretension, candidate Sections, the deck deflection/uplift check, Run results and Chart interpretation. Six real dialog screenshots follow a solved nine-case h × LL example; the optional cable screenshot is clearly separated. The article includes range/count rules, load calculations, actual example results, costs, troubleshooting and Word sharing.
+- Checks: --tas-guide-capture (offline real dialogs and nine solved cases); --user-guide (eight steps, six packaged screenshots, links, window rendering and valid Word export); --dev-log
+
+## 2026-10-13 · Export graphical results as numbered report figures
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Result → Show Results… → Export Result…
+- What: Word and PDF exports now contain captures of the model result diagrams, with Figure numbers and load case/output captions. Select axial/cable forces, bending, shear, reactions or deflection; one figure for each selected case and output. Uses the screen renderer, fitted to the full model with high-resolution images and result labels; preserves the live view. A4, Arial 11, spacing 1.15 and the requested margins remain. Cable target fit stays in Results Table and is not a graphical export option.
+- Checks: --result-export (real model/case captures, distinct diagrams, captions, embedded images, no tables, Word schema/page settings, PDF and dialog save/open); --result-tools-ui
+
+## 2026-10-13 · Detailed Optimization VCF user guide
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Help → User Guide → Optimization VCF
+- What: Expanded to eight illustrated steps: model preparation, geometry ranges, fan grading and shared cable steps, tributary loading, section candidates, bottom-chord deflection/uplift checks, Run interpretation and Chart refinement. Retains six screenshots and explains the nine-case example, combination counts, synchronization, fitting status, costs and troubleshooting.
+- Checks: --user-guide (article, eight steps, six screenshots, links, rendering and Word export); --dev-log
+
+## 2026-10-13 · Shared User Guide Word export format
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Help → User Guide → any article → Export to Word…
+- What: Every article uses A4, Arial 11 throughout (including headings, captions and footer), 1.15 line spacing and margins top/left 1.88 cm, bottom 1.28 cm, right 1.58 cm. Screenshots fit the new content width; the page footer stays inside the smaller bottom margin.
+- Checks: --user-guide (all 62 article exports, styles, margins and screenshot width; valid illustrated Word documents); --dev-log
+
+## 2026-10-13 · Illustrated column design optimization user guide
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Help → User Guide → Column design optimization
+- What: Eight detailed steps with nine real-dialog screenshots cover the basis, common member/case scope, RC/CFT/steel encased/mega size controls, grades and bars, unit rates, cheapest-first results and Use Selected. A labelled CFT force example demonstrates the actual search; pricing units, search limits, full-design review and separate model assignment are explained.
+- Checks: --column-guide-capture (real dialogs, completed CFT search and Use Selected); --column-design; --user-guide (steps, nine embedded screenshots, links, rendering and Word export); --dev-log
+
+## 2026-10-13 · Export selected analysis results to Word or PDF
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Result → Show Results… → Export Result…
+- What: Select solved load cases/combinations and all or individual output types, save a Word or PDF report and open it. Portrait A4, Arial 11, 1.15 line spacing; margins top/left 1.88 cm, bottom 1.28 cm, right 1.58 cm. Tables retain frame stations, signed reactions, deflections and cable fit warnings. PDF uses installed Edge or Chrome.
+- Checks: --result-export (selection, stations, units, missing values, warnings, Word schema/page settings, real PDF generation and dialog save/open); rendered PDF A4/Arial 11, margins and repeated headers verified across five pages
+## 2026-10-13 · Archive the complete legacy MB workspace
+- Status: Done
+- Who: Codex
+- Where: Main window menus and toolbar; `archive/Mcotis.Desktop/LegacyMb/`
+- What: Removed the top-level MB menu and its remaining 06A Optimization and 08 Quantities pages, plus the legacy
+  06 Post-Processing page, Post-Processing → Study Reports and the Print All Reports toolbar entry. Their frozen
+  XAML and navigation entry points are kept outside the compiled project. Empty slots 0–6 and 8 retain FEM's
+  established index 7. The separate standalone Optimization menu for VCF/TAS remains active.
+- Checks: solution build; --study-ui archive assertions; --user-guide; --dev-log. KNOWN GAP of --study-ui, older than
+  this change: its Optimization VCF checks were written for the default model before the bundled database of
+  2026-10-11. The fan-cable forces they named (30,000 … 40,000 kN) are now those of the bundled model (5,000 …
+  15,000 kN), and Cable4b-2 follows Cable4a-2 as the bundled model has it (user, 2026-10-13). The suite now runs
+  100 checks, through the Load Cases pane, and stops at Define → Result Load Case: the check opens a menu item the
+  Define menu does not have, and did not have at the commit before. --study-ui is not part of --full.
+
+## 2026-10-13 · Load cases: verified P-Delta, linear static on a saved stiffness, modal analysis and result storage
+- Status: Planned
+- Who: Unassigned
+- Where: Run → Run FEM Analysis; the result tables; the numerical analysis libraries
+- What: The remaining steps of docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md, in their order: P-Delta and the state a nonlinear case ends in (PR-04,
+  blocked until the geometric stiffness and the restoring force have passed the literature gate — ALG-07, ALG-08);
+  linear static on the stiffness at the end of a nonlinear case (PR-05); mass sources and modal analysis (PR-06);
+  results of six degrees of freedom and of modes in the result database (PR-07). Until each is verified, a case that
+  asks for it is refused at Run with the reason — see the entry below.
+- Checks: none yet
+
+## 2026-10-13 · Load cases: Load Case Data for the four types; the run follows a plan and solves what a case needs first
+- Status: Done
+- Who: markbui, Codex, Claude
+- Where: Define → Load Cases → + Add / Modify (Load Case Data); Run → Run FEM Analysis → Set Load Cases to Run; Run →
+  Analysis Monitor
+- What: PR-03 of docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md. Load Case Data has a Type: Linear Static, Nonlinear
+  Static, Initial P-Delta, Modal (Eigenvectors), and shows what belongs to the type. A nonlinear case has "Continue
+  from" (its loads are added to the end state of that case), its geometric nonlinearity (None / P-Delta) and, when
+  ticked, its own load steps, iterations and tolerances; an initial P-Delta case is a nonlinear case with P-Delta
+  fixed on; a linear or modal case has "Stiffness from" instead (only the end stiffness of that case is used, its
+  loads are not applied again); a modal case has a mass source and a number of modes in place of loads. Both lists
+  offer nonlinear cases only, and never a case that depends on the one being edited; a case others start from cannot
+  be made linear or modal. A model without a mass source is offered MS1 — the self mass of its members — which is
+  kept with the configuration once a modal case names it; there is no form for mass sources yet. NOTHING NEW IS
+  SOLVED. A type or option that is not solved yet — P-Delta, modal, linear static, own iteration controls — can be
+  defined and saved; the form says so, the Load Cases table shows "Unavailable — verification pending" in its Status
+  column, a new case of such a type is added not set to run, and Run with it ticked stops with the reason, never
+  solving it as a simpler case. The Load Cases table now shows Type, Starts From / Stiffness, Geometric and Status,
+  and the case a case continues from is set in Load Case Data, no longer in the table. Set Load Cases to Run shows
+  the plan of the run: for each case its role (Requested, or Prerequisite — not set to run but needed first), what
+  it depends on, and whether it is solved. CHANGE TO A RUN: a case that is not set to run but that a case of the run
+  continues from is now solved and listed with its own results, as SAP2000 and ETABS do; its log in the run monitor
+  says "Not set to run: solved because … continues from it". Before, only its loads were carried. The results of
+  the other cases are the same (default model, only ULS set to run: Pretension and ULS equal those of a run of every
+  case), and the cases are solved and listed in the order of the Load Cases table as before.
+- Checks: --case-editor (the plan, the order of the run, prerequisites, rows outside the run, the form for every
+  type, the run dialog, save and reopen, a run with a prerequisite against a run of everything); --study-ui (Set
+  Load Cases to Run and the Load Cases pane in the main window; the suite stops later for a reason of its own — see
+  the entry below);
+  --fem-schema; --run-monitor-ui; --template-building-ui; --full of Mcotis.Desktop.Checks; --full of Mcotis.Checks;
+  --user-guide; --dev-log
+
+## 2026-10-13 · Cable force fitting is shown only for a model that has cables
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Analysis Options…; Result → Cable target fit; Show Results; Results Table; Run → Analysis Monitor
+- What: A model without cables has no cable target forces to fit, so what belongs to that fit is no longer shown for
+  it. In Analysis Options the second tab is "Cable Force Fitting" — tolerance, fitting iterations, frame mesh, cable
+  sag — when the model has cables, and "Frame Mesh" with the mesh alone when it has none; the settings that are not
+  shown keep their values. Also not shown without cables: Result → Cable target fit, its choice in Show Results, its
+  tab of the Results Table, and the Cable Target-Force Convergence tab of the run monitor. With the tied arch system
+  they appear as soon as it has its elevated cable. The native model window follows the same rule for its Analysis
+  Options. Not changed: the degrees of freedom of cable joints on the first tab, and Purpose / Cable Target Forces
+  in Load Case Data and the Load Cases table.
+- Checks: --template-building-ui (the form with and without cables; Apply keeps what is not shown);
+  --result-tools-ui (the tied arch system against the VCF system, in the main window and its three result windows);
+  --etabs-import (which models have cables); --run-monitor-ui; --full of Mcotis.Desktop.Checks; --user-guide;
+  --dev-log
+
+## 2026-10-13 · Optimization menu: only the optimization of the system that is open is offered
+- Status: Done
+- Who: markbui, Claude
+- Where: Optimization → Optimization VCF… / Optimization TAS…
+- What: Each optimization varies its own system, so the menu now follows the model that is open. On a VCF system
+  Optimization VCF is offered and Optimization TAS is greyed; with the tied arch system open (File → Load TAS… or
+  Edit → Tied Arch System…) it is the other way round; on a model that is neither — an imported ETABS model, a blank
+  one — both are greyed. Before, both were always enabled, whatever model was open. A greyed item still shows its
+  tooltip, which begins with the system it is for. Optimization Results… stays available: it shows the last run.
+- Checks: --result-tools-ui (the menu in the main window on the VCF model, the tied arch system and back; this suite
+  had also still expected the archived MB menu after Optimization — corrected); --etabs-import (every model the
+  application can hold, and that the menu is told when the system changes); --full of Mcotis.Desktop.Checks;
+  --user-guide; --dev-log
+
+## 2026-10-12 · Selecting points, frames and cables on the model view
+- Status: Done
+- Who: markbui
+- Where: Model view, 2D and 3D; Select tool (V); status bar
+- What: A left click selects a point as well as a frame or a cable, in the 3D view too, where every point is now drawn.
+  A right-click shows the object's information — Point Information for a point: coordinates, the members that meet at
+  it, its support and its loads. V is the Select tool; Esc only clears the selection and no longer leaves Pan. The
+  status bar counts the selected frames, cables, points and shells (the app has no shells yet). Selecting by a window
+  stays 2D only: a drag in 3D rotates the model.
+- Checks: --result-tools-ui
+
+## 2026-10-12 · Help → Development Plans and the compulsory development log
+- Status: Done
+- Who: Philip Pham
+- Where: Help → Development Plans; docs/DEVELOPMENT_LOG.md
+- What: Shows this log in the app — in progress and planned work first, then what is done, newest first. Writing an entry
+  is compulsory for every change of the app: the build installs .githooks, whose commit-msg hook refuses a commit that
+  changes src/, App.xaml or src/Mcotis.Desktop/Mcotis.Desktop.csproj without a log entry ([no-log] only for changes no user can notice); AGENTS.md
+  tells every coding agent to write the entry.
+- Checks: --dev-log
+
+## 2026-10-12 · Cable pretension in Export to ETABS
+- Status: Planned
+- Who: Unassigned
+- Where: File → Export to ETABS…
+- What: ETABS has no cable target-force load, so Export to ETABS writes cables as tension-only frames without their
+  Tab 03 pretension. Carry the pretension across (for example as an equivalent strain or temperature load).
+- Checks: none yet
+
+## 2026-10-12 · One form for a member: information and assignments together
+- Status: Done
+- Who: markbui
+- Where: Model view — right-click or double-click a frame or cable (Frame / Cable Information)
+- What: The separate Member Assignments form is gone. The information form now changes the assignments itself, on its
+  Assignments tab: section, local-axis angle and end moment releases of a frame; section, target pattern and target
+  force of a cable. OK / Cancel / Apply; only what was changed is written. A locked model shows the same form read-only.
+  A double-click opens it on Assignments, a right-click on Geometry.
+- Checks: --result-tools-ui
+
+## 2026-10-12 · Standalone 3D topology and DOF compiler foundation
+- Status: Done
+- Who: Codex
+- Where: src/Mcotis.Core; Mcotis.Analysis; Mcotis.Persistence (library only, no desktop menu yet)
+- What: Adds persisted Full 3D, XZ/XY/YZ and custom DOF masks, immutable topology compilation with free/restrained/inactive
+  mappings, load/geometry diagnostics and schema-1 to schema-2 migration preserving XZ. Keeps unsupported shells explicit.
+  The spatial stiffness solver, staged desktop dialog, P-Delta and modal algorithms remain planned with source gates.
+- Checks: dotnet run --project tests/Mcotis.Checks (364 checks); default offline Mcotis.Desktop.Checks; solution build
+
+## 2026-10-12 · Optimization tab on the menu bar
+- Status: Done
+- Who: markbui
+- Where: Optimization (menu bar, between Help and MB)
+- What: Optimization VCF…, Optimization Results… and Cancel Optimization have a menu of their own, set apart by a
+  separator and highlighted. They are no longer under Run.
+- Checks: --result-tools-ui; --study-ui
+
+## 2026-10-12 · Strand Bundle for cable sections
+- Status: Done
+- Who: markbui
+- Where: Define → Section Properties → Cable Sections… → Add / Modify
+- What: A cable section worked out from its strands (number × area of one strand) and named by the convention, e.g.
+  192T15.7; strand section management and section drawing.
+- Checks: offline suite
+
+## 2026-10-12 · Save Config As and Object Information
+- Status: Done
+- Who: markbui
+- Where: File → Save Config As… (Ctrl+Shift+S); right-click a member on the model view → Object Information
+- What: Saves the configuration under a new name. Object Information shows a frame's or cable's geometry, assignments and
+  loads as ETABS does; Modify Assignments edits them (double-click a member opens the same form).
+- Checks: offline suite
+
+## 2026-10-12 · Edit → Delete, Import From / Export to SAP2000
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Edit → Delete (Del key, not while typing); File → Import From SAP2000; File → Export to SAP2000…
+- What: Delete removes the joints, frames and cables selected on the model view after an OK / Cancel confirmation (no
+  undo); as in SAP2000 a deleted joint takes the members connected to it. Everything that names a removed object follows
+  (member properties, SAP loading, Tab 01 loaded points and point loads, Tab 02 chord groups — the baseline is captured
+  again —, Tab 03 cables, Tab 04 output lists); FEM results are cleared and the model becomes an offline "· edited"
+  model. Import From SAP2000 brings the model open in SAP2000 in, read-only, ready to run: geometry, member properties,
+  materials and sections as SAP2000 defines them, load patterns and loads, cases and combinations, the Tab 02 chord groups
+  (TTrPt / MTrPt / BTrPt joints, else the three highest levels of horizontal frames) with the baseline, Tab 03 cables with
+  their SAP target forces, and Tab 01 fitted to the SAP joint loads (a pattern uniform per tributary length becomes qz on
+  those joints, B = 1 m and 1 storey — set the real B and storeys before a parametric study); a summary says what was
+  imported and whether Run Analysis is ready. Export to SAP2000 first previews, read-only, what it would change in the
+  open SAP2000 model, then after OK writes materials, sections, geometry (members and joints not in Mcotis are removed),
+  section / local axis / releases / modifiers, pins, load patterns, Tab 01 loads, cable target forces, load cases (new
+  nonlinear ones with P-Δ and large displacements), combinations and run flags. It needs kN-m units, unlocks a locked
+  model only after confirming (SAP2000 deletes its results) and does not save: review and save in SAP2000, or close
+  without saving to discard. The SAP2000 calls are checked against SAP2000 27's API but have not yet been run against a
+  live SAP2000 — try it on a copy of a model first.
+- Checks: --sap-import (import ready to run and runs; Tab 01 reproduces the SAP joint loads; chords without the COT
+  names; the export carries the imported model back and is previewed before it is written); the default suite (Delete of
+  a cable and of a joint with its members on the default model, the edited model runs)
+
+## 2026-10-12 · P-Δ in the internal solver
+- Status: Planned
+- Who: Unassigned
+- Where: Run → Run FEM Analysis
+- What: ETABS / SAP2000 nonlinear cases with P-Δ are solved first-order by Mcotis; models imported from ETABS (the CoT arch)
+  rely on P-Δ in their design combinations.
+- Checks: none yet
+
+## 2026-10-12 · Export to ETABS
+- Status: Done
+- Who: Philip Pham
+- Where: File → Export to ETABS…
+- What: Writes the Mcotis model into the model open in ETABS after a read-only preview and an OK: frames matched to ETABS
+  frames by their end coordinates (in either direction), sections, materials, releases, supports, every joint and frame
+  load, load cases and combinations, plane-frame analysis. Stories follow the joint levels in a model that never had
+  objects. CFT / encased / Section Designer sections go as general sections with their true self-weight; cables as
+  tension-only frames (no pretension, see the plan above). The ETABS model is not saved.
+- Checks: --etabs-export; --etabs-export-live (opt-in: a private hidden ETABS, round trip)
+
+## 2026-10-12 · Import From ETABS
+- Status: Done
+- Who: Philip Pham
+- Where: File → Import From ETABS (without a running ETABS: an .e2k file)
+- What: Reads the model open in ETABS (read-only, its database tables) or an .e2k file into an offline Mcotis model ready to
+  run: joints (label@story), frames, materials, sections (I, box, pipe, CFT, steel encased, Section Designer with ETABS's
+  own A / I and true self-weight), releases, loads, load cases and combinations; Tab 01 fitted to the ETABS joint loads.
+  Run FEM Analysis no longer needs truss chords or cables, so an arch runs.
+- Checks: --etabs-import; --etabs-live (opt-in, read-only)
+
+## 2026-10-12 · Standalone 3D linear static frame engine
+- Status: Done
+- Who: Codex, Claude
+- Where: src/Mcotis.Analysis (library only; the desktop app still analyses with its own planar solver)
+- What: Solves 3D frames of the standalone model for linear static cases: point, line and member point loads,
+  self-weight, end moment releases, the Full 3D / XZ / XY / YZ / custom degrees of freedom. It refuses what it does not
+  cover instead of approximating it: cables, shells, nonlinear or staged cases, frames with a point inside their length,
+  unstable models. Checked against closed forms, twelve OpenSeesPy models and the app's planar solver; what that
+  evidence does and does not show is in docs/analysis/spatial-static-verification.md. One sign printed in the source
+  book's stiffness matrix is a misprint and is recorded there.
+- Checks: dotnet run --project tests/Mcotis.Checks (1447 checks); --spatial-frame-regression
 
 ## 2026-10-12 · Edit → Tied Arch System
 - Status: Done
@@ -250,6 +592,84 @@ continues on the next lines, indented by two spaces):
 - Checks: dotnet run --project tests/Mcotis.Checks (2,767 checks); default offline Mcotis.Desktop.Checks; --fem;
   --fem-sap; --general-solver; --template-building-ui; --dev-log
 
+## 2026-10-12 · Tied arch system with an elevated cable
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Edit → Tied Arch System… → Geometry (With elevated cable, H0) and Cable Force; Optimization → Optimization TAS…
+  → Geometry (H0), Cable Force and Sections (tie cable)
+- What: With elevated cable ticked, the arch springs at H0 (default 10 m) from the top of two columns of the arch's own
+  section, pinned on the ground, and one cable — TIE, the VCF model's strand section 192T15.7 — ties the two springing
+  points; H1 and H2 are measured from the springing (deck at H0 + H2). The Cable Force sheet sets the tie's target force
+  (default 20,000 kN) in the Pretension load pattern. As for the VCF cables, the Pretension case applies it with the
+  self-weight and fits the tie to it, and the SLS / ULS cases (and the P-Δ ULS cases) continue from it, prestressed then
+  loaded. Optimization TAS of such a system adds H0 to its geometry ranges, the tie's pretension in steps (min / max /
+  steps, as Optimization VCF) and the tie among its section roles; each case is fitted and run with its cable. The
+  viewer still dimensions H1 from the springing.
+- Checks: --etabs-import (the elevated system is built, pinned on the ground, meets the tie's target in Pretension and
+  solves; Optimization TAS reproduces its run and steps the pretension); --result-tools-ui (the forms show and hide H0
+  and Cable Force)
+
+## 2026-10-12 · Mcotis opens with the tied arch system
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Starting Mcotis
+- What: The app now opens with the tied arch system — TAS - Tied Arch System, as File → Load TAS… opens it, ready to run —
+  instead of the VCF model. File → Load VCF… still opens the VCF model; should TAS not load, the VCF model opens
+  instead and the status bar says why.
+- Checks: --etabs-import (a fresh start opens TAS with 30 joints and 59 frames, ready to run)
+
+## 2026-10-12 · Optimization TAS
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Optimization → Optimization TAS…; Optimization → Optimization Results…
+- What: The parametric study of the tied arch system, run as Optimization VCF is. The form has min / max / step for H1,
+  h (H2 = H1 + h, so the top chord is always above the arch crown; 2–5 m @ 1 by default), the number of bays and their
+  spacing (sheet Geometry, the others starting fixed at the open system) and for the storeys above
+  — SW 7–15 kPa @ 1, SDL 3–10 @ 1, LL 5–10 @ 2.5, floors n 5–10 @ 1 and the tributary width B (sheet Storey Force, with
+  the SLS / ULS point load per deck joint) — candidate sections per role (arch rib, top chord, mega column, end strut,
+  strut, brace), the deflection check (max δ of a top chord joint in the chosen result ≤ L / ratio, uplift limit) and a
+  preview at the minimum, current or maximum corner. Run Optimization builds every case in memory as Edit → Tied Arch
+  System would (an odd number of bays is skipped with the reason), analyses it with the internal FEM
+  and lists it in the Optimization Results table — the same table, run loop, checks and cost as Optimization VCF, which
+  now share one loop. The default space is 5,184 cases. Needs the tied arch system open (File → Load TAS… or Edit →
+  Tied Arch System…); the open model is not changed. The span of an arch is L: the model view labels it "Span L = 120 m",
+  and the form and the results give the limit as L/250 (480 mm for TAS).
+- Checks: --etabs-import (a case with the model's inputs deflects as Run FEM Analysis of Load TAS; odd bays skipped;
+  section candidates change the result; bad ranges refused); --result-tools-ui; --fem-model (Optimization VCF unchanged)
+
+## 2026-10-12 · Analysis Options form and TemplateBuilding native workspace
+- Status: Done
+- Who: Codex
+- Where: Run → Analysis Options; Edit → TemplateBuilding; File → Open Native Model
+- What: A staged WPF form shows active DOFs and cable fitting inputs. The existing planar solver uses the fitting
+  tolerance, iteration limit, frame mesh and sag inputs; its DOFs remain XZ. TemplateBuilding creates a new native
+  workspace with per-bay X/Y widths, per-storey heights and downward beam line loads, general section properties,
+  fixed/pinned bases and optional self-weight. Native Save/Open, Undo/Redo, geometry view, DOF settings and linear
+  static frame results are connected to the standalone libraries. No slabs or diaphragms; the native engine remains
+  limited to frames and 600 free / 2,400 total DOFs. Native cable fitting and result-file storage remain unavailable.
+- Checks: dotnet run --project tests/Mcotis.Checks (24 template checks); --template-building-ui; --result-tools-ui;
+  --study-ui; --dev-log; dotnet build MCOTiS.sln
+
+## 2026-10-12 · MCOTiS solution name
+- Status: Done
+- Who: Codex
+- Where: Repository root — MCOTiS.sln
+- What: Renames COTVCF.sln to MCOTiS.sln, preserving the projects and build configurations. Documentation and agent
+  build commands use the new solution name.
+- Checks: dotnet build MCOTiS.sln; --dev-log
+
+## 2026-10-12 · One folder per project: src and tests
+- Status: Done
+- Who: markbui
+- Where: Repository layout (no change in the app)
+- What: The app is now the project src/Mcotis.Desktop (it was at the repository root with its code under src/). The
+  libraries of the standalone system are its siblings in src/ (they were under mcotis/); the checks are
+  tests/Mcotis.Desktop.Checks and tests/Mcotis.Checks. Build and run commands are unchanged except for the paths:
+  dotnet build MCOTiS.sln, ./build-desktop.ps1, dotnet run --project tests/Mcotis.Desktop.Checks. A branch made before this
+  change must be merged with rename detection. The build now finds SAP2000 27 when 26 is not installed.
+- Checks: solution build; dotnet run --project tests/Mcotis.Checks; default offline Mcotis.Desktop.Checks; --dev-log;
+  --result-tools-ui
+
 ## 2026-10-12 · Degrees of freedom of cable joints; a movement nothing holds is unstable
 - Status: Done
 - Who: markbui, Claude
@@ -307,214 +727,12 @@ continues on the next lines, indented by two spaces):
 - Checks: dotnet build MCOTiS.sln; dotnet run --project tests/Mcotis.Checks; default offline Mcotis.Desktop.Checks
   (old format name still opens); --dev-log
 
-## 2026-10-12 · Analysis Options form and TemplateBuilding native workspace
-- Status: Done
-- Who: Codex
-- Where: Run → Analysis Options; Edit → TemplateBuilding; File → Open Native Model
-- What: A staged WPF form shows active DOFs and cable fitting inputs. The existing planar solver uses the fitting
-  tolerance, iteration limit, frame mesh and sag inputs; its DOFs remain XZ. TemplateBuilding creates a new native
-  workspace with per-bay X/Y widths, per-storey heights and downward beam line loads, general section properties,
-  fixed/pinned bases and optional self-weight. Native Save/Open, Undo/Redo, geometry view, DOF settings and linear
-  static frame results are connected to the standalone libraries. No slabs or diaphragms; the native engine remains
-  limited to frames and 600 free / 2,400 total DOFs. Native cable fitting and result-file storage remain unavailable.
-- Checks: dotnet run --project tests/Mcotis.Checks (24 template checks); --template-building-ui; --result-tools-ui;
-  --study-ui; --dev-log; dotnet build MCOTiS.sln
-
-## 2026-10-12 · MCOTiS solution name
-- Status: Done
-- Who: Codex
-- Where: Repository root — MCOTiS.sln
-- What: Renames COTVCF.sln to MCOTiS.sln, preserving the projects and build configurations. Documentation and agent
-  build commands use the new solution name.
-- Checks: dotnet build MCOTiS.sln; --dev-log
-
-## 2026-10-12 · One folder per project: src and tests
+## 2026-10-11 · Storey force and loaded points
 - Status: Done
 - Who: markbui
-- Where: Repository layout (no change in the app)
-- What: The app is now the project src/Mcotis.Desktop (it was at the repository root with its code under src/). The
-  libraries of the standalone system are its siblings in src/ (they were under mcotis/); the checks are
-  tests/Mcotis.Desktop.Checks and tests/Mcotis.Checks. Build and run commands are unchanged except for the paths:
-  dotnet build MCOTiS.sln, ./build-desktop.ps1, dotnet run --project tests/Mcotis.Desktop.Checks. A branch made before this
-  change must be merged with rename detection. The build now finds SAP2000 27 when 26 is not installed.
-- Checks: solution build; dotnet run --project tests/Mcotis.Checks; default offline Mcotis.Desktop.Checks; --dev-log;
-  --result-tools-ui
-
-## 2026-10-12 · Standalone 3D linear static frame engine
-- Status: Done
-- Who: Codex, Claude
-- Where: src/Mcotis.Analysis (library only; the desktop app still analyses with its own planar solver)
-- What: Solves 3D frames of the standalone model for linear static cases: point, line and member point loads,
-  self-weight, end moment releases, the Full 3D / XZ / XY / YZ / custom degrees of freedom. It refuses what it does not
-  cover instead of approximating it: cables, shells, nonlinear or staged cases, frames with a point inside their length,
-  unstable models. Checked against closed forms, twelve OpenSeesPy models and the app's planar solver; what that
-  evidence does and does not show is in docs/analysis/spatial-static-verification.md. One sign printed in the source
-  book's stiffness matrix is a misprint and is recorded there.
-- Checks: dotnet run --project tests/Mcotis.Checks (1447 checks); --spatial-frame-regression
-
-## 2026-10-12 · One form for a member: information and assignments together
-- Status: Done
-- Who: markbui
-- Where: Model view — right-click or double-click a frame or cable (Frame / Cable Information)
-- What: The separate Member Assignments form is gone. The information form now changes the assignments itself, on its
-  Assignments tab: section, local-axis angle and end moment releases of a frame; section, target pattern and target
-  force of a cable. OK / Cancel / Apply; only what was changed is written. A locked model shows the same form read-only.
-  A double-click opens it on Assignments, a right-click on Geometry.
-- Checks: --result-tools-ui
-
-## 2026-10-12 · Standalone 3D topology and DOF compiler foundation
-- Status: Done
-- Who: Codex
-- Where: src/Mcotis.Core; Mcotis.Analysis; Mcotis.Persistence (library only, no desktop menu yet)
-- What: Adds persisted Full 3D, XZ/XY/YZ and custom DOF masks, immutable topology compilation with free/restrained/inactive
-  mappings, load/geometry diagnostics and schema-1 to schema-2 migration preserving XZ. Keeps unsupported shells explicit.
-  The spatial stiffness solver, staged desktop dialog, P-Delta and modal algorithms remain planned with source gates.
-- Checks: dotnet run --project tests/Mcotis.Checks (364 checks); default offline Mcotis.Desktop.Checks; solution build
-
-## 2026-10-12 · Optimization tab on the menu bar
-- Status: Done
-- Who: markbui
-- Where: Optimization (menu bar, between Help and MB)
-- What: Optimization VCF…, Optimization Results… and Cancel Optimization have a menu of their own, set apart by a
-  separator and highlighted. They are no longer under Run.
-- Checks: --result-tools-ui; --study-ui
-
-## 2026-10-12 · Selecting points, frames and cables on the model view
-- Status: Done
-- Who: markbui
-- Where: Model view, 2D and 3D; Select tool (V); status bar
-- What: A left click selects a point as well as a frame or a cable, in the 3D view too, where every point is now drawn.
-  A right-click shows the object's information — Point Information for a point: coordinates, the members that meet at
-  it, its support and its loads. V is the Select tool; Esc only clears the selection and no longer leaves Pan. The
-  status bar counts the selected frames, cables, points and shells (the app has no shells yet). Selecting by a window
-  stays 2D only: a drag in 3D rotates the model.
-- Checks: --result-tools-ui
-
-## 2026-10-12 · Help → Development Plans and the compulsory development log
-- Status: Done
-- Who: Philip Pham
-- Where: Help → Development Plans; docs/DEVELOPMENT_LOG.md
-- What: Shows this log in the app — in progress and planned work first, then what is done, newest first. Writing an entry
-  is compulsory for every change of the app: the build installs .githooks, whose commit-msg hook refuses a commit that
-  changes src/, App.xaml or src/Mcotis.Desktop/Mcotis.Desktop.csproj without a log entry ([no-log] only for changes no user can notice); AGENTS.md
-  tells every coding agent to write the entry.
-- Checks: --dev-log
-
-## 2026-10-12 · Cable pretension in Export to ETABS
-- Status: Planned
-- Who: Unassigned
-- Where: File → Export to ETABS…
-- What: ETABS has no cable target-force load, so Export to ETABS writes cables as tension-only frames without their
-  Tab 03 pretension. Carry the pretension across (for example as an equivalent strain or temperature load).
-- Checks: none yet
-
-## 2026-10-12 · P-Δ in the internal solver
-- Status: Planned
-- Who: Unassigned
-- Where: Run → Run FEM Analysis
-- What: ETABS / SAP2000 nonlinear cases with P-Δ are solved first-order by Mcotis; models imported from ETABS (the CoT arch)
-  rely on P-Δ in their design combinations.
-- Checks: none yet
-
-## 2026-10-12 · Export to ETABS
-- Status: Done
-- Who: Philip Pham
-- Where: File → Export to ETABS…
-- What: Writes the Mcotis model into the model open in ETABS after a read-only preview and an OK: frames matched to ETABS
-  frames by their end coordinates (in either direction), sections, materials, releases, supports, every joint and frame
-  load, load cases and combinations, plane-frame analysis. Stories follow the joint levels in a model that never had
-  objects. CFT / encased / Section Designer sections go as general sections with their true self-weight; cables as
-  tension-only frames (no pretension, see the plan above). The ETABS model is not saved.
-- Checks: --etabs-export; --etabs-export-live (opt-in: a private hidden ETABS, round trip)
-
-## 2026-10-12 · Import From ETABS
-- Status: Done
-- Who: Philip Pham
-- Where: File → Import From ETABS (without a running ETABS: an .e2k file)
-- What: Reads the model open in ETABS (read-only, its database tables) or an .e2k file into an offline Mcotis model ready to
-  run: joints (label@story), frames, materials, sections (I, box, pipe, CFT, steel encased, Section Designer with ETABS's
-  own A / I and true self-weight), releases, loads, load cases and combinations; Tab 01 fitted to the ETABS joint loads.
-  Run FEM Analysis no longer needs truss chords or cables, so an arch runs.
-- Checks: --etabs-import; --etabs-live (opt-in, read-only)
-
-## 2026-10-12 · Strand Bundle for cable sections
-- Status: Done
-- Who: markbui
-- Where: Define → Section Properties → Cable Sections… → Add / Modify
-- What: A cable section worked out from its strands (number × area of one strand) and named by the convention, e.g.
-  192T15.7; strand section management and section drawing.
+- Where: Edit → VCF System… → Storey Force sheet
+- What: Tributary width, storeys and qz per load pattern; the loaded points picked from a list or on the preview.
 - Checks: offline suite
-
-## 2026-10-12 · Save Config As and Object Information
-- Status: Done
-- Who: markbui
-- Where: File → Save Config As… (Ctrl+Shift+S); right-click a member on the model view → Object Information
-- What: Saves the configuration under a new name. Object Information shows a frame's or cable's geometry, assignments and
-  loads as ETABS does; Modify Assignments edits them (double-click a member opens the same form).
-- Checks: offline suite
-
-## 2026-10-12 · Edit → Delete, Import From / Export to SAP2000
-- Status: Done
-- Who: Philip Pham, Claude
-- Where: Edit → Delete (Del key, not while typing); File → Import From SAP2000; File → Export to SAP2000…
-- What: Delete removes the joints, frames and cables selected on the model view after an OK / Cancel confirmation (no
-  undo); as in SAP2000 a deleted joint takes the members connected to it. Everything that names a removed object follows
-  (member properties, SAP loading, Tab 01 loaded points and point loads, Tab 02 chord groups — the baseline is captured
-  again —, Tab 03 cables, Tab 04 output lists); FEM results are cleared and the model becomes an offline "· edited"
-  model. Import From SAP2000 brings the model open in SAP2000 in, read-only, ready to run: geometry, member properties,
-  materials and sections as SAP2000 defines them, load patterns and loads, cases and combinations, the Tab 02 chord groups
-  (TTrPt / MTrPt / BTrPt joints, else the three highest levels of horizontal frames) with the baseline, Tab 03 cables with
-  their SAP target forces, and Tab 01 fitted to the SAP joint loads (a pattern uniform per tributary length becomes qz on
-  those joints, B = 1 m and 1 storey — set the real B and storeys before a parametric study); a summary says what was
-  imported and whether Run Analysis is ready. Export to SAP2000 first previews, read-only, what it would change in the
-  open SAP2000 model, then after OK writes materials, sections, geometry (members and joints not in Mcotis are removed),
-  section / local axis / releases / modifiers, pins, load patterns, Tab 01 loads, cable target forces, load cases (new
-  nonlinear ones with P-Δ and large displacements), combinations and run flags. It needs kN-m units, unlocks a locked
-  model only after confirming (SAP2000 deletes its results) and does not save: review and save in SAP2000, or close
-  without saving to discard. The SAP2000 calls are checked against SAP2000 27's API but have not yet been run against a
-  live SAP2000 — try it on a copy of a model first.
-- Checks: --sap-import (import ready to run and runs; Tab 01 reproduces the SAP joint loads; chords without the COT
-  names; the export carries the imported model back and is previewed before it is written); the default suite (Delete of
-  a cable and of a joint with its members on the default model, the edited model runs)
-
-## 2026-10-11 · New Config, the blank model and the desktop build
-- Status: Done
-- Who: markbui
-- Where: File → New Config; the start screen (Load Default Template / Continue with Blank Model); Edit → VCF System…;
-  build-desktop.ps1
-- What: A new configuration can start blank: define the materials and frame / cable sections, then create the VCF
-  system under Edit → VCF System…, which gives the new members the sections chosen there. The start screen offers the
-  built-in template (now File → Load VCF…) or a blank model; menus that need geometry stay off until there is some.
-  build-desktop.ps1 builds the app (FreshBuild configuration) into bin/ and puts a Mcotis shortcut on the desktop.
-- Checks: --blank-ui; --fem-db; --fem-model
-
-## 2026-10-11 · Result pickers, result values and the toolbar
-- Status: Done
-- Who: markbui
-- Where: Result → Show Deformed Shape… (F5), Show Member Forces… (F6), Show Joint Reactions… (F7); the toolbar;
-  Post-Processing → Output Settings; Display → View Options
-- What: F5 / F6 / F7 open a picker for the load case (and N, V or M for member forces) of the deflection, member force
-  and reaction views. Values on the model view are written in compact units with a fixed number of decimals (MN, MN·m)
-  and never upside down; the stored results stay in kN and kN·m. Cable force diagrams are scaled so crossing cables
-  stay legible, and Optimization VCF shows its force ranges in MN. The toolbar buttons are regrouped with new icons,
-  and Output Settings moved under Post-Processing.
-- Checks: --result-tools-ui; ViewerResultDisplayChecks (default offline suite)
-
-## 2026-10-11 · Frame local axes
-- Status: Done
-- Who: markbui
-- Where: Assign → Frame → Local Axes…; Display → Frame local axes; selection on the 3D view
-- What: Sets a frame's local-axis angle (in-plane inertia rotates with it, kept when saved) and draws the axes of the
-  selected frames; members can be selected in 3D.
-- Checks: --fem-model
-
-## 2026-10-11 · Bundled default model and FEM databases
-- Status: Done
-- Who: markbui
-- Where: File → Default Model; File → Load Config / Save Config (.cotfem.db); Run → Unlock FEM Model
-- What: The default model is a bundled MCOTiS database; a configuration is one .cotfem.db; a run locks the model and writes
-  its output database, Unlock deletes the outputs.
-- Checks: --fem-db; --fem-model
 
 ## 2026-10-11 · Load cases, Set Load Cases to Run, FEM reports
 - Status: Done
@@ -523,21 +741,6 @@ continues on the next lines, indented by two spaces):
 - What: Load cases defined in the app (Default Setup: Pretension, SLS, ULS), chosen to run before each run; FEM results
   reported live in HTML.
 - Checks: offline suite
-
-## 2026-10-11 · Storey force and loaded points
-- Status: Done
-- Who: markbui
-- Where: Edit → VCF System… → Storey Force sheet
-- What: Tributary width, storeys and qz per load pattern; the loaded points picked from a list or on the preview.
-- Checks: offline suite
-
-## 2026-10-11 · Optimization VCF
-- Status: Done
-- Who: Philip Pham; markbui
-- Where: Run → Optimization VCF…; Run → Optimization Results…
-- What: Runs the geometry × cable force × storey force × section variants with the internal solver; deflection check
-  (span / ratio and an uplift limit on the bottom chord) and total cost per case.
-- Checks: OptimizationChecks (offline suite)
 
 ## 2026-10-11 · Composite sections and column design
 - Status: Done
@@ -557,6 +760,53 @@ continues on the next lines, indented by two spaces):
 - Checks: --column-design (sections and capacities against hand calculations, pass / fail of members); MegaColumnChecks
   (offline suite)
 
+## 2026-10-11 · Optimization VCF
+- Status: Done
+- Who: Philip Pham; markbui
+- Where: Run → Optimization VCF…; Run → Optimization Results…
+- What: Runs the geometry × cable force × storey force × section variants with the internal solver; deflection check
+  (span / ratio and an uplift limit on the bottom chord) and total cost per case.
+- Checks: OptimizationChecks (offline suite)
+
+## 2026-10-11 · Result pickers, result values and the toolbar
+- Status: Done
+- Who: markbui
+- Where: Result → Show Deformed Shape… (F5), Show Member Forces… (F6), Show Joint Reactions… (F7); the toolbar;
+  Post-Processing → Output Settings; Display → View Options
+- What: F5 / F6 / F7 open a picker for the load case (and N, V or M for member forces) of the deflection, member force
+  and reaction views. Values on the model view are written in compact units with a fixed number of decimals (MN, MN·m)
+  and never upside down; the stored results stay in kN and kN·m. Cable force diagrams are scaled so crossing cables
+  stay legible, and Optimization VCF shows its force ranges in MN. The toolbar buttons are regrouped with new icons,
+  and Output Settings moved under Post-Processing.
+- Checks: --result-tools-ui; ViewerResultDisplayChecks (default offline suite)
+
+## 2026-10-11 · New Config, the blank model and the desktop build
+- Status: Done
+- Who: markbui
+- Where: File → New Config; the start screen (Load Default Template / Continue with Blank Model); Edit → VCF System…;
+  build-desktop.ps1
+- What: A new configuration can start blank: define the materials and frame / cable sections, then create the VCF
+  system under Edit → VCF System…, which gives the new members the sections chosen there. The start screen offers the
+  built-in template (now File → Load VCF…) or a blank model; menus that need geometry stay off until there is some.
+  build-desktop.ps1 builds the app (FreshBuild configuration) into bin/ and puts a Mcotis shortcut on the desktop.
+- Checks: --blank-ui; --fem-db; --fem-model
+
+## 2026-10-11 · Bundled default model and FEM databases
+- Status: Done
+- Who: markbui
+- Where: File → Default Model; File → Load Config / Save Config (.cotfem.db); Run → Unlock FEM Model
+- What: The default model is a bundled MCOTiS database; a configuration is one .cotfem.db; a run locks the model and writes
+  its output database, Unlock deletes the outputs.
+- Checks: --fem-db; --fem-model
+
+## 2026-10-11 · Frame local axes
+- Status: Done
+- Who: markbui
+- Where: Assign → Frame → Local Axes…; Display → Frame local axes; selection on the 3D view
+- What: Sets a frame's local-axis angle (in-plane inertia rotates with it, kept when saved) and draws the axes of the
+  selected frames; members can be selected in 3D.
+- Checks: --fem-model
+
 ## 2026-10-10 · Desktop menu UI, materials and section libraries, VCF System
 - Status: Done
 - Who: Philip Pham
@@ -574,6 +824,13 @@ continues on the next lines, indented by two spaces):
   FEM results browsed by load case.
 - Checks: --quantity-connected (opt-in, live); QuantityTakeoffChecks (offline suite)
 
+## 2026-10-06 · Report printing and PDF export
+- Status: Done
+- Who: markbui
+- Where: MB → 06 Post-Processing → reports; toolbar Print All Reports
+- What: Print Setup and PDF export of the study reports (headless Chromium); a module's report regenerated on its own.
+- Checks: ReportPrintChecks (offline suite)
+
 ## 2026-10-06 · FEM analysis, cable sag, FEM against SAP2000
 - Status: Done
 - Who: Philip Pham; markbui
@@ -581,13 +838,6 @@ continues on the next lines, indented by two spaces):
 - What: The internal 2D solver with SAP loading, frame meshing, pretension stages, cable sag, the run monitor and the 3D
   view; member forces compared with SAP2000.
 - Checks: --fem-sap
-
-## 2026-10-06 · Report printing and PDF export
-- Status: Done
-- Who: markbui
-- Where: MB → 06 Post-Processing → reports; toolbar Print All Reports
-- What: Print Setup and PDF export of the study reports (headless Chromium); a module's report regenerated on its own.
-- Checks: ReportPrintChecks (offline suite)
 
 ## 2026-09-15 · Member forces and support reactions
 - Status: Done
@@ -604,12 +854,11 @@ continues on the next lines, indented by two spaces):
   Offset / Same Step), reuse of built child models.
 - Checks: CableForceReportChecks (offline suite)
 
-## 2026-09-08 · Cable Sync UX (plan Phase 6)
+## 2026-09-08 · Feature-oriented presentation refactor (plan Phase 8)
 - Status: Planned
 - Who: Unassigned
-- Where: MB → 03 Pretension
-- What: Master / follower hierarchy with resolved-force preview, immediate orphan / cycle validation, explicit action when a
-  master is removed (docs/implementation-plan.md, Phase 6).
+- Where: code: src/Mcotis.Desktop/Presentation
+- What: Focused feature view models and views, typed outcomes, more regression checks (docs/implementation-plan.md, Phase 8).
 - Checks: none yet
 
 ## 2026-09-08 · SAP operations and recovery UX (plan Phase 7)
@@ -620,11 +869,12 @@ continues on the next lines, indented by two spaces):
   (docs/implementation-plan.md, Phase 7).
 - Checks: none yet
 
-## 2026-09-08 · Feature-oriented presentation refactor (plan Phase 8)
+## 2026-09-08 · Cable Sync UX (plan Phase 6)
 - Status: Planned
 - Who: Unassigned
-- Where: code: src/Mcotis.Desktop/Presentation
-- What: Focused feature view models and views, typed outcomes, more regression checks (docs/implementation-plan.md, Phase 8).
+- Where: MB → 03 Pretension
+- What: Master / follower hierarchy with resolved-force preview, immediate orphan / cycle validation, explicit action when a
+  master is removed (docs/implementation-plan.md, Phase 6).
 - Checks: none yet
 
 ## 2026-09-06 · Output settings and the SAP2000 iteration study

@@ -59,46 +59,6 @@ public sealed record FemCableFitRow(string RunId, string CableName, double? Targ
     }
 }
 
-/// <summary>One line of the run monitor's equilibrium table: a load case, how its equilibrium was reached and whether
-/// every joint is in balance. The values are text because a case with cables is judged by a force and one without
-/// by a backward error (<see cref="FemEquilibriumProgress"/>).</summary>
-/// <param name="Detail">Why the case has no result; shown with the status.</param>
-public sealed record FemEquilibriumRow(string Case, string SolvedDofs, string Iterations, string OutOfBalance, string Accepted,
-    string Joints, string LargestAt, string Status, string? Detail = null)
-{
-    public const string Converged = "Converged", NotConverged = "Not converged", Unstable = "Unstable", Failed = "Failed", Stopped = "Stopped";
-
-    public static string CaseLabel(FemEquilibriumProgress report) => !report.FitStage ? report.CaseName
-        : report.CaseName.Length > 0 ? $"{report.CaseName} · target fit" : "Target fit";
-
-    /// <summary>The out-of-balance with its unit: a moment at a rotation, a force otherwise; a backward error has none.</summary>
-    public static string Size(double? value, FemEquilibriumProgress report, bool accepted = false) => value is not { } size ? "—"
-        : report.Linear ? $"{size:0.00E+00} rel."
-        : $"{size:0.00E+00} {(!accepted && report.WorstDof?.StartsWith('R') == true ? "kN·m" : "kN")}";
-
-    /// <param name="runEnded">The run is over: a case it left unfinished was stopped, by a cancellation or by a
-    /// failure outside its own solution.</param>
-    public static FemEquilibriumRow From(FemEquilibriumProgress report, bool runEnded = false)
-    {
-        bool running = report.State == FemEquilibriumState.Running, measured = report.OutOfBalance is not null;
-        string iterations = !measured ? "—" : report.Linear ? "direct"
-            : running ? report.FitRun > 0 ? $"fit run {report.FitRun} · {report.Iteration}" : $"{report.Iteration}"
-            : report.FitStage && report.FitRun > 0 ? $"{report.Iteration} · {report.FitRun} fit run{(report.FitRun == 1 ? "" : "s")}" : $"{report.Iteration}";
-        string status = report.State switch
-        {
-            FemEquilibriumState.Running => runEnded ? Stopped : report.FitRun > 0 ? "Fitting cable forces…" : "Solving…",
-            FemEquilibriumState.Converged => Converged,
-            FemEquilibriumState.NotConverged => NotConverged,
-            FemEquilibriumState.Unstable => Unstable,
-            _ => Failed,
-        };
-        return new(CaseLabel(report), report.SolvedDofs > 0 ? $"{report.SolvedDofs:N0}" : "—", iterations,
-            Size(report.OutOfBalance, report), Size(report.Tolerance, report, accepted: true),
-            report.Joints > 0 ? $"{report.JointsInEquilibrium:N0} / {report.Joints:N0}" : "—",
-            report.WorstJoint is { } joint ? $"{joint} {report.WorstDof}" : "—", status, report.Failure);
-    }
-}
-
 public enum FemResultMode { AxialForce, BendingMoment, Shear, Reactions, DeflectedShape }
 public sealed record FemResultRow(string ObjectName, double StartValue, double? EndValue, string Unit);
 
@@ -294,7 +254,9 @@ public sealed class FemStudyService
         int frameMeshSegments = 1,
         FemLoadPlan? loadPlan = null,
         bool cableSag = false,
-        IProgress<FemEquilibriumProgress>? equilibrium = null)
+        IProgress<FemEquilibriumProgress>? equilibrium = null,
+        Mcotis.Core.DofMask activeDofs = Mcotis.Core.DofMask.XZ,
+        Mcotis.Core.DofMask cableDofs = Mcotis.Core.DofMask.Translations)
     {
         if (frameMeshSegments is < 1 or > FemSolver.MaximumFrameMeshSegments)
             throw new ArgumentOutOfRangeException(nameof(frameMeshSegments), $"Frame mesh must be between 1 and {FemSolver.MaximumFrameMeshSegments} segments per frame.");
@@ -325,7 +287,7 @@ public sealed class FemStudyService
                 if (loadPlan is null)
                     result = solver.Solve(geometry, frameProperties, cableProperties, candidate.PretensionTargetsKN,
                         candidate.Loads, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments, cableSag,
-                        Follow(null, 0, 1));
+                        Follow(null, 0, 1), activeDofs, cableDofs);
                 else
                 {
                     // Load cases from the SAP model (as edited), then linear-additive combinations of their results.
@@ -338,11 +300,11 @@ public sealed class FemStudyService
                         foreach (var (name, caseResult) in solver.SolveCases(geometry, frameProperties, cableProperties,
                                      fitStage is null ? new Dictionary<string, double>() : candidate.PretensionTargetsKN,
                                      fitLoads, cases, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments, cableSag,
-                                     Follow(fitStage, stage, stages.Count)))
+                                     Follow(fitStage, stage, stages.Count), activeDofs, cableDofs))
                             caseResults[name] = caseResult;
                     }
                     results = loadPlan.Complete(caseResults);
-                    result = results[loadPlan.ResultNames[0]];
+                    result = results[loadPlan.PrimaryResultName];
                 }
             }
             catch (InvalidOperationException ex)
