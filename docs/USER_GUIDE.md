@@ -6,6 +6,8 @@ The guide follows the menu bar: [[Configurations|File]] (models, import and expo
 
 The guide is docs/USER_GUIDE.md in the repository; it is built into the app, so it always matches the version you run. Whoever adds or changes a function updates its article (see [[Help and development plans]]).
 
+**Export to Word…** saves any article with the same format: A4, Arial 11 pt throughout, line spacing 1.15; margins top/left 1.88 cm, bottom 1.28 cm and right 1.58 cm. Screenshots fit the width between the margins.
+
 # Introduction to Mcotis
 Category: Getting started
 Where: The whole application
@@ -427,6 +429,7 @@ Draws the results of the selected load case on the model view.
 - **Member forces** (F6) — choose the load case and N, V or M.
 - **Joint reactions** (F7).
 - **Show Results…** — choose the case / combination and the output.
+- **Export Result…** in Show Results opens the Word / PDF export dialog. Select solved load cases or combinations and all results or individual result types, then click OK and choose the file name and folder. The report opens after saving. Both formats use portrait A4, Arial 11, 1.15 line spacing and margins of 1.88 cm top/left, 1.28 cm bottom and 1.58 cm right. Reports contain high-resolution captures of the model result diagrams, with Figure numbers and load case/output captions, for axial/cable forces, bending, shear, reactions and deflection. The full model is fitted into each figure using the screen renderer, with result labels. Cable fit warnings are retained. Cable target fit remains in Results Table and is not a graphical export option. PDF uses the installed Edge or Chrome browser.
 - Quick items: axial forces / cables, bending moments, shear forces, support reactions, deflection, cable target fit.
 - **F4** shows the undeformed model again.
 
@@ -539,59 +542,368 @@ Copy Report / Save Report… write the summary and every calculation as text.
 # Column design optimization
 Category: Design
 Where: Design → any column design → Optimization tab
-See also: Column design; Materials; Design results
+See also: Column design; Materials; Design results; Run FEM Analysis
 
-Finds the cheapest section of the column type that passes every ticked member and load case, and gives its cost per metre of column.
+Finds the cheapest candidate cross-section of the chosen column type that passes every ticked member and load case, ranked by **cost per metre of column**. It supports RC, concrete filled tube (CFT), steel encased and mega composite columns. Open the appropriate design dialog and use its Optimization tab; this is separate from the Optimization VCF / TAS system studies.
 
-## Before you start
-Run the FEM analysis, open the column design and tick the members on Members & Loads — one section is sized for all of them. The effective lengths are those of Design Basis (also editable on the tab).
+The search designs sections against the selected, existing FEM forces. It does not rerun the structural FEM model for every candidate, and Use Selected puts a candidate into the design dialog rather than automatically assigning it to the model.
 
-## What you can vary
-- **Concrete outline** h × b (RC, steel encased, mega; square or not).
-- **Steel tube** H × B or D and wall thickness t (CFT).
-- **Encased I section** h, b, tf, tw (steel encased, mega); for mega columns also 4 and / or 6 profiles placed from an edge distance (face of the concrete to the profile).
-- **Grades**, stepped grade by grade: steel S235 – S690 (not for RC) and concrete C30/37 – C185/200. Steel fy follows the plate thickness (tube wall or flange) by the EN 10025 bands.
-- **Bars**: sizes, bars per b face, the h faces at the same spacing or a range, and cover (optional inside a CFT tube).
+## Step 1 — Prepare results and choose the column type
+1. Define the working model's materials, sections, loads and combinations, then run **Run → Run FEM Analysis**.
+2. Identify the members to size. You may select them in the model viewer before opening the design dialog, then verify the ticked list on Members & Loads.
+3. Open the matching **Design** command: **RC Column Design…**, **CFT (Concrete Filled Tube) Design…**, **Steel Encased Composite Column Design…** or **Mega Composite Column Design…**.
+4. Review the existing Section inputs, or use **From Member Section** to start from a ticked member's section. The optimization ranges start around the section present when the dialog is opened; inspect them before running.
 
-Each range is min / max / step. The starting ranges come from the section on the Section tab.
+The screenshots below use real dialogs. The complete CFT walkthrough uses the design checks' **illustrative forces**, not a particular open FEM model: C1 and C2 are 6 m members, with effective lengths of 6 m about both axes. Their ULS1 station forces are C1 N = −12,000 kN, V = 300 kN, M = 900 / −450 kN·m; C2 N = −9,000 kN, V = 500 kN, M = 1,400 / −700 kN·m. Negative N denotes compression in these example inputs. Use your own analysed member forces in normal work.
 
-## Costs
-Unit costs come from the material library (steel SGD/t per grade, concrete SGD/m³ per grade, rebar SGD/t) and can be edited on the tab. Cost per metre = steel and bars by mass + concrete by net volume, with the links of RC, encased and mega columns. Formwork is not priced.
+## Step 2 — Confirm Design Basis and effective lengths
+On **Design Basis**, confirm the code, method, partial factors and material limits for the selected column type. Enter positive **l0,y** and **l0,z [m]**, the effective lengths for buckling about the major and minor axes. They are not automatically the same as a member's geometric length; enter the values appropriate to your design basis.
 
-## Run
-Run prices every combination, sorts them cheapest first and designs them in that order (as Run Design) until the 10 cheapest passing sections are found — so number 1 is the cheapest section that passes. It runs in the background; Stop ends it. Sections that cannot be built (a wall too slender for its steel, a profile not fitting, bars without room) are left out first. More than 250,000 combinations are refused: narrow a range or use larger steps.
+The Optimization tab has the same two length editors, synchronized with Design Basis. Changing either location changes the lengths used by the search. These values apply to the selected design scope. Do not compare two runs with different effective lengths as though only their cross-sections had changed.
 
-## Results
-Rank, section, steel (with the fy used), concrete, bars, kg/m, m³/m, SGD/m, utilisation and the governing member and case. **Use Selected** (or a double-click) puts the section on the Section tab; Run Design then gives its full report.
+For the illustrated CFT example, enter **6 m** for both axes. See [[Column design]] for the design basis and method descriptions.
+
+![Step 2 — CFT Design Basis: confirm the method, material limits and 6 m effective lengths before sizing the section](images/column-optimization-basis.png)
+
+## Step 3 — Select members and load cases
+On **Members & Loads**, tick every member that the common section must satisfy and the load cases/combinations to design. One section is sized for **all** those members, not separately for each member. In the Optimization tab, the right-hand panel repeats the selected member scope and offers the load-case checkboxes, with All / None controls.
+
+The example checks **C1 and C2 under ULS1**. In your model, include the required design combinations; checking only a lightly loaded member or omitting a governing case can produce a different optimum. The governing member/case may change as candidate sizes and grades change.
+
+If there are no selected forces, the search reports that it needs FEM results. Selecting a name alone does not create forces; run analysis and choose results available for the selected members.
+
+![Step 3 — Members & Loads: the illustrated common CFT section must pass C1 and C2 under ULS1](images/column-optimization-members.png)
+
+## Step 4 — Enter size ranges for the chosen type
+Open **Optimization**. Dimensions are in **mm**. Each continuous dimension uses **Min / Max / Step**: Min = Max fixes it; otherwise the search enumerates stepped values up to Max. An off-step maximum is not added. Keep positive steps and start with a small range.
+
+The input groups change with the column type. Disabled width editors under a square option are not another independent range. Every additional dimension, grade or bar alternative multiplies the search space; more than **250,000 combinations** is refused.
+
+### CFT — tube shape, size and thickness
+Choose a **rectangular** or **circular** tube. A rectangular tube uses **H, B and wall thickness t**; a circular tube uses **diameter D and t**. The square option links the rectangular width to its depth, so B is not varied independently.
+
+For the worked example, use a square rectangular tube with **H 400–900 mm at Step 100** and **t 10–30 mm at Step 5**. These give six outer sizes and five thicknesses before grades are combined. Try unreinforced tubes first by leaving the reinforced-options checkbox clear.
+
+![Step 4 — CFT ranges: square tube H 400–900 mm, wall thickness 10–30 mm; effective lengths and case scope stay visible](images/column-optimization-cft-ranges.png)
+
+### RC — concrete outline and longitudinal bars
+Set **concrete h and b**, or use a square outline to keep them equal. RC has no structural steel tube/profile ranges. Choose concrete grades and longitudinal-bar alternatives. Cover is measured **to the links**, and the Section tab supplies the link inputs used when pricing the bars and links.
+
+Bar counts on the b faces include corners. On the h faces, use the same-spacing option or specify how many bars fit **between corners**. Those conventions matter when reading the resulting total bar count.
+
+![RC controls — concrete outline, concrete-grade range and longitudinal reinforcement; structural steel ranges are absent](images/column-optimization-rc-ranges.png)
+
+### Steel encased — outline, embedded I section and bars
+Set the concrete outline and the embedded steel I-section dimensions: **h, b, flange thickness tf and web thickness tw**. The outline and profile dimensions are different groups; changing one does not mean the other is automatically scaled to match.
+
+Choose steel and concrete grades plus longitudinal bars and cover to links. Candidates whose steel profile or reinforcement cannot fit within the concrete outline are excluded. Narrowing the profile ranges can reduce the search substantially.
+
+![Steel encased controls — concrete outline and I-section h, b, tf and tw are separate search ranges](images/column-optimization-encased-ranges.png)
+
+### Mega composite — multiple profiles and placement
+Set the concrete outline and dimensions of one steel I profile, then tick **4 and/or 6 profiles**. Ticking both tries both arrangements. Enter the **edge distance from the concrete face to the profile [mm]**; it controls placement, rather than being a centre-to-centre spacing.
+
+Choose grades, bars and cover as for the mega section. More profiles do not automatically produce the cheapest result: their added capacity and material cost are both considered. The screenshot illustrates the mega-specific controls, not a completed mega optimization run.
+
+![Mega composite controls — concrete outline, repeated I profile, four/six-profile alternatives and face-to-profile edge distance](images/column-optimization-mega-ranges.png)
+
+## Step 5 — Set grade and reinforcement alternatives
+Grades are stepped through the app's grade list between the selected lower and upper grades; they are not a numeric MPa step. For example **S355 to S460** includes the intervening S420 grade. The yield strength used follows plate thickness, so the nominal grade name alone does not determine fy. The results show the grade and fy actually used.
+
+For the CFT example, choose **S355 to S460** and **C50/60 to C70/85**. The listed concrete classes in that interval are C50/60, C55/67, C60/75 and C70/85. Together with six sizes and five thicknesses this gives 360 raw combinations before buildability filtering, with no reinforcement alternatives.
+
+For bars, enter a diameter list such as **20, 25, 32 mm** and the per-face count limits. RC, steel encased and mega candidates use longitudinal reinforcement. For CFT, **Also try reinforced options** adds bar alternatives while the unreinforced tube is still tried. CFT cover is measured **to the tube**, unlike cover to links in the other types. Scroll within the input panel to see all groups.
+
+## Step 6 — Review and edit Unit costs
+The Unit costs table is populated for the grades selected above. Edit the Rate cells to use the rates you want this search to compare:
+
+- Structural steel and rebar: **SGD/t**.
+- Concrete: **SGD/m³**.
+- Candidate result: **SGD/m of column**, not total project cost.
+
+Pricing uses steel and rebar mass plus **net** concrete volume per metre. RC, steel encased and mega pricing includes links with reinforcement. **Formwork is not priced**. The quantities are material quantities, not fabrication, erection or complete installed costs.
+
+Check the units before entering a rate. A zero rate prices that material at zero. Dialog rate edits are inputs to this search; confirm the material library separately if you intend to change the model's rates.
+
+For a simple pricing illustration, a 400 × 400 × 10 mm unreinforced CFT has about **122.46 kg steel/m** and **0.1444 m³ concrete/m**. At illustrative rates of 4,000 SGD/t and 150 SGD/m³, the material cost is **122.46 / 1,000 × 4,000 + 0.1444 × 150 = 511.5 SGD/m**. This arithmetic illustrates units; it does not mean that section passes the worked example's forces.
+
+![Step 6 — Scroll to Unit costs: review the rates for the selected steel/concrete grades and rebar before running](images/column-optimization-costs.png)
+
+## Step 7 — Run and read the ranked results
+Click **Run**. The app prices buildable candidates, sorts them from cheapest to most expensive, and checks them against all selected members/cases until it finds up to **10 cheapest passing sections**, or exhausts the candidates. The progress text reports how many candidates were designed and how many passing options were found. **Stop** cancels the search.
+
+A completed search does not have to design every listed candidate: once the retained cheapest passing options have been found, more expensive candidates need not be checked. The cheapest result is the cheapest **within your ranges, grade list, reinforcement choices, rates, member/case scope and basis**; it is not a claim about every possible section.
+
+The results columns show:
+
+- **Rank / Section**: the cost rank and candidate dimensions.
+- **Steel / Concrete / Bars**: chosen grades, the steel fy used and reinforcement arrangement.
+- **Steel kg/m / Conc. m³/m**: the material quantities shown for the candidate.
+- **SGD/m**: the candidate's material cost per metre.
+- **Util. / Governs**: maximum design utilisation and governing member/case. Another member or case may govern a different candidate.
+
+Select a row and read the dimensions and material grades together. A thicker tube can use a lower thickness-dependent fy than a thinner tube of the same nominal grade. A low cost with high utilisation is a different choice from a more expensive section with greater reserve.
+
+If no section passes, review the load scope and effective lengths, then consider wider size/thickness/grade ranges. If the range is too large, fix less influential dimensions or reduce grade/bar alternatives rather than starting a huge search.
+
+In the illustrated CFT run, 228 buildable candidates remain after filtering. The search reports 35 candidates designed and retains ten passing options. Rank 1 is **RHS 500 × 500 × 15, S355 / C60/75, no bars**, at about **877 SGD/m**, with utilisation **0.97**, governed by **C2 · ULS1**. Those results use the stated example forces, effective lengths and captured rates; they are not a recommended section for another model.
+
+![Step 7 — Actual CFT optimization results for the labelled C1/C2 example: passing candidates are ranked by material cost per metre](images/column-optimization-results.png)
+
+## Step 8 — Use Selected and review the full design
+Choose a result and click **Use Selected**, or double-click the row. The candidate appears on **Section**, with its dimensions, strengths and reinforcement. The dialog raises its material limit fields when needed to accommodate the selected grade.
+
+Then click **Run Design** to obtain the detailed member-by-member calculation and governing checks under the selected basis and force scope. Inspect the report through [[Design results]] rather than deciding from a rounded utilisation value alone.
+
+Use Selected does **not** assign the section to the structural model or rerun FEM. If you want the optimized section in the model, update/assign the corresponding section separately and analyse the revised model as needed before the final design review. Section stiffness and self-weight changes can change the member forces used in design.
+
+![Step 8 — Use Selected transfers the ranked CFT candidate to Section; Run Design provides its full calculation](images/column-optimization-selected-section.png)
+
+## Troubleshooting and practical sequence
+- **No FEM forces:** run analysis, check the selected members and cases, and reopen the design scope if the model changed.
+- **No passing section:** confirm the basis, lengths and loads; widen a relevant size, thickness, grade or reinforcement range. Do not weaken the design basis just to obtain a passing result.
+- **Too many combinations:** fix dimensions, reduce alternative grades or bar counts, and use coarser steps before refining around promising candidates.
+- **Fewer candidates than expected:** impossible fits, reinforcement layouts and unsupported/slender tube candidates can be excluded before detailed design. Inspect which dimensions and options are actually enabled.
+- **Unexpected cost ranking:** check SGD/t versus SGD/m³, the chosen rates and material quantities. This is a cost per metre comparison, not a total-cost structural optimization.
+- **Comparing runs:** keep member/case scope, effective lengths and cost basis consistent; change one group of choices at a time.
+- Export this article with **Export to Word…** in the User Guide to share the procedure and screenshots.
 
 # Optimization VCF
 Category: Optimization
 Where: Optimization → Optimization VCF…
-See also: Optimization results and charts; VCF System; Materials
+See also: Optimization results and charts; VCF System; Materials; Load cases and combinations; Analysis options; 03 Pretension
 
-The parametric study of the VCF system: every combination of geometry, cable force, storey force and section variants is built in memory and analysed with the Mcotis solver.
+The parametric study of the VCF system: Mcotis builds every combination of the geometry, cable force, storey force and candidate section inputs, analyses it with the internal solver, checks bottom-chord deflection and uplift, and prices its members. The working model is not changed. A single Run FEM Analysis analyses the model as defined; Optimization VCF compares many variants without applying them to that model.
 
-- **Ranges** (min / max / step): bays, bay width, truss depth (middle chord at half depth), clear height, back-span, back-stay height; cable forces; storey loads.
-- **Sections**: candidate sections per chord, mega column and cable.
-- **Check**: max deflection of a bottom chord point in the chosen result ≤ span / ratio, and the uplift limit.
-- **Cost**: Σ member cost per metre × length.
+## Step 1 — Prepare the working model
+1. Open the VCF model through **File → Load VCF…**, a saved configuration, or an existing imported model.
+2. Check **Edit → VCF System…**: geometry, loaded points, storey forces, cable target forces and assigned sections should describe the system you want to vary. The optimization starts from these inputs; it does not fetch a fresh SAP2000 model during the run.
+3. Review **Define → Load Cases / Load Combinations**. Choose which cases run and check any staged pretension definitions. A load pattern such as LL_ABOVE is an assigned loading source; the result checked later is a solved case or combination such as SLS: 1.0DL+1.0LL.
+4. Review **Run → Analysis Options**, including cable target-force fitting, iteration limit, mesh and sag. These apply to the optimization cases as well.
+5. Check section assignments and material unit costs through **Define → Materials / Section Properties**. Missing rates can make the cost unavailable; unavailable is not zero.
+6. Open **Optimization → Optimization VCF…**.
 
-Run Optimization lists each case as it completes; the working model and SAP2000 are not changed. Results: [[Optimization results and charts]]. Optimization → Cancel Optimization stops a run.
+For a first study, vary only one or two inputs. The illustrated nine-case example uses **truss depth 18, 20, 22 m** and **LL_ABOVE qz 5, 7.5, 10 kPa**, with one cable-force step and no section alternatives. Other geometry stays fixed. The six screenshots illustrate the relevant controls; some were captured while only the loading range was active, before the depth range was added.
+
+## Step 2 — Set Geometry ranges and inspect the preview
+The form has four sheets on the left and a model preview on the right. On Geometry, each row has **Min / Max / Step** and **n**, the number of values:
+
+- **Min = Max** keeps an input fixed.
+- Otherwise values are Min, Min + Step, Min + 2 × Step, and so on up to Max. An off-step Max is not appended: 18–23 at Step 2 gives 18, 20 and 22.
+- A positive step is required even for a fixed range. Whole-number inputs such as bays must use whole-number values.
+- Independent ranges multiply. Three depths and three bay widths already make nine geometries, before loading or section alternatives are added.
+
+The geometry inputs describe **number of bays, bay width, truss depth, clear height, back-span and back-stay node height**. Truss depth is bottom-to-top chord height; clear height is ground-to-bottom chord. Back-span runs from the mega column to the outer column. The middle chord is not an independent range: it remains at **0.5 × truss depth**. Invalid geometries are listed as skipped cases with a reason.
+
+For the example, enter **truss depth Min 18 / Max 22 / Step 2** and leave the other geometry inputs fixed. Check **n = 3**. The truss span between mega columns is **bays × bay width**; changing either also changes the deflection limit, member lengths and quantities being priced.
+
+Use **Preview at** to inspect the minimum, current-model or maximum corner of the ranges. A corner takes that value for every varying input; it is not a selected result or a best-case recommendation. The preview changes neither the working model nor SAP2000. When the bay range changes the fan, the choices identify fewer/current/more cables and the caption identifies new or omitted cables. Check the fan layout and force labels at both ends of the range before running.
+
+![Step 2 — Geometry: truss depth 18–22 m at Step 2 gives three geometries; with three loading values the study contains nine combinations](images/optimization-vcf-geometry.png)
+
+## Step 3 — Define Cable Force and the shared steps
+Cable Force starts from the model's pretension setup. Values here are **target pretension [kN]**, not the cable's final force under the chosen SLS/ULS result. Each case fits the applicable targets in its pretension stage and then solves its defined loading cases.
+
+**Steps** is the number of shared force steps. All independently varied cable spans move together from Min to Max; they are not a separate Cartesian axis for every cable. For example, Min 5,000 / Max 7,000 with Steps 3 gives 5,000, 6,000 and 7,000 kN. With Steps 1, the run uses Min even if Max differs; equal Min/Max remains fixed. A follower keeps its configured synchronization relationship rather than receiving an unrelated independent force.
+
+### Fan cables — Force by length
+The fan runs from a top corner to bottom-chord joints. **Force by length** offers:
+
+- **+ kN per m**: T = T shortest + increase × (L − L shortest). Enter the shortest cable's Min/Max and the increase in kN/m. Longer cables receive a greater force when the increase is positive.
+- **× length**: T = T shortest × L / L shortest.
+- **Manual**: enter a separate Min/Max for each independently controlled fan cable.
+
+A length rule uses **the cable lengths of each geometry case**, including the other side's lengths. Derived forces are rounded to **100 kN**; typed forces are not rounded by this rule. More bays can add fan cables, whose targets follow the selected length rule; in Manual, a new cable uses its template cable's force scaled by the length ratio.
+
+The screenshot uses **+ kN per m**, shortest Cable2a-2 at **5,000 kN**, increase **318 kN/m** and **Steps 1**. Other fan rows are derived. The **Model** column is a reference to the model's force; it need not equal the proposed force.
+
+### Other cables and synchronization
+Other cables, such as back-stays, have their own spans. Their rows follow the previewed geometry. A cable that takes another cable's value is not repeated as an independent editable row. Check Min, Max and Steps together: in the screenshot Cable1a-2 has Max 105,000 kN, but with one step the run still uses its Min 100,000 kN.
+
+For the nine-case walkthrough, keep **Steps 1**. If you introduce three effective cable steps, the same three depths and three loading values become **27 cases**.
+
+![Step 3 — Cable Force: shortest fan cable 5,000 kN plus 318 kN/m; Steps 1 uses Min for every independent cable span](images/optimization-vcf-cable-force.png)
+
+## Step 4 — Set Storey Force ranges
+Storey Force starts from the model's loading setup and varies **qz per load definition [kPa]**, **number of storeys** and **tributary width B [m]**. qz is a nonnegative downward loading magnitude. Each loaded point receives:
+
+**Fz = −qz × tributary length × B × number of storeys [kN]**
+
+The tributary length follows that case's geometry, so changing bay widths can change the joint loads even when qz stays fixed. B is the out-of-plane width; it is not the truss span. End points use their own tributary lengths rather than automatically receiving the same force as interior points. The sheet summarizes the load at minimum and maximum corners.
+
+For the example, keep **DEAD_ABOVE qz = 10 kPa**, **10 storeys** and **B = 12 m** fixed; set **LL_ABOVE Min 5 / Max 10 / Step 2.5 kPa**. At an interior point with 10 m tributary length, the live force is −6,000, −9,000 or −12,000 kN. Each of those loading variants is combined with every depth. The load definitions feed patterns; the defined cases/combinations supply the result factors.
+
+The counter's **force** factor combines the storey-load ranges and the effective shared cable steps. With one cable step and three LL values, it is three. Adding a two-value storey-count range would double the nine-case study to 18 cases.
+
+![Step 4 — Storey Force: DEAD_ABOVE 10 kPa; LL_ABOVE 5–10 kPa at Step 2.5; 10 storeys and B = 12 m](images/optimization-vcf-storey-force.png)
+
+## Step 5 — Choose candidate Sections
+On Sections, open the candidate picker for each frame group — **top, middle, bottom and vertical chords, mega columns and end frames** — or each cable. Tick the sections you want to try. **(keep as assigned)** retains the model's assignments when no alternatives are selected.
+
+Each set of alternatives is another independent choice. Two top-chord sections and three mega-column sections make **six section variants** for every geometry/force combination. The nine-case example would therefore become 54 cases. Frame and cable choices come from their appropriate section libraries; a frame section is not a cable section.
+
+Start with the existing assignments for the first study. Add section alternatives after identifying the influential geometry and loading inputs. Confirm materials, properties and unit costs before comparing section variants: the cost is the sum of member cost per metre × each case's member length.
+
+![Step 5 — Sections: choose alternatives per frame role and cable, or keep the model's assigned sections](images/optimization-vcf-sections.png)
+
+## Step 6 — Set the Deflection Check and start the run
+The bottom strip applies to every case:
+
+1. In **max δ in**, choose the load case or combination used for the check. The form normally starts with an SLS-named result when one exists; verify the actual name and its loading rather than relying on the letters SLS alone.
+2. Set **≤ span / = 250** for this example. With 10 bays × 10 m, span = 100 m and the deflection limit is **400.0 mm**. Each varying-span case uses its own span.
+3. Set **uplift ≤ = 0 mm** for the illustrated setup, or enter your permitted upward movement.
+4. Check the space counter: **3 geometry × 3 force × 1 section variant = 9 combinations**. Resolve any invalid-input messages and check both preview corners.
+5. Click **Run Optimization**.
+
+Both limits are read on **bottom-chord points**, not every joint in the model. A strong fan can reduce downward movement while lifting the middle of the chord; passing the downward limit alone is insufficient. **OK** requires both downward deflection within span/ratio and uplift within its allowance. Optimization TAS instead checks its top-chord deck points.
+
+One run accepts at most **10,000 cases**. If the count is too large, fix less important inputs, reduce candidate sections or use larger steps. A single three-value axis triples the study. Do not assume a fixed cable span adds Steps variants: the counter reflects whether any cable force actually varies.
+
+**OK** keeps the form settings for the current app session without running or applying them. **Cancel** discards form edits. **Reset Form to Current Model** rebuilds the starting settings from the current model. The optimization does not automatically apply a winning case to the working model.
+
+## Step 7 — Read the Run results
+The Run sheet fills as cases finish. Each row shows the varying inputs, **max downward deflection [mm]**, its governing point, span, limit, **δ / limit**, uplift, **OK / NG**, total cost, result name and status. Values that do not vary need not appear as individual columns.
+
+- **δ / limit ≤ 1** meets the downward-displacement limit; check uplift and status as well.
+- **NG** indicates a failed check. A skipped or failed analysis has a reason in Status and may have no numerical result; do not interpret a blank as zero.
+- A **cable not fitted** status means the requested target was not met within tolerance. Read that status before accepting the case as the intended pretension setup.
+- Sort by cost to compare economical options, then confirm that the selected row passes both displacement checks and has the intended result definition.
+
+The summary identifies the cheapest passing case and the least-deflection case; they need not be the same. The pictured completed run has **nine passing cases**, with cheapest case 1 at depth 18 m and LL 5 kPa, priced at **SGD 7,248,380** using the model and rates when captured. Your current model, analysis settings and rates determine your own results.
+
+**Cancel Run**, or **Optimization → Cancel Optimization**, stops the study and keeps completed cases. **Optimization → Optimization Results…** reopens the last run.
+
+![Step 7 — Run results: the illustrated nine-case study passes both displacement checks; the summary identifies the cheapest passing case](images/optimization-vcf-results-run.png)
+
+## Step 8 — Use Chart to refine the study
+Open Chart for numbered figures of responses against the inputs that actually varied, followed by a summary and conclusions. See [[Optimization results and charts]] for the shared controls and available response families.
+
+The main-effect line summarizes the response at each input value over the other inputs; a shaded band shows their minimum-to-maximum spread. It is not a deflection acceptance band. A wide band means another variable matters too; use the interaction plots to examine combinations instead of treating one line as a single case.
+
+For the pictured study, increasing live load increases deflection and increasing truss depth reduces it. This is an observation of those cases, not a guaranteed rule for every model or pretension setting. Read utilisation against its limit, compare cost versus utilisation, and use the sensitivity ranking to decide which input deserves finer steps. Cost can remain unchanged across loading-only cases while changing with geometry or sections.
+
+Use **Copy Summary** to copy the report text. A fixed or small study may produce fewer figures because there are fewer varied inputs or available responses. Refine one range at a time, rerun, and compare using the same load result and acceptance limits.
+
+![Step 8 — Chart: in the illustrated study, deflection increases with LL and decreases with truss depth; bands show spread over the other inputs](images/optimization-vcf-results-chart.png)
+
+## Troubleshooting and good practice
+- **Run disabled:** inspect invalid ranges, missing geometry or force inputs, the case-count limit and whether another run is active. Use positive steps and whole-number values where required.
+- **Unexpected number of cases:** multiply the counts of every geometry range, storey-load range, effective shared cable step and section choice. Off-step maxima are omitted.
+- **Cable changes with geometry despite one force step:** a length rule recalculates targets using each geometry's lengths; one step fixes the shortest cable's starting target, not every derived cable force.
+- **Large uplift with small downward deflection:** review fan pretension and the separate uplift allowance. Do not decide from δ / limit alone.
+- **Unavailable cost:** inspect the section/material assignments and material rates. Compare total costs only on a consistent cost basis.
+- **Using a selected variant:** enter its geometry, forces and sections through [[VCF System]], apply them, and run the working model to review its results. The optimization table is a comparison, not an automatic model edit.
+- Export this article with **Export to Word…** in the User Guide to share its steps and six screenshots.
 
 # Optimization TAS
 Category: Optimization
 Where: Optimization → Optimization TAS…
-See also: Optimization results and charts; Tied Arch System
+See also: Optimization results and charts; Tied Arch System; Load cases and combinations; Materials; Analysis options
 
-The parametric study of the tied arch system, run like [[Optimization VCF]].
+The parametric study of the tied arch system: Mcotis builds every combination of the geometry, storey loading, optional cable pretension and candidate sections, analyses it with the internal solver, checks the deck deflection and uplift, and calculates its member cost. Like [[Optimization VCF]], it runs in memory and leaves the open model unchanged. SAP2000 and ETABS are not needed.
 
-- **Geometry**: H1, h (H2 = H1 + h, so the deck stays above the crown), bays (an odd number is skipped) and spacing; H0 with an elevated cable.
-- **Storey Force**: SW, SDL, LL, floors n and tributary width B.
-- **Cable Force** (elevated cable): the tie's pretension in steps.
-- **Sections**: candidates per role — arch rib, top chord, mega column, end strut, strut, brace, tie.
-- **Check**: max deflection of a top chord joint ≤ L / ratio (480 mm at L / 250 for the 120 m TAS), and the uplift limit.
+## Step 1 — Open and check the TAS model
+1. Choose **File → Load TAS…** for the built-in 120 m system, or use **Edit → Tied Arch System…** to create your own system first.
+2. Check **Define → Load Cases / Load Combinations**. Only the cases set to run are available to the study; the example below checks **SLS1 G+Q full**.
+3. Check **Run → Analysis Options**. These options also apply to each optimization case.
+4. Check material unit costs under **Define → Materials** before comparing costs. A missing rate can leave the cost unavailable; it does not mean the member is free.
+5. Open **Optimization → Optimization TAS…**. An unrelated model is not a TAS input: the Run button asks you to open or create the tied arch system first.
 
-Needs the tied arch system open (File → Load TAS… or Edit → Tied Arch System…); the open model is not changed.
+The walkthrough uses the built-in system: H1 = 30 m, 12 bays at 10 m, B = 12 m and 10 floors, without an elevated cable. It varies only **h = 2, 3, 4 m** and **LL = 5, 7.5, 10 kPa**, giving nine cases. The Cable Force screenshot is a separate optional example.
+
+## Step 2 — Set the Geometry ranges
+The form has four sheets on the left and a preview on the right. On **Geometry**, enter **Min / Max / Step** for each input. Min = Max fixes an input. Otherwise values are Min, Min + Step, and so on up to Max; an off-step Max is not appended. The **n** column counts the values.
+
+- **H1 — support → arch crown [m]**: the arch rise from its springing to the crown at mid-span. The arch is parabolic.
+- **h — arch crown → top chord [m]**: the gap above the crown. **H2 = H1 + h**, so H2 is derived rather than entered as another independent range. h must stay greater than zero.
+- **Number of bays (even)**: a whole, even number from 6 to 40. Use Step = 2 when varying it. If an interior value is odd, that case is skipped and its reason appears in the results.
+- **Spacing of vertical lines [m]**: the bay spacing. **Span L = bays × spacing**, so changing either input also changes the deflection limit and the length being priced.
+- **H0 — ground → cable and springing [m]** appears only with an elevated cable. In that system, the crown elevation is H0 + H1 and the deck elevation is H0 + H1 + h.
+
+For the nine-case example, fix H1 at 30, bays at 12 and spacing at 10; set **h Min 2 / Max 4 / Step 1**. This gives three geometries, with H2 = 32, 33 and 34 m.
+
+**Preview at** switches between Minimum, Current and Maximum. Minimum/Maximum uses that corner of every range; Current shows the open model. It is a preview, not a selected optimization case and not an edit to the open model. In the screenshots below Maximum shows h = 4 m and LL = 10 kPa.
+
+![Step 2 — Geometry: H1 fixed at 30 m, h 2–4 m in steps of 1, 12 bays at 10 m; Maximum previews the deck at H2 = 34 m](images/optimization-tas-geometry.png)
+
+## Step 3 — Set Storey Force ranges
+On **Storey Force**, set the loads carried by the deck:
+
+- **SW [kPa]** is slab self-weight from the floors above; structural member self-weight follows the model's load cases.
+- **SDL [kPa]** is superimposed dead load.
+- **LL [kPa]** is live load.
+- **Number of floors n** is a whole-number range.
+- **Tributary width B [m]** is the width carried by the system.
+
+For an inner top-chord joint, the form shows the following downward load magnitudes:
+
+**SLS = (SW + SDL + LL) × spacing × B × n**
+
+**ULS = (1.35 SW + 1.35 SDL + 1.5 LL) × spacing × B × n**
+
+The two end joints take half the inner-joint load. SW + SDL goes into DEAD_above; LL goes into LL_above, with LL_left / LL_right for the half-span loading cases. The defined cases and combinations apply the factors.
+
+For this example, fix SW at **7 kPa**, SDL at **3 kPa**, n at **10** and B at **12 m**. Set **LL Min 5 / Max 10 / Step 2.5**. The three LL values combine with all three h values: **3 geometry × 3 load × 1 section = 9 combinations**. The load summary reads **SLS 18,000–24,000 kN** and **ULS 25,200–34,200 kN** per inner joint; the preview arrows show SLS at the chosen corner.
+
+![Step 3 — Storey Force: SW 7 kPa, SDL 3 kPa, LL 5–10 kPa at 2.5, 10 floors and B = 12 m; the study now contains nine combinations](images/optimization-tas-storey-force.png)
+
+## Step 4 — Set Cable Force when an elevated cable is present
+For a system without an elevated cable, **Cable Force** is disabled. Keep it disabled for the nine-case example above.
+
+To study a prestressed tie, first open **Edit → Tied Arch System…**, tick **With elevated cable**, set its H0 and cable force, and apply the system. Then reopen Optimization TAS. H0 appears on Geometry and Cable Force becomes available.
+
+The tie is **TIE** at H0. Enter its pretension **Min / Max [kN]** and **Steps**. The first step is Min and the last is Max, with equally spaced forces in between; one step uses Min, and equal Min/Max gives one force variant. For example, **10,000–30,000 kN with 3 steps** tries **10,000, 20,000 and 30,000 kN**. With the same h and LL ranges this would make **27 combinations**, not nine.
+
+Each case fits the tie to its target in the Pretension case; the subsequent staged cases carry that pretension. Review any cable-not-fitted status in the results rather than treating it as a successfully fitted target. The screenshot below illustrates this optional setup with H0 fixed at 10 m; it is separate from the nine-case results shown later.
+
+![Optional Step 4 — Elevated cable: TIE at H0 = 10 m, pretension 10,000–30,000 kN in three steps; this optional study contains 27 combinations](images/optimization-tas-cable-force.png)
+
+## Step 5 — Choose candidate Sections
+On **Sections**, open the candidate picker for each role and tick the sections to try: **arch rib, top chord (deck), mega column, end strut, strut and brace**, plus the tie when there is an elevated cable. Frame choices come from **Define → Section Properties → Frame Sections**; the tie uses cable sections.
+
+No sections ticked keeps the TAS section for that role. Tick several to try each one. Section choices multiply: two arch sections and three deck sections make six section variants for every geometry/load combination. The sheet also shows the TAS section name beside each role.
+
+Leave every picker at its existing TAS section for the nine-case walkthrough. Try section alternatives in a second, smaller study once you understand the geometry and load effects. See [[Materials]] for the cost basis.
+
+![Step 5 — Sections: candidates are chosen per member role; no alternatives are selected in the nine-case walkthrough](images/optimization-tas-sections.png)
+
+## Step 6 — Set the Deflection Check and run
+The bottom strip is common to all four sheets:
+
+1. In **max δ in**, select **SLS1 G+Q full** for this example. A blank result selection checks the largest deflection over every solved result, which may be governed by a different case.
+2. Set **≤ L / = 250**. For 12 bays × 10 m, L = 120 m and the limit is **480.0 mm**. If the span varies, each case uses its own L.
+3. Set **uplift ≤ = 0 mm** for this example, or enter the allowed upward movement for your study.
+4. Check the combination count and the preview at Minimum and Maximum. Red problem text must be resolved before running. One run accepts at most **10,000 combinations**.
+5. Click **Run Optimization**. **OK** keeps the settings for the current app session without running or applying them. **Cancel** discards the form edits. **Reset Form to Current Model** restores the TAS starting form, including its default h and load ranges; it does not make every range fixed.
+
+Both displacement limits are checked on **top chord (deck) joints**, where the floors sit. This differs from Optimization VCF, which checks bottom chord points. A case passes only when its downward deflection is within L / ratio and its uplift is within the uplift limit.
+
+The starting form has wider ranges than this walkthrough: h 2–5 m, SW 7–15 kPa, SDL 3–10 kPa, LL 5–10 kPa and n 5–10, giving **5,184 combinations** for the built-in system with no section alternatives. Start with the nine-case example before expanding the study.
+
+## Step 7 — Read the Run results
+The **Run** sheet fills as cases finish. Each row lists the varying inputs, maximum deck deflection and its point, span, limit, δ / limit, uplift, **OK / NG**, total cost and status. The Result column identifies the load case or combination checked.
+
+Sort by deflection, utilisation or cost to compare cases. Read the status of skipped or failed cases: unavailable results are not zero. The summary names the cheapest passing case and the case with the least deflection. **Cancel Run**, or **Optimization → Cancel Optimization**, stops the run; completed cases remain available. Reopen the last run through **Optimization → Optimization Results…**.
+
+In the illustrated run, **all nine cases pass**. Deflection ranges from **74.6 to 100.0 mm** against the 480.0 mm limit, and uplift is 0.0 mm to the displayed precision. The cheapest passing and least-deflection case is **case 1: h = 2 m, LL = 5 kPa**, at **SGD 2,558,537** using the model rates when the screenshots were captured. These are the example results, not prescribed inputs or a cost estimate for another model.
+
+![Step 7 — Run results from the actual nine-case TAS study: each h value is paired with LL 5, 7.5 and 10 kPa; deck deflection is checked against L/250](images/optimization-tas-results-run.png)
+
+## Step 8 — Compare the Chart results
+Open **Chart** to see the completed study as numbered figures, followed by its summary and conclusions. For this walkthrough, compare how the responses change with **h** and **LL**. Deflection, utilisation, cost and other available responses come from the cases actually solved. A plotted band shows the spread over the other varying inputs; it is not another acceptance limit.
+
+In this example, the mean deflection rises from about **75.4 to 99.0 mm** as LL rises from 5 to 10 kPa. Changing h from 2 to 4 m has a smaller effect: the mean rises from about **86.2 to 88.1 mm**. Increasing h does not reduce deflection in this particular study; read the plotted response rather than assuming the direction of an effect.
+
+Use the sensitivity figures to decide which range to refine. Compare cost against utilisation to find economical passing cases, and read the interaction plots when more than one input varies. A small or fixed study may produce fewer figures. **Copy Summary** copies the report text. See [[Optimization results and charts]] for the shared Run/Chart controls.
+
+![Step 8 — Chart results from the same nine-case TAS run: numbered response figures compare the varied geometry and loading](images/optimization-tas-results-chart.png)
+
+## Tips and troubleshooting
+- If Run Optimization is disabled, check the red problem text, the case count, and that a tied arch system is open. Use positive h and spacing, whole-number floors, and even bay values.
+- The preview is a corner of the input ranges, not the cheapest or best result. Optimization does not automatically replace the open model with a result row; enter your chosen parameters through [[Tied Arch System]] if you want to use them.
+- If a cost is unavailable, check section/material assignments and unit costs before ranking the cases.
+- Use a named service load result consistently when comparing studies; changing the result or the uplift allowance changes which cases pass.
+- Export this article with **Export to Word…** in the User Guide to share the steps and screenshots with the team.
 
 # Optimization results and charts
 Category: Optimization

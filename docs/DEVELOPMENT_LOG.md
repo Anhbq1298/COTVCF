@@ -18,6 +18,48 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Shared User Guide Word export format
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Help → User Guide → any article → Export to Word…
+- What: Every article uses A4, Arial 11 throughout (including headings, captions and footer), 1.15 line spacing and margins top/left 1.88 cm, bottom 1.28 cm, right 1.58 cm. Screenshots fit the new content width; the page footer stays inside the smaller bottom margin.
+- Checks: --user-guide (all 62 article exports, styles, margins and screenshot width; valid illustrated Word documents); --dev-log
+
+## 2026-10-13 · Illustrated column design optimization user guide
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Help → User Guide → Column design optimization
+- What: Eight detailed steps with nine real-dialog screenshots cover the basis, common member/case scope, RC/CFT/steel encased/mega size controls, grades and bars, unit rates, cheapest-first results and Use Selected. A labelled CFT force example demonstrates the actual search; pricing units, search limits, full-design review and separate model assignment are explained.
+- Checks: --column-guide-capture (real dialogs, completed CFT search and Use Selected); --column-design; --user-guide (steps, nine embedded screenshots, links, rendering and Word export); --dev-log
+
+## 2026-10-13 · Detailed Optimization VCF user guide
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Help → User Guide → Optimization VCF
+- What: Expanded to eight illustrated steps: model preparation, geometry ranges, fan grading and shared cable steps, tributary loading, section candidates, bottom-chord deflection/uplift checks, Run interpretation and Chart refinement. Retains six screenshots and explains the nine-case example, combination counts, synchronization, fitting status, costs and troubleshooting.
+- Checks: --user-guide (article, eight steps, six screenshots, links, rendering and Word export); --dev-log
+
+## 2026-10-13 · Illustrated step-by-step Optimization TAS user guide
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Help → User Guide → Optimization TAS
+- What: Eight steps cover preparation, Geometry, Storey Force, optional elevated-cable pretension, candidate Sections, the deck deflection/uplift check, Run results and Chart interpretation. Six real dialog screenshots follow a solved nine-case h × LL example; the optional cable screenshot is clearly separated. The article includes range/count rules, load calculations, actual example results, costs, troubleshooting and Word sharing.
+- Checks: --tas-guide-capture (offline real dialogs and nine solved cases); --user-guide (eight steps, six packaged screenshots, links, window rendering and valid Word export); --dev-log
+
+## 2026-10-13 · Export graphical results as numbered report figures
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Result → Show Results… → Export Result…
+- What: Word and PDF exports now contain captures of the model result diagrams, with Figure numbers and load case/output captions. Select axial/cable forces, bending, shear, reactions or deflection; one figure for each selected case and output. Uses the screen renderer, fitted to the full model with high-resolution images and result labels; preserves the live view. A4, Arial 11, spacing 1.15 and the requested margins remain. Cable target fit stays in Results Table and is not a graphical export option.
+- Checks: --result-export (real model/case captures, distinct diagrams, captions, embedded images, no tables, Word schema/page settings, PDF and dialog save/open); --result-tools-ui
+
+## 2026-10-13 · Export selected analysis results to Word or PDF
+- Status: Done
+- Who: Philip Pham, Codex
+- Where: Result → Show Results… → Export Result…
+- What: Select solved load cases/combinations and all or individual output types, save a Word or PDF report and open it. Portrait A4, Arial 11, 1.15 line spacing; margins top/left 1.88 cm, bottom 1.28 cm, right 1.58 cm. Tables retain frame stations, signed reactions, deflections and cable fit warnings. PDF uses installed Edge or Chrome.
+- Checks: --result-export (selection, stations, units, missing values, warnings, Word schema/page settings, real PDF generation and dialog save/open); rendered PDF A4/Arial 11, margins and repeated headers verified across five pages
+
 ## 2026-10-13 · Help → User Guide
 - Status: Done
 - Who: Philip Pham, Claude
@@ -27,11 +69,16 @@ continues on the next lines, indented by two spaces):
   Assign, Run, Results, Design, Optimization, MB study, Reference). The window has the contents by category with a search
   box (every word must match; Enter opens the first result or a results page), and each article shows an infobox with its
   category and menu path, its lead, a contents box, its sections, See also and the articles that link to it; links
-  between articles navigate, with Back / Forward / Main page. The text is docs/USER_GUIDE.md, built into the app: whoever
-  adds or changes a function updates its article (one `# Title` with Category, Where and See also lines, then Markdown
-  with [[links]]).
-- Checks: --user-guide (format, every link resolves, the app carries the current guide, every menu command of the main
-  window is covered, search, and the window's main page, article page and navigation)
+  between articles navigate, with Back / Forward / Main page. Articles can show screenshots with a caption
+  (![caption](images/file.png), the files in docs/user-guide/images, built into the app); Optimization VCF is written as
+  a step-by-step guide with six — the four sheets of the form and the Run and Chart sheets of the results. Export to Word…
+  (guide window, on any article) saves the article as a .docx: A4, 2.54 cm margins, Arial 11 with 1.15 line spacing,
+  headings, bullet and numbered lists, the screenshots scaled to the page width with their captions, the article and
+  page number in the footer. The text is docs/USER_GUIDE.md, built into the app: whoever adds or changes a function
+  updates its article (one `# Title` with Category, Where and See also lines, then Markdown with [[links]]).
+- Checks: --user-guide (format, every link and screenshot resolves, the app carries the current guide, every menu command
+  of the main window is covered, search, the window's pages, screenshots and navigation; the Word export is A4, Arial 11,
+  1.15 spacing, holds the screenshots and is valid Open XML)
 
 ## 2026-10-13 · Run monitor opens on an analysis log laid out like SAP2000's
 - Status: Done

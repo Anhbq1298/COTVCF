@@ -80,4 +80,5 @@ public partial class ShowResultsWindow : Window
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
     private void Outputs_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e) => ApplySelection();
     private void Table_Click(object sender, RoutedEventArgs e) => openTable(viewModel.FemCableFitView);
+    private void Export_Click(object sender, RoutedEventArgs e) => new ExportResultsWindow(viewModel) { Owner = this }.ShowDialog();
 }

@@ -19,6 +19,21 @@ internal static class Program
     {
         try
         {
+            if (args.Contains("--column-guide-capture"))
+            {
+                ColumnGuideCapture.Run();
+                return 0;
+            }
+            if (args.Contains("--tas-guide-capture"))
+            {
+                TasGuideCapture.Run();
+                return 0;
+            }
+            if (args.Contains("--result-export"))
+            {
+                ResultExportChecks.Run();
+                return 0;
+            }
             if (args.Contains("--template-building-ui"))
             {
                 var app = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };

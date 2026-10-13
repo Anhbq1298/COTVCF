@@ -21,6 +21,8 @@
      <Button x:Name="ForwardButton" Content="Forward ▶" MinWidth="82" Margin="0,0,6,0" Click="Forward_Click" IsEnabled="False"/>
      <Button Content="Main page" MinWidth="82" Margin="0,0,12,0" Click="Home_Click"/>
     </StackPanel>
+    <Button x:Name="ExportButton" DockPanel.Dock="Right" Content="Export to Word…" MinWidth="110" Margin="12,0,0,0" Click="Export_Click" IsEnabled="False"
+            ToolTip="Save this article as a Word document — A4, Arial 11, line spacing 1.15, with its screenshots" AutomationProperties.Name="Export to Word"/>
     <TextBlock x:Name="Breadcrumb" VerticalAlignment="Center" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"/>
    </DockPanel>
    <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Raised}">

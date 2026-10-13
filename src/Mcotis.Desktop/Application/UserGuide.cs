@@ -15,6 +15,11 @@ public sealed record UserGuideArticle(string Title, string Category, string Wher
     public string Lead => string.Join(" ", Sections.FirstOrDefault(section => section.Heading.Length == 0)?.Lines.TakeWhile(line => line.Trim().Length > 0) ?? []);
     public string Text => string.Join("\n", Sections.SelectMany(section => section.Lines.Prepend(section.Heading)));
 
+    /// <summary>The screenshots of the article: ![caption](images/file.png) lines, as (file, caption).</summary>
+    public IReadOnlyList<(string File, string Caption)> Images => Sections.SelectMany(section => section.Lines)
+        .Select(line => UserGuide.ImagePattern.Match(line.Trim())).Where(match => match.Success)
+        .Select(match => (match.Groups[2].Value.Trim(), match.Groups[1].Value.Trim())).ToArray();
+
     /// <summary>Titles this article links to with [[Title]] or [[Title|text]], and under See also.</summary>
     public IEnumerable<string> Links => UserGuide.LinkPattern.Matches(Text).Select(match => match.Groups[1].Value.Trim()).Concat(SeeAlso).Distinct(StringComparer.OrdinalIgnoreCase);
 }
@@ -30,6 +35,19 @@ public static class UserGuide
 {
     public const string ResourceName = "Mcotis.UserGuide.md";
     internal static readonly Regex LinkPattern = new(@"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]", RegexOptions.Compiled);
+    /// <summary>A screenshot on a line of its own: ![caption](images/file.png) — the file is in docs/user-guide/images.</summary>
+    public static readonly Regex ImagePattern = new(@"^!\[([^\]]*)\]\((?:images/)?([^)]+)\)$", RegexOptions.Compiled);
+    public const string ImageResourcePrefix = "Mcotis.UserGuide.";
+
+    /// <summary>The PNG bytes of a screenshot built into the app, or null.</summary>
+    public static byte[]? Image(string file)
+    {
+        using var stream = typeof(UserGuide).Assembly.GetManifestResourceStream(ImageResourcePrefix + file);
+        if (stream is null) return null;
+        using var memory = new MemoryStream();
+        stream.CopyTo(memory);
+        return memory.ToArray();
+    }
 
     public sealed record Guide(IReadOnlyList<string> MainPage, IReadOnlyList<UserGuideArticle> Articles)
     {
@@ -67,6 +85,8 @@ public static class UserGuide
                 if (article.Where.Length == 0) problems.Add($"'{article.Title}' has no Where.");
                 if (article.Lead.Length == 0) problems.Add($"'{article.Title}' has no lead paragraph.");
                 foreach (var link in article.Links.Where(link => Find(link) is null)) problems.Add($"'{article.Title}' links to '{link}', which is not an article.");
+                foreach (var (file, _) in article.Images.Where(image => UserGuide.Image(image.File) is null))
+                    problems.Add($"'{article.Title}' shows '{file}', which is not built into the app (docs/user-guide/images).");
             }
             foreach (Match match in LinkPattern.Matches(string.Join("\n", MainPage)))
                 if (Find(match.Groups[1].Value) is null) problems.Add($"The main page links to '{match.Groups[1].Value}', which is not an article.");
