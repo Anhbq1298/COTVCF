@@ -5,6 +5,8 @@
 **Baseline:** master `f80b18a3fb3e39baa67cea4f1199a6e6702a5e33`; companion case plan on `plan/load-case-state-architecture`.
 **Status:** sourced *implementation specification*; no modal code or reviewer-accepted formula currently released.
 
+**2026-10-13 user-required mass feature:** automatic SW through element self mass at factor 1.0, user-selected extra load patterns/factors from Define → Mass Source, and mandatory generated-SW exclusion. See [MASS_SOURCE_IMPLEMENTATION_PLAN.md](MASS_SOURCE_IMPLEMENTATION_PLAN.md) for TODOs, physical rule and exact code map; this is part of Modal MVP.
+
 ## Evidence levels
 
 - `INSPECTED_HTML_BEHAVIOR`: original vendor online help supports feature semantics, **not** its unpublished internal matrix.
@@ -42,7 +44,7 @@ Use `SOURCE_VERIFIED` only after actual independent engineering sign-off; a sing
 |---|---|---|---|---|
 | ALG-10A | Element physical mass: `m=ρAL × mass modifier`; DOFs translational, rho [t/m³], A [m²], L [m] | C-MASS-01, O-MASS-01 (behavior); dimensionally from mechanics | DERIVED_PENDING_REVIEW | Hand arithmetic with material rho, modifiers; member split invariance; origin and units verified. |
 | ALG-10B | Lumped beam/cable mass: two end nodes each `m/2` for a uniform two-noded element | O-MASS-01 distinguishes lumped/consistent; exact entry convention not derivation there | OPEN_FORMULA | Inspect FE mass-lumping derivation/source; model with interior joint vs unsplit, independent OpenSees lumped mass. |
-| ALG-10C | Selected gravity loads converted to inertial mass `m=W/g`; avoid prestress/self-weight duplications | C-MASS-01, C-MASS-02 | INSPECTED_HTML_BEHAVIOR; implementation discretization OPEN | Independent load equivalence and mapping; g unit check, mass signs, negative mass response, self-weight double-count. |
+| ALG-10C | **MVP** user-selected additional gravity patterns converted to inertial mass `m=α W_explicit/g`; all generated SW excluded because auto self mass is already included | C-MASS-01, C-MASS-02 | INSPECTED_HTML_BEHAVIOR; implementation discretization OPEN | Independent load equivalence and mapping; g unit check, mass signs, negative mass response, self-weight double-count. |
 | ALG-10D | Consistent 3D frame mass `M_e=∫ρA NᵀN dx` with EB interpolations | Classical FEM; source passage not yet inspected | OPEN_FORMULA | Compare local 12×12 entries, sign/symmetry/PSD and local-global rotations; exact dynamic end-release treatment. |
 | ALG-11A | `K φ = λ M φ`, `λ=ω²`, `f=ω/(2π)`, `T=1/f` when λ positive | O-MOD-01 eigen eq; standard harmonic substitution | INSPECTED_FORMULA for eigenproblem; frequency derivation reviewer pending | 1/2 DOF analytically, units kN–m–t; residual of each eigenpair on original DOFs. |
 | ALG-11B | Reduce explicit supports/inactive components using native DOF mapping, not by adding supports | Existing ModelCompiler contract; general FEM constraints | DERIVED_PENDING_REVIEW | 2D vs 3D benchmark, full six DOF recovery, inactive directions stay inactive. |
@@ -115,3 +117,33 @@ For consistent mass and sparse solvers, use additional IDs rather than treating 
 ## Mandatory status statement for engineering report
 
 "Modal analysis uses the eigenvalue solution of the explicitly documented model mass and reference stiffness. Reported frequencies/mode shapes describe small-amplitude free vibration about that reference state. The selected mass formulation, parent stiffness, active DOFs, supported element types, limitations, numerical residuals and source review status are listed in this report. It does not by itself constitute a seismic response-spectrum or dynamic design verification."
+
+## Mass Source mandatory implementation evidence — 2026-10-13
+
+CSI SAP2000 Mass Source [C-MASS-01] explicitly describes a named default source, material self mass and scaled specified load patterns, downward global Z / g, and warns that selecting load patterns that include selfweight alongside Element Self Mass can double-count it. CSI ETABS [C-MASS-02] documents its corresponding Define → Mass Source UI and volume × mass density. SAP2000 Define Load Patterns [C-LP-01] explains how a Self-Weight Multiplier generates static gravity loads. OpenSees modalProperties [O-MOD-01] describes assembled mass matrices and total/free mass inventories.
+
+**User-mandated MCOTiS policy (not published CSI behavior):**
+- [ ] Structural Element Self Mass auto-ON and fixed at multiplier 1.0, obtained from material MassDensity and mass modifiers (not from the SW load pattern).
+- [ ] Selected SDL/DEAD/LL/etc patterns add **only explicitly assigned downward gravity loading converted / g**. Generated selfweight in any selected pattern is excluded automatically using provenance and SelfWeightMultiplier; no brittle pattern-name lookup.
+- [ ] A mixed SW+SDL pattern must give material selfmass once plus SDL/g, not selfmass plus total SW+SDL/g.
+- [ ] No automatic extra patterns; mass multiplier not copied from static ULS load factor.
+- [ ] If explicit/generated loads cannot be separated for an imported model, refuse that mass-conversion input instead of guessing.
+- [ ] No silent absolute-value or negative-mass clipping; name pattern, member/joint and contribution.
+- [ ] Selected patterns and factors are part of Modal MVP, not a deferred improvement.
+
+| New record | Formula/behavior | Source classification | Verification |
+|---|---|---|---|
+| MASS-ALG-01 | Auto element selfmass m=rho A L × mass modifier (factor 1.0) | CSI material selfmass documented; exact lumping/release operator needs review | MASS-01,02, frame subdivision, material gamma/rho independence |
+| MASS-ALG-03 | Signed explicit assigned gravity Wdown/g; factors alpha | CSI SAP Detailed Calculations, ETABS Mass Source | MASS-03,04,08, exact sign/local projection |
+| MASS-ALG-04 | Exclude generated selfweight from selected pattern, regardless of source name or multiplier | CSI warns of double counting; exclusion is a **MCOTiS application rule** | MASS-05,06 mixed pattern and SW factor 0.5/1.0/2.0 |
+| MASS-ALG-05 | Frame load-to-lumped nodal mass: mI=alpha/g ∫(1-s/L)w(s)ds, mJ=alpha/g ∫(s/L)w(s)ds | **DERIVED_PENDING_REVIEW**; not claimed CSI formula | Exact integration, mass conservation, centroid/split invariance, independent source |
+| MASS-PERSIST-01 | Named/default source stable IDs in .mcotis and .cotfem.db | MCOTiS software requirement, not CSI numerical behavior | MASS-09 schema roundtrip and rename |
+| MASS-UX-01 | Define → Mass Source tab, SW locked and pattern factors editable | User requirement inspired by CSI mass source concept | WPF workflow, 2D/3D model, default import |
+
+Reference URLs:
+- [CSI SAP2000 Mass Source](https://docs.csiamerica.com/help-files/sap/Menus/Define/Mass_Source.htm)
+- [CSI ETABS Mass Source](https://docs.csiamerica.com/help-files/etabs/Menus/Define/Mass_Source.htm)
+- [CSI SAP2000 Define Load Patterns](https://docs.csiamerica.com/help-files/sap/Menus/Define/Load_Pattern/Define_Load_Patterns.htm)
+- [OpenSees modalProperties](https://opensees.github.io/OpenSeesDocumentation/user/manual/analysis/modalProperties.html)
+
+**Evidence limitation:** live public reference pages establish behavior and published modal participation relationships. They do not establish MCOTiS's detailed frame-weight lumping as numerically verified. This must pass an independent derivation/reference and external benchmark before release.
