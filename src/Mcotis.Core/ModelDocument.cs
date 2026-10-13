@@ -19,7 +19,8 @@ internal sealed record DocumentData(
     ImmutableDictionary<ObjectId, CableAssignment> CableAssignments,
     ImmutableDictionary<ObjectId, ShellAssignment> ShellAssignments,
     ImmutableDictionary<ObjectId, LoadAssignment> Loads,
-    AnalysisSettings Settings)
+    AnalysisSettings Settings,
+    ImmutableDictionary<ObjectId, MassSource> MassSources)
 {
     public static DocumentData Empty { get; } = new(
         ImmutableDictionary<ObjectId, PointObject>.Empty, ImmutableDictionary<ObjectId, FrameObject>.Empty,
@@ -30,7 +31,7 @@ internal sealed record DocumentData(
         ImmutableDictionary<ObjectId, LoadCombination>.Empty, ImmutableDictionary<ObjectId, Restraint>.Empty,
         ImmutableDictionary<ObjectId, FrameAssignment>.Empty, ImmutableDictionary<ObjectId, CableAssignment>.Empty,
         ImmutableDictionary<ObjectId, ShellAssignment>.Empty, ImmutableDictionary<ObjectId, LoadAssignment>.Empty,
-        AnalysisSettings.Default);
+        AnalysisSettings.Default, ImmutableDictionary<ObjectId, MassSource>.Empty);
 }
 
 /// <summary>The engineering model: every object, definition, assignment and load of one structure, and nothing of
@@ -73,6 +74,8 @@ public sealed class ModelDocument
     public ImmutableDictionary<ObjectId, LoadPattern> LoadPatterns => Data.LoadPatterns;
     public ImmutableDictionary<ObjectId, LoadCase> LoadCases => Data.LoadCases;
     public ImmutableDictionary<ObjectId, LoadCombination> LoadCombinations => Data.LoadCombinations;
+    /// <summary>The masses modal cases read (<see cref="ModalEigenOptions.MassSourceId"/>).</summary>
+    public ImmutableDictionary<ObjectId, MassSource> MassSources => Data.MassSources;
     /// <summary>Points with a restraint; a point without an entry is free.</summary>
     public ImmutableDictionary<ObjectId, Restraint> Restraints => Data.Restraints;
     /// <summary>Frames with an assignment other than <see cref="FrameAssignment.Default"/>.</summary>
@@ -109,13 +112,15 @@ public sealed class ModelDocument
             : Data.LoadPatterns.TryGetValue(id, out var pattern) ? pattern
             : Data.LoadCases.TryGetValue(id, out var loadCase) ? loadCase
             : Data.LoadCombinations.TryGetValue(id, out var combination) ? combination
+            : Data.MassSources.TryGetValue(id, out var massSource) ? massSource
             : null;
         kind = found switch
         {
             PointObject => ObjectKind.Point, FrameObject => ObjectKind.Frame, CableObject => ObjectKind.Cable, ShellObject => ObjectKind.Shell,
             MaterialDefinition => ObjectKind.Material, FrameSectionDefinition => ObjectKind.FrameSection,
             CableSectionDefinition => ObjectKind.CableSection, ShellSectionDefinition => ObjectKind.ShellSection,
-            LoadPattern => ObjectKind.LoadPattern, LoadCase => ObjectKind.LoadCase, _ => ObjectKind.LoadCombination,
+            LoadPattern => ObjectKind.LoadPattern, LoadCase => ObjectKind.LoadCase, MassSource => ObjectKind.MassSource,
+            _ => ObjectKind.LoadCombination,
         };
         name = found?.Name ?? "";
         return found is not null;

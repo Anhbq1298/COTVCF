@@ -228,7 +228,7 @@ public sealed class VcfOptimizationRunner : IOptimizationRunner
                 activeDofs: inputs.ActiveDofs, cableDofs: inputs.CableDofs);
             if (runs.Count == 0) return Failed(failure.Message ?? "The case did not reach equilibrium.");
             var run = runs[0];
-            IReadOnlyDictionary<string, FemAnalysisResult> results = run.Results ?? new Dictionary<string, FemAnalysisResult> { [plan.ResultNames.FirstOrDefault() ?? "Result"] = run.Result };
+            IReadOnlyDictionary<string, FemAnalysisResult> results = run.Results ?? new Dictionary<string, FemAnalysisResult> { [plan.PrimaryResultName] = run.Result };
             if (settings.DeflectionResult is { } wanted)
             {
                 var match = results.Keys.FirstOrDefault(key => string.Equals(key, wanted, StringComparison.OrdinalIgnoreCase));

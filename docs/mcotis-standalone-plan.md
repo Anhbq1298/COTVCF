@@ -3,10 +3,11 @@
 Bản chỉnh ngày 2026-10-12. Thay cho bản plan 10 mục trước đó, và thay cho các quyết định về Lock/Unlock, SQLite và
 "stable ID theo tên" trong [fem-database-plan.md](fem-database-plan.md) đối với hệ mới.
 
-**Cập nhật UI legacy (2026-10-13):** theo yêu cầu mới, các trang MB 01–05 đã rời khỏi ứng dụng và được
-giữ đông băng tại `archive/Mcotis.Desktop/LegacyTabs01To05/`. Năm slot rỗng chỉ giữ index của các trang còn lại;
-không được khôi phục navigation vào slot 0–4. Kiểu dữ liệu/config cũ còn lại chỉ để mở file cũ và phục vụ
-VCF/TAS/optimization hiện hành trong khi quá trình chuyển sang hệ standalone tiếp tục.
+**Cập nhật UI legacy (2026-10-13):** toàn bộ workspace MB đã rời khỏi ứng dụng. Các trang 01–05 được giữ đông
+băng tại `archive/Mcotis.Desktop/LegacyTabs01To05/`; các trang 06, 06A, 08 cùng menu và entry point của chúng ở
+`archive/Mcotis.Desktop/LegacyMb/`. `WorkflowTabs` chỉ còn FEM hoạt động tại index 7; các slot 0–6 và 8 là placeholder
+rỗng để không làm đổi index. Không được khôi phục navigation vào các slot đó. Optimization VCF/TAS độc lập vẫn là
+menu hoạt động cuối cùng. Kiểu dữ liệu/config cũ chỉ còn để mở file cũ hoặc phục vụ code hiện hành còn phụ thuộc.
 
 **Cập nhật 3D (2026-10-12):** theo yêu cầu mới, tầng analysis sẽ dùng chung model XYZ và DOF presets cho 3D/XZ/XY/YZ,
 thay cho việc port nguyên solver planar. Foundation đã có: `Mcotis.Analysis.ModelCompiler`, DOF settings lưu ở schema 2,
@@ -29,12 +30,32 @@ và bảng kết quả (kể cả bảng cable). Chưa phải desktop migration 
 [analysis/foundation-status.md](analysis/foundation-status.md), [implementation plan](analysis/IMPLEMENTATION_PLAN.md),
 [literature register](analysis/literature.md). P-Delta và modal vẫn là các giai đoạn sau.
 
+**Cập nhật load case (2026-10-13, người dùng: "implement this plan" / "continue this plan", phạm vi PR-01 đến PR-03 của
+[analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md](analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md)):** load case nay có bốn loại
+(Linear Static, Nonlinear Static, Initial P-Delta, Modal Eigen) và hai tham chiếu tách biệt — case mà nó *tiếp tục từ*
+(`InitialCaseId`) và case mà nó *lấy stiffness* (`StiffnessSourceCaseId`). Có thêm `MassSource`, `LoadCaseRules` (một bộ
+quy tắc dùng chung cho cả hai cửa sổ) và `Mcotis.Analysis.Cases.CaseDependencyPlanner` (thứ tự chạy, prerequisite, case
+bị chặn khi case trước hỏng). File: `.mcotis` schema 4, `.cotfem.db` schema 2, `.cotfem.json` version 2; file cũ được
+nâng cấp trong bộ nhớ khi mở, giữ nguyên ý nghĩa, ID, pattern và hệ số. **Chưa có phép tính mới nào**: P-Delta, modal,
+linear static trên stiffness của case khác và iteration controls riêng của case đều bị từ chối khi Run kèm lý do —
+không có fallback ngầm về phân tích bậc nhất. Ở cửa sổ chính, form Load Case Data nay định nghĩa đủ bốn loại và đổi
+trường theo loại: nonlinear / Initial P-Delta dùng **Continue from**, linear / modal dùng **Stiffness from**; modal có
+mass source (model chưa có thì được đề xuất `MS1` = khối lượng bản thân) và số mode, nonlinear có geometric
+nonlinearity và controls riêng. Trường không thuộc loại đang chọn không tham gia vào case. Loại chưa được giải ghi rõ
+"Unavailable — verification pending"; case mới thuộc loại đó được thêm với Run tắt. Set Load Cases to Run hiển thị run
+plan (`CaseExecutionCoordinator` → `CaseDependencyPlanner`): Requested / Prerequisite, phụ thuộc, khả dụng.
+`FemLoadPlan.Build` chạy theo plan đó, **theo thứ tự của bảng Load Cases**; case không tick nhưng được case khác tiếp tục
+từ nay được giải và liệt kê như một prerequisite (trước đây chỉ cộng load), kết quả các case còn lại không đổi.
+`PDELTA_GRAVITY → LIN_WIND` không cộng load của PDELTA vào WIND. Solver vẫn nhận mỗi case nối tiếp dưới dạng load cộng
+dồn (CASE-01); state transfer là PR-04, bước tiếp theo, còn bị chặn bởi literature gate (ALG-07, ALG-08). Native
+workspace chưa có form load case.
+
 ## 0. Định hướng đã chốt
 
 | Nội dung | Quyết định (người dùng, 2026-10-12) |
 |---|---|
 | SAP2000 / CSI | Bỏ qua hoàn toàn. Không import, không export, không có giai đoạn tích hợp CSI. Code SAP hiện có chỉ để tham khảo, không mở rộng. |
-| Các trang MB | Chỉ để tham khảo. Giữ nguyên hành vi, không refactor, không nối vào hệ mới. Menu **MB** nằm cuối thanh menu, sau một vạch ngăn. |
+| Các trang MB | Đã archive toàn bộ, không còn menu hay trang MB hoạt động. Chỉ giữ source đông băng để tham khảo; không nối vào hệ mới. |
 | Hệ mới | Các project thư viện riêng trong `src/` (`Mcotis.Core`, `Mcotis.Application`, `Mcotis.Persistence`, `Mcotis.Analysis`), không phụ thuộc app desktop, WPF, SQLite hay CSI. App hiện tại là `src/Mcotis.Desktop`, vẫn chạy cho đến khi từng tính năng được chuyển sang. |
 
 Hệ quả: mọi mục của plan cũ nói về CSI service, version adapter, Import Report và "Save gọi SAP" đều rời khỏi phạm vi.
@@ -97,7 +118,8 @@ Hệ quả: mọi mục của plan cũ nói về CSI service, version adapter, I
 | `ShellSectionDefinition` | Material, loại, chiều dày |
 | Assignments (tách khỏi geometry) | Restraint theo point; section, releases, local axis, modifiers theo frame; section, modifiers (area / mass / weight) theo cable; section, local axis theo shell |
 | Loads | Point load, frame distributed / point load, cable target force, shell uniform load — mỗi load thuộc một pattern |
-| Load case | Loại, components (pattern × hệ số), initial case, Run, fit cable target forces |
+| Load case | Loại (`CaseKind`: LinearStatic / NonlinearStatic / InitialPDelta / ModalEigen), components (pattern × hệ số), initial case (case nonlinear mà nó tiếp tục từ), stiffness source (case nonlinear mà case linear / modal lấy stiffness), geometric nonlinearity (None / PDelta), controls riêng (load steps, iterations, dung sai), modal options (mass source, số mode), Run, fit cable target forces |
+| Mass source | ID, Name, có tính khối lượng bản thân hay không — dữ liệu cho modal; chưa có phép tính nào đọc nó |
 | Combination | Terms (case hoặc combination × hệ số), loại |
 | Analysis settings | Dung sai và số vòng fit cáp, số đoạn mesh, cable sag, DOF đang bật, DOF của nút cable (mặc định UX UY UZ) |
 
@@ -105,7 +127,9 @@ Hệ quả: mọi mục của plan cũ nói về CSI service, version adapter, I
 
 `DocumentValidator` chặn: tọa độ không hữu hạn; frame hoặc cable thiếu điểm đầu hoặc dài bằng 0; shell dưới 3 điểm, lặp điểm, suy
 biến, biên tự cắt (shell vênh chỉ là cảnh báo); tham chiếu không tồn tại; load đặt sai loại object; vòng lặp trong
-initial case hoặc combination; tên trùng. Một frame chưa gán section vẫn là document hợp lệ — đó là việc của
+initial case hoặc combination; tên trùng; và các quy tắc theo loại case (`LoadCaseRules`): case linear không tiếp tục
+từ case khác, case modal không có load, chỉ case nonlinear / initial P-Delta mới được tiếp tục từ hoặc cho mượn
+stiffness, không case nào phụ thuộc vào chính nó, combination không lấy case modal. Một frame chưa gán section vẫn là document hợp lệ — đó là việc của
 **solver capability validator** (giai đoạn 4), tách riêng.
 
 ## 4. Cấu trúc solution
@@ -166,7 +190,7 @@ chạy model có Shell và nói rõ lý do.
 
 ## 7. Checks
 
-`dotnet run --project tests/Mcotis.Checks -- --full` — full verification (historically 2904 checks), không cần SAP2000, WPF hay database:
+`dotnet run --project tests/Mcotis.Checks -- --full` — full verification (3017 checks ngày 2026-10-13), không cần SAP2000, WPF hay database:
 
 | Nhóm | Nội dung |
 |---|---|
@@ -176,6 +200,7 @@ chạy model có Shell và nói rõ lý do.
 | Commands | Change set, revision, Undo/Redo, dirty state, giới hạn history |
 | Result state | Hash bỏ qua tên và thứ tự dựng; current / stale / failed; snapshot không bị edit ảnh hưởng |
 | Native file | Round-trip; Save đúng dữ liệu đang thấy; Open lỗi giữ nguyên model; file thiếu/thừa field bị từ chối; migration không ghi file gốc; atomic save |
+| Load cases | Model mẫu của plan (NL_PRET → PDELTA_GRAVITY → LIN_WINDX / MODES_PD, các nhánh nonlinear độc lập NL_SLS / NL_ULS / NL_ALTERNATE) và run graph của nó: thứ tự, prerequisite, vòng lặp, case bị chặn; quy tắc từng loại; hash; những gì solver từ chối (`static.case.*`); schema 4 round-trip và nâng cấp một file schema 3 thật |
 | DOF compilation | Full 3D/plane/custom masks, deterministic mapping, support loads, failed compilation, immutable snapshot, schema-1 migration |
 | Spatial static | Ma trận 12×12 kiểm bằng tích phân độc lập, lời giải giải tích, cân bằng toàn cục, các trường hợp từ chối, đối chiếu OpenSeesPy (12 model) |
 | General static | Frame chia tại điểm nằm trên nó, cable tension-only, target force (một cable, hai cable tương tác, hai cable nối tiếp), staged case, sag so với lời giải kín và catenary chính xác, xoay cả kết cấu trong không gian, các trường hợp từ chối, đối chiếu OpenSeesPy (4 model có cable, 11 lời giải) |
@@ -185,6 +210,8 @@ chạy model có Shell và nói rõ lý do.
 `dotnet run --project tests/Mcotis.Desktop.Checks -- --general-solver` đối chiếu phép phân tích của app (`FemSolver` →
 `StaticSolver`) với solver planar đã archive trên cùng dữ liệu đầu vào: một cable truss và default model như app chạy.
 `--fem` (58 checks lời giải kín của app) và `--fem-sap` (study SAP2000 đã lưu) nay cũng chạy qua solver tổng quát.
+`--fem-schema` kiểm tra configuration của app ở schema 2: nâng cấp một `.cotfem.db` schema 1 và một `.cotfem.json`
+version 1 thật (ID, pattern, hệ số, revision không đổi), bốn loại case qua cả hai file, các trường hợp bị từ chối.
 
 Còn thiếu so với danh sách của plan cũ: UX (Cancel dialog, selection đồng bộ) — thuộc giai đoạn 6.
 
@@ -192,8 +219,8 @@ Còn thiếu so với danh sách của plan cũ: UX (Cancel dialog, selection đ
 
 1. **Tên object do VCF generator sinh**: giữ quy ước theo vai trò hiện tại (`TTrPt001`, `BTrPt…`, `Cable9a-2`) hay
    chuyển sang `P1` / `F1` / `C1`. Hệ mới hỗ trợ cả hai; cần chốt trước giai đoạn 5.
-2. **Các lối vào SAP/MB còn nằm ngoài menu MB**: File → Read FEM Properties from SAP,
-   Post-Processing → Study Reports…, nút *Get From SAP2000* trong Define Materials / Sections. Hiện giữ nguyên;
-   Run Study / Cancel Study đã rời khỏi menu cùng các trang MB 01–05.
+2. **Các lối vào SAP còn lại**: File → Read FEM Properties from SAP và nút *Get From SAP2000* trong Define
+   Materials / Sections hiện giữ nguyên. Toàn bộ menu/trang MB, Study Reports, Print All Reports và Run Study /
+   Cancel Study đã rời khỏi UI hoạt động.
 3. **Save As và document ID**: bản sao giữ hay đổi `DocumentId` — quyết định cùng results store (giai đoạn 7).
 4. **Tendon**: chưa có trong model. Khi cần sẽ là một object riêng như Cable, không phải một loại Frame.

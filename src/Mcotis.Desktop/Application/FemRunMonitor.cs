@@ -61,11 +61,13 @@ public sealed class FemRunMonitor(Func<DateTime>? clock = null) : IProgress<FemE
     private int active, solved, restrained;
     private string? message;
 
-    private sealed class CaseState(int number, string name, bool fitStage)
+    private sealed class CaseState(int number, string name, bool fitStage, string? remark = null)
     {
         public readonly int Number = number;
         public readonly string Name = name;
         public readonly bool FitStage = fitStage;
+        /// <summary>Said when the case starts: why the run solves a case that is not set to run.</summary>
+        public readonly string? Remark = remark;
         public readonly List<FemRunLogEntry> Log = [];
         public FemCaseStatus Status = FemCaseStatus.Pending;
         public DateTime? Started, Ended;
@@ -86,12 +88,14 @@ public sealed class FemRunMonitor(Func<DateTime>? clock = null) : IProgress<FemE
     }
 
     /// <summary>Starts the run: the model, and the solves it will make, in order — they wait as Pending.</summary>
-    public void Begin(FemRunModelInfo runModel, IEnumerable<(string Case, bool FitStage)> planned)
+    /// <param name="remarks">By case: what its log says first — a case the run needs but that is not set to run.</param>
+    public void Begin(FemRunModelInfo runModel, IEnumerable<(string Case, bool FitStage)> planned, IReadOnlyDictionary<string, string>? remarks = null)
     {
         lock (gate)
         {
             cases.Clear();
-            foreach (var (name, fitStage) in planned) cases.Add(new(cases.Count + 1, name, fitStage));
+            foreach (var (name, fitStage) in planned)
+                cases.Add(new(cases.Count + 1, name, fitStage, !fitStage && remarks is not null && remarks.TryGetValue(name, out var remark) ? remark : null));
             model = runModel;
             status = FemRunStatus.Running;
             started = lastEnded = now();
@@ -115,7 +119,8 @@ public sealed class FemRunMonitor(Func<DateTime>? clock = null) : IProgress<FemE
             case FemEquilibriumState.Unstable: return FemCaseStatus.NumericalInstability;
             case FemEquilibriumState.Converged:
                 bool leftOut = report.ActiveDofs - report.SolvedDofs - report.RestrainedDofs > 0;
-                return reported || leftOut || report.Outcome is { FitMet: false } ? FemCaseStatus.ConvergedWithWarnings : FemCaseStatus.Converged;
+                return reported || leftOut || report.Outcome is { FitMet: false } || report.ModelWarnings.Count > 0
+                    ? FemCaseStatus.ConvergedWithWarnings : FemCaseStatus.Converged;
             default:
                 // The solver factorized the stiffness and then withheld the result because its own accuracy checks
                 // failed. With degrees of freedom reported for lost accuracy, that is a numerical refusal.
@@ -144,6 +149,11 @@ public sealed class FemRunMonitor(Func<DateTime>? clock = null) : IProgress<FemE
                 item.Started = lastEnded ?? time;
                 item.Status = FemCaseStatus.Running;
                 Add(item, item.Started.Value, "Analysis started.");
+                if (item.Remark is not null) Add(item, item.Started.Value, item.Remark);
+                // what the solver said of the model the case is solved on: a joint held by a degree-of-freedom option
+                foreach (string warning in report.ModelWarnings.Take(MaximumDiagnosticLines)) Add(item, item.Started.Value, warning, FemLogLevel.Warning);
+                if (report.ModelWarnings.Count > MaximumDiagnosticLines)
+                    Add(item, item.Started.Value, $"{Count(report.ModelWarnings.Count - MaximumDiagnosticLines, "more warning", "more warnings")} of the same kind.", FemLogLevel.Warning);
             }
             if (report.SolvedDofs > 0) (active, solved, restrained) = (report.ActiveDofs, report.SolvedDofs, report.RestrainedDofs);
             fraction = Math.Max(fraction, report.Fraction);
@@ -220,7 +230,12 @@ public sealed class FemRunMonitor(Func<DateTime>? clock = null) : IProgress<FemE
                 Add(item, time, $"Equilibrium reached in {Count(report.Iteration, "iteration", "iterations")}: every joint within the accepted out-of-balance.");
             if (report.Outcome is { } outcome)
             {
-                Add(item, time, $"Stiffness at the {(report.Linear ? "solution" : "converged state")} factorized: positive definite (smallest scaled pivot {Number(outcome.SmallestPivot)}).");
+                string where = report.Linear ? "solution" : "converged state";
+                if (report.Stability is { MovementsHeld: > 0 } held)
+                    Add(item, time, $"Stiffness at the {where}: singular — {Count(held.MovementsHeld, "movement", "movements")} without stiffness, on which the loads of the case do no work. " +
+                        $"Held, and the rest factorized (smallest scaled pivot {Number(outcome.SmallestPivot)}).", FemLogLevel.Warning);
+                else
+                    Add(item, time, $"Stiffness at the {where} factorized: positive definite (smallest scaled pivot {Number(outcome.SmallestPivot)}).");
                 Add(item, time, $"Internal forces checked: relative resultant {Number(outcome.ResultantError)}.");
                 if (item.FitStage && outcome.FitDeviationPercent is { } deviation)
                 {
@@ -261,18 +276,22 @@ public sealed class FemRunMonitor(Func<DateTime>? clock = null) : IProgress<FemE
                 (FemStabilityText.Largest(stability) is { } largest ? $"; largest loss of accuracy {largest}." : "."));
             return;
         }
-        var level = stability.Instabilities > 0 ? FemLogLevel.Error : FemLogLevel.Warning;
+        // a case solved with a movement held has its result: what is listed of it is a warning, not a failure
+        var level = stability.Instabilities > 0 && stability.MovementsHeld == 0 ? FemLogLevel.Error : FemLogLevel.Warning;
         Add(item, time, $"Numerical stability checked{where}: {FemStabilityText.Summary(stability)}; " +
             $"{Count(stability.Instabilities, "instability", "instabilities")}, {Count(stability.Warnings, "accuracy warning", "accuracy warnings")}.", level);
+        if (stability.MovementsHeld > 0)
+            Add(item, time, "The case is solved with " + (stability.MovementsHeld == 1 ? "that movement" : "those movements") +
+                " held: displacements are determined up to it; forces are not affected. The degrees of freedom that move in it are listed.", level);
         var reported = stability.Joints.SelectMany(joint => joint.Reported).ToArray();
         foreach (var dof in reported.Take(MaximumDiagnosticLines))
-            Add(item, time, FemStabilityText.Message(dof, stability), dof.Severity == StabilitySeverity.Severe ? FemLogLevel.Error : FemLogLevel.Warning);
+            Add(item, time, FemStabilityText.Message(dof, stability), dof.Severity == StabilitySeverity.Severe && stability.MovementsHeld == 0 ? FemLogLevel.Error : FemLogLevel.Warning);
         if (reported.Length > MaximumDiagnosticLines)
             Add(item, time, $"{Count(reported.Length - MaximumDiagnosticLines, "more degree of freedom is", "more degrees of freedom are")} listed in the table.", level);
     }
 
     /// <summary>Ends the run. <paramref name="completed"/>: it has its results. A case still running was stopped; a
-    /// case still waiting was not run.</summary>
+    /// case still waiting was not run — and the log of each says why, with the reason the run gave (<paramref name="note"/>).</summary>
     public void End(bool completed, bool cancelled = false, string? note = null)
     {
         lock (gate)
@@ -288,12 +307,14 @@ public sealed class FemRunMonitor(Func<DateTime>? clock = null) : IProgress<FemE
                     item.Ended = time;
                     item.Note = cancelled ? "Stopped: the analysis was cancelled." : "Stopped: the run ended before this case had finished.";
                     Add(item, time, item.Note, FemLogLevel.Warning);
+                    if (!cancelled && note is not null) Add(item, time, note, FemLogLevel.Error);
                 }
                 else if (item.Status == FemCaseStatus.Pending)
                 {
                     item.Status = FemCaseStatus.Cancelled;
                     item.Note = cancelled ? "Not run: the analysis was cancelled." : "Not run: the run stopped before this case.";
-                    item.Version++;
+                    Add(item, time, item.Note, FemLogLevel.Warning);
+                    if (!cancelled && note is not null) Add(item, time, note, FemLogLevel.Error);
                 }
             }
             bool failed = !completed || cases.Any(item => item.Status is FemCaseStatus.NotConverged or FemCaseStatus.NumericalInstability or FemCaseStatus.Failed);

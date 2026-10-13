@@ -23,7 +23,7 @@ public sealed class FemRunCaseViewModel : Observable
 {
     private static readonly CultureInfo Plain = CultureInfo.InvariantCulture;
     private FemRunCase? shown;
-    private bool isExpanded, opened;
+    private bool isExpanded, isTechnicalExpanded, opened;
     private string elapsedText = "";
 
     public int Number { get; private set; }
@@ -31,8 +31,15 @@ public sealed class FemRunCaseViewModel : Observable
     public FemCaseStatus Status { get; private set; }
     public string StatusText { get; private set; } = "";
     public string StatusGlyph { get; private set; } = "";
+    /// <summary>What the closed case says after its status: what was found of its numerical stability, or why there
+    /// is nothing to say. "Instabilities: 0" is the solver's count of severe instabilities in a case it assessed —
+    /// not a residual, not digits lost; a case it did not assess reads N/A, never 0.</summary>
+    public string DiagnosticText { get; private set; } = "";
+    public bool HasDiagnostic => DiagnosticText.Length > 0;
+    /// <summary>The header of the case in one line: status, then the diagnostic.</summary>
+    public string HeaderText => HasDiagnostic ? $"{StatusText}  ·  {DiagnosticText}" : StatusText;
     /// <summary>What the header of the case reads to a screen reader.</summary>
-    public string Summary => $"Load case {Number}, {Name}: {StatusText}";
+    public string Summary => $"Load case {Number}, {Name}: {HeaderText}";
     public string ElapsedText { get => elapsedText; private set => Set(ref elapsedText, value); }
     public bool IsExpanded { get => isExpanded; set => Set(ref isExpanded, value); }
 
@@ -43,6 +50,11 @@ public sealed class FemRunCaseViewModel : Observable
     public string? FailureText { get; private set; }
     public bool HasFailure => !string.IsNullOrEmpty(FailureText);
     public IReadOnlyList<FemRunField> Details { get; private set; } = [];
+    /// <summary>The numbers behind the lines above — measured errors, pivots, resultants — as the solver reported
+    /// them. They are kept out of the way until asked for; nothing of them is left out.</summary>
+    public IReadOnlyList<FemRunField> Technical { get; private set; } = [];
+    public bool HasTechnical => Technical.Count > 0;
+    public bool IsTechnicalExpanded { get => isTechnicalExpanded; set => Set(ref isTechnicalExpanded, value); }
     public IReadOnlyList<FemInstabilityRow> Rows { get; private set; } = [];
     public bool HasRows => Rows.Count > 0;
     public string TableTitle { get; private set; } = "";
@@ -95,13 +107,18 @@ public sealed class FemRunCaseViewModel : Observable
         StabilityLevel = stability switch
         {
             null or { Passed: true } => FemCellLevel.Normal,
+            // a movement the solver held to solve the case: the case has its result
+            { MovementsHeld: > 0 } => FemCellLevel.Warning,
             { Instabilities: > 0 } => FemCellLevel.Severe,
             _ => FemCellLevel.Warning,
         };
-        InstabilitiesText = stability is null ? "—" : stability.Instabilities.ToString("N0", Plain);
+        // a case that has ended without an assessment has no count: N/A, never 0
+        InstabilitiesText = stability is not null ? stability.Instabilities.ToString("N0", Plain)
+            : item.Status is FemCaseStatus.Pending or FemCaseStatus.Running ? "—" : FemStabilityText.Unavailable;
+        DiagnosticText = Diagnostic(item, last, stability);
         FailureText = item.Note ?? (solved ? null
             : last?.Failure is { } failure ? (last.PrerequisiteFailed ? "The cable target-force fit this case continues from failed. " : "") + failure : null);
-        Details = Describe(item, last, stability, now);
+        (Details, Technical) = Describe(item, last, stability, now);
         Rows = stability is null ? [] : stability.Joints.Select(joint => Row(joint, stability)).ToArray();
         TableTitle = stability is null || Rows.Count == 0 ? ""
             : $"NUMERICAL STABILITY — {Rows.Count.ToString("N0", Plain)} AFFECTED {(Rows.Count == 1 ? "JOINT" : "JOINTS")}";
@@ -116,27 +133,61 @@ public sealed class FemRunCaseViewModel : Observable
         }
     }
 
-    private static IReadOnlyList<FemRunField> Describe(FemRunCase item, FemEquilibriumProgress? last, FemStabilityReport? stability, DateTime now)
+    private static string Counted(int count, string one, string many) => $"{count.ToString("N0", Plain)} {(count == 1 ? one : many)}";
+
+    /// <summary>The words after the status in the header of a case. Every count is the solver's; a case whose
+    /// stability it did not assess says so.</summary>
+    private static string Diagnostic(FemRunCase item, FemEquilibriumProgress? last, FemStabilityReport? stability)
     {
-        var fields = new List<FemRunField>();
+        string instabilities = "Instabilities: " + (stability is null ? FemStabilityText.Unavailable : stability.Instabilities.ToString("N0", Plain));
+        switch (item.Status)
+        {
+            case FemCaseStatus.Pending or FemCaseStatus.Running:
+                return "";
+            case FemCaseStatus.Cancelled:
+                return item.Started is null ? "Not run" : "Stopped";
+            case FemCaseStatus.Converged:
+                return instabilities;
+            case FemCaseStatus.ConvergedWithWarnings:
+                var said = new List<string> { instabilities };
+                if (stability is { MovementsHeld: > 0 }) said.Add(Counted(stability.MovementsHeld, "unloaded movement held", "unloaded movements held"));
+                if (stability is { Warnings: > 0 }) said.Add("Accuracy warnings: " + stability.Warnings.ToString("N0", Plain));
+                if (last?.Outcome is { FitMet: false }) said.Add("Cable target forces not met");
+                if (item.LeftOutDofs > 0) said.Add(Counted(item.LeftOutDofs, "rotation left out", "rotations left out"));
+                if (last is { ModelWarnings.Count: > 0 }) said.Add(Counted(last.ModelWarnings.Count, "degree-of-freedom warning", "degree-of-freedom warnings"));
+                return string.Join("  ·  ", said);
+            case FemCaseStatus.NumericalInstability:
+                return stability is null ? instabilities : Counted(stability.ReportedDofs, "affected DOF", "affected DOFs");
+            case FemCaseStatus.NotConverged:
+                return (last is { Iteration: > 0 } ? Counted(last.Iteration, "iteration", "iterations") + "  ·  " : "") + instabilities;
+            default:
+                return last is { PrerequisiteFailed: true } ? "Cable target-force fit failed" : instabilities;
+        }
+    }
+
+    /// <summary>What an open case says of its solution, and — apart — the numbers behind it.</summary>
+    private static (IReadOnlyList<FemRunField> Details, IReadOnlyList<FemRunField> Technical) Describe(FemRunCase item, FemEquilibriumProgress? last, FemStabilityReport? stability, DateTime now)
+    {
+        var (fields, technical) = (new List<FemRunField>(), new List<FemRunField>());
         void Add(string label, string value) => fields.Add(new(label, value));
+        void Measured(string label, string value) => technical.Add(new(label, value));
         static string Number(double value) => value.ToString("0.00E+00", Plain);
-        if (last is null) return fields;
+        if (last is null) return (fields, technical);
         bool measured = last.OutOfBalance is not null, ended = last.State != FemEquilibriumState.Running;
         Add("Analysis type", item.FitStage ? "Nonlinear static, cable forces fitted" : !measured ? "Static" : last.Linear ? "Linear static" : "Nonlinear static");
         if (last.SolvedDofs > 0) Add("Equations solved", last.SolvedDofs.ToString("N0", Plain));
         if (measured && last.Linear)
-            Add("Scaled backward error", $"{Number(last.OutOfBalance!.Value)} (accepted {Number(last.Tolerance!.Value)})");
+            Measured("Scaled backward error", $"{Number(last.OutOfBalance!.Value)} (accepted {Number(last.Tolerance!.Value)})");
         else if (measured)
         {
             bool within = last.OutOfBalance <= last.Tolerance;
             Add("Nonlinear convergence", !ended ? "Iterating" : last.State == FemEquilibriumState.Converged ? "Converged" : within ? "Converged, result withheld" : "Not converged");
             Add("Iterations", last.Iteration.ToString("N0", Plain) + (ended ? "" : " so far"));
             Add("Convergence tolerance", within ? "Satisfied" : "Not satisfied");
-            Add("Out-of-balance", $"{Number(last.OutOfBalance!.Value)} {(last.WorstDof?.StartsWith('R') == true ? "kN·m" : "kN")} (accepted {Number(last.Tolerance!.Value)} kN)");
+            Measured("Out-of-balance", $"{Number(last.OutOfBalance!.Value)} {(last.WorstDof?.StartsWith('R') == true ? "kN·m" : "kN")} (accepted {Number(last.Tolerance!.Value)} kN)");
             Add("Joints in equilibrium", $"{last.JointsInEquilibrium.ToString("N0", Plain)} of {last.Joints.ToString("N0", Plain)}" +
                 (last.JointsInEquilibrium < last.Joints && last.WorstJoint is { } joint ? $" — largest out-of-balance at {joint} {last.WorstDof}" : ""));
-            Add("Load steps", "1 (loads applied in one step)");
+            Measured("Load steps", "1 (loads applied in one step)");
         }
         if (last.FitRun > 0) Add(ended ? "Fitting runs" : "Fitting run", last.FitRun.ToString("N0", Plain));
         if (last.Outcome is { } outcome)
@@ -144,18 +195,21 @@ public sealed class FemRunCaseViewModel : Observable
             if (outcome.FitDeviationPercent is { } deviation)
                 Add("Cable target forces", outcome.FitMet ? $"Met — largest deviation {deviation.ToString("0.######", Plain)} %"
                     : $"Not met — closest pretension used, largest deviation {deviation.ToString("0.###", Plain)} %");
-            Add("Smallest scaled pivot", Number(outcome.SmallestPivot));
-            Add("Resultant of internal forces", $"{Number(outcome.ResultantError)} (relative)");
+            Measured("Smallest scaled pivot", Number(outcome.SmallestPivot));
+            Measured("Resultant of internal forces", $"{Number(outcome.ResultantError)} (relative)");
         }
         if (stability is not null)
         {
-            if (FemStabilityText.Largest(stability) is { } largest) Add("Largest loss of accuracy", largest);
+            if (FemStabilityText.Largest(stability) is { } largest) Measured("Largest loss of accuracy", largest);
             Add("Accuracy warnings", stability.Warnings.ToString("N0", Plain));
-            if (stability.ZeroStiffnessModes > 0) Add("Movements without stiffness", stability.ZeroStiffnessModes.ToString("N0", Plain));
+            if (stability.ZeroStiffnessModes > 0)
+                Add("Movements without stiffness", stability.ZeroStiffnessModes.ToString("N0", Plain) +
+                    (stability.MovementsHeld > 0 ? " — not acted on by the loads: held, and the case solved" : ""));
         }
         if (item.LeftOutDofs > 0) Add("Rotations left out", $"{item.LeftOutDofs.ToString("N0", Plain)} — no stiffness and no load there");
+        if (last.ModelWarnings.Count > 0) Add("Degree-of-freedom warnings", $"{last.ModelWarnings.Count.ToString("N0", Plain)} — a cable joint is held by a degree of freedom that is off, as by a support; see the log");
         if (item.Started is { } started) Add("Elapsed", $"{((item.Ended ?? now) - started).TotalSeconds.ToString("0.00", Plain)} s");
-        return fields;
+        return (fields, technical);
     }
 
     private static FemInstabilityRow Row(FemJointDiagnostic joint, FemStabilityReport report)
@@ -184,7 +238,7 @@ public sealed class FemRunCaseViewModel : Observable
     private static string Note(FemStabilityReport report)
     {
         string legend = $"Digits of accuracy lost by degree of freedom. {FemStabilityText.Inactive} inactive · {FemStabilityText.Restrained} restrained · " +
-            $"{FemStabilityText.Unavailable} no estimate · {FemStabilityText.Infinity} singular. Coordinates in m.";
+            $"{FemStabilityText.Unavailable} no estimate · {FemStabilityText.Infinity} singular. Coordinates of the model as defined, in m.";
         return legend + (report.Stage == StabilityStage.EquilibriumIteration
                 ? $" Found in equilibrium iteration {report.Iteration}: only movements without any stiffness are identified at that point."
             : report.State == StabilityState.Singular ? " A singular stiffness has no estimate for the degrees of freedom outside the movements found."
@@ -278,6 +332,9 @@ public sealed class FemRunMonitorViewModel : Observable
             Cases[index].Apply(snapshot.Cases[index], now);
         }
         if (modelChanged) DescribeModel(snapshot.Model);
+        // the note states the thresholds the solver reported by in this run, not a constant of the window
+        if (snapshot.Cases.Select(item => item.Stability).FirstOrDefault(report => report is not null) is { } assessed)
+            (WarningDigits, SevereDigits) = (assessed.WarningDigits, assessed.SevereDigits);
         int ended = snapshot.Cases.Count(item => item.Status is not (FemCaseStatus.Pending or FemCaseStatus.Running));
         CasesSummary = snapshot.Cases.Count == 0 ? "" : $"{ended.ToString("N0", Plain)} of {snapshot.Cases.Count.ToString("N0", Plain)} ended";
         elapsedText = snapshot.Started is { } started ? Hms((snapshot.Ended ?? now) - started) : "";
@@ -304,7 +361,7 @@ public sealed class FemRunMonitorViewModel : Observable
             Field("Number of Load Combinations", model.Combinations),
         ];
         SupportSummary = model.Supports.Count == 0 ? "No restrained joints"
-            : $"{model.Supports.Count.ToString("N0", Plain)} pin {(model.Supports.Count == 1 ? "support" : "supports")} (UX, UZ restrained; rotation free): {string.Join(", ", model.Supports)}";
+            : $"{model.Supports.Count.ToString("N0", Plain)} pin {(model.Supports.Count == 1 ? "support" : "supports")} (translations restrained; rotations free): {string.Join(", ", model.Supports)}";
         ModelNotes = string.Join("\n", (model.LoadingWarnings > 0
                 ? new[] { $"The loading of the model has {model.LoadingWarnings.ToString("N0", Plain)} warning{(model.LoadingWarnings == 1 ? "" : "s")}; see Define → Load Patterns." } : [])
             .Concat(model.Notes));

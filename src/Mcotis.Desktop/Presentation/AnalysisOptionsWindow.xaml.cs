@@ -7,11 +7,12 @@ using Mcotis.Desktop.Geometry;
 namespace Mcotis.Desktop.Presentation;
 
 /// <summary>Edits a private form. Only Apply/OK calls the supplied commit; Cancel discards uncommitted edits.
-/// <para><c>planar</c> is the main window, whose model spans the XZ plane: its Degrees of Freedom tab offers the
-/// choices that model has — RY for the model, UX and UZ for a joint only cables reach — and shows nothing that could
-/// not be changed (user, 2026-10-12, of a tab of boxes that were all disabled: "tab này hơi thừa"; asked for again on
-/// 2026-10-13, to change degrees of freedom). UX and UZ of the model are not among them: the solver refuses a
-/// translation that is off unless every joint has the same coordinate along it.</para></summary>
+/// <para><c>planar</c> is the main window, whose model lies in one XZ plane. Its Degrees of Freedom tab is the same
+/// as the native workspace's — the presets, the six boxes, those of cable joints, every one a box that can be changed
+/// (user, 2026-10-12, of a tab of boxes that were all disabled: "tab này hơi thừa"; 2026-10-13: set them freely
+/// rather than fixed, "if not proper then report in the log", and "make the planar use 3d as 3d is default"). So the
+/// form refuses no set the model might not be analysable with: the run does, in the run monitor. Only the notes
+/// differ: they say what full 3D means for a model in a plane.</para></summary>
 public partial class AnalysisOptionsWindow : Window
 {
     private readonly Action<AnalysisSettings> commit;
@@ -23,12 +24,10 @@ public partial class AnalysisOptionsWindow : Window
         this.commit = commit; this.planar = planar; current = settings;
         InitializeComponent();
         foreach (var box in Boxes) box.Click += (_, _) => Preset.SelectedIndex = 4;
-        SetMask(planar ? settings.ActiveDofs & DofMask.XZ : settings.ActiveDofs);
+        SetMask(settings.ActiveDofs);
         Preset.SelectedIndex = settings.ActiveDofs switch { DofMask.Full3D => 0, DofMask.XZ => 1, DofMask.YZ => 2, DofMask.XY => 3, _ => 4 };
         Preset.IsEnabled = DofEditors.IsEnabled = CableDofEditors.IsEnabled = editable;
-        // the main window's model is planar: its cable joints move in the plane
-        var cableMask = planar ? settings.CableDofs & DofMask.XZ : settings.CableDofs;
-        for (int i = 0; i < 6; i++) CableBoxes[i].IsChecked = (cableMask & (DofMask)(1 << i)) != 0;
+        for (int i = 0; i < 6; i++) CableBoxes[i].IsChecked = (settings.CableDofs & (DofMask)(1 << i)) != 0;
         Tolerance.Text = settings.CableFitTolerancePercent.ToString(CultureInfo.CurrentCulture);
         Iterations.Text = settings.CableFitMaxIterations.ToString(CultureInfo.CurrentCulture);
         Mesh.Text = settings.FrameMeshSegments.ToString(CultureInfo.CurrentCulture);
@@ -36,22 +35,17 @@ public partial class AnalysisOptionsWindow : Window
         Tolerance.IsEnabled = Iterations.IsEnabled = Mesh.IsEnabled = Sag.IsEnabled = editable;
         ScopeText.Text = "Static analysis of frames and cables. Shell, P-Delta and modal analysis are not available.";
         CableScope.Text = "These settings are used by Run Analysis: the fitting when a load case fits cable target forces, cable sag for every case with cables. The mesh is the number of stations each frame is read at; it changes no joint result." +
-            (planar ? " This window's model is analysed in its XZ plane; the run monitor shows the degrees of freedom of each run." : "");
+            (planar ? " The Run Monitor shows the degrees of freedom of each run." : "");
         if (planar)
         {
-            // Only the choices this model has, each of them a box that can be changed: no preset — there is one plane
-            // — no box for UX and UZ, which stay on, for UY, RX, RZ, or for the rotation of a cable joint.
-            Preset.Visibility = Visibility.Collapsed;
-            foreach (var box in new[] { UX, UZ, UY, RX, RZ, CableUY, CableRX, CableRY, CableRZ }) box.Visibility = Visibility.Collapsed;
-            DofEditors.Rows = CableDofEditors.Rows = 1;
-            DofEditors.Columns = 1;
-            RY.Content = "RY — rotation of the joints";
-            DofNote.Text = "This model spans its XZ plane: UX and UZ are always on, and UY, RX and RZ are not degrees of freedom of it. " +
-                "With RY off no joint turns: the rotation is held at every joint, as by a support — it is not released — " +
-                "and a moment applied to a joint is refused, not dropped.";
-            CableDofNote.Text = "A joint that only cables reach has these degrees of freedom, among those that are on; a cable holds no rotation. " +
-                "A cable gives stiffness along its own line only: a movement left on that nothing else holds — another member or a restraint — " +
-                "makes the model unstable, and the run monitor names the joint. Switching it off here holds it at those joints.";
+            // The same choices as the native workspace. What differs is what they mean for a model that lies in a plane.
+            DofNote.Text = "A degree of freedom that is off is held at every joint, as by a support — not released — and a load on it is refused, not dropped. " +
+                "This model lies in its XZ plane on pin supports that are all on one line: in Full 3D nothing holds it out of that plane. " +
+                "Its loads act in the plane and do no work on that movement, so the run holds it, solves, and lists it in the Run Monitor as a warning; " +
+                "the results are those of the XZ plane. A set the model cannot be analysed with is not refused here: the run reports it, with the reason.";
+            CableDofNote.Text = "A joint that only cables reach has these, among those that are on. A cable gives stiffness along its own line only: " +
+                "a movement left on that nothing else holds makes the model unstable, and the Run Monitor names the joint. " +
+                "Switching it off here holds it at those joints; the log of the run says where a cable pulls against that hold.";
             MinHeight = 0;
             SizeToContent = SizeToContent.Height;
         }

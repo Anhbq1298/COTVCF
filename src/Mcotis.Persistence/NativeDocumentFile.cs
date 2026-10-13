@@ -32,6 +32,8 @@ internal sealed class FileDto
     public required List<LoadDto> Loads { get; init; }
     public required List<LoadCaseDto> LoadCases { get; init; }
     public required List<LoadCombinationDto> LoadCombinations { get; init; }
+    /// <summary>Schema 4. The masses modal cases read.</summary>
+    public required List<MassSourceDto> MassSources { get; init; }
 }
 
 internal sealed class UnitsDto
@@ -238,15 +240,58 @@ internal sealed class ComponentDto
     public required double Factor { get; init; }
 }
 
+/// <summary>Schema 4. A case states its kind and, by that kind, exactly one of two references to another case: a
+/// nonlinear static or initial P-Delta case its <see cref="InitialState"/>, a linear static or modal case its
+/// <see cref="StiffnessSource"/>. The one that does not apply is absent, and the reader refuses a case that carries it.</summary>
 internal sealed class LoadCaseDto
 {
     public required string Id { get; init; }
     public required string Name { get; init; }
-    public required LoadCaseType Type { get; init; }
+    public required CaseKind Kind { get; init; }
     public required List<ComponentDto> Components { get; init; }
-    public string? InitialCaseId { get; init; }
     public required bool Run { get; init; }
     public required bool FitCableTargetForces { get; init; }
+    public required GeometricNonlinearity GeometricMode { get; init; }
+    public InitialStateDto? InitialState { get; init; }
+    public StiffnessSourceDto? StiffnessSource { get; init; }
+    public NonlinearControlsDto? NonlinearControls { get; init; }
+    public ModalDto? Modal { get; init; }
+}
+
+internal sealed class InitialStateDto
+{
+    public required InitialStateKind Kind { get; init; }
+    /// <summary>With <see cref="InitialStateKind.EndOfNonlinearCase"/> only: the case that is continued, by its id.</summary>
+    public string? CaseId { get; init; }
+}
+
+internal sealed class StiffnessSourceDto
+{
+    public required StiffnessSourceKind Kind { get; init; }
+    /// <summary>With <see cref="StiffnessSourceKind.EndOfNonlinearCase"/> only: the case whose end stiffness is used, by its id.</summary>
+    public string? CaseId { get; init; }
+}
+
+internal sealed class NonlinearControlsDto
+{
+    public required int MaxLoadSteps { get; init; }
+    public required int MaxIterationsPerStep { get; init; }
+    public required double RelativeResidualTolerance { get; init; }
+    public required double RelativeDisplacementTolerance { get; init; }
+}
+
+internal sealed class ModalDto
+{
+    public required string MassSourceId { get; init; }
+    public required int RequestedModes { get; init; }
+    public required ModalMassMatrixKind MassMatrixKind { get; init; }
+}
+
+internal sealed class MassSourceDto
+{
+    public required string Id { get; init; }
+    public required string Name { get; init; }
+    public required bool IncludeSelfMass { get; init; }
 }
 
 internal sealed class TermDto

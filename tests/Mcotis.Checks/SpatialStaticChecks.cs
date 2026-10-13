@@ -332,18 +332,26 @@ internal static class SpatialStaticChecks
             Assert(outcome.Result is null && outcome.Issues.Any(issue => issue.Code == code), "Refused safely with diagnostic " + code);
             Assert(document.AnalysisInputHash == hash, "Solving/refusing never edits its native snapshot");
         }
+        // A case that no method can solve as it is defined is refused where it is defined: by the document, before any solver.
+        void Invalid(DocumentEditor edit, string code)
+        {
+            string? refused = null;
+            try { edit.Commit(); }
+            catch (DocumentException exception) { refused = string.Join(", ", exception.Issues.Select(issue => issue.Code)); }
+            Assert(refused is not null && refused.Split(", ").Contains(code), $"Refused by the document with {code} ({refused ?? "it was accepted"})");
+        }
         var unsupported = Unloaded().Edit();
         var earlier = ObjectId.New();
         unsupported.PutLoadCase(new(earlier, "Earlier", LoadCaseType.LinearStatic, [new(Pattern, 1)]));
         unsupported.PutLoadCase(new(Case, "Continued", LoadCaseType.LinearStatic, [new(Pattern, 1)]) { InitialCaseId = earlier });
-        Refuse(unsupported.Commit().Document, "static.case.unsupported");
+        Invalid(unsupported, "case.initial.kind");
         var fitting = Unloaded().Edit();
         fitting.PutLoadCase(new(Case, "Fitting", LoadCaseType.LinearStatic, [new(Pattern, 1)]) { FitCableTargetForces = true });
-        Refuse(fitting.Commit().Document, "static.case.unsupported");
+        Invalid(fitting, "case.fit");
         var afterLinear = Unloaded().Edit();
         afterLinear.PutLoadCase(new(earlier, "Earlier", LoadCaseType.LinearStatic, [new(Pattern, 1)]));
         afterLinear.PutLoadCase(new(Case, "Continued", LoadCaseType.NonlinearStatic, [new(Pattern, 1)]) { InitialCaseId = earlier });
-        Refuse(afterLinear.Commit().Document, "static.case.initialLinear");
+        Invalid(afterLinear, "case.initial.producer");
         var mechanism = Unloaded().Edit();
         mechanism.SetRestraint([Point(1)], Restraint.Free);
         Refuse(mechanism.Commit().Document, "static.matrix.unstable");

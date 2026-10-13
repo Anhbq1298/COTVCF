@@ -2,7 +2,7 @@ Welcome to the **Mcotis User Guide** — the reference for every function of Mco
 
 New to Mcotis? Start with [[Introduction to Mcotis]], then [[The main window]] and [[Typical workflow]].
 
-The guide follows the menu bar: [[Configurations|File]] (models, import and export), Define (materials, sections, loads), Edit (the parametric systems), Assign, Run (analysis), Result and Display, Design (columns), Optimization and MB (the SAP2000 candidate study). The Reference articles cover [[Units and sign conventions]], [[Design codes and references]], the [[Glossary]] and the [[Limitations and known issues]].
+The guide follows the menu bar: [[Configurations|File]] (models, import and export), Define (materials, sections, loads), Edit (the parametric systems), Assign, Run (analysis), Result and Display, Design (columns), and Optimization. The Reference articles cover [[Units and sign conventions]], [[Design codes and references]], the [[Glossary]] and the [[Limitations and known issues]].
 
 The guide is docs/USER_GUIDE.md in the repository; it is built into the app, so it always matches the version you run. Whoever adds or changes a function updates its article (see [[Help and development plans]]).
 
@@ -121,6 +121,11 @@ A configuration is one Mcotis file (.cotfem.db) that holds the complete analysis
 
 ## Locked models
 A run of [[Run FEM Analysis]] locks the model and stores its results with the configuration; Run → Unlock FEM Model deletes the results and allows editing again (see [[Unlock FEM Model]]).
+
+## Configurations of earlier versions
+A configuration saved by an earlier version of Mcotis opens as it was: every load case with its name, its load patterns and factors, the case it continues from and its Run setting, and the results stored with it stay with it. The file on disk is not changed until you save. Once saved by this version, the file is in the newer format and an earlier version of Mcotis no longer opens it — it reports that the file is newer than it supports. Update Mcotis on every computer before exchanging configurations.
+
+A configuration can hold load cases this version does not analyse yet — a case with P-Delta, a modal case, a linear static case. They are kept, can be edited and are saved back (see [[Load cases and combinations]]). [[Run FEM Analysis]] with such a case ticked stops and says which case and why; it does not analyse the case in a simpler way instead. Untick the case to run the others.
 
 # Built-in models
 Category: Files and models
@@ -268,13 +273,27 @@ See also: Load patterns; Run FEM Analysis
 The load cases the analysis solves and the combinations of their results.
 
 ## Load cases
-Linear or nonlinear static cases, each a factored list of load patterns (for example 1.35 DEAD + 1.5 LL). A nonlinear case can **continue from** another (staged: its loads act on the deformed, prestressed structure). The **Default Setup** is Pretension → SLS / ULS: the Pretension case fits the cables to their target forces with the self-weight, and the service and ultimate cases continue from it. Cases saved from SAP2000 or ETABS are kept, and you can add your own.
+The **Default Setup** is Pretension → SLS / ULS: Pretension fits the cables to their target forces with self-weight, and the service and ultimate cases continue from it. All three are Nonlinear Static.
+
+**+ Add** and **Modify** open Load Case Data: the name of the case, its **Type**, and what belongs to the type.
+
+- **Nonlinear Static** — tension-only cables with their sag. **Continue from** names the nonlinear case it starts from: the loads of this case are added to what is already on the structure at the end of that case. (zero) starts unstressed. **Purpose** Cable Target Forces makes it the case in which the cable pretension is fitted.
+- **Initial P-Delta** — a nonlinear case whose geometric nonlinearity is P-Delta, meant to give its end stiffness to other cases.
+- **Linear Static** — **Stiffness from** names the nonlinear case whose end stiffness it uses. Only the stiffness is taken; the loads of that case are not applied again. (unstressed) is the stiffness of the unloaded structure.
+- **Modal (Eigenvectors)** — a **Mass source** and a number of **Modes** in place of loads, on a stiffness chosen as for a linear case. A model without a mass source is offered MS1, the self mass of its members.
+
+A nonlinear case can also be given P-Delta as its **Geometric nonlinearity**, and its own load steps, iterations and tolerances (**Own iteration controls**). The lists under Continue from and Stiffness from hold nonlinear cases only. A case that other cases start from cannot be made linear or modal.
+
+## What is not analysed yet
+This version analyses Nonlinear Static cases without P-Delta and without iteration controls of their own. P-Delta, Initial P-Delta, Linear Static, Modal and a case's own iteration controls can be defined and saved, so that a model can be prepared and exchanged, but their analysis has not passed its verification. Load Case Data says so, and the **Status** column of the table reads "Unavailable — verification pending". A new case of such a type is added without its Run tick. [[Run FEM Analysis]] with such a case ticked stops and says which case and why; it never analyses the case in a simpler way instead.
 
 ## Combinations
 Linear additive combinations of cases (and other combinations).
 
 ## Running
-Before each run you choose which cases to run (Set Load Cases to Run).
+Before each run, **Set Load Cases to Run** lists the cases and combinations with their action, Run or Do Not Run, and the plan those actions make. **Role** is Requested for a case set to Run, Prerequisite for a case that is not set to Run but is needed first — a case of the run continues from it, or a combination of the run adds it up — and Result for a combination. **Depends On** names what a case needs: the case it continues, the case whose stiffness it uses, its mass source. **Availability** says whether the case is analysed yet.
+
+A prerequisite is solved with the run and listed among its results, though it is not set to Run; its log in the run monitor says which case needs it. The cases are solved and listed in the order of the Load Cases table.
 
 # VCF System
 Category: Edit
@@ -380,7 +399,8 @@ See also: Analysis options; Analysis monitor; Load cases and combinations; Unloc
 Solves the model as it is defined with the Mcotis solver. SAP2000 and ETABS are not read or written.
 
 ## The solver
-- 3D frames connected at every point lying on them; the main window's model is solved in its XZ plane.
+- 3D frames connected at every point lying on them. The degrees of freedom are set in [[Analysis options]]: a model starts in Full 3D, and the XZ plane preset analyses a model of the main window in its plane.
+- A movement without stiffness that the loads do not act on is held and reported, and the case is solved; one the loads do act on has no result.
 - Tension-only cables, with sag when the option is on.
 - Cable target forces fitted in the case set to fit them (the Pretension case), within the fitting tolerance.
 - Staged nonlinear cases (a case continuing from another) and internal forces along every frame.
@@ -399,10 +419,18 @@ See also: Run FEM Analysis
 The degrees of freedom of the analysis, and the settings of the cable target-force fit. OK and Apply use the form for the next run and clear the results of the last one; a locked model shows the form read-only.
 
 ## Degrees of Freedom
-The model of the main window spans its XZ plane: UX and UZ are always on, and UY, RX and RZ are not degrees of freedom of it. What can be chosen:
+The six degrees of freedom of the analysis — UX, UY, UZ, RX, RY, RZ — with the presets Full 3D, XZ plane, YZ plane, XY plane and Custom, and those of cable joints. A degree of freedom that is switched off is held at every joint, as by a support. It is not a release — a frame still bends between its joints — and a load on it is refused, never dropped.
 
-- **RY — rotation of the joints.** Switched off, no joint turns: the rotation is held at every joint, as by a support. It is not a release — a frame still bends between its joints — and a moment applied to a joint is refused, not dropped.
-- **Degrees of freedom of cable joints: UX, UZ.** A joint that only cables reach has the ones that are ticked. A cable gives stiffness along its own line only, so a movement left on that nothing else holds makes the model unstable, and the [[Analysis monitor]] names the joint. Switching it off holds it at those joints: with UX off, a vertical cable modelled in two segments through a joint nothing else reaches is analysed as the one cable it is.
+**A model starts in Full 3D.** A model of the main window lies in its XZ plane and stands on pin supports at its lowest joints, all on one line. In Full 3D nothing holds it out of that plane: it is free to turn about the line of its supports. Its loads act in the plane and do no work on that movement, so the analysis goes on: the solver holds the movement, solves, and reports it. [[Run FEM Analysis]] reads Completed with Warnings, every load case reads "Converged with Warnings · Instabilities: … · 1 unloaded movement held", and the [[Analysis monitor]] lists the movement joint by joint — RX of every joint, UY of every joint off the line of the supports. The results are those of the XZ plane. Choose the **XZ plane** preset to analyse the model in its plane without those warnings. A configuration saved before this option existed opens in the XZ plane it was analysed in.
+
+What is held is only a movement the loads do not act on. A mechanism under its own load — a frame that sways under a sideways force with nothing to resist it — has no equilibrium and no result: the load case reads Numerical Instability. So does a degree of freedom that nothing holds at all, such as a cable joint with no stiffness sideways.
+
+- **XZ plane** — UX, UZ and RY. Any of them can be switched off too: with RY off no joint turns; with UX off no joint moves in X, which suits only a model whose joints all share one X — a column on one line, not a truss that spans X.
+- **Degrees of freedom of cable joints.** A joint that only cables reach has the ones that are ticked, among those that are on. A cable gives stiffness along its own line only, so a movement left on that nothing else holds makes the model unstable, and the monitor names the joint. Switching it off holds it at those joints: with UX off, a vertical cable modelled in two segments through a joint nothing else reaches is analysed as the one cable it is.
+
+The form keeps the set you choose; it does not judge whether this model can be analysed with it, and nothing corrects it. The run does: a set the model cannot be analysed with stops the run, and the monitor says why — which degree of freedom, which joints, and where to change it. Where an option holds a cable joint against the pull of a cable, the cases still run, read Converged with Warnings, and their log names the cable and the joint.
+
+In 3D a frame is analysed with the out-of-plane inertia and the torsion constant of its section. The results shown are the in-plane ones; the displacement along a movement that was held is given as zero.
 
 The monitor counts the degrees of freedom of each run (active | solved | restrained) and shows "-" for one that is off.
 
@@ -417,24 +445,34 @@ See also: Run FEM Analysis
 The run monitor follows one run of [[Run FEM Analysis]]: the run on top, then every load case with its convergence and its numerical stability. It opens with each run, and Run → Analysis Monitor opens it again.
 
 ## The run
-The status of the run — Running, Completed, Completed with Warnings, Failed or Cancelled — a bar that counts the load cases ended, the degrees of freedom as the equations were assembled (active | solved | restrained), the start time and the elapsed time. A run that failed shows the reason under them.
+The status of the run — Running, Completed, Completed with Warnings, Failed or Cancelled — a bar that counts the load cases ended, the degrees of freedom as the equations were assembled (active | solved | restrained), the start time and the elapsed time. A run that failed shows the reason under them, in red; a run refused before it was solved — a translation switched off for a model that spans it, for instance ([[Analysis options]]) — has no equations to count, and its load cases read Cancelled · Not run with the reason in their log. A model analysed in Full 3D reads Completed with Warnings, every load case with the movement out of its plane held and listed: see [[Analysis options]].
 
 ## Load Cases
 - **Numerical stability — information.** A note on how numerical stability is reported, with the thresholds in force. Click its heading to close it.
 - **Model information.** The file the model is in and its counts: joints, restrained joints, frames, cables, shells, load patterns, joint and member load assignments, load cases and load combinations, and the supports by name.
-- **Load cases.** One entry per solve of the run: the fit of the cable target forces of a pretension stage first, then its cases. A load combination is a superposition of case results, not a solve, so it has no entry. Each entry shows its number, name, status and time (hours:minutes:seconds).
+- **Load cases.** One entry per solve of the run: the fit of the cable target forces of a pretension stage first, then its cases. A load combination is a superposition of case results, not a solve, so it has no entry. Each entry shows its number, name, status, what was found of it, and its time (hours:minutes:seconds).
 
-A load case reads Pending, Running, Converged, Converged with Warnings, Not Converged, Numerical Instability, Failed or Cancelled. Click its header to open it; several can stay open, and a case that failed opens itself. Open, it shows:
+A load case reads Pending, Running, Converged, Converged with Warnings, Not Converged, Numerical Instability, Failed or Cancelled, and after that what the solver found:
 
-- **Convergence**, **Numerical Stability** and **Instabilities** — the number of degrees of freedom reported as a severe instability or a singularity. 0 means none was detected; the out-of-balance and the residuals are shown beside it as measured.
-- The details: analysis type, equations solved, iterations, whether the convergence tolerance was satisfied, the out-of-balance against the accepted value, joints in equilibrium, fitting runs and whether the cable target forces were met, and the largest loss of accuracy.
-- **The affected joints**, when a degree of freedom is reported: the joint, its global coordinates in m, and the six columns UX UY UZ RX RY RZ with the digits of accuracy lost — amber from 6, red above 11 — and the remarks naming the degrees of freedom.
+- **Converged · Instabilities: 0** — a result, and no severe instability detected. The 0 counts instabilities; it is not a residual and not the digits lost.
+- **Converged with Warnings · Instabilities: 0 · Accuracy warnings: 2** — a result, with degrees of freedom that lost accuracy. Other warnings read "Cable target forces not met", "1 rotation left out" or "2 degree-of-freedom warnings".
+- **Converged with Warnings · Instabilities: 78 · 1 unloaded movement held** — a result: the model has a movement without stiffness that the loads do not act on, which was held. The count is the degrees of freedom that move in it; they are listed, with the remark "possible mechanism, not loaded: held".
+- **Numerical Instability · 6 affected DOFs** — no result: the number of degrees of freedom the solver reported, which is not the number of joints.
+- **Not Converged · 100 iterations · Instabilities: N/A** — the equilibrium iteration did not converge. Its numerical stability was not assessed, so there is no count: N/A, not 0.
+- **Failed · Cable target-force fit failed**, **Cancelled · Not run**, **Cancelled · Stopped** — why there is no result.
+
+Click the header to open a case; several can stay open, and a case that failed opens itself. Open, it shows:
+
+- **Convergence**, **Numerical Stability** and **Instabilities** — the number of degrees of freedom reported as a severe instability or a singularity. 0 means none was detected; N/A that the stability was not assessed.
+- The details: analysis type, equations solved, iterations, whether the convergence tolerance was satisfied, joints in equilibrium, fitting runs and whether the cable target forces were met, and the accuracy warnings.
+- **The affected joints**, when a degree of freedom is reported — for a warning as for a failure: the joint, its global coordinates X, Y, Z in m, and the six columns UX UY UZ RX RY RZ with the digits of accuracy lost — amber from 6, red above 11 — and the remarks naming the degrees of freedom.
+- **Technical diagnostics** — closed until you click it: the numbers the solver measured — scaled backward error, out-of-balance against the accepted value, smallest scaled pivot, resultant of internal forces, largest loss of accuracy.
 - **Analysis log** — what the solver reported of the case, in order, with the time of each line. The text can be selected and copied.
 
 ## Reading the table
 - A number is the estimated digits of accuracy lost at that degree of freedom during the matrix solution.
 - **∞** — a singularity was identified there: no stiffness and no restraint, a joint held by slack cables only, or a movement the stiffness does not resist ("possible mechanism").
-- **-** — the degree of freedom is not active: UY, RX and RZ in the XZ plane, and the rotation of a joint only cables reach.
+- **-** — the degree of freedom is not active: one that is switched off — UY, RX and RZ in the XZ plane — and the rotation of a joint only cables reach.
 - **R** — restrained by a support. **N/A** — active, but without an estimate.
 
 Numerical Instability and Not Converged are different outcomes: the first is a stiffness the solver cannot rely on, the second an equilibrium iteration that did not converge. For an instability, review the joints listed for missing restraints, disconnected members, mechanisms or very different stiffnesses meeting at a joint.
@@ -641,14 +679,12 @@ The parametric study written like the results section of a paper: up to 20 numbe
 
 # MB study workflow
 Category: MB study (SAP2000)
-Where: MB menu → 06A Optimization, 08 Quantities; Post-Processing → Study Reports…
+Where: Archived on 2026-10-13 — no longer in the application
 See also: Run study; 01 Loading; 05 Iteration
 
-**The pages 01 Loading, 02 Truss Height, 03 Pretension, 04 Output Settings and 05 Iteration, and Run → Run Study / Cancel Study, were archived on 2026-10-13 and are no longer in the application.** Their articles are kept as a record of the study; what remains in the menus is the reporting (06), the qualification (06A) and the quantities (08) of a study already made.
+**The complete legacy MB workspace was archived on 2026-10-13 and is no longer in the application.** This includes pages 01–06, 06A and 08, the MB menu, Run Study / Cancel Study, Study Reports and the old report toolbar button. These articles remain only as a record of the former SAP2000 study workflow. The separate [[Optimization VCF]] and [[Optimization TAS]] tools remain active and use the internal solver.
 
-The MB pages ran the original candidate study on SAP2000: candidates of loading (01), truss height (02) and cable pretension (03) are combined, each candidate is built as a child SAP2000 model, analysed by SAP2000 and reported (06), qualified (06A) and quantified (08). It needs SAP2000 and a connected model; the parametric studies inside Mcotis ([[Optimization VCF]], [[Optimization TAS]]) need neither.
-
-Each MB item shows its page's status next to its name.
+The MB pages ran the original candidate study on SAP2000: candidates of loading (01), truss height (02) and cable pretension (03) were combined, each candidate was built as a child SAP2000 model, analysed by SAP2000 and reported (06), qualified (06A) and quantified (08).
 
 # 01 Loading
 Category: MB study (SAP2000)
@@ -694,21 +730,21 @@ Validates the study and runs it from anywhere — it jumps to 05 Iteration for t
 
 # 06 Post-Processing
 Category: MB study (SAP2000)
-Where: MB → 06 Post-Processing; toolbar Print All Reports
+Where: Archived on 2026-10-13 — no longer in the application (was MB → 06 Post-Processing)
 See also: 06A Optimization; Run study
 
 The raw data of the study turned into reports: cable forces with design capacities, deflections by candidate, member forces and support reactions, as interactive HTML. Print Setup and PDF export print the reports.
 
 # 06A Optimization
 Category: MB study (SAP2000)
-Where: MB → 06A Optimization
+Where: Archived on 2026-10-13 — no longer in the application (was MB → 06A Optimization)
 See also: 06 Post-Processing
 
 Qualifies the stored candidates against acceptance criteria — available once 06 has raw data.
 
 # 08 Quantities
 Category: MB study (SAP2000)
-Where: MB → 08 Quantities
+Where: Archived on 2026-10-13 — no longer in the application (was MB → 08 Quantities)
 See also: MB study workflow; Materials
 
 Concrete volume and steel mass by assigned section, read live from the connected SAP2000 model, with section figures.

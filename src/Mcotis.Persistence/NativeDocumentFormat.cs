@@ -21,12 +21,64 @@ public interface IDocumentMigration
 public static class NativeDocumentFormat
 {
     public const string FormatName = "Mcotis.Document";
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
     public const string Extension = ".mcotis";
 
     /// <summary>Schema 1 had no DOF setting; preserve its planar XZ analysis assumption. Schema 2 had no setting for the
-    /// degrees of freedom of cable joints; they were the translations, which is what it gets.</summary>
-    public static IReadOnlyList<IDocumentMigration> Migrations { get; } = [new AddActiveDofs(), new AddCableDofs()];
+    /// degrees of freedom of cable joints; they were the translations, which is what it gets. Schema 3 knew two kinds
+    /// of load case with one reference to another case; schema 4 states the kind, the reference by its meaning, the
+    /// geometric nonlinearity and the mass sources (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md §5.1).</summary>
+    public static IReadOnlyList<IDocumentMigration> Migrations { get; } = [new AddActiveDofs(), new AddCableDofs(), new AddLoadCaseStateConfig()];
+
+    /// <summary>3 → 4. A schema-3 case keeps exactly what it meant: a linear static case uses the unstressed
+    /// stiffness; a nonlinear static case starts from zero or continues from its initial case; neither has
+    /// geometric nonlinearity — P-Delta is never switched on by an upgrade — and no mass source is made up. Ids,
+    /// components, factors and the run and fit flags are not touched. A linear static case that names an initial case
+    /// had no meaning schema 4 could keep, and is refused rather than guessed at.</summary>
+    private sealed class AddLoadCaseStateConfig : IDocumentMigration
+    {
+        public int FromVersion => 3;
+        public void Upgrade(JsonObject file)
+        {
+            if (file.ContainsKey("massSources")) throw new DocumentFileException("Schema 3 has no mass sources.");
+            if (file["loadCases"] is not JsonArray cases) throw new DocumentFileException("Schema 3 requires its load cases.");
+            foreach (var node in cases)
+            {
+                if (node is not JsonObject item || item["type"] is not JsonValue typeValue || !typeValue.TryGetValue<string>(out var type) ||
+                    item.ContainsKey("kind") || item.ContainsKey("initialState") || item.ContainsKey("stiffnessSource") || item.ContainsKey("geometricMode"))
+                    throw new DocumentFileException("A schema-3 load case states its type and nothing of schema 4.");
+                string name = item["name"] is JsonValue nameValue && nameValue.TryGetValue<string>(out var text) ? text : "?";
+                string? initial = null;
+                if (item["initialCaseId"] is JsonNode reference)
+                {
+                    if (reference is not JsonValue referenceValue || !referenceValue.TryGetValue<string>(out initial))
+                        throw new DocumentFileException($"Load case '{name}' has an initial case that is not an id.");
+                    item.Remove("initialCaseId");
+                }
+                item.Remove("type");
+                switch (type)
+                {
+                    case nameof(CaseKind.LinearStatic):
+                        if (initial is not null)
+                            throw new DocumentFileException($"Load case '{name}' is linear static and names an initial case. A linear case does not continue from another case, " +
+                                "and this version does not guess what was meant: open the file with the version that saved it and make the case nonlinear static, or remove its initial case.");
+                        item["kind"] = nameof(CaseKind.LinearStatic);
+                        item["stiffnessSource"] = new JsonObject { ["kind"] = nameof(StiffnessSourceKind.Unstressed) };
+                        break;
+                    case nameof(CaseKind.NonlinearStatic):
+                        item["kind"] = nameof(CaseKind.NonlinearStatic);
+                        item["initialState"] = initial is null
+                            ? new JsonObject { ["kind"] = nameof(InitialStateKind.Zero) }
+                            : new JsonObject { ["kind"] = nameof(InitialStateKind.EndOfNonlinearCase), ["caseId"] = initial };
+                        break;
+                    default:
+                        throw new DocumentFileException($"Load case '{name}' is of type '{type}', which schema 3 does not have.");
+                }
+                item["geometricMode"] = nameof(GeometricNonlinearity.None);
+            }
+            file["massSources"] = new JsonArray();
+        }
+    }
 
     private sealed class AddCableDofs : IDocumentMigration
     {
@@ -186,14 +238,30 @@ public static class NativeDocumentFormat
             Loads = d.Loads.Values.OrderBy(load => NameOf(load.TargetId), NaturalNameComparer.Instance).ThenBy(load => load.Id).Select(ToLoad).ToList(),
             LoadCases = ByName(d.LoadCases.Values).Select(item => new LoadCaseDto
             {
-                Id = item.Id.ToString(), Name = item.Name, Type = item.Type, InitialCaseId = item.InitialCaseId?.ToString(),
-                Run = item.Run, FitCableTargetForces = item.FitCableTargetForces,
+                Id = item.Id.ToString(), Name = item.Name, Kind = item.Kind,
+                Run = item.Run, FitCableTargetForces = item.FitCableTargetForces, GeometricMode = item.GeometricMode,
                 Components = item.Components.Select(component => new ComponentDto { PatternId = component.PatternId.ToString(), Factor = component.Factor }).ToList(),
+                // the reference that belongs to the kind of the case, and only that one
+                InitialState = item.ProducesState ? new() { Kind = item.InitialState.Kind, CaseId = item.InitialCaseId?.ToString() } : null,
+                StiffnessSource = item.ProducesState ? null : new() { Kind = item.StiffnessSource.Kind, CaseId = item.StiffnessSourceCaseId?.ToString() },
+                NonlinearControls = item.NonlinearControls is { } controls ? new()
+                {
+                    MaxLoadSteps = controls.MaxLoadSteps, MaxIterationsPerStep = controls.MaxIterationsPerStep,
+                    RelativeResidualTolerance = controls.RelativeResidualTolerance, RelativeDisplacementTolerance = controls.RelativeDisplacementTolerance,
+                } : null,
+                Modal = item.ModalOptions is { } modal ? new()
+                {
+                    MassSourceId = modal.MassSourceId.ToString(), RequestedModes = modal.RequestedModes, MassMatrixKind = modal.MassMatrixKind,
+                } : null,
             }).ToList(),
             LoadCombinations = ByName(d.LoadCombinations.Values).Select(item => new LoadCombinationDto
             {
                 Id = item.Id.ToString(), Name = item.Name, Type = item.Type, Run = item.Run,
                 Terms = item.Terms.Select(term => new TermDto { SourceId = term.SourceId.ToString(), Factor = term.Factor }).ToList(),
+            }).ToList(),
+            MassSources = ByName(d.MassSources.Values).Select(item => new MassSourceDto
+            {
+                Id = item.Id.ToString(), Name = item.Name, IncludeSelfMass = item.IncludeSelfMass,
             }).ToList(),
         };
     }
@@ -295,14 +363,31 @@ public static class NativeDocumentFormat
         foreach (var item in Member(file.LoadPatterns, "loadPatterns"))
             editor.PutLoadPattern(new(Id(item.Id, "load pattern id"), item.Name, item.Type, item.SelfWeightMultiplier));
         foreach (var item in Member(file.Loads, "loads")) editor.PutLoad(FromLoad(item));
+        foreach (var item in Member(file.MassSources, "massSources"))
+            editor.PutMassSource(new(Id(item.Id, "mass source id"), item.Name, item.IncludeSelfMass));
         foreach (var item in Member(file.LoadCases, "loadCases"))
-            editor.PutLoadCase(new(Id(item.Id, "load case id"), item.Name, item.Type,
+        {
+            // A case carries the reference of its kind, stated in full, and not the other one.
+            bool producesState = item.Kind is CaseKind.NonlinearStatic or CaseKind.InitialPDelta;
+            if (producesState ? item.InitialState is null || item.StiffnessSource is not null : item.StiffnessSource is null || item.InitialState is not null)
+                throw new DocumentFileException($"Load case '{item.Name}' is {item.Kind}: it states " +
+                    (producesState ? "its initial state and no stiffness source." : "its stiffness source and no initial state."));
+            ObjectId? Source(bool none, string? caseId, string what) => none
+                ? caseId is null ? null : throw new DocumentFileException($"Load case '{item.Name}' names a case for {what} it does not have.")
+                : Id(caseId, "load case id");
+            editor.PutLoadCase(new(Id(item.Id, "load case id"), item.Name, item.Kind,
                 [.. Member(item.Components, "components").Select(component => new LoadCaseComponent(Id(component.PatternId, "load pattern id"), component.Factor))])
             {
-                InitialCaseId = item.InitialCaseId is null ? null : Id(item.InitialCaseId, "load case id"),
+                InitialCaseId = item.InitialState is { } initial ? Source(initial.Kind == InitialStateKind.Zero, initial.CaseId, "an initial state") : null,
+                StiffnessSourceCaseId = item.StiffnessSource is { } stiffness ? Source(stiffness.Kind == StiffnessSourceKind.Unstressed, stiffness.CaseId, "a stiffness") : null,
+                GeometricMode = item.GeometricMode,
+                NonlinearControls = item.NonlinearControls is { } controls
+                    ? new(controls.MaxLoadSteps, controls.MaxIterationsPerStep, controls.RelativeResidualTolerance, controls.RelativeDisplacementTolerance) : null,
+                ModalOptions = item.Modal is { } modal ? new(Id(modal.MassSourceId, "mass source id"), modal.RequestedModes, modal.MassMatrixKind) : null,
                 Run = item.Run,
                 FitCableTargetForces = item.FitCableTargetForces,
             });
+        }
         foreach (var item in Member(file.LoadCombinations, "loadCombinations"))
             editor.PutLoadCombination(new(Id(item.Id, "load combination id"), item.Name, item.Type,
                 [.. Member(item.Terms, "terms").Select(term => new CombinationTerm(Id(term.SourceId, "load case id"), term.Factor))])

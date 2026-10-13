@@ -31,6 +31,7 @@ internal static class StabilityDiagnosticsChecks
         NoStiffnessAtAll();
         NonConvergenceIsNotInstability();
         CasesAreIndependent();
+        UnloadedMovementsHeld();
     }
 
     private sealed class Model
@@ -541,6 +542,122 @@ internal static class StabilityDiagnosticsChecks
         Assert(found.Dofs.Where(dof => dof.IsInfinite).Select(dof => document.Points[dof.Dof.PointId].Position).SequenceEqual([new Xyz(2, 5, 0), new Xyz(2, 5, 3)]) &&
                Where(document, found, dof => !dof.IsInfinite).SequenceEqual(["J1 RX", "J1 RY", "J2 UZ", "J2 RX", "J2 RY"]),
             "… at the joints of the model, (2, 5, 0) and (2, 5, 3); its bending rotations and its axial movement are not in the mode");
+    }
+
+    /// <summary>Movements the stiffness does not resist, on which the loads of the case do no work. With
+    /// <see cref="StaticOptions.HoldUnloadedMechanisms"/> they are held and the case is solved — to its closed form,
+    /// and to the digit of the same model with that movement restrained; a movement the loads do act on has no
+    /// result either way, and without the option nothing changes.</summary>
+    private static void UnloadedMovementsHeld()
+    {
+        var hold = new StaticOptions(HoldUnloadedMechanisms: true);
+        static bool Same(StaticOutcome first, StaticOutcome second, double tolerance = 1e-9) =>
+            first.Result!.Joints.Zip(second.Result!.Joints).All(pair =>
+                pair.First.Displacements.Zip(pair.Second.Displacements).All(value => Math.Abs(value.First - value.Second) <= tolerance * 1e-3) &&
+                pair.First.Reactions.Zip(pair.Second.Reactions).All(value => Math.Abs(value.First - value.Second) <= tolerance)) &&
+            first.Result.Frames.Zip(second.Result.Frames).All(pair =>
+                pair.First.LocalEndActions.Zip(pair.Second.LocalEndActions).All(value => Math.Abs(value.First - value.Second) <= tolerance)) &&
+            first.Result.Cables.Zip(second.Result.Cables).All(pair => Math.Abs(pair.First.Tension - pair.Second.Tension) <= tolerance);
+        static double Moved(StaticOutcome outcome, ObjectId point, int component) =>
+            outcome.Result!.Joints.Single(joint => joint.PointId == point).Displacements[component];
+        static bool Refused(StaticOutcome outcome) => !outcome.Success && outcome.Result is null && outcome.Stability is { State: StabilityState.Singular, MovementsHeld: 0 } &&
+            outcome.Issues.Any(issue => issue is { Severity: ValidationSeverity.Error, Code: "static.matrix.unstable" });
+        static bool Marked(StaticOutcome outcome, int movements) => outcome.Success && outcome.Stability is { State: StabilityState.Singular } found &&
+            found.ZeroStiffnessModes == movements && found.MovementsHeld == movements && ReferenceEquals(outcome.Result!.Diagnostics.Stability, found) &&
+            outcome.Issues.Count(issue => issue.Severity == ValidationSeverity.Error) == 0 &&
+            outcome.Issues.Single(issue => issue.Code == "static.mechanism.held").Severity == ValidationSeverity.Warning;
+
+        // 1. A column in space on a ball joint, its head held sideways: free to spin about its own axis.
+        (ModelDocument Document, ObjectId Axial, ObjectId Torque, ObjectId Head) Column(bool spinHeld)
+        {
+            var m = new Model(DofMask.Full3D);
+            var foot = m.Point(2, 5, 0, Restraint.Pinned);
+            var head = m.Point(2, 5, 3, new Restraint(true, true, false, false, false, spinHeld));
+            m.Frame(foot, head);
+            var axial = m.Case("Axial", true, head, new(0, 0, -50));
+            var torque = m.Case("Torque", true, head, new(0, 0, -50), new(0, 0, 5));
+            return (m.Build(), axial, torque, head);
+        }
+        var column = Column(false);
+        var restrained = Column(true);
+        var spinning = StaticSolver.Solve(Compile(column.Document), column.Axial, hold);
+        var reference = StaticSolver.Solve(Compile(restrained.Document), restrained.Axial);
+        Assert(Marked(spinning, 1) && Where(column.Document, spinning.Stability!, dof => dof.IsInfinite).SequenceEqual(["J1 RZ", "J2 RZ"]) && spinning.Stability!.Instabilities == 2,
+            "A column free to spin about its axis, loaded along it: the load does no work on the spin, so with the option it is held and the case is solved — marked, with RZ of its two joints still reported");
+        Near(Moved(spinning, column.Head, 2), -50 * 3 / (E * A), "… to the closed form: the head moves PL/EA", 1e-15);
+        Assert(reference is { Success: true, Stability.MovementsHeld: 0 } && Same(spinning, reference) && Moved(spinning, column.Head, 5) == 0,
+            "… and to the digit of the same column with the spin restrained at its head: displacements, reactions and end actions; the spin itself is reported as zero");
+        Assert(Refused(StaticSolver.Solve(Compile(column.Document), column.Torque, hold)),
+            "With a torque about its axis the load acts on the spin: no equilibrium exists, and the case is refused as unstable — option or not");
+        Assert(Refused(StaticSolver.Solve(Compile(column.Document), column.Axial)),
+            "Without the option the same column is refused whatever its load: the solver holds nothing unless it is asked to");
+
+        // 2. A beam on two rollers: nothing holds it along its axis.
+        (ModelDocument Document, ObjectId Down, ObjectId Along, ObjectId Middle) Beam(bool held)
+        {
+            var roller = new Restraint(false, false, true, false, false, false);
+            var m = new Model(DofMask.XZ);
+            var left = m.Point(0, 0, 0, held ? Restraint.Pinned : roller);
+            var middle = m.Point(3, 0, 0);
+            var right = m.Point(6, 0, 0, roller);
+            m.Frame(left, middle);
+            m.Frame(middle, right);
+            var down = m.Case("Down", true, middle, new(0, 0, -20));
+            var along = m.Case("Along", true, middle, new(7, 0, -20));
+            return (m.Build(), down, along, middle);
+        }
+        var beam = Beam(false);
+        var sliding = StaticSolver.Solve(Compile(beam.Document), beam.Down, hold);
+        Assert(Marked(sliding, 1) && Where(beam.Document, sliding.Stability!, dof => dof.IsInfinite).SequenceEqual(["J1 UX", "J2 UX", "J3 UX"]),
+            "A beam on two rollers under a transverse load: the slide along its axis is not acted on, is held, and the case is solved");
+        Near(Moved(sliding, beam.Middle, 2), -20 * 216 / (48 * E * I33), "… to PL³/48EI at mid-span", 1e-15);
+        var pinned = Beam(true);
+        Assert(Same(sliding, StaticSolver.Solve(Compile(pinned.Document), pinned.Down)) && Refused(StaticSolver.Solve(Compile(beam.Document), beam.Along, hold)),
+            "… as the same beam with one end pinned; with a load along its axis it has no equilibrium and is refused");
+
+        // 3. The portal whose beam is hinged at both ends: its sway is a mechanism.
+        var p = new Model(DofMask.XZ);
+        var footA = p.Point(0, 0, 0, Restraint.Pinned);
+        var headA = p.Point(0, 0, 3);
+        var headB = p.Point(4, 0, 3);
+        var footB = p.Point(4, 0, 0, Restraint.Pinned);
+        p.Frame(footA, headA);
+        p.Frame(headA, headB, pinned: true);
+        p.Frame(footB, headB);
+        var weight = p.Case("Weight", true, headA, new(0, 0, -10));
+        var sway = p.Case("Sway", true, headA, new(10, 0, -10));
+        var portal = p.Build();
+        var standing = StaticSolver.Solve(Compile(portal), weight, hold);
+        Assert(Marked(standing, 1) && standing.Stability!.Instabilities == 6, "The hinged portal under a weight on one head: the sway is not acted on, is held, and the case is solved");
+        Near(Moved(standing, headA, 2), -10 * 3 / (E * A), "… the loaded column shortens PL/EA", 1e-15);
+        Near(standing.Result!.Joints.Single(joint => joint.PointId == footA).Reactions[2], 10, "… and carries the whole weight to its foot");
+        Assert(Refused(StaticSolver.Solve(Compile(portal), sway, hold)), "Pushed sideways the same portal is a mechanism under load: refused, as before");
+
+        // 4. With a cable: the beam on rollers hung at mid-span. The equilibrium is iterated; its tangent does not resist the slide.
+        (ModelDocument Document, ObjectId Case, ObjectId Middle) Hung(bool held)
+        {
+            var roller = new Restraint(false, false, true, false, false, false);
+            var m = new Model(DofMask.XZ);
+            var left = m.Point(0, 0, 0, held ? Restraint.Pinned : roller);
+            var middle = m.Point(3, 0, 0);
+            var right = m.Point(6, 0, 0, roller);
+            var anchor = m.Point(3, 0, 4, Restraint.Pinned);
+            m.Frame(left, middle);
+            m.Frame(middle, right);
+            m.Cable(middle, anchor);
+            var down = m.Case("Down", false, middle, new(0, 0, -20));
+            return (m.Build(), down, middle);
+        }
+        var hung = Hung(false);
+        var hanging = StaticSolver.Solve(Compile(hung.Document), hung.Case, hold);
+        double beamStiffness = 48 * E * I33 / 216, cableStiffness = 1.6e8 * .002 / 4;
+        Assert(Marked(hanging, 1) && hanging.Stability!.Stage == StabilityStage.Solution && hanging.Result!.Diagnostics.NonlinearIterations > 0,
+            "The same beam hung from a cable, an iterated equilibrium: its converged state meets every equilibrium equation, the slide's included, and is accepted with the slide marked as held");
+        Near(Moved(hanging, hung.Middle, 2), -20 / (beamStiffness + cableStiffness), "… the beam and the cable share the load by their stiffnesses: deflection P/(k_beam + k_cable)", 1e-12);
+        Near(hanging.Result!.Cables.Single().Tension, 20 * cableStiffness / (beamStiffness + cableStiffness), "… and the cable takes its share", 1e-8);
+        var fixedEnd = Hung(true);
+        Assert(Same(hanging, StaticSolver.Solve(Compile(fixedEnd.Document), fixedEnd.Case), 1e-7) && Refused(StaticSolver.Solve(Compile(hung.Document), hung.Case)),
+            "… as with one end pinned; without the option the hung beam is refused");
     }
 
     /// <summary>A rotation no frame end holds, loaded by a moment: an exactly zero stiffness.</summary>

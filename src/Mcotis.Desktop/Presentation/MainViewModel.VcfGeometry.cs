@@ -216,6 +216,7 @@ public sealed partial class MainViewModel
             return current with
             {
                 AreaM2 = template.AreaM2, ElasticModulusKNPerM2 = template.ElasticModulusKNPerM2, InPlaneInertiaM4 = template.InPlaneInertiaM4,
+                OutOfPlaneInertiaM4 = template.OutOfPlaneInertiaM4, TorsionConstantM4 = template.TorsionConstantM4,
                 SectionName = template.SectionName, MaterialName = template.MaterialName, UnitWeightKNPerM3 = template.UnitWeightKNPerM3,
                 UnitMassTPerM3 = template.UnitMassTPerM3, GrossAreaM2 = template.GrossAreaM2, Modifiers = template.Modifiers, Shape = template.Shape,
             };

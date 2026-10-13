@@ -1,6 +1,6 @@
 <Window x:Class="Mcotis.Desktop.Presentation.RunLoadCasesWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:p="clr-namespace:Mcotis.Desktop.Presentation"
-        Title="Set Load Cases to Run" Icon="{x:Static p:AppIcon.Window}" Width="700" Height="430" MinWidth="560" MinHeight="300"
+        Title="Set Load Cases to Run" Icon="{x:Static p:AppIcon.Window}" Width="980" Height="470" MinWidth="720" MinHeight="320"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
  <!-- Run → Run FEM Analysis: choose the load cases to analyse (as SAP2000's Set Load Cases to Run), then Run Now. The
       choice is staged: Run Now and OK keep it, Cancel discards it. -->
@@ -30,7 +30,9 @@
    <DataGrid.Columns>
     <DataGridTextColumn Header="Case Name" Binding="{Binding Name}" Width="1.5*" MinWidth="120"/>
     <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="Auto" MinWidth="96"/>
-    <DataGridTextColumn Header="From" Binding="{Binding From}" Width="Auto" MinWidth="72"/>
+    <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="Auto" MinWidth="84"/>
+    <DataGridTextColumn Header="Depends On" Binding="{Binding DependsOn}" Width="1.5*" MinWidth="130"/>
+    <DataGridTextColumn Header="Availability" Binding="{Binding Availability}" Width="Auto" MinWidth="120"/>
     <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="Auto" MinWidth="68"/>
     <DataGridTemplateColumn Header="Action" Width="Auto" MinWidth="86">
      <DataGridTemplateColumn.CellTemplate>

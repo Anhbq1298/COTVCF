@@ -122,6 +122,38 @@ space of K does not depend on any ordering; the degrees of freedom with a compon
 - An iteration that stalls or reaches its limit has no assessment at all (`Stability = null`). Non-convergence is not
   turned into a statement about the stiffness.
 
+### 2.4 A movement without stiffness that the loads do not act on
+
+A singular stiffness has no result — unless the solver is asked to go on (`StaticOptions.HoldUnloadedMechanisms`;
+the main window asks, the native workspace does not; user, 2026-10-13: "ETABS can run regardless") and the
+singularity is of one kind only: movements the stiffness does not resist (the modes of §2.2), nothing negative, and
+no equation that stands alone without any stiffness.
+
+- **What is solved.** K is positive semi-definite with K·yₖ = 0 for the movements yₖ. K·u = f has solutions exactly
+  when the loads do no work on them, yₖᵀ·f = 0, and they are then u + Σ cₖ·yₖ: one deformation, with any amount of
+  those movements. The solver takes the member of that family in which the equations left over by the pivoted
+  factorization do not move (`StiffnessConditioning.SolveHeld`): it factorizes with diagonal pivoting exactly as the
+  assessment does, holds those equations at zero and solves the rest. Every member has the same strains and so the
+  same forces; only the amount of the movements differs, and it is given as zero.
+- **What decides.** Nothing is assumed about the loads. The residual of a held equation is the work of the loads on
+  that movement, so the usual test — the scaled backward error of the *whole* system, the held equations included,
+  within the accepted tolerance (10⁻¹⁰) — is the test that the loads leave the movements alone. A case that fails it
+  has no equilibrium and is refused as unstable, exactly as without the option. The resultant of the internal forces
+  is checked as for any result.
+- **With cables.** The equilibrium is iterated as always. A converged state meets every equilibrium equation to the
+  iteration's tolerance, those of the movements its tangent does not resist included; with nothing negative in that
+  tangent the state is an equilibrium, neutral along those movements, and it is accepted instead of being withheld.
+- **What is reported.** The case has its result and reads Converged with Warnings. Its stability stays what it is:
+  singular, the movements counted, every degree of freedom that moves in them ∞ and listed — with
+  `StaticStability.MovementsHeld`, the remark "possible mechanism, not loaded: held", a warning
+  (`static.mechanism.held`) and a line in the log. It is never silent.
+- **What is still refused.** A movement the loads act on; a negative pivot; a degree of freedom that nothing holds at
+  all — a zero diagonal, a joint only slack cables reach (the rule of 2026-10-12 for cable joints stands).
+
+This is not claimed to be what CSI's programs do internally, which has not been inspected. The user's observation is
+that ETABS completes the analysis of such a model with warnings; this gives the same outcome for the case that
+matters here, a model in a plane analysed in 3D, and it states its condition: the loads do no work on what is held.
+
 ## 3. Interpretation
 
 | Solver outcome | Run monitor status | Numerical stability |
@@ -240,6 +272,11 @@ in CSI's programs, and "severe, above 11, with results" has not been observed �
 - **The native workspace** (Edit → TemplateBuilding) receives the same `StaticStability` with every outcome but does
   not show it yet: its result views are unchanged.
 - **Not assessed**: cases refused before they are solved, and iterations that do not converge.
+- **A held movement (§2.4) is as good as the rank the pivoted factorization finds.** A stiffness whose rank it
+  overestimates is not held but refused, which is the safe side; one whose rank it underestimated would have an
+  equation held that carries load — and then fail the backward error, so it is refused too. The displacement along a
+  held movement is not a result: it is reported as zero, and any other amount is an equally valid equilibrium. Holding
+  is not offered in the native workspace yet, and a comparison with another program's treatment has not been made.
 
 For analyses that do not exist yet: a nonlinear static case with load steps would carry the step in
 `StaticStability` beside `Stage` and `Iteration`; geometric stiffness makes `NotPositiveDefinite` a physical state
@@ -249,9 +286,9 @@ assessment.
 
 ## 8. Verification
 
-`dotnet run --project tests/Mcotis.Checks` — group *Numerical stability diagnostics* (137 checks, no SAP2000, no WPF);
-`dotnet run --project tests/Mcotis.Desktop.Checks -- --run-monitor` (38 checks, the application's solver through the
-monitor and its view model; also in the `-- --full` run); `-- --run-monitor-ui` (15 checks, the window). Models are solved in the checks; no
+`dotnet run --project tests/Mcotis.Checks` — group *Numerical stability diagnostics* (165 checks, no SAP2000, no WPF);
+`dotnet run --project tests/Mcotis.Desktop.Checks -- --run-monitor` (53 checks, the application's solver through the
+monitor and its view model; also in the `-- --full` run); `-- --run-monitor-ui` (24 checks, the window). Models are solved in the checks; no
 value shown is supplied by a check.
 
 ### The estimate
@@ -299,6 +336,41 @@ The resultant grows with the estimate and stays within ε·10^d at every R solve
 | 8 Inactive degrees of freedom | Cases 1 and 3; a cable joint | UY, RX, RZ "-"; pinned translations "R"; the rotation of a cable joint "-" |
 | 9 Independence | Beam hung from a cable joint that only slack cables reach when pushed up; a cable in two segments with a target force | Up, Down, Up: Numerical Instability, Converged, Numerical Instability, each with its own times and log; the case continuing from a failed fit reads Failed and says so, the case that does not is judged on its own |
 | 10 Consistency | Every run of the application-level checks | The monitor's status of every case equals the classification of the solver's last report of it; results exist exactly when every case converged; a case that only started, or a run that was cancelled, is never Converged |
+
+**Movements held (§2.4).** In `Mcotis.Checks`, each against a closed form and against the same model with the
+movement restrained, to the digit (displacements 10⁻¹² m, reactions and end actions 10⁻⁹ kN):
+
+| Model | Movement not acted on | Solved to | Refused when |
+|---|---|---|---|
+| Column in space on a ball joint, head held sideways, loaded along its axis | Spin about its axis: RZ of its two joints | PL/EA; the column with RZ restrained | A torque about its axis is added |
+| Beam on two rollers, transverse load | Slide along its axis: UX of its three joints | PL³/48EI; the beam with one end pinned | A load along its axis is added |
+| Portal with its beam hinged at both ends, a weight on one head | Sway: 6 degrees of freedom | PL/EA of the loaded column, the whole weight at its foot | It is pushed sideways |
+| The beam on rollers hung from a cable at mid-span (iterated) | The slide | P/(k_beam + k_cable) and the cable's share; the beam with one end pinned | — |
+
+Without the option every one of them is refused, as before: the default is unchanged.
+
+**A model in a plane, analysed in full 3D** (the main window starts a model in full 3D since 2026-10-13). Such a model
+stands on pins that are all on one line, so its stiffness in 3D is always singular: it turns about that line. What is
+reported is checked against the kinematics of that rotation, and what is solved against the analysis in the plane —
+neither against a stored answer.
+
+- A rigid portal on two pins (`--run-monitor`): in 3D the solver finds one movement without stiffness and names
+  exactly RX of its four joints and UY of the two joints off the line of the pins — a rotation θ about X gives RX = θ
+  everywhere and UY = ∓θ·z, zero on the line — with R at the three translations of each pin and nothing against UX,
+  UZ, RY. Held, the case is solved: its joints, reactions and every frame station equal those of the XZ analysis
+  within 2·10⁻¹⁸ m and 8·10⁻¹⁴ kN.
+- A beam hung from a cable (`--run-monitor`), an iterated equilibrium: the beam twists about its own axis, RX of its
+  three joints; held, the result equals the plane's within 2·10⁻¹⁵ m and 10⁻¹⁰ kN.
+- The same portal with its beam hinged, pushed sideways, in 3D: two movements, one of them under load — refused, 12
+  degrees of freedom listed, nothing held.
+- The default model through the window (`--run-monitor-ui`): 246 active, 234 solved, 12 restrained; every case one
+  movement, 78 degrees of freedom = RX of the 41 joints + UY of the 37 off the line of the 4 pins; the fit of the
+  cable target forces and its cases all solved. Against the same model in the XZ plane, for every case and
+  combination: displacements within 2·10⁻¹² m, forces within 2·10⁻⁶ kN — joints, reactions, frame stations, cables.
+
+The out-of-plane inertia and the torsion constant are those of the sections; a section without a torsion constant
+takes the polar moment I22 + I33, as on export to SAP2000 and ETABS. The movement found, and the in-plane result, do
+not depend on their size, only on their being positive. The main window shows the in-plane components of a result.
 
 Other checks: the classification of matrices (free spring: one mode, both equations in it; a held equation beside it
 not counted; a zero diagonal; contrast 10¹³ against 10¹⁶; a negative pivot is neither singular nor a number of

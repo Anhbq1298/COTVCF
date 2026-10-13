@@ -21,7 +21,9 @@ internal static class RunMonitorChecks
         TargetsNotMet();
         CaseIndependence();
         PrerequisiteFailure();
+        Headers();
         DegreesOfFreedom();
+        FullThreeD();
         Bookkeeping();
     }
 
@@ -100,9 +102,12 @@ internal static class RunMonitorChecks
             "a stable plane frame: Converged, numerical stability passed on its 5 equations, zero instabilities — of 9 active degrees of freedom, 4 restrained by the two pins");
         var item = shown.Cases.Single();
         Check(shown.StatusText == "Completed" && shown.DofText == "9 active | 5 solved | 4 restrained" && item is { StatusText: "Converged", ConvergenceText: "Passed", StabilityText: "Passed", InstabilitiesText: "0", HasRows: false, IsExpanded: false } &&
-              item.Details.Any(field => field is { Label: "Analysis type", Value: "Linear static" }) && item.Details.Any(field => field.Label == "Scaled backward error" && field.Value.Contains("accepted", StringComparison.Ordinal)) &&
-              !item.Details.Any(field => field.Value is "0" or "0.00E+00" && field.Label.Contains("error", StringComparison.OrdinalIgnoreCase)),
-            $"… shown as Convergence: Passed · Numerical Stability: Passed · Instabilities: 0, with the backward error as the solver measured it ({item.Details.Single(field => field.Label == "Scaled backward error").Value}), not as a zero");
+              item.Details.Any(field => field is { Label: "Analysis type", Value: "Linear static" }) && item.Technical.Any(field => field.Label == "Scaled backward error" && field.Value.Contains("accepted", StringComparison.Ordinal)) &&
+              !item.Technical.Any(field => field.Value is "0" or "0.00E+00" && field.Label.Contains("error", StringComparison.OrdinalIgnoreCase)),
+            $"… shown as Convergence: Passed · Numerical Stability: Passed · Instabilities: 0, with the backward error as the solver measured it ({item.Technical.Single(field => field.Label == "Scaled backward error").Value}), not as a zero");
+        string[] measured = ["Scaled backward error", "Smallest scaled pivot", "Resultant of internal forces", "Largest loss of accuracy"];
+        Check(item is { HasTechnical: true, IsTechnicalExpanded: false } && measured.All(label => item.Technical.Any(field => field.Label == label) && item.Details.All(field => field.Label != label)),
+            "… the measured numbers — backward error, smallest pivot, resultant of internal forces, largest loss of accuracy — are its technical diagnostics: all there, closed until asked for, none among the lines of the case");
 
         // the same run reporting from 0.1 digits: every joint with a degree of freedom above that is listed
         var listed = Solve(geometry, frames, null, ["A", "C"], [Loads("Load", "B", 2, -10)], solver: new FemSolver { StabilityThresholds = new(0.1, 11) });
@@ -150,13 +155,13 @@ internal static class RunMonitorChecks
     }
 
     /// <summary>TEST 5: a soft frame to the support and a stiff one beyond it, on a column held by two pins.</summary>
+    private static (FemRunSnapshot Run, FemRunMonitorViewModel Shown, IReadOnlyDictionary<string, FemAnalysisResult>? Results, string? Refusal) Chain(double ratio) =>
+        Solve(Geometry([("A", 0, 0), ("B", 4, 0), ("C", 8, 0), ("D", 0, -3)],
+                ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame), ("DA", "D", "A", MemberKind.Frame)),
+            Sections(Frame("AB", 1e-4), Frame("BC", 1e-4 * ratio), Frame("DA")), null, ["A", "D"], [Loads("Pull", "C", 5, -1)]);
+
     private static void StiffnessContrast()
     {
-        (FemRunSnapshot Run, FemRunMonitorViewModel Shown, IReadOnlyDictionary<string, FemAnalysisResult>? Results, string? Refusal) Chain(double ratio) =>
-            Solve(Geometry([("A", 0, 0), ("B", 4, 0), ("C", 8, 0), ("D", 0, -3)],
-                    ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame), ("DA", "D", "A", MemberKind.Frame)),
-                Sections(Frame("AB", 1e-4), Frame("BC", 1e-4 * ratio), Frame("DA")), null, ["A", "D"], [Loads("Pull", "C", 5, -1)]);
-
         var warned = Chain(1e7);
         var item = warned.Shown.Cases.Single();
         Check(warned.Results is not null && warned.Run.Status == FemRunStatus.CompletedWithWarnings && item is { StatusText: "Converged with Warnings", ConvergenceText: "Passed", InstabilitiesText: "0" } &&
@@ -164,7 +169,7 @@ internal static class RunMonitorChecks
               item.Rows.Select(row => row.Joint).SequenceEqual(["B", "C"]) && item.Rows.All(row => row.UX is { Text: "7.0", Level: FemCellLevel.Warning } && row.Remarks == "UX: Numerical accuracy warning (7.0 digits)"),
             "a stiffness contrast of 1e7 converges — its nonlinear convergence is not in question — with a numerical accuracy warning: 7.0 digits lost at UX of B and C, in amber, zero instabilities");
         Check(item.Rows.All(row => row.UZ.Level == FemCellLevel.Normal && row.RY.Level == FemCellLevel.Normal && Number(row.UZ.Text) < 6) &&
-              item.Details.Any(field => field is { Label: "Largest loss of accuracy", Value: "7.0 digits at B UX" or "7.0 digits at C UX" }),
+              item.Technical.Any(field => field is { Label: "Largest loss of accuracy", Value: "7.0 digits at B UX" or "7.0 digits at C UX" }),
             "… the other degrees of freedom of those joints are listed with their own small values, uncoloured");
 
         var withheld = Chain(1e10);
@@ -184,26 +189,29 @@ internal static class RunMonitorChecks
     }
 
     /// <summary>TEST 7: a cable equilibrium stopped at its iteration limit.</summary>
+    private static (FemRunSnapshot Run, FemRunMonitorViewModel Shown, IReadOnlyDictionary<string, FemAnalysisResult>? Results, string? Refusal) HungBeam(FemSolver? solver = null) =>
+        Solve(Geometry([("A", -5, 0), ("B", 0, 0), ("C", 5, 0), ("D", 0, 5)],
+                ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame), ("Cable-BD", "B", "D", MemberKind.Cable)),
+            Sections(Frame("AB"), Frame("BC")), Sections(Cable("Cable-BD")), ["A", "C", "D"], [Loads("Down", "B", 0, -50)], solver: solver);
+
     private static void NonConvergence()
     {
-        var geometry = Geometry([("A", -5, 0), ("B", 0, 0), ("C", 5, 0), ("D", 0, 5)],
-            ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame), ("Cable-BD", "B", "D", MemberKind.Cable));
-        var (frames, cables) = (Sections(Frame("AB"), Frame("BC")), Sections(Cable("Cable-BD")));
-        var stopped = Solve(geometry, frames, cables, ["A", "C", "D"], [Loads("Down", "B", 0, -50)], solver: new FemSolver { MaximumEquilibriumIterations = 1 });
+        var stopped = HungBeam(new FemSolver { MaximumEquilibriumIterations = 1 });
         var only = stopped.Run.Cases.Single();
         var item = stopped.Shown.Cases.Single();
         Check(stopped.Results is null && only is { Status: FemCaseStatus.NotConverged, Stability: null, Last: { FailureCode: "static.nonlinear.noConvergence", Iteration: 1 } } &&
-              item is { StatusText: "Not Converged", ConvergenceText: "Not converged", StabilityText: "Not assessed", InstabilitiesText: "—", HasRows: false, IsExpanded: true } &&
+              item is { StatusText: "Not Converged", ConvergenceText: "Not converged", StabilityText: "Not assessed", InstabilitiesText: "N/A", HasRows: false, IsExpanded: true } &&
               item.Details.Any(field => field is { Label: "Nonlinear convergence", Value: "Not converged" }) && item.Details.Any(field => field is { Label: "Iterations", Value: "1" }) &&
               item.Details.Any(field => field is { Label: "Convergence tolerance", Value: "Not satisfied" }),
             "a case stopped at its iteration limit reads Not Converged, with its iterations and the tolerance not satisfied; its numerical stability is not assessed, and it is not called an instability");
         Check(only.Log.Any(entry => entry.Text == "Numerical stability not assessed: the iteration reached no converged state.") &&
               only.Log[^1].Text == "Analysis ended without a result: the equilibrium iteration did not converge." && stopped.Run.Status == FemRunStatus.Failed,
             "… and its log ends on the iteration that did not converge");
-        var solved = Solve(geometry, frames, cables, ["A", "C", "D"], [Loads("Down", "B", 0, -50)]);
+        var solved = HungBeam();
         Check(solved.Results is not null && solved.Shown.Cases.Single() is { StatusText: "Converged", ConvergenceText: "Passed", StabilityText: "Passed", InstabilitiesText: "0" } done &&
               done.Details.Any(field => field is { Label: "Nonlinear convergence", Value: "Converged" }) && done.Details.Any(field => field is { Label: "Convergence tolerance", Value: "Satisfied" }) &&
-              done.Details.Any(field => field.Label == "Out-of-balance" && !field.Value.StartsWith("0 ", StringComparison.Ordinal) && field.Value.Contains("E-", StringComparison.Ordinal)),
+              done.Details.Any(field => field.Label == "Iterations") &&
+              done.Technical.Any(field => field.Label == "Out-of-balance" && !field.Value.StartsWith("0 ", StringComparison.Ordinal) && field.Value.Contains("E-", StringComparison.Ordinal)),
             "given its iterations the same case reads Converged, with its nonlinear convergence, the tolerance satisfied and the out-of-balance as measured — within the tolerance, not written as zero");
     }
 
@@ -219,7 +227,8 @@ internal static class RunMonitorChecks
               fit is { StatusText: "Converged with Warnings", ConvergenceText: "Passed", StabilityText: "Passed", InstabilitiesText: "0" } &&
               fit.Details.Any(field => field.Label == "Cable target forces" && field.Value.StartsWith("Not met — closest pretension used", StringComparison.Ordinal)) &&
               run.Run.Cases[0].Log.Any(entry => entry.Level == FemLogLevel.Warning && entry.Text.StartsWith("Cable target forces not met within the tolerance", StringComparison.Ordinal)) &&
-              run.Shown.Cases[1] is { StatusText: "Converged with Warnings", ConvergenceText: "Passed", InstabilitiesText: "0" },
+              run.Shown.Cases[1] is { StatusText: "Converged with Warnings", ConvergenceText: "Passed", InstabilitiesText: "0" } &&
+              fit.HeaderText == "Converged with Warnings  ·  Instabilities: 0  ·  Cable target forces not met",
             "cable target forces that are not met within the tolerance: the fit reads Converged with Warnings — a warning, not a failure — and so does the case that carries that pretension: " +
             string.Join(" | ", run.Shown.Cases.Select(item => $"{item.Name}: {item.StatusText}, {string.Join("; ", item.Details.Where(field => field.Label == "Cable target forces").Select(field => field.Value))}")));
     }
@@ -255,6 +264,7 @@ internal static class RunMonitorChecks
         var (fit, service, unstressed) = (run.Run.Cases[0], run.Run.Cases[1], run.Run.Cases[2]);
         Check(run.Results is null && fit is { FitStage: true, Status: FemCaseStatus.NumericalInstability } && service is { Status: FemCaseStatus.Failed, Last.PrerequisiteFailed: true } &&
               run.Shown.Cases[1].FailureText!.StartsWith("The cable target-force fit this case continues from failed.", StringComparison.Ordinal) &&
+              run.Shown.Cases[1].HeaderText == "Failed  ·  Cable target-force fit failed" &&
               service.Log.Any(entry => entry.Level == FemLogLevel.Error && entry.Text.StartsWith("Not solved — the cable target-force fit this case continues from failed:", StringComparison.Ordinal)),
             "a case that continues from a cable target-force fit that failed reads Failed and says where it failed — in the fit, which has its own entry reading Numerical Instability");
         Check(unstressed is { Status: FemCaseStatus.NumericalInstability, Last.PrerequisiteFailed: false } && unstressed.Stability!.Joints.Single().Joint == "M",
@@ -288,20 +298,167 @@ internal static class RunMonitorChecks
               rows.All(row => row.UX is { Text: "7.0", Level: FemCellLevel.Warning } && row.RY is { Text: "-", Level: FemCellLevel.Muted } && row.UY.Text == "-" && Number(row.UZ.Text) is not null),
             "… where joints are listed, a degree of freedom that is off reads '-': nothing is reported against it — B and C, UX 7.0, RY -");
 
-        string Refusal(Mcotis.Core.DofMask active, FemCaseLoads[] cases)
+        // A set the model cannot be analysed with is not corrected and not passed over: the run is refused with the
+        // reason, and the monitor says it — in the run, and in the log of every case that was not run.
+        const string place = "under Run → Analysis Options → Degrees of Freedom";
+        (FemRunSnapshot Run, FemRunMonitorViewModel Shown, string Reason) Refused(Mcotis.Core.DofMask active, FemCaseLoads[] cases)
         {
-            try { new FemSolver().SolveCases(geometry, frames, new Dictionary<string, FemSectionProperties>(), new Dictionary<string, double>(), FemLoadSet.Empty, cases, ["A", "C"], activeDofs: active); }
-            catch (InvalidOperationException ex) { return ex.Message; }
-            return "";
+            var monitor = new FemRunMonitor();
+            monitor.Begin(new("Beam.cotfem.db", 3, ["A", "C"], 2, 0, 0, 1, 1, 0, cases.Length, 0, 0, []), cases.Select(item => (item.Name, false)));
+            string reason = "";
+            try { new FemSolver().SolveCases(geometry, frames, new Dictionary<string, FemSectionProperties>(), new Dictionary<string, double>(), FemLoadSet.Empty, cases, ["A", "C"], equilibrium: monitor, activeDofs: active); }
+            catch (InvalidOperationException ex) { reason = ex.Message; }
+            monitor.End(completed: false, note: reason);
+            var shown = new FemRunMonitorViewModel();
+            shown.Apply(monitor.Snapshot());
+            return (monitor.Snapshot(), shown, reason);
         }
-        string turned = Refusal(Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ, [new("Moment", new([new("B", 0, -10, 4)], [], []), 0)]);
-        Check(turned.Contains("'B'", StringComparison.Ordinal) && turned.Contains("RY", StringComparison.Ordinal) && turned.Contains("inactive", StringComparison.OrdinalIgnoreCase),
-            "a moment on a joint whose rotation is switched off is refused, not dropped: " + turned);
-        string sideways = Refusal(Mcotis.Core.DofMask.UZ | Mcotis.Core.DofMask.RY, load);
-        Check(sideways.Contains("lies outside the common plane/line required when UX is inactive", StringComparison.Ordinal),
-            "a translation of the plane cannot be switched off for a model that spans it — which is why Analysis Options does not offer it: " + sideways[..Math.Min(sideways.Length, 110)] + "…");
-        Check(Refusal(Mcotis.Core.DofMask.Full3D, load).Contains("planar", StringComparison.Ordinal) && Refusal(Mcotis.Core.DofMask.RY, load).Contains("planar", StringComparison.Ordinal),
-            "degrees of freedom out of the plane, or no translation at all, are refused before anything is solved: this model is planar");
+        var sideways = Refused(Mcotis.Core.DofMask.UZ | Mcotis.Core.DofMask.RY, [Loads("Load", "B", 0, -10), Loads("Other", "B", 0, -5)]);
+        Check(sideways.Reason == "UX is switched off, but the joints of the model are not all at one X: 'B', 'C' are elsewhere. With UX off no joint moves in X, " +
+                  $"which only a model whose joints all share one X can be analysed with. Switch UX on {place}.",
+            "UX switched off for a model that spans X is the user's to set, and is not analysable: the run is refused with the reason, the joints and where to change it — " + sideways.Reason);
+        Check(sideways.Run is { Status: FemRunStatus.Failed, SolvedDofs: 0 } && sideways.Run.Message == sideways.Reason && sideways.Shown is { StatusText: "Failed", DofText: "" } && sideways.Shown.Message == sideways.Reason &&
+              sideways.Run.Cases.Count == 2 && sideways.Run.Cases.All(item => item is { Status: FemCaseStatus.Cancelled, Stability: null, Note: "Not run: the run stopped before this case." } &&
+                  item.Log.Select(entry => (entry.Text, entry.Level)).SequenceEqual([("Not run: the run stopped before this case.", FemLogLevel.Warning), (sideways.Reason, FemLogLevel.Error)])) &&
+              sideways.Shown.Cases.All(item => item is { HeaderText: "Cancelled  ·  Not run", InstabilitiesText: "N/A", IsExpanded: false } && item.LogText.Contains(sideways.Reason, StringComparison.Ordinal)),
+            "… and the monitor reports it: the run Failed with that reason, no equations assembled, and every load case Cancelled · Not run with the reason in its own log — none is called converged, none has an instability count");
+
+        // the same option on a model it suits: a column on one line, loaded along it
+        var column = Solve(Geometry([("A", 0, 0), ("B", 0, 3), ("C", 0, 6)], ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame)),
+            frames, null, ["A", "C"], load, activeDofs: Mcotis.Core.DofMask.UZ | Mcotis.Core.DofMask.RY);
+        double shortened = -10 * 3 / (2 * E * Area), columnMoved = column.Results!["Load"].Joints.Single(joint => joint.PointName == "B").UZM;
+        Check(column.Run is { Status: FemRunStatus.Completed, ActiveDofs: 6, SolvedDofs: 4, RestrainedDofs: 2 } && Math.Abs(columnMoved - shortened) < 1e-15 &&
+              column.Results["Load"].Joints.All(joint => joint.UXM == 0) && column.Shown.Cases.Single().HeaderText == "Converged  ·  Instabilities: 0",
+            $"with UX switched off a model whose joints share one X is analysed: a column held at both ends and loaded at mid-height moves PL/2EA = {shortened * 1e6:0.###} µm ({columnMoved * 1e6:0.###} µm), nothing moves in X, 6 active | 4 solved | 2 restrained");
+
+        var turned = Refused(Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ, [new("Moment", new([new("B", 0, -10, 4)], [], []), 0)]).Reason;
+        Check(turned.StartsWith("Load on 'B' has a nonzero RY component on an inactive DOF", StringComparison.Ordinal) && turned.EndsWith($"The degrees of freedom are set {place}.", StringComparison.Ordinal) &&
+              !System.Text.RegularExpressions.Regex.IsMatch(turned, "[0-9a-f]{8}-[0-9a-f]{4}"),
+            "a moment on a joint whose rotation is switched off is refused, not dropped — by the joint, without the identity the load has inside the solver: " + turned);
+        string bare = Refused(Mcotis.Core.DofMask.Full3D, load).Reason, still = Refused(Mcotis.Core.DofMask.RY, load).Reason;
+        Check(bare == "UY, RX, RZ are switched on, so the model is analysed in 3D, and 2 frames — 'AB', 'BC' — hold no bending inertia out of the plane or no torsion constant. " +
+                  $"Give them a section that has both (Define → Section Properties), or analyse the model in its plane: the XZ plane {place}." &&
+              still == $"No translation is switched on: no joint of the model can move. Switch one on {place}.",
+            "the solver is handed no stiffness it was not given: frames that come without an out-of-plane inertia or a torsion constant are refused for a 3D analysis, by name — and so is a set without a translation: " + bare);
+
+        // A cable joint held by an option against the pull of its cables: solved, and said.
+        var hung = Solve(Geometry([("A", -5, 0), ("B", 0, 0), ("C", 5, 0), ("M", 1, 2.5), ("D", 0, 5)],
+                ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame), ("Cable-BM", "B", "M", MemberKind.Cable), ("Cable-MD", "M", "D", MemberKind.Cable)),
+            frames, Sections(Cable("Cable-BM"), Cable("Cable-MD")), ["A", "C", "D"], [Loads("Down", "B", 0, -50)], cableDofs: Mcotis.Core.DofMask.UZ);
+        var hungCase = hung.Run.Cases.Single();
+        var said = hungCase.Log.Where(entry => entry.Level == FemLogLevel.Warning).Select(entry => entry.Text).ToArray();
+        Check(hung.Results is not null && hungCase.Status == FemCaseStatus.ConvergedWithWarnings && hung.Run.Status == FemRunStatus.CompletedWithWarnings &&
+              said.SequenceEqual(["Cable 'Cable-BM' pulls on 'M' in UX, which is switched off for cable joints: the joint is held there as by a support.",
+                  "Cable 'Cable-MD' pulls on 'M' in UX, which is switched off for cable joints: the joint is held there as by a support."]) &&
+              hung.Shown.Cases.Single() is { HeaderText: "Converged with Warnings  ·  Instabilities: 0  ·  2 degree-of-freedom warnings", StabilityText: "Passed" } shownHung &&
+              shownHung.Details.Any(field => field.Label == "Degree-of-freedom warnings" && field.Value.StartsWith("2 ", StringComparison.Ordinal)),
+            "a cable joint that UX off for cable joints holds against the pull of its inclined cables is solved — and the hold is not passed over in silence: Converged with Warnings, each cable named in the log by its own name — " + said.FirstOrDefault());
+    }
+
+    /// <summary>The largest difference between two results of one model: of a displacement or rotation [m, rad] and of
+    /// a force or moment [kN, kN·m] — joints, support reactions, every station of every frame, cable forces.</summary>
+    internal static (double Moved, double Force) Difference(FemAnalysisResult first, FemAnalysisResult second)
+    {
+        if (first.Joints.Count != second.Joints.Count || first.SupportReactions.Count != second.SupportReactions.Count ||
+            first.Frames.Count != second.Frames.Count || first.Cables.Count != second.Cables.Count) return (double.PositiveInfinity, double.PositiveInfinity);
+        double moved = 0, force = 0;
+        void Moved(double a, double b) => moved = Math.Max(moved, Math.Abs(a - b));
+        void Force(double a, double b) => force = Math.Max(force, Math.Abs(a - b));
+        foreach (var (a, b) in first.Joints.Zip(second.Joints)) { Moved(a.UXM, b.UXM); Moved(a.UZM, b.UZM); Moved(a.RotationRad, b.RotationRad); }
+        foreach (var (a, b) in first.SupportReactions.Zip(second.SupportReactions)) { Force(a.ReactionXKN, b.ReactionXKN); Force(a.ReactionZKN, b.ReactionZKN); }
+        foreach (var (a, b) in first.Frames.Zip(second.Frames))
+        foreach (var (s, t) in a.Stations!.Zip(b.Stations!))
+        {
+            Force(s.AxialKN, t.AxialKN); Force(s.ShearKN, t.ShearKN); Force(s.MomentKNm, t.MomentKNm);
+            Moved(s.UXM, t.UXM); Moved(s.UZM, t.UZM);
+        }
+        foreach (var (a, b) in first.Cables.Zip(second.Cables)) Force(a.AxialForceKN, b.AxialForceKN);
+        return (moved, force);
+    }
+
+    /// <summary>Full 3D — what a model starts with — for a model that lies in a plane on pins: nothing holds it out of
+    /// that plane, and it turns about the line through its pins. Its loads act in the plane and do no work on that
+    /// movement, so the solver holds it and solves: the result is the one of the analysis in the plane, and the
+    /// movement is reported — UY of the joints off that line and RX of every joint, as the kinematics of a rotation
+    /// about X give it. A movement the loads do act on has no result in 3D either.</summary>
+    private static void FullThreeD()
+    {
+        static FemSectionProperties Whole(string name, bool hinged = false) => Frame(name, hinged: hinged) with { OutOfPlaneInertiaM4 = 0.0002, TorsionConstantM4 = 0.00001 };
+        var geometry = Geometry([("A", 0, 0), ("B", 0, 3), ("C", 4, 3), ("D", 4, 0)], ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame), ("DC", "D", "C", MemberKind.Frame));
+        var frames = Sections(Whole("AB"), Whole("BC"), Whole("DC"));
+        FemCaseLoads[] load = [Loads("Sway", "B", 10, -25)];
+        var plane = Solve(geometry, frames, null, ["A", "D"], load);
+        var spatial = Solve(geometry, frames, null, ["A", "D"], load, activeDofs: Mcotis.Core.DofMask.Full3D);
+        var only = spatial.Run.Cases.Single();
+        Check(plane.Results is not null && plane.Shown.Cases.Single().HeaderText == "Converged  ·  Instabilities: 0" && plane.Run is { ActiveDofs: 12, SolvedDofs: 8, RestrainedDofs: 4 } &&
+              spatial.Results is not null && spatial.Run is { Status: FemRunStatus.CompletedWithWarnings, ActiveDofs: 24, SolvedDofs: 18, RestrainedDofs: 6 } &&
+              only is { Status: FemCaseStatus.ConvergedWithWarnings, Stability: { State: StabilityState.Singular, ZeroStiffnessModes: 1, MovementsHeld: 1, Instabilities: 6, Warnings: 0, Equations: 18 } },
+            "a rigid portal on two pins in full 3D (24 active | 18 solved | 6 restrained, against 12 | 8 | 4 in its plane): nothing holds it out of its plane — one movement without stiffness, 6 degrees of freedom in it — " +
+            "and its loads do no work on that movement, so the solver holds it and the case has its result: Converged with Warnings");
+        var gap = Difference(plane.Results!["Sway"], spatial.Results!["Sway"]);
+        Check(gap.Moved <= 1e-13 && gap.Force <= 1e-9 && spatial.Results["Sway"].Joints.Any(joint => Math.Abs(joint.UXM) > 1e-5),
+            $"… and that result is the one of the analysis in the plane, at every joint, reaction and station of every frame: displacements within {gap.Moved:0.0E+00} m, forces within {gap.Force:0.0E+00} kN");
+        var shown = spatial.Shown.Cases.Single();
+        var rows = shown.Rows;
+        Check(rows.Select(row => row.Joint).SequenceEqual(["A", "B", "C", "D"]) &&
+              Cells(rows[0]).SequenceEqual(["R", "R", "R", "∞", "N/A", "N/A"]) && Cells(rows[3]).SequenceEqual(["R", "R", "R", "∞", "N/A", "N/A"]) &&
+              Cells(rows[1]).SequenceEqual(["N/A", "∞", "N/A", "∞", "N/A", "N/A"]) && Cells(rows[2]).SequenceEqual(["N/A", "∞", "N/A", "∞", "N/A", "N/A"]) &&
+              rows[0].Remarks == "RX: Singular (∞) — possible mechanism, not loaded: held" && rows[1].Remarks == "UY, RX: Singular (∞) — possible mechanism, not loaded: held",
+            "… the movement held is the frame turning about the line through its pins: ∞ at RX of all four joints and at UY of the two joints off that line, R at the three translations of each pin, nothing against the degrees of freedom of the plane — " +
+            string.Join(" | ", rows.Select(row => $"{row.Joint}: {string.Join(" ", Cells(row))}")));
+        Check(shown is { HeaderText: "Converged with Warnings  ·  Instabilities: 6  ·  1 unloaded movement held", ConvergenceText: "Passed", InstabilitiesText: "6", IsExpanded: false, HasFailure: false,
+                  StabilityText: "Singular stiffness — 1 movement without stiffness, not loaded: held", StabilityLevel: FemCellLevel.Warning } &&
+              only.Log.All(entry => entry.Level != FemLogLevel.Error) &&
+              only.Log.Any(entry => entry.Level == FemLogLevel.Warning && entry.Text.StartsWith("Stiffness at the solution: singular — 1 movement without stiffness, on which the loads of the case do no work. Held, and the rest factorized", StringComparison.Ordinal)) &&
+              only.Log.Any(entry => entry.Text == "The case is solved with that movement held: displacements are determined up to it; forces are not affected. The degrees of freedom that move in it are listed.") &&
+              only.Log.Any(entry => entry.Text == "B UY: Singular (∞) — possible mechanism, not loaded: held."),
+            $"… and it is said, as a warning and not as a failure: '{shown.HeaderText}', the stability line, and the log of the case");
+
+        // with a cable — an iterated equilibrium: the beam can twist about its own axis, which the cable does not hold
+        var hungGeometry = Geometry([("A", -5, 0), ("B", 0, 0), ("C", 5, 0), ("D", 0, 5)],
+            ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame), ("Cable-BD", "B", "D", MemberKind.Cable));
+        var (beam, rope) = (Sections(Whole("AB"), Whole("BC")), Sections(Cable("Cable-BD")));
+        FemCaseLoads[] down = [Loads("Down", "B", 0, -50)];
+        var hungPlane = Solve(hungGeometry, beam, rope, ["A", "C", "D"], down);
+        var hungSpatial = Solve(hungGeometry, beam, rope, ["A", "C", "D"], down, activeDofs: Mcotis.Core.DofMask.Full3D);
+        var hungGap = Difference(hungPlane.Results!["Down"], hungSpatial.Results!["Down"]);
+        var hungCase = hungSpatial.Shown.Cases.Single();
+        Check(hungSpatial.Run.Cases.Single() is { Status: FemCaseStatus.ConvergedWithWarnings, Stability: { ZeroStiffnessModes: 1, MovementsHeld: 1, Instabilities: 3 } } &&
+              hungCase.Rows.Select(row => row.Joint).SequenceEqual(["A", "B", "C"]) && hungCase.Rows.All(row => row.RX.Text == "∞" && row.UY.Text != "∞") &&
+              hungGap.Moved <= 1e-9 && hungGap.Force <= 1e-5 && hungSpatial.Results["Down"].Cables.Single().AxialForceKN > 1,
+            $"a beam hung from a cable, in full 3D: the beam can twist about its own axis — RX of its three joints — which nothing loads; held, and the iterated equilibrium is the one of the plane: " +
+            $"displacements within {hungGap.Moved:0.0E+00} m, forces within {hungGap.Force:0.0E+00} kN, cable {hungSpatial.Results["Down"].Cables.Single().AxialForceKN:0.###} kN");
+
+        // a movement the loads do act on: the portal whose beam is hinged, pushed sideways — no result in 3D either
+        var swaying = Solve(geometry, Sections(Whole("AB"), Whole("BC", hinged: true), Whole("DC")), null, ["A", "D"], load, activeDofs: Mcotis.Core.DofMask.Full3D);
+        Check(swaying.Results is null && swaying.Run.Cases.Single() is { Status: FemCaseStatus.NumericalInstability, Stability: { State: StabilityState.Singular, ZeroStiffnessModes: 2, MovementsHeld: 0, Instabilities: 12 } } &&
+              swaying.Shown.Cases.Single() is { HeaderText: "Numerical Instability  ·  12 affected DOFs", IsExpanded: true } &&
+              swaying.Shown.Cases.Single().Rows.All(row => row.Remarks.EndsWith("Singular (∞) — possible mechanism", StringComparison.Ordinal)) &&
+              swaying.Refusal!.EndsWith("where nothing holds it out of its XZ plane. To analyse it in its plane, choose the XZ plane under Run → Analysis Options → Degrees of Freedom.", StringComparison.Ordinal),
+            "the same portal with its beam hinged, pushed sideways, sways under its load: that movement is acted on, so nothing is held and the case has no result — Numerical Instability, two movements, 12 degrees of freedom — in 3D as in the plane");
+    }
+
+    /// <summary>The closed row of a load case: its status, then what the solver found of it. "Instabilities: 0" is
+    /// said only of a case whose numerical stability was assessed.</summary>
+    private static void Headers()
+    {
+        var beam = Solve(Geometry([("A", 0, 0), ("B", 3, 0), ("C", 6, 0)], ("AB", "A", "B", MemberKind.Frame), ("BC", "B", "C", MemberKind.Frame)),
+            Sections(Frame("AB"), Frame("BC")), null, ["A", "C"], [Loads("Load", "B", 2, -10)]);
+        (string What, FemRunMonitorViewModel Shown, string Header, bool Assessed)[] rows =
+        [
+            ("a stable frame", beam.Shown, "Converged  ·  Instabilities: 0", true),
+            ("a stiffness contrast of 1e7", Chain(1e7).Shown, "Converged with Warnings  ·  Instabilities: 0  ·  Accuracy warnings: 2", true),
+            ("a result withheld at 1e10", Chain(1e10).Shown, "Numerical Instability  ·  2 affected DOFs", true),
+            ("a portal that sways", SwayingPortal().Shown, "Numerical Instability  ·  6 affected DOFs", true),
+            ("an iteration stopped at its limit", HungBeam(new FemSolver { MaximumEquilibriumIterations = 1 }).Shown, "Not Converged  ·  1 iteration  ·  Instabilities: N/A", false),
+        ];
+        foreach (var (what, shown, header, assessed) in rows)
+        {
+            var item = shown.Cases.Single();
+            Check(item.HeaderText == header && item.Summary == $"Load case 1, {item.Name}: {header}" &&
+                  (assessed || (!item.DiagnosticText.Contains(": 0", StringComparison.Ordinal) && item.InstabilitiesText == "N/A")),
+                $"closed, {what} reads '{item.HeaderText}'" + (assessed ? "" : " — its stability was not assessed, so no count is given: N/A, not 0"));
+        }
     }
 
     /// <summary>What the monitor does with a run as a whole: the solves it plans, a run that is cancelled, a run that stops.</summary>
@@ -319,11 +476,12 @@ internal static class RunMonitorChecks
             "a run starts with every solve it will make waiting as Pending, in order, the fit of the cable target forces as a solve of its own");
         var shown = new FemRunMonitorViewModel();
         shown.Apply(planned, time);
-        Check(shown is { StatusText: "Running", IsIndeterminate: true, DofText: "", ModelName: "Tied arch.cotfem.db" } && shown.Cases.All(item => item is { StatusText: "Pending", ElapsedText: "", IsExpanded: false }) &&
+        Check(shown is { StatusText: "Running", IsIndeterminate: true, DofText: "", ModelName: "Tied arch.cotfem.db" } &&
+              shown.Cases.All(item => item is { StatusText: "Pending", HeaderText: "Pending", InstabilitiesText: "—", ElapsedText: "", IsExpanded: false }) &&
               shown.ModelLeft.Select(field => field.Label).SequenceEqual(["Number of Joints", "Number of Restrained Joints", "Number of Frame Members", "Number of Cable Members", "Number of Shell Elements"]) &&
               shown.ModelRight.Select(field => field.Label).SequenceEqual(["Number of Load Patterns", "Number of Joint Load Assignments", "Number of Member Load Assignments", "Number of Load Cases", "Number of Load Combinations"]) &&
               shown.ModelLeft.Select(field => field.Value).SequenceEqual(["12", "2", "9", "4", "0"]) && shown.ModelRight.Select(field => field.Value).SequenceEqual(["3", "5", "2", "3", "1"]) &&
-              shown.SupportSummary == "2 pin supports (UX, UZ restrained; rotation free): A, D",
+              shown.SupportSummary == "2 pin supports (translations restrained; rotations free): A, D",
             "the model information is the model's file name and its counts in two columns, load cases and combinations counted apart, and the supports by name — no solver name, no source");
 
         FemEquilibriumProgress Report(string name, bool fitStage, FemEquilibriumState state, int iteration = 0, double? unbalance = null, double fraction = 0) =>
@@ -345,7 +503,8 @@ internal static class RunMonitorChecks
         shown.Apply(cancelled, time);
         Check(cancelled.Status == FemRunStatus.Cancelled && cancelled.Cases.All(item => item.Status == FemCaseStatus.Cancelled) &&
               cancelled.Cases[0].Log[^1].Text == "Stopped: the analysis was cancelled." && cancelled.Cases[2].Note == "Not run: the analysis was cancelled." &&
-              shown.StatusText == "Cancelled" && shown.Cases.All(item => item.StatusText == "Cancelled" && item.ConvergenceText == "Not completed" && !item.IsExpanded) && !shown.IsIndeterminate,
+              shown.StatusText == "Cancelled" && shown.Cases.All(item => item.StatusText == "Cancelled" && item.ConvergenceText == "Not completed" && !item.IsExpanded) && !shown.IsIndeterminate &&
+              shown.Cases.Select(item => item.HeaderText).SequenceEqual(["Cancelled  ·  Stopped", "Cancelled  ·  Not run", "Cancelled  ·  Not run"]),
             "a cancelled run reads Cancelled: the case that was running is stopped, the ones waiting were not run — none of them is Converged because the solver returned");
 
         // without results a case that reported no end is not converged either

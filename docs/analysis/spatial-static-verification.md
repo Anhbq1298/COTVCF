@@ -124,5 +124,10 @@ fixture on 2026-10-12.
 
 Shells; shear-flexible frames; offsets; axial, shear and torsion releases; a sparse solver and instability
 diagnostics; P-Delta and large displacements; mass and modal analysis. Since 2026-10-12 every analysis of the
-application runs this engine — the main window with the XZ degrees of freedom, the native workspace directly — and
-`PlanarFrameSolver` is archived with the checks as the comparison baseline.
+application runs this engine — the main window with the degrees of freedom of Analysis Options, full 3D to start
+with, the native workspace directly — and `PlanarFrameSolver` is archived with the checks as the comparison baseline.
+
+Since 2026-10-13 the engine can, when asked (`StaticOptions.HoldUnloadedMechanisms`, the main window only), solve a
+stiffness that is singular by movements the loads do no work on, with those movements held. The method, its
+condition and its evidence — closed forms, the same models restrained, and a model in a plane analysed in 3D against
+its analysis in the plane — are in `docs/solver/numerical-stability-diagnostics.md` §2.4 and §8.

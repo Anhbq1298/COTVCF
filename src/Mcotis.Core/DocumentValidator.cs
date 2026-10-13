@@ -55,6 +55,7 @@ public static class DocumentValidator
             Scope(ObjectKind.LoadPattern, d.LoadPatterns.Values);
             Scope(ObjectKind.LoadCase, d.LoadCases.Values);
             Scope(ObjectKind.LoadCombination, d.LoadCombinations.Values);
+            Scope(ObjectKind.MassSource, d.MassSources.Values);
             foreach (var scope in Enum.GetValues<NameScope>())
                 if (d.Names.Count(scope) != counts.GetValueOrDefault(scope))
                     Error("name.index", ObjectKind.Settings, default, $"The name index of {scope} does not match its objects.");
@@ -250,27 +251,21 @@ public static class DocumentValidator
         {
             foreach (var loadCase in d.LoadCases.Values)
             {
+                string label = $"Load case '{loadCase.Name}'";
                 foreach (var component in loadCase.Components)
                 {
                     if (!d.LoadPatterns.ContainsKey(component.PatternId))
-                        Error("case.pattern", ObjectKind.LoadCase, loadCase.Id, $"Load case '{loadCase.Name}' uses a load pattern that does not exist.");
+                        Error("case.pattern", ObjectKind.LoadCase, loadCase.Id, $"{label} uses a load pattern that does not exist.");
                     if (!double.IsFinite(component.Factor))
-                        Error("case.value", ObjectKind.LoadCase, loadCase.Id, $"Load case '{loadCase.Name}' has a factor that is not a finite number.");
+                        Error("case.value", ObjectKind.LoadCase, loadCase.Id, $"{label} has a factor that is not a finite number.");
                 }
-                if (loadCase.InitialCaseId is not { } initial) continue;
-                if (!d.LoadCases.ContainsKey(initial))
-                {
-                    Error("case.initial", ObjectKind.LoadCase, loadCase.Id, $"Load case '{loadCase.Name}' continues from a load case that does not exist.");
-                    continue;
-                }
-                var seen = new HashSet<ObjectId> { loadCase.Id };
-                for (ObjectId? current = initial; current is { } id && d.LoadCases.TryGetValue(id, out var next); current = next.InitialCaseId)
-                {
-                    if (seen.Add(id)) continue;
-                    Error("case.cycle", ObjectKind.LoadCase, loadCase.Id, $"Load case '{loadCase.Name}' continues, through its initial cases, from itself.");
-                    break;
-                }
+                // what a case of its kind may carry and refer to: one set of rules, shared with the desktop's configuration
+                foreach (var (code, message) in LoadCaseRules.Check(loadCase, id => d.LoadCases.GetValueOrDefault(id), d.MassSources.ContainsKey))
+                    Error(code, ObjectKind.LoadCase, loadCase.Id, message);
             }
+
+            foreach (var id in LoadCaseRules.Circular(d.LoadCases.Values))
+                Error("case.cycle", ObjectKind.LoadCase, id, $"Load case '{d.LoadCases[id].Name}' depends, through the cases it continues from or takes its stiffness from, on itself.");
 
             var open = new HashSet<ObjectId>();
             var known = new Dictionary<ObjectId, bool>();
@@ -293,7 +288,30 @@ public static class DocumentValidator
                         Error("combination.value", ObjectKind.LoadCombination, combination.Id, $"Load combination '{combination.Name}' has a factor that is not a finite number.");
                 }
                 if (Cyclic(combination.Id))
+                {
                     Error("combination.cycle", ObjectKind.LoadCombination, combination.Id, $"Load combination '{combination.Name}' contains itself, directly or through another combination.");
+                    continue;
+                }
+                // What a combination adds or envelopes are results of static cases. Modes are not such results.
+                var statics = CasesOf(combination).ToArray();
+                foreach (var modal in statics.Where(item => item.Kind == CaseKind.ModalEigen))
+                    Error("combination.modal", ObjectKind.LoadCombination, combination.Id,
+                        $"Load combination '{combination.Name}' includes modal case '{modal.Name}': mode shapes and frequencies are not load-case results and cannot be combined.");
+                // Linear results add up only about one stiffness: cases linearized about different states do not superpose.
+                var stiffnesses = statics.Where(item => item.Kind == CaseKind.LinearStatic).Select(item => item.StiffnessSourceCaseId).Distinct().ToArray();
+                if (combination.Type == CombinationType.LinearAdd && stiffnesses.Length > 1)
+                    Warning("combination.stiffness.mixed", ObjectKind.LoadCombination, combination.Id,
+                        $"Load combination '{combination.Name}' adds linear static cases that use different stiffnesses ({string.Join(", ", stiffnesses.Select(id => id is { } source ? $"the end of '{NameOf(source)}'" : "unstressed"))}): their results do not superpose as one linear scenario.");
+            }
+
+            IEnumerable<LoadCase> CasesOf(LoadCombination combination)
+            {
+                foreach (var term in combination.Terms)
+                {
+                    if (d.LoadCases.TryGetValue(term.SourceId, out var loadCase)) yield return loadCase;
+                    else if (d.LoadCombinations.TryGetValue(term.SourceId, out var inner))
+                        foreach (var nested in CasesOf(inner)) yield return nested;
+                }
             }
         }
     }

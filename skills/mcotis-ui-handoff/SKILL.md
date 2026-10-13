@@ -19,27 +19,27 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   pack URIs read `/Mcotis;component/Presentation/Theme.xaml`, without `src/`. The fixtures `tests/fem-sap-benchmark` and
   `tests/etabs-import` stay where they were, and the checks are run from the repository root.
 - `MCOTiS.sln` includes the app, the libraries and both check projects; the desktop build script targets the app project directly.
-- **Legacy MB Tabs 01–05 are archived** (user, 2026-10-13: "bỏ hết tab 01-05 và đưa vào mục archive của dự án"):
-  Loading, Truss Height, Pretension, Output Settings and Iteration no longer appear in the main window or the MB
-  menu. Their frozen XAML and page-only code-behind are under `archive/Mcotis.Desktop/LegacyTabs01To05/` and are not
-  compiled. Five inert `WorkflowTabs` slots preserve the established indices of Post-Processing, Optimization, FEM
-  and Quantities. The legacy state/configuration and study services remain only as compatibility seams for existing
-  model files and current VCF/TAS/optimization code; do not navigate to or restore slots 0–4. Run Study / Cancel Study
-  were removed from the active Run menu. Later sections describing those five pages are historical reference only.
+- **The complete legacy MB workspace is archived** (user, 2026-10-13: "bỏ tab MB và bỏ vào archive"):
+  pages 01–05 are frozen under `archive/Mcotis.Desktop/LegacyTabs01To05/`; pages 06, 06A and 08 and their former menu,
+  toolbar and navigation entry points are under `archive/Mcotis.Desktop/LegacyMb/`. Nothing there is compiled. The MB
+  menu, Run Study / Cancel Study, Study Reports and the report toolbar button are absent. Inert `WorkflowTabs` slots
+  0–6 and 8 preserve FEM at index 7; do not navigate to or restore them. The separate Optimization menu for VCF/TAS
+  remains active. Legacy state, configuration and report services remain only where old files or active code still
+  depend on them. Every later section about an MB page or study report is historical reference, not active UI guidance.
 - **The standalone system** (user, 2026-10-12: "ignore SAP2000 and the MB tab completely … stand on our own feet and
   develop a new system") is the library projects `src/Mcotis.Core`, `src/Mcotis.Application`, `src/Mcotis.Persistence`
   and `src/Mcotis.Analysis`, with their checks in `tests/Mcotis.Checks`. The desktop now references them for the
   separate TemplateBuilding native workspace. Plan and
   status: `docs/mcotis-standalone-plan.md`. Checks:
-  `dotnet run --project tests/Mcotis.Checks`. SAP2000 and the MB pages are reference only: keep them working, do not
-  extend them.
+  `dotnet run --project tests/Mcotis.Checks`. SAP2000 code is reference only; the MB UI is archived and must not be
+  restored or extended.
 - **Native building UI** (user, 2026-10-12): **Edit → TemplateBuilding…** is available even on a blank/locked legacy
   model and creates a new native workspace, preserving the main window's model. Per-bay X/Y widths, per-storey
   heights and beam line loads, general section properties, fixed/pinned bases and optional self-weight. Native
   Save/Open `.mcotis`, Undo/Redo, DOF options, async static analysis (**Run → Run Analysis**, F5) and result tables,
   including **Cable results**. Main **File →
   Open Native Model…** reopens saved native input. Main **Run → Analysis Options…** now opens a staged WPF dialog:
-  the degrees of freedom its planar model can change (see **No silent restraint** below) plus the real planar cable-fit
+  the same Degrees of Freedom tab as the native dialog, full 3D to start with (see **No silent restraint** below), plus the real planar cable-fit
   tolerance/iterations/mesh/sag; the native dialog offers 3D/planar/custom DOFs and marks cable/mesh controls inactive. Native engine since 2026-10-12: `Mcotis.Analysis.StaticSolver` — frames
   split at points lying on them, tension-only cables, cable target forces, staged nonlinear cases, cable sag; validated
   before its results were shown (`docs/analysis/cable-static-verification.md`). Native limits: 600 free / 2,400 total
@@ -53,21 +53,45 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   baseline: the same laws now live in `Mcotis.Analysis` (`StaticSolver`, `CableElement`). The main window is the
   standalone application — the user does not want it called "Tab 07" (2026-10-12). **No silent restraint** (user,
   2026-10-12): the native Analysis Options has "Degrees of freedom of cable joints" (`AnalysisSettings.CableDofs`,
-  default UX UY UZ). **The main window has a Degrees of Freedom tab too, since 2026-10-13** (user: "analysis option,
-  add the menu to change degree of freedom"). The day before the user had it removed because every box on it was
-  disabled ("tab này hơi thừa, nhất là cho cable") — so it shows **only boxes that can be changed**: `RY — rotation of
-  the joints` for the model (off = the rotation is held at every joint, as by a support, not released; a moment on a
-  joint is then refused) and `UX` / `UZ` for cable joints (default both; UX off holds a joint only cables reach
-  sideways, which is what lets a cable in two segments be analysed). No preset, no UX / UZ of the model — the model
-  spans its XZ plane and the compiler refuses a translation that is off unless every joint has the same coordinate
-  along it (`dof.geometry`) — and no UY / RX / RZ. Do not add disabled boxes back, and do not offer 3D there: the main
-  window's members hold in-plane properties only. State: `MainViewModel.FemActiveDofs` / `FemCableDofs`
-  (`MainViewModel.AnalysisOptions.cs`, `DofProblem` is the one rule) → `FemStudyService.Analyze(…, activeDofs,
-  cableDofs)` → `FemSolver`; the optimizations carry them in their inputs; saved as `FemSettingsDto.ActiveDofs` /
-  `CableJointDofs` (names; an older file has everything on). The solver's hint "or switch it off for cable joints
-  (Analysis Options → Degrees of Freedom)" is no longer stripped from main-window messages. A movement that is on and that nothing holds is reported as
+  default UX UY UZ). **The main window has the same Degrees of Freedom tab, since 2026-10-13** — three decisions
+  of the user that day, in order: "analysis option, add the menu to change degree of freedom" (the tab had been removed
+  the day before because every box on it was disabled: "tab này hơi thừa, nhất là cho cable" — so never a box that
+  cannot be changed); "can it be more generalized as can be set different degree of freedom rather than fixed it, if
+  not proper then report in the log"; "make the planar use 3d as 3d is default"; and, on seeing every 3D run fail,
+  **"ETABS CAN RUN REGARDLESS"**. So: preset + six boxes + six for cable joints, exactly the
+  native form (`AnalysisOptionsWindow`, `planar: true` changes the notes only). **A model starts in Full 3D** with the
+  translations for cable joints (`MainViewModel.StartingDofs`: the default model, a blank model); a configuration
+  saved without them opens in the XZ plane it was analysed in (`PlaneDofs`; `FemSettingsDto.ActiveDofs` /
+  `CableJointDofs` are null in such a file). **The set is the user's**: the form refuses only a set without a
+  translation (`DofProblem`); nothing corrects it, and **do not choose the XZ plane for the user**. A model of this
+  window lies in a plane on pins that are all on one line (supports are the lowest joints), so in Full 3D nothing
+  holds it out of that plane. **The run goes on where the loads allow** (`StaticOptions.HoldUnloadedMechanisms`, on
+  in `FemSolver`, off in the native workspace): a stiffness singular only by movements it does not resist, on which
+  the loads do no work, is solved with those movements held (`StiffnessConditioning.SolveHeld`) and accepted only if
+  every equilibrium equation is met — the same residual check as any solution. The run then reads Completed with
+  Warnings, every case `Converged with Warnings · Instabilities: 78 · 1 unloaded movement held`, the table lists the
+  movement (RX of every joint, UY of every joint off the line; remark `possible mechanism, not loaded: held`), all in
+  amber, and the results are those of the XZ plane. A movement the loads DO act on has no result (Numerical
+  Instability, as before); so has a degree of freedom nothing holds at all — the 2026-10-12 rule for cable joints
+  stands. Never hold a movement silently, and never one the loads act on. `FemSolver` hands the set to the solver as it is. In 3D (`spatial`)
+  the frames get `FemSectionProperties.OutOfPlaneInertiaM4` / `TorsionConstantM4` — set by
+  `MainViewModel.PropertiesFor` from the section (a section without a torsion constant takes I22 + I33, as on
+  export), filled in for older members by `HeldFemProperties` — and frames without them are refused by name; in the
+  plane the adapter passes what it always passed. The 3D results of a main-window model are validated against its
+  analysis in the plane (`--run-monitor`, `--run-monitor-ui`: to round-off); the window shows the in-plane
+  components only. Other refusals come back as the run's
+  reason — `dof.geometry` reworded once with the joints ("UX is switched off, but the joints of the model are not all
+  at one X: … Switch UX on under Run → Analysis Options → Degrees of Freedom"), the other `dof.*` errors in the
+  solver's words plus where the option is — and the Run Monitor shows them: run Failed, reason in red, every case
+  Cancelled · Not run with the reason in its log. Off = held at every joint as by a support, not released; a load on
+  it is refused, not dropped. A cable joint held by an option against a cable's pull (`dof.cable.held`, a compiler
+  warning) goes on every report as `FemEquilibriumProgress.ModelWarnings`: logged per case, and the case reads
+  Converged with Warnings. The optimizations carry the set in their inputs. What the solver says reaches the user
+  without the adapter's own prefixes (`F:…#n`, `C:…`) and load identities (`FemSolver.Said`). **The checks start models
+  in the XZ plane** (`Program.Main` sets `MainViewModel.StartingDofs = PlaneDofs`): every expected value in them is
+  of the analysis in the plane; the 3D start is checked where it is the subject. A movement that is on and that nothing holds is reported as
   an unstable model in both windows — a segmented cable through a cable-only joint or a free cable end now stops a
-  main-window run. Native files are schema 3. **Validate before showing a result** (same message): see AGENTS.md. Full scope: `docs/native-building-ui.md`;
+  main-window run. Native files are schema 4 (load-case kinds, below). **Validate before showing a result** (same message): see AGENTS.md. Full scope: `docs/native-building-ui.md`;
   checks `--template-building-ui`. Preserve Apply/OK/Cancel semantics and the result current/stale state.
 - `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/` and `.work/` wherever they are.
 - The app is a WPF app targeting `net8.0-windows`, `x64`, with SAP2000 API reference `CSiAPIv1.dll`.
@@ -112,16 +136,13 @@ earlier tall-header / large-button / blue-block look.
 ## Navigation Style — desktop menu bar (ETABS-like)
 
 - A menu bar (`MainMenu`, top of the window) replaces the left tab rail: **File · Define · Edit · Assign · Run ·
-  Result · Post-Processing · Display · Design · Help | Optimization | MB**. Menu items reuse the existing commands; navigation is presentation only
+  Result · Post-Processing · Display · Design · Help | Optimization**. Menu items reuse the existing commands; navigation is presentation only
   (`MainViewModel.Menu.cs`, click handlers in `MainWindow.xaml.cs`). Do not bring the rail or the toolbar buttons back.
   **Optimization is a tab of its own, after a separator, and highlighted** (user, 2026-10-12: "thêm 1 separator for tab
   optimization, highlight this tab") — `OptimizationMenu` holds Optimization VCF…, Optimization TAS…, Optimization
   Results… and Cancel Optimization, which left the Run menu. The highlight is the `HighlightedMenuHeader` header template of `Theme.xaml`
   (accent text on the pale `Selected` chip): the menu's `Header` stays the string `_Optimization`, which the window and
-  the checks read, and the drop-down keeps the normal colours. Placing it between Help and MB was the implementer's choice.
-  **MB is last, after a separator** (user, 2026-10-12: the MB pages are for reference only) — `MbMenuSeparator`, a
-  `Separator` with the `MenuBarSeparator` style of `Theme.xaml` (a vertical line; the default style of a `Separator`
-  in a menu is the drop-down's horizontal rule). Do not move MB back among the working menus.
+  the checks read, and the drop-down keeps the normal colours. It is the final menu, after one vertical separator.
   - **File**: New Config, Load Config…, Save Config (**Ctrl+S**), Save Config As… (**Ctrl+Shift+S**) · Load VCF… · Load TAS… ·
     Read FEM Properties from SAP. Save (`SaveFemModel`) overwrites the active configuration and asks for a file only when
     there is none; Save As (`SaveFemModelAs`, asked for by the user 2026-10-12) always asks, starting from the active
@@ -199,13 +220,11 @@ earlier tall-header / large-button / blue-block look.
     live: `--etabs-export-live` starts a **private hidden ETABS** (`EtabsGateway.StartPrivateAsync`, never the user's), exports
     the CoT model into its blank model, previews again (143 matched, nothing to change), imports it back and runs it: same
     members, joint loads, deflections and reactions (self-weight within 3·10⁻⁶ — ETABS keeps the weight modifier to ~6 figures).
-  - **MB**: only the remaining reference pages 06A Optimization and 08 Quantities. Legacy pages 01–05 are archived;
-    no active menu, command or startup flow may select them.
+  - **MB**: archived completely. No active menu, command, toolbar button or startup flow may select an MB slot.
   - **Define**: Materials, Section Properties, Load Patterns, Load Cases / Load Combinations · Result Load Case.
     There is no Define → Loading: the loads of the model are entered in Edit → VCF System (Storey Force / Cable Force),
-    one fixed value each — see Tab 07 FEM, "The flow the user set". The 01 Loading page stays under MB with its ranges;
-    its AddPoints / RemoveAppliedPoints / AddLoadDefinition / DeleteLoadDefinition commands work on an offline model too
-    (they only edit what the app holds).
+    one fixed value each — see Tab 07 FEM, "The flow the user set". The archived 01 Loading implementation and its
+    commands remain compatibility code only; they are not reachable from the active UI.
   - **Edit**: VCF System…. A blank configuration enables this after at least one frame section and one cable section
     exist. The window previews the built-in VCF topology without putting objects in the working model; Apply creates and
     names the joints, frames and cables and assigns the selected library sections.
@@ -327,17 +346,17 @@ earlier tall-header / large-button / blue-block look.
 - Every launch opens the built-in default model before the window is shown; no blank viewport or choice appears at startup.
   File → New Config still starts an unsaved blank model. Its creation flow is
   **Define materials/sections → Edit VCF System → Define loads/cases → Run**. Define remains available on that blank model;
-  MB, Assign, Run, Result, Post-Processing, Display and Design require geometry. The New Config blank viewer offers
+  Assign, Run, Result, Post-Processing, Display, Design and Optimization require geometry. The New Config blank viewer offers
   **Load Default Template** and **Continue with Blank Model**. The template uses File → Load VCF…; Continue hides
   the choice and keeps the model empty. New Config clears the active working-session manifest.
 - The `WorkflowTabs` TabControl stays (indices unchanged) but its tab strip is hidden (`ItemContainerStyle` →
-  `Collapsed`). Slots 0–4 are inert compatibility placeholders for the archived pages. A one-line pane header above
+  `Collapsed`). Slots 0–6 and 8 are inert compatibility placeholders; only FEM at index 7 is active. A one-line pane header above
   the active content shows `PaneMenu  ›  PaneTitle` (for example `Define › SECTIONS`) with the page status
   (`PaneStatus`) on the right and, offline, the `OfflineModelSummary` line.
 - The pane header has an **✕** (`ClosePaneButton`, shown while the shared viewer is) that hides the left pane — the
-  params column goes to 0 (its MinWidth is dropped too) and the viewer takes the full width. Any MB / Define / Assign /
+  params column goes to 0 (its MinWidth is dropped too) and the viewer takes the full width. Any Define / Assign /
   Run / Result / Display item opens the pane again (`OpenPane`). At startup the pane is closed (`App.OnStartup` → `ClosePane`), so the app
-  opens on the model view only. Full-width pages (05, 06, 06A, 08) always show it.
+  opens on the model view only.
 - **Edit → VCF System…** opens `VcfGeometryWindow`: `VcfGeometry.Analyze` (Application) reads the system from the
   02 Truss Height chord groups — bays and bay width, truss depth, middle chord above the bottom chord, clear height
   (ground → bottom chord), back-span (mega column → outer column) and back-stay node height — and the role of every
@@ -509,19 +528,14 @@ earlier tall-header / large-button / blue-block look.
 
 ## Workflow tabs & shared model preview
 
-- There is **no** standalone "SAP Model" tab. The left rail is **01 Loading, 02 Truss Height, 03 Pretension,
-  04 Output Settings, 05 Iteration, 06 Post-Processing, 06A Optimization, 07 FEM, 08 Quantities** (`SelectedIndex`
-  0-8: Optimization is index 6 — `TabOptimization` — FEM is index 7 — `TabFem` — and Quantity Take-off is index 8 —
-  `TabQuantities`). Connecting is the top-bar `Connect SAP` button only. Project JSON stores the Tabs 01-05 inputs and the Print Setup; nothing of
-  the FEM tab is saved in it (the separate FEM model file from Save Model holds that). DTO property names (`Tab02Loading` … `Tab05IterationStudy`) and JSON keys are
-  unchanged legacy v1 identifiers.
+- There is **no** standalone "SAP Model" tab and no visible tab rail. Only **07 FEM** at index 7 is active; indices
+  0–6 and 8 are empty placeholders for the archived MB workspace. Legacy project JSON/DTO names remain unchanged only
+  for compatibility; the separate FEM model file stores the active FEM model.
 - There is **one** `Structural2DViewer` (`x:Name="SharedViewer"`), hoisted out of the `TabControl` into a
   three-column grid in `MainWindow.xaml`: `ParamsColumn` (the `TabControl`, params only) | `ViewerSplitterColumn` |
   `ViewerColumn` (the `SharedViewerPane` `DockPanel`). Switching tabs never rebuilds the viewer.
-- `MainWindow.xaml.cs` `ApplyViewerLayout()` (called from `Loaded` and `WorkflowTabs_SelectionChanged`): tabs
-  01-04 (index 0-3) and 07 FEM (index 7) get the resizable ~40/60 params/preview split; tabs 05 Iteration,
-  06 Post-Processing, 06A Optimization (indices 4-6) and 08 Quantities (index 8) hide the viewer + splitter and the
-  `TabControl` takes the full width. The user's dragged split is remembered in
+- `MainWindow.xaml.cs` `ApplyViewerLayout()` (called from `Loaded` and `WorkflowTabs_SelectionChanged`) gives FEM
+  at index 7 the resizable ~40/60 params/preview split. The user's dragged split is remembered in
   `paramsColumnWidth` / `viewerColumnWidth`.
 - The viewer's `Model` and every overlay come from `MainViewModel` `SharedViewer*` computed properties gated on
   `selectedTab` (`SharedViewerModel`, `SharedViewerAppliedPoints`, `SharedViewerTopPoints/Middle/Bottom`,
@@ -582,12 +596,70 @@ earlier tall-header / large-button / blue-block look.
     FEM_PT / FEM_TAB01), continuing from SAP's own pretension case with whatever self-weight that case lacks.
   - Checked on the default model: the default Pretension / SLS / ULS give the displacements, cable forces and reactions of
     SAP2000's `Pretension`, `NL SLS001…-staged` and `NL ULS001…-staged` rows (SLS 39.6 mm, ULS 46.3 mm).
-  - **Editing**: `+ Add` (a nonlinear static case with the Tab 01 loads, From the pretension case), `- Remove` (refused
-    while another case continues from it or a combination uses it), and editable **Case** (unique; no ` + ` / ` - ` in a
-    name — they separate definition terms; followers and combinations follow a rename), **Definition** and **From**
-    (dropdown of `FemInitialCaseChoices`, changed in place so a From cell never loses its value; a case cannot continue
-    from itself, longer cycles are refused when the run starts). Default Setup and SAP Cases replace the table (the view
+  - **Editing**: `+ Add` proposes a nonlinear static case with the Tab 01 loads, From the pretension case, and opens
+    Load Case Data (`LoadCaseWindow`) on it; `Modify`, the `…` button and the loads cell open it on the selected case.
+    The table edits **Run** and **Case** (the name: unique, no ` + ` / ` - `; followers — by continuation and by
+    stiffness — and combinations follow a rename) in place; the type, the case continued from or lending its
+    stiffness, the loads and Cable Target Forces are set in Load Case Data only (the From dropdown that used to be in
+    the table is gone: what a case may name depends on its type). `- Remove` is refused while another case continues
+    from it or uses its stiffness, or a combination uses it. Default Setup and SAP Cases replace the table (the view
     asks first) and clear the results; the other edits leave the last results on screen. Rows are saved with Save Model.
+- **Load-case kinds and references (2026-10-13, user: "implement this plan" / "continue this plan" — PR-01 + PR-02 + PR-03 of
+  `docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md`; read its "Implementation status" before touching load cases).**
+  - A case is one of four kinds (`Mcotis.Core.CaseKind`: LinearStatic, NonlinearStatic, InitialPDelta, ModalEigen) and
+    keeps two references apart: `InitialCaseId` = the nonlinear case it **continues from**; `StiffnessSourceCaseId` =
+    the nonlinear case whose end stiffness a linear / modal case **uses**. Do not use one for the other. Rules:
+    `Mcotis.Core.LoadCaseRules` — the native validator and the desktop files (`FemCaseSchema.Validate`) both call it;
+    put a new rule there, not in a view model. Run order: `Mcotis.Analysis.Cases.CaseDependencyPlanner`, adapted for
+    the main-window rows by `Mcotis.Desktop.Application.CaseExecutionCoordinator`.
+  - **Nothing new is solved, and nothing may fall back.** P-Delta, modal, linear on a stiffness source and
+    case-specific controls are refused at Run with the reason: `StaticSolver` (`static.case.pdelta`, `.modal`,
+    `.stiffnessSource`, `.controls`) and, in the main window, `FemCaseOptions.NotSolvedYet` thrown by
+    `FemLoadPlan.Build`. Never solve such a case as a plain nonlinear static one. Lifting a refusal needs the checks
+    of AGENTS.md "Validate before showing a result" and the literature gates of the plan.
+  - Main-window rows: `FemDefinitionRow.Id` (a GUID a rename keeps) and `FemCaseRow.Options` (`FemCaseOptions`: kind,
+    geometric mode, stiffness-source case, controls, mass source, modes; `Default` = nonlinear static, no P-Delta).
+    A desktop case of version 1 is nonlinear static whatever its type text says — that is how it was analysed; the
+    table shows `CaseType` (from the kind), and `Type` is only the text a case is saved with.
+  - **Load Case Data** (`LoadCaseWindow`, PR-03): a Type box (`FemCaseOptions.Kinds` / `KindName`: Linear Static,
+    Nonlinear Static, Initial P-Delta, Modal (Eigenvectors)) and what belongs to the type — `ShowType`. One reference
+    box under two labels: **Continue from** for the nonlinear kinds, **Stiffness from** for linear / modal; both list
+    `StateProducerChoicesFor` (nonlinear cases that do not depend on the one edited). Geometric nonlinearity
+    (None / P-Delta; fixed P-Delta for Initial P-Delta), Purpose (nonlinear static only), **Own iteration controls**
+    (a tick box — the four boxes are data only when it is ticked), and for modal a mass source and modes in place of
+    the loads. **A field that is not shown has no part in the case**: `Options()` / `FitsCableTargets` return only
+    what the type has, so a value left over from another type can never hold OK back — keep it so when adding a
+    field. Problems come from `MainViewModel.FemLoadCaseProblem` (which ends in `LoadCaseRules.Check`); a case others
+    start from cannot be made linear / modal. A type that is not solved yet shows the banner with
+    `FemCaseOptions.NotSolvedYet`'s reason; a NEW case of such a type is added with Run off (the cases beside it go
+    on running), an edited one keeps its Run. Mass sources: no form (PR-06); a configuration without one is offered
+    `MainViewModel.DefaultMassSourceName` ("MS1", self mass), created in `femMassSources` when a modal case that names
+    it is saved.
+  - **The run plan** (`CaseExecutionCoordinator.Plan`, PR-03): the load tables put before the native planner. It
+    reads from a row only what decides the plan (kind, the two references, has-loads, mass source, Run), so a row
+    outside a run cannot stop it; it solves nothing. `RunLoadCasesWindow` shows it per staged action: Role
+    (Requested / Prerequisite / Result), Depends On, Availability. `FemLoadPlan.Build` runs by it: `CaseNames` = the
+    planned cases **in the order of the Load Cases table** — never the planner's order, which breaks ties by
+    identity and would reorder results at random for new rows. `PrerequisiteRemarks` = the cases of the run that are
+    not ticked, each with its reason; they are solved and listed (user-visible change of PR-03: an unticked case a
+    ticked case continues from used to be carried as loads only), the run monitor logs the remark in that case
+    (`FemRunMonitor.Begin(…, remarks)`), and `PrimaryResultName` / `DefaultResultName` pick a case that was asked
+    for — use them, not `ResultNames[0]` / `CaseNames[^1]`. The solver is still handed each continued case as its
+    accumulated loads (`Resolve`, CASE-01); a stiffness source is a dependency of the plan and never becomes loads.
+  - Files: `.mcotis` schema 4; `.cotfem.db` schema 2 (`FemInputSnapshot.CurrentSchemaVersion`; tables
+    `case_analysis_options`, `mass_sources`; no `initial_case_name`); `.cotfem.json` version 2. Older files are
+    upgraded in memory on read (`FemCaseSchema.Complete`: identities, names → identities, fail-fast on a missing or
+    ambiguous name) and written new on save. In a desktop row an absent kind / geometric mode / stiffness source means
+    the version-1 meaning. Identities and the file version are **not** part of the revision hash
+    (`FemCaseSchema.Content`, `FemModelFileDto.RevisionFormVersion`) — keep it so, or every stored result of an
+    upgraded configuration goes stale. The database snapshot stays the authority; `CheckTables` refuses a database
+    whose tables disagree with it. Fixtures written by the earlier code: `tests/fem-schema/`,
+    `tests/Mcotis.Checks/Fixtures/schema3-cases.mcotis` — do not regenerate them with current code.
+  - Checks: `Mcotis.Checks` group "Load cases: …" (`CaseStateChecks.cs`); `--fem-schema` (`FemSchemaChecks.cs`);
+    `--case-editor` (`CaseEditorChecks.cs`: the plan and the `PDELTA_GRAVITY → LIN_WIND` gate, the order of the run,
+    prerequisites, the form for every type, a run with a prerequisite against a run of everything — its window part
+    needs the application's resources, so `--full` runs the rest only); `--study-ui` covers the two windows in the
+    main window.
 - **The flow the user set (2026-10-11)**: define load patterns → assign loads → define load cases → Run → choose the
   cases → results. Run always solves the model as it is then: current geometry, section assignments, loads and cable
   targets (the VCF System window shows all four).
@@ -706,14 +778,24 @@ earlier tall-header / large-button / blue-block look.
     summary; then LOAD CASES, one entry per **solve**: per pretension stage `<case> — cable target-force fit`, then
     its cases. A combination is a superposition, not a solve: never an entry. Entries are planned as Pending from
     `FemLoadPlan.StagesFor` when the run starts.
-  - **An entry**: header `> n  name   ✓ status   hh:mm:ss`, the whole header a `ToggleButton` (`SectionToggle`), a 1 px
-    solid line under each. Statuses and colours: Converged green · Converged with Warnings amber · Not Converged /
-    Numerical Instability / Failed red · Pending / Cancelled grey · Running accent. Several stay open; a failed one
-    opens itself once; nothing is ever closed for the user. Its detail (`CaseDetail`) is built only while it is open.
-    Open: Convergence / Numerical Stability / Instabilities (0 = none detected — never write a residual as zero), the
-    details in two columns, the table when a degree of freedom is reported, and ANALYSIS LOG — a read-only `TextBox`
-    in the UI font, one line per thing the solver reported (600 iteration lines kept per case).
-  - **The table**: Joint · X · Y · Z · UX · UY · UZ · RX · RY · RZ · Remarks, always the six columns. A cell is a
+  - **An entry**: header `> n  name   ✓ status · diagnostic   hh:mm:ss`, the whole header a `ToggleButton`
+    (`SectionToggle`), a 1 px solid line under each. Statuses and colours: Converged green · Converged with Warnings
+    amber · Not Converged / Numerical Instability / Failed red · Pending / Cancelled grey · Running accent. **The
+    diagnostic** (`DiagnosticText`, refined 2026-10-13 to the user's repository-aligned plan) makes a closed case
+    self-contained: `Instabilities: 0` · `Instabilities: 0 · Accuracy warnings: 2` (or `Cable target forces not met`,
+    `1 rotation left out`, `2 degree-of-freedom warnings`) · `6 affected DOFs` · `100 iterations · Instabilities: N/A`
+    · `Cable target-force fit failed` · `Not run` / `Stopped`. **Never write a bare "(= 0)"**: the 0 is the solver's
+    count of severe instabilities of a case it assessed; a case it did not assess reads `N/A`, never 0. Inline text in
+    the status colour (plain for Converged), no filled chip; name `2*` and outcome `3*` share the row and trim, the
+    full line is the tooltip and the automation name. Several stay open; a failed one opens itself once; nothing is
+    ever closed for the user. Its detail (`CaseDetail`) is built only while it is open. Open: Convergence / Numerical
+    Stability / Instabilities, the details in two columns (convergence, iterations, tolerance, fit — the cause of a
+    failure stays in view), the table when a degree of freedom is reported, then **TECHNICAL DIAGNOSTICS** — closed
+    until asked for (`IsTechnicalExpanded`): scaled backward error, out-of-balance, smallest scaled pivot, resultant
+    of internal forces, largest loss of accuracy; move numbers there, never drop them — and ANALYSIS LOG — a
+    read-only `TextBox` in the UI font, one line per thing the solver reported (600 iteration lines kept per case).
+    A case that was stopped or not run has the run's reason in its log.
+  - **The table**: Joint · X (m) · Y (m) · Z (m) · UX · UY · UZ · RX · RY · RZ · Remarks, always the six columns. A cell is a
     number of digits lost (amber from the warning threshold, red above the severe one), `∞` (bold red: a singularity
     the solver identified), `-` (inactive: off in the XZ plane, or not used at a cable joint), `R` (restrained) or
     `N/A` (on, without an estimate). Digits show one decimal, more where one would read as the other side of a
@@ -838,7 +920,7 @@ earlier tall-header / large-button / blue-block look.
   Import From ETABS (`EtabsGateway`), which turns the ETABS model into an offline Mcotis model, and written by Export to ETABS
   after its preview and confirmation; there is no lasting ETABS session.
 
-## Tab 08 Quantity Take-off (`MainViewModel.Quantities.cs`, `src/Mcotis.Desktop/Application/Quantities/`)
+## Archived reference: Tab 08 Quantity Take-off (`MainViewModel.Quantities.cs`, `src/Mcotis.Desktop/Application/Quantities/`)
 
 Concrete volume and steel mass of **one model** by assigned section, from that model's own SAP2000 data: the
 **connected model**, read live from the running SAP2000, or a **study candidate**, from its own saved data. Reads
@@ -1343,7 +1425,7 @@ legend, chart text, values table); do not fork that CSS per report.
 - Checks: `tests/Mcotis.Desktop.Checks/SupportReactionReportChecks.cs` covers the derivation in C# and runs the report's own script (Jint,
   `tests/Mcotis.Desktop.Checks/ReportPage.cs`) through `window.reactionReport.summary('summary' | 'candidate', { loadId, pretensionId, heightId })`.
 
-## Tab 06A Optimization (`MainViewModel.Optimization.cs`, `Study/Optimized/`)
+## Archived reference: Tab 06A Optimization (`MainViewModel.Optimization.cs`, `Study/Optimized/`)
 
 Qualifies the stored candidates against acceptance criteria and writes the existing reports for the qualified
 ("optimized") set. Post-processing only: raw data in, no SAP2000, never part of a run or its fingerprint.
@@ -1573,7 +1655,7 @@ ViewModels; project save/load never mutates SAP.
 - `src/Mcotis.Desktop/Presentation/Theme.xaml`: density tokens, palette (chrome + `Viewport*`), button / grid / tab
   styles, and the `AppLogo` Vierendeel-truss `DrawingImage` (window icon + top-bar mark).
 - `src/Mcotis.Desktop/Presentation/MainViewModel.cs`: command wiring; `StatusLine` for the top-bar status text.
-- `src/Mcotis.Desktop/Presentation/MainViewModel.Quantities.cs` + `src/Mcotis.Desktop/Application/Quantities/`: Tab 08 Quantity Take-off.
+- `src/Mcotis.Desktop/Presentation/MainViewModel.Quantities.cs` + `src/Mcotis.Desktop/Application/Quantities/`: retained legacy backend for the archived Tab 08.
 - `src/Mcotis.Desktop/Presentation/Controls/Structural2DViewer.xaml`: dark viewport shell + floating overlay controls.
 - `src/Mcotis.Desktop/Presentation/Controls/Structural2DViewer.xaml.cs`: canvas drawing (viewport brushes), fit/pan/zoom,
   reset-to-XZ, axis colors, point labels.

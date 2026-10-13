@@ -69,7 +69,14 @@ public sealed record StaticDofStability(DofKey Dof, StabilityCondition Condition
 /// in the order of the model. Empty when nothing is reported.</param>
 public sealed record StaticStability(StabilityState State, StabilityStage Stage, int Iteration, int Equations, int ZeroStiffnessModes,
     double? LargestDigitsLost, DofKey? LargestAt, int Warnings, int Instabilities, ImmutableArray<StaticDofStability> Dofs,
-    StabilityThresholds Thresholds);
+    StabilityThresholds Thresholds)
+{
+    /// <summary>Movements without stiffness that were held so that the case could be solved
+    /// (<see cref="StaticOptions.HoldUnloadedMechanisms"/>): the loads of the case do no work on them, the case has a
+    /// result, its displacements are determined up to those movements and its forces are not affected. 0 when none
+    /// was held — then a singular stiffness has no result.</summary>
+    public int MovementsHeld { get; init; }
+}
 
 /// <summary>The conditioning of a symmetric stiffness, equation by equation. It reads the matrix and changes nothing
 /// of a solution.
@@ -94,8 +101,16 @@ internal static class StiffnessConditioning
     /// <param name="Digits">NaN where the condition is not <see cref="StabilityCondition.Estimated"/>.</param>
     /// <param name="SmallestPivot">Of the pivoted factorization, as a fraction of the diagonal stiffness: the smallest
     /// pivot taken, or what remained when it stopped. 1 when no factorization was made here.</param>
+    /// <param name="SmallestKeptPivot">The smallest pivot the pivoted factorization took before it stopped — what
+    /// is left of the stiffness when its movements without stiffness are held. 1 when none was taken.</param>
     internal sealed record Assessment(StabilityState State, StabilityCondition[] Conditions, double[] Digits, int ZeroStiffnessModes,
-        double SmallestPivot = 1);
+        double SmallestPivot = 1, double SmallestKeptPivot = 1)
+    {
+        /// <summary>Singular only by movements the stiffness does not resist — nothing negative, and no equation
+        /// that stands alone without any stiffness: holding those movements leaves a stiffness that can be solved.</summary>
+        public bool CanBeHeld => State == StabilityState.Singular && ZeroStiffnessModes > 0 &&
+            !Conditions.Any(condition => condition is StabilityCondition.NoStiffness or StabilityCondition.NegativePivot);
+    }
 
     /// <summary>What remains of a unit-diagonal matrix of this size below this cannot be told from zero: n·ε, the
     /// stopping tolerance of LAPACK's pivoted Cholesky for a matrix that is given exactly, and
@@ -158,7 +173,7 @@ internal static class StiffnessConditioning
         for (int j = 0; j < m; j++)
             a[i, j] = stiffness[kept[i], kept[j]] / Math.Sqrt(stiffness[kept[i], kept[i]]) / Math.Sqrt(stiffness[kept[j], kept[j]]);
         var order = Enumerable.Range(0, m).ToArray();
-        double rounding = RoundingLevel(m), smallest = 1;
+        double rounding = RoundingLevel(m), smallest = 1, smallestKept = 1;
         int rank = 0;
         // Cholesky with diagonal pivoting: columns before 'rank' hold L below the diagonal, the rest what remains.
         for (; rank < m; rank++)
@@ -169,6 +184,7 @@ internal static class StiffnessConditioning
                 if (a[i, i] > a[pivot, pivot]) pivot = i;
             smallest = Math.Min(smallest, a[pivot, pivot]);
             if (!(a[pivot, pivot] > rounding)) break;
+            smallestKept = Math.Min(smallestKept, a[pivot, pivot]);
             if (pivot != rank)
             {
                 for (int c = 0; c < m; c++) (a[rank, c], a[pivot, c]) = (a[pivot, c], a[rank, c]);
@@ -235,6 +251,74 @@ internal static class StiffnessConditioning
 
         var state = indefinite ? StabilityState.NotPositiveDefinite
             : rank < m || unstiffened > 0 ? StabilityState.Singular : StabilityState.NearlySingular;
-        return new(state, conditions, digits, indefinite ? 0 : m - rank + unstiffened, smallest);
+        return new(state, conditions, digits, indefinite ? 0 : m - rank + unstiffened, smallest, smallestKept);
+    }
+
+    /// <summary>A solution of a stiffness that is singular by movements it does not resist: those movements held.
+    /// <para>The stiffness is factorized with diagonal pivoting exactly as in <see cref="Assess"/>. The equations left
+    /// when it stops — one for each movement without stiffness — are held at zero and the others are solved. Of the
+    /// whole family u + Σ cₖ·yₖ (yₖ the movements, K·yₖ = 0) this is the member in which those equations do not move;
+    /// every member has the same strains, so the same forces.</para>
+    /// <para>What is returned satisfies the held equations too only if the loads do no work on the movements
+    /// (yₖᵀ·f = 0): the residual of a held equation is exactly that work. This method does not judge it — the caller
+    /// measures the backward error of the whole system, as for any solution.</para></summary>
+    /// <returns>Null when the stiffness is not of that kind: a diagonal that is not positive, a pivot negative by
+    /// more than rounding, or nothing left over.</returns>
+    public static double[]? SolveHeld(double[,] stiffness, double[] load, CancellationToken cancellationToken = default)
+    {
+        int n = stiffness.GetLength(0);
+        var scale = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            double diagonal = stiffness[i, i];
+            if (!(diagonal > 0) || !double.IsFinite(diagonal)) return null;
+            scale[i] = 1 / Math.Sqrt(diagonal);
+        }
+        var a = new double[n, n];
+        for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++) a[i, j] = stiffness[i, j] * scale[i] * scale[j];
+        var order = Enumerable.Range(0, n).ToArray();
+        double rounding = RoundingLevel(n);
+        int rank = 0;
+        for (; rank < n; rank++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            int pivot = rank;
+            for (int i = rank + 1; i < n; i++)
+                if (a[i, i] > a[pivot, pivot]) pivot = i;
+            if (!(a[pivot, pivot] > rounding)) break;
+            if (pivot != rank)
+            {
+                for (int c = 0; c < n; c++) (a[rank, c], a[pivot, c]) = (a[pivot, c], a[rank, c]);
+                for (int r = 0; r < n; r++) (a[r, rank], a[r, pivot]) = (a[r, pivot], a[r, rank]);
+                (order[rank], order[pivot]) = (order[pivot], order[rank]);
+            }
+            double root = Math.Sqrt(a[rank, rank]);
+            a[rank, rank] = root;
+            for (int i = rank + 1; i < n; i++) a[i, rank] /= root;
+            for (int i = rank + 1; i < n; i++)
+            for (int k = rank + 1; k < n; k++) a[i, k] -= a[i, rank] * a[k, rank];
+        }
+        if (rank == n) return null;
+        for (int q = rank; q < n; q++)
+            if (a[q, q] < -10 * rounding) return null;
+
+        // L11·y = b, then L11ᵀ·v = y, in the scaled and reordered equations; the equations left over stay at zero
+        var v = new double[rank];
+        for (int i = 0; i < rank; i++)
+        {
+            double value = load[order[i]] * scale[order[i]];
+            for (int k = 0; k < i; k++) value -= a[i, k] * v[k];
+            v[i] = value / a[i, i];
+        }
+        for (int i = rank - 1; i >= 0; i--)
+        {
+            double value = v[i];
+            for (int k = i + 1; k < rank; k++) value -= a[k, i] * v[k];
+            v[i] = value / a[i, i];
+        }
+        var solution = new double[n];
+        for (int i = 0; i < rank; i++) solution[order[i]] = v[i] * scale[order[i]];
+        return solution;
     }
 }

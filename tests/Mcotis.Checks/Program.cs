@@ -17,6 +17,7 @@ internal static class Program
             ("Commands, undo/redo and revisions", SessionChecks.Run),
             ("Analysis input and result state", ResultStateChecks.Run),
             ("Native file", PersistenceChecks.Run),
+            ("Load cases: kinds, references, run order, schema 4 and what is not solved yet", CaseStateChecks.Run),
             ("3D topology and DOF compilation", DofCompilationChecks.Run),
             ("Spatial linear static engineering benchmarks", full ? SpatialStaticChecks.Run : SpatialStaticChecks.RunSmoke),
             ("General static solver: split frames, cables, target forces, stages and sag", full ? GeneralStaticChecks.Run : GeneralStaticChecks.RunSmoke),
@@ -76,6 +77,20 @@ internal static class Check
         return refusal;
     }
 
+    /// <summary>Turns a file of the current schema back into what the schemas before 4 held of its load cases — a
+    /// type and one reference to another case — and takes its mass sources away, for a check that then lowers its
+    /// schema version. The cases must be ones those schemas could hold: linear or nonlinear static.</summary>
+    public static void LoadCasesAsSchema3(System.Text.Json.Nodes.JsonObject file)
+    {
+        file.Remove("massSources");
+        foreach (var item in file["loadCases"]!.AsArray().Select(node => node!.AsObject()))
+        {
+            item["type"] = item["kind"]!.GetValue<string>();
+            if (item["initialState"]?["caseId"] is { } parent) item["initialCaseId"] = parent.GetValue<string>();
+            foreach (var member in new[] { "kind", "geometricMode", "initialState", "stiffnessSource" }) item.Remove(member);
+        }
+    }
+
     public static bool SameContent(ModelDocument a, ModelDocument b)
     {
         static bool Same<T>(ImmutableDictionary<ObjectId, T> x, ImmutableDictionary<ObjectId, T> y) where T : notnull =>
@@ -86,7 +101,8 @@ internal static class Check
             Same(a.Materials, b.Materials) && Same(a.FrameSections, b.FrameSections) && Same(a.CableSections, b.CableSections) &&
             Same(a.ShellSections, b.ShellSections) && Same(a.Restraints, b.Restraints) && Same(a.FrameAssignments, b.FrameAssignments) &&
             Same(a.CableAssignments, b.CableAssignments) && Same(a.ShellAssignments, b.ShellAssignments) &&
-            Same(a.LoadPatterns, b.LoadPatterns) && Same(a.Loads, b.Loads) && Same(a.LoadCases, b.LoadCases) && Same(a.LoadCombinations, b.LoadCombinations);
+            Same(a.LoadPatterns, b.LoadPatterns) && Same(a.Loads, b.Loads) && Same(a.LoadCases, b.LoadCases) && Same(a.LoadCombinations, b.LoadCombinations) &&
+            Same(a.MassSources, b.MassSources);
     }
 }
 

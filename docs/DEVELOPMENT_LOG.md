@@ -18,6 +18,152 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Load cases: Load Case Data for the four types; the run follows a plan and solves what a case needs first
+- Status: Done
+- Who: markbui, Codex, Claude
+- Where: Define → Load Cases → + Add / Modify (Load Case Data); Run → Run FEM Analysis → Set Load Cases to Run; Run →
+  Analysis Monitor
+- What: PR-03 of docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md. Load Case Data has a Type: Linear Static, Nonlinear
+  Static, Initial P-Delta, Modal (Eigenvectors), and shows what belongs to the type. A nonlinear case has "Continue
+  from" (its loads are added to the end state of that case), its geometric nonlinearity (None / P-Delta) and, when
+  ticked, its own load steps, iterations and tolerances; an initial P-Delta case is a nonlinear case with P-Delta
+  fixed on; a linear or modal case has "Stiffness from" instead (only the end stiffness of that case is used, its
+  loads are not applied again); a modal case has a mass source and a number of modes in place of loads. Both lists
+  offer nonlinear cases only, and never a case that depends on the one being edited; a case others start from cannot
+  be made linear or modal. A model without a mass source is offered MS1 — the self mass of its members — which is
+  kept with the configuration once a modal case names it; there is no form for mass sources yet. NOTHING NEW IS
+  SOLVED. A type or option that is not solved yet — P-Delta, modal, linear static, own iteration controls — can be
+  defined and saved; the form says so, the Load Cases table shows "Unavailable — verification pending" in its Status
+  column, a new case of such a type is added not set to run, and Run with it ticked stops with the reason, never
+  solving it as a simpler case. The Load Cases table now shows Type, Starts From / Stiffness, Geometric and Status,
+  and the case a case continues from is set in Load Case Data, no longer in the table. Set Load Cases to Run shows
+  the plan of the run: for each case its role (Requested, or Prerequisite — not set to run but needed first), what
+  it depends on, and whether it is solved. CHANGE TO A RUN: a case that is not set to run but that a case of the run
+  continues from is now solved and listed with its own results, as SAP2000 and ETABS do; its log in the run monitor
+  says "Not set to run: solved because … continues from it". Before, only its loads were carried. The results of
+  the other cases are the same (default model, only ULS set to run: Pretension and ULS equal those of a run of every
+  case), and the cases are solved and listed in the order of the Load Cases table as before.
+- Checks: --case-editor (the plan, the order of the run, prerequisites, rows outside the run, the form for every
+  type, the run dialog, save and reopen, a run with a prerequisite against a run of everything); --study-ui (Set
+  Load Cases to Run and the Load Cases pane in the main window; the suite stops later for a reason of its own — see
+  the entry below);
+  --fem-schema; --run-monitor-ui; --template-building-ui; --full of Mcotis.Desktop.Checks; --full of Mcotis.Checks;
+  --user-guide; --dev-log
+
+## 2026-10-13 · Archive the complete legacy MB workspace
+- Status: Done
+- Who: Codex
+- Where: Main window menus and toolbar; `archive/Mcotis.Desktop/LegacyMb/`
+- What: Removed the top-level MB menu and its remaining 06A Optimization and 08 Quantities pages, plus the legacy
+  06 Post-Processing page, Post-Processing → Study Reports and the Print All Reports toolbar entry. Their frozen
+  XAML and navigation entry points are kept outside the compiled project. Empty slots 0–6 and 8 retain FEM's
+  established index 7. The separate standalone Optimization menu for VCF/TAS remains active.
+- Checks: solution build; --study-ui archive assertions; --user-guide; --dev-log. KNOWN GAP of --study-ui, older than
+  this change: its Optimization VCF checks were written for the default model before the bundled database of
+  2026-10-11. The fan-cable forces they named (30,000 … 40,000 kN) are now those of the bundled model (5,000 …
+  15,000 kN), and Cable4b-2 follows Cable4a-2 as the bundled model has it (user, 2026-10-13). The suite now runs
+  100 checks, through the Load Cases pane, and stops at Define → Result Load Case: the check opens a menu item the
+  Define menu does not have, and did not have at the commit before. --study-ui is not part of --full.
+
+## 2026-10-13 · Load cases: verified P-Delta, linear static on a saved stiffness, modal analysis and result storage
+- Status: Planned
+- Who: Unassigned
+- Where: Run → Run FEM Analysis; the result tables; the numerical analysis libraries
+- What: The remaining steps of docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md, in their order: P-Delta and the state a nonlinear case ends in (PR-04,
+  blocked until the geometric stiffness and the restoring force have passed the literature gate — ALG-07, ALG-08);
+  linear static on the stiffness at the end of a nonlinear case (PR-05); mass sources and modal analysis (PR-06);
+  results of six degrees of freedom and of modes in the result database (PR-07). Until each is verified, a case that
+  asks for it is refused at Run with the reason — see the entry below.
+- Checks: none yet
+
+## 2026-10-13 · Load cases: four kinds and references by identity in the model and in every file; older files are upgraded when opened
+- Status: Done
+- Who: markbui, Claude
+- Where: No new window. File → Load Config… / Save Config (.cotfem.db, .cotfem.json); the native window's File → Open /
+  Save (.mcotis); Run → Run FEM Analysis and the native Run → Run Analysis (the refusals)
+- What: First two steps of docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md (PR-01, PR-02). A load case is now one of
+  four kinds — Linear Static, Nonlinear Static, Initial P-Delta, Modal (Eigenvectors) — and keeps two different
+  references apart: the nonlinear case it continues from (its loads are added to that case's end state) and the
+  nonlinear case whose end stiffness a linear or modal case uses (that case's loads are not applied again). It can
+  also hold P-Delta as its geometric nonlinearity, its own load steps / iterations / tolerances, and for a modal case
+  a mass source and a number of modes. The rules are one set for both windows: a linear case does not continue from a
+  case, a modal case has no loads, only a nonlinear or initial P-Delta case can be continued from or lend its
+  stiffness, no case depends on itself; a native model also refuses a combination of a modal case. The order in
+  which cases have to run — a case that is not ticked but is needed runs as a prerequisite; the cases behind a failed
+  one are blocked — is worked out by a run plan in the analysis library. NOTHING NEW IS SOLVED. The form to define
+  these cases and the run by the plan are the entry of Load Case Data above; a case that
+  asks for P-Delta, for modes, for the stiffness of another case or for its own iteration controls is refused at Run
+  with the reason ("P-Delta is not available yet — numerical verification pending … The case is not solved, and it is
+  not replaced by a first-order analysis"). The cases that were solved before give the same numbers. Files: native
+  .mcotis is schema 4, a configuration .cotfem.db is schema 2 and a .cotfem.json is version 2. An older file opens as
+  it was — every case with the meaning, the identity, the load patterns and factors, the run and cable-fit flags it
+  had; nothing is switched on by the upgrade, and the file on disk is not touched until it is saved. A configuration
+  keeps its revision through the upgrade, so its results stay its results. In a configuration a case now refers to
+  another by identity, so renaming a case cannot break what continues from it. A file that contradicts itself —
+  a reference to a case that is not there, two cases under one name, a name and an identity that point to different
+  cases, tables that disagree with the stored model — is refused with the case named, not repaired by a guess.
+  TO KNOW: a file saved by this version is not opened by an earlier build of Mcotis ("newer than this app supports");
+  update before exchanging configurations. The bundled default model is the same model, saved as schema 2.
+- Checks: Mcotis.Checks (group "Load cases: kinds, references, run order, schema 4 and what is not solved yet", and
+  its --full); --fem-schema (the upgrade of a schema-1 database and a version-1 JSON file written by the earlier
+  code, the four kinds through both files, the refusals, the bundled default, a P-Delta case opened, refused at Run
+  and saved again); --fem-db; --fem-model; --full of Mcotis.Desktop.Checks; --dev-log
+
+## 2026-10-13 · Analysis Options: full 3D to start with, every degree of freedom the user's to set; the run goes on where the loads allow and reports the rest
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Analysis Options… → tab "Degrees of Freedom"; the report is in Run → Analysis Monitor
+- What: The main window's Degrees of Freedom tab is now the same as the native workspace's: the preset (Full 3D, XZ,
+  YZ, XY plane, Custom), the six degrees of freedom and those of cable joints, each a box that can be changed. A model
+  starts in Full 3D — the default model, a new blank model — with the translations for cable joints; this replaces the
+  rule of the entry below that only RY could be changed. The set goes to the solver as chosen and is never corrected;
+  the form refuses only a set without a translation. A model of the main window lies in its XZ plane on pin supports
+  that are all on one line, so in Full 3D nothing holds it out of that plane: it can turn about the line of its
+  supports. The loads act in the plane and do no work on that movement, so — as ETABS does — the run goes on: the
+  solver holds that movement, solves, and reports it. Run FEM Analysis then reads Completed with Warnings, every load
+  case "Converged with Warnings · Instabilities: 78 · 1 unloaded movement held" (default model), and the table lists
+  the movement joint by joint — RX of every joint and UY of every joint off the line of the supports, remark
+  "possible mechanism, not loaded: held". The results are those of the XZ plane (default model: displacements within
+  2·10⁻¹² m, forces within 2·10⁻⁶ kN, every case and combination); the displacement along the held movement is given as
+  zero. A movement the loads DO act on — a mechanism under its load — has no result, as before, and neither has a
+  degree of freedom that nothing holds at all (a cable joint with no stiffness sideways: rule of 2026-10-12, unchanged).
+  The same holds in the plane: a mechanism the loads leave alone no longer stops a main-window run. The native
+  workspace is unchanged. A configuration saved before the degrees of freedom were an option opens in the XZ plane it
+  was analysed in. Other sets the model cannot be analysed with stop the run with the reason — "UX is switched off,
+  but the joints of the model are not all at one X: …" — every load case Cancelled · Not run with the reason in its
+  log; a load on a degree of freedom that is off is refused by the joint. A cable joint that a switched-off degree of
+  freedom holds against the pull of an inclined cable is said: the cases read Converged with Warnings and their log
+  names the cable and the joint. In 3D a frame is given the out-of-plane inertia and the torsion constant of its
+  section (a Section Designer section without a torsion constant takes the polar moment, as it does on export);
+  frames that come without them are refused by name. Messages of the solver name a frame or a cable by its own name.
+- Checks: Mcotis.Checks (movements held: a column free to spin, a beam on rollers, a hinged portal, a beam hung from a
+  cable — each to its closed form and to the digit of the same model restrained; refused when the load acts on the
+  movement, and without the option) and its --full; --run-monitor (a rigid portal and a hung beam in Full 3D against
+  the plane; a hinged portal pushed sideways refused; UX off; a cable joint held by an option); --run-monitor-ui (the
+  default model through the window in Full 3D against the XZ plane; UX off); --template-building-ui (the form, the 3D
+  start); --fem-model (what a new model, a blank one and an older file start with); --fem; --general-solver;
+  --fem-sap; --full of Mcotis.Desktop.Checks; --user-guide; --dev-log
+
+## 2026-10-13 · Run monitor: a closed load case says what was found; technical diagnostics apart
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis → the run monitor (also Run → Analysis Monitor), tab "Load Cases"
+- What: A load case that is closed now says, after its status, what the solver found of it: "Converged · Instabilities:
+  0"; "Converged with Warnings · Instabilities: 0 · Accuracy warnings: 2" (or "Cable target forces not met", "1
+  rotation left out"); "Numerical Instability · 6 affected DOFs"; "Not Converged · 100 iterations · Instabilities:
+  N/A"; "Failed · Cable target-force fit failed"; "Cancelled · Not run". The 0 is the solver's count of severe
+  instabilities in a case whose numerical stability it assessed — not a residual and not digits lost; a case it did
+  not assess reads N/A, never 0. The name and the outcome share the row and both give way in a narrow window; the full
+  line is in the tooltip and is what a screen reader reads. Open, a case keeps its convergence, iterations and cause of
+  failure in view; the measured numbers behind them — scaled backward error, out-of-balance, smallest scaled pivot,
+  resultant of internal forces, largest loss of accuracy — are under "Technical diagnostics", closed until asked for,
+  between the table and the log. The table's coordinate columns read X (m), Y (m), Z (m). The reason of a run that
+  failed is in red, and is also written in the log of every case that was stopped or not run. The note states the
+  thresholds the run was reported by. Nothing of the solver or of its diagnostics changed.
+- Checks: --run-monitor (the closed row for a stable frame, a stiffness contrast, a withheld result, a mechanism, an
+  iteration stopped at its limit, an unmet fit, a failed fit, a planned and a cancelled run); --run-monitor-ui (the
+  rows, Technical diagnostics opening and closing, the table's columns, a refused run); --general-solver; --dev-log
+
 ## 2026-10-13 · Analysis Options: degrees of freedom in the main window
 - Status: Done
 - Who: markbui, Claude

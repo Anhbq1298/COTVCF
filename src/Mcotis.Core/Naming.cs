@@ -6,7 +6,7 @@ namespace Mcotis.Core;
 
 /// <summary>A name is unique within its scope. Points, frames, cables and shells share one scope, so a name
 /// identifies one object of the model whatever its type.</summary>
-public enum NameScope { Object, Material, FrameSection, CableSection, ShellSection, LoadPattern, AnalysisCase }
+public enum NameScope { Object, Material, FrameSection, CableSection, ShellSection, LoadPattern, AnalysisCase, MassSource }
 
 /// <summary>The one place that decides what a valid name is, how two names compare and which name a new object gets.
 /// Nothing else — no view model, no importer — makes up or checks names.</summary>
@@ -16,6 +16,7 @@ public static class NamingService
     [
         ObjectKind.Point, ObjectKind.Frame, ObjectKind.Cable, ObjectKind.Shell, ObjectKind.Material, ObjectKind.FrameSection,
         ObjectKind.CableSection, ObjectKind.ShellSection, ObjectKind.LoadPattern, ObjectKind.LoadCase, ObjectKind.LoadCombination,
+        ObjectKind.MassSource,
     ];
 
     /// <summary>Names that differ only in case are the same name.</summary>
@@ -46,6 +47,7 @@ public static class NamingService
         ObjectKind.ShellSection => NameScope.ShellSection,
         ObjectKind.LoadPattern => NameScope.LoadPattern,
         ObjectKind.LoadCase or ObjectKind.LoadCombination => NameScope.AnalysisCase,
+        ObjectKind.MassSource => NameScope.MassSource,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "This kind of object has no name."),
     };
 
@@ -63,6 +65,7 @@ public static class NamingService
         ObjectKind.LoadPattern => "LP",
         ObjectKind.LoadCase => "LC",
         ObjectKind.LoadCombination => "COMB",
+        ObjectKind.MassSource => "MS",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "This kind of object has no name."),
     };
 

@@ -38,7 +38,12 @@ public sealed record FemStabilityReport(StabilityState State, StabilityStage Sta
     double? LargestDigitsLost, string? LargestJoint, Native.DofComponent? LargestDof, int Warnings, int Instabilities,
     IReadOnlyList<FemJointDiagnostic> Joints, double WarningDigits, double SevereDigits)
 {
+    /// <summary>Movements without stiffness that the solver held to solve the case, because its loads do no work on
+    /// them: the case has its result, and its displacements are determined up to those movements. 0 otherwise.</summary>
+    public int MovementsHeld { get; init; }
     public bool Passed => Warnings == 0 && Instabilities == 0;
+    /// <summary>Degrees of freedom the solver reported, as a warning or as an instability: those marked in the table.</summary>
+    public int ReportedDofs => Warnings + Instabilities;
 
     public static FemStabilityReport From(StaticStability stability, CompiledModel model)
     {
@@ -64,7 +69,8 @@ public sealed record FemStabilityReport(StabilityState State, StabilityStage Sta
         }).ToArray();
         return new(stability.State, stability.Stage, stability.Iteration, stability.Equations, stability.ZeroStiffnessModes,
             stability.LargestDigitsLost, stability.LargestAt is { } at ? document.Points[at.PointId].Name : null, stability.LargestAt?.Component,
-            stability.Warnings, stability.Instabilities, joints, stability.Thresholds.WarningDigits, stability.Thresholds.SevereDigits);
+            stability.Warnings, stability.Instabilities, joints, stability.Thresholds.WarningDigits, stability.Thresholds.SevereDigits)
+            { MovementsHeld = stability.MovementsHeld };
     }
 }
 
@@ -100,7 +106,7 @@ public static class FemStabilityText
     {
         StabilityCondition.NoStiffness => $"Singular ({Infinity}) — no stiffness and no restraint",
         StabilityCondition.SlackCablesOnly => $"Singular ({Infinity}) — held by slack cables only",
-        StabilityCondition.ZeroStiffnessMode => $"Singular ({Infinity}) — possible mechanism",
+        StabilityCondition.ZeroStiffnessMode => report.MovementsHeld > 0 ? $"Singular ({Infinity}) — possible mechanism, not loaded: held" : $"Singular ({Infinity}) — possible mechanism",
         StabilityCondition.NegativePivot => "Not positive definite (negative pivot)",
         _ when dof.Severity == StabilitySeverity.Severe => report.State == StabilityState.NearlySingular ? "Nearly singular" : "Ill-conditioned",
         _ => "Numerical accuracy warning",
@@ -125,7 +131,7 @@ public static class FemStabilityText
         string modes = report.ZeroStiffnessModes == 1 ? "1 movement without stiffness" : $"{report.ZeroStiffnessModes} movements without stiffness";
         return report.State switch
         {
-            StabilityState.Singular => $"Singular stiffness — {modes}",
+            StabilityState.Singular => $"Singular stiffness — {modes}" + (report.MovementsHeld > 0 ? ", not loaded: held" : ""),
             StabilityState.NearlySingular => "Nearly singular stiffness",
             StabilityState.NotPositiveDefinite => "Stiffness not positive definite",
             _ when report.Instabilities > 0 => "Severe ill-conditioning",

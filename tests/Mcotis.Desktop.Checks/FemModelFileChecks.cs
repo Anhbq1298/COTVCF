@@ -1205,6 +1205,30 @@ internal static class FemModelFileChecks
                 "the degrees of freedom of Analysis Options are saved with the configuration and come back when it is opened — RY off, UZ alone for cable joints; " +
                 "the file saved before they were changed opens with every one on");
 
+            // What a model starts with, and what a configuration from before the degrees of freedom were an option
+            // opens with: full 3D for the one, the XZ plane it was analysed in for the other.
+            var old = FemInputDatabase.Read(first).Snapshot.ToLegacy();
+            old.Settings.ActiveDofs = null;
+            old.Settings.CableJointDofs = null;
+            var oldPath = Path.Combine(folder, "before-dofs" + FemModelFile.Extension);
+            FemModelFile.Write(oldPath, old);
+            var checksStart = MainViewModel.StartingDofs;
+            MainViewModel.StartingDofs = Program.ProductStartingDofs;
+            try
+            {
+                var (fresh, _, _, _) = DefaultModelApp();
+                var startedWith = (fresh.FemActiveDofs, fresh.FemCableDofs);
+                fresh.OpenFemModelFile(oldPath);
+                var opened = (fresh.FemActiveDofs, fresh.FemCableDofs);
+                fresh.InitializeBlankMcotisConfiguration();
+                Check(startedWith == (Mcotis.Core.DofMask.Full3D, Mcotis.Core.DofMask.Translations) &&
+                      opened == (Mcotis.Core.DofMask.XZ, Mcotis.Core.DofMask.UX | Mcotis.Core.DofMask.UZ) &&
+                      (fresh.FemActiveDofs, fresh.FemCableDofs) == (Mcotis.Core.DofMask.Full3D, Mcotis.Core.DofMask.Translations),
+                    "the default model starts in full 3D, the translations for cable joints; a configuration saved before the degrees of freedom were an option opens in the XZ plane it was analysed in; " +
+                    "and a new, blank model starts in full 3D again");
+            }
+            finally { MainViewModel.StartingDofs = checksStart; }
+
             answer = null;
             var files = Directory.GetFiles(folder).Length;
             var message = vm.FemProgressText;

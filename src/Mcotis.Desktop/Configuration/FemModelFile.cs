@@ -20,7 +20,12 @@ public sealed class FemModelFileDto
     public const string FormatName = "Mcotis.FemModel";
     /// <summary>What <see cref="FormatName"/> was before the app was renamed. Files saved under it still open; none is written.</summary>
     public const string LegacyFormatName = "COTVCF.FemModel";
-    public const int CurrentVersion = 1;
+    /// <summary>2 since the load cases state their kind and refer to each other by identity
+    /// (<see cref="FemCaseSchema"/>). A file of version 1 is brought to version 2 in memory when it is read.</summary>
+    public const int CurrentVersion = 2;
+    /// <summary>The version a revision is identified in (<see cref="FemInputDatabase.RevisionHash"/>): the version of
+    /// the file is not content, so a configuration and the same one after an upgrade are one revision.</summary>
+    internal const int RevisionFormVersion = 1;
 
     public string Format { get; set; } = FormatName;
     public int Version { get; set; } = CurrentVersion;
@@ -43,11 +48,44 @@ public sealed class FemModelFileDto
     public List<FemPatternRowDto> PatternRows { get; set; } = [];
     public List<FemDefinitionRowDto> CaseRows { get; set; } = [];
     public List<FemDefinitionRowDto> CombinationRows { get; set; } = [];
+    /// <summary>Version 2. The masses modal cases read; null when there is none.</summary>
+    public List<FemMassSourceDto>? MassSources { get; set; }
     public FemSettingsDto Settings { get; set; } = new();
 }
 
 public sealed record FemPatternRowDto(string Name, string Type, double SelfWeightMultiplier, string Role, string Loads);
-public sealed record FemDefinitionRowDto(string Name, string Type, string Definition, string? InitialCase, bool Run, bool Supported, string Source, string Note, bool? CableTargetForces = null);
+
+/// <summary>A load case or a load combination as it is saved. The first nine members are version 1; the others are
+/// version 2 (<see cref="FemCaseSchema"/>). A member of version 2 that is absent means what version 1 meant: a
+/// nonlinear static case, without geometric nonlinearity, on its own stiffness.</summary>
+/// <param name="Type">The type as text, as it is shown ("Nonlinear Static", or what SAP2000 called it). Descriptive:
+/// <see cref="CaseKind"/> is what the case is.</param>
+/// <param name="InitialCase">The case this one continues from, by name — what version 1 held, kept beside
+/// <see cref="InitialCaseId"/> for the application and for files of version 1.</param>
+public sealed record FemDefinitionRowDto(string Name, string Type, string Definition, string? InitialCase, bool Run, bool Supported, string Source, string Note, bool? CableTargetForces = null)
+{
+    /// <summary>The identity of the row: a GUID that a rename does not change.</summary>
+    public string? Id { get; init; }
+    /// <summary>LinearStatic, NonlinearStatic, InitialPDelta or ModalEigen. Absent: NonlinearStatic.</summary>
+    public string? CaseKind { get; init; }
+    /// <summary>None or PDelta. Absent: None — PDelta for an initial P-Delta case.</summary>
+    public string? GeometricMode { get; init; }
+    /// <summary>The case <see cref="InitialCase"/> names, by its identity.</summary>
+    public string? InitialCaseId { get; init; }
+    /// <summary>A linear static or modal case: the nonlinear case whose end stiffness it uses, by name. Absent: the unstressed stiffness.</summary>
+    public string? StiffnessSourceCase { get; init; }
+    /// <summary>The case <see cref="StiffnessSourceCase"/> names, by its identity.</summary>
+    public string? StiffnessSourceCaseId { get; init; }
+    public FemNonlinearControlsDto? NonlinearControls { get; init; }
+    public FemModalOptionsDto? Modal { get; init; }
+}
+
+public sealed record FemNonlinearControlsDto(int MaxLoadSteps, int MaxIterationsPerStep, double RelativeResidualTolerance, double RelativeDisplacementTolerance);
+
+/// <param name="MassSource">The mass source by name, beside <paramref name="MassSourceId"/>.</param>
+public sealed record FemModalOptionsDto(string MassSource, string? MassSourceId, int RequestedModes);
+
+public sealed record FemMassSourceDto(string Id, string Name, bool IncludeSelfMass = true);
 
 public sealed class FemSettingsDto
 {
@@ -55,11 +93,12 @@ public sealed class FemSettingsDto
     public int TargetFitIterations { get; set; } = 100;
     public int FrameMeshSegments { get; set; } = 10;
     public bool CableSag { get; set; } = true;
-    /// <summary>The degrees of freedom of the model, by name, among UX, UZ and RY. A file written before this
-    /// existed has all three.</summary>
-    public List<string> ActiveDofs { get; set; } = ["UX", "UZ", "RY"];
-    /// <summary>Those of a joint only cables reach, among UX and UZ.</summary>
-    public List<string> CableJointDofs { get; set; } = ["UX", "UZ"];
+    /// <summary>The degrees of freedom of the model, by name (UX … RZ). Null in a file written before they were an
+    /// option: the application then takes the XZ plane the file was analysed in, or — for the bundled default model —
+    /// the degrees of freedom a model starts with.</summary>
+    public List<string>? ActiveDofs { get; set; }
+    /// <summary>Those of a joint only cables reach. Null as <see cref="ActiveDofs"/>.</summary>
+    public List<string>? CableJointDofs { get; set; }
 }
 
 public static class FemModelFile
@@ -81,8 +120,15 @@ public static class FemModelFile
         Converters = { new JsonStringEnumConverter() },
     };
 
-    public static void Write(string path, FemModelFileDto model) =>
+    /// <summary>Writes the model as a file of the current version, whole: every row with its identity, every case
+    /// that names another referring to it by that identity. What cannot be written so is refused, and nothing is written.</summary>
+    public static void Write(string path, FemModelFileDto model)
+    {
+        (model.CaseRows, model.CombinationRows) = FemCaseSchema.Complete(model.CaseRows, model.CombinationRows, scope: null);
+        FemCaseSchema.Validate(model.CaseRows, model.CombinationRows, model.MassSources ?? []);
+        model.Version = FemModelFileDto.CurrentVersion;
         AtomicFile.WriteAllText(path, JsonSerializer.Serialize(model, Json));
+    }
 
     public static string Serialize(FemModelFileDto model) => JsonSerializer.Serialize(model, Json);
 
@@ -101,6 +147,12 @@ public static class FemModelFile
             throw new InvalidDataException("The FEM model file is incomplete: it has no SAP model, geometry or Tabs 01–05 project.");
         if (model.SectionProperties.Count == 0 || model.Loading is null)
             throw new InvalidDataException("The FEM model file has no section properties or SAP loading.");
+        // A file of version 1 names the case a case continues from; version 2 refers to it by identity. The upgrade
+        // is made on what was read — the file on disk is not written — and what it cannot resolve is refused.
+        if (model.Version < FemModelFileDto.CurrentVersion)
+            (model.CaseRows, model.CombinationRows) = FemCaseSchema.Complete(model.CaseRows, model.CombinationRows, scope: null);
+        FemCaseSchema.Validate(model.CaseRows, model.CombinationRows, model.MassSources ?? []);
+        model.Version = FemModelFileDto.CurrentVersion;
         return model;
     }
 }

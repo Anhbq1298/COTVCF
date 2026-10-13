@@ -129,6 +129,11 @@ public sealed partial class MainViewModel
         var radians = member.LocalAngleDeg * Math.PI / 180;
         var i33 = values.I33 * Mod(section.Modifiers, 5) * Mod(member.Modifiers, 5);
         var i22 = values.I22 * Mod(section.Modifiers, 4) * Mod(member.Modifiers, 4);
+        // out of the plane: the other principal inertia as the local axis turns it, and the torsion constant
+        var outOfPlane = i33 * Math.Sin(radians) * Math.Sin(radians) + i22 * Math.Cos(radians) * Math.Cos(radians);
+        // A section read without a torsion constant — a Section Designer section — takes the polar moment for it, as it
+        // does when it is exported to SAP2000 and ETABS (SapGateway.Export, EtabsGateway.Export).
+        var torsion = (values.Torsion > 0 ? values.Torsion : values.I33 + values.I22) * Mod(section.Modifiers, 3) * Mod(member.Modifiers, 3);
         var material = Materials.FirstOrDefault(item => item.Name == section.Material);
         var shape = section.Shape switch
         {
@@ -152,6 +157,8 @@ public sealed partial class MainViewModel
             AreaM2 = values.Area * Mod(section.Modifiers, 0) * Mod(member.Modifiers, 0),
             GrossAreaM2 = values.Area,
             InPlaneInertiaM4 = i33 * Math.Cos(radians) * Math.Cos(radians) + i22 * Math.Sin(radians) * Math.Sin(radians),
+            OutOfPlaneInertiaM4 = outOfPlane > 0 ? outOfPlane : null,
+            TorsionConstantM4 = torsion > 0 ? torsion : null,
             ElasticModulusKNPerM2 = composite?.Ecm ?? material?.ElasticModulus ?? member.ElasticModulusKNPerM2,
             UnitWeightKNPerM3 = composite?.EquivalentUnitWeight ?? material?.WeightPerVolume ?? member.UnitWeightKNPerM3,
             UnitMassTPerM3 = composite?.EquivalentUnitMass ?? material?.MassPerVolume ?? member.UnitMassTPerM3,

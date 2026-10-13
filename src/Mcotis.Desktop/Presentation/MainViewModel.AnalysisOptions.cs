@@ -4,29 +4,33 @@ namespace Mcotis.Desktop.Presentation;
 
 public sealed partial class MainViewModel
 {
-    /// <summary>The degrees of freedom this window's model can have: it is planar, in XZ.</summary>
-    internal const DofMask PlaneDofs = DofMask.XZ;
-    /// <summary>Those a joint only cables reach can have: a cable holds no rotation.</summary>
-    internal const DofMask PlaneCableDofs = DofMask.UX | DofMask.UZ;
+    /// <summary>The degrees of freedom a model starts with — the default model, a blank one — for the model and for a
+    /// joint only cables reach: the solver's own default, full 3D with the translations for cable joints (user,
+    /// 2026-10-13: "make the planar use 3d as 3d is default"). A model of this window lies in one plane on pins that
+    /// are on one line, so in 3D nothing holds it out of that plane. Its loads do no work on that movement: the solver
+    /// holds it, solves, and the run monitor lists it as a warning (user, same day: "ETABS can run regardless"). The
+    /// results are those of the XZ plane, which the user can also choose.</summary>
+    internal static (DofMask Model, DofMask CableJoints) StartingDofs { get; set; } = (DofMask.Full3D, DofMask.Translations);
+    /// <summary>The degrees of freedom of a configuration saved before they were an option: the XZ plane it was
+    /// analysed in, so that what it holds — a lock, results — still belongs to its settings.</summary>
+    internal static readonly (DofMask Model, DofMask CableJoints) PlaneDofs = (DofMask.XZ, DofMask.UX | DofMask.UZ);
 
-    private DofMask femActiveDofs = PlaneDofs, femCableDofs = PlaneCableDofs;
-    /// <summary>The degrees of freedom of the model that are on (Run → Analysis Options → Degrees of Freedom): UX and
-    /// UZ, which a model that spans its plane always has, and RY unless it is switched off — the rotation is then held
-    /// at every joint.</summary>
+    private DofMask femActiveDofs = StartingDofs.Model, femCableDofs = StartingDofs.CableJoints;
+    /// <summary>The degrees of freedom of the model that are on (Run → Analysis Options → Degrees of Freedom). The
+    /// set is the user's: whether the model can be analysed with it is for the run to say (user, 2026-10-13: "if not
+    /// proper then report in the log"), not for this window to prevent. One that is off is held at every joint.</summary>
     internal DofMask FemActiveDofs => femActiveDofs;
-    /// <summary>The degrees of freedom of a joint only cables reach, among UX and UZ.</summary>
+    /// <summary>The degrees of freedom of a joint only cables reach, among those that are on.</summary>
     internal DofMask FemCableDofs => femCableDofs;
 
     internal AnalysisSettings PlanarAnalysisSettings => new(FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag)
         { ActiveDofs = femActiveDofs, CableDofs = femCableDofs };
 
-    /// <summary>Why these degrees of freedom cannot be those of this window's model; null when they can.</summary>
+    /// <summary>Why these degrees of freedom cannot be kept; null when they can. Only what no model could be run with
+    /// is refused here — no translation at all. A set that this model cannot be analysed with is kept, and the run says so.</summary>
     internal static string? DofProblem(DofMask active, DofMask cable) =>
-        (active & ~PlaneDofs) != 0 ? "This workspace's model is planar: its degrees of freedom are UX, UZ and RY."
-        // the solver refuses a translation that is off unless every joint has the same coordinate along it
-        : (active & PlaneCableDofs) != PlaneCableDofs ? "This workspace's model spans its XZ plane: UX and UZ stay on. RY can be switched off."
-        : (cable & ~PlaneCableDofs) != 0 ? "A joint that only cables reach moves in UX and UZ: a cable holds no rotation."
-        : (cable & active) == 0 ? "Keep at least one of UX and UZ on for cable joints, among those that are on for the model."
+        !DegreesOfFreedom.IsValid(active) || (active & DofMask.Translations) == 0 ? "Select at least one translational DOF."
+        : !DegreesOfFreedom.IsValid(cable) || (cable & DofMask.Translations) == 0 ? "Select at least one translational DOF for cable joints."
         : null;
 
     internal void ApplyPlanarAnalysisSettings(AnalysisSettings settings)
@@ -52,13 +56,19 @@ public sealed partial class MainViewModel
     private static List<string> DofNames(DofMask mask) =>
         DegreesOfFreedom.Components.Where(component => mask.Contains(component)).Select(component => component.ToString()).ToList();
 
-    /// <summary>The degrees of freedom a file holds. Names it does not know, or a set this window cannot analyse, give
-    /// the degrees of freedom of the plane back: a file is never opened into a model that cannot be run.</summary>
-    private void RestoreFemDofs(IEnumerable<string>? active, IEnumerable<string>? cable)
+    /// <summary>The degrees of freedom of a model that is opened. What its file holds, as it holds it. A file without
+    /// them — or with names it does not know, or a set no model can have — gives <paramref name="starting"/> for a
+    /// model that starts here (the default model) and the XZ plane for a configuration saved before they were an
+    /// option: that is what it was analysed in.</summary>
+    private void RestoreFemDofs(IEnumerable<string>? active, IEnumerable<string>? cable, bool starting)
     {
-        static DofMask Read(IEnumerable<string>? names) => (names ?? []).Aggregate(DofMask.None,
+        static DofMask Read(IEnumerable<string> names) => names.Aggregate(DofMask.None,
             (mask, name) => Enum.TryParse<DofComponent>(name, ignoreCase: true, out var component) && Enum.IsDefined(component) ? mask | component.Mask() : mask);
-        var (model, joints) = (Read(active), Read(cable));
-        (femActiveDofs, femCableDofs) = DofProblem(model, joints) is null ? (model, joints) : (PlaneDofs, PlaneCableDofs);
+        var kept = starting ? StartingDofs : PlaneDofs;
+        (femActiveDofs, femCableDofs) = active is not null && cable is not null && Read(active) is var model && Read(cable) is var joints && DofProblem(model, joints) is null
+            ? (model, joints) : kept;
     }
+
+    /// <summary>A model that starts here, without a file: the degrees of freedom every model starts with.</summary>
+    private void ResetFemDofs() => (femActiveDofs, femCableDofs) = StartingDofs;
 }

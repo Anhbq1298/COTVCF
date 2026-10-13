@@ -1,11 +1,16 @@
 <Window x:Class="Mcotis.Desktop.Presentation.LoadCaseWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:p="clr-namespace:Mcotis.Desktop.Presentation"
-        Title="Load Case Data" Icon="{x:Static p:AppIcon.Window}" Width="600" Height="430" MinWidth="480" MinHeight="330"
+        Title="Load Case Data" Icon="{x:Static p:AppIcon.Window}" Width="700" Height="560" MinWidth="620" MinHeight="420"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
- <!-- Define → Load Cases → + Add / Modify… (as SAP2000's Load Case Data): the case name, the case it continues from and
-      its Loads Applied — a load pattern with a scale factor per row. Staged: OK writes the case, Cancel leaves it. -->
+ <!-- Define → Load Cases → + Add / Modify… (as SAP2000's Load Case Data): the case name, its type, and what belongs to
+      the type — the case it continues from or the case whose stiffness it uses, its geometric nonlinearity, its loads
+      or its mass source. Staged: OK writes the case, Cancel leaves it. A type that is not solved yet can be defined
+      and saved; the form says so, and Run refuses it. -->
  <Window.Resources>
   <Style x:Key="FormButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0,0,0"/></Style>
+  <Style x:Key="FieldLabel" TargetType="TextBlock"><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="0,6,8,0"/></Style>
+  <Style x:Key="NextLabel" TargetType="TextBlock" BasedOn="{StaticResource FieldLabel}"><Setter Property="Margin" Value="12,6,8,0"/></Style>
+  <Style x:Key="NumberBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}"><Setter Property="TextAlignment" Value="Right"/><Setter Property="Margin" Value="0,6,0,0"/><Setter Property="VerticalContentAlignment" Value="Center"/></Style>
  </Window.Resources>
  <DockPanel Margin="10">
   <DockPanel DockPanel.Dock="Bottom" Margin="0,10,0,0" LastChildFill="True">
@@ -17,63 +22,104 @@
   </DockPanel>
 
   <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
-   <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-   <TextBlock Grid.Row="2" Text="Purpose" VerticalAlignment="Center" Margin="0,6,8,0"/>
-   <ComboBox x:Name="PurposeBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" SelectionChanged="Input_Changed" AutomationProperties.Name="Load case purpose">
-    <ComboBoxItem Content="Normal"/><ComboBoxItem Content="Cable Target Forces"/>
-   </ComboBox>
+   <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Grid.RowDefinitions>
+    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+   </Grid.RowDefinitions>
    <TextBlock Text="Load Case Name" VerticalAlignment="Center" Margin="0,0,8,0"/>
    <TextBox x:Name="NameBox" Grid.Column="1" VerticalContentAlignment="Center" TextChanged="Input_Changed" AutomationProperties.Name="Load case name"/>
-   <TextBlock Grid.Column="2" Text="Type" VerticalAlignment="Center" Foreground="{StaticResource Muted}" Margin="12,0,6,0"/>
-   <TextBlock x:Name="TypeText" Grid.Column="3" VerticalAlignment="Center"
-              ToolTip="Every case is solved the same way: nonlinear static, with tension-only cables and their sag."/>
-   <TextBlock Grid.Row="1" Text="Continue from" VerticalAlignment="Center" Margin="0,6,8,0"/>
-   <ComboBox x:Name="FromBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" SelectionChanged="Input_Changed" AutomationProperties.Name="Continue from load case"
-             ToolTip="The case this one continues from — its loads and its fitted cable pretension are already on the structure. Blank = starts unstressed."/>
-   <TextBlock Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" x:Name="FromHint" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontSize="11" Margin="12,6,0,0"/>
+   <TextBlock Grid.Column="2" Text="Type" VerticalAlignment="Center" Margin="12,0,8,0"/>
+   <ComboBox x:Name="TypeBox" Grid.Column="3" SelectionChanged="Type_Changed" AutomationProperties.Name="Load case type"
+             ToolTip="Linear Static: its own loads on a stiffness that does not change. Nonlinear Static: tension-only cables with their sag, from zero or continuing another case. Initial P-Delta: a nonlinear case with P-Delta whose end stiffness other cases use. Modal: the modes of a stiffness and a mass."/>
+
+   <TextBlock x:Name="ReferenceLabel" Grid.Row="1" Text="Continue from" Style="{StaticResource FieldLabel}"/>
+   <ComboBox x:Name="ReferenceBox" Grid.Row="1" Grid.Column="1" Margin="0,6,0,0" SelectionChanged="Input_Changed" AutomationProperties.Name="Continue from or stiffness from load case"/>
+   <TextBlock x:Name="ReferenceHint" Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2" VerticalAlignment="Center" Foreground="{StaticResource Muted}" FontSize="11" Margin="12,6,0,0" TextWrapping="Wrap"/>
+
+   <TextBlock x:Name="GeometricLabel" Grid.Row="2" Text="Geometric nonlinearity" Style="{StaticResource FieldLabel}"/>
+   <ComboBox x:Name="GeometricBox" Grid.Row="2" Grid.Column="1" Margin="0,6,0,0" SelectionChanged="Input_Changed" AutomationProperties.Name="Geometric nonlinearity"
+             ToolTip="None: equilibrium on the undeformed geometry. P-Delta: the axial forces of the members act on their deflection.">
+    <ComboBoxItem Content="None"/><ComboBoxItem Content="P-Delta"/>
+   </ComboBox>
+   <TextBlock x:Name="PurposeLabel" Grid.Row="2" Grid.Column="2" Text="Purpose" Style="{StaticResource NextLabel}"/>
+   <ComboBox x:Name="PurposeBox" Grid.Row="2" Grid.Column="3" Margin="0,6,0,0" SelectionChanged="Input_Changed" AutomationProperties.Name="Load case purpose"
+             ToolTip="Cable Target Forces: the cable pretension is fitted in this case, so that the cables carry their target forces at its end.">
+    <ComboBoxItem Content="Normal"/><ComboBoxItem Content="Cable Target Forces"/>
+   </ComboBox>
+
+   <Grid x:Name="ModalPanel" Grid.Row="3" Grid.ColumnSpan="4">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="90"/></Grid.ColumnDefinitions>
+    <TextBlock Text="Mass source" Style="{StaticResource FieldLabel}"/>
+    <ComboBox x:Name="MassSourceBox" Grid.Column="1" Margin="0,6,0,0" SelectionChanged="Input_Changed" AutomationProperties.Name="Modal mass source"
+              ToolTip="The mass the modes are found with. A model without a mass source is offered one of the self mass of its members."/>
+    <TextBlock Grid.Column="2" Text="Modes" Style="{StaticResource NextLabel}"/>
+    <TextBox x:Name="ModesBox" Grid.Column="3" Style="{StaticResource NumberBox}" TextChanged="Input_Changed" AutomationProperties.Name="Number of modes"/>
+   </Grid>
+
+   <Grid x:Name="ControlsPanel" Grid.Row="4" Grid.ColumnSpan="4">
+    <Grid.ColumnDefinitions>
+     <ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="54"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="54"/>
+     <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/>
+    </Grid.ColumnDefinitions>
+    <CheckBox x:Name="ControlsBox" Content="Own iteration controls" VerticalAlignment="Center" Margin="0,6,0,0" Click="Input_Changed" AutomationProperties.Name="Case-specific iteration controls"
+              ToolTip="Unticked: the case is solved with the settings of Run → Analysis Options. Ticked: with the load steps, iterations and tolerances given here."/>
+    <TextBlock Grid.Column="1" Text="Steps" Style="{StaticResource NextLabel}"/>
+    <TextBox x:Name="StepsBox" Grid.Column="2" Style="{StaticResource NumberBox}" TextChanged="Input_Changed" IsEnabled="{Binding IsChecked, ElementName=ControlsBox}" AutomationProperties.Name="Load steps"/>
+    <TextBlock Grid.Column="3" Text="Iterations" Style="{StaticResource NextLabel}"/>
+    <TextBox x:Name="IterationsBox" Grid.Column="4" Style="{StaticResource NumberBox}" TextChanged="Input_Changed" IsEnabled="{Binding IsChecked, ElementName=ControlsBox}" AutomationProperties.Name="Iterations per load step"/>
+    <TextBlock Grid.Column="5" Text="Residual tol." Style="{StaticResource NextLabel}"/>
+    <TextBox x:Name="ResidualBox" Grid.Column="6" Style="{StaticResource NumberBox}" TextChanged="Input_Changed" IsEnabled="{Binding IsChecked, ElementName=ControlsBox}" AutomationProperties.Name="Relative residual tolerance"/>
+    <TextBlock Grid.Column="7" Text="Correction tol." Style="{StaticResource NextLabel}"/>
+    <TextBox x:Name="CorrectionBox" Grid.Column="8" Style="{StaticResource NumberBox}" TextChanged="Input_Changed" IsEnabled="{Binding IsChecked, ElementName=ControlsBox}" AutomationProperties.Name="Relative displacement tolerance"/>
+   </Grid>
+
+   <Border x:Name="AvailabilityPanel" Grid.Row="5" Grid.ColumnSpan="4" BorderBrush="{StaticResource Warning}" BorderThickness="1" Padding="7,4" Margin="0,8,0,0">
+    <TextBlock x:Name="AvailabilityText" Foreground="{StaticResource Warning}" FontSize="11" TextWrapping="Wrap"/>
+   </Border>
   </Grid>
 
-  <TextBlock DockPanel.Dock="Top" Text="LOADS APPLIED" Style="{StaticResource Subheading}" Margin="0,0,0,4"/>
-  <StackPanel DockPanel.Dock="Bottom">
-   <DockPanel LastChildFill="False" Margin="0,4,0,6">
-    <Button x:Name="AddLoadButton" DockPanel.Dock="Left" Content="+ Add Load" Click="AddLoad_Click" Margin="0" AutomationProperties.Name="Add load pattern to the case"
-            ToolTip="Add a load pattern to this case, then choose it and its scale factor in the row"/>
-   </DockPanel>
-   <TextBlock x:Name="TotalText" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
-              ToolTip="Everything on the structure at the end of this case: the loads of the cases it continues from, then its own."/>
-  </StackPanel>
-  <DataGrid x:Name="LoadGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column" SelectionMode="Single"
-            ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Loads applied">
-   <DataGrid.Columns>
-    <DataGridTemplateColumn Header="Load Pattern" Width="*" MinWidth="130">
-     <DataGridTemplateColumn.CellTemplate>
-      <DataTemplate>
-       <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Pattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                 BorderThickness="0" Padding="5,0" Background="Transparent" ToolTip="A load pattern of the model (Define → Load Patterns)"/>
-      </DataTemplate>
-     </DataGridTemplateColumn.CellTemplate>
-    </DataGridTemplateColumn>
-    <DataGridTemplateColumn Header="Scale Factor" Width="96">
-     <DataGridTemplateColumn.CellTemplate>
-      <DataTemplate>
-       <TextBox Text="{Binding Factor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MinHeight="0" Padding="6,0" BorderThickness="0"
-                Background="Transparent" FontFamily="{StaticResource MonoFont}" TextAlignment="Right" VerticalContentAlignment="Center"
-                ToolTip="The factor on the loads of this pattern in the case, e.g. 1.35"/>
-      </DataTemplate>
-     </DataGridTemplateColumn.CellTemplate>
-    </DataGridTemplateColumn>
-    <DataGridTextColumn Header="Carries" Binding="{Binding Carries}" IsReadOnly="True" Width="1.2*" MinWidth="120"/>
-    <DataGridTemplateColumn Width="34" MinWidth="34">
-     <DataGridTemplateColumn.CellTemplate>
-      <DataTemplate>
-       <Button Click="RemoveLoad_Click" ToolTip="Take this load pattern out of the case" Width="24" Height="22" MinHeight="22" Padding="5" Margin="0" Background="Transparent" BorderThickness="0">
-        <Viewbox Width="11" Height="11"><Path Stroke="{StaticResource Error}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,2 L14,14 M14,2 L2,14"/></Viewbox>
-       </Button>
-      </DataTemplate>
-     </DataGridTemplateColumn.CellTemplate>
-    </DataGridTemplateColumn>
-   </DataGrid.Columns>
-  </DataGrid>
+  <DockPanel x:Name="LoadsPanel">
+   <TextBlock DockPanel.Dock="Top" Text="LOADS APPLIED" Style="{StaticResource Subheading}" Margin="0,0,0,4"/>
+   <StackPanel DockPanel.Dock="Bottom">
+    <DockPanel LastChildFill="False" Margin="0,4,0,6">
+     <Button x:Name="AddLoadButton" DockPanel.Dock="Left" Content="+ Add Load" Click="AddLoad_Click" Margin="0" AutomationProperties.Name="Add load pattern to the case"
+             ToolTip="Add a load pattern to this case, then choose it and its scale factor in the row"/>
+    </DockPanel>
+    <TextBlock x:Name="TotalText" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+   </StackPanel>
+   <DataGrid x:Name="LoadGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column" SelectionMode="Single"
+             ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Loads applied">
+    <DataGrid.Columns>
+     <DataGridTemplateColumn Header="Load Pattern" Width="*" MinWidth="130">
+      <DataGridTemplateColumn.CellTemplate>
+       <DataTemplate>
+        <ComboBox ItemsSource="{Binding Choices}" SelectedItem="{Binding Pattern, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                  BorderThickness="0" Padding="5,0" Background="Transparent" ToolTip="A load pattern of the model (Define → Load Patterns)"/>
+       </DataTemplate>
+      </DataGridTemplateColumn.CellTemplate>
+     </DataGridTemplateColumn>
+     <DataGridTemplateColumn Header="Scale Factor" Width="96">
+      <DataGridTemplateColumn.CellTemplate>
+       <DataTemplate>
+        <TextBox Text="{Binding Factor, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" MinHeight="0" Padding="6,0" BorderThickness="0"
+                 Background="Transparent" FontFamily="{StaticResource MonoFont}" TextAlignment="Right" VerticalContentAlignment="Center"
+                 ToolTip="The factor on the loads of this pattern in the case, e.g. 1.35"/>
+       </DataTemplate>
+      </DataGridTemplateColumn.CellTemplate>
+     </DataGridTemplateColumn>
+     <DataGridTextColumn Header="Carries" Binding="{Binding Carries}" IsReadOnly="True" Width="1.2*" MinWidth="120"/>
+     <DataGridTemplateColumn Width="34" MinWidth="34">
+      <DataGridTemplateColumn.CellTemplate>
+       <DataTemplate>
+        <Button Click="RemoveLoad_Click" ToolTip="Take this load pattern out of the case" Width="24" Height="22" MinHeight="22" Padding="5" Margin="0" Background="Transparent" BorderThickness="0">
+         <Viewbox Width="11" Height="11"><Path Stroke="{StaticResource Error}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,2 L14,14 M14,2 L2,14"/></Viewbox>
+        </Button>
+       </DataTemplate>
+      </DataGridTemplateColumn.CellTemplate>
+     </DataGridTemplateColumn>
+    </DataGrid.Columns>
+   </DataGrid>
+  </DockPanel>
  </DockPanel>
 </Window>

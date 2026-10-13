@@ -14,7 +14,6 @@ This folder preserves the former MB pages:
 `MainWindow.Tabs01To05.xaml.cs` preserves the code-behind that existed only to serve those pages.
 Neither file is compiled.
 
-The active `WorkflowTabs` control retains five empty slots so the established indices of Post-Processing,
-Optimization, FEM and Quantities do not change. The legacy domain/configuration types and study services remain
-in the desktop project only where current VCF/TAS/optimization workflows or older configuration files still need
-them. New UI work must not navigate to or restore slots 0–4.
+The rest of the former MB workspace (06, 06A, 08 and its entry points) is archived beside this folder under
+`archive/Mcotis.Desktop/LegacyMb/`. The active `WorkflowTabs` control retains inert slots 0–6 and 8 so FEM keeps
+its established index 7. New UI work must not navigate to or restore any archived slot.

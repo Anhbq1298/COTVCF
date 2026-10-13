@@ -99,40 +99,62 @@ internal static class TemplateBuildingUiChecks
             var state = StudyComposerChecks.CreateState();
             var sap = new Program.FakeSap { Snapshot = new(state.Model!, state.Geometry, state.LoadPatterns.ToArray()) };
             var workflow = new WorkflowService(sap, state);
-            var legacy = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(sap, state, workflow),
-                femSessionStore: new FemWorkingSessionStore(Path.Combine(folder, "legacy")));
-            legacy.LoadDefaultFemModel(replaceCurrent: true);
+            // What the application itself starts a model with — not the XZ plane these checks otherwise start in.
+            var checksStart = MainViewModel.StartingDofs;
+            MainViewModel.StartingDofs = Program.ProductStartingDofs;
+            MainViewModel legacy;
+            try
+            {
+                legacy = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(sap, state, workflow),
+                    femSessionStore: new FemWorkingSessionStore(Path.Combine(folder, "legacy")));
+                legacy.LoadDefaultFemModel(replaceCurrent: true);
+            }
+            finally { MainViewModel.StartingDofs = checksStart; }
+            Check(Program.ProductStartingDofs == (DofMask.Full3D, DofMask.Translations) && legacy.FemActiveDofs == DofMask.Full3D && legacy.FemCableDofs == DofMask.Translations,
+                "the application starts a model in full 3D — all six degrees of freedom, the translations for cable joints — and so the default model starts");
             var cable = new AnalysisOptionsWindow(legacy.PlanarAnalysisSettings, legacy.ApplyPlanarAnalysisSettings, planar: true);
             cable.Show(); Idle(); Snapshot(cable, ".work/analysis-options-main-window.png");
-            CheckBox[] offered = [cable.RY, cable.CableUX, cable.CableUZ];
-            CheckBox[] notOffered = [cable.UX, cable.UZ, cable.UY, cable.RX, cable.RZ, cable.CableUY, cable.CableRX, cable.CableRY, cable.CableRZ];
+            CheckBox[] model = [cable.UX, cable.UY, cable.UZ, cable.RX, cable.RY, cable.RZ];
+            CheckBox[] joints = [cable.CableUX, cable.CableUY, cable.CableUZ, cable.CableRX, cable.CableRY, cable.CableRZ];
             Check(cable.DofTab.IsVisible && ReferenceEquals(cable.Tabs.SelectedItem, cable.DofTab) && cable.Tabs.Items.Count == 2 &&
-                  offered.All(box => box.IsVisible && box.IsEnabled && box.IsChecked == true) && notOffered.All(box => !box.IsVisible) && !cable.Preset.IsVisible,
-                "the main window's analysis options have a Degrees of Freedom tab with the choices its planar model has — RY for the model, UX and UZ for cable joints — " +
-                "every box a choice: no preset to pick, and no box for what cannot be changed (UX and UZ of the model, UY, RX, RZ, the rotation of a cable joint)");
-            Check(cable.ActualHeight < 500 && cable.DofNote.Text.Contains("UX and UZ are always on", StringComparison.Ordinal) && cable.DofNote.Text.Contains("held at every joint", StringComparison.Ordinal),
-                $"… the form is as tall as what is on it ({cable.ActualHeight:0} px), and says why: the model spans its plane, and a rotation that is off is held at every joint, not released");
+                  cable.Preset is { IsVisible: true, IsEnabled: true, SelectedIndex: 0 } && Equals(((ComboBoxItem)cable.Preset.SelectedItem).Content, "Full 3D") &&
+                  model.All(box => box.IsVisible && box.IsEnabled && box.IsChecked == true) && joints.All(box => box.IsVisible && box.IsEnabled) &&
+                  joints.Select(box => box.IsChecked == true).SequenceEqual([true, true, true, false, false, false]),
+                "the main window's analysis options open on the same Degrees of Freedom tab as the native workspace: the preset — Full 3D — the six degrees of freedom, all on, and those of cable joints, the translations on; every box a choice");
+            Check(cable.ActualHeight < 640 && cable.DofNote.Text.Contains("held at every joint", StringComparison.Ordinal) && cable.DofNote.Text.Contains("in Full 3D nothing holds it out of that plane", StringComparison.Ordinal) &&
+                  cable.DofNote.Text.Contains("the run holds it, solves, and lists it in the Run Monitor as a warning", StringComparison.Ordinal) &&
+                  cable.DofNote.Text.Contains("the results are those of the XZ plane", StringComparison.Ordinal) && cable.DofNote.Text.Contains("the run reports it", StringComparison.Ordinal),
+                $"… the form is as tall as what is on it ({cable.ActualHeight:0} px), and says what full 3D means for a model in a plane — the movement out of it is held and listed as a warning, the results are those of the plane — and that a set the model cannot be analysed with is reported by the run, not refused here");
             cable.Tabs.SelectedItem = cable.FittingTab; Idle();
             cable.Tolerance.Text = "5"; cable.Iterations.Text = "150"; cable.Mesh.Text = "8"; cable.Sag.IsChecked = false;
             Check(cable.Tolerance.IsVisible && cable.ApplyForm() && legacy.FemTargetFitPercent == 5 && legacy.FemTargetFitIterations == 150 && legacy.FemFrameMeshSegments == 8 && !legacy.FemCableSag &&
-                  legacy.FemActiveDofs == DofMask.XZ && legacy.FemCableDofs == (DofMask.UX | DofMask.UZ),
+                  legacy.FemActiveDofs == DofMask.Full3D && legacy.FemCableDofs == DofMask.Translations,
                 "cable fitting form updates the actual planar analysis inputs, and leaves the degrees of freedom as they were");
             cable.Mesh.Text = "101";
             Check(!cable.ApplyForm() && legacy.FemFrameMeshSegments == 8, "invalid cable-form mesh count leaves applied settings unchanged");
             cable.Mesh.Text = "8";
             cable.Tabs.SelectedItem = cable.DofTab; Idle();
-            cable.RY.IsChecked = false; cable.CableUX.IsChecked = false;
-            Check(cable.ApplyForm() && legacy.FemActiveDofs == (DofMask.UX | DofMask.UZ) && legacy.FemCableDofs == DofMask.UZ &&
-                  legacy.PlanarAnalysisSettings is { ActiveDofs: DofMask.UX | DofMask.UZ, CableDofs: DofMask.UZ, CableFitTolerancePercent: 5 },
-                "Apply switches RY off for the model and UX off for cable joints: the run takes the degrees of freedom of the form");
+            cable.Preset.SelectedIndex = 1;
+            Check(cable.ApplyForm() && legacy.FemActiveDofs == DofMask.XZ && legacy.FemCableDofs == DofMask.Translations &&
+                  model.Select(box => box.IsChecked == true).SequenceEqual([true, false, true, false, true, false]) &&
+                  legacy.PlanarAnalysisSettings is { ActiveDofs: DofMask.XZ, CableDofs: DofMask.Translations, CableFitTolerancePercent: 5 },
+                "the XZ plane preset switches UY, RX and RZ off, and Apply makes it the run's: the model is then analysed in its plane");
+            cable.RY.IsChecked = false; cable.CableUX.IsChecked = false; cable.CableUY.IsChecked = false;
+            Check(cable.ApplyForm() && legacy.FemActiveDofs == (DofMask.UX | DofMask.UZ) && legacy.FemCableDofs == DofMask.UZ,
+                "any box can be changed, and Apply takes the set as it is: RY off for the model, UZ alone for cable joints");
             cable.CableUZ.IsChecked = false;
             Check(!cable.ApplyForm() && cable.ErrorText.Text.Contains("cable joints", StringComparison.Ordinal) && legacy.FemCableDofs == DofMask.UZ,
                 "cable joints without a translation are refused, and what was applied stays: " + cable.ErrorText.Text);
-            Check(MainViewModel.DofProblem(DofMask.Full3D, DofMask.UX | DofMask.UZ) is not null && MainViewModel.DofProblem(DofMask.XZ, DofMask.UX | DofMask.RY) is not null &&
-                  MainViewModel.DofProblem(DofMask.UZ | DofMask.RY, DofMask.UX | DofMask.UZ) is not null && MainViewModel.DofProblem(DofMask.UX | DofMask.UZ, DofMask.UX) is null,
-                "the main window refuses degrees of freedom out of its plane, a translation of the plane switched off and a rotation for a cable joint, whoever asks");
-            foreach (var box in offered) box.IsChecked = true;
-            Check(cable.ApplyForm() && legacy.FemActiveDofs == DofMask.XZ && legacy.FemCableDofs == (DofMask.UX | DofMask.UZ), "and every degree of freedom of the plane can be switched on again");
+            cable.CableUZ.IsChecked = true; cable.RY.IsChecked = true; cable.UX.IsChecked = false;
+            Check(cable.ApplyForm() && cable.ErrorText.Text == "Applied." && legacy.FemActiveDofs == (DofMask.UZ | DofMask.RY) && legacy.FemCableDofs == DofMask.UZ,
+                "a translation of the plane can be switched off as well: the form keeps the user's set — whether this model can be analysed with it is for the run to say, in the Run Monitor");
+            Check(MainViewModel.DofProblem(DofMask.Full3D, DofMask.Translations) is null && MainViewModel.DofProblem(DofMask.UZ | DofMask.RY, DofMask.UX | DofMask.UZ) is null &&
+                  MainViewModel.DofProblem(DofMask.UX, DofMask.UZ) is null && MainViewModel.DofProblem(DofMask.RY, DofMask.UX | DofMask.UZ) is not null &&
+                  MainViewModel.DofProblem(DofMask.XZ, DofMask.None) is not null && MainViewModel.DofProblem(DofMask.XZ, DofMask.RY) is not null,
+                "the main window keeps any set that has a translation in it, for the model and for cable joints; one without is refused, whoever asks");
+            cable.Preset.SelectedIndex = 0;
+            foreach (var box in joints.Take(3)) box.IsChecked = true;
+            Check(cable.ApplyForm() && legacy.FemActiveDofs == DofMask.Full3D && legacy.FemCableDofs == DofMask.Translations, "and Full 3D can be chosen again");
             cable.Close();
             var shell = new MainWindow { DataContext = legacy };
             shell.Show(); Idle();
@@ -221,6 +243,20 @@ internal static class TemplateBuildingUiChecks
             Check(statuses.Length == shown.Cases.Count && statuses.Zip(shown.Cases).All(pair => pair.First.Text == pair.Second.StatusText &&
                       ReferenceEquals(pair.First.Foreground, monitor.FindResource(pair.Second.Status == FemCaseStatus.Converged ? "Success" : "Warning"))),
                 "… every load case has its own status, in its colour: " + string.Join(", ", shown.Cases.Select(item => $"{item.Number} {item.Name} — {item.StatusText}")));
+            var diagnostics = Visuals<TextBlock>(monitor.CaseList).Where(text => text.Name == "CaseDiagnosticText").ToArray();
+            Check(diagnostics.Length == shown.Cases.Count && diagnostics.Zip(shown.Cases).All(pair => pair.First.IsVisible && pair.First.Text == pair.Second.DiagnosticText &&
+                      pair.First.Text.StartsWith("Instabilities: 0", StringComparison.Ordinal)) &&
+                  headers.Zip(shown.Cases).All(pair => System.Windows.Automation.AutomationProperties.GetName(pair.First) == pair.Second.Summary && pair.Second.Summary.EndsWith(pair.Second.HeaderText, StringComparison.Ordinal)),
+                "… and, closed, says after its status what was found of it: " + string.Join(" | ", shown.Cases.Select(item => item.HeaderText)));
+            // at its smallest the window still shows every status whole; the name and the diagnostic give way
+            double wide = monitor.Width;
+            monitor.Width = monitor.MinWidth; Idle();
+            Snapshot(monitor, ".work/run-monitor-narrow-ui.png");
+            double Right(FrameworkElement element) => element.TransformToAncestor(monitor).Transform(new Point(element.ActualWidth, 0)).X;
+            Check(monitor.ActualWidth == 720 && statuses.All(text => text.ActualWidth > 0 && Right(text) <= Right((FrameworkElement)VisualTreeHelper.GetParent(text)) + 0.5) &&
+                  headers.All(header => Right(header) <= Right(monitor.CaseList) + 0.5 && Visuals<TextBlock>(header).Count(text => text.IsVisible && text.ActualWidth > 0) >= 5),
+                "… at the window's smallest width, 720, each row still has its number, name, whole status, diagnostic and time: the name and the diagnostic are what is trimmed");
+            monitor.Width = wide; Idle();
             var lines = Enumerable.Range(0, monitor.CaseList.Items.Count).Select(index => (DependencyObject)monitor.CaseList.ItemContainerGenerator.ContainerFromIndex(index))
                 .Select(container => Visuals<Border>(container).Last(border => border.Height == 1)).ToArray();
             Check(lines.Length == shown.Cases.Count && lines.All(line => ReferenceEquals(line.Background, monitor.FindResource("Border")) && line.ActualWidth >= monitor.CaseList.ActualWidth - 1),
@@ -233,11 +269,19 @@ internal static class TemplateBuildingUiChecks
             var logs = Visuals<TextBox>(monitor.CaseList).ToArray();
             Check(shown.Cases[0].IsExpanded && shown.Cases[^1].IsExpanded && shown.Cases.Count(item => item.IsExpanded) == 2 && logs.Length == 2,
                 "a load case opens from its header, and two stay open at once");
-            var detail = Visuals<TextBlock>(monitor.CaseList.ItemContainerGenerator.ContainerFromIndex(0)).Select(text => text.Text).ToArray();
+            string[] Detail() => Visuals<TextBlock>(monitor.CaseList.ItemContainerGenerator.ContainerFromIndex(0)).Where(text => text.IsVisible).Select(text => text.Text).ToArray();
+            var detail = Detail();
             int At(string label) => Array.IndexOf(detail, label);
+            string[] measured = ["Smallest scaled pivot", "Resultant of internal forces", "Largest loss of accuracy"];
             Check(At("Convergence") >= 0 && detail[At("Convergence") + 1] == "Passed" && detail[At("Numerical Stability") + 1] == shown.Cases[0].StabilityText &&
-                  detail[At("Instabilities") + 1] == "0" && detail.Contains("ANALYSIS LOG") && detail.Contains("Nonlinear convergence") && detail.Contains("Largest loss of accuracy"),
-                $"… on Convergence: Passed · Numerical Stability: {shown.Cases[0].StabilityText} · Instabilities: 0, the details of its convergence, and its own analysis log");
+                  detail[At("Instabilities") + 1] == "0" && detail.Contains("ANALYSIS LOG") && detail.Contains("Nonlinear convergence") && detail.Contains("Iterations") &&
+                  At("TECHNICAL DIAGNOSTICS") > At("Instabilities") && At("TECHNICAL DIAGNOSTICS") < At("ANALYSIS LOG") && !measured.Any(detail.Contains),
+                $"… on Convergence: Passed · Numerical Stability: {shown.Cases[0].StabilityText} · Instabilities: 0, its convergence and iterations, and its own analysis log — the pivot, the resultant and the largest loss of accuracy are not on show");
+            shown.Cases[0].IsTechnicalExpanded = true; Idle();
+            detail = Detail();
+            Check(measured.All(detail.Contains) && shown.Cases[0].Technical.All(field => detail.Contains(field.Label) && detail.Contains(field.Value)) && !shown.Cases[^1].IsTechnicalExpanded,
+                "… Technical diagnostics opens on them, as the solver reported them: " + string.Join(" · ", shown.Cases[0].Technical.Select(field => $"{field.Label} {field.Value}")));
+            shown.Cases[0].IsTechnicalExpanded = false; Idle();
             Check(logs[0].IsReadOnly && logs[0].Text == shown.Cases[0].LogText && logs[0].Text.Contains("Analysis started.", StringComparison.Ordinal) &&
                   ReferenceEquals(logs[0].FontFamily, monitor.FindResource("UiFont")) && ReferenceEquals(logs[0].Foreground, monitor.FindResource("Text")) &&
                   logs[0].TextWrapping == TextWrapping.Wrap && monitor.FontFamily.Source == "Segoe UI" && monitor.FontSize == 12 &&
@@ -250,8 +294,9 @@ internal static class TemplateBuildingUiChecks
             Snapshot(monitor, ".work/run-monitor-instability-ui.png");
             var grid = Visuals<DataGrid>(monitor.CaseList).Single();
             Check(monitor.RunStatusText.Text == "Failed" && ReferenceEquals(monitor.RunStatusText.Foreground, monitor.FindResource("Error")) && shown.Cases.Single().IsExpanded &&
-                  grid.Columns.Select(column => column.Header as string).SequenceEqual(["Joint", "X", "Y", "Z", "UX", "UY", "UZ", "RX", "RY", "RZ", "Remarks"]) && grid.Items.Count == 4,
-                "a load case that failed opens itself on the table of its joints: Joint · X · Y · Z · UX · UY · UZ · RX · RY · RZ · Remarks");
+                  grid.Columns.Select(column => column.Header as string).SequenceEqual(["Joint", "X (m)", "Y (m)", "Z (m)", "UX", "UY", "UZ", "RX", "RY", "RZ", "Remarks"]) && grid.Items.Count == 4 &&
+                  Visuals<TextBlock>(monitor.CaseList).Single(text => text.Name == "CaseDiagnosticText") is { Text: "6 affected DOFs" } affected && ReferenceEquals(affected.Foreground, monitor.FindResource("Error")),
+                "a load case that failed reads Numerical Instability · 6 affected DOFs in red and opens itself on the table of its joints: Joint · X (m) · Y (m) · Z (m) · UX · UY · UZ · RX · RY · RZ · Remarks");
             var cells = Visuals<DataGridRow>(grid).SelectMany(row => Visuals<TextBlock>(row)).ToArray();
             var infinite = cells.Where(text => text.Text == "∞").ToArray();
             Check(infinite.Length == 6 && infinite.All(text => text.FontWeight == FontWeights.Bold && ReferenceEquals(text.Foreground, monitor.FindResource("Error"))) &&
@@ -263,6 +308,54 @@ internal static class TemplateBuildingUiChecks
             monitor.Views.SelectedItem = monitor.ConvergenceTab; Idle();
             Check(Visuals<Mcotis.Desktop.Presentation.Controls.ConvergenceChart>(monitor).Single() is { IsVisible: true, Ratios.Count: > 0 },
                 "… and the second view is the cable target-force convergence chart, with the fitting runs of the monitored cable");
+
+            // Degrees of freedom the model cannot be analysed with: Analysis Options keeps them, the run reports them.
+            monitor.Views.SelectedItem = monitor.RunTab;
+            vm.UnlockFemModel.Execute(null);
+            vm.ApplyPlanarAnalysisSettings(vm.PlanarAnalysisSettings with { ActiveDofs = DofMask.UZ | DofMask.RY });
+            var none = FemModelFileChecks.Analyze(vm); Idle();
+            Snapshot(monitor, ".work/run-monitor-refused-ui.png");
+            var notRun = Visuals<TextBlock>(monitor.CaseList).Where(text => text.Name == "CaseDiagnosticText").ToArray();
+            Check(none.Count == 0 && monitor.RunStatusText.Text == "Failed" && !monitor.DofText.IsVisible && monitor.RunMessage.IsVisible && ReferenceEquals(monitor.RunMessage.Foreground, monitor.FindResource("Error")) &&
+                  monitor.RunMessage.Text.StartsWith("UX is switched off, but the joints of the model are not all at one X", StringComparison.Ordinal) &&
+                  monitor.RunMessage.Text.EndsWith("Switch UX on under Run → Analysis Options → Degrees of Freedom.", StringComparison.Ordinal) &&
+                  shown.Cases.Count >= 2 && notRun.Length == shown.Cases.Count && notRun.All(text => text.Text == "Not run") &&
+                  shown.Cases.All(item => item is { StatusText: "Cancelled", InstabilitiesText: "N/A" } && item.LogText.Contains("UX is switched off", StringComparison.Ordinal)),
+                "with UX switched off in Analysis Options the default model — which spans X — is not analysed and not corrected: the run reads Failed with the reason in red, and every load case Cancelled · Not run with the reason in its log");
+
+            // Full 3D — what the application starts a model with. The default model lies in a plane on pins.
+            if (vm.IsFemModelLocked) vm.UnlockFemModel.Execute(null);
+            vm.ApplyPlanarAnalysisSettings(vm.PlanarAnalysisSettings with { ActiveDofs = Program.ProductStartingDofs.Model, CableDofs = Program.ProductStartingDofs.CableJoints });
+            var spatial = FemModelFileChecks.Analyze(vm); Idle();
+            Snapshot(monitor, ".work/run-monitor-3d-ui.png");
+            int jointCount = int.Parse(shown.ModelLeft[0].Value), pins = int.Parse(shown.ModelLeft[1].Value);
+            Check(spatial.Count == 1 && monitor.RunStatusText.Text == "Completed with Warnings" && ReferenceEquals(monitor.RunStatusText.Foreground, monitor.FindResource("Warning")) &&
+                  monitor.DofText.Text == $"{6 * jointCount} active | {6 * jointCount - 3 * pins} solved | {3 * pins} restrained" && !monitor.RunMessage.IsVisible,
+                $"in full 3D — what the application starts a model with — the default model is analysed and has its results: the run reads Completed with Warnings over {monitor.DofText.Text}");
+            Check(shown.Cases.Count >= 2 && shown.Cases.All(item => item is { Status: FemCaseStatus.ConvergedWithWarnings, StabilityText: "Singular stiffness — 1 movement without stiffness, not loaded: held", IsExpanded: false } &&
+                      item.DiagnosticText.StartsWith($"Instabilities: {2 * jointCount - pins}  ·  1 unloaded movement held", StringComparison.Ordinal) &&
+                      item.Rows.Count == jointCount && item.Rows.All(row => row.RX.Text == "∞" && row.RY.Text != "∞" && row.UX.Text != "∞" && row.UZ.Text != "∞") &&
+                      item.Rows.Count(row => row.UY.Text == "∞") == jointCount - pins &&
+                      item.Rows.Count(row => row.UY.Text == "R" && row.Remarks == "RX: Singular (∞) — possible mechanism, not loaded: held") == pins),
+                $"… every load case reads Converged with Warnings · Instabilities: {2 * jointCount - pins} · 1 unloaded movement held, and lists the one movement the solver held, joint by joint: the model turning about the line of its {pins} pins — " +
+                $"RX of all {jointCount} joints and UY of the {jointCount - pins} off that line, nothing against UX, UZ or RY");
+            var statusTexts = Visuals<TextBlock>(monitor.CaseList).Where(text => text.Name is "CaseStatusText" or "CaseDiagnosticText").ToArray();
+            Check(statusTexts.Length == 2 * shown.Cases.Count && statusTexts.All(text => ReferenceEquals(text.Foreground, monitor.FindResource("Warning"))),
+                "… in amber, as warnings: none of them a failure");
+
+            // The same model in its plane: the results of the two runs are the same.
+            if (vm.IsFemModelLocked) vm.UnlockFemModel.Execute(null);
+            vm.ApplyPlanarAnalysisSettings(vm.PlanarAnalysisSettings with { ActiveDofs = DofMask.XZ });
+            var inPlane = FemModelFileChecks.Analyze(vm); Idle();
+            Check(inPlane.Count == 1 && vm.FemCableDofs == DofMask.Translations && shown.Status is FemRunStatus.Completed or FemRunStatus.CompletedWithWarnings &&
+                  monitor.DofText.Text == $"{3 * jointCount} active | {3 * jointCount - 2 * pins} solved | {2 * pins} restrained" && shown.Cases.All(item => item.DiagnosticText.StartsWith("Instabilities: 0", StringComparison.Ordinal)),
+                $"with the XZ plane chosen the same model is analysed in its plane: {shown.StatusText}, {monitor.DofText.Text}, every load case with zero instabilities");
+            var names = inPlane[0].Results!.Keys.ToArray();
+            var gaps = names.Select(name => RunMonitorChecks.Difference(inPlane[0].Results![name], spatial[0].Results![name])).ToArray();
+            Check(names.Length >= 3 && spatial[0].Results!.Keys.SequenceEqual(names) && gaps.Max(gap => gap.Moved) <= 1e-8 && gaps.Max(gap => gap.Force) <= 1e-3 &&
+                  inPlane[0].Result.Cables.Any(cable => cable.AxialForceKN > 100),
+                $"… and the results of the run in full 3D are those of the run in the plane, for every load case and combination ({string.Join(", ", names)}): joints, reactions, every frame station and every cable — " +
+                $"displacements within {gaps.Max(gap => gap.Moved):0.0E+00} m, forces within {gaps.Max(gap => gap.Force):0.0E+00} kN");
         }
         finally { shell.Close(); }
     }

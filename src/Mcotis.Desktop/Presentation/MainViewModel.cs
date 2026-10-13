@@ -178,7 +178,7 @@ public sealed partial class MainViewModel : Observable
         TabFem when SelectedFemPage == FemResultsPage && FemResultMode == FemResultMode.DeflectedShape => "Deformed shape is visually magnified; displacement values in the Results table are true scale.",
         TabFem when SelectedFemPage == FemResultsPage && FemResultMode == FemResultMode.Reactions => "Green vectors show support reaction direction; labels and the Results table show exact magnitudes and components.",
         TabFem when SelectedFemPage == FemResultsPage => "Blue = positive (tension for axial force); red = negative (compression). Diagram width is auto-scaled; table values are exact.",
-        TabFem => "Internal 2D XZ FEM · Assigned loading points are highlighted; automatically detected base pins restrain X/Z translation and leave rotation free.",
+        TabFem => "Internal FEM · Assigned loading points are highlighted; automatically detected base pins restrain translation and leave rotation free.",
         _ => "",
     };
     private void NotifySharedViewer()
@@ -1769,8 +1769,24 @@ public sealed partial class MainViewModel : Observable
         const string read = "File → Read FEM Properties from SAP brings them in (read-only); the analysis then solves the model held here.";
         if (State.IsSapConnected && femInputsOutdated)
             throw new InvalidOperationException("The sections, materials and loading of the connected SAP2000 model are not in Mcotis yet. " + read);
+        // A frame's stiffness out of the plane — what an analysis in 3D needs — comes from its section. A member kept
+        // from before these were held has none: it takes them from its section in the library, as assigning it would.
+        var library = FrameSections.GroupBy(section => section.Name, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var derived = new Dictionary<(string Section, double Angle, IReadOnlyList<double>? Modifiers), (double? OutOfPlane, double? Torsion)>();
+        FemSectionProperties Complete(FemSectionProperties member)
+        {
+            if (member.IsCable || member is { OutOfPlaneInertiaM4: not null, TorsionConstantM4: not null } ||
+                member.SectionName is not { } name || !library.TryGetValue(name, out var section)) return member;
+            var key = (name, member.LocalAngleDeg, member.Modifiers);
+            if (!derived.TryGetValue(key, out var found))
+            {
+                var whole = PropertiesFor(member, section);
+                derived[key] = found = (whole.OutOfPlaneInertiaM4, whole.TorsionConstantM4);
+            }
+            return member with { OutOfPlaneInertiaM4 = member.OutOfPlaneInertiaM4 ?? found.OutOfPlane, TorsionConstantM4 = member.TorsionConstantM4 ?? found.Torsion };
+        }
         var properties = FemSectionProperties.GroupBy(property => property.MemberName, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            .ToDictionary(group => group.Key, group => Complete(group.First()), StringComparer.Ordinal);
         var missing = State.Geometry.Members.FirstOrDefault(member =>
             member.Kind is MemberKind.Frame or MemberKind.Cable && !properties.ContainsKey(member.Name));
         if (missing is not null)
@@ -1944,12 +1960,12 @@ public sealed partial class MainViewModel : Observable
         try
         {
             var loadPlan = FemLoadPlan.Build(FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), femSapLoading,
-                properties, State.Baseline, Tab01Patterns, PretensionPatterns, State.AppliedPoints.Select(point => point.PointName).ToArray());
+                properties, State.Baseline, Tab01Patterns, PretensionPatterns, State.AppliedPoints.Select(point => point.PointName).ToArray(), FemMassSourceReferences);
             femResultOrder = loadPlan.ResultNames;
             femMonitorTargetStages = loadPlan.FitCases.ToArray();
             Notify(nameof(FemMonitorTargetStages));
             FemMonitorTargetStage = femMonitorTargetStages.FirstOrDefault();
-            SelectedFemResultName = loadPlan.CombinationNames.FirstOrDefault() ?? loadPlan.CaseNames[^1];
+            SelectedFemResultName = loadPlan.DefaultResultName;
 
             var baseline = State.Baseline;
             var targetFitPercent = FemTargetFitPercent;
@@ -1970,7 +1986,7 @@ public sealed partial class MainViewModel : Observable
                     femSapLoading.MemberLoads.Count + femSapLoading.MemberPointLoads.Count + femSapLoading.GravityLoads.Count,
                     loadPlan.CaseNames.Count, loadPlan.CombinationNames.Count, femSapLoading.Warnings.Count, loadPlan.Notes),
                 loadPlan.StagesFor(model.Loads).SelectMany(stage => (stage.FitCase is { } fit ? new[] { (fit, true) } : [])
-                    .Concat(stage.Cases.Select(item => (item.Name, false)))));
+                    .Concat(stage.Cases.Select(item => (item.Name, false)))), loadPlan.PrerequisiteRemarks);
             FemMonitor.Apply(monitor.Snapshot());
             var failure = new FemFailureReport();
             var equilibrium = pump = new FemMonitorPump(this, monitor, SynchronizationContext.Current);

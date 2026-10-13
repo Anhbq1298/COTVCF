@@ -160,20 +160,8 @@ public partial class MainWindow : Window
         return false;
     }
 
-    // ---- Menu bar: MB opens a remaining reference page; Define / Assign / Run / Display open an FEM pane; Result shows an output ----
+    // ---- Menu bar: Define / Assign / Run / Display open an FEM pane; Result shows an output ----
     private static int MenuTag(object sender) => sender is FrameworkElement { Tag: string tag } && int.TryParse(tag, out var value) ? value : -1;
-
-    private void MbMenu_Click(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is MainViewModel vm && MenuTag(sender) is >= 0 and var tab) vm.SelectedTab = tab;
-        OpenPane();
-    }
-
-    private void MainMenu_SubmenuOpened(object sender, RoutedEventArgs e)
-    {
-        if (e.OriginalSource is MenuItem item && ItemsControl.ItemsControlFromItemContainer(item) == MainMenu)
-            SapConnectionControls.Visibility = Equals(item.Header, "_MB") ? Visibility.Visible : Visibility.Collapsed;
-    }
 
     // Define → Load Cases: Default Setup / SAP Cases replace the table, so they ask first when it holds something else
     private void DefaultLoadCases_Click(object sender, RoutedEventArgs e)

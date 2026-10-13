@@ -1,0 +1,459 @@
+{
+  "format": "Mcotis.Document",
+  "schemaVersion": 3,
+  "documentId": "5841218e-4c5f-4ac5-ab14-3801c92ce6f4",
+  "savedUtc": "2026-10-13T08:00:00Z",
+  "units": {
+    "force": "kN",
+    "length": "m",
+    "mass": "t"
+  },
+  "settings": {
+    "activeDofs": "Full3D",
+    "cableDofs": "Translations",
+    "cableFitTolerancePercent": 10,
+    "cableFitMaxIterations": 100,
+    "frameMeshSegments": 10,
+    "cableSag": true
+  },
+  "nameSequence": {
+    "Point": 6,
+    "Frame": 3,
+    "Cable": 1,
+    "Shell": 1
+  },
+  "materials": [
+    {
+      "id": "27b336ff-fbfe-4d68-9cb9-5eaa572e0cfb",
+      "name": "C40/50",
+      "type": "Concrete",
+      "elasticModulus": 35000000,
+      "poissonRatio": 0.2,
+      "weightDensity": 25,
+      "massDensity": 2.5
+    },
+    {
+      "id": "951aaecb-0cf9-4b8c-86a6-c9267274beed",
+      "name": "S355",
+      "type": "Steel",
+      "elasticModulus": 210000000,
+      "poissonRatio": 0.3,
+      "weightDensity": 76.97,
+      "massDensity": 7.849
+    },
+    {
+      "id": "0e1b12b8-dbdd-4f99-83dd-e94558109703",
+      "name": "Y1860",
+      "type": "Tendon",
+      "elasticModulus": 195000000,
+      "poissonRatio": 0.3,
+      "weightDensity": 77,
+      "massDensity": 7.85
+    }
+  ],
+  "frameSections": [
+    {
+      "id": "ee8d1531-b071-4280-8b3b-2a9774140d82",
+      "name": "HB400",
+      "materialId": "951aaecb-0cf9-4b8c-86a6-c9267274beed",
+      "shape": "ISection",
+      "area": 0.0219,
+      "inertia33": 0.000666,
+      "inertia22": 0.000224,
+      "torsionConstant": 2.7E-06,
+      "shearArea2": 0.0054,
+      "shearArea3": 0.014,
+      "dimensions": {
+        "t2": 0.4,
+        "t3": 0.4,
+        "tf": 0.021,
+        "tw": 0.013
+      }
+    }
+  ],
+  "cableSections": [
+    {
+      "id": "b6887442-1ebc-4d75-b208-4081ddd66227",
+      "name": "19T15.7",
+      "materialId": "0e1b12b8-dbdd-4f99-83dd-e94558109703",
+      "area": 0.00285
+    }
+  ],
+  "shellSections": [
+    {
+      "id": "0fd80eeb-c129-443d-bb4e-494a1cddf959",
+      "name": "SLAB200",
+      "materialId": "27b336ff-fbfe-4d68-9cb9-5eaa572e0cfb",
+      "type": "Shell",
+      "thickness": 0.2
+    }
+  ],
+  "points": [
+    {
+      "id": "310c1afe-6d2b-4948-a9ec-c389602bd1d4",
+      "name": "P1",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    {
+      "id": "e5078e9b-7db3-4ceb-9a76-d2bf7469bfab",
+      "name": "P2",
+      "x": 0,
+      "y": 0,
+      "z": 5
+    },
+    {
+      "id": "a7cebd1f-674c-4f32-9b0f-f6e2bf3c3751",
+      "name": "P3",
+      "x": 6,
+      "y": 0,
+      "z": 5
+    },
+    {
+      "id": "4231e43c-4308-4e17-a25c-7722e234098c",
+      "name": "P4",
+      "x": 6,
+      "y": 0,
+      "z": 0
+    },
+    {
+      "id": "2a75c977-562c-4cd4-95a2-223d4e8499b0",
+      "name": "P5",
+      "x": 6,
+      "y": 4,
+      "z": 5,
+      "origin": {
+        "kind": "Generated",
+        "generationKey": "slab:corner:3"
+      }
+    },
+    {
+      "id": "4028ea41-af87-442f-a310-3e4c00ddfc9d",
+      "name": "P6",
+      "x": 0,
+      "y": 4,
+      "z": 5
+    }
+  ],
+  "frames": [
+    {
+      "id": "92cdebe3-9ef0-4577-b3ab-9888cf986ed9",
+      "name": "F1",
+      "startPointId": "310c1afe-6d2b-4948-a9ec-c389602bd1d4",
+      "endPointId": "e5078e9b-7db3-4ceb-9a76-d2bf7469bfab"
+    },
+    {
+      "id": "e166f140-d601-4d75-9c51-eb903724762c",
+      "name": "F2",
+      "startPointId": "e5078e9b-7db3-4ceb-9a76-d2bf7469bfab",
+      "endPointId": "a7cebd1f-674c-4f32-9b0f-f6e2bf3c3751"
+    },
+    {
+      "id": "4159b04d-20b9-48b0-a57c-c91cd81d6082",
+      "name": "F3",
+      "startPointId": "4231e43c-4308-4e17-a25c-7722e234098c",
+      "endPointId": "a7cebd1f-674c-4f32-9b0f-f6e2bf3c3751"
+    }
+  ],
+  "cables": [
+    {
+      "id": "97f0a436-6a46-49e6-ac84-9d5ba2739410",
+      "name": "C1",
+      "startPointId": "310c1afe-6d2b-4948-a9ec-c389602bd1d4",
+      "endPointId": "a7cebd1f-674c-4f32-9b0f-f6e2bf3c3751"
+    }
+  ],
+  "shells": [
+    {
+      "id": "7cfe6d48-0dcc-4aed-b2f0-5f0b3c48acbb",
+      "name": "S1",
+      "pointIds": [
+        "e5078e9b-7db3-4ceb-9a76-d2bf7469bfab",
+        "a7cebd1f-674c-4f32-9b0f-f6e2bf3c3751",
+        "2a75c977-562c-4cd4-95a2-223d4e8499b0",
+        "4028ea41-af87-442f-a310-3e4c00ddfc9d"
+      ]
+    }
+  ],
+  "restraints": [
+    {
+      "pointId": "310c1afe-6d2b-4948-a9ec-c389602bd1d4",
+      "ux": true,
+      "uy": true,
+      "uz": true,
+      "rx": false,
+      "ry": false,
+      "rz": false
+    },
+    {
+      "pointId": "4231e43c-4308-4e17-a25c-7722e234098c",
+      "ux": true,
+      "uy": true,
+      "uz": true,
+      "rx": false,
+      "ry": false,
+      "rz": false
+    }
+  ],
+  "frameAssignments": [
+    {
+      "frameId": "92cdebe3-9ef0-4577-b3ab-9888cf986ed9",
+      "sectionId": "ee8d1531-b071-4280-8b3b-2a9774140d82",
+      "startRelease": {
+        "axial": false,
+        "shear2": false,
+        "shear3": false,
+        "torsion": false,
+        "moment2": false,
+        "moment3": false
+      },
+      "endRelease": {
+        "axial": false,
+        "shear2": false,
+        "shear3": false,
+        "torsion": false,
+        "moment2": false,
+        "moment3": false
+      },
+      "localAxisAngle": 90,
+      "modifiers": {
+        "area": 1,
+        "inertia33": 1,
+        "inertia22": 1,
+        "torsion": 1,
+        "mass": 1,
+        "weight": 1
+      }
+    },
+    {
+      "frameId": "e166f140-d601-4d75-9c51-eb903724762c",
+      "sectionId": "ee8d1531-b071-4280-8b3b-2a9774140d82",
+      "startRelease": {
+        "axial": false,
+        "shear2": false,
+        "shear3": false,
+        "torsion": false,
+        "moment2": false,
+        "moment3": true
+      },
+      "endRelease": {
+        "axial": false,
+        "shear2": false,
+        "shear3": false,
+        "torsion": false,
+        "moment2": false,
+        "moment3": true
+      },
+      "localAxisAngle": 0,
+      "modifiers": {
+        "area": 1,
+        "inertia33": 1,
+        "inertia22": 1,
+        "torsion": 1,
+        "mass": 1,
+        "weight": 1
+      }
+    },
+    {
+      "frameId": "4159b04d-20b9-48b0-a57c-c91cd81d6082",
+      "sectionId": "ee8d1531-b071-4280-8b3b-2a9774140d82",
+      "startRelease": {
+        "axial": false,
+        "shear2": false,
+        "shear3": false,
+        "torsion": false,
+        "moment2": false,
+        "moment3": false
+      },
+      "endRelease": {
+        "axial": false,
+        "shear2": false,
+        "shear3": false,
+        "torsion": false,
+        "moment2": false,
+        "moment3": false
+      },
+      "localAxisAngle": 0,
+      "modifiers": {
+        "area": 1,
+        "inertia33": 0.7,
+        "inertia22": 1,
+        "torsion": 1,
+        "mass": 1,
+        "weight": 1
+      }
+    }
+  ],
+  "cableAssignments": [
+    {
+      "cableId": "97f0a436-6a46-49e6-ac84-9d5ba2739410",
+      "sectionId": "b6887442-1ebc-4d75-b208-4081ddd66227",
+      "areaModifier": 1,
+      "massModifier": 1,
+      "weightModifier": 1.05
+    }
+  ],
+  "shellAssignments": [
+    {
+      "shellId": "7cfe6d48-0dcc-4aed-b2f0-5f0b3c48acbb",
+      "sectionId": "0fd80eeb-c129-443d-bb4e-494a1cddf959",
+      "localAxisAngle": 0
+    }
+  ],
+  "loadPatterns": [
+    {
+      "id": "32826062-bc28-44e2-844f-adee42e51a6e",
+      "name": "DEAD",
+      "type": "Dead",
+      "selfWeightMultiplier": 1
+    },
+    {
+      "id": "b14060db-9e0e-4434-8c38-2365c009dd42",
+      "name": "LIVE",
+      "type": "Live",
+      "selfWeightMultiplier": 0
+    },
+    {
+      "id": "36cb3e4c-901b-43ef-a1e1-45085446b1cb",
+      "name": "PT",
+      "type": "Prestress",
+      "selfWeightMultiplier": 0
+    }
+  ],
+  "loads": [
+    {
+      "id": "4e248d0b-8cfd-422f-8680-07b050774177",
+      "type": "cableTargetForce",
+      "patternId": "36cb3e4c-901b-43ef-a1e1-45085446b1cb",
+      "targetId": "97f0a436-6a46-49e6-ac84-9d5ba2739410",
+      "relativeDistance": 0.5,
+      "value": 500
+    },
+    {
+      "id": "270323a8-8aef-4d6b-8c84-5c967306b676",
+      "type": "frameDistributed",
+      "patternId": "32826062-bc28-44e2-844f-adee42e51a6e",
+      "targetId": "e166f140-d601-4d75-9c51-eb903724762c",
+      "direction": "GlobalZ",
+      "relativeStart": 0,
+      "relativeEnd": 1,
+      "valueStart": -12,
+      "valueEnd": -12
+    },
+    {
+      "id": "384289c9-23b6-4209-bd72-1457e24174f1",
+      "type": "point",
+      "patternId": "b14060db-9e0e-4434-8c38-2365c009dd42",
+      "targetId": "e5078e9b-7db3-4ceb-9a76-d2bf7469bfab",
+      "force": {
+        "x": 0,
+        "y": 0,
+        "z": -100
+      },
+      "moment": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "id": "0fc355bb-dc72-4149-816d-d81f4ce2f7fd",
+      "type": "shellUniform",
+      "patternId": "b14060db-9e0e-4434-8c38-2365c009dd42",
+      "targetId": "7cfe6d48-0dcc-4aed-b2f0-5f0b3c48acbb",
+      "direction": "GlobalZ",
+      "value": -5
+    }
+  ],
+  "loadCases": [
+    {
+      "id": "2b6104e9-862c-4567-9965-3585c86db28a",
+      "name": "Pretension",
+      "type": "NonlinearStatic",
+      "components": [
+        {
+          "patternId": "36cb3e4c-901b-43ef-a1e1-45085446b1cb",
+          "factor": 1
+        },
+        {
+          "patternId": "32826062-bc28-44e2-844f-adee42e51a6e",
+          "factor": 1
+        }
+      ],
+      "run": true,
+      "fitCableTargetForces": true
+    },
+    {
+      "id": "4d184722-721c-46d8-9546-98c21091d364",
+      "name": "SLS: 1.0DL\u002B1.0LL",
+      "type": "NonlinearStatic",
+      "components": [
+        {
+          "patternId": "32826062-bc28-44e2-844f-adee42e51a6e",
+          "factor": 1
+        },
+        {
+          "patternId": "b14060db-9e0e-4434-8c38-2365c009dd42",
+          "factor": 1
+        }
+      ],
+      "initialCaseId": "2b6104e9-862c-4567-9965-3585c86db28a",
+      "run": true,
+      "fitCableTargetForces": false
+    },
+    {
+      "id": "5d16a911-008a-43f6-92a8-26d5a6c1b6a2",
+      "name": "ULS: 1.35DL\u002B1.5LL",
+      "type": "NonlinearStatic",
+      "components": [
+        {
+          "patternId": "32826062-bc28-44e2-844f-adee42e51a6e",
+          "factor": 1.35
+        },
+        {
+          "patternId": "b14060db-9e0e-4434-8c38-2365c009dd42",
+          "factor": 1.5
+        }
+      ],
+      "initialCaseId": "2b6104e9-862c-4567-9965-3585c86db28a",
+      "run": true,
+      "fitCableTargetForces": false
+    },
+    {
+      "id": "d508f8bb-4b56-47e1-a8d3-2e5da85de9db",
+      "name": "WIND",
+      "type": "LinearStatic",
+      "components": [
+        {
+          "patternId": "b14060db-9e0e-4434-8c38-2365c009dd42",
+          "factor": 0.5
+        },
+        {
+          "patternId": "32826062-bc28-44e2-844f-adee42e51a6e",
+          "factor": -0.25
+        }
+      ],
+      "run": false,
+      "fitCableTargetForces": false
+    }
+  ],
+  "loadCombinations": [
+    {
+      "id": "935fbd2a-26b9-431c-bdd8-088b905f40c5",
+      "name": "ENV",
+      "type": "Envelope",
+      "terms": [
+        {
+          "sourceId": "4d184722-721c-46d8-9546-98c21091d364",
+          "factor": 1
+        },
+        {
+          "sourceId": "2b6104e9-862c-4567-9965-3585c86db28a",
+          "factor": 1
+        }
+      ],
+      "run": true
+    }
+  ]
+}

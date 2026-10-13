@@ -22,6 +22,12 @@ or cable objects. The generator is one undoable command and refuses an existing 
 In the native window, **File → Save / Save As / Open Native Model** uses JSON `.mcotis` files. Save writes the current
 document. Open validates before replacement. Unsaved changes are checked on Open and Close. Results remain in
 memory and are cleared on Open; the input file does not store them. The main window also has **File → Open Native Model…**.
+Native files are schema 4 since 2026-10-13: a load case states its kind (Linear Static, Nonlinear Static, Initial
+P-Delta, Modal), the case it continues from, the case whose stiffness it uses, and its options. An older file is
+upgraded when it is opened — the cases keep their meaning and their identities — and is written as schema 4 on Save.
+This window has no form for load cases yet (the main window's Define → Load Cases has), and **Run → Run Analysis** refuses a case that asks for P-Delta, modes, the
+stiffness of another case or its own iteration controls, with the reason: see
+[the load-case plan](analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md).
 
 **Run → Analysis Options… → Degrees of Freedom** provides 3D, XZ, YZ, XY and custom six-DOF selections. Apply commits
 one command; OK commits and closes; Cancel discards edits since the last Apply. Global inactive DOFs are separate
@@ -42,11 +48,15 @@ numerical source verification gates or establish production readiness; the evide
 [analysis/cable-static-verification.md](analysis/cable-static-verification.md).
 
 The main window's **Run → Analysis Options…** is the form of the main window's own run. That run uses the same
-general solver. Because the main window's model is planar, its Degrees of Freedom tab offers only what that model
-can change (user, 2026-10-12: a tab of boxes that cannot be changed is redundant; 2026-10-13: the tab is wanted, to
-change degrees of freedom): RY for the model, and UX and UZ for cable joints. UX and UZ of the model stay on — the
-model spans its plane — and there is no preset. The run monitor states the degrees of freedom of each run. On its
-other tab the form edits the
+general solver, and its Degrees of Freedom tab is the same as the native one — the presets, the six degrees of
+freedom, those of cable joints (user, 2026-10-12: a tab of boxes that cannot be changed is redundant; 2026-10-13: the
+tab is wanted, set freely, "if not proper then report in the log", and "make the planar use 3d as 3d is default"). A
+model starts in Full 3D. A model of the main window lies in a plane on pins that are all on one line, so in Full 3D
+nothing holds it out of that plane; its loads do no work on that movement, so the main window's run holds it, solves
+and lists it as a warning (user, same day: "ETABS can run regardless") — the results are those of the XZ plane, which
+the user can choose instead; the form does not choose it for them. The native run does not hold anything: there a
+singular stiffness has no result. The run monitor states the degrees of
+freedom of each run. On its other tab the form edits the
 cable target-fitting tolerance, maximum iterations, frame mesh (1–100: the stations each frame piece is read at,
 which changes no joint result) and cable sag. Individual cable target
 forces remain in the cable assignments/load patterns. In the native options the same four settings are active: the

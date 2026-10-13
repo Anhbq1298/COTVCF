@@ -304,7 +304,7 @@ public sealed class FemStudyService
                             caseResults[name] = caseResult;
                     }
                     results = loadPlan.Complete(caseResults);
-                    result = results[loadPlan.ResultNames[0]];
+                    result = results[loadPlan.PrimaryResultName];
                 }
             }
             catch (InvalidOperationException ex)

@@ -12,10 +12,16 @@ namespace Mcotis.Analysis;
 /// so that the deviation can be reviewed.</param>
 /// <param name="Stability">The digits of accuracy lost from which a degree of freedom is reported
 /// (<see cref="StabilityThresholds.Default"/> when null). It changes what is reported, never a result.</param>
+/// <param name="HoldUnloadedMechanisms">A stiffness that is singular by movements it does not resist — a model free
+/// to turn about the line of its supports, a mechanism: false refuses the case; true holds those movements and solves
+/// it, provided the loads of the case do no work on them — every equilibrium equation, theirs included, is then met
+/// to the accepted tolerance. The result is marked (<see cref="StaticStability.MovementsHeld"/>, a warning): its
+/// displacements are determined up to those movements, its forces are not affected. A movement the loads do act on,
+/// and a degree of freedom that nothing holds at all, are refused either way.</param>
 public sealed record StaticOptions(int MaximumFullDofs = 2400, int MaximumFreeDofs = 600,
     double RelativePivotTolerance = 1e-12, double ResidualTolerance = 1e-10,
     double NonlinearForceTolerance = 1e-9, int MaximumNonlinearIterations = 100, double EquilibriumTolerance = 1e-8,
-    bool AcceptClosestFit = false, StabilityThresholds? Stability = null);
+    bool AcceptClosestFit = false, StabilityThresholds? Stability = null, bool HoldUnloadedMechanisms = false);
 
 public sealed record StaticJointResult(ObjectId PointId, ImmutableArray<double> Displacements,
     ImmutableArray<double> Reactions, ImmutableArray<double> SuppressedDofForces);
@@ -125,7 +131,12 @@ public sealed record StaticProgress(ObjectId CaseId, StaticProgressKind Kind, in
 /// pretension.</para>
 /// <para>It returns a result or diagnostics, never both an error and numbers: what it does not cover it refuses, and a
 /// result is returned only after the residual, stability and equilibrium checks at the end of <see cref="Solve"/>.
-/// No shells, P-Delta, large displacements or modal analysis.</para></summary>
+/// No shells, P-Delta, large displacements or modal analysis.</para>
+/// <para><b>Movements without stiffness.</b> A stiffness that cannot be factorized has no result — unless
+/// <see cref="StaticOptions.HoldUnloadedMechanisms"/> is on and it is singular only by movements it does not resist,
+/// on which the loads of the case do no work. Those are held (<see cref="StiffnessConditioning.SolveHeld"/>) and the
+/// case is solved; the same residual and equilibrium checks decide whether that solution stands, and the result says
+/// what was held.</para></summary>
 public static class StaticSolver
 {
     /// <summary>The part of an unstable-model message that points to the degrees of freedom of cable joints. A window
@@ -252,6 +263,15 @@ public static class StaticSolver
             var chain = new List<LoadCase>();
             for (LoadCase? current = loadCase; current is not null;
                  current = current.InitialCaseId is { } initial ? document.LoadCases[initial] : null) chain.Insert(0, current);
+            // What a case can be defined as and what is solved are not the same yet. A case of a kind, or with an
+            // option, whose method has not passed its source review and benchmarks is refused here — it is never
+            // solved as something else: no first-order analysis in place of P-Delta, no unstressed stiffness in
+            // place of the one asked for.
+            if (Unavailable(loadCase, chain) is { } unavailable)
+            {
+                Error(unavailable.Code, ObjectKind.LoadCase, caseId, unavailable.Message);
+                return Failed();
+            }
             bool linear = loadCase.Type == LoadCaseType.LinearStatic;
             if (linear && (loadCase.InitialCaseId is not null || loadCase.FitCableTargetForces))
                 Error("static.case.unsupported", ObjectKind.LoadCase, caseId,
@@ -356,6 +376,7 @@ public static class StaticSolver
                 for (int i = 0; i < free.Length; i++)
                 for (int j = 0; j < free.Length; j++) reduced[i, j] = stiffness[free[i], free[j]];
                 double[] solved;
+                FactorizationFailure? held = null;
                 try
                 {
                     var factor = new ScaledCholesky(reduced, options.RelativePivotTolerance, cancellationToken);
@@ -365,12 +386,29 @@ public static class StaticSolver
                 }
                 catch (FactorizationFailure failure)
                 {
-                    Unstable(free[failure.Index], failure.Pivot);
-                    stability = Stability(StiffnessConditioning.Assess(reduced, cancellationToken), free);
-                    return Failed();
+                    var assessed = StiffnessConditioning.Assess(reduced, cancellationToken);
+                    stability = Stability(assessed, free);
+                    // Movements the stiffness does not resist. Held, the rest can be solved; whether the loads leave
+                    // them alone is what the backward error of the whole system — their equations included — says below.
+                    if (!options.HoldUnloadedMechanisms || !assessed.CanBeHeld || StiffnessConditioning.SolveHeld(reduced, rhs, cancellationToken) is not { } determined)
+                    {
+                        Unstable(free[failure.Index], failure.Pivot);
+                        return Failed();
+                    }
+                    (solved, minimumPivot, held) = (determined, assessed.SmallestKeptPivot, failure);
                 }
                 residual = DenseAlgebra.ScaledResidual(reduced, solved, rhs);
                 if (progress is not null) Measure(free, DenseAlgebra.ScaledResiduals(reduced, solved, rhs), 0, options.ResidualTolerance, linear: true);
+                if (held is not null)
+                {
+                    // the loads do work on a movement without stiffness: no equilibrium exists, and none is made up
+                    if (solved.Any(value => !double.IsFinite(value)) || !(residual <= options.ResidualTolerance))
+                    {
+                        Unstable(free[held.Index], held.Pivot);
+                        return Failed();
+                    }
+                    stability = Held(stability!, free[held.Index], loadCase.Name);
+                }
                 if (solved.Any(value => !double.IsFinite(value)) || !double.IsFinite(residual) || residual > options.ResidualTolerance)
                 {
                     Error("static.residual", ObjectKind.LoadCase, caseId, $"The scaled backward error ({residual:G6}) exceeds the accepted tolerance ({options.ResidualTolerance:G6}); no results returned.");
@@ -436,9 +474,18 @@ public static class StaticSolver
                 }
                 catch (FactorizationFailure failure)
                 {
-                    Unstable(free[failure.Index], failure.Pivot);
-                    stability = Stability(StiffnessConditioning.Assess(tangent, cancellationToken), free);
-                    return Failed();
+                    var assessed = StiffnessConditioning.Assess(tangent, cancellationToken);
+                    stability = Stability(assessed, free);
+                    // The iteration has converged: every equilibrium equation is met to its tolerance, those of the
+                    // movements this tangent does not resist included — so the loads do no work on them, and the
+                    // state reached is an equilibrium, neutral along them. Nothing negative: it is not an unstable one.
+                    if (!options.HoldUnloadedMechanisms || !assessed.CanBeHeld)
+                    {
+                        Unstable(free[failure.Index], failure.Pivot);
+                        return Failed();
+                    }
+                    minimumPivot = assessed.SmallestKeptPivot;
+                    stability = Held(stability, free[failure.Index], loadCase.Name);
                 }
             }
 
@@ -507,6 +554,37 @@ public static class StaticSolver
             Report(StaticProgressKind.Finished, fitRuns: cableFit?.Iterations ?? 0, diagnostics: diagnostics);
             return new(new(model.DocumentId, model.InputHash, model.Revision, caseId, joints, frames, cables, diagnostics),
                 issues.ToImmutableArray(), stability);
+        }
+
+        /// <summary>Marks a case solved with its movements without stiffness held, and says so.</summary>
+        private StaticStability Held(StaticStability found, int fullIndex, string caseName)
+        {
+            var dof = model.Dofs[fullIndex];
+            int movements = found.ZeroStiffnessModes;
+            issues.Add(new(ValidationSeverity.Warning, "static.mechanism.held", ObjectKind.Point, dof.Key.PointId,
+                $"Case '{caseName}': the stiffness does not resist {(movements == 1 ? "one movement" : $"{movements} movements")} of the model " +
+                $"(found near '{document.Points[dof.Key.PointId].Name}' {dof.Key.Component}), and the loads of the case do no work on {(movements == 1 ? "it" : "them")}. " +
+                $"{(movements == 1 ? "It is" : "They are")} held and the case is solved: the displacements are determined up to {(movements == 1 ? "that movement" : "those movements")}; the forces are not affected."));
+            return found with { MovementsHeld = movements };
+        }
+
+        /// <summary>Why this solver cannot solve the case as it is defined; null when it can.</summary>
+        private (string Code, string Message)? Unavailable(LoadCase loadCase, List<LoadCase> chain)
+        {
+            const string pending = "numerical verification pending (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md)";
+            if (loadCase.Kind == CaseKind.ModalEigen)
+                return ("static.case.modal", $"Case '{loadCase.Name}' is a modal case. Eigenvalue analysis is not available yet — {pending}. Nothing is computed for it.");
+            if (chain.FirstOrDefault(item => item.GeometricMode == GeometricNonlinearity.PDelta) is { } secondOrder)
+                return ("static.case.pdelta", (secondOrder.Id == loadCase.Id ? $"Case '{loadCase.Name}' is analysed with P-Delta."
+                        : $"Case '{loadCase.Name}' continues from '{secondOrder.Name}', which is analysed with P-Delta.") +
+                    $" P-Delta is not available yet — {pending}. The case is not solved, and it is not replaced by a first-order analysis.");
+            if (loadCase.StiffnessSourceCaseId is { } source)
+                return ("static.case.stiffnessSource", $"Case '{loadCase.Name}' uses the stiffness at the end of '{document.LoadCases[source].Name}'. " +
+                    $"Solving a case about the converged state of another is not available yet — {pending}. It is not solved with the unstressed stiffness instead.");
+            if (chain.FirstOrDefault(item => item.NonlinearControls is not null) is { } controlled)
+                return ("static.case.controls", $"Case '{controlled.Name}' sets its own load steps, iterations and tolerances. Case-specific iteration controls are not applied yet — {pending}. " +
+                    "Remove them to solve the case with the solver's standard iteration.");
+            return null;
         }
 
         private void Unstable(int fullIndex, double pivot)

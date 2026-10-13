@@ -15,7 +15,11 @@ namespace Mcotis.Desktop.Configuration;
 public sealed class FemInputSnapshot
 {
     public const string FormatName = "Mcotis.FemInput";
-    public const int CurrentSchemaVersion = 1;
+    /// <summary>2 since the load cases state their kind and refer to each other by identity
+    /// (<see cref="FemCaseSchema"/>), and the database has their options and the mass sources in tables of their own.
+    /// A database of schema 1 is brought to schema 2 in memory when it is read; it is written as schema 2 when it is
+    /// next saved.</summary>
+    public const int CurrentSchemaVersion = 2;
 
     public string Format { get; set; } = FormatName;
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -45,14 +49,19 @@ public sealed class FemInputSnapshot
     public List<FemPatternRowDto> PatternRows { get; set; } = [];
     public List<FemDefinitionRowDto> CaseRows { get; set; } = [];
     public List<FemDefinitionRowDto> CombinationRows { get; set; } = [];
+    /// <summary>Schema 2. The masses modal cases read.</summary>
+    public List<FemMassSourceDto> MassSources { get; set; } = [];
     public FemSettingsDto Settings { get; set; } = new();
 
     public static FemInputSnapshot FromLegacy(FemModelFileDto file, FemInputSnapshot? previous = null)
     {
         var project = file.Project ?? throw new InvalidDataException("The FEM model has no resolved setup.");
+        var databaseId = previous?.DatabaseId ?? Guid.NewGuid();
+        // a row keeps the identity it has; one without — a row the application has just made — gets its own
+        var (cases, combinations) = FemCaseSchema.Complete(file.CaseRows, file.CombinationRows, databaseId);
         return new FemInputSnapshot
         {
-            DatabaseId = previous?.DatabaseId ?? Guid.NewGuid(),
+            DatabaseId = databaseId,
             Revision = previous is null ? 1 : previous.Revision + 1,
             IsLocked = previous?.IsLocked ?? false,
             LockedRevision = previous?.LockedRevision,
@@ -76,8 +85,9 @@ public sealed class FemInputSnapshot
             TendonSections = (file.TendonSections ?? []).ToList(),
             Loading = file.Loading,
             PatternRows = file.PatternRows.ToList(),
-            CaseRows = file.CaseRows.ToList(),
-            CombinationRows = file.CombinationRows.ToList(),
+            CaseRows = cases,
+            CombinationRows = combinations,
+            MassSources = (file.MassSources ?? []).ToList(),
             Settings = file.Settings,
         };
     }
@@ -115,6 +125,7 @@ public sealed class FemInputSnapshot
             PatternRows = PatternRows.ToList(),
             CaseRows = CaseRows.ToList(),
             CombinationRows = CombinationRows.ToList(),
+            MassSources = MassSources.Count > 0 ? MassSources.ToList() : null,
             Settings = Settings,
         };
     }
@@ -165,6 +176,16 @@ public static class FemInputDatabase
         var payload = command.ExecuteScalar() as string ?? throw new InvalidDataException("The FEM database has no input snapshot.");
         var snapshot = JsonSerializer.Deserialize<FemInputSnapshot>(payload, Json)
             ?? throw new InvalidDataException("The FEM database input snapshot is invalid.");
+        if (snapshot.SchemaVersion != schema)
+            throw new InvalidDataException($"The FEM database states schema {schema} and its input snapshot schema {snapshot.SchemaVersion}: the two do not agree.");
+        if (schema < FemInputSnapshot.CurrentSchemaVersion)
+        {
+            // Schema 1 → 2, on what was read; the file is not written here. A case keeps the identity the database
+            // already gave it, and the case it names as the one it continues from is resolved to that case's identity.
+            (snapshot.CaseRows, snapshot.CombinationRows) = FemCaseSchema.Complete(snapshot.CaseRows, snapshot.CombinationRows, snapshot.DatabaseId, TryReadObjectIds(path));
+            snapshot.SchemaVersion = FemInputSnapshot.CurrentSchemaVersion;
+        }
+        else CheckTables(connection, snapshot);
         Validate(snapshot);
         var outputs = new List<FemOutputRegistration>();
         using var output = connection.CreateCommand();
@@ -192,10 +213,16 @@ public static class FemInputDatabase
         finally { if (File.Exists(path)) File.Delete(path); }
     }
 
+    /// <summary>Identifies the content of a configuration: results belong to a revision while it matches. The time
+    /// it was saved, the version of the file and the identities of its rows are not content — a configuration and
+    /// the same one after an upgrade are one revision.</summary>
     public static string RevisionHash(FemInputSnapshot snapshot)
     {
         var model = snapshot.ToLegacy();
         model.SavedUtc = default;
+        model.Version = FemModelFileDto.RevisionFormVersion;
+        model.CaseRows = model.CaseRows.Select(FemCaseSchema.Content).ToList();
+        model.CombinationRows = model.CombinationRows.Select(FemCaseSchema.Content).ToList();
         var canonical = FemModelFile.Serialize(model);
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
     }
@@ -267,10 +294,12 @@ public static class FemInputDatabase
                 ("$sw", row.row.SelfWeightMultiplier), ("$seq", row.index), ("$payload", JsonSerializer.Serialize(row.row, Json)));
         foreach (var row in snapshot.CaseRows.Select((row, index) => (row, index)))
         {
-            var caseId = StableId(snapshot.DatabaseId, "LoadCase", row.row.Name, oldIds);
-            Execute(connection, transaction, "INSERT INTO load_cases(case_id,name,analysis_type,purpose,initial_case_name,run,sequence_no,payload_json) VALUES($id,$name,'NonlinearStatic',$purpose,$initial,$run,$seq,$payload)",
-                ("$id", caseId), ("$name", row.row.Name), ("$purpose", row.row.CableTargetForces == true ? "CableTargetForces" : "Normal"),
-                ("$initial", row.row.InitialCase), ("$run", row.row.Run ? 1 : 0), ("$seq", row.index), ("$payload", JsonSerializer.Serialize(row.row, Json)));
+            // the identity the row carries — a rename does not change it — and the kind it is, not a fixed one
+            var caseId = row.row.Id!;
+            Execute(connection, transaction, "INSERT INTO load_cases(case_id,name,analysis_type,purpose,run,sequence_no,payload_json) VALUES($id,$name,$type,$purpose,$run,$seq,$payload)",
+                ("$id", caseId), ("$name", row.row.Name), ("$type", FemCaseSchema.KindOf(row.row) is Mcotis.Core.CaseKind.InitialPDelta ? nameof(Mcotis.Core.LoadCaseType.NonlinearStatic) : FemCaseSchema.KindOf(row.row).ToString()),
+                ("$purpose", row.row.CableTargetForces == true ? "CableTargetForces" : "Normal"),
+                ("$run", row.row.Run ? 1 : 0), ("$seq", row.index), ("$payload", JsonSerializer.Serialize(row.row, Json)));
             try
             {
                 var terms = FemLoadDefinition.Parse(row.row.Definition);
@@ -280,9 +309,28 @@ public static class FemInputDatabase
             }
             catch (ArgumentException) { /* the snapshot remains authoritative and UI validation reports the row */ }
         }
+        foreach (var source in snapshot.MassSources)
+            Execute(connection, transaction, "INSERT INTO mass_sources(mass_source_id,name,source_json) VALUES($id,$name,$payload)",
+                ("$id", source.Id), ("$name", source.Name), ("$payload", JsonSerializer.Serialize(source, Json)));
+        // after every case and mass source is there: what a case refers to, it refers to by identity
+        foreach (var row in snapshot.CaseRows)
+        {
+            var kind = FemCaseSchema.KindOf(row);
+            bool producesState = kind is Mcotis.Core.CaseKind.NonlinearStatic or Mcotis.Core.CaseKind.InitialPDelta;
+            Execute(connection, transaction,
+                "INSERT INTO case_analysis_options(case_id,case_kind,geometric_mode,initial_case_id,stiffness_source_case_id,stiffness_source_kind,mass_source_id," +
+                "max_load_steps,max_iterations_per_step,residual_tolerance,correction_tolerance,requested_modes) " +
+                "VALUES($id,$kind,$geometric,$initial,$stiffness,$source,$mass,$steps,$iterations,$residual,$correction,$modes)",
+                ("$id", row.Id), ("$kind", kind.ToString()), ("$geometric", FemCaseSchema.GeometricOf(row).ToString()),
+                ("$initial", row.InitialCaseId), ("$stiffness", row.StiffnessSourceCaseId),
+                ("$source", producesState ? "NotApplicable" : row.StiffnessSourceCaseId is null ? nameof(Mcotis.Core.StiffnessSourceKind.Unstressed) : nameof(Mcotis.Core.StiffnessSourceKind.EndOfNonlinearCase)),
+                ("$mass", row.Modal?.MassSourceId), ("$steps", row.NonlinearControls?.MaxLoadSteps), ("$iterations", row.NonlinearControls?.MaxIterationsPerStep),
+                ("$residual", row.NonlinearControls?.RelativeResidualTolerance), ("$correction", row.NonlinearControls?.RelativeDisplacementTolerance),
+                ("$modes", row.Modal?.RequestedModes));
+        }
         foreach (var row in snapshot.CombinationRows.Select((row, index) => (row, index)))
         {
-            var combinationId = StableId(snapshot.DatabaseId, "LoadCombination", row.row.Name, oldIds);
+            var combinationId = row.row.Id!;
             Execute(connection, transaction, "INSERT INTO load_combinations(combination_id,name,combination_type,run,sequence_no,payload_json) VALUES($id,$name,$type,$run,$seq,$payload)",
                 ("$id", combinationId), ("$name", row.row.Name),
                 ("$type", row.row.Type), ("$run", row.row.Run ? 1 : 0), ("$seq", row.index), ("$payload", JsonSerializer.Serialize(row.row, Json)));
@@ -388,6 +436,40 @@ public static class FemInputDatabase
         if (snapshot.LoadingSetup is null || snapshot.GeometrySetup is null || snapshot.CableSetup is null || snapshot.Loading is null)
             throw new InvalidDataException("The FEM database is missing loading, geometry, cable, or load-assignment setup.");
         if (snapshot.SectionProperties.Count == 0) throw new InvalidDataException("The FEM database has no member section properties.");
+        if (snapshot.SchemaVersion < FemInputSnapshot.CurrentSchemaVersion)
+            throw new InvalidDataException($"The FEM input is of schema {snapshot.SchemaVersion}; schema {FemInputSnapshot.CurrentSchemaVersion} is written.");
+        FemCaseSchema.Validate(snapshot.CaseRows, snapshot.CombinationRows, snapshot.MassSources);
+    }
+
+    /// <summary>The tables of a schema-2 database say of its load cases what its snapshot says — the snapshot is what
+    /// is read, and a table that contradicts it is not passed over: the database is refused.</summary>
+    private static void CheckTables(SqliteConnection connection, FemInputSnapshot snapshot)
+    {
+        static string? Text(SqliteDataReader reader, int column) => reader.IsDBNull(column) ? null : reader.GetString(column);
+        var stored = new Dictionary<string, (string Name, string Kind, string Geometric, string? Initial, string? Stiffness, string? Mass)>(StringComparer.OrdinalIgnoreCase);
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT c.case_id, c.name, o.case_kind, o.geometric_mode, o.initial_case_id, o.stiffness_source_case_id, o.mass_source_id " +
+                                  "FROM load_cases c LEFT JOIN case_analysis_options o ON o.case_id = c.case_id";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+                stored[reader.GetString(0)] = (reader.GetString(1), Text(reader, 2) ?? "", Text(reader, 3) ?? "", Text(reader, 4), Text(reader, 5), Text(reader, 6));
+        }
+        static bool Same(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+        if (stored.Count != snapshot.CaseRows.Count)
+            throw new InvalidDataException($"The FEM database is inconsistent: its tables hold {stored.Count} load cases and its snapshot {snapshot.CaseRows.Count}.");
+        foreach (var row in snapshot.CaseRows)
+        {
+            if (row.Id is null || !stored.TryGetValue(row.Id, out var table))
+                throw new InvalidDataException($"The FEM database is inconsistent: its tables do not hold load case '{row.Name}' by the identity its snapshot gives it.");
+            if (table.Name != row.Name || table.Kind != FemCaseSchema.KindOf(row).ToString() || table.Geometric != FemCaseSchema.GeometricOf(row).ToString() ||
+                !Same(table.Initial, row.InitialCaseId) || !Same(table.Stiffness, row.StiffnessSourceCaseId) || !Same(table.Mass, row.Modal?.MassSourceId))
+                throw new InvalidDataException($"The FEM database is inconsistent: its tables and its snapshot say different things of load case '{row.Name}'.");
+        }
+        using var foreign = connection.CreateCommand();
+        foreign.CommandText = "PRAGMA foreign_key_check";
+        using var broken = foreign.ExecuteReader();
+        if (broken.Read()) throw new InvalidDataException($"The FEM database is inconsistent: table '{broken.GetString(0)}' refers to a row that does not exist.");
     }
 
     internal static SqliteConnection Open(string path, bool readOnly)
@@ -431,7 +513,9 @@ public static class FemInputDatabase
         CREATE TABLE materials(material_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, material_type TEXT NOT NULL, payload_json TEXT NOT NULL);
         CREATE TABLE sections(section_id TEXT PRIMARY KEY, name TEXT NOT NULL, section_category TEXT NOT NULL, section_type TEXT NOT NULL, payload_json TEXT NOT NULL, UNIQUE(section_category,name));
         CREATE TABLE load_patterns(pattern_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, engineering_type TEXT NOT NULL, self_weight_multiplier REAL NOT NULL, sequence_no INTEGER NOT NULL, payload_json TEXT NOT NULL);
-        CREATE TABLE load_cases(case_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, analysis_type TEXT NOT NULL, purpose TEXT NOT NULL, initial_case_name TEXT, run INTEGER NOT NULL, sequence_no INTEGER NOT NULL, payload_json TEXT NOT NULL);
+        CREATE TABLE load_cases(case_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, analysis_type TEXT NOT NULL, purpose TEXT NOT NULL, run INTEGER NOT NULL, sequence_no INTEGER NOT NULL, payload_json TEXT NOT NULL);
+        CREATE TABLE mass_sources(mass_source_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, source_json TEXT NOT NULL);
+        CREATE TABLE case_analysis_options(case_id TEXT PRIMARY KEY REFERENCES load_cases(case_id) ON DELETE CASCADE, case_kind TEXT NOT NULL, geometric_mode TEXT NOT NULL, initial_case_id TEXT REFERENCES load_cases(case_id), stiffness_source_case_id TEXT REFERENCES load_cases(case_id), stiffness_source_kind TEXT NOT NULL, mass_source_id TEXT REFERENCES mass_sources(mass_source_id), max_load_steps INTEGER, max_iterations_per_step INTEGER, residual_tolerance REAL, correction_tolerance REAL, requested_modes INTEGER);
         CREATE TABLE load_case_components(case_id TEXT NOT NULL REFERENCES load_cases(case_id) ON DELETE CASCADE, pattern_name TEXT NOT NULL, factor REAL NOT NULL, sequence_no INTEGER NOT NULL, PRIMARY KEY(case_id,sequence_no));
         CREATE TABLE load_combinations(combination_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE, combination_type TEXT NOT NULL, run INTEGER NOT NULL, sequence_no INTEGER NOT NULL, payload_json TEXT NOT NULL);
         CREATE TABLE load_combination_terms(combination_id TEXT NOT NULL REFERENCES load_combinations(combination_id) ON DELETE CASCADE, item_name TEXT NOT NULL, factor REAL NOT NULL, sequence_no INTEGER NOT NULL, PRIMARY KEY(combination_id,sequence_no));
@@ -446,6 +530,8 @@ public static class FemInputDatabase
         CREATE INDEX ix_geometry_name ON geometry_objects(name);
         CREATE INDEX ix_members_start_end ON members(start_joint_id,end_joint_id);
         CREATE INDEX ix_case_components_case ON load_case_components(case_id,sequence_no);
+        CREATE INDEX ix_case_initial ON case_analysis_options(initial_case_id);
+        CREATE INDEX ix_case_stiffness ON case_analysis_options(stiffness_source_case_id);
         """;
 }
 

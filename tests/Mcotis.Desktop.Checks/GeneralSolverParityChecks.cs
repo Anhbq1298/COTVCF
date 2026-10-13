@@ -332,9 +332,9 @@ internal static class GeneralSolverParityChecks
             Monitor(shownRun.Cases.Select(item => item.Name).SequenceEqual(expectedRows) && shownRun.Cases.Select(item => item.Number).SequenceEqual(Enumerable.Range(1, expectedRows.Length)) &&
                     shownRun.Cases.All(item => item.Status is FemCaseStatus.Converged or FemCaseStatus.ConvergedWithWarnings && item is { ConvergenceText: "Passed", InstabilitiesText: "0", HasFailure: false } &&
                         item.Details.Any(field => field is { Label: "Nonlinear convergence", Value: "Converged" }) && item.Details.Any(field => field is { Label: "Convergence tolerance", Value: "Satisfied" }) &&
-                        item.Details.Any(field => field.Label == "Largest loss of accuracy")),
+                        item.Technical.Any(field => field.Label == "Largest loss of accuracy")),
                 $"… and every solve of the run, the fit of the cable target forces first, each converged with zero instabilities: " +
-                string.Join(" | ", shownRun.Cases.Select(item => $"{item.Number} {item.Name}: {item.StatusText}, stability {item.StabilityText}, {item.Details.Single(field => field.Label == "Largest loss of accuracy").Value}")));
+                string.Join(" | ", shownRun.Cases.Select(item => $"{item.Number} {item.Name}: {item.StatusText}, stability {item.StabilityText}, {item.Technical.Single(field => field.Label == "Largest loss of accuracy").Value}")));
             Monitor(shownRun.Status is FemRunStatus.Completed or FemRunStatus.CompletedWithWarnings && shownRun.Progress == 1 && !shownRun.IsIndeterminate &&
                     (shownRun.Status == FemRunStatus.Completed) == shownRun.Cases.All(item => item.Status == FemCaseStatus.Converged),
                 "… with the outcome of the run and the bar full: " + shownRun.StatusText);
