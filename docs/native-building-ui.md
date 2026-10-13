@@ -56,9 +56,9 @@ native run reads the fitting tolerance, the iteration limit and cable sag, and r
 default. A joint that only cables reach has these, among the active degrees of freedom; the others are switched off
 there. A cable gives stiffness along its own line only, so a movement left on that nothing else holds — another
 member, a restraint — makes the model unstable, and Run reports it with the joint and the movement instead of
-solving. In the main window cable joints move in UX and UZ; that is fixed and not shown as an option. Locked/running legacy models show their options read-only.
+solving. In the main window cable joints move in UX and UZ, and its Degrees of Freedom tab can switch either of them off (see above). Locked/running legacy models show their options read-only.
 
-Verification: `dotnet run --project tests/Mcotis.Checks` includes template topology, line-load accounting, support
+Verification: `dotnet run --project tests/Mcotis.Checks -- --full` includes template topology, line-load accounting, support
 reactions, self-weight, planar cases, invalid input, Undo/Redo and Save/Open. `--template-building-ui` on
 `tests/Mcotis.Desktop.Checks` checks staged forms, native runs, diagnostics, result state, Save/Open and WPF bindings;
 it captures the forms in `.work/*-ui.png`. Existing numerical benchmarks remain unchanged.

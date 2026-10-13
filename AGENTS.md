@@ -69,10 +69,12 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
   (`core.hooksPath`); `.githooks/commit-msg` refuses a commit that changes anything under `src/` without
   the log. Use `[no-log]` in the commit message only for a change no user can notice. `--dev-log` checks the format.
 
-## Repository Checks
+## Repository Checks — Lean Development Loop
 
 - Build with `dotnet build MCOTiS.sln`.
-- Run the new system's checks with `dotnet run --project tests/Mcotis.Checks`. They need no SAP2000 installation.
-- Run offline checks with `dotnet run --project tests/Mcotis.Desktop.Checks`.
+- For ordinary changes, run **quick smoke checks**: `dotnet run --project tests/Mcotis.Checks` and `dotnet run --project tests/Mcotis.Desktop.Checks`. Both default runners intentionally omit the large historical/independent comparison suites.
+- Test the **changed subsystem** with its existing targeted flag when necessary (e.g., `--general-solver`, `--template-building-ui`, `--fem-db`). Do not rerun every suite after each small UI/editing change.
+- Run `dotnet run --project tests/Mcotis.Checks -- --full` and `dotnet run --project tests/Mcotis.Desktop.Checks -- --full` before a release. The full numerical suite is also mandatory when changing the FEM formulation, stiffness, DOF compilation, boundary conditions, equilibrium/instability detection, cables, nonlinear stages or result recovery. Keep the independent closed-form, archived solver and OpenSees benchmarks as verifiable evidence, not routine per-edit gates.
+- For a bug fix, prefer **one focused regression** for the failure plus a representative success path. Avoid multiplying tests for equivalent input variations, duplicate assertions, or UI details that are not an actual behavior contract. Reuse fixtures and parameterization. Safety-critical failure paths still need explicit tests.
 - Do not run `--sap-read`, `--ui-read`, or write to a live SAP2000 model unless the user asks for that live integration work.
 - Preserve unrelated user changes, including local Visual Studio state.

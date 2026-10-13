@@ -726,7 +726,7 @@ earlier tall-header / large-button / blue-block look.
     cable target-force fit failed reads Failed and says the fit failed; the fit has its own entry.
   - Thresholds 6 / 11 digits are `FemSolver.StabilityThresholds` (`StaticOptions.Stability`); they change what is
     listed, never a result. There is no control for them in the app yet. Method, limits and the checks:
-    `docs/solver/numerical-stability-diagnostics.md`. Checks: `--run-monitor` (also in the default run),
+    `docs/solver/numerical-stability-diagnostics.md`. Checks: `--run-monitor` (also in the `--full` run; the default run is a quick smoke set since 2026-10-13),
     `--run-monitor-ui`, `--template-building-ui`; the estimate itself in `tests/Mcotis.Checks`.
   - **Tab "Cable Target-Force Convergence"** (unchanged): Cable dropdown (default Cable1a-2) and target-stage dropdown —
     no Candidate dropdown and no Follow latest, there is one run — and ConvergenceChart of P_result/P_preset per

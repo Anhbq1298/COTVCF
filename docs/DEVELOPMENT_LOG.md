@@ -37,8 +37,8 @@ continues on the next lines, indented by two spaces):
   presets and custom sets.
 - Checks: --fem (a cable in two segments with UX off for cable joints gives the tension, deflection and reactions of
   the one cable); --run-monitor (RY off against PL³/24EI; the counts of the run; a moment on a rotation that is off
-  refused; a translation of the plane refused); --template-building-ui (the form); default offline
-  Mcotis.Desktop.Checks; --user-guide; --dev-log
+  refused; a translation of the plane refused); --template-building-ui (the form); --full of
+  Mcotis.Desktop.Checks and of Mcotis.Checks; --user-guide; --dev-log
 
 ## 2026-10-13 · Run monitor: load cases that open on convergence, numerical stability by joint and DOF, and their own log
 - Status: Done

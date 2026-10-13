@@ -86,7 +86,7 @@ local 2 gives zero force only with it, and bending in the 1–3 plane matches th
 
 ## Numerical evidence
 
-All of it runs in `dotnet run --project tests/Mcotis.Checks` (group *Spatial linear static engineering benchmarks*,
+All of it runs in `dotnet run --project tests/Mcotis.Checks -- --full` (group *Spatial linear static engineering benchmarks*,
 1086 checks) unless stated.
 
 | Evidence | What it shows | Result |

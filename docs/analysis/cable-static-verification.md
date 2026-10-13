@@ -80,7 +80,7 @@ Everything below runs offline. Counts and differences are those of the runs of 2
 
 ### 1. Closed forms and independent scalar solutions
 
-`dotnet run --project tests/Mcotis.Checks`, group *General static solver* (`GeneralStaticChecks.cs`, 1,273 checks
+`dotnet run --project tests/Mcotis.Checks -- --full`, group *General static solver* (`GeneralStaticChecks.cs`, 1,273 checks
 with the OpenSees comparison). Every expected value is worked out in the check file, not taken from the solver.
 
 | Subject | What is compared |
@@ -99,7 +99,7 @@ with the OpenSees comparison). Every expected value is worked out in the check f
 
 ### 2. The archived planar solver, and the application's own checks
 
-`dotnet run --project tests/Mcotis.Desktop.Checks -- --general-solver` (also in the default run;
+`dotnet run --project tests/Mcotis.Desktop.Checks -- --general-solver` (also in the `--full` run;
 `GeneralSolverParityChecks.cs`). The application's analysis and the archived planar solver are given the same input;
 everything the application shows of a run is compared: joints, reactions, frame ends, every station along every
 frame, cables, sag, and the fitting — applied pretension, each fitting run and their number.
@@ -125,7 +125,7 @@ The checks that were written for the application's solver now run through the ge
   cable forces within 3.82 %, deflections within 3.22 %, reactions within 1.2 % of the largest SAP2000 value — the
   same figures the planar solver gave. The remaining difference is what SAP2000 analysed and this solver does not:
   large displacements, catenary cables, shear-deformable frames.
-- The default offline run of `tests/Mcotis.Desktop.Checks` — the application's whole suite.
+- The full offline run of `tests/Mcotis.Desktop.Checks` (`-- --full`) — the application's whole suite.
 
 ### 3. OpenSees
 
@@ -187,7 +187,7 @@ digit. The main window's run monitor shows them (`FemEquilibriumProgress`), one 
 ## Reproduce
 
 ```
-dotnet run --project tests/Mcotis.Checks
+dotnet run --project tests/Mcotis.Checks -- --full
 dotnet run --project tests/Mcotis.Desktop.Checks -- --general-solver
 dotnet run --project tests/Mcotis.Desktop.Checks -- --fem
 dotnet run --project tests/Mcotis.Desktop.Checks -- --fem-sap

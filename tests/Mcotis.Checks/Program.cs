@@ -6,8 +6,9 @@ using Mcotis.Persistence;
 
 internal static class Program
 {
-    public static int Main()
+    public static int Main(string[] args)
     {
+        bool full = args.Contains("--full", StringComparer.OrdinalIgnoreCase);
         (string Name, Action Run)[] groups =
         [
             ("Naming", NamingChecks.Run),
@@ -17,8 +18,8 @@ internal static class Program
             ("Analysis input and result state", ResultStateChecks.Run),
             ("Native file", PersistenceChecks.Run),
             ("3D topology and DOF compilation", DofCompilationChecks.Run),
-            ("Spatial linear static engineering benchmarks", SpatialStaticChecks.Run),
-            ("General static solver: split frames, cables, target forces, stages and sag", GeneralStaticChecks.Run),
+            ("Spatial linear static engineering benchmarks", full ? SpatialStaticChecks.Run : SpatialStaticChecks.RunSmoke),
+            ("General static solver: split frames, cables, target forces, stages and sag", full ? GeneralStaticChecks.Run : GeneralStaticChecks.RunSmoke),
             ("Numerical stability diagnostics: digits lost, singular and nearly singular stiffness", StabilityDiagnosticsChecks.Run),
             ("TemplateBuilding generation, loading and analysis", TemplateBuildingChecks.Run),
             ("Independence", IndependenceChecks.Run),
@@ -35,7 +36,8 @@ internal static class Program
             }
             Console.WriteLine($"PASS: {name} ({Check.Count - before} checks)");
         }
-        Console.WriteLine($"PASS: {Check.Count} Mcotis checks; no SAP2000, no WPF, no database.");
+        Console.WriteLine($"PASS: {Check.Count} Mcotis {(full ? "full verification" : "quick smoke")} checks; no SAP2000, no WPF, no database.");
+        if (!full) Console.WriteLine("Numerical OpenSees benchmarks and exhaustive scalar assertions: run with --full before releasing or after changing the solver.");
         return 0;
     }
 }
