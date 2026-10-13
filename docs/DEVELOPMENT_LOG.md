@@ -18,6 +18,31 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-13 · Column design optimization (RC, CFT, steel encased, mega column)
+- Status: Done
+- Who: Philip Pham, Claude
+- Where: Design → RC Column / CFT (Concrete Filled Tube) / Steel Encased Composite Column / Mega Composite Column Design… →
+  Optimization (tab after Members & Loads); run the FEM analysis and tick the members on Members & Loads first
+- What: Finds the cheapest section of the column type that passes every ticked member and load case — one section for
+  all of them — and gives its cost per metre of column. The inputs that drive the cost depend on the type: the concrete
+  outline h × b (RC, steel encased, mega; square or not), the steel tube H × B or D and wall t (CFT), the encased I section
+  h, b, tf, tw (steel encased, mega; mega also 4 and / or 6 profiles placed from an edge distance), the steel grade
+  (S235 – S690, not for RC) and concrete grade (C30/37 – C185/200), stepped grade by grade, and the bars (sizes, bars per b
+  face, h faces at the same spacing or a range, cover; optional inside a CFT tube). Each range is min / max / step; the
+  effective lengths are those of Design Basis. Steel fy follows the plate thickness (tube wall or flange) by the EN 10025
+  bands. Unit costs come from the material library (steel SGD/t per grade, concrete SGD/m³ per grade, rebar SGD/t) and
+  can be edited in the tab. Cost = steel and bars by mass + concrete by net volume, with the links of RC / encased / mega
+  columns; formwork is not priced. Run prices every combination, sorts them cheapest first and designs them in that order
+  with the type's own design (as Run Design) until the 10 cheapest passing sections are found, in the background, with
+  Stop; sections that cannot be built (wall too slender for its steel, profile not fitting the outline, bars without
+  room) are left out first, and more than 250,000 combinations are refused (narrow the ranges). The results list each
+  section's steel (with the fy used), concrete, bars, kg/m, m³/m, SGD/m, utilisation and the governing member and case;
+  Use Selected (or a double-click) puts it on the Section tab, and Run Design then gives its full report. The CFT design
+  now also takes bars inside the tube (Section tab, Bars inside the tube).
+- Checks: --column-design (fy bands; cost per metre of a CFT and an RC candidate by hand; for each type the chosen section
+  is the cheapest passing one — every cheaper candidate designed and failing — and Run Design passes it; bars in the tube
+  add resistance)
+
 ## 2026-10-13 · Optimization results: Run and Chart sheets
 - Status: Done
 - Who: Philip Pham, Claude
@@ -35,7 +60,8 @@ continues on the next lines, indented by two spaces):
   the two column bases left of the middle — over all four the horizontal force is zero), the largest frame axial force,
   moment and cable tension in the deflection result, and the system mass.
 - Checks: --optimization-study (known main effects, sensitivities, figure set, summary, one-end base force); the default
-  suite (a 4-case run on the default model gives its Chart sheet)
+  suite (a 4-case run on the default model gives its Chart sheet); --etabs-import (after an Optimization TAS run over H1
+  and bays the Chart sheet holds numbered figures, utilisation against L / 250, and a summary)
 
 ## 2026-10-12 · Tied arch system with an elevated cable
 - Status: Done
@@ -304,12 +330,27 @@ continues on the next lines, indented by two spaces):
 
 ## 2026-10-12 · Edit → Delete, Import From / Export to SAP2000
 - Status: Done
-- Who: Philip Pham
-- Where: Edit → Delete (Del); File → Import From SAP2000; File → Export to SAP2000…
-- What: Delete removes the selected joints / frames / cables with every reference to them. Import From SAP2000 brings the
-  open SAP2000 model in, ready to run (chord groups, cable targets, Tab 01 fitted to the SAP joint loads). Export to
-  SAP2000 previews, then writes the Mcotis model into the open SAP2000 model (not saved).
-- Checks: --sap-import; offline suite
+- Who: Philip Pham, Claude
+- Where: Edit → Delete (Del key, not while typing); File → Import From SAP2000; File → Export to SAP2000…
+- What: Delete removes the joints, frames and cables selected on the model view after an OK / Cancel confirmation (no
+  undo); as in SAP2000 a deleted joint takes the members connected to it. Everything that names a removed object follows
+  (member properties, SAP loading, Tab 01 loaded points and point loads, Tab 02 chord groups — the baseline is captured
+  again —, Tab 03 cables, Tab 04 output lists); FEM results are cleared and the model becomes an offline "· edited"
+  model. Import From SAP2000 brings the model open in SAP2000 in, read-only, ready to run: geometry, member properties,
+  materials and sections as SAP2000 defines them, load patterns and loads, cases and combinations, the Tab 02 chord groups
+  (TTrPt / MTrPt / BTrPt joints, else the three highest levels of horizontal frames) with the baseline, Tab 03 cables with
+  their SAP target forces, and Tab 01 fitted to the SAP joint loads (a pattern uniform per tributary length becomes qz on
+  those joints, B = 1 m and 1 storey — set the real B and storeys before a parametric study); a summary says what was
+  imported and whether Run Analysis is ready. Export to SAP2000 first previews, read-only, what it would change in the
+  open SAP2000 model, then after OK writes materials, sections, geometry (members and joints not in Mcotis are removed),
+  section / local axis / releases / modifiers, pins, load patterns, Tab 01 loads, cable target forces, load cases (new
+  nonlinear ones with P-Δ and large displacements), combinations and run flags. It needs kN-m units, unlocks a locked
+  model only after confirming (SAP2000 deletes its results) and does not save: review and save in SAP2000, or close
+  without saving to discard. The SAP2000 calls are checked against SAP2000 27's API but have not yet been run against a
+  live SAP2000 — try it on a copy of a model first.
+- Checks: --sap-import (import ready to run and runs; Tab 01 reproduces the SAP joint loads; chords without the COT
+  names; the export carries the imported model back and is previewed before it is written); the default suite (Delete of
+  a cable and of a joint with its members on the default model, the edited model runs)
 
 ## 2026-10-11 · New Config, the blank model and the desktop build
 - Status: Done
@@ -375,12 +416,21 @@ continues on the next lines, indented by two spaces):
 
 ## 2026-10-11 · Composite sections and column design
 - Status: Done
-- Who: Philip Pham
+- Who: Philip Pham, Claude
 - Where: Define → Section Properties → Frame Sections (CFT, Steel Encased, Mega Composite); Design → RC / CFT / Steel
-  Encased / Mega Composite Column Design…
-- What: Composite frame sections with transformed properties and cost per metre; column design to EC2 / EC4 + BC4 and the
-  CTBUH mega-column method, from the FEM forces.
-- Checks: --column-design; MegaColumnChecks (offline suite)
+  Encased / Mega Composite Column Design… → Design Basis, Section, Members & Loads → Run Design
+- What: Composite frame sections with transformed properties and cost per metre. Column design from the FEM forces of the
+  selected FEM candidate: RC to SS EN 1992-1-1 + Singapore NA (strain compatibility, nominal curvature or stiffness,
+  shear, biaxial, detailing), CFT and steel encased to SS EN 1994-1-1 extended by BCA BC4:2025 (plastic N–M, buckling
+  curves, second order, biaxial, shear, local buckling and scope rules), mega columns by the CTBUH method. Before a run the
+  Design Reference dialog shows the design code and its references, the effective lengths l0,y / l0,z (m), partial
+  factors and grade limits (Design Basis), the section and materials, filled from the member's FEM section (Section), and
+  the members and load cases (Members & Loads; frames selected on the model view are ticked). The 2D model's moment bends
+  the major axis; the minor axis carries imperfections. Run Design opens Design Results: a summary per member (governing
+  case, NEd, MEd, VEd, utilisations, OK / CHECK / FAIL) above the step-by-step calculation with clause references; Copy /
+  Save Report.
+- Checks: --column-design (sections and capacities against hand calculations, pass / fail of members); MegaColumnChecks
+  (offline suite)
 
 ## 2026-10-10 · Desktop menu UI, materials and section libraries, VCF System
 - Status: Done

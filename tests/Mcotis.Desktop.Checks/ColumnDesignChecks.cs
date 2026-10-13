@@ -64,22 +64,92 @@ internal static class ColumnDesignChecks
         var none = ColumnDesignEngine.Design(src, new DesignMemberInput("S2", "SRC", 8, []));
         Check(none.Status == "ERROR", "Member without forces reports an error");
         RunCftOptimization();
+        RunColumnOptimization();
+    }
+
+    /// <summary>Design → RC / steel encased / mega → Optimization: cost per metre by hand, and the cheapest passing section
+    /// of each type, every cheaper candidate failing.</summary>
+    private static void RunColumnOptimization()
+    {
+        // RC 400 × 400, C40/50, 4 Ø25 (corners), links Ø10 @ 300, cover 40: concrete 0.16 − 0.0019635 = 0.1580 m³/m;
+        // bars 1963.5 mm² = 15.41 kg/m; one link per 300 mm, perimeter 4 × (400 − 80 − 10) = 1240 mm → 2.55 kg/m
+        var rcTemplate = new ColumnSectionInput { LinkDiameter = 10, LinkSpacing = 300, Fyk = 500 };
+        var rcSingle = new ColumnOptimizationInput
+        {
+            Type = ColumnDesignType.ReinforcedConcrete, OutlineDepth = new(400, 400, 50), ConcreteFrom = "C40/50", ConcreteTo = "C40/50",
+            BarDiameters = [25], BarsPerFaceMin = 2, BarsPerFaceMax = 2, UniformBarSpacing = false, BarsDepthMin = 0, BarsDepthMax = 0, Cover = 40,
+            ConcreteRates = new Dictionary<string, double> { ["C40/50"] = 150 }, RebarRate = 1000,
+        };
+        var rc = ColumnOptimizer.Candidates(rcSingle, rcTemplate).Single();
+        var rebar = 1963.5e-6 * 7850 + 78.54 * 1240 / 300 * 1e-6 * 7850;
+        Check(rc.Rebar == "4 Ø25" && Near(rc.ConcreteM3PerM, 0.1580365, 0.001) && Near(rc.RebarKgPerM, rebar, 0.002) &&
+              Near(rc.CostPerM, 0.1580365 * 150 + rebar, 0.002),
+            $"an RC candidate is priced per metre with its bars and links: {rc.ConcreteM3PerM:0.0000} m³ × 150 + {rc.RebarKgPerM:0.00} kg × 1000 SGD/t = {rc.CostPerM:0.0} SGD/m");
+
+        var rates = new ColumnOptimizationInput
+        {
+            SteelRates = ColumnGrades.Steel.ToDictionary(grade => grade.Name, grade => ColumnGrades.SteelRate(grade, [])),
+            ConcreteRates = ColumnGrades.Concrete.ToDictionary(grade => grade.Name, grade => ColumnGrades.ConcreteRate(grade, [])), Keep = 3,
+        };
+        void Cheapest(string title, ColumnDesignBasis basis, ColumnOptimizationInput input, IReadOnlyList<DesignMemberInput> members)
+        {
+            var run = ColumnOptimizer.Run(input, basis, members);
+            var scope = basis with
+            {
+                MaxConcreteGrade = input.ConcreteTo, MaxSteelGrade = input.Type == ColumnDesignType.ReinforcedConcrete ? basis.MaxSteelGrade : input.SteelTo,
+            };
+            var all = ColumnOptimizer.Candidates(input with { Type = basis.Type }, basis.Section).OrderBy(candidate => candidate.CostPerM).ToArray();
+            var cheaper = run.Best.Count == 0 ? all : all.TakeWhile(candidate => candidate.CostPerM < run.Best[0].Candidate.CostPerM).ToArray();
+            var best = run.Best.FirstOrDefault()?.Candidate;
+            var full = best is null ? null : members.Select(member => ColumnDesignEngine.Design(scope with { Section = best.Section }, member)).ToArray();
+            Check(best is not null && run.Best.All(result => result.Check.Passes) &&
+                  cheaper.All(candidate => !ColumnDesignEngine.Check(scope with { Section = candidate.Section }, members).Passes) &&
+                  full!.All(design => design.Status == "OK"),
+                $"{title}: cheapest passing {best?.Size} {best?.SteelGrade}/{best?.ConcreteGrade} + {best?.Rebar} at {best?.CostPerM:N0} SGD/m — " +
+                $"all {cheaper.Length} cheaper candidates fail ({run.Evaluated} of {run.Candidates} designed); Run Design agrees");
+        }
+
+        var rcBasis = ColumnDesignCodes.Default(ColumnDesignType.ReinforcedConcrete) with
+        {
+            EffectiveLengthY = 4, EffectiveLengthZ = 4, Section = rcTemplate with { Cover = 40 },
+        };
+        Cheapest("RC optimisation", rcBasis, rates with
+        {
+            Type = ColumnDesignType.ReinforcedConcrete, OutlineDepth = new(300, 700, 50), ConcreteFrom = "C30/37", ConcreteTo = "C60/75",
+            BarDiameters = [20, 25, 32], BarsPerFaceMin = 2, BarsPerFaceMax = 5, Cover = 40,
+        }, [Member("R1", 4, -3_500, 120, 260), Member("R2", 4, -2_000, 150, 380)]);
+
+        var srcBasis = ColumnDesignCodes.Default(ColumnDesignType.SteelEncased) with { EffectiveLengthY = 8, EffectiveLengthZ = 8 };
+        Cheapest("Steel encased optimisation", srcBasis, rates with
+        {
+            Type = ColumnDesignType.SteelEncased, OutlineDepth = new(600, 900, 100), ProfileDepth = new(300, 500, 100), ProfileWidth = new(300, 400, 100),
+            FlangeThickness = new(20, 40, 10), WebThickness = new(15, 25, 10), SteelFrom = "S355", SteelTo = "S460", ConcreteFrom = "C40/50", ConcreteTo = "C60/75",
+            BarDiameters = [25, 32], BarsPerFaceMin = 3, BarsPerFaceMax = 4, Cover = 40,
+        }, [Member("S1", 8, -14_000, 300, 1_200)]);
+
+        var megaBasis = ColumnDesignCodes.Default(ColumnDesignType.MegaComposite) with { EffectiveLengthY = 20, EffectiveLengthZ = 20 };
+        Cheapest("Mega column optimisation", megaBasis, rates with
+        {
+            Type = ColumnDesignType.MegaComposite, OutlineDepth = new(1800, 2400, 200), ProfileDepth = new(500, 500, 50), ProfileWidth = new(430, 430, 50),
+            FlangeThickness = new(40, 60, 20), WebThickness = new(37, 37, 10), ProfileCounts = [4], ProfileEdge = 160,
+            SteelFrom = "S460", SteelTo = "S460", ConcreteFrom = "C80/95", ConcreteTo = "C100/115", BarDiameters = [40], BarsPerFaceMin = 13, BarsPerFaceMax = 17, Cover = 50,
+        }, [Member("M1", 20, -170_000, 3_000, 30_000)]);
     }
 
     /// <summary>Design → CFT → Optimization: fy by plate thickness, cost per metre, and the cheapest passing section.</summary>
     private static void RunCftOptimization()
     {
-        var s355 = CftGrades.Steel.First(grade => grade.Name == "S355");
-        var s690 = CftGrades.Steel.First(grade => grade.Name == "S690");
+        var s355 = ColumnGrades.Steel.First(grade => grade.Name == "S355");
+        var s690 = ColumnGrades.Steel.First(grade => grade.Name == "S690");
         Check(s355.Fy(16) == 355 && s355.Fy(50) == 335 && s690.Fy(50) == 690 && s690.Fy(60) == 650, "steel fy steps down with plate thickness (EN 10025 bands)");
 
         // one candidate priced by hand: RHS 400 × 400 × 10 → Aa = 15 600 mm² = 122.46 kg/m; Ac = 0.1444 m³/m
-        var single = new CftOptimizationInput
+        var single = new ColumnOptimizationInput
         {
             Depth = new(400, 400, 50), Thickness = new(10, 10, 2), SteelFrom = "S355", SteelTo = "S355", ConcreteFrom = "C40/50", ConcreteTo = "C40/50",
             SteelRates = new Dictionary<string, double> { ["S355"] = 4000 }, ConcreteRates = new Dictionary<string, double> { ["C40/50"] = 150 },
         };
-        var priced = CftOptimizer.Candidates(single, new ColumnSectionInput()).Single();
+        var priced = ColumnOptimizer.Candidates(single, new ColumnSectionInput()).Single();
         Check(Near(priced.SteelKgPerM, 122.46, 0.001) && Near(priced.ConcreteM3PerM, 0.1444, 0.001) && Near(priced.CostPerM, 122.46 * 4 + 0.1444 * 150, 0.001),
             $"a candidate is priced per metre: {priced.SteelKgPerM:0.00} kg × 4000 SGD/t + {priced.ConcreteM3PerM:0.0000} m³ × 150 SGD/m³ = {priced.CostPerM:0.0} SGD/m");
 
@@ -94,15 +164,15 @@ internal static class ColumnDesignChecks
 
         // the search returns the cheapest passing section: every cheaper candidate fails, and the results are in cost order
         var members = new[] { Member("C1", 6, -12_000, 300, 900), Member("C2", 6, -9_000, 500, 1_400) };
-        var input = new CftOptimizationInput
+        var input = new ColumnOptimizationInput
         {
             Depth = new(400, 900, 100), Thickness = new(10, 30, 5), SteelFrom = "S355", SteelTo = "S460", ConcreteFrom = "C50/60", ConcreteTo = "C70/85",
-            SteelRates = CftGrades.Steel.ToDictionary(grade => grade.Name, grade => CftGrades.SteelRate(grade, [])),
-            ConcreteRates = CftGrades.Concrete.ToDictionary(grade => grade.Name, grade => CftGrades.ConcreteRate(grade, [])), Keep = 5,
+            SteelRates = ColumnGrades.Steel.ToDictionary(grade => grade.Name, grade => ColumnGrades.SteelRate(grade, [])),
+            ConcreteRates = ColumnGrades.Concrete.ToDictionary(grade => grade.Name, grade => ColumnGrades.ConcreteRate(grade, [])), Keep = 5,
         };
         var basis = plain with { EffectiveLengthY = 6, EffectiveLengthZ = 6 };
-        var run = CftOptimizer.Run(input, basis, members);
-        var all = CftOptimizer.Candidates(input, basis.Section).OrderBy(candidate => candidate.CostPerM).ToArray();
+        var run = ColumnOptimizer.Run(input, basis, members);
+        var all = ColumnOptimizer.Candidates(input, basis.Section).OrderBy(candidate => candidate.CostPerM).ToArray();
         var scope = basis with { MaxConcreteGrade = "C70/85", MaxSteelGrade = "S460" };
         var cheaper = all.TakeWhile(candidate => candidate.CostPerM < run.Best[0].Candidate.CostPerM).ToArray();
         Check(run.Best.Count == 5 && run.Best.All(result => result.Check.Passes) &&
