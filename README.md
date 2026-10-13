@@ -330,7 +330,20 @@ Default executable:
 
 ## Checks
 
+The default test commands are deliberately small for everyday development; the extensive numerical and historical
+regressions are retained but run on demand. For changes to FEM mathematics, geometry/DOF handling, instability
+diagnostics, nonlinear cables or results, use the full tests before merging.
+
 ```powershell
+# Everyday smoke checks (no SAP2000 required)
+dotnet run --project tests\Mcotis.Checks
+dotnet run --project tests\Mcotis.Desktop.Checks
+
+# Full validation, before releasing or changing the engineering solver
+dotnet run --project tests\Mcotis.Checks -- --full
+dotnet run --project tests\Mcotis.Desktop.Checks -- --full
+
+# Targeted subsystem verification, as applicable
 dotnet run --project tests\Mcotis.Desktop.Checks
 dotnet run --project tests\Mcotis.Desktop.Checks -- --study-ui
 dotnet run --project tests\Mcotis.Desktop.Checks -- --fem
@@ -339,7 +352,7 @@ dotnet run --project tests\Mcotis.Desktop.Checks -- --quantity-study "<baseline>
 dotnet run --project tests\Mcotis.Desktop.Checks -- --quantity-connected
 ```
 
-The first command runs offline workflow and guarded SAP-write tests using test doubles, including the Tab 8 quantity take-off (calculation, candidate records, source selection, the isolated read against API doubles, and the tab's loading / stale-request / connection behaviour). The second opens the WPF smoke test and checks workflow/FEM/quantity bindings. The third runs the internal FEM analytical and candidate-composition checks. The fourth compares the internal FEM with a completed SAP2000 study, like for like, from the fixture in `tests/fem-sap-benchmark` (offline; report in `.work/fem-vs-sap`). The fifth prints the quantity take-off of every candidate of a study on disk from the candidates' own text exports (offline; reads only). The sixth is live but read-only: it attaches to the running SAP2000, takes off the model open in it through the API exactly as Tab 8's *Connected model* does, prints the values as SAP2000 hands them over, and confirms that the model, its units and its lock state are unchanged. Live SAP checks are intentionally separate because they require SAP2000: `--quantity-live "<candidate>.sdb"` runs the isolated Tab 8 read on one candidate — it starts its own SAP2000 on a private copy, never attaches to a running one — and compares the result with that candidate's text export.
+The default desktop command checks essential inputs, workflow reset, reliability, model/database persistence and development-log integrity. The **full desktop** command runs the original offline workflow and guarded SAP-write tests using test doubles, including the Tab 8 quantity take-off (calculation, candidate records, source selection, the isolated read against API doubles, and the tab's loading / stale-request / connection behaviour). The second opens the WPF smoke test and checks workflow/FEM/quantity bindings. The third runs the internal FEM analytical and candidate-composition checks. The fourth compares the internal FEM with a completed SAP2000 study, like for like, from the fixture in `tests/fem-sap-benchmark` (offline; report in `.work/fem-vs-sap`). The fifth prints the quantity take-off of every candidate of a study on disk from the candidates' own text exports (offline; reads only). The sixth is live but read-only: it attaches to the running SAP2000, takes off the model open in it through the API exactly as Tab 8's *Connected model* does, prints the values as SAP2000 hands them over, and confirms that the model, its units and its lock state are unchanged. Live SAP checks are intentionally separate because they require SAP2000: `--quantity-live "<candidate>.sdb"` runs the isolated Tab 8 read on one candidate — it starts its own SAP2000 on a private copy, never attaches to a running one — and compares the result with that candidate's text export.
 
 The checks project takes the same `-p:SapInstallDir=...` as the application when SAP2000 26 is not the installed version.
 
