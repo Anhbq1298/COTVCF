@@ -830,11 +830,12 @@ internal static class Program
                 window.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
                 {
                     var options = window.OwnedWindows.OfType<AnalysisOptionsWindow>().Single();
-                    analysisFormOpened = options.IsVisible && !options.DofEditors.IsEnabled && options.Sag.IsChecked == vm.FemCableSag;
+                    analysisFormOpened = options.IsVisible && options.DofTab.Visibility != Visibility.Visible && !options.UX.IsVisible &&
+                        options.Sag.IsVisible && options.Sag.IsChecked == vm.FemCableSag;
                     options.Close();
                 }));
                 OpenMenu("Run", "Analysis Options");
-                Assert(analysisFormOpened, "Run -> Analysis Options opens the staged DOF and cable fitting form");
+                Assert(analysisFormOpened, "Run -> Analysis Options opens the staged cable fitting form, without a Degrees of Freedom tab: this window has no choice of them");
                 vm.SelectedTab = 7; vm.FemPane = MainViewModel.FemPaneAnalysisOptions;
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var sagBox = FindVisuals<CheckBox>(window).Single(box => Equals(box.Content, "Cable sag"));

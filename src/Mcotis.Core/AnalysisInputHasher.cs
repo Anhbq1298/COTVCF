@@ -113,7 +113,7 @@ internal static class AnalysisInputHasher
         var s = d.Settings;
         w.Section("settings", 1);
         w.Doubles(s.CableFitTolerancePercent); w.Int(s.CableFitMaxIterations); w.Int(s.FrameMeshSegments); w.Bools(s.CableSag);
-        w.Int((int)s.ActiveDofs);
+        w.Int((int)s.ActiveDofs); w.Int((int)s.CableDofs);
 
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }

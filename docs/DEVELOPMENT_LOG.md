@@ -33,6 +33,29 @@ continues on the next lines, indented by two spaces):
 - Checks: --user-guide (format, every link resolves, the app carries the current guide, every menu command of the main
   window is covered, search, and the window's main page, article page and navigation)
 
+## 2026-10-13 · Run monitor opens on an analysis log laid out like SAP2000's
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis → the run monitor (also Run → Analysis Monitor): the new tab "Analysis Log", beside
+  "Equilibrium by Load Case" and "Cable Target-Force Convergence"
+- What: Under the bar the run monitor now has three tabs instead of panels one above the other, and it opens on the
+  analysis log. The log is laid out like the analysis log of SAP2000 — blue fixed-width text, section titles spaced
+  out with the time at the right, NAME = value lines — and says what this solver does, in its own terms. It begins
+  with the model in numbers (joints, restraints, frames, cables, load patterns, load assignments, cases and
+  combinations), the load cases to be solved and the analysis options, then the equations of the run: active degrees
+  of freedom, restrained, solved. Every solve has a block, the fit of the cable target forces first: how it starts
+  (from zero, or from the pretension fitted for its stage), one line per equilibrium iteration — fitting run,
+  iteration, unbalance, relative unbalance, joints converged, where the unbalance is largest — with the trial
+  pretensions of a fitting run counted in one line, and at the end the stability check of the converged state, the
+  smallest scaled pivot, the resultant of the internal forces, what the fit reached and the time. The log closes with
+  the largest axial force, deflection and number of slack cables of every load case and combination, the output
+  database and ANALYSIS COMPLETE. A case that is unstable or does not converge ends with an error block that names
+  the joint and the movement; a run that fails or is cancelled closes with ANALYSIS INCOMPLETE. Text in the log can
+  be selected and copied. The log replaces the collapsed "Diagnostic details" list; the equilibrium table and the
+  convergence chart are as before, each on its own tab. The results of a run are unchanged.
+- Checks: dotnet run --project tests/Mcotis.Checks (2,767 checks); default offline Mcotis.Desktop.Checks; --fem;
+  --fem-sap; --general-solver; --template-building-ui; --dev-log
+
 ## 2026-10-13 · Column design optimization (RC, CFT, steel encased, mega column)
 - Status: Done
 - Who: Philip Pham, Claude
@@ -159,6 +182,46 @@ continues on the next lines, indented by two spaces):
 - Checks: --etabs-import (the bundled file is tests/etabs-import/CoT120.e2k; Load TAS is ready to run, has no joint
   left inside a straight member, deflects and reacts as the split model, and its arch is found with H = 30 m; a braced
   portal has no arch; the title is TAS - Tied Arch System); --fem-model (Load VCF… opens the default model); --dev-log
+
+## 2026-10-12 · Run monitor shows the equilibrium of a run; no Degrees of Freedom tab in the main window
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis → the run monitor (also Run → Analysis Monitor): the bar and the lines under it, and
+  the new table "Equilibrium by load case". Run → Analysis Options… in the main window
+- What: While a run goes, the monitor now says where its equilibrium stands. Under the bar: the degrees of freedom of
+  the run (how many are active, solved and restrained) and the iteration in progress — the fitting run, the
+  out-of-balance force against the accepted one, how many joints are in equilibrium and the joint and movement where
+  the out-of-balance is largest. The bar counts the load cases that have ended. The table has one line per load case,
+  the fit of the cable target forces first: solved degrees of freedom, iterations, out-of-balance, accepted value,
+  joints converged, where the out-of-balance is largest, and the status — Converged, Not converged, Unstable, Failed
+  (the reason is the status tooltip) or Stopped. The lines stay after the run and are written to Diagnostic details.
+  A joint counts as converged when every solved degree of freedom of it is within the accepted out-of-balance. The
+  results of a run are unchanged. In the main window, Analysis Options no longer has a Degrees of Freedom tab: nothing
+  on it could be changed there, since that model is analysed in its XZ plane. The form opens on the cable settings,
+  and an unstable-model message there no longer points to that tab. The native workspace keeps the tab, where the
+  degrees of freedom, those of cable joints included, are a choice.
+- Checks: dotnet run --project tests/Mcotis.Checks (2,767 checks); default offline Mcotis.Desktop.Checks; --fem;
+  --fem-sap; --general-solver; --template-building-ui; --dev-log
+
+## 2026-10-12 · Degrees of freedom of cable joints; a movement nothing holds is unstable
+- Status: Done
+- Who: markbui, Claude
+- Where: Native workspace: Run → Analysis Options… → Degrees of Freedom, new group "Degrees of freedom of cable
+  joints"; the Cable Force Fitting tab is now active there too. The unstable report: every run, in both windows
+- What: A joint that only cables reach has the degrees of freedom the user gives cable joints (UX, UY, UZ by default),
+  among the active ones; the rest are switched off there. The solver no longer holds or passes over a movement by
+  itself: one that is on and that no member and no restraint holds — across a cable's line, at a cable end left free,
+  at a joint between cables that all go slack — is reported as an unstable model, with the joint and the movement, and
+  no results. Before, such a movement was left at zero with a note, or passed over silently in the main window. In the
+  main window cable joints move in UX and UZ and that cannot be changed there, so a cable modelled in several segments
+  through a joint only cables reach, or a cable end that nothing holds, now stops the run: model it as one cable, and
+  hold every cable end with a frame or a support. The default model and the stored SAP2000 study have no such joint
+  and give the same results as before. A cable that pulls in a movement switched off at its joint is held there as by
+  a support; the model says so when it is compiled. Native files are now schema 3; older files open with UX, UY, UZ
+  for their cable joints. In the native Analysis Options the fitting tolerance, iterations, frame stations and cable
+  sag can now be edited, since the native run reads them.
+- Checks: dotnet run --project tests/Mcotis.Checks (2,751 checks); default offline Mcotis.Desktop.Checks; --fem;
+  --fem-sap; --general-solver; --template-building-ui; --dev-log
 
 ## 2026-10-12 · One solver everywhere: the general 3D solver runs the application
 - Status: Done

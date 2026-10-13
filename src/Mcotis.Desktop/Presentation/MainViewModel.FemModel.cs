@@ -476,6 +476,7 @@ public sealed partial class MainViewModel
         FemRuns.Clear();
         FemCableFitRows.Clear();
         FemLog.Clear();
+        ClearFemEquilibrium();
         FemProgressText = "";
         NotifyFemMonitorChart();
     }

@@ -39,7 +39,7 @@ code changes are part of this milestone. The new library has no reference to the
   lookup uses `(PointId, Component)`, never a name.
 - Every point retains six full slots, including supports and inactive components. Only free DOFs receive contiguous
   reduced indices. Restraints remain separate from the active mask. Cable-only points do not acquire unused free
-  rotations. Full nodal vectors retain signed support forces/moments; equivalent member loads are not assembled yet.
+  rotations (since 2026-10-12 they have the degrees of freedom the model gives cable joints, the translations by default). Full nodal vectors retain signed support forces/moments; equivalent member loads are not assembled yet.
 - Coordinates are never projected. When a translation is disabled, all points must have a common coordinate along
   that axis within `Tolerances.Length` (1e-6 m). Offset planes are accepted. This conservative rule also applies to
   custom masks; it is not a general constraint-transform implementation.

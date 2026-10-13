@@ -55,7 +55,7 @@
 
      <Paragraph Style="{StaticResource H2}">3. Set up and run</Paragraph>
      <Paragraph>In Run → Analysis Options, choose the frame mesh, target-force fitting tolerance and maximum iterations. Cable sag is enabled by default; switch it off when comparing straight-cable behavior. Click Run Analysis: Set Load Cases to Run lists the load cases — set each to Run or Do Not Run — and Run Now analyses the model as it is at that moment (geometry, sections, loads and cable target forces).</Paragraph>
-     <Paragraph>The solver first adjusts applied cable pretension to meet the Tab 03 targets under the target-force case's loads. It then solves the loaded cases using the fitted pretension. Monitor shows progress and the cable target-force convergence chart; a ratio of 1 means the target is met.</Paragraph>
+     <Paragraph>The solver first adjusts applied cable pretension to meet the Tab 03 targets under the target-force case's loads. It then solves the loaded cases using the fitted pretension. Monitor shows progress, the degrees of freedom of the run, the equilibrium of every load case (iterations, out-of-balance force, joints converged) and the cable target-force convergence chart; a ratio of 1 means the target is met.</Paragraph>
 
      <Paragraph Style="{StaticResource H2}">4. Review the results</Paragraph>
      <List>

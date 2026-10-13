@@ -919,10 +919,21 @@ public sealed partial class MainViewModel : Observable
     public bool FemMonitorRunning
     {
         get => femMonitorRunning;
-        private set { if (Set(ref femMonitorRunning, value)) { Notify(nameof(FemMonitorProgressText)); Notify(nameof(FemMonitorProgress)); } }
+        private set { if (Set(ref femMonitorRunning, value)) { Notify(nameof(FemMonitorProgressText)); Notify(nameof(FemMonitorProgress)); Notify(nameof(FemMonitorIndeterminate)); } }
     }
-    /// <summary>Progress bar of the one run: full once it has results (the bar is indeterminate while it runs).</summary>
-    public double FemMonitorProgress => !FemMonitorRunning && FemRuns.Count > 0 ? 1 : 0;
+    /// <summary>Progress bar of the one run: the part of its load cases that has ended while it runs, full once it has results.</summary>
+    public double FemMonitorProgress => FemMonitorRunning ? femMonitorFraction : FemRuns.Count > 0 ? 1 : 0;
+    /// <summary>Running, and no load case has ended yet: the bar has nothing to count, so it only shows that the run goes.</summary>
+    public bool FemMonitorIndeterminate => FemMonitorRunning && femMonitorFraction <= 0;
+    private double femMonitorFraction;
+    private string femMonitorDofText = "", femMonitorEquilibriumText = "";
+    /// <summary>One row per load case of the run, the fit of the cable target forces first: its equilibrium iterations,
+    /// the out-of-balance against the accepted one, the joints in equilibrium and how it ended.</summary>
+    public ObservableCollection<FemEquilibriumRow> FemEquilibriumRows { get; } = [];
+    /// <summary>The degrees of freedom of the run: how many are on, solved and restrained.</summary>
+    public string FemMonitorDofText { get => femMonitorDofText; private set => Set(ref femMonitorDofText, value); }
+    /// <summary>Where the equilibrium stands: the iteration in progress while the run goes, the outcome once it has ended.</summary>
+    public string FemMonitorEquilibriumText { get => femMonitorEquilibriumText; private set => Set(ref femMonitorEquilibriumText, value); }
     public string FemMonitorProgressText => FemMonitorRunning ? "Running" : FemRuns.Count > 0 ? "Finished"
         : FemLog.Count > 0 ? "No result" : "No FEM run yet.";
     public double FemMonitorTolerancePercent { get => femMonitorTolerancePercent; private set => Set(ref femMonitorTolerancePercent, value); }
@@ -972,9 +983,65 @@ public sealed partial class MainViewModel : Observable
     private void StartFemMonitor()
     {
         FemLog.Clear();
+        ClearFemEquilibrium();
         FemMonitorRunning = true;
         PrepareFemMonitor();
         FemAnalysisStarted?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void ClearFemEquilibrium()
+    {
+        FemEquilibriumRows.Clear();
+        FemMonitorDofText = "";
+        FemMonitorEquilibriumText = "";
+        femMonitorFraction = 0;
+        Notify(nameof(FemMonitorProgress));
+        Notify(nameof(FemMonitorIndeterminate));
+    }
+
+    /// <summary>Shows the equilibrium of every load case of the run. Called on the window's thread: while the run goes,
+    /// with what the solver has reported so far; once after it, with how every case ended.</summary>
+    private void ShowFemEquilibrium(IReadOnlyList<FemEquilibriumProgress> cases, FemEquilibriumProgress? latest, bool running)
+    {
+        for (int index = 0; index < cases.Count; index++)
+        {
+            var row = FemEquilibriumRow.From(cases[index], runEnded: !running);
+            if (index == FemEquilibriumRows.Count) FemEquilibriumRows.Add(row);
+            else if (FemEquilibriumRows[index] != row) FemEquilibriumRows[index] = row;
+        }
+        if (cases.FirstOrDefault(item => item.SolvedDofs > 0) is { } sized)
+        {
+            int leftOut = sized.ActiveDofs - sized.SolvedDofs - sized.RestrainedDofs;
+            FemMonitorDofText = $"Degrees of freedom: {sized.ActiveDofs:N0} active (UX, UZ, RY in the XZ plane; UX, UZ at a joint only cables reach) · " +
+                $"{sized.SolvedDofs:N0} solved · {sized.RestrainedDofs:N0} restrained" +
+                (leftOut > 0 ? $" · {leftOut:N0} rotation{(leftOut == 1 ? "" : "s")} left out (no stiffness and no load there)" : "") + ".";
+        }
+        femMonitorFraction = latest?.Fraction ?? 0;
+        Notify(nameof(FemMonitorProgress));
+        Notify(nameof(FemMonitorIndeterminate));
+        if (running)
+        {
+            if (latest is not null) FemMonitorEquilibriumText = DescribeFemEquilibrium(latest);
+            return;
+        }
+
+        var open = cases.Where(item => item.State != FemEquilibriumState.Converged).ToArray();
+        string fit = cases.Any(item => item.FitStage) ? ", the target-force fit included" : "";
+        FemMonitorEquilibriumText = cases.Count == 0 ? ""
+            : open.Length == 0 ? $"Equilibrium reached in every load case ({cases.Count} solved{fit}): every joint is within the accepted out-of-balance."
+            : $"Equilibrium not reached in {open.Length} of {cases.Count} load cases ({string.Join(", ", open.Select(FemEquilibriumRow.CaseLabel))}). See the log and the table.";
+    }
+
+    private static string DescribeFemEquilibrium(FemEquilibriumProgress report)
+    {
+        string label = FemEquilibriumRow.CaseLabel(report);
+        if (report.OutOfBalance is null)
+            return report.State == FemEquilibriumState.Running ? $"{label}: {report.SolvedDofs:N0} degrees of freedom to solve…" : $"{label}: no equilibrium.";
+        string step = report.Linear ? "solved directly"
+            : (report.FitRun > 0 && report.State == FemEquilibriumState.Running ? $"fitting run {report.FitRun}, " : "") + $"equilibrium iteration {report.Iteration}";
+        return $"{label} — {step}: out-of-balance {FemEquilibriumRow.Size(report.OutOfBalance, report)}, accepted {FemEquilibriumRow.Size(report.Tolerance, report, accepted: true)} · " +
+            $"{report.JointsInEquilibrium:N0} of {report.Joints:N0} joints in equilibrium" +
+            (report.JointsInEquilibrium < report.Joints && report.WorstJoint is { } joint ? $" · largest at {joint} {report.WorstDof}" : "");
     }
 
     /// <summary>Refresh the Cable list from Tab 03 and select Cable1a-2 (or the first cable) if nothing valid is chosen.</summary>
@@ -987,24 +1054,25 @@ public sealed partial class MainViewModel : Observable
         NotifyFemMonitorChart();
     }
 
-    private void FemLogLine(string line)
+    /// <summary>Appends to the analysis log what <see cref="FemRunLog"/> has written since it was last taken.</summary>
+    private void FemLogLines(FemRunLog log)
     {
-        FemLog.Add($"{DateTime.Now:HH:mm:ss}  {line}");
+        foreach (string line in log.Take()) FemLog.Add(line);
         while (FemLog.Count > MaximumFemLogLines) FemLog.RemoveAt(0);
     }
 
-    private static string DescribeFemRun(FemStudyRun run)
+    /// <summary>What the analysis log says of a run's results: the fit of the cable target forces, and the largest
+    /// values of every load case and combination in the order the results are shown.</summary>
+    private FemRunLogResults DescribeFemRun(FemStudyRun run, string? outputDatabase)
     {
         var result = run.Result;
         var fitted = result.Cables.Where(cable => cable.TargetForceKN > 0 && cable.PretensionStageForceKN is not null).ToArray();
         var worst = fitted.Select(cable => Math.Abs(cable.PretensionStageForceKN!.Value / cable.TargetForceKN - 1) * 100).DefaultIfEmpty().Max();
-        var fit = result.TargetFitIterations == 0 ? "No target fitting"
-            : result.TargetFitConverged ? $"Pretension fitted in {result.TargetFitIterations} run(s), max deviation {worst:0.##}%"
-            : $"Pretension NOT fitted after {result.TargetFitIterations} run(s), max deviation {worst:0.##}%";
-        var slack = result.Cables.Count(cable => !cable.Active);
-        return $"{fit} · loaded equilibrium in {result.NonlinearIterations} Newton iteration(s)" +
-            (slack > 0 ? $" · {slack} slack cable(s)" : "") +
-            $" · max |N| {result.MaximumAbsoluteAxialKN:0} kN · max deflection {result.MaximumDownwardDeflectionMm:0.#} mm";
+        var named = run.Results is { } results ? femResultOrder.Where(results.ContainsKey).Select(name => (Name: name, Result: results[name])).ToArray()
+            : [(Name: "(the loading of the run)", Result: result)];
+        return new(result.TargetFitIterations == 0 ? null : result.TargetFitConverged, result.TargetFitIterations, worst,
+            named.Select(item => new FemRunLogCaseResult(item.Name, item.Result.MaximumAbsoluteAxialKN, item.Result.MaximumDownwardDeflectionMm,
+                item.Result.Cables.Count(cable => !cable.Active))).ToArray(), outputDatabase);
     }
 
     public const int FemInputsPage = 0;
@@ -1896,6 +1964,51 @@ public sealed partial class MainViewModel : Observable
         public void Report(FemProgress value) => Reason = value.Failure ?? Reason;
     }
 
+    /// <summary>Takes the solver's equilibrium reports on the solver's thread: every one goes to the analysis log, and
+    /// the latest of every load case is kept for the table.
+    /// The solver reports every iteration, so the window is brought up to date at most every <see cref="ShowEveryMs"/>;
+    /// <see cref="Show"/> with <c>ended</c>, after the run, shows how every case ended and closes the report.</summary>
+    private sealed class FemEquilibriumReport(MainViewModel owner, FemRunLog log, SynchronizationContext? window) : IProgress<FemEquilibriumProgress>
+    {
+        private const int ShowEveryMs = 80;
+        private readonly object gate = new();
+        private readonly List<FemEquilibriumProgress> cases = [];
+        private FemEquilibriumProgress? latest;
+        private long shownAt = Environment.TickCount64 - ShowEveryMs;
+        private bool queued, closed;
+
+        public void Report(FemEquilibriumProgress value)
+        {
+            lock (gate)
+            {
+                int at = cases.FindIndex(item => item.FitStage == value.FitStage && item.CaseName == value.CaseName);
+                if (at < 0) cases.Add(value); else cases[at] = value;
+                latest = value;
+                log.Report(value);
+                if (window is null || queued || closed || Environment.TickCount64 - shownAt < ShowEveryMs) return;
+                queued = true;
+            }
+            window.Post(_ => Show(ended: false), null);
+        }
+
+        public void Show(bool ended)
+        {
+            FemEquilibriumProgress[] now;
+            FemEquilibriumProgress? last;
+            lock (gate)
+            {
+                if (closed) return;
+                closed = ended;
+                queued = false;
+                shownAt = Environment.TickCount64;
+                now = [.. cases];
+                last = latest;
+            }
+            owner.FemLogLines(log);
+            owner.ShowFemEquilibrium(now, last, running: !ended);
+        }
+    }
+
     /// <summary>Run → Run FEM Analysis: solves the model as it stands, once — the geometry, sections, loading and settings
     /// Mcotis holds. It never reads or writes SAP2000, and it is not the parametric study: varying the Tab 01–03 ranges or
     /// the VCF system over many cases is Run → Optimization VCF.</summary>
@@ -1948,22 +2061,12 @@ public sealed partial class MainViewModel : Observable
         Notify(nameof(CanCancelFemAnalysis));
         CommandManager.InvalidateRequerySuggested();
         StartFemMonitor();
+        // The analysis log of the run, in the layout of SAP2000's: FemRunLog writes it, FemLog shows it.
+        var log = new FemRunLog();
         try
         {
-            FemLogLine($"Solving the model held in Mcotis ({modelName}) — SAP2000 is not read or written. {FemRunSummary}.");
-            FemLogLine($"{properties.Count(pair => pair.Value.InPlaneInertiaM4 is not null):N0} frame and {properties.Count(pair => pair.Value.InPlaneInertiaM4 is null):N0} cable sections " +
-                $"(self-weight from unit weight × gross area × weight modifier).");
-            FemLogLine($"Loading: {femSapLoading.Patterns.Count} patterns, {femSapLoading.JointLoads.Count} joint, " +
-                $"{femSapLoading.MemberLoads.Count + femSapLoading.MemberPointLoads.Count + femSapLoading.GravityLoads.Count} member load assignments, " +
-                $"{femSapLoading.Cases.Count} cases, {femSapLoading.Combinations.Count} combinations" +
-                (femSapLoading.Warnings.Count > 0 ? $" · {femSapLoading.Warnings.Count} warning(s), see Inputs → Loads" : "") + ".");
             var loadPlan = FemLoadPlan.Build(FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), femSapLoading,
                 properties, State.Baseline, Tab01Patterns, PretensionPatterns, State.AppliedPoints.Select(point => point.PointName).ToArray());
-            FemLogLine($"Load cases solved: {string.Join(", ", loadPlan.CaseNames)}" +
-                (loadPlan.CombinationNames.Count > 0 ? $" · combinations: {string.Join(", ", loadPlan.CombinationNames)}" : "") +
-                (loadPlan.FitCases.Count > 0 ? $" · cable target forces fitted in {string.Join(", ", loadPlan.FitCases.Select(name => $"'{name}'"))}" +
-                    (loadPlan.FitCases.Count > 1 ? " (each case uses the stage it continues from)" : "") : "") + ".");
-            foreach (var note in loadPlan.Notes) FemLogLine("Note: " + note);
             femResultOrder = loadPlan.ResultNames;
             femMonitorTargetStages = loadPlan.FitCases.ToArray();
             Notify(nameof(FemMonitorTargetStages));
@@ -1976,19 +2079,32 @@ public sealed partial class MainViewModel : Observable
             var frameMeshSegments = FemFrameMeshSegments;
             var cableSag = FemCableSag;
             FemMonitorTolerancePercent = targetFitPercent;
-            FemLogLine($"Pin supports: {string.Join(", ", supports)}.");
-            FemLogLine($"Settings: target-force fitting ±{targetFitPercent:0.###}% · max {targetFitIterations:N0} fitting runs · frame mesh {frameMeshSegments} segments (cables unmeshed) · " +
-                (cableSag ? "cable sag ON (parabolic cable under the load each case puts on it)." : "cable sag OFF (straight tension-only cables)."));
-            FemLogLine("General solver (Mcotis.Analysis), XZ degrees of freedom: split frames at joints → fit cable pretension in its stage → apply the loads → tension-only equilibrium → recover member forces at the mesh stations.");
+            // the members the run analyses: every frame, and the cables that have a section
+            var analysed = baseline.Members.Where(member => member.Kind == MemberKind.Frame ||
+                member.Kind == MemberKind.Cable && properties.TryGetValue(member.Name, out var section) && section.InPlaneInertiaM4 is null).ToArray();
+            log.Begin(new(modelName, analysed.SelectMany(member => new[] { member.Start, member.End }).Distinct(StringComparer.Ordinal).Count(), supports,
+                analysed.Count(member => member.Kind == MemberKind.Frame), analysed.Count(member => member.Kind == MemberKind.Cable),
+                femSapLoading.Patterns.Count, femSapLoading.JointLoads.Count,
+                femSapLoading.MemberLoads.Count + femSapLoading.MemberPointLoads.Count + femSapLoading.GravityLoads.Count, femSapLoading.Warnings.Count,
+                loadPlan.CaseNames, loadPlan.CombinationNames, loadPlan.FitCases, loadPlan.Notes,
+                targetFitPercent, targetFitIterations, frameMeshSegments, cableSag));
+            FemLogLines(log);
             var failure = new FemFailureReport();
+            var equilibrium = new FemEquilibriumReport(this, log, SynchronizationContext.Current);
+            IReadOnlyList<FemStudyRun> results;
             // The model's own geometry: no Tab 02 height change, so the chord groups are not passed.
-            var results = await Task.Run(() => femStudy.Analyze(baseline, [], [], [], supports, [model], properties, failure,
-                cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan, cableSag), cancellationToken);
+            try
+            {
+                results = await Task.Run(() => femStudy.Analyze(baseline, [], [], [], supports, [model], properties, failure,
+                    cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan, cableSag, equilibrium), cancellationToken);
+            }
+            finally { equilibrium.Show(ended: true); }
             if (results.Count == 0)
             {
                 var reason = failure.Reason ?? "The model did not reach equilibrium.";
                 FemCableFitRows.Add(FemCableFitRow.FailedCase(model.Id, reason));
                 FemProgressText = $"Analysis failed · {reason}";
+                log.End(complete: false, error: reason);
             }
             else
             {
@@ -1996,9 +2112,9 @@ public sealed partial class MainViewModel : Observable
                 FemRuns.Add(run);
                 foreach (var row in FemCableFitRow.FromRun(run, SelectedFemResultName)) FemCableFitRows.Add(row);
                 SelectedFemRun = run;
-                FemLogLine(DescribeFemRun(run));
                 var outputDatabase = WriteFemOutput(run);
-                FemLogLine($"Output database: {outputDatabase}");
+                log.Results(DescribeFemRun(run, outputDatabase));
+                log.End(complete: true);
                 FemProgressText = "Analysis complete" +
                     (loadPlan.FitCases.Count == 0 ? "" // no cable target forces to fit (a model without cables)
                     : run.Result.TargetFitConverged ? $" · pretension stage within {targetFitPercent:0.###}% of target"
@@ -2006,19 +2122,21 @@ public sealed partial class MainViewModel : Observable
                     $" · {modelName}.";
             }
             Message = FemProgressText;
-            FemLogLine(FemProgressText);
+            FemLogLines(log);
         }
         catch (OperationCanceledException)
         {
             FemProgressText = "Analysis cancelled.";
             Message = FemProgressText;
-            FemLogLine(FemProgressText);
+            log.End(complete: false, note: "ANALYSIS CANCELLED BY THE USER");
+            FemLogLines(log);
         }
         catch (Exception ex)
         {
             FemProgressText = $"FEM analysis failed: {ex.Message}";
             Message = ex.Message;
-            FemLogLine(FemProgressText);
+            log.End(complete: false, error: ex.Message);
+            FemLogLines(log);
             Warn("FEM Analysis", ex.Message);
         }
         finally

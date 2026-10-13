@@ -32,6 +32,10 @@ The planar solver is no longer part of the application. It is kept, frozen, in
 - **Stations along a frame.** Internal actions and the deflected line at equal intervals along every piece, as many as
   the model's frame mesh setting. They are output only: no result at a joint depends on their number.
 - **Cables: tension only**, straight, with a pretension (lack of fit × EA / L). A slack cable carries nothing.
+- **Degrees of freedom of cable joints.** A joint that only cables reach has the degrees of freedom the model gives
+  cable joints (UX, UY, UZ by default), among the active ones; the others are switched off there. A cable that pulls
+  in a switched-off movement is held there as by a support: the compiler says so, and the force is reported apart
+  from the support reactions.
 - **Cable sag** under the cable's self-weight (model setting): the shallow parabola, with Ernst's equivalent stiffness.
 - **Cable target forces.** The case set to fit them adjusts the pretension of every targeted cable until its tension
   is within the model's tolerance of the target at the end of that case.
@@ -42,9 +46,15 @@ The planar solver is no longer part of the application. It is kept, frozen, in
 It refuses, with a diagnostic and no result: a linear static case on a model that has cables; a linear case that
 continues from another or fits target forces; a nonlinear case continuing from a linear one; target forces applied
 by a case that does not fit them; a fit case with no target, with two targets on one cable, or with a target that is
-not a positive tension; more than one fit case in a chain; a load on a DOF that nothing holds; an equilibrium that
-does not converge or is not stable; internal forces that do not balance; everything the linear record lists (shells,
-axial/shear/torsion releases, the size limits).
+not a positive tension; more than one fit case in a chain; an equilibrium that does not converge or is not stable;
+internal forces that do not balance; everything the linear record lists (shells, axial/shear/torsion releases, the
+size limits).
+
+**A movement nothing holds is an unstable model** (user, 2026-10-12). A degree of freedom that is on and that no
+member and no restraint holds — across a cable's line, at a cable end left free, a rotation switched on for cable
+joints, a joint between cables that all go slack in the case — is reported with its joint and movement, and no result
+is returned. The solver does not hold it or pass over it. One case is unchanged from the linear record: the rotation
+of a frame joint whose every frame end is released is left out with a warning.
 
 Target forces that are not met within the tolerance are refused by default. With the option `AcceptClosestFit` the
 solver returns the equilibrium of the closest pretension found, marked as not fitted, with the reason. The main
@@ -70,7 +80,7 @@ Everything below runs offline. Counts and differences are those of the runs of 2
 
 ### 1. Closed forms and independent scalar solutions
 
-`dotnet run --project tests/Mcotis.Checks`, group *General static solver* (`GeneralStaticChecks.cs`, 1,221 checks
+`dotnet run --project tests/Mcotis.Checks`, group *General static solver* (`GeneralStaticChecks.cs`, 1,273 checks
 with the OpenSees comparison). Every expected value is worked out in the check file, not taken from the solver.
 
 | Subject | What is compared |
@@ -83,7 +93,9 @@ with the OpenSees comparison). Every expected value is worked out in the check f
 | Space | The whole structure turned and moved in space: same tension and pretension, displacement turned with it; XZ preset equal to full 3D for a planar structure |
 | Sag | `T³ = EA·w²L²/24` for a cable cut to its chord; sag `wL²/8T`; Ernst's ratio exactly 1/3 there; `w·cos θ` on a slope; the weight modifier; the cable equation re-evaluated from the solved displacements of a structure |
 | Sag vs. exact theory | The same level cable as an exact elastic catenary (Irvine): the tensions differ by less than 0.2 % at a sag of 1.0 % of the span |
+| Cable joints | A weight on a vertical cable: unstable across the cable's line with UX, UY, UZ on; solved with those two restrained, or with UZ alone for cable joints; rotations switched on for cable joints are unstable at the hanging joint and at the anchor until both are restrained; a load across a cable; two cables in line, taut and both slack; a cable pulling in a switched-off movement, with the holding force reported |
 | Refusals | Each refusal listed above |
+| Reports of a run | The backward error equation by equation, by hand (`K = diag(4, 9)`: 1/17); a followed run gives the same results to the last digit; the degrees of freedom counted by hand (15 active, 9 restrained, 6 solved); the first iteration of a fit is the 50 kN pretension out of balance at the tip, against 1e-9 of it; every equilibrium of a fit ends within the tolerance; a joint is counted in balance only when every solved degree of freedom of it is; a linear case reports the backward error it is accepted by; an unstable or refused case ends its report with its first error |
 
 ### 2. The archived planar solver, and the application's own checks
 
@@ -107,7 +119,7 @@ was not established.)
 
 The checks that were written for the application's solver now run through the general solver:
 
-- `--fem` — 58 checks against closed forms (`PL³/48EI`, `5wL⁴/384EI`, `wL²/8`, reactions and equilibrium, stations
+- `--fem` — 60 checks against closed forms (`PL³/48EI`, `5wL⁴/384EI`, `wL²/8`, reactions and equilibrium, stations
   against an unmeshed frame, superposition, the cable sag equation, Ernst's formula, fitting and its failure note).
 - `--fem-sap` — the stored SAP2000 study of 135 candidates, 4,995 values: total vertical reaction within 0.002 %,
   cable forces within 3.82 %, deflections within 3.22 %, reactions within 1.2 % of the largest SAP2000 value — the
@@ -132,8 +144,17 @@ resulting tensions as targets and finds that pretension again. Stations were not
 A result is returned only if: the linear solution's scaled backward error is within 1e-10, or the cable
 equilibrium's out-of-balance force is within 1e-9 of the largest load or pretension; the tangent at the equilibrium
 is positive definite on every DOF that something holds; and the internal forces of the whole model have no
-resultant force or moment (within 1e-8). A translation held by slack cables only is reported as undetermined, not
-given a number.
+resultant force or moment (within 1e-8). A movement that nothing holds stops the run as an unstable model; it is
+never given a number.
+
+**Reports of a run.** `StaticSolver.Solve` takes an optional `IProgress<StaticProgress>`: a case started, with its
+degrees of freedom (active, restrained, solved); each equilibrium iteration, with the largest out-of-balance on a
+solved degree of freedom, the accepted value, the joints whose every solved degree of freedom is within it and the
+place where it is largest; and how the case ended — finished, or failed with its first error. While target forces
+are fitted the report carries the fitting run. A linear case makes one report, with the scaled backward error of
+each equation (`DenseAlgebra.ScaledResiduals`; the gate above is the largest of them). The reports are read from
+what the iteration computes anyway and decide nothing: with and without them the results are equal to the last
+digit. The main window's run monitor shows them (`FemEquilibriumProgress`), one line per load case.
 
 ## What this evidence does not show
 
@@ -148,6 +169,10 @@ given a number.
   its self-weight times one factor per load pattern, so with sag on the loads along the cables must be in the same
   proportion to each other in every case — as self-weight is — and must not act across a vertical cable. A model
   that is otherwise is refused with that explanation; the planar solver accepted it.
+- **Cable joints in the main window.** There a joint that only cables reach moves in UX and UZ, and that is not a
+  choice the main window offers. A cable modelled in several segments through such a joint, or a cable end that
+  nothing holds, is reported as unstable; the planar solver passed over it. Neither the default model nor the stored
+  SAP2000 study has such a joint.
 - **Differences from the planar solver, by decision:** a factor other than 1 on the cable target-force pattern scales
   the target (the planar solver scaled the fitted pretension); a chain with two fit cases is refused in the native
   workspace. Neither arises in the comparisons above.

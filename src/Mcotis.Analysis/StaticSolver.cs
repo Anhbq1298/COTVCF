@@ -56,10 +56,8 @@ public sealed record StaticCableFit(ObjectId FitCaseId, int Iterations, double W
 /// force over the force scale of <see cref="StaticOptions.NonlinearForceTolerance"/>.</param>
 /// <param name="NonlinearIterations">0 for a linear solution.</param>
 /// <param name="EquilibriumError">Resultant force and moment of all internal forces, relative to their size.</param>
-/// <param name="UndeterminedDofs">Translations held by slack cables only: nothing acts on them and nothing holds them.</param>
 public sealed record StaticDiagnostics(int SolvedDofCount, double ScaledResidual, double MinimumScaledPivot,
-    ImmutableArray<DofKey> UnconnectedRotations, int NonlinearIterations, double EquilibriumError,
-    ImmutableArray<DofKey> UndeterminedDofs, StaticCableFit? CableFit);
+    ImmutableArray<DofKey> UnconnectedRotations, int NonlinearIterations, double EquilibriumError, StaticCableFit? CableFit);
 
 public sealed record StaticResult(ObjectId DocumentId, string InputHash, long Revision, ObjectId LoadCaseId,
     ImmutableArray<StaticJointResult> Joints, ImmutableArray<StaticFrameResult> Frames, ImmutableArray<StaticCableResult> Cables,
@@ -72,6 +70,36 @@ public sealed record StaticOutcome(StaticResult? Result, ImmutableArray<Validati
 {
     public bool Success => Result is not null;
 }
+
+public enum StaticProgressKind { Started, Equilibrium, Finished, Failed }
+
+/// <summary>How far the model is from equilibrium at one moment of a solution, joint by joint.
+/// <para>A cable equilibrium is iterated: <paramref name="Iteration"/> counts from 1, <paramref name="OutOfBalance"/> is
+/// the largest out-of-balance force or moment on a solved degree of freedom [kN, kN·m] and <paramref name="Tolerance"/>
+/// the one the solver accepts. A linear case is solved directly (<paramref name="Linear"/>, iteration 0): the two are
+/// then its scaled backward error and the accepted one, which have no unit.</para></summary>
+/// <param name="Joints">Joints with a solved degree of freedom.</param>
+/// <param name="JointsInBalance">Those of them whose every solved degree of freedom is within the tolerance.</param>
+/// <param name="Worst">Where the out-of-balance is largest.</param>
+/// <param name="Scale">The force a cable equilibrium is judged against — the largest applied load or cable pretension,
+/// at least 1 kN: <paramref name="OutOfBalance"/> over it is the relative unbalance, <paramref name="Tolerance"/> over
+/// it the relative tolerance. 1 for a linear case, whose two measures are relative already.</param>
+public sealed record StaticBalance(int Iteration, double OutOfBalance, double Tolerance, int Joints, int JointsInBalance,
+    DofKey? Worst, bool Linear = false, double Scale = 1);
+
+/// <summary>What a run tells a view that follows it: a case started, where its equilibrium iteration stands, how it
+/// ended. Nothing of the solution depends on it. Reports are made on the solving thread, one after the other.</summary>
+/// <param name="CaseId">The case asked for.</param>
+/// <param name="ActiveDofs">Degrees of freedom that are on: those solved, those restrained and any rotation left out
+/// as unconnected.</param>
+/// <param name="FitRun">While the pretension of the case's fit stage is being fitted: the fitting run, from 1, and
+/// <paramref name="Balance"/> is that of the fit stage. 0 while the case's own equilibrium is solved. On
+/// <see cref="StaticProgressKind.Finished"/>: the number of fitting runs its pretension took.</param>
+/// <param name="Balance">The last equilibrium measured; null before the first.</param>
+/// <param name="Issue">On <see cref="StaticProgressKind.Failed"/>: the first error.</param>
+/// <param name="Diagnostics">On <see cref="StaticProgressKind.Finished"/>: those of the result.</param>
+public sealed record StaticProgress(ObjectId CaseId, StaticProgressKind Kind, int ActiveDofs, int RestrainedDofs, int SolvedDofs,
+    int FitRun, StaticBalance? Balance, ValidationIssue? Issue = null, StaticDiagnostics? Diagnostics = null);
 
 /// <summary>The static solver of the standalone system: 3D frames and cables on the compiled model, with the DOFs the
 /// model selects. Dense; sized for verification and for models up to its limits.
@@ -90,13 +118,18 @@ public sealed record StaticOutcome(StaticResult? Result, ImmutableArray<Validati
 /// No shells, P-Delta, large displacements or modal analysis.</para></summary>
 public static class StaticSolver
 {
+    /// <summary>The part of an unstable-model message that points to the degrees of freedom of cable joints. A window
+    /// that does not offer them leaves it out of what it shows.</summary>
+    public const string CableJointOption = ", or switch it off for cable joints (Analysis Options → Degrees of Freedom)";
+
     public static StaticOutcome Solve(CompiledModel model, ObjectId caseId, StaticOptions? options = null,
-        CancellationToken cancellationToken = default) => Solve(model, [caseId], options, cancellationToken)[caseId];
+        CancellationToken cancellationToken = default, IProgress<StaticProgress>? progress = null) =>
+        Solve(model, [caseId], options, cancellationToken, progress)[caseId];
 
     /// <summary>Several cases of one model. Each is solved as it would be alone; cases that continue from the same fit
     /// case share the one fit of its target forces instead of repeating it.</summary>
     public static ImmutableDictionary<ObjectId, StaticOutcome> Solve(CompiledModel model, IEnumerable<ObjectId> caseIds,
-        StaticOptions? options = null, CancellationToken cancellationToken = default)
+        StaticOptions? options = null, CancellationToken cancellationToken = default, IProgress<StaticProgress>? progress = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(caseIds);
@@ -106,14 +139,14 @@ public static class StaticSolver
             !Fraction(options.RelativePivotTolerance) || !Fraction(options.ResidualTolerance) ||
             !Fraction(options.NonlinearForceTolerance) || !Fraction(options.EquilibriumTolerance))
             throw new ArgumentException("Solver limits must be positive and numerical tolerances finite within (0,1).", nameof(options));
-        var run = new Run(model, options, cancellationToken);
+        var run = new Run(model, options, progress, cancellationToken);
         return caseIds.Distinct().ToImmutableDictionary(caseId => caseId, run.Solve);
     }
 
     private sealed record Assembly(List<(SpatialFrameElement Element, int[] Indices)> Frames, double[,] Stiffness,
         double[] External, CableElement[] Cables);
 
-    private sealed class Run(CompiledModel model, StaticOptions options, CancellationToken cancellationToken)
+    private sealed class Run(CompiledModel model, StaticOptions options, IProgress<StaticProgress>? progress, CancellationToken cancellationToken)
     {
         // 0 first: a well-posed tangent takes the exact Newton step; larger shifts only when that step fails.
         private static readonly double[] LevenbergShifts = [0, 1e-12, 1e-8, 1e-5, 1e-3, 1e-1, 1];
@@ -127,13 +160,47 @@ public static class StaticSolver
         private readonly ILookup<ObjectId, LoadAssignment> loadsByTarget =
             model.Input.Loads.Values.OrderBy(load => load.Id).ToLookup(load => load.TargetId);
 
+        // What a view following the run is told (StaticProgress): the case asked for and where its solution stands.
+        private readonly int activeDofs = model.Dofs.Count(dof => dof.State != DofState.Inactive);
+        private readonly int restrainedDofs = model.Dofs.Count(dof => dof.State == DofState.Restrained);
+        private ObjectId requested;
+        private int solvedDofs, fitRun;
+        private StaticBalance? balance;
+
         private void Error(string code, ObjectKind kind, ObjectId id, string message) =>
             issues.Add(new(ValidationSeverity.Error, code, kind, id, message));
-        private StaticOutcome Failed() => new(null, issues.ToImmutableArray());
+        private StaticOutcome Failed()
+        {
+            Report(StaticProgressKind.Failed, issues.FirstOrDefault(issue => issue.Severity == ValidationSeverity.Error));
+            return new(null, issues.ToImmutableArray());
+        }
+
+        private void Report(StaticProgressKind kind, ValidationIssue? issue = null, int? fitRuns = null, StaticDiagnostics? diagnostics = null) =>
+            progress?.Report(new(requested, kind, activeDofs, restrainedDofs, solvedDofs, fitRuns ?? fitRun, balance, issue, diagnostics));
+
+        /// <summary>Records how far each joint is from equilibrium and reports it. <paramref name="size"/> holds one
+        /// value per solved degree of freedom, in the order of <paramref name="free"/>.</summary>
+        private void Measure(int[] free, double[] size, int iteration, double tolerance, bool linear = false, double scale = 1)
+        {
+            var joints = new Dictionary<ObjectId, bool>();
+            int worst = -1;
+            for (int i = 0; i < free.Length; i++)
+            {
+                var point = model.Dofs[free[i]].Key.PointId;
+                joints[point] = joints.GetValueOrDefault(point, true) && size[i] <= tolerance;
+                if (worst < 0 || size[i] > size[worst]) worst = i;
+            }
+            balance = new(iteration, worst < 0 ? 0 : size[worst], tolerance, joints.Count, joints.Values.Count(within => within),
+                worst < 0 ? null : model.Dofs[free[worst]].Key, linear, scale);
+            Report(StaticProgressKind.Equilibrium);
+        }
 
         public StaticOutcome Solve(ObjectId caseId)
         {
             issues.Clear();
+            requested = caseId;
+            solvedDofs = fitRun = 0;
+            balance = null;
             if (!document.LoadCases.TryGetValue(caseId, out var loadCase))
             {
                 Error("static.case.missing", ObjectKind.LoadCase, caseId, "Select an existing load case.");
@@ -230,6 +297,8 @@ public static class StaticSolver
                 }
             }
             var (free, unconnectedRotations) = FreeDofs(assembly, report: true);
+            solvedDofs = free.Length;
+            Report(StaticProgressKind.Started);
 
             double[] displacement;
             double residual, minimumPivot = 1;
@@ -238,7 +307,6 @@ public static class StaticSolver
             double[]? stageTensions = null;
             StaticCableFit? cableFit = null;
             List<double[]> fitHistory = [];
-            var undetermined = new List<DofKey>();
             if (assembly.Cables.Length == 0)
             {
                 var reduced = new double[free.Length, free.Length];
@@ -258,6 +326,7 @@ public static class StaticSolver
                     return Failed();
                 }
                 residual = DenseAlgebra.ScaledResidual(reduced, solved, rhs);
+                if (progress is not null) Measure(free, DenseAlgebra.ScaledResiduals(reduced, solved, rhs), 0, options.ResidualTolerance, linear: true);
                 if (solved.Any(value => !double.IsFinite(value)) || !double.IsFinite(residual) || residual > options.ResidualTolerance)
                 {
                     Error("static.residual", ObjectKind.LoadCase, caseId, $"The scaled backward error ({residual:G6}) exceeds the accepted tolerance ({options.ResidualTolerance:G6}); no results returned.");
@@ -283,6 +352,7 @@ public static class StaticSolver
                     if (!fits.TryGetValue(fitCase.Id, out var kept))
                     {
                         if (FitPretension(stage, stageFree, cableTargets, fitCase) is not { } found) return Failed();
+                        fitRun = 0;
                         var note = found.Failure is null ? null : new ValidationIssue(ValidationSeverity.Warning, "static.fit.closest", ObjectKind.LoadCase, fitCase.Id,
                             $"Case '{fitCase.Name}': {found.Failure} The results are those of the closest pretension found.");
                         fits[fitCase.Id] = kept = (found, note);
@@ -298,23 +368,24 @@ public static class StaticSolver
                 (displacement, nonlinearIterations, residual) = equilibrium;
 
                 // The equilibrium has to be a stable one: the tangent there, without any regularization, is positive
-                // definite on every DOF that something holds.
+                // definite. A movement that only slack cables reach has nothing holding it in this case.
                 var tangent = Tangent(assembly, pretension, displacement, free, regularize: false);
-                for (int i = 0; i < free.Length; i++)
+                var reached = Tangent(assembly, pretension, displacement, free, regularize: true);
+                var unheld = Enumerable.Range(0, free.Length).Where(i => !(tangent[i, i] > 0)).ToArray();
+                foreach (var point in unheld.GroupBy(i => (model.Dofs[free[i]].Key.PointId, Slack: reached[i, i] > 0)))
                 {
-                    if (tangent[i, i] > 0) continue;
-                    tangent[i, i] = 1;
-                    undetermined.Add(model.Dofs[free[i]].Key);
+                    string where = $"'{document.Points[point.Key.PointId].Name}' {string.Join("/", point.Select(i => model.Dofs[free[i]].Key.Component))}";
+                    Error("static.matrix.unstable", ObjectKind.Point, point.Key.PointId, point.Key.Slack
+                        ? $"{where} is held by slack cables only in case '{loadCase.Name}': nothing holds it there, and the model is unstable. No results returned."
+                        : $"{where} has no stiffness and no restraint: the model is unstable there. A cable gives stiffness along its own line only: hold that movement with another member or a restraint{CableJointOption}. No results returned.");
                 }
+                if (unheld.Length > 0) return Failed();
                 try { minimumPivot = new ScaledCholesky(tangent, options.RelativePivotTolerance, cancellationToken).MinimumPivot; }
                 catch (FactorizationFailure failure)
                 {
                     Unstable(free[failure.Index], failure.Pivot);
                     return Failed();
                 }
-                foreach (var point in undetermined.GroupBy(key => key.PointId))
-                    issues.Add(new(ValidationSeverity.Warning, "static.translation.undetermined", ObjectKind.Point, point.Key,
-                        $"'{document.Points[point.Key].Name}' {string.Join("/", point.Select(key => key.Component))} is held by slack cables only: nothing acts on it and nothing holds it, so its displacement is not determined (reported as 0)."));
             }
 
             var tensions = assembly.Cables.Select((cable, index) => cable.Tension(pretension[index], displacement)).ToArray();
@@ -377,9 +448,11 @@ public static class StaticSolver
                 Error("static.recovery.nonfinite", ObjectKind.LoadCase, caseId, "Force/reaction recovery overflowed; no results returned.");
                 return Failed();
             }
-            return new(new(model.DocumentId, model.InputHash, model.Revision, caseId, joints, frames, cables,
-                new(free.Length - undetermined.Count, residual, minimumPivot, unconnectedRotations.ToImmutableArray(), nonlinearIterations,
-                    equilibriumError, undetermined.ToImmutableArray(), cableFit)), issues.ToImmutableArray());
+            var diagnostics = new StaticDiagnostics(free.Length, residual, minimumPivot, unconnectedRotations.ToImmutableArray(),
+                nonlinearIterations, equilibriumError, cableFit);
+            Report(StaticProgressKind.Finished, fitRuns: cableFit?.Iterations ?? 0, diagnostics: diagnostics);
+            return new(new(model.DocumentId, model.InputHash, model.Revision, caseId, joints, frames, cables, diagnostics),
+                issues.ToImmutableArray());
         }
 
         private void Unstable(int fullIndex, double pivot)
@@ -462,15 +535,19 @@ public static class StaticSolver
             return new(frames, stiffness, external, cables.ToArray());
         }
 
-        /// <summary>The free DOFs to solve. A joint rotation that no frame stiffness reaches and no moment loads is left out.</summary>
+        /// <summary>The free DOFs to solve. The rotation of a frame joint that no frame stiffness reaches (every end there
+        /// released) and no moment loads is left out. A degree of freedom the model gives a joint only cables reach is
+        /// not: if nothing holds it, the model is unstable there and the analysis says so.</summary>
         private (int[] Free, List<DofKey> Unconnected) FreeDofs(Assembly assembly, bool report)
         {
             var unconnected = new List<DofKey>();
             var free = new List<int>();
+            var framed = model.Members.Where(member => member.Kind == ObjectKind.Frame)
+                .SelectMany(member => new[] { member.StartPointId, member.EndPointId }).ToHashSet();
             foreach (var dof in model.Dofs.Where(dof => dof.State == DofState.Free))
             {
                 bool zeroRow = Enumerable.Range(0, n).All(j => assembly.Stiffness[dof.FullIndex, j] == 0);
-                if (zeroRow && dof.Key.Component >= DofComponent.RX && assembly.External[dof.FullIndex] == 0)
+                if (zeroRow && dof.Key.Component >= DofComponent.RX && assembly.External[dof.FullIndex] == 0 && framed.Contains(dof.Key.PointId))
                 {
                     unconnected.Add(dof.Key);
                     if (report)
@@ -562,11 +639,13 @@ public static class StaticSolver
                 var residual = Residual(assembly, pretension, displacement);
                 norm = Norm(residual);
                 if (!double.IsFinite(norm)) break;
+                if (progress is not null) Measure(free, free.Select(i => Math.Abs(residual[i])).ToArray(), iteration, tolerance, scale: scale);
                 if (norm <= tolerance) return (displacement, iteration, norm / scale);
 
                 var tangent = Tangent(assembly, pretension, displacement, free, regularize: true);
                 var rhs = new double[free.Length];
                 double maximumDiagonal = 0;
+                bool unstable = false;
                 for (int i = 0; i < free.Length; i++)
                 {
                     if (tangent[i, i] > 0)
@@ -575,15 +654,14 @@ public static class StaticSolver
                         maximumDiagonal = Math.Max(maximumDiagonal, tangent[i, i]);
                         continue;
                     }
+                    // Neither a frame nor a cable, taut or slack, reaches this movement, and no restraint holds it.
                     var dof = model.Dofs[free[i]].Key;
-                    if (Math.Abs(residual[free[i]]) > tolerance)
-                    {
-                        Error("static.dof.noStiffness", ObjectKind.Point, dof.PointId,
-                            $"A load acts on '{document.Points[dof.PointId].Name}' {dof.Component}, which no frame or cable holds in that direction. A straight cable has no stiffness across its own line in this small-displacement analysis.");
-                        return null;
-                    }
-                    tangent[i, i] = 1;   // nothing acts on it and nothing holds it: it stays where it is
+                    Error("static.matrix.unstable", ObjectKind.Point, dof.PointId,
+                        $"'{document.Points[dof.PointId].Name}' {dof.Component} has no stiffness and no restraint: the model is unstable there. " +
+                        $"A cable gives stiffness along its own line only: hold that movement with another member or a restraint{CableJointOption}. No results returned.");
+                    unstable = true;
                 }
+                if (unstable) return null;
                 double[]? Step(double shift)
                 {
                     var shifted = (double[,])tangent.Clone();
@@ -672,6 +750,7 @@ public static class StaticSolver
             var needsCompression = new SortedSet<string>(StringComparer.Ordinal);
             for (int iteration = 1; ; iteration++)
             {
+                fitRun = iteration;
                 if (StageTensions(applied) is not { } tensions) return null;
                 history.Add(tensions);
                 int worst = targeted.MaxBy(index => Deviation(tensions, index));

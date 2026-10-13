@@ -49,6 +49,8 @@ internal static class TemplateBuildingUiChecks
             var before = vm.Session.Document;
             var options = new AnalysisOptionsWindow(before.Settings, settings => vm.Session.Execute(DocumentCommands.SetSettings(settings)));
             options.Show(); Idle(); Snapshot(options, ".work/analysis-options-ui.png");
+            Check(options.DofTab.Visibility == Visibility.Visible && options.UX.IsVisible && options.CableUX.IsVisible,
+                "the native analysis options open on the degrees of freedom, those of cable joints included");
             options.UY.IsChecked = false;
             options.Close();
             Check(ReferenceEquals(vm.Session.Document, before), "closing the analysis-options form discards uncommitted DOF edits");
@@ -58,6 +60,21 @@ internal static class TemplateBuildingUiChecks
             options.Preset.SelectedIndex = 1;
             Check(options.ApplyForm() && vm.Session.Document.Settings.ActiveDofs == DofMask.XZ, "Apply commits a DOF preset to the native document");
             options.Close();
+            // the degrees of freedom of cable joints, and the settings the native run now reads
+            var cableOptions = new AnalysisOptionsWindow(before.Settings, settings => vm.Session.Execute(DocumentCommands.SetSettings(settings)));
+            Check(cableOptions.CableDofEditors.IsEnabled && cableOptions.CableUX.IsChecked == true && cableOptions.CableUY.IsChecked == true && cableOptions.CableUZ.IsChecked == true &&
+                  cableOptions.CableRX.IsChecked == false && cableOptions.CableRY.IsChecked == false && cableOptions.CableRZ.IsChecked == false &&
+                  cableOptions.Tolerance.IsEnabled && cableOptions.Iterations.IsEnabled && cableOptions.Mesh.IsEnabled && cableOptions.Sag.IsEnabled,
+                "the native options offer the degrees of freedom of cable joints — the translations by default — and the cable settings the run reads");
+            cableOptions.CableUX.IsChecked = cableOptions.CableUY.IsChecked = cableOptions.CableUZ.IsChecked = false;
+            var unchanged = vm.Session.Document;
+            Check(!cableOptions.ApplyForm() && ReferenceEquals(vm.Session.Document, unchanged), "cable joints without a translation are refused atomically");
+            cableOptions.CableUZ.IsChecked = cableOptions.CableRY.IsChecked = true;
+            cableOptions.Tolerance.Text = "2"; cableOptions.Mesh.Text = "6"; cableOptions.Sag.IsChecked = false;
+            Check(cableOptions.ApplyForm() && vm.Session.Document.Settings is { CableDofs: DofMask.UZ | DofMask.RY, CableFitTolerancePercent: 2, FrameMeshSegments: 6, CableSag: false },
+                "Apply commits the degrees of freedom of cable joints and the cable settings to the native document");
+            cableOptions.Close();
+            vm.Session.Undo();
             Pump(vm.RunAsync());
             Check(vm.Results.State == ResultState.Failed && vm.Message.Contains("plane", StringComparison.OrdinalIgnoreCase), "running a spatial building with planar DOFs reports a capability error");
             vm.Session.Undo();
@@ -84,9 +101,14 @@ internal static class TemplateBuildingUiChecks
                 femSessionStore: new FemWorkingSessionStore(Path.Combine(folder, "legacy")));
             legacy.LoadDefaultFemModel(replaceCurrent: true);
             var cable = new AnalysisOptionsWindow(legacy.PlanarAnalysisSettings, legacy.ApplyPlanarAnalysisSettings, planar: true);
-            Check(!cable.DofEditors.IsEnabled && cable.UX.IsChecked == true && cable.UY.IsChecked == false && cable.RY.IsChecked == true,
-                "planar cable workspace states its actual XZ DOFs");
+            cable.Show(); Idle(); Snapshot(cable, ".work/analysis-options-main-window.png");
+            Check(cable.DofTab.Visibility != Visibility.Visible && !cable.UX.IsVisible && !cable.CableUX.IsVisible &&
+                  ReferenceEquals(cable.Tabs.SelectedItem, cable.FittingTab) && cable.Tolerance.IsVisible && cable.Sag.IsVisible,
+                "the main window's analysis options have no Degrees of Freedom tab — nothing on it could be changed there — and open on the cable settings");
+            Check(cable.ActualHeight < 500 && cable.CableScope.Text.Contains("XZ plane", StringComparison.Ordinal),
+                $"… the form is as tall as what is left on it ({cable.ActualHeight:0} px against the 560 px of the two-tab form), and says the model is analysed in its plane");
             cable.Tolerance.Text = "5"; cable.Iterations.Text = "150"; cable.Mesh.Text = "8"; cable.Sag.IsChecked = false;
+            // Apply still hands over the XZ degrees of freedom the form no longer shows; the main window refuses any other.
             Check(cable.ApplyForm() && legacy.FemTargetFitPercent == 5 && legacy.FemTargetFitIterations == 150 && legacy.FemFrameMeshSegments == 8 && !legacy.FemCableSag,
                 "cable fitting form updates the actual planar analysis inputs");
             cable.Mesh.Text = "101";
@@ -101,6 +123,7 @@ internal static class TemplateBuildingUiChecks
             Check(edit.IsEnabled && edit.Items.OfType<MenuItem>().Single(m => Equals(m.Header, "_TemplateBuilding…")).IsEnabled,
                 "TemplateBuilding also remains available on a blank model");
             shell.Close();
+            RunMonitor(folder);
             Check(string.IsNullOrWhiteSpace(bindings.ToString()), "new WPF forms and workspace have no reported binding errors: " + bindings);
         }
         finally
@@ -109,6 +132,75 @@ internal static class TemplateBuildingUiChecks
             form.Close();
             PresentationTraceSources.DataBindingSource.Listeners.Remove(listener);
         }
+    }
+    /// <summary>The run monitor of the main window: empty before a run; after Run Analysis on the default model, the
+    /// analysis log it opens on, the degrees of freedom of the run and one line per load case with its equilibrium.</summary>
+    private static void RunMonitor(string folder)
+    {
+        var state = StudyComposerChecks.CreateState();
+        var sap = new Program.FakeSap { Snapshot = new(state.Model!, state.Geometry, state.LoadPatterns.ToArray()) };
+        var workflow = new WorkflowService(sap, state);
+        var vm = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(sap, state, workflow),
+            femSessionStore: new FemWorkingSessionStore(Path.Combine(folder, "run-monitor")));
+        vm.LoadDefaultFemModel(replaceCurrent: true);
+        var shell = new MainWindow { DataContext = vm };
+        shell.Show(); Idle();
+        try
+        {
+            var run = shell.MainMenu.Items.OfType<MenuItem>().Single(m => Equals(m.Header, "_Run"));
+            run.Items.OfType<MenuItem>().Single(m => Equals(m.Header, "Analysis _Monitor")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Idle();
+            var monitor = shell.OwnedWindows.OfType<FemRunMonitorWindow>().Single();
+            TextBlock Line(string property) => Visuals<TextBlock>(monitor).Single(text =>
+                System.Windows.Data.BindingOperations.GetBindingExpression(text, TextBlock.TextProperty)?.ParentBinding.Path.Path == property);
+            var bar = Visuals<ProgressBar>(monitor).Single();
+            Check(monitor.Views.Items.OfType<TabItem>().Select(tab => tab.Header).SequenceEqual(["Analysis Log", "Equilibrium by Load Case", "Cable Target-Force Convergence"]) &&
+                  ReferenceEquals(monitor.Views.SelectedItem, monitor.LogTab) && monitor.LogBox.IsVisible && monitor.LogBox.Text.Length == 0 &&
+                  monitor.EquilibriumGrid.Items.Count == 0 && !Line(nameof(MainViewModel.FemMonitorDofText)).IsVisible &&
+                  !Line(nameof(MainViewModel.FemMonitorEquilibriumText)).IsVisible && bar.Value == 0 && !bar.IsIndeterminate,
+                "before a run the monitor opens on an empty analysis log, its equilibrium table is empty, and the lines that describe a run take no room");
+
+            var runs = FemModelFileChecks.Analyze(vm); Idle();
+            Snapshot(monitor, ".work/run-monitor-log-ui.png");
+            var shownLog = monitor.LogBox.Text.Split(Environment.NewLine);
+            Check(runs.Count == 1 && ReferenceEquals(monitor.Views.SelectedItem, monitor.LogTab) && monitor.LogBox.IsVisible && monitor.LogBox.IsReadOnly &&
+                  shownLog.Take(vm.FemLog.Count).SequenceEqual(vm.FemLog) && shownLog.Length == vm.FemLog.Count + 1 && shownLog[^1].Length == 0 &&
+                  shownLog[0].StartsWith(" B E G I N   A N A L Y S I S ", StringComparison.Ordinal) &&
+                  shownLog[^2].StartsWith(" A N A L Y S I S   C O M P L E T E ", StringComparison.Ordinal) &&
+                  shownLog.Count(line => line == FemRunLog.Stable) == vm.FemEquilibriumRows.Count,
+                $"Run Analysis writes the analysis log into the monitor as SAP2000 does: {vm.FemLog.Count} lines from BEGIN ANALYSIS to ANALYSIS COMPLETE, a stability check for every case solved");
+            Check(ReferenceEquals(monitor.LogBox.Foreground, monitor.FindResource("Accent")) && ReferenceEquals(monitor.LogBox.Background, monitor.FindResource("Raised")) &&
+                  ReferenceEquals(monitor.LogBox.FontFamily, monitor.FindResource("MonoFont")) && monitor.LogBox.TextWrapping == TextWrapping.NoWrap &&
+                  monitor.LogBox.VerticalOffset > 0 && monitor.LogBox.VerticalOffset + monitor.LogBox.ViewportHeight >= monitor.LogBox.ExtentHeight - 1,
+                "… in the look of that log — blue fixed-width text on white, lines not wrapped — and scrolled to its newest line");
+            monitor.Views.SelectedItem = monitor.EquilibriumTab; Idle();
+            Snapshot(monitor, ".work/run-monitor-ui.png");
+            Check(monitor.EquilibriumGrid.IsVisible && ReferenceEquals(shell.OwnedWindows.OfType<FemRunMonitorWindow>().Single(), monitor) &&
+                  vm.FemEquilibriumRows.Count >= 2 && monitor.EquilibriumGrid.Items.Count == vm.FemEquilibriumRows.Count &&
+                  monitor.EquilibriumGrid.Columns.Select(column => column.Header is TextBlock header ? header.Text : column.Header as string)
+                      .SequenceEqual(["Load case", "Solved DOFs", "Iterations", "Out-of-balance", "Accepted", "Joints converged", "Largest at", "Status"]),
+                $"Run Analysis fills the monitor's equilibrium table: {vm.FemEquilibriumRows.Count} load cases, each with its solved degrees of freedom, iterations, out-of-balance, joints converged and status");
+            var shown = Visuals<DataGridRow>(monitor.EquilibriumGrid).ToArray();
+            var statuses = shown.SelectMany(row => Visuals<TextBlock>(row)).Where(text => text.Name == "StatusText").ToArray();
+            Check(shown.Length > 0 && statuses.Length == shown.Length &&
+                  statuses.All(text => text.Text == FemEquilibriumRow.Converged && ReferenceEquals(text.Foreground, monitor.FindResource("Success"))),
+                $"… every line shown ({shown.Length}) reads Converged, in the colour of a good result");
+            var dofs = Line(nameof(MainViewModel.FemMonitorDofText));
+            var outcome = Line(nameof(MainViewModel.FemMonitorEquilibriumText));
+            Check(dofs.IsVisible && dofs.Text == vm.FemMonitorDofText && dofs.Text.Contains(" active", StringComparison.Ordinal) && dofs.Text.Contains(" solved", StringComparison.Ordinal) &&
+                  outcome.IsVisible && outcome.Text.StartsWith("Equilibrium reached in every load case", StringComparison.Ordinal) && bar.Value == 1 && !bar.IsIndeterminate,
+                $"… above it the degrees of freedom of the run and the outcome, with the bar full: {dofs.Text} {outcome.Text}");
+            monitor.Views.SelectedItem = monitor.ConvergenceTab; Idle();
+            Check(Visuals<Mcotis.Desktop.Presentation.Controls.ConvergenceChart>(monitor).Single() is { IsVisible: true } chart && chart.Ratios.Count > 0,
+                "… and the third view is the cable target-force convergence chart, with the fitting runs of the monitored cable");
+        }
+        finally { shell.Close(); }
+    }
+    private static IEnumerable<T> Visuals<T>(DependencyObject root) where T : DependencyObject
+    {
+        if (root is T match) yield return match;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            foreach (var found in Visuals<T>(VisualTreeHelper.GetChild(root, i))) yield return found;
     }
     private sealed class NoSelection : ISelectionService
     {

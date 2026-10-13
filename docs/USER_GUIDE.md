@@ -403,7 +403,11 @@ Category: Run
 Where: Run → Analysis Monitor
 See also: Run FEM Analysis
 
-The progress of the run and the convergence of each cable's target force (result / target per fitting run). Diagnostic details are collapsed by default.
+The run monitor: the progress bar of the run and, below it, three tabs. It opens with each run of [[Run FEM Analysis]], and Run → Analysis Monitor opens it again.
+
+- **Analysis Log** — opens first. Laid out like SAP2000's analysis log: the model in numbers (joints, restraints, frames, cables, load patterns, loads, cases and combinations), the cases to solve and the options, the equations (active, restrained and solved degrees of freedom), then a block per solve — the cable target-force fit with one line per equilibrium iteration (unbalance, joints converged, where the unbalance is largest), the stability check, the smallest pivot and the time. It closes with the largest axial force, deflection and slack cables of every case and combination and ANALYSIS COMPLETE; an unstable or non-converging case ends with an error block naming the joint and the movement, and a failed or cancelled run with ANALYSIS INCOMPLETE. The text can be selected and copied.
+- **Equilibrium by Load Case** — the equilibrium of each solved case.
+- **Cable Target-Force Convergence** — each cable's result / target per fitting run.
 
 # Unlock FEM Model
 Category: Run

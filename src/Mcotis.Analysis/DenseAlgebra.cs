@@ -125,7 +125,16 @@ internal static class DenseAlgebra
     /// <summary>Infinity-norm backward error in the diagonally equilibrated system; not a condition estimate.</summary>
     public static double ScaledResidual(double[,] a, double[] x, double[] b)
     {
-        double matrixNorm = 0, solutionNorm = 0, loadNorm = 0, residualNorm = 0;
+        double worst = 0;
+        foreach (double value in ScaledResiduals(a, x, b)) worst = Math.Max(worst, value);
+        return worst;
+    }
+
+    /// <summary>The backward error of <see cref="ScaledResidual"/> equation by equation; that one is the largest of these.</summary>
+    public static double[] ScaledResiduals(double[,] a, double[] x, double[] b)
+    {
+        double matrixNorm = 0, solutionNorm = 0, loadNorm = 0;
+        var residuals = new double[x.Length];
         for (int i = 0; i < x.Length; i++)
         {
             double rowNorm = 0, residual = -b[i];
@@ -138,9 +147,11 @@ internal static class DenseAlgebra
             matrixNorm = Math.Max(matrixNorm, rowNorm);
             solutionNorm = Math.Max(solutionNorm, Math.Abs(x[i] * si));
             loadNorm = Math.Max(loadNorm, Math.Abs(b[i] / si));
-            residualNorm = Math.Max(residualNorm, Math.Abs(residual / si));
+            residuals[i] = Math.Abs(residual / si);
         }
         double denominator = matrixNorm * solutionNorm + loadNorm;
-        return denominator == 0 ? residualNorm : residualNorm / denominator;
+        if (denominator != 0)
+            for (int i = 0; i < residuals.Length; i++) residuals[i] /= denominator;
+        return residuals;
     }
 }
