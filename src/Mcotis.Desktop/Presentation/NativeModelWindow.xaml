@@ -12,6 +12,18 @@
    <MenuItem Header="_Run"><MenuItem Header="Analysis _Options…" Click="Options_Click"/><MenuItem Header="_Run Analysis" Click="Run_Click" InputGestureText="F5"/></MenuItem>
   </Menu>
   <StackPanel DockPanel.Dock="Top" Margin="8,4">
+   <WrapPanel Margin="0,2,0,6" VerticalAlignment="Center">
+    <TextBlock Text="View" VerticalAlignment="Center" Margin="0,0,8,0"/>
+    <ComboBox x:Name="ViewOrientation" Width="145" SelectedIndex="0" SelectionChanged="ViewOrientation_Changed">
+     <ComboBoxItem Content="3D"/><ComboBoxItem Content="XY plan @ Z"/><ComboBoxItem Content="XZ elevation @ Y"/><ComboBoxItem Content="YZ elevation @ X"/>
+    </ComboBox>
+    <TextBlock x:Name="FixedAxisLabel" Text="Coordinate (m)" VerticalAlignment="Center" Margin="12,0,6,0"/>
+    <Button Content="◀" Width="27" Click="PreviousLevel_Click" ToolTip="Previous grid/level"/>
+    <ComboBox x:Name="ViewCoordinate" Width="116" IsEditable="True" IsEnabled="False"
+      SelectionChanged="ViewCoordinate_Changed" LostKeyboardFocus="ViewCoordinate_Commit"/>
+    <Button Content="▶" Width="27" Click="NextLevel_Click" ToolTip="Next grid/level"/>
+    <TextBlock x:Name="ReferenceKind" Text="Model coordinates" VerticalAlignment="Center" Margin="10,0,0,0"/>
+   </WrapPanel>
    <TextBlock Text="{Binding Summary}" FontWeight="SemiBold"/>
    <WrapPanel Margin="0,6,0,2" IsEnabled="{Binding Editable}">
     <TextBlock Text="Load case" Margin="0,0,8,0"/><ComboBox ItemsSource="{Binding Cases}" SelectedItem="{Binding SelectedCase}" DisplayMemberPath="Name" Width="190" AutomationProperties.Name="Analysis load case"/>
@@ -23,7 +35,7 @@
   </Border>
   <Grid>
    <Grid.RowDefinitions><RowDefinition Height="3*"/><RowDefinition Height="5"/><RowDefinition Height="2*"/></Grid.RowDefinitions>
-   <c:Structural2DViewer x:Name="Viewer" Model="{Binding Geometry}" PinSupportPoints="{Binding Supports}" ShowPointLabels="False" ShowFrameLabels="False" ShowDimensions="False"
+   <c:Structural2DViewer x:Name="Viewer" Model="{Binding VisibleGeometry}" PinSupportPoints="{Binding Supports}" ShowPointLabels="False" ShowFrameLabels="False" ShowDimensions="False"
                          FemResult="{Binding ModalDisplayResult}" FemResultMode="DeflectedShape" DeflectionIsModeShape="True"/>
    <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"/>
    <TabControl Grid.Row="2" Margin="8,0,8,8">
