@@ -32,3 +32,70 @@ The native model window's viewport receives an independent orientation/coordinat
 5. Grid labels, offsets and model units formatted correctly; no duplicate or ambiguous names.
 6. Explicit visibility of viewplane controls when 3D/XY/XZ/YZ changes.
 7. UI regression checks for plan selection, coordinate stepping, typing and projection switch.
+
+## Detailed implementation checklist — SAP2000 / ETABS style
+
+This checklist complements [GEOMETRY_EDITING_PLAN.md](GEOMETRY_EDITING_PLAN.md). All unchecked items are planned, not implemented.
+
+### Grid Systems WPF design
+- [ ] Build `Define > Grid Systems...` WPF dialog with grid-system selector, `New / Duplicate / Rename / Delete` and coordinate reference (X origin, Y origin, rotation). Version 1 supports Cartesian only.
+- [ ] Tab `Grid Lines`: two DataGrids for X and Y lines, columns `Grid ID | Coordinate (m) | Spacing from Previous (m) | Visible`; preserve user-edited coordinate ordering, and use named X grids `1, 2, 3` and Y grids `A, B, C` by default.
+- [ ] Tab `Quick Grid`: number of bays NX/NY, uniform DX/DY, origin X/Y; optional list of unequal spacings, with actual computed coordinates preview. Positive counts, finite coordinates, collision-free names and actionable validation.
+- [ ] Tab `Display`: axis bubble labels at model extents, line style, extents, show grid coordinates, default visibility; options should not generate physical FE joints.
+- [ ] Stage changes until Apply/OK; Cancel must leave model unchanged; Apply should commit one undoable edit and update the viewport without losing camera state.
+- [ ] Persist grid definitions in versioned native document data and Save/Open .mcotis; backward compatibility for models created without reference grids.
+
+### Story and Z spacing controller
+- [ ] Build `Define > Levels...` form with table `Name | Z Elevation | Height to Above | Show`. Editing a level's elevation adjusts its displayed reference plane only, not connected FE geometry.
+- [ ] `Generate Levels` dialog fields `Base Z | Number of Storeys | Typical Storey Height`; allow individually edited heights and custom names after generation.
+- [ ] Support manual Z plane not matching a named level. Display current plane and coordinate in the viewport ribbon, including negative elevations and unit suffix.
+- [ ] Optional checkbox `Generate FE Joints at Grid Intersections`, **off by default**; first show count and coordinate preview and ensure point IDs/names are unique and deduplicated with model-space tolerance.
+
+### View switching and grid rendering
+- [ ] Replace split-brain native toolbar versus internal viewer projection with single synchronized `ActiveViewContext`; both selectors must show exactly the same active view.
+- [ ] XY uses `Z=constant`, XZ uses `Y=constant`, YZ uses `X=constant`. For 3D, no fixed coordinate. Per-view camera state is maintained across transitions.
+- [ ] Show level/grid list from persisted definitions, with an `At coordinate...` option; previous/next navigates saved named references, not every joint coordinate when named grids exist.
+- [ ] Draw light dashed grids under structural members, labelled bubbles, subtle current-plane highlight and visible origins; gridlines are non-selectable reference visuals.
+- [ ] Render XY grid crossings and XZ/YZ level intersections for snapping with distinct `Grid intersection` glyph; avoid confusing geometric crossings with actual connected joints.
+- [ ] Preserve fit/zoom/pan/selection and avoid full-frame rebuilds on mouse movement. Transition should remain smooth even when no members lie in the selected view.
+
+### Connected workflows
+- [ ] Point dialog's `On active plane` mode auto-fixes the out-of-plane coordinate; user controls remaining two coordinates by typing or snap.
+- [ ] Frame draw I/J coordinates and live preview use the same plane and grid data. A grid intersection becomes an FE joint only after an explicit Add Point / Draw Frame action.
+- [ ] Model view settings and reference geometry must not modify analysis DOFs or solver state; structural edits do invalidate prior results.
+- [ ] Tests: irregular grids, renamed/moved lines, story Z changes, duplicate/negative coordinates, save/open, undo/redo, mixed 2D/3D plane switching and imported models.
+
+### UI form layout sketch
+
+```text
+Define Grid Systems
+┌─────────────────────────────────────────────────────────┐
+│ Grid system: [GLOBAL v]    [New] [Copy] [Rename]       │
+│ [Grid Lines] [Quick Grid] [Display]                    │
+│                                                         │
+│ X Grids                        Y Grids                  │
+│ ID   Coordinate   Spacing     ID   Coordinate   Spacing │
+│ 1      0.000        —        A      0.000       —      │
+│ 2      6.000       6.000     B      4.000      4.000   │
+│ 3     14.000       8.000     C      9.000      5.000   │
+│ [+] [-]                       [+] [-]                   │
+│                                                         │
+│ Origin X [0.000] Origin Y [0.000] Angle [0.0°]        │
+│                                                         │
+│                    [Preview] [Apply] [Cancel] [OK]     │
+└─────────────────────────────────────────────────────────┘
+
+Add Joint / Point
+┌───────────────────────────────────────────┐
+│ Name      [ Auto P...         ]           │
+│ Reference [Absolute XYZ       v]          │
+│ X (m)     [ 14.000            ] [Pick]     │
+│ Y (m)     [  4.000            ] [Pick]     │
+│ Z (m)     [  9.300            ]            │
+│ [x] Use active work plane                 │
+│                                           │
+│         [Add Point] [Add Next] [Cancel]  │
+└───────────────────────────────────────────┘
+```
+
+**Dependency:** persistent grids/levels first, then canvas rendering and snapping, then coordinate forms and frame editor. Do not auto-create a full Cartesian FEM mesh simply by defining a visual grid.
