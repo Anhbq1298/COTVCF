@@ -51,7 +51,7 @@ internal static class NativeGridLevelController
         };
         var visible = geometry.Points.Where(p => Math.Abs(Axis(p.Value) - coordinate) <= Tolerance)
             .ToDictionary(p => p.Key, p => p.Value);
-        var members = geometry.Members.Where(m => visible.ContainsKey(m.StartPoint) && visible.ContainsKey(m.EndPoint)).ToArray();
+        var members = geometry.Members.Where(m => visible.ContainsKey(m.Start) && visible.ContainsKey(m.End)).ToArray();
         return new GeometryModel(visible, members);
     }
 }
