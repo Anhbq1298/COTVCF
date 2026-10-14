@@ -18,6 +18,13 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-15 · Geometry canvas and grid/level WPF UX roadmap
+- Status: Planned
+- Who: Unassigned
+- Where: Define → Grid Systems / Levels; Draw → Point / Frame; Edit → Move / Delete; Display → Show Display Options (Ctrl+W); native modelling viewport
+- What: Roadmap in docs/geometry/GEOMETRY_EDITING_PLAN.md and GRID_LEVEL_CONTROLLER.md for persistent X/Y gridlines, Z levels, X/Y/Z spacing forms, coordinate joint creation, frame editing, snapping, smooth XY/XZ/YZ/3D transitions and a working canvas. Checklists are plans, not completed implementations.
+- Checks: none yet
+
 ## 2026-10-14 · Moment at a fixed support in the reactions
 - Status: Planned
 - Who: Unassigned
