@@ -256,7 +256,8 @@ public sealed class FemStudyService
         bool cableSag = false,
         IProgress<FemEquilibriumProgress>? equilibrium = null,
         Mcotis.Core.DofMask activeDofs = Mcotis.Core.DofMask.XZ,
-        Mcotis.Core.DofMask cableDofs = Mcotis.Core.DofMask.Translations)
+        Mcotis.Core.DofMask cableDofs = Mcotis.Core.DofMask.Translations,
+        IReadOnlyDictionary<string, Mcotis.Core.Restraint>? jointRestraints = null)
     {
         if (frameMeshSegments is < 1 or > FemSolver.MaximumFrameMeshSegments)
             throw new ArgumentOutOfRangeException(nameof(frameMeshSegments), $"Frame mesh must be between 1 and {FemSolver.MaximumFrameMeshSegments} segments per frame.");
@@ -287,7 +288,7 @@ public sealed class FemStudyService
                 if (loadPlan is null)
                     result = solver.Solve(geometry, frameProperties, cableProperties, candidate.PretensionTargetsKN,
                         candidate.Loads, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments, cableSag,
-                        Follow(null, 0, 1), activeDofs, cableDofs);
+                        Follow(null, 0, 1), activeDofs, cableDofs, jointRestraints);
                 else
                 {
                     // Load cases from the SAP model (as edited), then linear-additive combinations of their results.
@@ -300,7 +301,7 @@ public sealed class FemStudyService
                         foreach (var (name, caseResult) in solver.SolveCases(geometry, frameProperties, cableProperties,
                                      fitStage is null ? new Dictionary<string, double>() : candidate.PretensionTargetsKN,
                                      fitLoads, cases, pinSupports, cancellationToken, targetFitPercent, maximumTargetFitIterations, frameMeshSegments, cableSag,
-                                     Follow(fitStage, stage, stages.Count), activeDofs, cableDofs))
+                                     Follow(fitStage, stage, stages.Count), activeDofs, cableDofs, jointRestraints))
                             caseResults[name] = caseResult;
                     }
                     results = loadPlan.Complete(caseResults);

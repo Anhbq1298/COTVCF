@@ -348,7 +348,7 @@ Removes the joints, frames and cables selected on the model view, after an OK / 
 
 - As in SAP2000, deleting a joint also deletes the members connected to it; deleting a member leaves its end joints.
 - Everything that names a removed object follows: member properties, loads on removed objects, Tab 01 loaded points and point loads, the Tab 02 chord groups (the baseline is captured again; if a group becomes invalid the message says so), Tab 03 cables (a cable that followed a removed one becomes independent) and the output lists.
-- FEM results are cleared and supports are worked out again from the new geometry.
+- FEM results are cleared. A restraint the model holds goes with its joint; the automatic pins of a model without restraints are worked out again from the new geometry.
 - The model becomes an offline "· edited" model; SAP2000 is never changed.
 
 The Del key does nothing while you type in a field or a table.
@@ -358,7 +358,12 @@ Category: Assign
 Where: Assign → Joint → Restraints (Pin Supports)…
 See also: Run FEM Analysis
 
-The supports of the model. In the 2D analysis the lowest joints are pinned automatically; the page shows which joints are restrained.
+The supports of the model; the page shows which joints are restrained.
+
+- A model imported from SAP2000 or ETABS is held as that model restrains it, component by component (UX, UY, UZ, RX, RY, RZ): a fixed support stays fixed and a roller stays a roller. The restraints are saved with the configuration and written back by Export to SAP2000 / ETABS.
+- A model that holds no restraint — the VCF system, a configuration saved by an older version — has its lowest column bases pinned automatically (translations restrained, rotations free).
+- Joints held in the XZ plane are drawn as supports in the viewer, and the reactions are reported at them. The reactions are the forces in X and Z; the moment at a fixed support is not listed yet.
+- The page is read-only: restraints cannot be edited here yet.
 
 # Assign frame sections
 Category: Assign

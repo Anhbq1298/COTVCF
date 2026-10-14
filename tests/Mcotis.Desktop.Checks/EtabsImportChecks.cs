@@ -50,6 +50,11 @@ internal static class EtabsImportChecks
             "Load TAS leaves an offline model ready to run; VCF System recognises that the TAS arch must be replaced rather than edited as VCF — " + string.Join(" | ", summary.Lines));
         Check(vm.OfflineModelName == "TAS - Tied Arch System" && vm.Message.StartsWith("Loaded TAS - Tied Arch System", StringComparison.Ordinal),
             $"the model is named TAS - Tied Arch System in the title bar ({vm.OfflineModelName}; {vm.Message})");
+        var nativeTas = vm.NativeDocumentSession.Document;
+        Check(nativeTas.Points.Count == a.Points.Count && nativeTas.Frames.Count == a.Members.Count(member => member.Kind == MemberKind.Frame) &&
+              nativeTas.LoadCases.Count == vm.FemCaseRows.Count &&
+              nativeTas.Points.Values.All(point => point.Origin is { Kind: Mcotis.Core.OriginKind.Generated, GenerationKey: not null }),
+            "Load TAS initializes the central native model as generated 3D geometry with its load cases; TAS remains a template, not a second model type");
 
         var replacement = NewViewModel(out var replacementSap);
         replacement.LoadTasModel();
@@ -375,6 +380,13 @@ internal static class EtabsImportChecks
         Check(vm.FemCaseRows.Count(row => row.Run) == 9 && vm.FemCaseRows.Single(row => row.Name == "MODAL") is { Run: false, Supported: false } &&
               vm.FemCombinationRows.Count == 8 && vm.FemCombinationRows.All(row => row.Run),
             "the 9 static ETABS cases are set to run (MODAL is not static) and the 8 linear additive combinations are evaluated");
+        var native = vm.NativeDocumentSession.Document;
+        var expectedRestraints = EtabsImport.Convert(EtabsE2kReader.Read(File.ReadAllText(E2k), E2k)).Restraints;
+        Check(native.Points.Count == state.Geometry.Points.Count && native.Frames.Count == state.Geometry.Members.Count &&
+              native.LoadCases.Count == vm.FemCaseRows.Count && native.LoadCombinations.Count == vm.FemCombinationRows.Count &&
+              native.Points.Values.All(point => point.Origin is { Kind: Mcotis.Core.OriginKind.Imported, SourceProduct: "ETABS" }) &&
+              expectedRestraints.All(item => native.RestraintOf(native.Points.Values.Single(point => point.Name == item.Key).Id) == item.Value),
+            "ETABS import hands geometry, exact six-DOF restraints, assignments, loads and cases to the central native document before analysis");
 
         // the run: every case and combination in equilibrium with the loads ETABS defines
         var runs = FemModelFileChecks.Analyze(vm);

@@ -18,6 +18,78 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-14 · Moment at a fixed support in the reactions
+- Status: Planned
+- Who: Unassigned
+- Where: Run → Run FEM Analysis → Reactions (viewer, table, hover); the FEM output database and reports
+- What: Since a model can be held on fixed supports (entry below), a support can carry a moment. The reactions list
+  the forces in X and Z only; the moment about Y is in the frame's end moment on the bending moment diagram, not in
+  the reactions. To add: the moment in the support reaction, its arrow and value in the viewer, the table, the
+  output database and the reports — with its sign convention stated.
+- Checks: none yet
+
+## 2026-10-14 · Run FEM Analysis holds a model as SAP2000 or ETABS restrains it
+- Status: Done
+- Who: Codex, markbui, Claude
+- Where: Run → Run FEM Analysis; Assign → Joint → Restraints; Object Information of a joint; File → Import From SAP2000 /
+  Import From ETABS (summary); File → Export to SAP2000 / Export to ETABS (preview); Save / Load MCOTiS Config
+- What: A model imported from SAP2000 or ETABS is analysed on the joint restraints that model has, component by
+  component (UX, UY, UZ, RX, RY, RZ): a fixed support is fixed and a roller is a roller, no longer every support a
+  pin at the lowest column bases. The restraints are part of the model: saved in `.cotfem.db` and `.cotfem.json`,
+  moved with a renamed joint and removed with a deleted one, shown on Assign → Joint Restraints and in Object
+  Information. A model that holds none — the VCF system, a configuration of an older version — keeps the pins found
+  at its column bases, as before; where none is found the run reports what is not held. Supports are drawn, and
+  reactions listed, at the joints held in the XZ plane (the TAS model also holds 24 joints in UY only). Exports: a
+  model with restraints is written as it is — every component, and a joint it leaves free is freed in the target;
+  a model without them only pins a column base the target leaves free and keeps the target's own restraints. The
+  export preview says how many joints change. Both exports set the target's active DOFs to the model's. Known
+  limits: the reactions table has the forces in X and Z only — the moment at a fixed support is not listed yet;
+  restraints cannot be edited in the main window yet; Optimization VCF and Optimization TAS still analyse their
+  candidates on pinned column bases, so for an imported model with other supports they differ from Run FEM
+  Analysis; the changed export code has not been run against a live SAP2000 or ETABS (the checks use stand-ins).
+- Checks: --fem (a cantilever on one fixed support, closed form); --sap-import (a fixed base among pins: run, export,
+  a restrained joint deleted then run at once, Save / Load as .cotfem.json, the VCF model's pins exported as a rule);
+  --fem-model (a connected model run before any autosave); --etabs-import; --etabs-export; --fem-db;
+  Mcotis.Desktop.Checks --full; Mcotis.Checks --full
+
+## 2026-10-14 · Main workspace hands every model to one native 3D document
+- Status: In progress
+- Who: Codex, markbui, Claude
+- Where: Startup / Load VCF / Load TAS / Load Config; File → Import From SAP2000 / Import From ETABS; FEM working autosave
+- What: The model open in the main workspace now also owns one `DocumentSession` / `ModelDocument`. VCF and TAS are
+  recorded as generated templates with stable `GenerationKey` identities; SAP2000 and ETABS models are recorded as
+  imports with their source names. The handoff preserves XYZ geometry, effective frame/cable properties, the joint
+  restraints the model is analysed with (see the entry above), pattern loads, cable targets, load cases,
+  combinations, mass sources and analysis DOFs, and the document can round-trip through `.mcotis`. The document is
+  brought up to the model when it is loaded or imported, at each working autosave and when a run locks it. It is a
+  copy of the model, not yet the model the window works on: the controls, the viewer and the run still read the
+  window's own model, and nothing a user sees changes yet. A model the document cannot express still opens, runs
+  and saves. The document is the same model as the one that is run: solved as it is by the standalone solver it
+  gives the results of Run FEM Analysis to round-off (relative differences of the order of 1E-11; the check accepts
+  1E-8) in every static case of the VCF system, the tied arch system with and without its cable, the ETABS import
+  and a VCF model on a fixed base — 17,856 values. One gap is known: a frame whose section holds no bending inertia out of the plane (members
+  of the SAP2000 check model) is solved by the run in its plane and refused when the document is solved. Next: the
+  run reading the document, VCF and TAS as native generators, the viewer reading the document, `.mcotis` as the
+  window's file.
+- Checks: --native-parity (the document solved against the run, and the known gap); --fem-db; --fem-schema;
+  --sap-import (full stand-in import → FEM → export); --etabs-import (full offline import, native handoff, TAS
+  generation and FEM); --etabs-export; Mcotis.Desktop.Checks --full; --dev-log; MCOTiS.sln build
+
+## 2026-10-13 · Native modal eigen analysis with explicit physical mass
+- Status: Done
+- Who: Codex
+- Where: Native model window → Define → Modal Eigen Case…; Assign → Joint Mass…; Run → Run Analysis; Modes,
+  Modal participation and Mode shape amplitudes result tabs
+- What: Native elastic frame models can define a named lumped mass source, include member `rho A L` self mass and
+  six-component joint mass/inertia, extract mass-normalized Eigen modes, and inspect frequency, period, residual,
+  UX/UY/UZ effective/cumulative mass, physical/free mass inventory and relative 2D/3D mode shapes. Free massless DOFs are condensed exactly rather
+  than restrained or given fictitious mass. Native schema 5 persists the inputs and migrates schemas 3/4. A requested
+  nonlinear/P-Delta stiffness state, cable mode or shell remains explicitly refused until its independently verified
+  tangent/mass formulation exists; it never falls back to elastic stiffness.
+- Checks: Mcotis.Checks --full (closed forms, mass conservation, persistence, refusals and two independently generated
+  OpenSeesPy 3.8.0 modal models); Mcotis.Desktop.Checks --template-building-ui (3D modal run, results and bindings);
+  both default smoke suites; MCOTiS.sln build; --dev-log
+
 ## 2026-10-13 · Cable force fitting is shown only for a model that has cables
 - Status: Done
 - Who: markbui, Claude

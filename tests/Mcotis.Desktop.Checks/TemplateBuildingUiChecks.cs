@@ -48,6 +48,25 @@ internal static class TemplateBuildingUiChecks
             Check(window.Viewer.Model.Points.Count == 18 && window.Viewer.Model.Members.Count == 26 && window.Viewer.CurrentPlane == "3D",
                 "the native workspace displays the generated spatial geometry");
             Check(vm.Session.CanUndo && vm.Loads.Count() == 14, "generation is undoable and line loads appear in the workspace");
+            var nativeMenu = (Menu)((DockPanel)window.Content).Children[0];
+            Check(nativeMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Define")) &&
+                  nativeMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Assign")),
+                "the native workspace exposes compact Define and Assign workflows for modal cases and joint mass");
+            vm.Session.Execute(DocumentCommands.Edit("Test modal mass", editor =>
+            {
+                foreach (var point in vm.Session.Document.Points.Values) editor.SetJointMass(new(point.Id, 1, 1, 1));
+            }));
+            vm.DefineModal(new("BuildingModes", "BuildingMass", false, true, 3));
+            Pump(vm.RunAsync()); Idle();
+            Check(vm.Results.State == ResultState.Current && vm.Modes.Count() == 3 && vm.Participation.Count() == 9 &&
+                  vm.Modes.All(mode => mode.Frequency is > 0 && mode.Period is > 0 && mode.Residual < 1e-8),
+                "the native modal run reports three positive frequencies, periods, residuals and directional participation rows");
+            Check(vm.ModalDisplayResult is not null && vm.ModeShape.Count() == 18,
+                "the selected mass-normalized eigenvector is available to both the mode-shape table and viewport adapter");
+            Check(vm.ModalMass.Any(row => row.Item == "Free UX" && row.Value > 0) &&
+                  vm.ModalMass.Count(row => row.Item.StartsWith("Centre of mass", StringComparison.Ordinal)) == 3,
+                "the modal mass inventory states assigned/free components and the physical centre of mass");
+            vm.SelectedCase = vm.Cases.Single(item => item.Kind == CaseKind.LinearStatic);
             var before = vm.Session.Document;
             var options = new AnalysisOptionsWindow(before.Settings, settings => vm.Session.Execute(DocumentCommands.SetSettings(settings)));
             options.Show(); Idle(); Snapshot(options, ".work/analysis-options-ui.png");

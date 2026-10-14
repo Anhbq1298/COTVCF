@@ -46,6 +46,7 @@ public sealed partial class MainViewModel
             var frames = State.Geometry.Members.Count(member => member.Kind == MemberKind.Frame);
             var cableMembers = State.Geometry.Members.Where(member => member.Kind == MemberKind.Cable).Select(member => member.Name).ToArray();
             lines.Add($"Model: {State.Model?.Name} · {State.Geometry.Points.Count} joints, {frames} frames, {cableMembers.Length} cables");
+            lines.Add($"Native restraints: {State.JointRestraints.Count} SAP2000 joint assignment(s), all six global components preserved");
             if (State.Geometry.Members.Count == 0) throw new InvalidOperationException("The active SAP2000 model has no frames or cables to import.");
 
             Message = "Reading member properties, loads, load cases and combinations…";
@@ -114,6 +115,7 @@ public sealed partial class MainViewModel
             finally { applyingProject = false; }
 
             ResetFemLoadRows();
+            ResetFemDofs();
             ClearFemResults();
             RegenerateStudyPreview();
             SelectedTab = TabFem;
@@ -124,6 +126,7 @@ public sealed partial class MainViewModel
             lines.Add(ready ? "Ready: Run → Run FEM Analysis solves the imported model." : $"Not ready to run yet: {blocker ?? "no working model"}");
             Message = ready ? "Imported the active SAP2000 model — ready to run (read-only; SAP2000 unchanged)."
                             : "Imported the active SAP2000 model — see the import summary for what is still needed.";
+            StartNewMcotisConfigurationFile(LegacyNativeDocumentMigration.Source.Imported("SAP2000"));
             return new SapImportSummary(ready, lines);
         }
         catch (System.Runtime.InteropServices.COMException)

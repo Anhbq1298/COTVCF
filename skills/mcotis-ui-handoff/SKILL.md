@@ -43,7 +43,10 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   tolerance/iterations/mesh/sag; the native dialog offers 3D/planar/custom DOFs and marks cable/mesh controls inactive. Native engine since 2026-10-12: `Mcotis.Analysis.StaticSolver` — frames
   split at points lying on them, tension-only cables, cable target forces, staged nonlinear cases, cable sag; validated
   before its results were shown (`docs/analysis/cable-static-verification.md`). Native limits: 600 free / 2,400 total
-  DOFs, small displacements, no result-file storage, no slabs/diaphragms, no shells/P-Delta/modal; the template form
+  DOFs, small displacements, no result-file storage, no slabs/diaphragms, no shells/P-Delta. Unstressed elastic
+  frame Modal Eigen is available in the native workspace: Define → Modal Eigen Case, Assign → Joint Mass, then
+  Run Analysis; cable/tangent-state modes remain explicitly unavailable. Modal mode shapes are mass-normalized
+  relative amplitudes, not physical displacements. The template form
   creates frames only. **One solver everywhere** (user, 2026-10-12: "put in archive for planar frame solver and do the
   general solver now", then "use general solver every where"): the main window's Run FEM Analysis and Optimization VCF
   run it too, through `Application/FemSolver.cs` (same inputs, options, result types and numbers as before; XZ degrees
@@ -91,8 +94,56 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   in the XZ plane** (`Program.Main` sets `MainViewModel.StartingDofs = PlaneDofs`): every expected value in them is
   of the analysis in the plane; the 3D start is checked where it is the subject. A movement that is on and that nothing holds is reported as
   an unstable model in both windows — a segmented cable through a cable-only joint or a free cable end now stops a
-  main-window run. Native files are schema 4 (load-case kinds, below). **Validate before showing a result** (same message): see AGENTS.md. Full scope: `docs/native-building-ui.md`;
+  main-window run. Native files are schema 5 (load-case kinds plus modal joint masses, below). **Validate before showing a result** (same message): see AGENTS.md. Full scope: `docs/native-building-ui.md`;
   checks `--template-building-ui`. Preserve Apply/OK/Cancel semantics and the result current/stale state.
+- **One central native model, in progress** (user, 2026-10-13: "tao muốn model khởi tạo là trung tâm, có thể lưu đc,
+  template kia chỉ là giúp model nhanh thôi, còn fem phải dựa vào 3d và loadcase"; then "các tính năng import sap
+  etabs export phải sure là xài đc"; "làm đi"). Target: the main window holds one `DocumentSession` / `ModelDocument`,
+  VCF / TAS / TemplateBuilding only generate objects into it, every analysis runs from that document and its load
+  cases, SAP2000 / ETABS are adapters around it. State on 2026-10-14:
+  - `MainViewModel.NativeDocumentSession` holds the native document of the model open in the main window. It is built
+    from the legacy state by `Application/LegacyNativeDocumentMigration.Convert` (a temporary boundary) at Load VCF /
+    Load TAS / Load Config / Import, at each working autosave and when a run locks the model
+    (`SyncNativeDocument`). **It is a projection, not yet the working model**: the controls, the viewer and
+    `FemSolver` still read the legacy state. Do not read model data for a run or an export from the session — it is
+    as old as the last sync; a freshly connected model had no supports at all that way (`--fem-model` caught it). A
+    model the document cannot express stays open, runs and saves; the session then holds an empty document and
+    `NativeDocumentProblem` the reason.
+  - **Joint restraints are data** — `ApplicationState.JointRestraints`, six components by joint name: read from
+    SAP2000 (`PointObj.GetRestraint` in `SapGateway.ReadAsync`) and ETABS, saved in `.cotfem.db` and `.cotfem.json`
+    (`FemJointRestraintDto`), following joint renames and deletions. **One rule gives the restraints a model is
+    analysed, shown and exported with**: `LegacyNativeDocumentMigration.Restraints` (view model:
+    `FemJointRestraints`) — the assignments the model holds; a model that holds none (the VCF system, an older
+    configuration) has pins at its column bases (`FemStudyService.FindPinSupportPoints`, as always). The run, the
+    native document, the exports, the viewer symbols, Object Information and Assign → Joint Restraints all use it.
+    `FemSolver.SolveCases(…, jointRestraints)` applies every component; reactions and support symbols are at the
+    joints held in the plane (`FemSolver.HoldsInPlane`: UX, UZ or RY) — the TAS model also holds 24 joints in UY only.
+    The reactions table still has X and Z only: **the moment at a fixed support is not reported yet**. The
+    optimizations (`VcfOptimizationRunner`, `TasOptimization`) and the study candidates still pin the column bases
+    of each candidate geometry (`FindPinSupportPoints`): the same as the run for VCF and TAS, not for an imported
+    model with other supports.
+  - Exports: with assignments (`SapExportModel.RestraintsAssigned`) every joint is written as the model holds it and
+    a joint it leaves free is freed; without them only a column base the target leaves free becomes a pin and the
+    target's own restraints are kept, as before. The preview states how many joints change. Both exports set the
+    target's active DOFs to the model's. **Not run against a live SAP2000 / ETABS since these changes** (the offline
+    checks use stand-ins that do not execute the gateway code): do that before relying on a real export.
+  - **The document is the model that is run** (`--native-parity`, in `--full`): solved as it is by
+    `ModelCompiler` + `StaticSolver`, the document gives the results of Run FEM Analysis to round-off (relative
+    differences ~1E-11, accepted 1E-8) in every static case of VCF, TAS, TAS with its cable, the ETABS .e2k import
+    and VCF on a fixed base — joint displacements and rotations, reactions, cable forces, frame end forces. So
+    `LegacyNativeDocumentMigration.Convert` (patterns, cases that continue from one another, target forces in their
+    pattern, self-weight by multiplier) and `FemSolver`'s own description (accumulated loads per case, a separate
+    fit stage, cable loads at the ends) are the same model. That is the gate for moving the run onto the document.
+    Two things to settle when doing it: (1) **a frame without out-of-plane inertia** — `FemSolver` runs it in the
+    plane (it passes the in-plane inertia where the engine only needs a positive number), `StaticSolver` refuses the
+    document (`static.section.stiffness` asks for I22 and I33 even in a plane preset); the check pins this as the
+    known gap, on the SAP2000 stand-in model. Do not put a made-up inertia in the document. (2) **Round-off depends
+    on identities**: the engine orders its equations by object id; `FemSolver` numbers ids in creation order, so a
+    model always gives the same digits, while `Convert` derives ids from the configuration's `DatabaseId`, which is
+    new for each default model — the last digits then differ from session to session.
+  - Not done: the run and the viewer reading the document, native VCF / TAS generators, editing restraints in the
+    main window, the moment at a fixed support in the reactions, `.mcotis` as the main window's file. Plan:
+    `docs/mcotis-standalone-plan.md` phases 5–7.
 - `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/` and `.work/` wherever they are.
 - The app is a WPF app targeting `net8.0-windows`, `x64`, with SAP2000 API reference `CSiAPIv1.dll`.
 
@@ -179,7 +230,8 @@ earlier tall-header / large-button / blue-block look.
     Offline checks: `--sap-import`.
     · **Export to SAP2000…** (after Import): writes the Mcotis model into the model open in SAP2000, ready to run there.
     `MainViewModel.BuildSapExportModel` (MainViewModel.Export.cs) → `SapExportModel` (Application/SapExport.cs): geometry,
-    member properties, materials / sections, pin supports, load patterns, Run Analysis's Tab 01 joint loads and Tab 03
+    member properties, materials / sections, supports (joint restraints, see "One central native model") and active
+    DOFs, load patterns, Run Analysis's Tab 01 joint loads and Tab 03
     targets (`FemStudyService.ComposeModel`), supported case rows (with Run) and linear additive combinations. Flow:
     `PreviewSapExportAsync` (read-only: attach via `WorkflowService.PeekActiveModelAsync`, validate everything, list the
     planned changes) → OK / Cancel dialog → `ExportToSapAsync`. `SapGateway.ExportModelAsync` (SapGateway.Export.cs,
@@ -187,7 +239,8 @@ earlier tall-header / large-button / blue-block look.
     confirmed (results deleted); order: materials → frame / cable sections (existing SAP general / Section Designer sections
     kept) → delete members not in Mcotis (or rewired) and their unconnected joints → move joints (undeformed-length cables
     keep their relative length) → add joints / members (new cables copy a kept cable's shape definition) → section, local
-    axis, in-plane moment releases, modifiers → pins on unrestrained supports → patterns → Tab 01 joint loads (replace) →
+    axis, in-plane moment releases, modifiers → supports (the model's restraints as they are; for a model that holds
+    none, pins on unrestrained column bases) and active DOFs → patterns → Tab 01 joint loads (replace) →
     cable target forces → cases (new nonlinear: P-Δ + large displacement; existing: loads + initial case only) →
     combinations (changed ones rebuilt) → run flags. Not saved: the user saves in SAP2000, or closes without saving to discard.
     · **Import From ETABS** (after Import From SAP2000; asked for by the user 2026-10-12): the model open in ETABS as an
@@ -210,7 +263,8 @@ earlier tall-header / large-button / blue-block look.
     factor so a kip-in table export gives back the kN-m model exactly. Then: loading (joint FX / FZ / MY, frame loads),
     static cases (P-Δ / preset stiffness not modelled, said in the case note), linear additive combinations, Tab 02 chords
     only if `VcfChordDetection` finds a truss, Tab 01 fitted to the ETABS joint loads (`ImportTab01(…, "ETABS")`), and
-    a supports line comparing Mcotis's auto pins with ETABS's restraints. Offline checks: `--etabs-import` (fixtures
+    a supports line: the ETABS restraints, used as ETABS has them (rollers and fixed supports included; pins at the
+    column bases, said as such, only when ETABS restrains nothing). Offline checks: `--etabs-import` (fixtures
     `tests/etabs-import`: the user's `CoT120.e2k` and the live table export `CoT120-live.tables.txt`, which has two braces
     D1 / D3 added since); live, read-only: `--etabs-live`.
     · **Export to ETABS…** (after Export to SAP2000; asked for by the user 2026-10-12): the Mcotis model written into the model
@@ -251,7 +305,8 @@ earlier tall-header / large-button / blue-block look.
     loaded points / point loads, Tab 02 chord-group entries (re-captures the baseline; a note if a group becomes invalid),
     Tab 03 cables (followers of a removed cable become Independent) and Tab 04 output entries; FEM results are cleared and the
     model becomes an offline "· edited" model — SAP2000 is never written.
-  - **Assign**: Joint Restraints (Pin Supports).
+  - **Assign**: Joint Restraints — read-only: the restraints the model holds with their components, or the pins
+    detected at its column bases (`FemPinSupportSummary`).
   - **Run**: Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Analysis Options. The legacy Run Study /
     Cancel Study commands are no longer exposed.
   - **Optimization** (its own tab since 2026-10-12; wherever this document says "Run → Optimization VCF", read
@@ -663,7 +718,7 @@ earlier tall-header / large-button / blue-block look.
     (`FemRunMonitor.Begin(…, remarks)`), and `PrimaryResultName` / `DefaultResultName` pick a case that was asked
     for — use them, not `ResultNames[0]` / `CaseNames[^1]`. The solver is still handed each continued case as its
     accumulated loads (`Resolve`, CASE-01); a stiffness source is a dependency of the plan and never becomes loads.
-  - Files: `.mcotis` schema 4; `.cotfem.db` schema 2 (`FemInputSnapshot.CurrentSchemaVersion`; tables
+  - Files: `.mcotis` schema 5; `.cotfem.db` schema 2 (`FemInputSnapshot.CurrentSchemaVersion`; tables
     `case_analysis_options`, `mass_sources`; no `initial_case_name`); `.cotfem.json` version 2. Older files are
     upgraded in memory on read (`FemCaseSchema.Complete`: identities, names → identities, fail-fast on a missing or
     ambiguous name) and written new on save. In a desktop row an absent kind / geometric mode / stiffness source means

@@ -34,6 +34,8 @@ internal sealed class FileDto
     public required List<LoadCombinationDto> LoadCombinations { get; init; }
     /// <summary>Schema 4. The masses modal cases read.</summary>
     public required List<MassSourceDto> MassSources { get; init; }
+    /// <summary>Schema 5. Additional inertia assigned to joints.</summary>
+    public required List<JointMassDto> JointMassAssignments { get; init; }
 }
 
 internal sealed class UnitsDto
@@ -292,6 +294,18 @@ internal sealed class MassSourceDto
     public required string Id { get; init; }
     public required string Name { get; init; }
     public required bool IncludeSelfMass { get; init; }
+    public required bool IncludeAdditionalMass { get; init; }
+}
+
+internal sealed class JointMassDto
+{
+    public required string PointId { get; init; }
+    public required double UX { get; init; }
+    public required double UY { get; init; }
+    public required double UZ { get; init; }
+    public required double RX { get; init; }
+    public required double RY { get; init; }
+    public required double RZ { get; init; }
 }
 
 internal sealed class TermDto

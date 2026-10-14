@@ -27,6 +27,20 @@ public partial class NativeModelWindow : Window
         if (form.ShowDialog() == true && form.CreatedSession is { } session) new NativeModelWindow(session).Show();
     }
     private void Template_Click(object sender, RoutedEventArgs e) => CreateTemplate(this);
+    private void Modal_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new NativeModalSetupWindow(Model.ModalDefinition()) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Definition is not { } definition) return;
+        try { Model.DefineModal(definition); }
+        catch (Exception ex) { Model.Message = "Modal case was not changed: " + ex.Message; }
+    }
+    private void JointMass_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new NativeJointMassWindow(Model.Session.Document) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Definition is not { } definition) return;
+        try { Model.AssignJointMass(definition); }
+        catch (Exception ex) { Model.Message = "Joint mass was not changed: " + ex.Message; }
+    }
     private void Options_Click(object sender, RoutedEventArgs e) => new AnalysisOptionsWindow(Model.Session.Document.Settings,
         settings => Model.Session.Execute(DocumentCommands.SetSettings(settings)), cables: Model.Session.Document.Cables.Count > 0) { Owner = this }.ShowDialog();
     private async void Run_Click(object sender, RoutedEventArgs e) => await Model.RunAsync();

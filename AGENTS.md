@@ -59,6 +59,17 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
   refused at Run with the reason — never solved as a simpler case. A run solves its cases in the order of the Load
   Cases table, and a case that is not ticked but needed first is solved and said to be a prerequisite. The plan,
   what is done and what is gated (PR-04 on: the literature gate): `docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md`.
+- One central model (user, 2026-10-13: "tao muốn model khởi tạo là trung tâm, có thể lưu đc, template kia chỉ là giúp
+  model nhanh thôi, còn fem phải dựa vào 3d và loadcase"; "các tính năng import sap etabs export phải sure là xài
+  đc"; "làm đi"): the main window is to work on one native `ModelDocument` — VCF, TAS and TemplateBuilding only
+  generate objects into it, every analysis runs from it and its load cases, SAP2000 and ETABS are adapters around
+  it, and Import / Export must keep working at every step. In progress, in slices that each pass the full checks.
+  Until the run reads the document, `MainViewModel.NativeDocumentSession` is a projection of the window's own model
+  (refreshed at load, import, autosave and when a run locks the model): take nothing for a run or an export from
+  it. Joint restraints are data of the model, and one rule gives the restraints a model is analysed, shown and
+  exported with (`LegacyNativeDocumentMigration.Restraints`). `--native-parity` shows the document solved directly
+  against Run FEM Analysis: it is the gate for moving the run onto the document. State, limits and next steps: the
+  handoff skill, "One central native model", and `docs/mcotis-standalone-plan.md` phases 5–7.
 - Validate before showing a result (user, 2026-10-12): nothing a new solver capability computes is put in a result
   view, a report or a document as a result until it has passed its checks against closed forms, against the archived
   planar solver where that covers the case, and against OpenSees where it can be modelled there. Record the evidence

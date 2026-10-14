@@ -71,6 +71,9 @@ public sealed partial class MainViewModel
             var (deltaMin, deltaMax, step, deltaCurrent) = (truss.MinimumHeight - truss.BaselineHeight, truss.MaximumHeight - truss.BaselineHeight,
                 truss.Increment, truss.CurrentHeight - truss.BaselineHeight);
             var captured = State.BaselineCaptured;
+            // a restraint goes with its joint
+            State.JointRestraints = State.JointRestraints.Where(item => points.Contains(item.Key))
+                .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
             State.Geometry = edited;
             State.Baseline = edited;
             State.SessionBaseline = edited;

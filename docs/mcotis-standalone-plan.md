@@ -23,8 +23,10 @@ nội lực / đường đàn hồi tại các station dọc frame. Cửa sổ c
 tiếp. Solver planar đã đưa vào archive: không còn nằm trong app, chỉ giữ ở
 `tests/Mcotis.Desktop.Checks/Archive/PlanarFrameSolver.cs` (đóng băng) làm mốc đối chiếu. Kết quả đã được đối chiếu
 với lời giải giải tích, solver planar (default model như app chạy: 11.361 giá trị) và OpenSees **trước khi** hiển thị:
-[analysis/cable-static-verification.md](analysis/cable-static-verification.md). Chưa có shell, P-Delta, modal, solver
-sparse. WPF đầu tiên đã nối vào engine qua
+[analysis/cable-static-verification.md](analysis/cable-static-verification.md). Modal Eigen tuyến tính cho frame nay đã
+có trong native workspace, đã đối chiếu closed form và OpenSeesPy; xem
+[analysis/modal-eigen-verification.md](analysis/modal-eigen-verification.md). Chưa có shell, P-Delta, modal từ tangent
+phi tuyến/cable, solver sparse. WPF đầu tiên đã nối vào engine qua
 **Edit → TemplateBuilding…**: model workspace riêng, native Save/Open, Undo/Redo, DOF options, **Run Analysis**
 và bảng kết quả (kể cả bảng cable). Chưa phải desktop migration đầy đủ; xem [phạm vi UI](native-building-ui.md). Chi tiết và source gates:
 [analysis/foundation-status.md](analysis/foundation-status.md), [implementation plan](analysis/IMPLEMENTATION_PLAN.md),
@@ -35,7 +37,7 @@ và bảng kết quả (kể cả bảng cable). Chưa phải desktop migration 
 (Linear Static, Nonlinear Static, Initial P-Delta, Modal Eigen) và hai tham chiếu tách biệt — case mà nó *tiếp tục từ*
 (`InitialCaseId`) và case mà nó *lấy stiffness* (`StiffnessSourceCaseId`). Có thêm `MassSource`, `LoadCaseRules` (một bộ
 quy tắc dùng chung cho cả hai cửa sổ) và `Mcotis.Analysis.Cases.CaseDependencyPlanner` (thứ tự chạy, prerequisite, case
-bị chặn khi case trước hỏng). File: `.mcotis` schema 4, `.cotfem.db` schema 2, `.cotfem.json` version 2; file cũ được
+bị chặn khi case trước hỏng). File: `.mcotis` schema 5, `.cotfem.db` schema 2, `.cotfem.json` version 2; file cũ được
 nâng cấp trong bộ nhớ khi mở, giữ nguyên ý nghĩa, ID, pattern và hệ số. **Chưa có phép tính mới nào**: P-Delta, modal,
 linear static trên stiffness của case khác và iteration controls riêng của case đều bị từ chối khi Run kèm lý do —
 không có fallback ngầm về phân tích bậc nhất. Ở cửa sổ chính, form Load Case Data nay định nghĩa đủ bốn loại và đổi
@@ -175,9 +177,9 @@ Dialog làm việc trên dữ liệu tạm: Apply = validate + commit; OK = comm
 | **2 — Document lifecycle** | `DocumentSession`, New / Open / Save / Save As | Save đúng document đang mở; Open lỗi giữ nguyên model | Xong ở tầng thư viện |
 | **3 — Edit commands** | Commands, Undo/Redo, change sets, revision, dirty, result state | Mọi thao tác phục hồi được; invalidation nhất quán | Xong ở tầng thư viện |
 | **4 — Analysis boundary** | Shared 3D engine, planar DOF presets, snapshot từ `ModelDocument`; capability check (chặn Shell…); results gắn document ID + input hash | Numerical source gates + XZ regression + analytical/OpenSeesPy checks | Compiler và `StaticSolver` xong cho frame và cable (target force, staged case, sag, frame có nút giữa, station dọc frame), đã đối chiếu ba nguồn kể cả default model; toàn bộ app đã chạy trên engine này và solver planar đã archive. Chẩn đoán ổn định số đã có (2026-10-13): số chữ số chính xác bị mất theo từng DOF, stiffness suy biến / gần suy biến và các DOF tham gia — [solver/numerical-stability-diagnostics.md](solver/numerical-stability-diagnostics.md). Còn shell, solver sparse |
-| **5 — Hệ VCF trên native model** | Generator VCF tạo/sinh lại geometry qua command, giữ ID bằng `GenerationKey`; tên theo vai trò | Đổi số bay giữ ID và assignments của object không đổi | |
-| **6 — Desktop** | `Mcotis.Desktop`: shell, các ViewModel ở mục 5, selection chung, viewport đọc document | Tạo → lưu → mở → phân tích → xem kết quả hoàn toàn trên hệ mới | |
-| **7 — Persistence hoàn chỉnh** | Autosave nền theo revision, recovery, results store, đọc file `.cotfem.db` cũ, default model dạng `.mcotis` | Recovery không báo thành công giả; file cũ mở được | |
+| **5 — Hệ VCF trên native model** | Generator VCF tạo/sinh lại geometry qua command, giữ ID bằng `GenerationKey`; tên theo vai trò | Đổi số bay giữ ID và assignments của object không đổi | Đang làm: VCF/TAS hiện khởi tạo native document với ID/`GenerationKey` ổn định; bước kế là regenerate theo command và giữ assignment của phần tử còn lại |
+| **6 — Desktop** | `Mcotis.Desktop`: shell, các ViewModel ở mục 5, selection chung, viewport đọc document | Tạo → lưu → mở → phân tích → xem kết quả hoàn toàn trên hệ mới | Đang làm: main workspace đã giữ một `DocumentSession` native cho VCF/TAS/config/SAP/ETABS (bản chiếu của model cũ, đồng bộ khi load / import / autosave / khóa để Run — chưa phải model làm việc); SAP/ETABS import/export đã giữ restraint 6-DOF và active DOF; **Run của cửa sổ chính đã giữ đúng restraint của model theo từng component** (2026-10-14: fixed / roller không còn bị đổi thành pin; model không có restraint — VCF, config cũ — vẫn dùng pin ở chân cột; một quy tắc chung cho Run, native document, export và viewer: `LegacyNativeDocumentMigration.Restraints`). **Document đã được chứng minh là đúng model đang chạy** (`--native-parity`, 2026-10-14): giải trực tiếp document bằng `ModelCompiler` + `StaticSolver` cho kết quả của Run FEM Analysis tới sai số làm tròn (~1E-11 tương đối, 17.856 giá trị) ở mọi static case của VCF, TAS, TAS có cable, ETABS import và VCF có gối fixed — đây là gate để chuyển Run sang đọc document. Một khoảng trống đã biết: frame không có inertia ngoài mặt phẳng thì Run giải được trong mặt phẳng còn `StaticSolver` từ chối document (`static.section.stiffness`). Còn lại: Run, controls và viewport đọc trực tiếp document; sửa restraint trong cửa sổ chính; moment phản lực tại gối fixed; chạy thử export trên SAP2000 / ETABS thật |
+| **7 — Persistence hoàn chỉnh** | Autosave nền theo revision, recovery, results store, đọc file `.cotfem.db` cũ, default model dạng `.mcotis` | Recovery không báo thành công giả; file cũ mở được | Đang làm: `.cotfem.db` được chuyển xác định sang native, giữ restraint 6-DOF qua Save/Open và round-trip `.mcotis`; default file và autosave chính vẫn chưa đổi sang `.mcotis` |
 | **8 — Release** | CI, đo hiệu năng, đóng gói; gỡ phần app cũ đã được thay | App chạy trọn vẹn trên máy không có SAP/ETABS | |
 
 Thứ tự 4 → 6 khác plan cũ (ViewModel trước, Analysis sau): đưa solver sang trước cho phép đối chiếu số với kết quả
@@ -200,7 +202,7 @@ chạy model có Shell và nói rõ lý do.
 | Commands | Change set, revision, Undo/Redo, dirty state, giới hạn history |
 | Result state | Hash bỏ qua tên và thứ tự dựng; current / stale / failed; snapshot không bị edit ảnh hưởng |
 | Native file | Round-trip; Save đúng dữ liệu đang thấy; Open lỗi giữ nguyên model; file thiếu/thừa field bị từ chối; migration không ghi file gốc; atomic save |
-| Load cases | Model mẫu của plan (NL_PRET → PDELTA_GRAVITY → LIN_WINDX / MODES_PD, các nhánh nonlinear độc lập NL_SLS / NL_ULS / NL_ALTERNATE) và run graph của nó: thứ tự, prerequisite, vòng lặp, case bị chặn; quy tắc từng loại; hash; những gì solver từ chối (`static.case.*`); schema 4 round-trip và nâng cấp một file schema 3 thật |
+| Load cases | Model mẫu của plan (NL_PRET → PDELTA_GRAVITY → LIN_WINDX / MODES_PD, các nhánh nonlinear độc lập NL_SLS / NL_ULS / NL_ALTERNATE) và run graph của nó: thứ tự, prerequisite, vòng lặp, case bị chặn; quy tắc từng loại; hash; những gì solver từ chối (`static.case.*`); schema 5 round-trip và nâng cấp file schema 3/4 |
 | DOF compilation | Full 3D/plane/custom masks, deterministic mapping, support loads, failed compilation, immutable snapshot, schema-1 migration |
 | Spatial static | Ma trận 12×12 kiểm bằng tích phân độc lập, lời giải giải tích, cân bằng toàn cục, các trường hợp từ chối, đối chiếu OpenSeesPy (12 model) |
 | General static | Frame chia tại điểm nằm trên nó, cable tension-only, target force (một cable, hai cable tương tác, hai cable nối tiếp), staged case, sag so với lời giải kín và catenary chính xác, xoay cả kết cấu trong không gian, các trường hợp từ chối, đối chiếu OpenSeesPy (4 model có cable, 11 lời giải) |

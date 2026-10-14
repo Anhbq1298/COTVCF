@@ -8,10 +8,10 @@ ALG-01/02/03/05 were inspected there and the code is cross-checked numerically, 
 [cable-static-verification.md](cable-static-verification.md) for cables, target forces, staged cases and split frames
 (CABLE-01…04, CASE-01, TOPO-01: coded and cross-checked numerically; their source texts were not inspected). No record has been promoted to
 SOURCE_VERIFIED or RELEASED — that needs a reviewer's approval; the mass-based P-Delta gate remains open.
-Since 2026-10-13 a load case can *state* P-Delta, a stiffness source, a mass source and modes
-([LOAD_CASE_STATE_REFACTOR_PLAN.md](LOAD_CASE_STATE_REFACTOR_PLAN.md), PR-01/PR-02: CASE-02, CASE-03, PERSIST-01
-below). That is data and files only — ALG-07, ALG-08 and ALG-10…12 are as open as before, and a case that needs
-them is refused at Run.
+Since 2026-10-13 a load case can state P-Delta, a stiffness source, a mass source and modes. Unstressed elastic-frame
+Modal Eigen is now coded and cross-verified in the native workspace (ALG-10…12; see
+[modal-eigen-verification.md](modal-eigen-verification.md)). P-Delta, nonlinear frozen-tangent modes, cable modes and
+load-derived/consistent mass remain open and are refused at Run rather than replaced by a simpler analysis.
 
 **Status:** living research / verification register — not a declaration that all equations or algorithms have been verified.
 
@@ -63,9 +63,9 @@ them is refused at Run.
 | ALG-07 | Geometric stiffness `K_t = K_e + K_g` with stated compression convention | B1 §§5.8–5.11; C6 | OPEN equation-level | bending under P and −P; stability threshold |
 | ALG-08 | Iterative P-Delta residual Newton update, convergence | C2/C3 behavior; B1 §1.10 scalar Newton as background, C6 exact formulation pending | OPEN numerical derivation | tangent finite-difference consistency, residual history, beam-column cases |
 | ALG-09 | Approximate noniterative **story-mass-based** P-Delta | C2/C3 behavior | BLOCKED: exact public derivation not verified | locate authoritative story-stiffness formula, floors/diaphragm assumptions and comparison |
-| ALG-10 | Assemble mass from self/additional/loads; positive mass rules | C5 | DOCUMENTED_BEHAVIOR, OPEN implementation math | hand mass inventory, center of mass, g conversion |
-| ALG-11 | Generalized vibration eigenproblem `K φ = ω² M φ` | C4/C6; B1 §2.13–2.15 for generic eigen methods | OPEN equation-level | oscillator, beam eigenvalues, eigen residual |
-| ALG-12 | Modal participation, mass normalization and effective masses | C6; independent vibration source needed | OPEN | mass-orthogonality and sum participation checks |
+| ALG-10 | Assemble mass from self/additional/loads; positive mass rules | C5; OpenSees `modalProperties` mass inventory behavior | CODED for first-release frame self mass and joint mass; closed-form inventory checked; load-derived, cable and consistent mass remain OPEN; reviewer pending | Done for `rho A L` lumping, split conservation, joint mass/inertia, center of mass and zero-mass refusal in `ModalChecks` |
+| ALG-11 | Generalized vibration eigenproblem `K φ = ω² M φ` | OpenSees `eigen` / `modalProperties`; B1 §2.13–2.15 for generic eigen methods | CODED with positive diagonal mass whitening, symmetric Jacobi extraction and exact condensation of massless free DOFs; closed-form and OpenSeesPy cross-check complete; reviewer pending | Done: SDOF, coupled 2DOF, bending with massless rotation, eigen residual and two independent OpenSeesPy models |
+| ALG-12 | Modal participation, mass normalization and effective masses | OpenSees `modalProperties` equations; independent OpenSeesPy models | CODED for UX/UY/UZ; mass normalization and effective/cumulative masses cross-checked; global rotational participation remains OPEN; reviewer pending | Done: 100% SDOF, two-mode sum, OpenSeesPy ratios; see `modal-eigen-verification.md` |
 | ALG-13 | Full instability diagnosis using factorization/nullspace and scaled residual | B1 §§2.6–2.10 partial background; B2 Chs.7–9; CSI standard solver behavior source TBD | OPEN | 6 rigid modes, rank-deficient frame, near-singular springs |
 | ALG-14 | Stiffness from converged P-Delta state used in subsequent modal/static | C3/C4 | DOCUMENTED_BEHAVIOR | frequency shift under compression, consistent stiffness state |
 | TOPO-01 | A frame is connected at every point on its axis; one element per piece | Application rule | CODED; cross-checked (closed forms, OpenSeesPy, archived planar solver); reviewer pending | Done: see cable-static-verification.md |
@@ -77,7 +77,7 @@ them is refused at Run.
 | CASE-01 | Staged nonlinear static cases carry earlier loads and the fit stage's pretension | Follows from CABLE-01/02 | CODED; cross-checked; reviewer pending | Done: see record |
 | CASE-02 | A nonlinear case continues from the complete converged end state of another: displacements, loads, member and cable forces, active sets | CSI "Initial Conditions" ([C2] of LOAD_CASE_STATE_REFACTOR_PLAN.md §9) | DOCUMENTED_BEHAVIOR; OPEN numerically. Only the reference is coded (`LoadCase.InitialCaseId`, rules, run plan, files). The solver still carries a continued case by its accumulated loads (CASE-01), which is not a state transfer; with P-Delta it is refused | PR-04: child load incremental, parent state retained, independent branches |
 | CASE-03 | A linear static or modal case uses the tangent stiffness frozen at the end of a nonlinear case; the loads of that case are not applied again | CSI "Stiffness to Use" ([C1] of the same) | DOCUMENTED_BEHAVIOR; OPEN numerically. Only the reference is coded (`LoadCase.StiffnessSourceCaseId`); a case that uses it is refused (`static.case.stiffnessSource`) | PR-05: perturbation on a saved Kt, no parent load in the response, superposition on one Kt |
-| PERSIST-01 | A file of an earlier schema opens with every load case meaning what it meant: `.mcotis` 3→4, `.cotfem.db` 1→2, `.cotfem.json` 1→2 | Project rule (LOAD_CASE_STATE_REFACTOR_PLAN.md §5) | CODED; checked on files written by the code before the change; reviewer pending. No numerical content | Done: `Mcotis.Checks` (schema 4 round-trip, `Fixtures/schema3-cases.mcotis`), `--fem-schema` (`tests/fem-schema/v1-default.*`: identities, patterns, factors, flags and revision unchanged) |
+| PERSIST-01 | A file of an earlier schema opens with every load case meaning what it meant: `.mcotis` 3→4→5, `.cotfem.db` 1→2, `.cotfem.json` 1→2 | Project rule (LOAD_CASE_STATE_REFACTOR_PLAN.md §5) | CODED; checked on files written by the code before the change; reviewer pending. No numerical content | Done: `Mcotis.Checks` (schema 5 round-trip, schema 3/4 migration, modal mass assignments), `--fem-schema` (`tests/fem-schema/v1-default.*`: identities, patterns, factors, flags and revision unchanged) |
 
 **Warning:** Standard numerical linear algebra equations in this register are *proposed implementation targets* until audited against the listed source. Their appearance here does not certify an exact CSI implementation.
 

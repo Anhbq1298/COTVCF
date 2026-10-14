@@ -174,6 +174,15 @@ public static class DocumentValidator
                 if (!d.Points.ContainsKey(pointId))
                     Error("restraint.point", ObjectKind.Point, pointId, "A restraint is kept for a point that does not exist.");
 
+            foreach (var (pointId, mass) in d.JointMassAssignments)
+            {
+                if (!d.Points.TryGetValue(pointId, out var point))
+                    Error("mass.point", ObjectKind.Point, pointId, "A joint mass is kept for a point that does not exist.");
+                else if (mass.PointId != pointId || mass.Values.Any(value => !double.IsFinite(value) || value < 0))
+                    Error("mass.value", ObjectKind.Point, pointId,
+                        $"Joint mass on '{point.Name}' needs six finite, nonnegative translational masses / rotational inertias.");
+            }
+
             foreach (var (frameId, assignment) in d.FrameAssignments)
             {
                 if (!d.Frames.TryGetValue(frameId, out var frame))

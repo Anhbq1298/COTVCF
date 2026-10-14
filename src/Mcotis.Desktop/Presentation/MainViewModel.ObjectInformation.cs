@@ -171,8 +171,10 @@ public sealed partial class MainViewModel
             // ---- Assignments ----
             new("Assignments",
             [
-                new("Restraint", [Row("Support", FemPinSupportPoints.Contains(point.Name)
-                    ? "Pin — translations X and Z restrained, rotation free" : "None — free")]),
+                new("Restraint", [Row("Support", !FemJointRestraints.TryGetValue(point.Name, out var restraint) ? "None — free"
+                    : restraint == Mcotis.Core.Restraint.Pinned ? "Pin — translations restrained, rotations free"
+                    : restraint == Mcotis.Core.Restraint.Fixed ? "Fixed — translations and rotations restrained"
+                    : $"Restrained: {RestraintText(restraint)}")]),
             ]),
         };
 

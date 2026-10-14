@@ -18,6 +18,7 @@ public sealed record EtabsImportModel(
     IReadOnlyList<FemSectionProperties> Members,
     IReadOnlyDictionary<string, SectionDesignerValues> SectionWeights,
     SapFemLoading Loading,
+    IReadOnlyDictionary<string, Mcotis.Core.Restraint> Restraints,
     IReadOnlyList<string> SupportedJoints,
     IReadOnlyList<string> FixedJoints,
     IReadOnlyList<string> Notes);
@@ -215,17 +216,21 @@ public static class EtabsImport
         }).ToArray();
         var loading = new SapFemLoading(patterns, jointLoads, memberLoads, memberPointLoads, [], cases, combinations, warnings);
 
-        // ---- supports as ETABS has them (Mcotis finds its pins at the column bases; the view model compares) ----
+        // ---- exact six-component global supports as ETABS has them ----
+        var restraints = model.Restraints.Where(item => points.ContainsKey(item.Joint) && item.Dofs.Count >= 6)
+            .GroupBy(item => item.Joint, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group =>
+            {
+                var dofs = group.Last().Dofs;
+                return new Mcotis.Core.Restraint(dofs[0], dofs[1], dofs[2], dofs[3], dofs[4], dofs[5]);
+            }, StringComparer.Ordinal);
         var restrained = model.Restraints.Where(item => points.ContainsKey(item.Joint) && item.Dofs.Count >= 6 && item.Dofs[0] && item.Dofs[2])
             .Select(item => item.Joint).Distinct(StringComparer.Ordinal).OrderBy(name => points[name].Position.X).ToArray();
         var fixedJoints = model.Restraints.Where(item => points.ContainsKey(item.Joint) && item.Dofs.Count >= 6 && item.Dofs[0] && item.Dofs[2] && item.Dofs[4])
             .Select(item => item.Joint).Distinct(StringComparer.Ordinal).ToArray();
-        var partial = model.Restraints.Where(item => points.ContainsKey(item.Joint) && item.Dofs.Count >= 6 && (item.Dofs[0] ^ item.Dofs[2]))
-            .Select(item => item.Joint).ToArray();
-        if (partial.Length > 0)
-            notes.Add($"ETABS restrains only one in-plane direction at {string.Join(", ", partial.Take(4))}{(partial.Length > 4 ? " …" : "")} — Mcotis has no roller supports; these are left free.");
+        // a joint ETABS restrains in one in-plane direction only — a roller — is analysed as ETABS has it
 
-        return new EtabsImportModel(geometry, materials, sections, members, weights, loading, restrained, fixedJoints, notes);
+        return new EtabsImportModel(geometry, materials, sections, members, weights, loading, restraints, restrained, fixedJoints, notes);
     }
 
     /// <summary>One ETABS frame section as a Mcotis library section, with the true weight per metre when its self-weight

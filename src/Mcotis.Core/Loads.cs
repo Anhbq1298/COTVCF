@@ -77,7 +77,16 @@ public sealed record ModalEigenOptions(ObjectId MassSourceId, int RequestedModes
 
 /// <summary>The mass a modal case reads. A named object of its own, so that several cases can share one.</summary>
 /// <param name="IncludeSelfMass">The mass of the frames, cables and shells from their materials and sections.</param>
-public sealed record MassSource(ObjectId Id, string Name, bool IncludeSelfMass = true) : INamedObject;
+public sealed record MassSource(ObjectId Id, string Name, bool IncludeSelfMass = true,
+    bool IncludeAdditionalMass = true) : INamedObject;
+
+/// <summary>Additional inertia assigned directly to one joint. Translational entries are [t]; rotational entries
+/// are [t·m²]. The six entries follow UX, UY, UZ, RX, RY, RZ and are physical properties, not restraints.</summary>
+public sealed record JointMassAssignment(ObjectId PointId, double UX, double UY, double UZ,
+    double RX = 0, double RY = 0, double RZ = 0)
+{
+    public ImmutableArray<double> Values => [UX, UY, UZ, RX, RY, RZ];
+}
 
 public readonly record struct LoadCaseComponent(ObjectId PatternId, double Factor);
 

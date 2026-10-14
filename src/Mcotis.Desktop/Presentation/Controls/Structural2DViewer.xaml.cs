@@ -56,6 +56,7 @@ public partial class Structural2DViewer : UserControl
     public static readonly DependencyProperty PinSupportPointsProperty = DependencyProperty.Register(nameof(PinSupportPoints), typeof(IEnumerable<string>), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty FemResultProperty = DependencyProperty.Register(nameof(FemResult), typeof(FemAnalysisResult), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty FemResultModeProperty = DependencyProperty.Register(nameof(FemResultMode), typeof(FemResultMode), typeof(Structural2DViewer), new PropertyMetadata(FemResultMode.AxialForce));
+    public static readonly DependencyProperty DeflectionIsModeShapeProperty = DependencyProperty.Register(nameof(DeflectionIsModeShape), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(false));
 
     public GeometryModel Model { get => (GeometryModel)GetValue(ModelProperty); set => SetValue(ModelProperty, value); }
     public object? ToolbarContent { get => GetValue(ToolbarContentProperty); set => SetValue(ToolbarContentProperty, value); }
@@ -74,6 +75,7 @@ public partial class Structural2DViewer : UserControl
     public IEnumerable<string>? PinSupportPoints { get => (IEnumerable<string>?)GetValue(PinSupportPointsProperty); set => SetValue(PinSupportPointsProperty, value); }
     public FemAnalysisResult? FemResult { get => (FemAnalysisResult?)GetValue(FemResultProperty); set => SetValue(FemResultProperty, value); }
     public FemResultMode FemResultMode { get => (FemResultMode)GetValue(FemResultModeProperty); set => SetValue(FemResultModeProperty, value); }
+    public bool DeflectionIsModeShape { get => (bool)GetValue(DeflectionIsModeShapeProperty); set => SetValue(DeflectionIsModeShapeProperty, value); }
     public static readonly DependencyProperty FrameMeshSegmentsProperty = DependencyProperty.Register(nameof(FrameMeshSegments), typeof(int), typeof(Structural2DViewer), new PropertyMetadata(0));
     public static readonly DependencyProperty MemberSizesProperty = DependencyProperty.Register(nameof(MemberSizes), typeof(IReadOnlyDictionary<string, string>), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty ShowLoadsProperty = DependencyProperty.Register(nameof(ShowLoads), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
@@ -184,7 +186,7 @@ public partial class Structural2DViewer : UserControl
         base.OnPropertyChanged(e);
         if (e.Property == ModelProperty) Rebuild3D(keepCamera: false);
         // the 3D view shows the deflected shape too: follow the result, and its options while it is on screen
-        else if (e.Property == FemResultProperty || e.Property == FemResultModeProperty)
+        else if (e.Property == FemResultProperty || e.Property == FemResultModeProperty || e.Property == DeflectionIsModeShapeProperty)
         {
             if (ShowsDeflected3D || scene3D?.Deflected is not null) Rebuild3D(keepCamera: true);
         }
@@ -217,7 +219,9 @@ public partial class Structural2DViewer : UserControl
         Update3DAxes();
         const string gestures = " · click a point, frame or cable to select · right-click for its information · drag rotate · right-drag pan · wheel zoom · double-click fit";
         View3DInfo.Text = scene.Deflected is { } shape
-            ? $"Deflected shape 3D · largest |U| {shape.MaximumMm:G4} mm, drawn × {shape.Magnification:G3}" + gestures
+            ? DeflectionIsModeShape
+                ? $"Mode shape 3D · mass-normalized relative amplitude, drawn × {shape.Magnification:G3}" + gestures
+                : $"Deflected shape 3D · largest |U| {shape.MaximumMm:G4} mm, drawn × {shape.Magnification:G3}" + gestures
             : MemberSections is null
             ? "Isometric 3D · geometry view; section outlines unavailable · drag rotate · right-drag pan · wheel zoom · double-click fit"
             : $"Isometric 3D · to scale · {scene.FramesWithSapShape} frames with their section dimensions" +
@@ -227,9 +231,13 @@ public partial class Structural2DViewer : UserControl
         Deflection3DLegend.Visibility = scene.Deflected is { Contour: true } ? Visibility.Visible : Visibility.Collapsed;
         if (scene.Deflected is { Contour: true } contour)
         {
-            Deflection3DRange.Text = $"|U| {contour.ContourMinMm:G5} to {contour.ContourMaxMm:G5} mm";
+            Deflection3DRange.Text = DeflectionIsModeShape
+                ? $"Relative |amplitude| {contour.ContourMinMm:G5} to {contour.ContourMaxMm:G5}"
+                : $"|U| {contour.ContourMinMm:G5} to {contour.ContourMaxMm:G5} mm";
             Deflection3DBar.Fill ??= new LinearGradientBrush(StructureModel3D.ContourBrush().GradientStops, new Point(0, 0), new Point(1, 0));
-            Deflection3DScale.Text = $"Shape magnified × {contour.Magnification:G3}";
+            Deflection3DScale.Text = DeflectionIsModeShape
+                ? $"Eigenvector magnified × {contour.Magnification:G3}"
+                : $"Shape magnified × {contour.Magnification:G3}";
         }
         if (!keepCamera || scene.Bounds.IsEmpty) Fit3D();
         else UpdateCamera();
@@ -492,6 +500,7 @@ public sealed class ModelCanvas : FrameworkElement
     public static readonly DependencyProperty PinSupportPointsProperty = DependencyProperty.Register(nameof(PinSupportPoints), typeof(IEnumerable<string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty FemResultProperty = DependencyProperty.Register(nameof(FemResult), typeof(FemAnalysisResult), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty FemResultModeProperty = DependencyProperty.Register(nameof(FemResultMode), typeof(FemResultMode), typeof(ModelCanvas), new FrameworkPropertyMetadata(FemResultMode.AxialForce, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty DeflectionIsModeShapeProperty = DependencyProperty.Register(nameof(DeflectionIsModeShape), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
 
     public GeometryModel Model { get => (GeometryModel)GetValue(ModelProperty); set => SetValue(ModelProperty, value); }
     public bool ShowPointLabels { get => (bool)GetValue(ShowPointLabelsProperty); set => SetValue(ShowPointLabelsProperty, value); }
@@ -507,6 +516,7 @@ public sealed class ModelCanvas : FrameworkElement
     public IEnumerable<string>? PinSupportPoints { get => (IEnumerable<string>?)GetValue(PinSupportPointsProperty); set => SetValue(PinSupportPointsProperty, value); }
     public FemAnalysisResult? FemResult { get => (FemAnalysisResult?)GetValue(FemResultProperty); set => SetValue(FemResultProperty, value); }
     public FemResultMode FemResultMode { get => (FemResultMode)GetValue(FemResultModeProperty); set => SetValue(FemResultModeProperty, value); }
+    public bool DeflectionIsModeShape { get => (bool)GetValue(DeflectionIsModeShapeProperty); set => SetValue(DeflectionIsModeShapeProperty, value); }
     public static readonly DependencyProperty FrameMeshSegmentsProperty = DependencyProperty.Register(nameof(FrameMeshSegments), typeof(int), typeof(ModelCanvas), new FrameworkPropertyMetadata(0, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty MemberSizesProperty = DependencyProperty.Register(nameof(MemberSizes), typeof(IReadOnlyDictionary<string, string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty ShowLoadsProperty = DependencyProperty.Register(nameof(ShowLoads), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -1018,13 +1028,15 @@ public sealed class ModelCanvas : FrameworkElement
             {
                 var left = Math.Max(18, ActualWidth - 245); var top = ActualHeight - 70;
                 for (var i = 0; i < 100; i++) dc.DrawRectangle(DeflectionBrush(i / 99.0), null, new Rect(left + i * 1.6, top, 1.7, 10));
-                Text(dc, $"|U| {min:G5} to {max:G5} mm", new Point(left, top - 20), "Text");
-                Text(dc, "Shape magnified - click a node", new Point(left, top + 14), "Text");
+                Text(dc, DeflectionIsModeShape ? $"Relative |amplitude| {min:G5} to {max:G5}" : $"|U| {min:G5} to {max:G5} mm", new Point(left, top - 20), "Text");
+                Text(dc, DeflectionIsModeShape ? "Eigenvector magnified - click a node" : "Shape magnified - click a node", new Point(left, top + 14), "Text");
             }
             if (selectedDeflectionNode is { } name && displacements.TryGetValue(name, out var selected) && deflectedNodes.TryGetValue(name, out var selectedPoint))
             {
                 dc.DrawEllipse(null, new Pen(Brush("Text"), 2), selectedPoint, 7, 7);
-                CableLabel(dc, $"Ux {selected.UXM * 1000:G8} mm  Uy 0 mm  Uz {selected.UZM * 1000:G8} mm", new Point(18, 90), false);
+                CableLabel(dc, DeflectionIsModeShape
+                    ? $"Ux {selected.UXM * 1000:G8}  Uy 0  Uz {selected.UZM * 1000:G8} (relative amplitude)"
+                    : $"Ux {selected.UXM * 1000:G8} mm  Uy 0 mm  Uz {selected.UZM * 1000:G8} mm", new Point(18, 90), false);
             }
             return;
         }

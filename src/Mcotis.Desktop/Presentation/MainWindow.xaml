@@ -488,9 +488,9 @@
      <TabItem Header="Joint Restraints">
       <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource Surface}" VerticalAlignment="Top">
        <StackPanel Margin="8">
-        <TextBlock Text="PIN SUPPORTS" Style="{StaticResource Subheading}"/>
+        <TextBlock Text="SUPPORTS" Style="{StaticResource Subheading}"/>
         <TextBlock Text="{Binding FemPinSupportSummary}" TextWrapping="Wrap" Margin="0,0,0,6"/>
-        <TextBlock Text="Detected automatically at the lowest joints connected to near-vertical frames; restrain translation, rotation free. Drawn at the base joints in the viewer."
+        <TextBlock Text="A model imported from SAP2000 or ETABS is held as that model restrains it, component by component (UX, UY, UZ, RX, RY, RZ). A model that holds no restraint — the VCF system, an older configuration — has pins detected at the lowest joints connected to near-vertical frames: translations restrained, rotations free. Joints held in the XZ plane are drawn as supports in the viewer."
                    Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
        </StackPanel>
       </Border>

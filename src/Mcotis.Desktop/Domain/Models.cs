@@ -31,7 +31,8 @@ public record ModelInfo(string Path, string Version, int UnitsCode, string Force
     public string Name => string.IsNullOrWhiteSpace(Path) ? "Unsaved model" : System.IO.Path.GetFileName(Path);
     public string Units => $"{ForceUnit} / {LengthUnit}";
 }
-public record ModelSnapshot(ModelInfo Info, GeometryModel Geometry, IReadOnlyList<string> LoadPatterns);
+public record ModelSnapshot(ModelInfo Info, GeometryModel Geometry, IReadOnlyList<string> LoadPatterns,
+    IReadOnlyDictionary<string, Mcotis.Core.Restraint>? JointRestraints = null);
 public record PointLoad(string PointName, string LoadPattern, double Fx, double Fy, double Fz);
 public record CableTargetForce(string CableName, string LoadPattern, double TargetForce, double RelativeDistance);
 /// <summary>One cable's assigned section property and cross-section area [m²], read from SAP.
@@ -564,6 +565,7 @@ public sealed class ApplicationState : Observable
     private GeometryModel sessionBaseline = GeometryModel.Empty;
     private IReadOnlyList<PointLoad> sessionBaselinePointLoads = [];
     private IReadOnlyDictionary<string, double> sessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
+    private IReadOnlyDictionary<string, Mcotis.Core.Restraint> jointRestraints = new Dictionary<string, Mcotis.Core.Restraint>(StringComparer.Ordinal);
     private string connection = "Disconnected";
     private double tributaryWidthB = 1, numberOfStories = 1;
     private double cableStrengthMpa = 1860, cableStrengthReductionFactor = 0.5;
@@ -578,6 +580,8 @@ public sealed class ApplicationState : Observable
     public GeometryModel SessionBaseline { get => sessionBaseline; internal set { if (Set(ref sessionBaseline, value)) Notify(nameof(SessionBaselineCaptured)); } }
     public IReadOnlyList<PointLoad> SessionBaselinePointLoads { get => sessionBaselinePointLoads; internal set => Set(ref sessionBaselinePointLoads, value); }
     public IReadOnlyDictionary<string, double> SessionBaselinePretensionForces { get => sessionBaselinePretensionForces; internal set => Set(ref sessionBaselinePretensionForces, value); }
+    /// <summary>The six global restraint assignments read from the model, by joint name. A missing joint is free.</summary>
+    public IReadOnlyDictionary<string, Mcotis.Core.Restraint> JointRestraints { get => jointRestraints; internal set => Set(ref jointRestraints, value); }
     public bool SessionBaselineCaptured => SessionBaselineModel is not null && SessionBaseline.Points.Count > 0;
     public ObservableCollection<string> LoadPatterns { get; } = [];
     public ObservableCollection<PointLoadConfiguration> PointLoads { get; } = [];

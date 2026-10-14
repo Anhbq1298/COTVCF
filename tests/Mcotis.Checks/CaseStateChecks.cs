@@ -242,7 +242,7 @@ internal static class CaseStateChecks
             "A case with its own load steps and tolerances is not solved in one step with the solver's own instead: " + withControls.Issues.Single().Message);
     }
 
-    /// <summary>Schema 4 of the native file: every kind round-trips, and a case that carries the wrong reference is refused.</summary>
+    /// <summary>Schema 5 of the native file: every kind round-trips, and a case that carries the wrong reference is refused.</summary>
     private static void FileSchema4()
     {
         var w = new Worked();
@@ -256,14 +256,14 @@ internal static class CaseStateChecks
 
         var file = (JsonObject)JsonNode.Parse(json)!;
         JsonObject Case(JsonObject root, ObjectId id) => root["loadCases"]!.AsArray().Select(node => node!.AsObject()).Single(item => (string?)item["id"] == id.ToString());
-        Assert((int)file["schemaVersion"]! == 4 && NativeDocumentFormat.CurrentSchemaVersion == 4 && file["massSources"]!.AsArray().Count == 1 &&
+        Assert((int)file["schemaVersion"]! == 5 && NativeDocumentFormat.CurrentSchemaVersion == 5 && file["massSources"]!.AsArray().Count == 1 &&
                (string?)Case(file, w.PDelta)["kind"] == "InitialPDelta" && (string?)Case(file, w.PDelta)["geometricMode"] == "PDelta" &&
                (string?)Case(file, w.PDelta)["initialState"]!["caseId"] == w.NlPret.ToString() && !Case(file, w.PDelta).ContainsKey("stiffnessSource") &&
                (string?)Case(file, w.NlPret)["initialState"]!["kind"] == "Zero" && !Case(file, w.NlPret)["initialState"]!.AsObject().ContainsKey("caseId") &&
                (string?)Case(file, w.LinWind)["stiffnessSource"]!["kind"] == "EndOfNonlinearCase" && !Case(file, w.LinWind).ContainsKey("initialState") &&
                (string?)Case(file, w.Modes)["modal"]!["massSourceId"] == w.Ms1.ToString() && (int)Case(file, w.Modes)["modal"]!["requestedModes"]! == 12 &&
                !Case(file, w.Modes).ContainsKey("type") && !Case(file, w.NlSls).ContainsKey("initialCaseId"),
-            "The file is schema 4: a case states its kind by name and the one reference of its kind in full, by id — no type, no bare initial case id");
+            "The file is schema 5: a case states its kind by name and the one reference of its kind in full, by id — no type, no bare initial case id");
 
         void Refuse(string description, Action<JsonObject> damage)
         {
@@ -286,7 +286,7 @@ internal static class CaseStateChecks
     }
 
     /// <summary>SchemaRoundTrip, native part: a file as schema 3 wrote it (Fixtures/schema3-cases.mcotis) opens in
-    /// schema 4 with every case meaning what it meant.</summary>
+    /// schema 5 with every case meaning what it meant.</summary>
     private static void Schema3Upgrade()
     {
         string path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "schema3-cases.mcotis");
@@ -297,7 +297,7 @@ internal static class CaseStateChecks
         var oldCases = old["loadCases"]!.AsArray().Select(node => node!.AsObject()).ToArray();
         Assert((int)old["schemaVersion"]! == 3 && oldCases.Length == 4 && upgraded.LoadCases.Count == 4 && upgraded.MassSources.IsEmpty &&
                File.ReadAllBytes(path).SequenceEqual(bytes) && DocumentValidator.Validate(upgraded).All(issue => issue.Severity != ValidationSeverity.Error),
-            "A schema-3 file opens in schema 4: its four load cases, no mass source made up, the file on disk untouched");
+            "A schema-3 file opens in schema 5: its four load cases, no mass source made up, the file on disk untouched");
         foreach (var item in oldCases)
         {
             var id = ObjectId.Parse((string)item["id"]!);
@@ -313,7 +313,7 @@ internal static class CaseStateChecks
                 $"its {components.Length} patterns and factors ({string.Join(", ", components.Select(component => component.Factor))}), its run and fit flags; no P-Delta is switched on");
         }
         var reopened = NativeDocumentFormat.Deserialize(NativeDocumentFormat.Serialize(upgraded));
-        Assert(SameContent(reopened, upgraded) && reopened.AnalysisInputHash == upgraded.AnalysisInputHash, "… and saved as schema 4 it opens the same again");
+        Assert(SameContent(reopened, upgraded) && reopened.AnalysisInputHash == upgraded.AnalysisInputHash, "… and saved as schema 5 it opens the same again");
 
         // a linear case that named an initial case had no meaning to keep
         var linear = oldCases.Single(item => (string)item["type"]! == "LinearStatic");

@@ -22,19 +22,27 @@ or cable objects. The generator is one undoable command and refuses an existing 
 In the native window, **File → Save / Save As / Open Native Model** uses JSON `.mcotis` files. Save writes the current
 document. Open validates before replacement. Unsaved changes are checked on Open and Close. Results remain in
 memory and are cleared on Open; the input file does not store them. The main window also has **File → Open Native Model…**.
-Native files are schema 4 since 2026-10-13: a load case states its kind (Linear Static, Nonlinear Static, Initial
+Native files are schema 5 since 2026-10-13: a load case states its kind (Linear Static, Nonlinear Static, Initial
 P-Delta, Modal), the case it continues from, the case whose stiffness it uses, and its options. An older file is
-upgraded when it is opened — the cases keep their meaning and their identities — and is written as schema 4 on Save.
-This window has no form for load cases yet (the main window's Define → Load Cases has), and **Run → Run Analysis** refuses a case that asks for P-Delta, modes, the
-stiffness of another case or its own iteration controls, with the reason: see
-[the load-case plan](analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md).
+upgraded when it is opened — the cases keep their meaning and their identities — and is written as schema 5 on Save.
+Schema 5 adds named modal mass-source components and six-component joint mass assignments.
+
+**Define → Modal Eigen Case…** creates or modifies an Eigen case, its named mass source and requested mode count.
+**Assign → Joint Mass…** assigns nonnegative UX/UY/UZ lumped masses [t] and RX/RY/RZ inertias [t·m²]. Element
+self mass is `rho A L` times the frame mass modifier and is split equally between its ends; a mass source can include
+self mass, assigned joint mass, or both. **Run → Run Analysis** solves an unstressed elastic frame modal case with
+the active DOFs selected in Analysis Options. P-Delta/tangent-source modes, cables and shells are refused with the
+specific missing capability; elastic stiffness is never silently substituted for a requested tangent state.
 
 **Run → Analysis Options… → Degrees of Freedom** provides 3D, XZ, YZ, XY and custom six-DOF selections. Apply commits
 one command; OK commits and closes; Cancel discards edits since the last Apply. Global inactive DOFs are separate
 from point supports. The compiler rejects geometry and loads incompatible with a selected plane; coordinates are
 never projected. Run executes asynchronously and shows diagnostics on failure. Joint translations use m, rotations
 rad, reaction forces kN and moments kN·m. Frame end actions use local axes. The geometry view is undeformed;
-native deflection contours are not connected yet. Edited inputs mark existing results Stale; Undo can restore Current.
+the modal tabs show eigenvalue, frequency, period, residual, UX/UY/UZ participation, the physical/free mass inventory
+and centre of mass, and the selected mass-normalized
+eigenvector. The 2D/3D viewer labels it as relative amplitude, never as physical displacement. Edited inputs mark
+existing results Stale; Undo can restore Current.
 
 The native engine retains its documented capability limits, including 600 free / 2,400 total DOFs. The template
 form allows up to 400 points for model creation/persistence, but larger free-DOF counts can still exceed the run limit.
@@ -43,9 +51,12 @@ cables, cable target forces fitted in the case set to fit them, nonlinear static
 cable sag. The **Cable results** tab lists each cable's tension, whether it is taut or slack, its target, the applied
 pretension, its tension at the fit stage, its sag and its remaining stiffness. Warnings of a run that succeeded (a
 joint rotation nothing reaches, a translation held by slack cables only) are shown under the result line. There is
-no shell, P-Delta or modal analysis. The template form still creates frames only. Template UI does not change the
-numerical source verification gates or establish production readiness; the evidence is in
-[analysis/cable-static-verification.md](analysis/cable-static-verification.md).
+no shell or P-Delta analysis. Cable modes remain unavailable until a verified prestressed tangent state exists. The
+template form still creates frames only. Modal results remain in memory and are not written to the input file,
+matching the native workspace result-lifetime rule. Template UI does not change the numerical source verification
+gates or establish production readiness; the evidence is in
+[analysis/cable-static-verification.md](analysis/cable-static-verification.md) and
+[analysis/modal-eigen-verification.md](analysis/modal-eigen-verification.md).
 
 The main window's **Run → Analysis Options…** is the form of the main window's own run. That run uses the same
 general solver, and its Degrees of Freedom tab is the same as the native one — the presets, the six degrees of
@@ -69,6 +80,6 @@ member, a restraint — makes the model unstable, and Run reports it with the jo
 solving. In the main window cable joints move in UX and UZ, and its Degrees of Freedom tab can switch either of them off (see above). Locked/running legacy models show their options read-only.
 
 Verification: `dotnet run --project tests/Mcotis.Checks -- --full` includes template topology, line-load accounting, support
-reactions, self-weight, planar cases, invalid input, Undo/Redo and Save/Open. `--template-building-ui` on
+reactions, self-weight, modal closed forms and OpenSeesPy comparisons, planar cases, invalid input, Undo/Redo and Save/Open. `--template-building-ui` on
 `tests/Mcotis.Desktop.Checks` checks staged forms, native runs, diagnostics, result state, Save/Open and WPF bindings;
 it captures the forms in `.work/*-ui.png`. Existing numerical benchmarks remain unchanged.

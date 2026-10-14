@@ -22,7 +22,7 @@ namespace Mcotis.Desktop.SAP2000;
 /// filled-tube / encased sections: cables become tension-only frames pinned at both ends (their Tab 03 target forces are
 /// not exported), and composite / Section Designer sections Mcotis created are written as general sections with their
 /// transformed properties and the weight / mass modifiers that keep their true self-weight; sections ETABS already has
-/// are kept as ETABS defines them. The analysis is set to the XZ plane (UX, UZ, RY active), as Mcotis analyses it.
+/// are kept as ETABS defines them. The analysis DOFs are copied from the Mcotis model.
 /// Everything is checked before the first write; the model is not saved.</para>
 /// </summary>
 public sealed partial class EtabsGateway
@@ -106,6 +106,8 @@ public sealed partial class EtabsGateway
         foreach (var combo in x.Combinations)
             if (combo.Items.FirstOrDefault(item => !caseNames.Contains(item.Name) && !comboNames.Contains(item.Name)) is { Name: { } missing })
                 throw new InvalidOperationException($"Combination '{combo.Name}' uses '{missing}', which is neither a load case nor a combination.");
+        foreach (var joint in x.JointRestraints.Keys.Where(joint => !geometry.Points.ContainsKey(joint)))
+            throw new InvalidOperationException($"A restraint refers to missing joint '{joint}'.");
 
         // matching by end coordinates; a frame met twice keeps one match
         (long, long, long) Key(Position p) => ((long)Math.Round(p.X / MatchTolerance), (long)Math.Round(p.Y / MatchTolerance), (long)Math.Round(p.Z / MatchTolerance));
@@ -139,8 +141,29 @@ public sealed partial class EtabsGateway
         var cables = members.Where(member => member.Kind == MemberKind.Cable).ToArray();
         var targets = x.CableTargets.Count;
 
+        // Supports. Restraints the model holds are written as they are, every component and at every joint: a roller
+        // or a fixed support is not reduced to a pin, and a joint the model leaves free is free in ETABS too. A model
+        // that holds none has only the pins of its column bases: such a joint becomes a pin where ETABS restrains
+        // nothing, and what ETABS restrains is kept.
+        bool[]? RestraintToWrite(string joint, bool[] held)
+        {
+            var wantedRestraint = x.JointRestraints.GetValueOrDefault(joint, Mcotis.Core.Restraint.Free);
+            if (!x.RestraintsAssigned && (wantedRestraint.IsFree || held.Any(value => value))) return null;
+            bool[] exact = [wantedRestraint.Ux, wantedRestraint.Uy, wantedRestraint.Uz, wantedRestraint.Rx, wantedRestraint.Ry, wantedRestraint.Rz];
+            return held.SequenceEqual(exact) ? null : exact;
+        }
+
         if (preview)
         {
+            // the ETABS joints as they are now, by position; a joint the export adds has no restraint yet
+            var pointsNow = points.GroupBy(point => Key(point.Value)).ToDictionary(group => group.Key, group => group.First().Key);
+            var supportChanges = 0;
+            foreach (var joint in geometry.Points.Values)
+            {
+                bool[] held = new bool[6];
+                if (pointsNow.TryGetValue(Key(joint.Position), out var point)) Check(m.PointObj.GetRestraint(point, ref held), "PointObj.GetRestraint", point);
+                if (RestraintToWrite(joint.Name, held) is not null) supportChanges++;
+            }
             int Missing(IEnumerable<string> wantedNames, HashSet<string> have) => wantedNames.Distinct(StringComparer.OrdinalIgnoreCase).Count(name => !have.Contains(name));
             lines.Add($"Target: {target.Name} ({version}, kN-m{(target.IsLocked ? ", locked — ETABS deletes its analysis results when it is unlocked" : "")})");
             lines.Add(setStories
@@ -156,8 +179,11 @@ public sealed partial class EtabsGateway
                       $"{newFrameSections.Length + newCableSections.Length} section(s); update {updated.Length}; ETABS's own definition kept for {usedSections.Count - newFrameSections.Length - newCableSections.Length - updated.Length}");
             lines.Add($"Loading: add {Missing(x.Patterns.Select(p => p.Name), etabsPatterns)} load pattern(s); {export.JointLoads.Count} joint load(s), " +
                       $"{export.MemberLoads.Count + export.MemberPointLoads.Count} frame load(s) — each pattern's loads on the exported members replaced");
+            lines.Add(x.RestraintsAssigned
+                ? $"Supports: the {x.JointRestraints.Count} joint restraint(s) of the Mcotis model are written as they are, every component, and a joint it leaves free is freed — {supportChanges} joint(s) change"
+                : $"Supports: the Mcotis model holds no restraint — {supportChanges} column base(s) that ETABS leaves free become pins; the restraints ETABS has are kept");
             lines.Add($"Analysis: add {Missing(x.Cases.Select(c => c.Name), etabsCases)} load case(s), update {x.Cases.Count - Missing(x.Cases.Select(c => c.Name), etabsCases)}; " +
-                      $"add {Missing(x.Combinations.Select(c => c.Name), etabsCombos)} combination(s); active DOF UX, UZ, RY (plane frame)");
+                      $"add {Missing(x.Combinations.Select(c => c.Name), etabsCombos)} combination(s); active DOF set to {x.ActiveDofs}");
             if (cables.Length > 0) lines.Add($"Cables: {cables.Length} as tension-only frames pinned at both ends; {targets} Tab 03 target force(s) are not exported (ETABS has no target-force load)");
             if (export.GravityLoadsLeftOut > 0) lines.Add($"Note: {export.GravityLoadsLeftOut} gravity load assignment(s) are not exported (ETABS has none on frames).");
             return new EtabsExportReport(target, lines);
@@ -306,21 +332,29 @@ public sealed partial class EtabsGateway
         var etabsPoints = ReadPoints(m).GroupBy(point => Key(point.Value)).ToDictionary(group => group.Key, group => group.First().Key);
         string? PointAt(string joint) => geometry.Points.TryGetValue(joint, out var point) && etabsPoints.TryGetValue(Key(point.Position), out var name) ? name : null;
 
-        // supports: a support joint without any restraint becomes a pin; the analysis runs in the XZ plane
-        var pinned = 0;
-        foreach (var support in x.PinSupports.Select(PointAt).OfType<string>())
+        // Supports, as the preview said (RestraintToWrite, above). ETABS has a joint only where a frame ends: a joint of
+        // the model that no exported member meets has none, and its restraint cannot be written — the report says so.
+        int restraintChanges = 0, withoutJoint = 0;
+        foreach (var joint in geometry.Points.Keys)
         {
-            bool[] restraint = new bool[6];
-            Check(m.PointObj.GetRestraint(support, ref restraint), "PointObj.GetRestraint", support);
-            if (restraint.Any(value => value)) continue;
-            bool[] pin = [true, true, true, false, false, false];
-            Check(m.PointObj.SetRestraint(support, ref pin), "PointObj.SetRestraint", support);
-            pinned++;
+            if (PointAt(joint) is not { } point)
+            {
+                if (!x.JointRestraints.GetValueOrDefault(joint, Mcotis.Core.Restraint.Free).IsFree) withoutJoint++;
+                continue;
+            }
+            bool[] held = new bool[6];
+            Check(m.PointObj.GetRestraint(point, ref held), "PointObj.GetRestraint", point);
+            if (RestraintToWrite(joint, held) is not { } exact) continue;
+            Check(m.PointObj.SetRestraint(point, ref exact), "PointObj.SetRestraint", point);
+            restraintChanges++;
         }
-        bool[] plane = [true, false, true, false, true, false];
-        Check(m.Analyze.SetActiveDOF(ref plane), "Analyze.SetActiveDOF");
+        bool[] activeDofs = Mcotis.Core.DegreesOfFreedom.Components.Select(component => Mcotis.Core.DegreesOfFreedom.Contains(x.ActiveDofs, component)).ToArray();
+        Check(m.Analyze.SetActiveDOF(ref activeDofs), "Analyze.SetActiveDOF");
         lines.Add($"Assignments: {members.Length} members (section, local axis, releases, modifiers; {reassigned} section change(s))" +
-                  (cables.Length > 0 ? $", {cables.Length} cable(s) as tension-only frames" : "") + $"; {pinned} new pin support(s); active DOF UX, UZ, RY.");
+                  (cables.Length > 0 ? $", {cables.Length} cable(s) as tension-only frames" : "") + "; " +
+                  (x.RestraintsAssigned ? $"{restraintChanges} joint restraint(s) set as the Mcotis model holds them" : $"{restraintChanges} new pin support(s)") +
+                  (withoutJoint > 0 ? $" ({withoutJoint} restrained joint(s) meet no exported member and have no ETABS joint: not written)" : "") +
+                  $"; active DOF {x.ActiveDofs}.");
 
         // load patterns
         var addedPatterns = 0;

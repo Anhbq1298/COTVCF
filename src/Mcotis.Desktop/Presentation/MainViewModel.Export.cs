@@ -28,6 +28,8 @@ public sealed partial class MainViewModel
             .Select(load => new SapExportJointLoad(load.PointName, load.Pattern!, load.FzKN)).ToArray() ?? [];
         var targets = run?.PretensionTargetsKN.Where(target => cablePatterns.ContainsKey(target.Key))
             .Select(target => new SapExportCableTarget(target.Key, cablePatterns[target.Key], target.Value)).ToArray() ?? [];
+        // the restraints of the model as it stands — the ones Run FEM Analysis holds
+        var restraints = FemJointRestraints;
         return new SapExportModel(
             State.Geometry,
             FemSectionProperties.ToArray(),
@@ -35,6 +37,9 @@ public sealed partial class MainViewModel
             FrameSections.ToArray(),
             CableSections.ToArray(),
             FemPinSupportPoints,
+            restraints,
+            HasAssignedJointRestraints,
+            FemActiveDofs,
             FemPatternRows.Select(row => new SapExportPattern(row.Name, row.Type, row.SelfWeightMultiplier)).ToArray(),
             run is null ? [] : State.AppliedPoints.Select(point => point.PointName).ToArray(),
             jointLoads,

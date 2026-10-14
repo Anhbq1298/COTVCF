@@ -50,6 +50,9 @@ public sealed class FemModelFileDto
     public List<FemDefinitionRowDto> CombinationRows { get; set; } = [];
     /// <summary>Version 2. The masses modal cases read; null when there is none.</summary>
     public List<FemMassSourceDto>? MassSources { get; set; }
+    /// <summary>The six-component joint restraints the model holds; null when it holds none, as in a version-2 file
+    /// written before restraints were data. Such a model is analysed with the pins at its column bases.</summary>
+    public List<FemJointRestraintDto>? JointRestraints { get; set; }
     public FemSettingsDto Settings { get; set; } = new();
 }
 
@@ -86,6 +89,13 @@ public sealed record FemNonlinearControlsDto(int MaxLoadSteps, int MaxIterations
 public sealed record FemModalOptionsDto(string MassSource, string? MassSourceId, int RequestedModes);
 
 public sealed record FemMassSourceDto(string Id, string Name, bool IncludeSelfMass = true);
+
+public sealed record FemJointRestraintDto(string JointName, bool Ux, bool Uy, bool Uz, bool Rx, bool Ry, bool Rz)
+{
+    public Mcotis.Core.Restraint ToNative() => new(Ux, Uy, Uz, Rx, Ry, Rz);
+    public static FemJointRestraintDto FromNative(string jointName, Mcotis.Core.Restraint restraint) =>
+        new(jointName, restraint.Ux, restraint.Uy, restraint.Uz, restraint.Rx, restraint.Ry, restraint.Rz);
+}
 
 public sealed class FemSettingsDto
 {

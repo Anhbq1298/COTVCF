@@ -24,6 +24,7 @@ public sealed class DocumentEditor
     private readonly ImmutableDictionary<ObjectId, LoadCase>.Builder loadCases;
     private readonly ImmutableDictionary<ObjectId, LoadCombination>.Builder loadCombinations;
     private readonly ImmutableDictionary<ObjectId, MassSource>.Builder massSources;
+    private readonly ImmutableDictionary<ObjectId, JointMassAssignment>.Builder jointMassAssignments;
     private readonly ImmutableDictionary<ObjectId, Restraint>.Builder restraints;
     private readonly ImmutableDictionary<ObjectId, FrameAssignment>.Builder frameAssignments;
     private readonly ImmutableDictionary<ObjectId, CableAssignment>.Builder cableAssignments;
@@ -51,6 +52,7 @@ public sealed class DocumentEditor
         loadCases = data.LoadCases.ToBuilder();
         loadCombinations = data.LoadCombinations.ToBuilder();
         massSources = data.MassSources.ToBuilder();
+        jointMassAssignments = data.JointMassAssignments.ToBuilder();
         restraints = data.Restraints.ToBuilder();
         frameAssignments = data.FrameAssignments.ToBuilder();
         cableAssignments = data.CableAssignments.ToBuilder();
@@ -73,6 +75,7 @@ public sealed class DocumentEditor
     public IReadOnlyDictionary<ObjectId, LoadCase> LoadCases => loadCases;
     public IReadOnlyDictionary<ObjectId, LoadCombination> LoadCombinations => loadCombinations;
     public IReadOnlyDictionary<ObjectId, MassSource> MassSources => massSources;
+    public IReadOnlyDictionary<ObjectId, JointMassAssignment> JointMassAssignments => jointMassAssignments;
     public IReadOnlyDictionary<ObjectId, LoadAssignment> Loads => loads;
     public AnalysisSettings Settings => settings;
 
@@ -272,6 +275,16 @@ public sealed class DocumentEditor
     public void PutLoadCombination(LoadCombination combination) => PutNamed(loadCombinations, ObjectKind.LoadCombination, combination, (item, name) => item with { Name = name });
     public void PutMassSource(MassSource massSource) => PutNamed(massSources, ObjectKind.MassSource, massSource, (item, name) => item with { Name = name });
 
+    /// <summary>Sets a point's additional inertia. Six zeros remove the assignment.</summary>
+    public void SetJointMass(JointMassAssignment assignment)
+    {
+        Open();
+        RequirePoint(assignment.PointId);
+        if (assignment.Values.All(value => value == 0)) jointMassAssignments.Remove(assignment.PointId);
+        else jointMassAssignments[assignment.PointId] = assignment;
+        changes.Record(assignment.PointId, ObjectKind.Point, ChangeAspects.Assignment);
+    }
+
     public void SetSettings(AnalysisSettings value)
     {
         Open();
@@ -365,7 +378,8 @@ public sealed class DocumentEditor
             cables.ToImmutable(), shells.ToImmutable(), materials.ToImmutable(), frameSections.ToImmutable(),
             cableSections.ToImmutable(), shellSections.ToImmutable(), loadPatterns.ToImmutable(), loadCases.ToImmutable(),
             loadCombinations.ToImmutable(), restraints.ToImmutable(), frameAssignments.ToImmutable(),
-            cableAssignments.ToImmutable(), shellAssignments.ToImmutable(), loads.ToImmutable(), settings, massSources.ToImmutable()),
+            cableAssignments.ToImmutable(), shellAssignments.ToImmutable(), loads.ToImmutable(), settings, massSources.ToImmutable(),
+            jointMassAssignments.ToImmutable()),
             new NameIndex(scopes, sequence.ToImmutable()));
 
         var errors = DocumentValidator.Validate(document).Where(issue => issue.Severity == ValidationSeverity.Error).ToArray();
@@ -499,7 +513,7 @@ public sealed class DocumentEditor
     {
         switch (kind)
         {
-            case ObjectKind.Point: points.Remove(id); restraints.Remove(id); break;
+            case ObjectKind.Point: points.Remove(id); restraints.Remove(id); jointMassAssignments.Remove(id); break;
             case ObjectKind.Frame: frames.Remove(id); frameAssignments.Remove(id); break;
             case ObjectKind.Cable: cables.Remove(id); cableAssignments.Remove(id); break;
             case ObjectKind.Shell: shells.Remove(id); shellAssignments.Remove(id); break;

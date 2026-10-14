@@ -51,6 +51,10 @@ public sealed class FemInputSnapshot
     public List<FemDefinitionRowDto> CombinationRows { get; set; } = [];
     /// <summary>Schema 2. The masses modal cases read.</summary>
     public List<FemMassSourceDto> MassSources { get; set; } = [];
+    /// <summary>The six-component joint restraints the model holds. Empty for a model that holds none — an older
+    /// configuration, or the VCF system: it is analysed with the pins at its column bases
+    /// (<see cref="Mcotis.Desktop.Application.LegacyNativeDocumentMigration.Restraints"/>).</summary>
+    public List<FemJointRestraintDto> JointRestraints { get; set; } = [];
     public FemSettingsDto Settings { get; set; } = new();
 
     public static FemInputSnapshot FromLegacy(FemModelFileDto file, FemInputSnapshot? previous = null)
@@ -88,6 +92,7 @@ public sealed class FemInputSnapshot
             CaseRows = cases,
             CombinationRows = combinations,
             MassSources = (file.MassSources ?? []).ToList(),
+            JointRestraints = (file.JointRestraints ?? []).ToList(),
             Settings = file.Settings,
         };
     }
@@ -126,6 +131,7 @@ public sealed class FemInputSnapshot
             CaseRows = CaseRows.ToList(),
             CombinationRows = CombinationRows.ToList(),
             MassSources = MassSources.Count > 0 ? MassSources.ToList() : null,
+            JointRestraints = JointRestraints.Count > 0 ? JointRestraints.ToList() : null,
             Settings = Settings,
         };
     }

@@ -157,7 +157,15 @@ public sealed partial class SapGateway : ISapGateway
         var points = new Dictionary<string, StructuralPoint>(StringComparer.Ordinal);
         int n = 0; string[] names = [];
         Check(Model.PointObj.GetNameList(ref n, ref names), "PointObj.GetNameList");
-        foreach (var name in names.Take(n)) points.Add(name, new(name, ReadPosition(name)));
+        var restraints = new Dictionary<string, Mcotis.Core.Restraint>(StringComparer.Ordinal);
+        foreach (var name in names.Take(n))
+        {
+            points.Add(name, new(name, ReadPosition(name)));
+            bool[] values = new bool[6];
+            Check(Model.PointObj.GetRestraint(name, ref values), "PointObj.GetRestraint", name);
+            var restraint = new Mcotis.Core.Restraint(values[0], values[1], values[2], values[3], values[4], values[5]);
+            if (!restraint.IsFree) restraints.Add(name, restraint);
+        }
         var members = new List<StructuralMember>();
         foreach (var kind in Enum.GetValues<MemberKind>())
         {
@@ -176,7 +184,7 @@ public sealed partial class SapGateway : ISapGateway
         n = 0; names = [];
         Check(Model.LoadPatterns.GetNameList(ref n, ref names), "LoadPatterns.GetNameList");
         Verify(info);
-        return new ModelSnapshot(info, new(points, members), names.Take(n).ToArray());
+        return new ModelSnapshot(info, new(points, members), names.Take(n).ToArray(), restraints);
     });
     private Position ReadPosition(string name)
     {

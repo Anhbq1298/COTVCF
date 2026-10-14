@@ -144,7 +144,7 @@ public sealed record FemCaseOptions(Mcotis.Core.CaseKind Kind = Mcotis.Core.Case
     public string? NotSolvedYet(string caseName)
     {
         const string pending = "numerical verification pending (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md)";
-        return Kind == Mcotis.Core.CaseKind.ModalEigen ? $"Load case '{caseName}' is a modal case. Eigenvalue analysis is not available yet — {pending}. Nothing is computed for it."
+        return Kind == Mcotis.Core.CaseKind.ModalEigen ? $"Load case '{caseName}' is modal. Eigenvalue analysis is available in the native standalone workspace; this older main-window case table has no native mass assignments, so it is not run here. Nothing is substituted or computed for it."
             : Kind == Mcotis.Core.CaseKind.InitialPDelta || GeometricMode == Mcotis.Core.GeometricNonlinearity.PDelta
                 ? $"Load case '{caseName}' is analysed with P-Delta. P-Delta is not available yet — {pending}. The case is not solved, and it is not replaced by a first-order analysis."
             : Kind == Mcotis.Core.CaseKind.LinearStatic

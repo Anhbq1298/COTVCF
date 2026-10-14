@@ -36,7 +36,7 @@ public partial class AnalysisOptionsWindow : Window
         Mesh.Text = settings.FrameMeshSegments.ToString(CultureInfo.CurrentCulture);
         Sag.IsChecked = settings.CableSag;
         Tolerance.IsEnabled = Iterations.IsEnabled = Mesh.IsEnabled = Sag.IsEnabled = editable;
-        ScopeText.Text = "Static analysis of frames and cables. Shell, P-Delta and modal analysis are not available.";
+        ScopeText.Text = "Static analysis of frames and cables. Modal Eigen is available for native frame models; shell and P-Delta analysis are not available.";
         CableScope.Text = (cables
                 ? "These settings are used by Run Analysis: the fitting when a load case fits cable target forces, cable sag for every case with cables. The mesh is the number of stations each frame is read at; it changes no joint result."
                 : "The mesh is the number of stations each frame is read at by Run Analysis; it changes no joint result. The model has no cables, so the settings of the cable force fitting are not shown.") +

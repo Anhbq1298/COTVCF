@@ -184,6 +184,7 @@ public sealed partial class MainViewModel
             State.SessionBaseline = geometry;
             State.SessionBaselinePointLoads = [];
             State.SessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
+            State.JointRestraints = imported.Restraints;
             State.Geometry = geometry;
             State.Baseline = geometry;
             State.Preview = geometry;
@@ -228,6 +229,7 @@ public sealed partial class MainViewModel
                 FemSectionProperties.Add(PropertiesFor(new FemSectionProperties(cable.Name, 0, 0, null, SectionName: cable.Section.Name), cable.Section));
             femSapLoading = imported.Loading;
             femInputsOutdated = false;
+            ResetFemDofs();
             offlineLoadCaseNames = femSapLoading.Cases.Select(item => item.Name).ToArray();
             offlineModelPath = displayName ?? $"{modelName} · ETABS";
             isDefaultModel = false;
@@ -290,20 +292,21 @@ public sealed partial class MainViewModel
         SelectedTab = TabFem;
         SelectedFemPage = FemInputsPage;
 
-        // supports: Mcotis pins the lowest column bases; say whether that is what ETABS restrains
-        try
+        // Supports: the run holds every joint as ETABS restrains it, component by component. A model ETABS restrains
+        // nowhere has the pins of the column-base rule, and the summary says that it is a rule and not ETABS.
+        var supports = FemPinSupportPoints;
+        if (HasAssignedJointRestraints)
         {
-            var pins = FemStudyService.FindPinSupportPoints(geometry);
-            var etabsSupports = imported.SupportedJoints;
-            lines.Add(pins.ToHashSet(StringComparer.Ordinal).SetEquals(etabsSupports)
-                ? $"Supports: pins at {string.Join(", ", pins)} — the joints ETABS restrains"
-                : $"Supports: Mcotis pins the column bases {string.Join(", ", pins)}; ETABS restrains " +
-                  (etabsSupports.Count == 0 ? "no joint in X and Z" : string.Join(", ", etabsSupports.Take(6)) + (etabsSupports.Count > 6 ? " …" : "")) +
-                  " — check the supports before relying on the results");
-            if (imported.FixedJoints.Count > 0)
-                lines.Add($"Supports: ETABS also fixes the rotation at {string.Join(", ", imported.FixedJoints.Take(6))}; Mcotis pins (rotation free)");
+            var held = FemJointRestraints;
+            lines.Add($"Supports: {held.Count} ETABS joint restraint(s), every component as ETABS has it — " +
+                      (supports.Count == 0 ? "none of them in the plane of the model: Run Analysis will report what is not held"
+                          : string.Join("; ", supports.Take(6).Select(name => $"{name} ({RestraintText(held[name])})")) + (supports.Count > 6 ? " …" : "")) +
+                      (held.Count > supports.Count && supports.Count > 0 ? $"; {held.Count - supports.Count} more out of the plane only" : ""));
         }
-        catch (InvalidOperationException ex) { lines.Add("Supports: " + ex.Message); }
+        else
+            lines.Add(supports.Count > 0
+                ? $"Supports: ETABS restrains no joint — pins at the column bases {string.Join(", ", supports)} are used; check the supports before relying on the results"
+                : "Supports: ETABS restrains no joint and the model has no column base to pin — Run Analysis will report what is not held");
         foreach (var note in imported.Notes.Take(10)) lines.Add("Note: " + note);
         if (imported.Notes.Count > 10) lines.Add($"Note: … and {imported.Notes.Count - 10} more.");
         if (femSapLoading.Warnings.Count > 0) lines.Add($"Loads: {femSapLoading.Warnings.Count} load assignment warning(s) — see Define → Load Patterns");
@@ -322,7 +325,9 @@ public sealed partial class MainViewModel
                           $"{femSapLoading.Combinations.Count} combinations." + (ready ? " Run Analysis solves it without SAP2000 or ETABS." : "");
         Message = ready ? $"{done} — ready to run" + (displayName is null ? " (ETABS unchanged)." : ".")
                         : $"{done} — see the import summary for what is still needed.";
-        StartNewMcotisConfigurationFile();
+        StartNewMcotisConfigurationFile(displayName == TasName
+            ? LegacyNativeDocumentMigration.Source.Generated("TAS")
+            : LegacyNativeDocumentMigration.Source.Imported("ETABS"));
         Notify(nameof(SharedViewerSpanPoints));
         Notify(nameof(SharedViewerMemberSizes));
         Notify(nameof(SharedViewerSections));

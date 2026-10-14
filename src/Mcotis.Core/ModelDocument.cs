@@ -20,7 +20,8 @@ internal sealed record DocumentData(
     ImmutableDictionary<ObjectId, ShellAssignment> ShellAssignments,
     ImmutableDictionary<ObjectId, LoadAssignment> Loads,
     AnalysisSettings Settings,
-    ImmutableDictionary<ObjectId, MassSource> MassSources)
+    ImmutableDictionary<ObjectId, MassSource> MassSources,
+    ImmutableDictionary<ObjectId, JointMassAssignment> JointMassAssignments)
 {
     public static DocumentData Empty { get; } = new(
         ImmutableDictionary<ObjectId, PointObject>.Empty, ImmutableDictionary<ObjectId, FrameObject>.Empty,
@@ -31,7 +32,8 @@ internal sealed record DocumentData(
         ImmutableDictionary<ObjectId, LoadCombination>.Empty, ImmutableDictionary<ObjectId, Restraint>.Empty,
         ImmutableDictionary<ObjectId, FrameAssignment>.Empty, ImmutableDictionary<ObjectId, CableAssignment>.Empty,
         ImmutableDictionary<ObjectId, ShellAssignment>.Empty, ImmutableDictionary<ObjectId, LoadAssignment>.Empty,
-        AnalysisSettings.Default, ImmutableDictionary<ObjectId, MassSource>.Empty);
+        AnalysisSettings.Default, ImmutableDictionary<ObjectId, MassSource>.Empty,
+        ImmutableDictionary<ObjectId, JointMassAssignment>.Empty);
 }
 
 /// <summary>The engineering model: every object, definition, assignment and load of one structure, and nothing of
@@ -76,6 +78,8 @@ public sealed class ModelDocument
     public ImmutableDictionary<ObjectId, LoadCombination> LoadCombinations => Data.LoadCombinations;
     /// <summary>The masses modal cases read (<see cref="ModalEigenOptions.MassSourceId"/>).</summary>
     public ImmutableDictionary<ObjectId, MassSource> MassSources => Data.MassSources;
+    /// <summary>Additional translational masses and rotational inertias, keyed by point identity.</summary>
+    public ImmutableDictionary<ObjectId, JointMassAssignment> JointMassAssignments => Data.JointMassAssignments;
     /// <summary>Points with a restraint; a point without an entry is free.</summary>
     public ImmutableDictionary<ObjectId, Restraint> Restraints => Data.Restraints;
     /// <summary>Frames with an assignment other than <see cref="FrameAssignment.Default"/>.</summary>

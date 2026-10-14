@@ -21,14 +21,34 @@ public interface IDocumentMigration
 public static class NativeDocumentFormat
 {
     public const string FormatName = "Mcotis.Document";
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
     public const string Extension = ".mcotis";
 
     /// <summary>Schema 1 had no DOF setting; preserve its planar XZ analysis assumption. Schema 2 had no setting for the
     /// degrees of freedom of cable joints; they were the translations, which is what it gets. Schema 3 knew two kinds
     /// of load case with one reference to another case; schema 4 states the kind, the reference by its meaning, the
     /// geometric nonlinearity and the mass sources (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md §5.1).</summary>
-    public static IReadOnlyList<IDocumentMigration> Migrations { get; } = [new AddActiveDofs(), new AddCableDofs(), new AddLoadCaseStateConfig()];
+    public static IReadOnlyList<IDocumentMigration> Migrations { get; } =
+        [new AddActiveDofs(), new AddCableDofs(), new AddLoadCaseStateConfig(), new AddModalMassAssignments()];
+
+    /// <summary>4 → 5. Existing mass sources keep their self-mass choice and opt into the newly explicit
+    /// additional-mass component. Old files had no joint assignments, so the list is empty.</summary>
+    private sealed class AddModalMassAssignments : IDocumentMigration
+    {
+        public int FromVersion => 4;
+        public void Upgrade(JsonObject file)
+        {
+            if (file.ContainsKey("jointMassAssignments")) throw new DocumentFileException("Schema 4 has no joint mass assignments.");
+            if (file["massSources"] is not JsonArray sources) throw new DocumentFileException("Schema 4 requires its mass sources.");
+            foreach (var node in sources)
+            {
+                if (node is not JsonObject source || source.ContainsKey("includeAdditionalMass"))
+                    throw new DocumentFileException("A schema-4 mass source has an invalid shape.");
+                source["includeAdditionalMass"] = true;
+            }
+            file["jointMassAssignments"] = new JsonArray();
+        }
+    }
 
     /// <summary>3 → 4. A schema-3 case keeps exactly what it meant: a linear static case uses the unstressed
     /// stiffness; a nonlinear static case starts from zero or continues from its initial case; neither has
@@ -262,7 +282,14 @@ public static class NativeDocumentFormat
             MassSources = ByName(d.MassSources.Values).Select(item => new MassSourceDto
             {
                 Id = item.Id.ToString(), Name = item.Name, IncludeSelfMass = item.IncludeSelfMass,
+                IncludeAdditionalMass = item.IncludeAdditionalMass,
             }).ToList(),
+            JointMassAssignments = d.JointMassAssignments.Values.OrderBy(item => NameOf(item.PointId), NaturalNameComparer.Instance)
+                .Select(item => new JointMassDto
+                {
+                    PointId = item.PointId.ToString(), UX = item.UX, UY = item.UY, UZ = item.UZ,
+                    RX = item.RX, RY = item.RY, RZ = item.RZ,
+                }).ToList(),
         };
     }
 
@@ -364,7 +391,9 @@ public static class NativeDocumentFormat
             editor.PutLoadPattern(new(Id(item.Id, "load pattern id"), item.Name, item.Type, item.SelfWeightMultiplier));
         foreach (var item in Member(file.Loads, "loads")) editor.PutLoad(FromLoad(item));
         foreach (var item in Member(file.MassSources, "massSources"))
-            editor.PutMassSource(new(Id(item.Id, "mass source id"), item.Name, item.IncludeSelfMass));
+            editor.PutMassSource(new(Id(item.Id, "mass source id"), item.Name, item.IncludeSelfMass, item.IncludeAdditionalMass));
+        foreach (var item in Member(file.JointMassAssignments, "jointMassAssignments"))
+            editor.SetJointMass(new(Id(item.PointId, "joint mass point id"), item.UX, item.UY, item.UZ, item.RX, item.RY, item.RZ));
         foreach (var item in Member(file.LoadCases, "loadCases"))
         {
             // A case carries the reference of its kind, stated in full, and not the other one.

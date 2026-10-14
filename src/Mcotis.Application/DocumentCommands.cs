@@ -62,6 +62,9 @@ public static class DocumentCommands
     public static IDocumentCommand AssignCableModifiers(IReadOnlyCollection<ObjectId> cableIds, CableModifiers modifiers) =>
         new DocumentCommand("Assign Cable Modifiers", editor => editor.SetCableModifiers(cableIds, modifiers));
 
+    public static IDocumentCommand AssignJointMass(JointMassAssignment assignment) =>
+        new DocumentCommand("Assign Joint Mass", editor => editor.SetJointMass(assignment));
+
     public static IDocumentCommand AssignShellSection(IReadOnlyCollection<ObjectId> shellIds, ObjectId? sectionId) =>
         new DocumentCommand("Assign Shell Section", editor => editor.SetShellSection(shellIds, sectionId));
 

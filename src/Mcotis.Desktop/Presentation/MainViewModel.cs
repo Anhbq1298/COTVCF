@@ -19,6 +19,9 @@ namespace Mcotis.Desktop.Presentation;
 public sealed partial class MainViewModel : Observable
 {
     public ApplicationState State { get; }
+    /// <summary>The standalone 3D document for the model open in the main workspace. During the desktop migration the
+    /// legacy controls are still projected into it; new analysis/model features consume this session.</summary>
+    public Mcotis.Application.DocumentSession NativeDocumentSession { get; } = new();
     private readonly WorkflowService workflow;
     private readonly ISelectionService selection;
     private readonly ConfigService config;
@@ -156,13 +159,39 @@ public sealed partial class MainViewModel : Observable
     public IEnumerable<string>? SharedViewerBottomPoints => null;
     /// <summary>All chord points (any tab): the overall span dimension runs between the mega columns they end at.</summary>
     public IEnumerable<string> SharedViewerSpanPoints => State.Truss.TopPoints.Concat(State.Truss.MiddlePoints).Concat(State.Truss.BottomPoints).ToArray();
+    /// <summary>The joint restraints of the model as it stands, by joint name — what Run FEM Analysis holds, what the
+    /// native document and the exports carry and what the viewer draws
+    /// (<see cref="LegacyNativeDocumentMigration.Restraints"/>). Read from the model each time it is asked for, never
+    /// from a copy that an edit may have left behind.</summary>
+    internal IReadOnlyDictionary<string, Mcotis.Core.Restraint> FemJointRestraints
+    {
+        get
+        {
+            var baseline = State.Baseline;
+            var assigned = State.JointRestraints.Where(item => baseline.Points.ContainsKey(item.Key))
+                .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+            return LegacyNativeDocumentMigration.Restraints(assigned, baseline);
+        }
+    }
+    /// <summary>Whether the restraints are assignments the model holds, or the pins found at its column bases.</summary>
+    private bool HasAssignedJointRestraints => State.JointRestraints.Any(item => !item.Value.IsFree && State.Baseline.Points.ContainsKey(item.Key));
+    /// <summary>The joints held in the plane of the model (<see cref="FemSolver.HoldsInPlane"/>), left to right: the
+    /// support symbols of the viewer and the supports reactions are reported at.</summary>
     public IReadOnlyList<string> FemPinSupportPoints
     {
         get
         {
-            try { return FemStudyService.FindPinSupportPoints(State.Baseline); }
-            catch { return []; }
+            var baseline = State.Baseline;
+            return FemJointRestraints.Where(item => FemSolver.HoldsInPlane(item.Value)).Select(item => item.Key)
+                .OrderBy(name => baseline.Points[name].Position.X).ThenBy(name => name, StringComparer.Ordinal).ToArray();
         }
+    }
+    /// <summary>The restrained components of a joint as text: "UX, UZ"; "free" when it has none.</summary>
+    internal static string RestraintText(Mcotis.Core.Restraint restraint)
+    {
+        var held = new[] { (restraint.Ux, "UX"), (restraint.Uy, "UY"), (restraint.Uz, "UZ"), (restraint.Rx, "RX"), (restraint.Ry, "RY"), (restraint.Rz, "RZ") }
+            .Where(item => item.Item1).Select(item => item.Item2).ToArray();
+        return held.Length == 0 ? "free" : string.Join(", ", held);
     }
     public IEnumerable<string>? SharedViewerPinSupportPoints => selectedTab == TabFem ? FemPinSupportPoints : null;
     public bool ShowFemPinLegend => selectedTab == TabFem;
@@ -1137,6 +1166,17 @@ public sealed partial class MainViewModel : Observable
     {
         get
         {
+            // the assignments the model holds, each with its components; else the pins found at the column bases
+            if (HasAssignedJointRestraints)
+            {
+                var restraints = FemJointRestraints;
+                var points = FemPinSupportPoints;
+                var outOfPlane = restraints.Count - points.Count;
+                return $"{points.Count} support{(points.Count == 1 ? "" : "s")} from the joint restraints the model holds: " +
+                    string.Join("; ", points.Take(12).Select(name => $"{name} ({RestraintText(restraints[name])})")) +
+                    (points.Count > 12 ? $"; and {points.Count - 12} more" : "") +
+                    (outOfPlane > 0 ? $". {outOfPlane} more joint{(outOfPlane == 1 ? " is" : "s are")} restrained out of the plane only (UY, RX, RZ)" : "");
+            }
             try
             {
                 var points = FemStudyService.FindPinSupportPoints(State.Baseline);
@@ -1911,11 +1951,16 @@ public sealed partial class MainViewModel : Observable
 
         FemStudyCandidate model;
         IReadOnlyList<string> supports;
+        IReadOnlyDictionary<string, Mcotis.Core.Restraint> restraints;
         IReadOnlyDictionary<string, FemSectionProperties> properties;
         try
         {
             model = femStudy.ComposeModel(State, IsOfflineModel);
-            supports = FemStudyService.FindPinSupportPoints(State.Baseline);
+            // The restraints of the model as it stands now. The native document is brought up to this model when the
+            // run locks it, below, so it is not what the run reads them from: an edit made since it was last written
+            // would otherwise be analysed on the supports of the model before the edit.
+            restraints = FemJointRestraints;
+            supports = FemPinSupportPoints;
             properties = HeldFemProperties();
         }
         catch (Exception ex)
@@ -1995,7 +2040,7 @@ public sealed partial class MainViewModel : Observable
             try
             {
                 results = await Task.Run(() => femStudy.Analyze(baseline, [], [], [], supports, [model], properties, failure,
-                    cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan, cableSag, equilibrium, activeDofs, cableDofs), cancellationToken);
+                    cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan, cableSag, equilibrium, activeDofs, cableDofs, restraints), cancellationToken);
             }
             finally { equilibrium.Show(ended: false); }
             if (results.Count == 0)

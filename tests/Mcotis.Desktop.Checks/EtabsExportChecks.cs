@@ -31,8 +31,12 @@ internal static class EtabsExportChecks
             "the ETABS export carries every joint load Run Analysis applies — Tab 01's in place of the ETABS loads it replaces, equal to them");
         var rib = vm.FemSectionProperties.First(property => property.SectionName == "RSC 3.52x2.64 P");
         Check(export.SectionWeights.TryGetValue("RSC 3.52x2.64 P", out var weight) && Math.Abs(weight.WeightPerLength - rib.WeightPerLengthKNPerM) < 1e-9 &&
-              export.Base.Members.Count == 143 && export.Base.PinSupports.SequenceEqual(["1@Base", "2@Base"]),
-            $"it carries each section's true weight per metre (arch rib {weight.WeightPerLength:0.##} kN/m), every member and the pins");
+              export.Base.Members.Count == 143 && export.Base.PinSupports.SequenceEqual(["1@Base", "2@Base"]) &&
+              export.Base.ActiveDofs == vm.FemActiveDofs && export.Base.JointRestraints.Count > 2 &&
+              export.Base.JointRestraints["1@Base"] == Mcotis.Core.Restraint.Pinned &&
+              export.Base.JointRestraints.Values.Any(restraint => restraint == new Mcotis.Core.Restraint(false, true, false, false, false, false)),
+            $"it carries each section's true weight per metre (arch rib {weight.WeightPerLength:0.##} kN/m), every member, " +
+            $"{export.Base.JointRestraints.Count} exact restraints and selected DOFs {export.Base.ActiveDofs}");
     }
 
     public static void RunLive()

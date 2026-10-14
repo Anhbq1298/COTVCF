@@ -17,6 +17,7 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
             state.SessionBaselineModel = null; state.SessionBaseline = GeometryModel.Empty;
             state.SessionBaselinePointLoads = [];
             state.SessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
+            state.JointRestraints = new Dictionary<string, Mcotis.Core.Restraint>(StringComparer.Ordinal);
         }
         state.Model = info; state.Connection = "Connected";
     }
@@ -47,6 +48,7 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
         }
         bool changed = state.BaselineCaptured && (snapshot.Geometry.Points.Count != state.Geometry.Points.Count || snapshot.Geometry.Points.Any(p => !state.Geometry.Points.TryGetValue(p.Key, out var prior) || prior.Position != p.Value.Position) || !snapshot.Geometry.Members.SequenceEqual(state.Geometry.Members));
         state.Geometry = snapshot.Geometry;
+        state.JointRestraints = snapshot.JointRestraints ?? new Dictionary<string, Mcotis.Core.Restraint>(StringComparer.Ordinal);
         state.LoadPatterns.Clear(); foreach (var pattern in snapshot.LoadPatterns) state.LoadPatterns.Add(pattern);
         if (!state.BaselineCaptured) { state.Baseline = state.SessionBaselineCaptured ? state.SessionBaseline : state.Geometry; state.Preview = state.Geometry; }
         else if (changed) { state.BaselineCaptured = false; state.Preview = state.Geometry; }

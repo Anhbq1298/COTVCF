@@ -46,6 +46,11 @@ internal static class Program
                 GeneralSolverParityChecks.Run();
                 return 0;
             }
+            if (args.Contains("--native-parity"))
+            {
+                NativeDocumentParityChecks.Run();
+                return 0;
+            }
             if (args.Contains("--run-monitor"))
             {
                 RunMonitorChecks.Run();
@@ -1095,6 +1100,7 @@ internal static class Program
                 CaseEditorChecks.Run(windows: false);   // the form itself needs the application's resources: --case-editor
                 FemModelFileChecks.Run();
                 GeneralSolverParityChecks.Run();
+                NativeDocumentParityChecks.Run();
                 RunMonitorChecks.Run();
                 SapImportChecks.Run();
                 EtabsImportChecks.Run();

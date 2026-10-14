@@ -10,7 +10,8 @@ namespace Mcotis.Desktop.Application;
 /// The application's analysis. It hands the model the application holds to the general solver of the standalone
 /// system — <see cref="StaticSolver"/> in <c>Mcotis.Analysis</c>, the same engine the native workspace runs — and
 /// gives the results back in the application's result types. No numerical method lives here.
-/// <para>The application's model lies in one XZ plane (loads in X and Z, pin supports at its lowest joints). The
+/// <para>The application's model lies in one XZ plane (loads in X and Z). Its native six-component joint restraints
+/// are passed to the solver exactly; the pin-support list remains only for callers migrating older input. The
 /// degrees of freedom are the user's, from Analysis Options, and go to the engine as chosen — never corrected. With
 /// those of the plane (UX, UZ, RY, or fewer) the model is analysed in its plane; a degree of freedom that is off is
 /// held at every joint. With UY, RX or RZ on it is analysed in 3D, its frames with the out-of-plane inertia and the
@@ -36,6 +37,11 @@ public sealed partial class FemSolver
     public const int MaximumFrameMeshSegments = 100;
     private const double PlanarityToleranceM = 1e-7;
 
+    /// <summary>Whether a restraint holds a movement in the XZ plane the application's model lies in — UX, UZ or RY.
+    /// Such a joint is a support of the model as it is drawn and as its reactions are reported; one held only out of
+    /// the plane (UY, RX, RZ) is restrained in the analysis and is not drawn as a support.</summary>
+    public static bool HoldsInPlane(Native.Restraint restraint) => restraint.Ux || restraint.Uz || restraint.Ry;
+
     /// <summary>The digits of accuracy lost from which the solver reports a degree of freedom: a warning from the
     /// first, severe above the second. They change what a run reports, never its results.</summary>
     public StabilityThresholds StabilityThresholds { get; init; } = StabilityThresholds.Default;
@@ -57,12 +63,13 @@ public sealed partial class FemSolver
         bool cableSag = false,
         IProgress<FemEquilibriumProgress>? equilibrium = null,
         Native.DofMask activeDofs = Native.DofMask.XZ,
-        Native.DofMask cableDofs = Native.DofMask.Translations)
+        Native.DofMask cableDofs = Native.DofMask.Translations,
+        IReadOnlyDictionary<string, Native.Restraint>? jointRestraints = null)
     {
         var caseLoads = new FemLoadSet(loads.Select(load => new FemJointLoad(load.PointName, load.FxKN, load.FzKN)).ToArray(), [], []);
         return SolveCases(geometry, frameSections, cableSections, cablePretensionsKN, FemLoadSet.Empty,
             [new FemCaseLoads("Default", caseLoads, 1)], pinSupportPoints, cancellationToken, targetFitPercent,
-            maximumTargetFitIterations, frameMeshSegments, cableSag, equilibrium, activeDofs, cableDofs)["Default"];
+            maximumTargetFitIterations, frameMeshSegments, cableSag, equilibrium, activeDofs, cableDofs, jointRestraints)["Default"];
     }
 
     /// <summary>
@@ -94,7 +101,8 @@ public sealed partial class FemSolver
         bool cableSag = false,
         IProgress<FemEquilibriumProgress>? equilibrium = null,
         Native.DofMask activeDofs = Native.DofMask.XZ,
-        Native.DofMask cableDofs = Native.DofMask.Translations)
+        Native.DofMask cableDofs = Native.DofMask.Translations,
+        IReadOnlyDictionary<string, Native.Restraint>? jointRestraints = null)
     {
         ArgumentNullException.ThrowIfNull(geometry);
         if (cases.Count == 0) throw new InvalidOperationException("At least one load case is required.");
@@ -115,8 +123,16 @@ public sealed partial class FemSolver
             throw new InvalidOperationException("The internal FEM solver requires all analyzed frame and cable joints to lie in one XZ plane.");
         if (frameMeshSegments is < 1 or > MaximumFrameMeshSegments)
             throw new InvalidOperationException($"Frame mesh must be between 1 and {MaximumFrameMeshSegments} segments per frame.");
-        var supports = pinSupportPoints.Distinct(StringComparer.Ordinal).ToArray();
-        if (supports.Length < 2 || supports.Any(name => !points.ContainsKey(name)))
+        // The model's own restraints when it gives them: every component as assigned, and no rule about how many. One
+        // at a joint that no analysed member meets holds nothing of the model and is left out. Without them, the pin
+        // supports of older input. The supports reactions are reported at are the joints held in the plane, left to
+        // right as the pin supports always were: a joint held only out of the plane has no reaction in X or Z.
+        var exactRestraints = jointRestraints?.Where(item => !item.Value.IsFree && points.ContainsKey(item.Key))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+        var supports = exactRestraints?.Where(item => HoldsInPlane(item.Value)).Select(item => item.Key)
+                .OrderBy(name => points[name].X).ThenBy(name => name, StringComparer.Ordinal).ToArray()
+            ?? pinSupportPoints.Distinct(StringComparer.Ordinal).ToArray();
+        if (exactRestraints is null && (supports.Length < 2 || supports.Any(name => !points.ContainsKey(name))))
             throw new InvalidOperationException("At least two valid pin-support joints connected to analyzed members are required.");
         if (targetFitPercent is double fit && (!double.IsFinite(fit) || fit <= 0 || fit >= 100))
             throw new InvalidOperationException("Target-force fitting tolerance must be greater than 0% and less than 100%.");
@@ -148,7 +164,11 @@ public sealed partial class FemSolver
         var pointIds = usedPoints.ToDictionary(name => name, _ => NewId(), StringComparer.Ordinal);
         // joints keep their own names, so that what the engine says about one reads as the user knows it
         foreach (var name in usedPoints) editor.AddPoint(new(points[name].X, plane, points[name].Z), name, pointIds[name]);
-        editor.SetRestraint(supports.Select(name => pointIds[name]), Native.Restraint.Pinned);
+        if (exactRestraints is null)
+            editor.SetRestraint(supports.Select(name => pointIds[name]), Native.Restraint.Pinned);
+        else
+            foreach (var name in usedPoints)
+                if (exactRestraints.TryGetValue(name, out var restraint)) editor.SetRestraint([pointIds[name]], restraint);
 
         (double C, double S, double Length) Direction(StructuralMember member)
         {

@@ -113,7 +113,11 @@ internal static class AnalysisInputHasher
         }
 
         w.Section("mass sources", d.MassSources.Count);
-        foreach (var massSource in d.MassSources.Values.OrderBy(item => item.Id)) { w.Id(massSource.Id); w.Bools(massSource.IncludeSelfMass); }
+        foreach (var massSource in d.MassSources.Values.OrderBy(item => item.Id))
+        { w.Id(massSource.Id); w.Bools(massSource.IncludeSelfMass, massSource.IncludeAdditionalMass); }
+        w.Section("joint masses", d.JointMassAssignments.Count);
+        foreach (var mass in d.JointMassAssignments.Values.OrderBy(item => item.PointId))
+        { w.Id(mass.PointId); w.Doubles([.. mass.Values]); }
 
         w.Section("load combinations", d.LoadCombinations.Count);
         foreach (var combination in d.LoadCombinations.Values.OrderBy(item => item.Id))

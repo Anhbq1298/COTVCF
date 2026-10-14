@@ -16,6 +16,10 @@ namespace Mcotis.Desktop.Presentation;
 // Commands that need the live SAP2000 model stay disabled until Connect SAP succeeds.
 public sealed partial class MainViewModel
 {
+    private LegacyNativeDocumentMigration.Source nativeDocumentSource =
+        LegacyNativeDocumentMigration.Source.Imported("Mcotis legacy config");
+    /// <summary>The model open in the workspace has been given its source — a template, an import, a file.</summary>
+    private bool nativeDocumentSourceKnown;
     private string? offlineModelPath;
     /// <summary>The offline model is the built-in default (not a file the user chose).</summary>
     private bool isDefaultModel;
@@ -116,6 +120,7 @@ public sealed partial class MainViewModel
             State.SessionBaseline = GeometryModel.Empty;
             State.SessionBaselinePointLoads = [];
             State.SessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
+            State.JointRestraints = new Dictionary<string, Mcotis.Core.Restraint>(StringComparer.Ordinal);
             State.Geometry = GeometryModel.Empty;
             State.Baseline = GeometryModel.Empty;
             State.Preview = GeometryModel.Empty;
@@ -142,6 +147,7 @@ public sealed partial class MainViewModel
             femWorkingDatabasePath = null;
             femOutputRegistrations.Clear();
             femWorkingDirty = false;
+            ClearNativeDocument();
             SelectedAppliedPoint = null;
             SelectedCable = null;
             SelectedTab = TabFem;
@@ -283,6 +289,11 @@ public sealed partial class MainViewModel
             }).ToList(),
             CombinationRows = FemCombinationRows.Select(row => new FemDefinitionRowDto(row.Name, row.Type, row.Definition, null, row.Run, row.Supported, row.Source, row.Note) { Id = row.Id.ToString("D") }).ToList(),
             MassSources = femMassSources.Count > 0 ? femMassSources.ToList() : null,
+            // the six-component restraints the model holds; a model that holds none is written without the field
+            JointRestraints = State.JointRestraints.Any(item => !item.Value.IsFree)
+                ? State.JointRestraints.Where(item => !item.Value.IsFree).OrderBy(item => item.Key, StringComparer.Ordinal)
+                    .Select(item => FemJointRestraintDto.FromNative(item.Key, item.Value)).ToList()
+                : null,
             Settings = new FemSettingsDto
             {
                 TargetFitPercent = FemTargetFitPercent,
@@ -361,6 +372,9 @@ public sealed partial class MainViewModel
         applyingFemDatabase = true;
         try
         {
+            var restoredSnapshot = databaseSnapshot ?? FemInputSnapshot.FromLegacy(file);
+            var restoredSource = isDefault ? LegacyNativeDocumentMigration.Source.Generated("VCF")
+                : LegacyNativeDocumentMigration.Infer(restoredSnapshot);
             ClearFemResults();
             State.Connection = "Offline model";
             State.Model = file.Model;
@@ -368,6 +382,8 @@ public sealed partial class MainViewModel
             State.SessionBaseline = file.SessionBaseline ?? GeometryModel.Empty;
             State.SessionBaselinePointLoads = [];
             State.SessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
+            State.JointRestraints = restoredSnapshot.JointRestraints
+                .ToDictionary(item => item.JointName, item => item.ToNative(), StringComparer.Ordinal);
             State.Geometry = file.Geometry!;
             State.Baseline = file.Baseline!;
             State.Preview = file.Geometry!;
@@ -413,7 +429,10 @@ public sealed partial class MainViewModel
 
             offlineModelPath = path;
             isDefaultModel = isDefault;
-            femInputSnapshot = databaseSnapshot ?? FemInputSnapshot.FromLegacy(file);
+            femInputSnapshot = restoredSnapshot;
+            nativeDocumentSource = restoredSource;
+            nativeDocumentSourceKnown = true;
+            SyncNativeDocument(restoredSnapshot);
             femInputDatabasePath = isDefault || databaseSnapshot is null ? null : path;
             femOutputRegistrations.Clear();
             femOutputRegistrations.AddRange(outputs ?? []);
@@ -505,6 +524,16 @@ public sealed partial class MainViewModel
         femWorkingDatabasePath = null;
         femOutputRegistrations.Clear();
         femWorkingDirty = false;
+        State.JointRestraints = new Dictionary<string, Mcotis.Core.Restraint>(StringComparer.Ordinal);
+        ClearNativeDocument();
+    }
+
+    /// <summary>No model: an empty native document, whose source the next model names.</summary>
+    private void ClearNativeDocument()
+    {
+        NativeDocumentSession.Replace(Mcotis.Core.ModelDocument.Create(), null);
+        nativeDocumentSourceKnown = false;
+        NativeDocumentProblem = null;
     }
 
     private void ClearFemResults()
@@ -518,7 +547,7 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Starts a new user-facing MCOTiS configuration while keeping the connected model as its source.</summary>
-    private void StartNewMcotisConfigurationFile()
+    private void StartNewMcotisConfigurationFile(LegacyNativeDocumentMigration.Source? source = null)
     {
         femWorkingSaveTimer?.Stop();
         femInputSnapshot = null;
@@ -526,8 +555,45 @@ public sealed partial class MainViewModel
         femWorkingDatabasePath = null;
         femOutputRegistrations.Clear();
         femWorkingDirty = true;
+        // Give a newly generated/imported model its native identity immediately. Revision zero is the unsaved base;
+        // the first working-database checkpoint advances it to revision one without changing the document id. The
+        // snapshot carries the restraints the model holds (State.JointRestraints), as every snapshot does.
+        if (HasWorkingModel && State.Baseline.Points.Count > 0 && FemSectionProperties.Count > 0)
+        {
+            var snapshot = CaptureFemInputSnapshot(advanceRevision: false);
+            snapshot.Revision = 0;
+            femInputSnapshot = snapshot;
+            nativeDocumentSource = source ?? LegacyNativeDocumentMigration.Infer(snapshot, startingModel: true);
+            nativeDocumentSourceKnown = true;
+            SyncNativeDocument(snapshot);
+        }
         NotifyFemDatabaseState();
         ScheduleFemWorkingSave();
+    }
+
+    /// <summary>Why the model open in the workspace has no native document: null when it has one.</summary>
+    internal string? NativeDocumentProblem { get; private set; }
+
+    /// <summary>Brings the native document to the model a snapshot holds. A model the workspace holds and the standalone
+    /// document cannot express is still the user's model: it stays open, runs and is saved as before; the session is
+    /// then left with an empty document, not with the document of an earlier state, and the reason is kept.</summary>
+    private void SyncNativeDocument(FemInputSnapshot snapshot)
+    {
+        // A model that was connected, and never loaded or imported, is named here by where it is from.
+        if (!nativeDocumentSourceKnown) nativeDocumentSource = LegacyNativeDocumentMigration.Infer(snapshot);
+        nativeDocumentSourceKnown = true;
+        Mcotis.Core.ModelDocument document;
+        try
+        {
+            document = LegacyNativeDocumentMigration.Convert(snapshot, nativeDocumentSource);
+            NativeDocumentProblem = null;
+        }
+        catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException or ArgumentException or FormatException or Mcotis.Core.DocumentException)
+        {
+            document = Mcotis.Core.ModelDocument.Create();
+            NativeDocumentProblem = ex.Message;
+        }
+        NativeDocumentSession.Replace(document, null);
     }
 
     private FemInputSnapshot CaptureFemInputSnapshot(bool advanceRevision)
@@ -567,6 +633,7 @@ public sealed partial class MainViewModel
         femInputSnapshot = snapshot;
         femWorkingDatabasePath = femSessionStore.Save(snapshot, femOutputRegistrations, femInputDatabasePath);
         femWorkingDirty = false;
+        SyncNativeDocument(snapshot);
         Notify(nameof(IsFemModelLocked));
         Notify(nameof(CanEditFemModel));
         Notify(nameof(CanUnlockFemModel));
@@ -608,6 +675,8 @@ public sealed partial class MainViewModel
         femInputSnapshot = snapshot;
         femWorkingDirty = false;
         femWorkingDatabasePath = femSessionStore.Save(snapshot, femOutputRegistrations, femInputDatabasePath);
+        // the native document is the model that is locked and run, not the model of the last autosave
+        SyncNativeDocument(snapshot);
         NotifyFemDatabaseState();
     }
 

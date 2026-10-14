@@ -91,6 +91,16 @@ internal static class PlanarFrameChecks
             ["A"] = new("A", new(0, 0, 0)), ["C"] = new("C", new(spanM, 0, 0))
         }, [new("Beam", "A", "C", MemberKind.Frame)]);
         var beamSection = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal) { ["Beam"] = section with { MemberName = "Beam" } };
+        var cantilever = new FemSolver().Solve(beamOnly, beamSection, new Dictionary<string, FemSectionProperties>(),
+            new Dictionary<string, double>(), [new("C", 0, -loadKN)], [], activeDofs: Mcotis.Core.DofMask.XZ,
+            jointRestraints: new Dictionary<string, Mcotis.Core.Restraint>(StringComparer.Ordinal)
+            {
+                ["A"] = new(true, false, true, false, true, false),
+            });
+        Check(cantilever.SupportReactions is [{ PointName: "A" }] &&
+              Math.Abs(cantilever.Joints.Single(joint => joint.PointName == "C").UZM + loadKN * Math.Pow(spanM, 3) / (3 * modulusKNPerM2 * inertiaM4)) < 1e-9 &&
+              Math.Abs(cantilever.MaximumAbsoluteMomentKNm - loadKN * spanM) < 1e-6,
+            "An exact fixed restraint from the native model solves a one-support cantilever; it is not replaced by the legacy two-pin rule");
         const double udl = 10;
         var udlCase = new FemCaseLoads("UDL", new FemLoadSet([], [new FemMemberLoad("Beam", FemLoadDirection.Gravity, 0, 1, udl, udl)], []), 0);
         var pointCase = new FemCaseLoads("PL", new FemLoadSet([], [], [new FemMemberPointLoad("Beam", FemLoadDirection.GlobalZ, 0.3, -loadKN)]), 0);

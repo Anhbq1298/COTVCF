@@ -98,21 +98,49 @@ public sealed partial class SapGateway
                 throw new InvalidOperationException($"Load case '{item.Name}' uses load pattern '{missing}', which does not exist.");
         foreach (var load in x.JointLoads.Where(load => !patterns.Contains(load.Pattern) || !geometry.Points.ContainsKey(load.PointName)))
             throw new InvalidOperationException($"Joint load {load.PointName} / {load.Pattern}: the joint or the load pattern does not exist.");
+        foreach (var joint in x.JointRestraints.Keys.Where(joint => !geometry.Points.ContainsKey(joint)))
+            throw new InvalidOperationException($"A restraint refers to missing joint '{joint}'.");
         var caseNames = sapCases.Concat(x.Cases.Select(item => item.Name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var comboNames = sapCombos.Concat(x.Combinations.Select(item => item.Name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var combo in x.Combinations)
             if (combo.Items.FirstOrDefault(item => !caseNames.Contains(item.Name) && !comboNames.Contains(item.Name)) is { Name: { } missing })
                 throw new InvalidOperationException($"Combination '{combo.Name}' uses '{missing}', which is neither a load case nor a combination.");
 
+        // Supports. Restraints the model holds are written as they are, every component and at every joint: an imported
+        // roller or fixed support is not reduced to a pin, and a joint the model leaves free is free in SAP2000 too. A
+        // model that holds none has only the pins of its column bases: such a joint becomes a pin where SAP2000
+        // restrains nothing, and what SAP2000 restrains is kept. The joints concerned are those of the exported
+        // members and those the model restrains.
+        var supportJoints = target.Values.SelectMany(member => new[] { member.Start, member.End }).Concat(x.JointRestraints.Keys)
+            .Distinct(StringComparer.Ordinal).ToArray();
+        bool[]? RestraintToWrite(string joint, bool[] held)
+        {
+            var wanted = x.JointRestraints.GetValueOrDefault(joint, Mcotis.Core.Restraint.Free);
+            if (!x.RestraintsAssigned && (wanted.IsFree || held.Any(value => value))) return null;
+            bool[] exact = [wanted.Ux, wanted.Uy, wanted.Uz, wanted.Rx, wanted.Ry, wanted.Rz];
+            return held.SequenceEqual(exact) ? null : exact;
+        }
+
         if (preview)
         {
             int Missing(IEnumerable<string> wanted, HashSet<string> have) => wanted.Count(name => !have.Contains(name));
             var info = ReadInfo();
+            var supportChanges = 0;
+            foreach (var joint in supportJoints)
+            {
+                bool[] held = new bool[6];   // a joint the export adds has no restraint yet
+                if (sapPoints.ContainsKey(joint)) Check(Model.PointObj.GetRestraint(joint, ref held), "PointObj.GetRestraint", joint);
+                if (RestraintToWrite(joint, held) is not null) supportChanges++;
+            }
             lines.Add($"Target: {info.Path} ({info.Units}{(info.IsLocked ? ", locked — analysis results will be deleted" : "")})");
             lines.Add($"Geometry: remove {removed.Length} member(s){(removed.Length > 0 ? " (" + string.Join(", ", removed.Take(8).Select(member => member.Name)) + (removed.Length > 8 ? ", …" : "") + ")" : "")}, add {added.Length}; move {moved.Length} joint(s), add {newPoints.Length}, remove {orphanPoints.Length} unconnected");
             lines.Add($"Libraries: add {Missing(x.Materials.Select(m => m.Name), sapMaterials)} material(s), {Missing(x.FrameSections.Select(s => s.Name), sapFrameProps) + Missing(x.CableSections.Select(s => s.Name), sapCableProps)} section(s)");
             lines.Add($"Loading: add {Missing(x.Patterns.Select(p => p.Name), sapPatterns)} load pattern(s); {x.JointLoads.Count} Tab 01 joint load(s); {x.CableTargets.Count} cable target force(s)");
-            lines.Add($"Analysis: add {Missing(x.Cases.Select(c => c.Name), sapCases)} load case(s), update {x.Cases.Count - Missing(x.Cases.Select(c => c.Name), sapCases)}; add {Missing(x.Combinations.Select(c => c.Name), sapCombos)} combination(s)");
+            lines.Add(x.RestraintsAssigned
+                ? $"Supports: the {x.JointRestraints.Count} joint restraint(s) of the Mcotis model are written as they are, every component, and a joint it leaves free is freed — {supportChanges} joint(s) change"
+                : $"Supports: the Mcotis model holds no restraint — {supportChanges} column base(s) that SAP2000 leaves free become pins; the restraints SAP2000 has are kept");
+            lines.Add($"Analysis: active DOF set to {x.ActiveDofs}; " +
+                      $"add {Missing(x.Cases.Select(c => c.Name), sapCases)} load case(s), update {x.Cases.Count - Missing(x.Cases.Select(c => c.Name), sapCases)}; add {Missing(x.Combinations.Select(c => c.Name), sapCombos)} combination(s)");
             return new SapExportReport(info.Path, lines);
         }
 
@@ -263,18 +291,21 @@ public sealed partial class SapGateway
                 Check(Model.CableObj.SetModifiers(member.Name, ref modifiers), "CableObj.SetModifiers", member.Name);
             }
         }
-        // supports: a support joint without any restraint becomes a pin (a joint SAP2000 restrains keeps its restraint)
-        var pinned = 0;
-        foreach (var support in x.PinSupports.Where(geometry.Points.ContainsKey))
+        // supports, as the preview said (RestraintToWrite, above)
+        var restraintChanges = 0;
+        foreach (var joint in supportJoints)
         {
-            bool[] restraint = new bool[6];
-            Check(Model.PointObj.GetRestraint(support, ref restraint), "PointObj.GetRestraint", support);
-            if (restraint.Any(value => value)) continue;
-            bool[] pin = [true, true, true, false, false, false];
-            Check(Model.PointObj.SetRestraint(support, ref pin), "PointObj.SetRestraint", support);
-            pinned++;
+            bool[] held = new bool[6];
+            Check(Model.PointObj.GetRestraint(joint, ref held), "PointObj.GetRestraint", joint);
+            if (RestraintToWrite(joint, held) is not { } exact) continue;
+            Check(Model.PointObj.SetRestraint(joint, ref exact), "PointObj.SetRestraint", joint);
+            restraintChanges++;
         }
-        lines.Add($"Assignments: {target.Count} members (section, local axis, releases, modifiers; {reassigned} section change(s)); {pinned} new pin support(s).");
+        bool[] activeDofs = Mcotis.Core.DegreesOfFreedom.Components.Select(component => Mcotis.Core.DegreesOfFreedom.Contains(x.ActiveDofs, component)).ToArray();
+        Check(Model.Analyze.SetActiveDOF(ref activeDofs), "Analyze.SetActiveDOF");
+        lines.Add($"Assignments: {target.Count} members (section, local axis, releases, modifiers; {reassigned} section change(s)); " +
+                  (x.RestraintsAssigned ? $"{restraintChanges} joint restraint(s) set as the Mcotis model holds them" : $"{restraintChanges} new pin support(s)") +
+                  $"; active DOF {x.ActiveDofs}.");
 
         // load patterns
         var addedPatterns = 0;

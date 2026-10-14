@@ -21,9 +21,15 @@ public sealed record SapExportCableTarget(string CableName, string Pattern, doub
 
 /// <summary>
 /// Everything File → Export to SAP2000 writes into the open SAP2000 model, in kN, m: the geometry with each member's
-/// section, local axis, releases and modifiers, the material and section libraries, the supports, the load patterns, the
+/// section, local axis, releases and modifiers, the material and section libraries, the supports and the active
+/// analysis DOFs, the load patterns, the
 /// Tab 01 joint loads (replacing those patterns' joint loads at <see cref="Tab01Points"/>), the Tab 03 cable target forces,
 /// the static load cases and the linear additive combinations.
+/// <para><see cref="JointRestraints"/> are the restraints the model is analysed with. With
+/// <see cref="RestraintsAssigned"/> they are assignments the model holds — read from SAP2000 or ETABS — and are written
+/// as they are, every component, a joint the model leaves free being freed. Without it the model holds none and they
+/// are the pins of its column bases: such a joint becomes a pin only where the target restrains nothing, and what
+/// the target restrains is kept. <see cref="PinSupports"/> are the joints held in the plane of the model.</para>
 /// </summary>
 public sealed record SapExportModel(
     GeometryModel Geometry,
@@ -32,6 +38,9 @@ public sealed record SapExportModel(
     IReadOnlyList<FrameSectionProperty> FrameSections,
     IReadOnlyList<StrandSectionProperty> CableSections,
     IReadOnlyList<string> PinSupports,
+    IReadOnlyDictionary<string, Mcotis.Core.Restraint> JointRestraints,
+    bool RestraintsAssigned,
+    Mcotis.Core.DofMask ActiveDofs,
     IReadOnlyList<SapExportPattern> Patterns,
     IReadOnlyList<string> Tab01Points,
     IReadOnlyList<SapExportJointLoad> JointLoads,

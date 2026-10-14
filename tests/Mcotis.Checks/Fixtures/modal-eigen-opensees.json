@@ -1,0 +1,58 @@
+{
+  "source": "Independent OpenSeesPy one-dimensional Elastic truss chains with nodal lumped mass",
+  "versions": {
+    "OpenSees": "3.8.0",
+    "openseespy": "3.8.0.0",
+    "openseespywin": "3.8.0.0"
+  },
+  "units": {
+    "length": "m",
+    "force": "kN",
+    "mass": "t",
+    "time": "s"
+  },
+  "assumptions": "Linear axial trusses; nodal lumped translational mass; fixed first node",
+  "cases": [
+    {
+      "name": "sdof",
+      "masses": [
+        3.0
+      ],
+      "eigenvalues": [
+        333333.3333333333
+      ],
+      "frequenciesHz": [
+        91.88814923696533
+      ],
+      "participationRatioPercentUX": [
+        100.0
+      ],
+      "cumulativeRatioPercentUX": [
+        100.0
+      ]
+    },
+    {
+      "name": "two-dof",
+      "masses": [
+        2.0,
+        2.0
+      ],
+      "eigenvalues": [
+        190983.0056250526,
+        1309016.9943749476
+      ],
+      "frequenciesHz": [
+        69.55326050139847,
+        182.09280002103674
+      ],
+      "participationRatioPercentUX": [
+        94.7213595499958,
+        5.2786404500042075
+      ],
+      "cumulativeRatioPercentUX": [
+        94.7213595499958,
+        100.0
+      ]
+    }
+  ]
+}

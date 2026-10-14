@@ -17,7 +17,27 @@ internal static class FemDatabaseChecks
             var source = FemInputDatabase.ReadDefault().Snapshot.ToLegacy();
             var sourceGeometry = source.Geometry ?? throw new InvalidOperationException("The default FEM model has no geometry.");
             var snapshot = FemInputSnapshot.FromLegacy(source);
+            var native = LegacyNativeDocumentMigration.Convert(snapshot, LegacyNativeDocumentMigration.Source.Generated("VCF"));
+            var nativeAgain = LegacyNativeDocumentMigration.Convert(snapshot, LegacyNativeDocumentMigration.Source.Generated("VCF"));
+            Check(native.DocumentId.Value == snapshot.DatabaseId && native.Points.Count == sourceGeometry.Points.Count &&
+                  native.Frames.Count == sourceGeometry.Members.Count(member => member.Kind == Mcotis.Desktop.Domain.MemberKind.Frame) &&
+                  native.Cables.Count == sourceGeometry.Members.Count(member => member.Kind != Mcotis.Desktop.Domain.MemberKind.Frame) &&
+                  native.LoadPatterns.Count == snapshot.PatternRows.Count && native.LoadCases.Count == snapshot.CaseRows.Count &&
+                  native.LoadCombinations.Count == snapshot.CombinationRows.Count,
+                "legacy VCF input becomes one complete native 3D document with geometry, loading and case definitions");
+            Check(native.Settings.ActiveDofs == Mcotis.Core.DofMask.Full3D && native.Restraints.Count >= 2 &&
+                  native.Points.Values.All(point => point.Origin is { Kind: Mcotis.Core.OriginKind.Generated, GenerationKey: not null }) &&
+                  native.Frames.Keys.Order().SequenceEqual(nativeAgain.Frames.Keys.Order()) &&
+                  native.AnalysisInputHash == nativeAgain.AnalysisInputHash,
+                "VCF is a deterministic native generator snapshot with explicit supports, stable IDs and full-3D defaults");
+            var nativeRoundTrip = Mcotis.Persistence.NativeDocumentFormat.Deserialize(Mcotis.Persistence.NativeDocumentFormat.Serialize(native));
+            Check(nativeRoundTrip.DocumentId == native.DocumentId && nativeRoundTrip.AnalysisInputHash == native.AnalysisInputHash &&
+                  nativeRoundTrip.Loads.Count == native.Loads.Count,
+                "the migrated VCF model saves and reopens as a native .mcotis document without losing analysis input");
             var inputPath = Path.Combine(root, "model" + FemInputDatabase.Extension);
+            var rollerName = sourceGeometry.Points.Keys.OrderBy(name => name, StringComparer.Ordinal).First();
+            var roller = new Mcotis.Core.Restraint(true, false, true, false, false, false);
+            snapshot.JointRestraints = [FemJointRestraintDto.FromNative(rollerName, roller)];
             FemInputDatabase.Write(inputPath, snapshot);
 
             Check(FemInputDatabase.Filter.Contains("MCOTiS Config", StringComparison.Ordinal) &&
@@ -27,8 +47,11 @@ internal static class FemDatabaseChecks
 
             var firstIds = ObjectIds(inputPath);
             var reopened = FemInputDatabase.Read(inputPath);
-            Check(reopened.Snapshot.DatabaseId == snapshot.DatabaseId && reopened.Snapshot.Geometry!.Points.Count == sourceGeometry.Points.Count,
-                "FEM input database round-trips the model identity and geometry");
+            var reopenedNative = LegacyNativeDocumentMigration.Convert(reopened.Snapshot, LegacyNativeDocumentMigration.Source.Imported("test"));
+            Check(reopened.Snapshot.DatabaseId == snapshot.DatabaseId && reopened.Snapshot.Geometry!.Points.Count == sourceGeometry.Points.Count &&
+                  reopened.Snapshot.JointRestraints.SequenceEqual(snapshot.JointRestraints) &&
+                  reopenedNative.RestraintOf(reopenedNative.Points.Values.Single(point => point.Name == rollerName).Id) == roller,
+                "FEM input database round-trips the model identity, geometry and exact six-DOF joint restraints");
             Check(reopened.Snapshot.PatternRows.Count == source.PatternRows.Count && reopened.Snapshot.CaseRows.Count == source.CaseRows.Count &&
                   reopened.Snapshot.OutputSettings is not null && reopened.Snapshot.ToLegacy().Project?.Tab05IterationStudy is null,
                 "FEM input database stores load definitions and output settings without the MB iteration study");

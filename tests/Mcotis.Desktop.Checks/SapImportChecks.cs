@@ -28,6 +28,13 @@ internal static class SapImportChecks
         Check(state.Geometry.Members.Count == geometry.Members.Count && vm.FemSectionProperties.Count == geometry.Members.Count &&
               vm.Materials.Count == 3 && vm.FrameSections.Count == 2 && vm.CableSections.Count == 1 && vm.FemPatternRows.Count > 0,
             "it imports the geometry, every member's properties, the material / section libraries and the load patterns");
+        var native = vm.NativeDocumentSession.Document;
+        Check(native.Points.Count == state.Geometry.Points.Count &&
+              native.Frames.Count + native.Cables.Count == state.Geometry.Members.Count &&
+              native.LoadCases.Count == vm.FemCaseRows.Count && native.LoadPatterns.Count == vm.FemPatternRows.Count &&
+              native.Points.Values.All(point => point.Origin is { Kind: Mcotis.Core.OriginKind.Imported, SourceProduct: "SAP2000" }) &&
+              state.JointRestraints.All(item => native.RestraintOf(native.Points.Values.Single(point => point.Name == item.Key).Id) == item.Value),
+            "SAP2000 import hands the complete frozen read, including exact six-DOF restraints, into the central native document with imported source identity");
         Check(state.Truss.TopPoints.Count == 11 && state.Truss.TopPoints[0] == "TTrPt001" && state.Truss.MiddlePoints.Count == 11 &&
               state.Truss.BottomPoints.Count == 11,
             "the Tab 02 chord groups are found from the TTrPt / MTrPt / BTrPt joints");
@@ -44,6 +51,11 @@ internal static class SapImportChecks
 
         var runs = FemModelFileChecks.Analyze(vm);
         Check(runs.Count == 1 && sap.Writes == 0, $"the imported model runs FEM, and SAP2000 was never written ({runs.Count} runs, unexpected calls: {string.Join(", ", sap.Unexpected)}; {vm.FemProgressText})");
+        var held = state.JointRestraints;
+        Check(runs[0].Result.SupportReactions.Select(reaction => reaction.PointName).SequenceEqual(vm.FemPinSupportPoints) &&
+              vm.FemPinSupportPoints.Count == held.Count && held.Values.Count(restraint => restraint == Mcotis.Core.Restraint.Fixed) == 1 &&
+              vm.FemJointRestraints.Count == held.Count && vm.FemJointRestraints.All(item => held[item.Key] == item.Value),
+            $"Run Analysis holds the joints as SAP2000 restrains them — a fixed base and {held.Count - 1} pins, every component — and reports the reactions at them, left to right");
 
         // Export to SAP2000 of the imported model gives SAP2000 back what it holds: every member and section, the joint loads
         // Tab 01 replaces (equal to SAP's), the cable target forces, the static cases and the combinations
@@ -53,8 +65,10 @@ internal static class SapImportChecks
               export.JointLoads.All(load => sapLoads.TryGetValue((load.PointName, load.Pattern.ToUpperInvariant()), out var fz) && Math.Abs(fz - load.FzKN) <= 1e-6 * Math.Max(1, Math.Abs(fz))) &&
               export.CableTargets.Count == cables && export.CableTargets.All(target => target.ForceKN == 30_000 && target.Pattern == "Pretension") &&
               export.Cases.Select(item => item.Name).SequenceEqual(vm.FemCaseRows.Where(row => row.Supported).Select(row => row.Name)) &&
-              export.Patterns.Count == vm.FemPatternRows.Count && export.PinSupports.Count > 0,
-            $"Export to SAP2000 carries the imported model back: {export.Members.Count} members, {export.JointLoads.Count} joint loads equal to SAP's, " +
+              export.Patterns.Count == vm.FemPatternRows.Count && export.PinSupports.Count > 0 && export.ActiveDofs == vm.FemActiveDofs &&
+              export.RestraintsAssigned &&
+              export.JointRestraints.Count == state.JointRestraints.Count && state.JointRestraints.All(item => export.JointRestraints.GetValueOrDefault(item.Key) == item.Value),
+            $"Export to SAP2000 carries the imported model, exact restraints and selected DOFs back: {export.Members.Count} members, {export.JointLoads.Count} joint loads equal to SAP's, " +
             $"{export.CableTargets.Count} cable targets, {export.Cases.Count} cases, {export.Combinations.Count} combinations");
         var preview = vm.PreviewSapExportAsync().GetAwaiter().GetResult();
         Check(sap.Exports.Count == 1 && sap.Exports[0].Preview && !sap.Exports[0].Unlock && preview.Target.Path == @"C:\Models\Imported.sdb",
@@ -71,6 +85,43 @@ internal static class SapImportChecks
         Check(chords is not null && chords.Top.SequenceEqual(state.Truss.TopPoints.Select(name => "J" + name)) &&
               chords.Bottom.SequenceEqual(state.Truss.BottomPoints.Select(name => "J" + name)),
             "without the COT names the chord groups come from the three highest levels of horizontal frames");
+
+        // The run reads the restraints from the model as it stands, not from the native document as it was last
+        // written: here a restrained joint is deleted and the model is run at once, before any autosave.
+        var removed = vm.FemPinSupportPoints[^1];
+        vm.UnlockFemModel.Execute(null);
+        vm.DeleteObjectsAsync([], [removed]).GetAwaiter().GetResult();
+        var after = FemModelFileChecks.Analyze(vm);
+        var document = vm.NativeDocumentSession.Document;
+        Check(!state.JointRestraints.ContainsKey(removed) && after.Count == 1 && vm.FemPinSupportPoints.Count == held.Count - 1 &&
+              after[0].Result.SupportReactions.Select(reaction => reaction.PointName).SequenceEqual(vm.FemPinSupportPoints) &&
+              vm.NativeDocumentProblem is null && document.Restraints.Count == held.Count - 1 && document.Points.Values.All(point => point.Name != removed),
+            $"a deleted joint ({removed}) takes its restraint with it; the run that follows at once is solved on the {held.Count - 1} supports left, and the native document is the model that ran ({vm.FemProgressText})");
+
+        // A model that holds no restraint — the VCF system — has the pins of its column bases by rule. They are exported
+        // as that, not as assignments: the export then pins only a base the target leaves free and frees nothing.
+        var vcfState = new ApplicationState();
+        var vcfWorkflow = new WorkflowService(sap.Gateway, vcfState);
+        var vcf = new MainViewModel(vcfState, vcfWorkflow, new NoSelection(), new ConfigService(sap.Gateway, vcfState, vcfWorkflow));
+
+        // the restraints are saved with the model in the .cotfem.json file too, and opened from it
+        var jsonPath = Path.Combine(Path.GetTempPath(), $"mcotis-restraints-{Guid.NewGuid():N}{FemModelFile.Extension}");
+        try
+        {
+            vm.SaveFemModelFileAsync(jsonPath).GetAwaiter().GetResult();
+            vcf.OpenFemModelFile(jsonPath);
+            Check(vcfState.JointRestraints.Count == held.Count - 1 && vcfState.JointRestraints.All(item => state.JointRestraints[item.Key] == item.Value) &&
+                  vcf.FemJointRestraints.Values.Count(restraint => restraint == Mcotis.Core.Restraint.Fixed) == 1,
+                $"Save MCOTiS Config as {FemModelFile.Extension} and Load MCOTiS Config keep the {held.Count - 1} joint restraints, the fixed base as fixed");
+        }
+        finally { File.Delete(jsonPath); }
+
+        vcf.LoadDefaultFemModel(replaceCurrent: true);
+        var rule = vcf.BuildSapExportModel();
+        Check(vcfState.JointRestraints.Count == 0 && !rule.RestraintsAssigned && rule.JointRestraints.Count >= 2 &&
+              rule.JointRestraints.Values.All(restraint => restraint == Mcotis.Core.Restraint.Pinned) &&
+              rule.PinSupports.SequenceEqual(FemStudyService.FindPinSupportPoints(vcfState.Baseline)),
+            $"the VCF model holds no restraint: its {rule.JointRestraints.Count} column-base pins are exported as the rule they are, so that the target keeps its own restraints");
     }
 
     private static void Check(bool condition, string name)
@@ -85,6 +136,19 @@ internal static class SapImportChecks
     }
 
     /// <summary>A read-only SAP2000 holding the benchmark model; every cable carries 30 MN in pattern "Pretension".</summary>
+    /// <summary>The benchmark model imported from the SAP2000 stand-in into a fresh application — one base fixed, the
+    /// others pinned — for checks of what an imported model is afterwards.</summary>
+    internal static MainViewModel ImportedViewModel()
+    {
+        var text = SapModelText.Read(Path.Combine(FemSapBenchmark.DefaultFolder, "model.s2k"));
+        var sap = ImportSap.Create(text, text.Geometry());
+        var state = new ApplicationState();
+        var workflow = new WorkflowService(sap.Gateway, state);
+        var vm = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(sap.Gateway, state, workflow));
+        if (!vm.ImportFromSapAsync().GetAwaiter().GetResult().ReadyToRun) throw new Exception("FAIL: the SAP2000 stand-in model is not ready to run after the import");
+        return vm;
+    }
+
     private class ImportSap : DispatchProxy
     {
         private SapModelText text = null!;
@@ -114,7 +178,12 @@ internal static class SapImportChecks
                 case nameof(ISapGateway.GetCurrentModelInfoAsync):
                     return Task.FromResult(Model);
                 case nameof(ISapGateway.ReadAsync):
-                    return Task.FromResult(new ModelSnapshot(Model, geometry, text.LoadPatternNames));
+                    var pins = FemStudyService.FindPinSupportPoints(geometry);
+                    var restraints = pins.Select((name, index) => (name, restraint: index == 0
+                            ? new Mcotis.Core.Restraint(true, true, true, true, true, true)
+                            : Mcotis.Core.Restraint.Pinned))
+                        .ToDictionary(item => item.name, item => item.restraint, StringComparer.Ordinal);
+                    return Task.FromResult(new ModelSnapshot(Model, geometry, text.LoadPatternNames, restraints));
                 case nameof(ISapGateway.ReadPointLoadsAsync):
                     return Task.FromResult<IReadOnlyList<PointLoad>>([]);
                 case nameof(ISapGateway.ReadForcesAsync):

@@ -187,6 +187,9 @@ public sealed partial class MainViewModel
         State.Geometry = geometry;
         State.Baseline = geometry;
         State.Preview = geometry;
+        // the model is the VCF system from here on: the native document records it as generated from that template
+        nativeDocumentSource = LegacyNativeDocumentMigration.Source.Generated("VCF");
+        nativeDocumentSourceKnown = true;
         State.Truss.TopPoints = setup.TopPoints;
         State.Truss.MiddlePoints = setup.MiddlePoints;
         State.Truss.BottomPoints = setup.BottomPoints;
@@ -254,6 +257,11 @@ public sealed partial class MainViewModel
             MemberPointLoads = femSapLoading.MemberPointLoads.Where(load => members.Contains(load.Load.MemberName)).ToArray(),
             GravityLoads = femSapLoading.GravityLoads.Where(load => members.Contains(load.MemberName)).ToArray(),
         };
+
+        // joint restraints the model holds: they move with renamed joints and go with removed ones, as the loads do
+        State.JointRestraints = State.JointRestraints.Select(item => (Joint: Map(item.Key), item.Value))
+            .Where(item => points.Contains(item.Joint)).GroupBy(item => item.Joint, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Value, StringComparer.Ordinal);
 
         // Tab 01: every top chord point stays loaded when every one was; otherwise the loaded points that still exist
         var appliedNames = State.AppliedPoints.Select(point => point.PointName).ToArray();
