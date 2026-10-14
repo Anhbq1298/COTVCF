@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Globalization;
+using System.Windows.Controls;
 using System.Windows;
 using System.Windows.Input;
 using Mcotis.Application;
@@ -8,11 +10,12 @@ namespace Mcotis.Desktop.Presentation;
 
 public partial class NativeModelWindow : Window
 {
+    private bool updatingView;
     public NativeModelViewModel Model { get; }
     public NativeModelWindow(DocumentSession session)
     {
         Model = new(session); InitializeComponent(); DataContext = Model;
-        Loaded += (_, _) => { Viewer.ShowPlane("3D"); Viewer.FitView(); };
+        Loaded += (_, _) => { Viewer.ShowPlane("3D"); RefreshReferenceController(); Viewer.FitView(); };
         Closing += OnClosing;
         PreviewKeyDown += async (_, e) =>
         {
@@ -21,6 +24,69 @@ public partial class NativeModelWindow : Window
             else if (e.Key == Key.F5 && Keyboard.Modifiers == ModifierKeys.None) { e.Handled = true; await Model.RunAsync(); }
         };
     }
+    private void ViewOrientation_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || updatingView || ViewOrientation.SelectedIndex < 0) return;
+        var plane = ViewOrientation.SelectedIndex switch { 1 => "XY", 2 => "XZ", 3 => "YZ", _ => "3D" };
+        Model.SetViewPlane(plane);
+        Viewer.ShowPlane(plane);
+        RefreshReferenceController();
+        Viewer.FitView();
+    }
+
+    private void RefreshReferenceController()
+    {
+        if (ViewCoordinate is null) return;
+        updatingView = true;
+        try
+        {
+            ViewCoordinate.ItemsSource = null;
+            var coordinates = Model.ViewCoordinates;
+            ViewCoordinate.ItemsSource = coordinates;
+            ViewCoordinate.IsEnabled = Model.ViewPlane != "3D";
+            FixedAxisLabel.Text = Model.ViewPlane == "3D" ? "Coordinate (m)" : NativeGridLevelController.FixedAxis(Model.ViewPlane) + " (m)";
+            ReferenceKind.Text = Model.ViewPlane switch { "XY" => "Levels / Z planes", "XZ" => "Y grids / elevations", "YZ" => "X grids / elevations", _ => "Model coordinates" };
+            if (Model.ViewPlane != "3D")
+            {
+                ViewCoordinate.SelectedItem = coordinates.FirstOrDefault(v => Math.Abs(v - Model.ViewCoordinate) <= NativeGridLevelController.Tolerance);
+                ViewCoordinate.Text = Model.ViewCoordinate.ToString("G", CultureInfo.CurrentCulture);
+            }
+            else ViewCoordinate.Text = "";
+        }
+        finally { updatingView = false; }
+    }
+
+    private void ViewCoordinate_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded || updatingView || ViewCoordinate.SelectedItem is not double coordinate) return;
+        Model.SetViewCoordinate(coordinate);
+        Viewer.FitView();
+    }
+
+    private void ViewCoordinate_Commit(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (!IsLoaded || updatingView || Model.ViewPlane == "3D") return;
+        if (double.TryParse(ViewCoordinate.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var value) && double.IsFinite(value))
+        {
+            Model.SetViewCoordinate(value);
+            Viewer.FitView();
+        }
+        else Model.Message = "Invalid plane coordinate. Enter a finite number in metres.";
+    }
+
+    private void StepLevel(int direction)
+    {
+        if (Model.ViewPlane == "3D") return;
+        var levels = Model.ViewCoordinates;
+        if (levels.Count == 0) return;
+        var nearest = Enumerable.Range(0, levels.Count).MinBy(i => Math.Abs(levels[i] - Model.ViewCoordinate));
+        Model.SetViewCoordinate(levels[Math.Clamp(nearest + direction, 0, levels.Count - 1)]);
+        RefreshReferenceController();
+        Viewer.FitView();
+    }
+    private void PreviousLevel_Click(object sender, RoutedEventArgs e) => StepLevel(-1);
+    private void NextLevel_Click(object sender, RoutedEventArgs e) => StepLevel(1);
+
     internal static void CreateTemplate(Window owner)
     {
         var form = new TemplateBuildingWindow { Owner = owner };
