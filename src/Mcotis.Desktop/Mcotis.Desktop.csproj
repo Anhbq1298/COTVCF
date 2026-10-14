@@ -98,6 +98,7 @@
     <EmbeddedResource Include="$(RepoRoot)docs\DEVELOPMENT_LOG.md" LogicalName="Mcotis.DevelopmentLog.md" Link="DEVELOPMENT_LOG.md" />
     <!-- Help → User Guide shows the user guide; whoever adds or changes a function updates its article. -->
     <EmbeddedResource Include="$(RepoRoot)docs\USER_GUIDE.md" LogicalName="Mcotis.UserGuide.md" Link="USER_GUIDE.md" />
+    <EmbeddedResource Include="$(RepoRoot)docs\user-guide\images\*.png" LogicalName="Mcotis.UserGuide.%(Filename)%(Extension)" Link="UserGuideImages\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

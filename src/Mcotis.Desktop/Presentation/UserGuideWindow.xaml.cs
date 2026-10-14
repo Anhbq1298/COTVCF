@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
@@ -51,15 +52,40 @@ public partial class UserGuideWindow : Window
 
     private void Show(string? target)
     {
+        shownArticle = null;
         if (target is null) { Viewer.Document = MainPage(); Breadcrumb.Text = "Main page"; SelectInContents(null); }
         else if (target.StartsWith('?')) { Viewer.Document = SearchPage(target[1..]); Breadcrumb.Text = $"Search: {target[1..]}"; }
         else if (guide.Find(target) is { } article)
         {
+            shownArticle = article;
             Viewer.Document = ArticlePage(article);
             Breadcrumb.Text = $"{article.Category}  ›  {article.Title}";
             SelectInContents(article.Title);
         }
+        ExportButton.IsEnabled = shownArticle is not null;
         Viewer.Document?.BringIntoView();
+    }
+
+    private UserGuideArticle? shownArticle;
+
+    /// <summary>Export to Word…: the shown article as a .docx (A4, Arial 11, line spacing 1.15, with its screenshots).</summary>
+    private void Export_Click(object sender, RoutedEventArgs e)
+    {
+        if (shownArticle is not { } article) return;
+        var name = string.Concat(("Mcotis User Guide - " + article.Title).Select(character => Path.GetInvalidFileNameChars().Contains(character) ? '-' : character));
+        var dialog = new Microsoft.Win32.SaveFileDialog { Title = "Export to Word", Filter = "Word document (*.docx)|*.docx", FileName = name + ".docx", AddExtension = true };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            UserGuideWord.Export(article, dialog.FileName);
+            if (MessageBox.Show(this, $"Saved “{article.Title}” to\n{dialog.FileName}\n\nOpen it now?", "Export to Word", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(this, "The document could not be saved: " + ex.Message + "\n\nIs it open in Word? Close it, or choose another name.", "Export to Word",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void Back_Click(object sender, RoutedEventArgs e) { if (position > 0) { position--; Navigate(history[position], record: false); } }
@@ -303,6 +329,18 @@ public partial class UserGuideWindow : Window
             var bullet = line.StartsWith("- ", StringComparison.Ordinal);
             var number = Regex.Match(line, @"^\d+\.\s+(.*)$");
             if (line.Length == 0) { foreach (var block in Flush()) yield return block; continue; }
+            if (line.StartsWith("### ", StringComparison.Ordinal))
+            {
+                foreach (var block in Flush()) yield return block;
+                yield return new Paragraph(new Run(line[4..].Trim())) { FontSize = 15, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 10, 0, 4) };
+                continue;
+            }
+            if (UserGuide.ImagePattern.Match(line) is { Success: true } image)
+            {
+                foreach (var block in Flush()) yield return block;
+                foreach (var block in Screenshot(image.Groups[2].Value.Trim(), image.Groups[1].Value.Trim())) yield return block;
+                continue;
+            }
             if (bullet || number.Success)
             {
                 if (paragraph.Count > 0) { yield return Para(string.Join(" ", paragraph)); paragraph.Clear(); }
@@ -321,6 +359,31 @@ public partial class UserGuideWindow : Window
             paragraph.Add(line);
         }
         foreach (var block in Flush()) yield return block;
+    }
+
+    /// <summary>A screenshot at most its own size and the page's width, framed, with its caption below.</summary>
+    private IEnumerable<Block> Screenshot(string file, string caption)
+    {
+        if (UserGuide.Image(file) is not { } bytes)
+        {
+            yield return new Paragraph(new Run($"[missing screenshot: {file}]")) { Foreground = (Brush)FindResource("Error") };
+            yield break;
+        }
+        var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+        bitmap.BeginInit();
+        bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+        bitmap.StreamSource = new MemoryStream(bytes);
+        bitmap.EndInit();
+        bitmap.Freeze();
+        var picture = new Image { Source = bitmap, Stretch = Stretch.Uniform, MaxWidth = bitmap.PixelWidth, HorizontalAlignment = HorizontalAlignment.Left };
+        System.Windows.Automation.AutomationProperties.SetName(picture, caption);
+        yield return new BlockUIContainer(new Border
+        {
+            Child = picture, BorderBrush = (Brush)FindResource("Border"), BorderThickness = new Thickness(1), HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 4, 0, 0), ToolTip = caption,
+        });
+        if (caption.Length > 0)
+            yield return new Paragraph(new Run(caption)) { FontSize = 11.5, FontStyle = FontStyles.Italic, Foreground = (Brush)FindResource("Muted"), Margin = new Thickness(0, 4, 0, 14) };
     }
 
     /// <summary>**bold**, `code` and [[links]] of a line.</summary>
