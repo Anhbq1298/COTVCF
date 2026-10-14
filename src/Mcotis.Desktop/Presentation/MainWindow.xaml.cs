@@ -8,18 +8,40 @@ namespace Mcotis.Desktop.Presentation;
 
 public partial class MainWindow : Window
 {
-    private void TemplateBuilding_Click(object sender, RoutedEventArgs e) => NativeModelWindow.CreateTemplate(this);
-    private void OpenNativeModel_Click(object sender, RoutedEventArgs e)
+    /// <summary>Edit → TemplateBuilding… (M8, one window): the building the form generates becomes the main window's model,
+    /// in the 3D view; the model it replaces is offered to be saved first.</summary>
+    private void TemplateBuilding_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = "Mcotis native model (*.mcotis)|*.mcotis" };
-        if (dialog.ShowDialog(this) != true) return;
+        if (DataContext is not MainViewModel vm) return;
+        var form = new TemplateBuildingWindow { Owner = this };
+        if (form.ShowDialog() != true || form.CreatedSession is not { } session || !vm.MayReplaceModel()) return;
         try
         {
-            var session = new Mcotis.Application.DocumentSession();
-            new Mcotis.Application.DocumentLifecycle(session, new Mcotis.Persistence.NativeDocumentStore()).Open(dialog.FileName);
-            new NativeModelWindow(session).Show();
+            vm.OpenNativeDocument(session.Document, "TemplateBuilding", null, LegacyNativeDocumentMigration.Source.Generated("TemplateBuilding"));
+            SharedViewer.ShowPlane("3D");
+            SharedViewer.FitView();
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Open native model", MessageBoxButton.OK, MessageBoxImage.Error); }
+        catch (InvalidOperationException ex) { MessageBox.Show(this, ex.Message, "TemplateBuilding", MessageBoxButton.OK, MessageBoxImage.Warning); }
+    }
+
+    /// <summary>The question "Save changes to …?", Yes / No / Cancel — a check answers it in its place.</summary>
+    internal static Func<Window, string, MessageBoxResult> AskSaveChanges { get; set; } = (owner, file) =>
+        MessageBox.Show(owner, $"Save changes to {file}?", "Mcotis", MessageBoxButton.YesNoCancel, MessageBoxImage.Question, MessageBoxResult.Yes);
+
+    /// <summary>The "Save changes?" prompt (M8): Yes saves (asking for a file when the model has none), No drops the
+    /// changes, Cancel keeps the model open.</summary>
+    private bool ConfirmDiscardChanges(MainViewModel vm)
+    {
+        switch (AskSaveChanges(this, vm.CurrentFileName))
+        {
+            case MessageBoxResult.No: return true;
+            case MessageBoxResult.Yes:
+                var saving = vm.SaveBeforeReplaceAsync();
+                if (saving.IsCompleted) return saving.Result;
+                MessageBox.Show(this, "The model is still being saved. Try again when the save has finished.", "Mcotis", MessageBoxButton.OK, MessageBoxImage.Information);
+                return false;
+            default: return false;
+        }
     }
     private void AnalysisOptions_Click(object sender, RoutedEventArgs e)
     {
@@ -50,12 +72,15 @@ public partial class MainWindow : Window
             if (DataContext is MainViewModel vm)
             {
                 vm.CommitEditors = CommitEditors;
+                vm.ConfirmDiscardChanges = () => ConfirmDiscardChanges(vm);
                 vm.FemAnalysisStarted += OpenFemMonitor;
                 // Run opens Set Load Cases to Run first; the analysis starts on Run Now
                 vm.ChooseFemLoadCases = () => new RunLoadCasesWindow(vm) { Owner = this }.ShowDialog() == true;
             }
         };
         Loaded += (_, _) => ApplyViewerLayout();
+        // closing with changes not saved: the same prompt as for opening another model
+        Closing += (_, e) => { if (DataContext is MainViewModel vm && !vm.MayReplaceModel()) e.Cancel = true; };
         // double-click a member: the same form as a right-click, opened on its assignments
         SharedViewer.MemberDoubleClicked += (_, name) =>
         {
@@ -276,6 +301,14 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Hides the left pane (startup: the model view opens on its own; any menu item opens the pane).</summary>
+    /// <summary>How the window opens (M9): the model view alone, in 3D — the tied arch system the app starts with is
+    /// analysed in Full 3D, and shown so.</summary>
+    internal void ShowStartupView()
+    {
+        ClosePane();
+        SharedViewer.ShowPlane("3D");
+    }
+
     internal void ClosePane()
     {
         paneClosed = true;
@@ -353,6 +386,32 @@ public partial class MainWindow : Window
             return;
         }
         new JointRestraintWindow(vm, joints) { Owner = this }.ShowDialog();
+    }
+
+    /// <summary>Assign → Joint → Masses… (M8): the native workspace's Joint Mass form, on the joints selected on the model view.</summary>
+    private void AssignJointMass_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        var document = vm.NativeDocumentSession.Document;
+        var names = LegacyNames.Of(document);
+        var joints = SharedViewer.SelectedJoints.Select(name => names.Point(name)).Where(id => id is not null).Select(id => id!.Value).ToArray();
+        if (joints.Length == 0)
+        {
+            MessageBox.Show(this, "Select one or more joints on the model view first (click them, or drag a window), then choose Assign → Joint → Masses.",
+                "Assign Joint Masses", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var form = new NativeJointMassWindow(document, joints) { Owner = this };
+        if (form.ShowDialog() != true || form.Definition is not { } mass) return;
+        try
+        {
+            vm.AssignJointMass(form.AppliesTo.Select(id => names[id]).ToArray(),
+                new Mcotis.Desktop.Configuration.FemJointMassDto("", mass.UX, mass.UY, mass.UZ, mass.RX, mass.RY, mass.RZ));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Mcotis.Core.DocumentException)
+        {
+            MessageBox.Show(this, ex.Message, "Assign Joint Masses", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void AssignFrameAxes_Click(object sender, RoutedEventArgs e)

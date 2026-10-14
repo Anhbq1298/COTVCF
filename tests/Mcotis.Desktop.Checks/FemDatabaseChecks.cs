@@ -5,6 +5,9 @@ using Mcotis.Desktop.Geometry.Handlers;
 using Mcotis.Desktop.Infrastructure;
 using Microsoft.Data.Sqlite;
 using System.IO;
+using System.Collections.Immutable;
+using Mcotis.Analysis;
+using Native = Mcotis.Core;
 
 internal static class FemDatabaseChecks
 {
@@ -72,19 +75,67 @@ internal static class FemDatabaseChecks
                 [new("J1", 4, 5)],
                 [new("F1", 1, 2, 3, 4, 5, 6, [new(0, 1, 3, 5, 0.001, -0.002)])],
                 [new("C1", 120, true, 100, 110, 100, [80, 100], 0.02, 0.9)], 7, 2);
-            var run = new FemStudyRun("Model", "L", "H", "P", result, [], new Dictionary<string, FemAnalysisResult> { ["SLS"] = result });
+            var documentId = new Native.ObjectId(Guid.NewGuid());
+            var caseId = new Native.ObjectId(Guid.NewGuid());
+            var modalCaseId = new Native.ObjectId(Guid.NewGuid());
+            var massSourceId = new Native.ObjectId(Guid.NewGuid());
+            var pointId = new Native.ObjectId(Guid.NewGuid());
+            var frameId = new Native.ObjectId(Guid.NewGuid());
+            var names = LegacyNames.FromEntries([(pointId, "J1", "Point"), (frameId, "F1", "Frame")]);
+            var nativeStatic = new StaticResult(documentId, "static-hash", 4, caseId,
+                [new(pointId, [0.001, 0.004, -0.002, 0.005, -0.003, 0.006], [4, 7, 5, 8, -6, 9], [0, 0, 0, 0, 0, 0])],
+                [new(frameId, new(1, 0, 0), new(0, 1, 0), new(0, 0, 1),
+                    ImmutableArray.CreateRange(Enumerable.Repeat(0d, 12)), ImmutableArray.CreateRange(Enumerable.Repeat(0d, 12)),
+                    [new(pointId, pointId, 0, 1, ImmutableArray.CreateRange(Enumerable.Repeat(0d, 12)), ImmutableArray.CreateRange(Enumerable.Repeat(0d, 12)),
+                        [new(0, [0.001, 0.004, -0.002, 0.005, -0.003, 0.006], [1, 2, 3, 4, 5, 6])])])],
+                [], new(6, 1e-12, 0.5, [], 0, 1e-13, null));
+            var nativeModal = new ModalAnalysisResult(documentId, modalCaseId, "modal-hash", 4, massSourceId, null, "elastic-1",
+                new("test", "1", 3, 0, 1e-10, 1e-8),
+                [new(1, 100, 10 / (2 * Math.PI), 2 * Math.PI / 10, ModalEigenStatus.Positive,
+                    [new(pointId, 0.1, 0.2, 0.3, 0.01, 0.02, 0.03)],
+                    [new(Native.DofComponent.UX, 1.2, 2.3, 45.6, 45.6)], 2e-10)],
+                new(12, [1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1], new(1, 2, 3)), []);
+            var nativeResults = new FemDocumentResults(new Dictionary<string, FemAnalysisResult> { ["SLS"] = result },
+                new Dictionary<string, StaticResult> { ["SLS"] = nativeStatic },
+                new Dictionary<string, ModalAnalysisResult> { ["MODES"] = nativeModal }, ["native note"], names)
+            {
+                CaseKinds = new Dictionary<string, Native.CaseKind> { ["SLS"] = Native.CaseKind.LinearStatic, ["MODES"] = Native.CaseKind.ModalEigen },
+            };
+            var run = new FemStudyRun("Model", "L", "H", "P", result, [], new Dictionary<string, FemAnalysisResult> { ["SLS"] = result }) { Native = nativeResults };
             var hash = FemInputDatabase.RevisionHash(snapshot);
             var outputPath = Path.Combine(root, "run" + FemOutputDatabase.Extension);
             var info = new FemOutputDatabaseInfo("run-1", snapshot.DatabaseId, snapshot.Revision, hash, DateTime.UtcNow, "Complete", inputPath);
             FemOutputDatabase.Write(outputPath, info, run);
             var output = FemOutputDatabase.Read(outputPath);
             Check(output.Info.InputDatabaseId == snapshot.DatabaseId && output.Info.InputRevisionHash == hash &&
-                  output.Run.Results!["SLS"].Cables.Single().FitHistoryKN!.SequenceEqual([80d, 100d]),
-                "FEM output database round-trips run provenance and engineering results");
+                  output.Run.Results!["SLS"].Cables.Single().FitHistoryKN!.SequenceEqual([80d, 100d]) &&
+                  output.Run.Native?.Static["SLS"].Joints.Single().Displacements[1] == 0.004 &&
+                  output.Run.Native.Modal["MODES"].Modes.Single().Shape.Single().RZ == 0.03 &&
+                  output.Run.Native.CaseKinds["SLS"] == Native.CaseKind.LinearStatic &&
+                  output.Run.Native.Notes.SequenceEqual(["native note"]),
+                "FEM output database round-trips run provenance, six-component static results and modal results");
             using (var connection = Open(outputPath))
-                Check(Scalar(connection, "SELECT COUNT(*) FROM frame_station_results") == 1 &&
-                      Scalar(connection, "SELECT COUNT(*) FROM cable_fit_iterations") == 2,
-                    "FEM output database exposes normalized frame and cable iteration rows");
+                Check(Scalar(connection, "PRAGMA user_version") == FemOutputDatabase.CurrentSchemaVersion &&
+                      Scalar(connection, "SELECT COUNT(*) FROM frame_station_results") == 1 &&
+                      Scalar(connection, "SELECT COUNT(*) FROM cable_fit_iterations") == 2 &&
+                      Scalar(connection, "SELECT COUNT(*) FROM joint_dof_results") == 6 &&
+                      Scalar(connection, "SELECT COUNT(*) FROM frame_station_components") == 6 &&
+                      Scalar(connection, "SELECT COUNT(*) FROM modal_modes") == 1 &&
+                      Scalar(connection, "SELECT COUNT(*) FROM modal_vectors") == 6 &&
+                      Scalar(connection, "SELECT COUNT(*) FROM modal_mass_participation") == 1,
+                    "FEM output schema v2 exposes normalized planar, six-component frame/joint and modal rows");
+
+            var legacyOutputPath = Path.Combine(root, "legacy-output" + FemOutputDatabase.Extension);
+            File.Copy(outputPath, legacyOutputPath);
+            using (var connection = OpenWritable(legacyOutputPath))
+            {
+                using var command = connection.CreateCommand();
+                command.CommandText = "DROP TABLE native_result_payloads; PRAGMA user_version = 1;";
+                command.ExecuteNonQuery();
+            }
+            var legacyOutput = FemOutputDatabase.Read(legacyOutputPath);
+            Check(legacyOutput.Run.Native is null && legacyOutput.Run.Results!["SLS"].Joints.Single().UZM == -0.002,
+                "the schema-v2 reader keeps opening a schema-v1 planar output without inventing native or modal results");
 
             var registration = new FemOutputRegistration(outputPath, info.RunId, snapshot.DatabaseId, snapshot.Revision, hash, info.CreatedUtc);
             var sessions = new FemWorkingSessionStore(Path.Combine(root, "sessions"));
@@ -134,6 +185,13 @@ internal static class FemDatabaseChecks
             Mode = SqliteOpenMode.ReadOnly,
             Pooling = false,
         }.ToString());
+        connection.Open();
+        return connection;
+    }
+
+    private static SqliteConnection OpenWritable(string path)
+    {
+        var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = path, Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ToString());
         connection.Open();
         return connection;
     }

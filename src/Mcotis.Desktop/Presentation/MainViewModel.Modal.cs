@@ -5,7 +5,7 @@ namespace Mcotis.Desktop.Presentation;
 
 // ---- Result → Modal Results: the modes of the run's modal cases, and a mode's shape in the shared viewer ----
 // The run solves a modal case of the Load Cases table with the modal solver of the standalone system (FemDocumentRun);
-// its modes are kept with the run (FemStudyRun.Native), in memory: the output database holds static results only.
+// its modes are kept with the run (FemStudyRun.Native) and persisted by output schema v2.
 public sealed partial class MainViewModel
 {
     /// <summary>The modes of the run shown (Result → Modal Results).</summary>
@@ -57,7 +57,11 @@ public sealed partial class MainViewModel
 
     private void ModeShown()
     {
-        if (showModeShape) NotifySharedViewer();
+        if (showModeShape)
+        {
+            Notify(nameof(FemResultDiagramTitle));
+            NotifySharedViewer();
+        }
     }
 
     /// <summary>Draws the mode chosen in Modal Results in the shared viewer, as a deflected shape that says it is a
@@ -68,6 +72,7 @@ public sealed partial class MainViewModel
         ShowFemResult(FemResultMode.DeflectedShape);
         showModeShape = true;
         Message = $"Mode {ModalResults.SelectedMode} of '{ModalResults.SelectedCase}': mass-normalized eigenvector, drawn magnified — relative amplitude, not a displacement.";
+        Notify(nameof(FemResultDiagramTitle));
         NotifySharedViewer();
     }
 }

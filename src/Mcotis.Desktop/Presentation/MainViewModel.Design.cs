@@ -63,10 +63,12 @@ public sealed partial class MainViewModel
         };
     }
 
+    /// <summary>The length of a frame of the model's document, by its identity (M7); 0 for a member the document lacks.</summary>
     private double MemberLength(string member)
     {
-        var frame = State.Geometry.Members.FirstOrDefault(item => item.Name == member);
-        if (frame is null || !State.Geometry.Points.TryGetValue(frame.Start, out var start) || !State.Geometry.Points.TryGetValue(frame.End, out var end)) return 0;
+        var document = NativeDocumentSession.Document;
+        if (Mcotis.Desktop.Application.LegacyNames.Of(document).Frame(member) is not { } id || !document.Frames.TryGetValue(id, out var frame) ||
+            !document.Points.TryGetValue(frame.StartPointId, out var start) || !document.Points.TryGetValue(frame.EndPointId, out var end)) return 0;
         var (dx, dy, dz) = (end.Position.X - start.Position.X, end.Position.Y - start.Position.Y, end.Position.Z - start.Position.Z);
         return Math.Sqrt(dx * dx + dy * dy + dz * dz);
     }
@@ -163,17 +165,22 @@ public sealed partial class MainViewModel
         DesignMemberInputs(basis.Type, basis.Members, basis.LoadCases).Select(input => ColumnDesignEngine.Design(basis, input)).ToArray();
 
     /// <summary>The FEM forces of <paramref name="members"/> under <paramref name="loadCases"/> (empty: all) in the design
-    /// candidate, as the design engine and the optimisation take them.</summary>
+    /// candidate, as the design engine and the optimisation take them: the six local components of the run's results by
+    /// frame identity (<see cref="NativeDesignForces"/>, M7); the planar stations only for a run that has no such result.</summary>
     internal IReadOnlyList<DesignMemberInput> DesignMemberInputs(ColumnDesignType type, IReadOnlyList<string> members, IReadOnlyList<string> loadCases)
     {
         var run = SelectedFemRun ?? FemRuns.FirstOrDefault();
         if (run is null) return [];
         var cases = loadCases.Count > 0 ? loadCases : DesignCaseNames();
         var options = DesignMemberOptions(type).ToDictionary(option => option.Member, StringComparer.Ordinal);
+        var combinations = FemCombinationRows.Select(row => (row.Name, row.Definition)).ToArray();
+        var native = cases.ToDictionary(name => name, name => run.Native is { } results && name != "Result"
+            ? NativeDesignForces.Of(results, name, combinations) : null, StringComparer.Ordinal);
         return members.Select(member =>
         {
             var forces = cases.Select(name =>
             {
+                if (native[name] is { } byFrame) return new DesignCaseForces(name, byFrame.GetValueOrDefault(member) ?? []);
                 var frame = run.ResultFor(name == "Result" ? null : name).Frames.FirstOrDefault(item => item.MemberName == member);
                 IReadOnlyList<DesignStation> stations = frame is null ? [] : frame.Stations is { Count: > 0 } list
                     ? list.Select(station => new DesignStation(station.AxialKN, station.ShearKN, station.MomentKNm)).ToArray()

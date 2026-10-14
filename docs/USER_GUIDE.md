@@ -2,7 +2,7 @@ Welcome to the **Mcotis User Guide** — the reference for every function of Mco
 
 New to Mcotis? Start with [[Introduction to Mcotis]], then [[The main window]] and [[Typical workflow]].
 
-The guide follows the menu bar: [[Configurations|File]] (models, import and export), Define (materials, sections, loads), Edit (the parametric systems), Assign, Run (analysis), Result and Display, Design (columns), and Optimization. The Reference articles cover [[Units and sign conventions]], [[Design codes and references]], the [[Glossary]] and the [[Limitations and known issues]].
+The guide follows the menu bar: [[Model files|File]] (models, import and export), Define (materials, sections, loads), Edit (the parametric systems), Assign, Run (analysis), Result and Display, Design (columns), and Optimization. The Reference articles cover [[Units and sign conventions]], [[Design codes and references]], the [[Glossary]] and the [[Limitations and known issues]].
 
 The guide is docs/USER_GUIDE.md in the repository; it is built into the app, so it always matches the version you run. Whoever adds or changes a function updates its article (see [[Help and development plans]]).
 
@@ -24,7 +24,10 @@ Mcotis is a desktop application for designing long-span structures for the Citie
 - **SAP2000 and ETABS.** Import a model to run it in Mcotis, export the Mcotis model back — see [[Import From SAP2000]] and [[Import From ETABS]].
 
 ## The models
-Mcotis opens with the tied arch system (see [[Built-in models]]). Your own work is saved as a configuration — one .cotfem.db file with the model and every setting (see [[Configurations]]).
+Mcotis opens with the tied arch system, shown in the 3D view and analysed in Full 3D (see [[Built-in models]]). Its
+out-of-plane stability comes from its section properties, member releases and joint restraints; the solver does not add
+a hidden restraint. Your own work is saved as a model file — one .mcotis file with the model and every setting (see
+[[Model files]]).
 
 # The main window
 Category: Getting started
@@ -37,7 +40,7 @@ The main window has the menu bar at the top, a toolbar below it, the model view 
 File · Define · Edit · Assign · Run · Result · Post-Processing · Display · Design · Help · Optimization · MB. Menus that need a model stay disabled until one is open. Optimization is set apart and highlighted; MB holds the pages of the SAP2000 candidate study ([[MB study workflow]]).
 
 ## Toolbar
-Buttons for the common commands: new / open / save configuration, run analysis, analysis options and monitor, zoom extents, zoom in and out, the 3-d, xy, xz and yz views, the Select tool, view options and the result pickers. Every button repeats a menu command and says which in its tooltip.
+Buttons for the common commands: new / open / save model, run analysis, analysis options and monitor, zoom extents, zoom in and out, the 3-d, xy, xz and yz views, the Select tool, view options and the result pickers. Every button repeats a menu command and says which in its tooltip.
 
 ## Model view
 The model drawn in 2D (XZ, XY, YZ) or 3D. Results are drawn on it. See [[Model view and selection]] and [[Display options]].
@@ -55,14 +58,14 @@ See also: Introduction to Mcotis; Run FEM Analysis; Column design
 
 A typical session goes from a model to a checked, costed design.
 
-1. **Open a model.** Mcotis opens with the tied arch system. Or use File → Load VCF…, File → Load Config…, [[Import From SAP2000]] or [[Import From ETABS]], or start blank with File → New Config ([[Configurations]]).
+1. **Open a model.** Mcotis opens with the tied arch system. Or use File → Load VCF…, File → Open…, [[Import From SAP2000]] or [[Import From ETABS]], or start blank with File → New Model ([[Model files]]).
 2. **Define.** Check the [[Materials]], [[Frame sections]] and [[Cable and tendon sections]]; the [[Load patterns]] and [[Load cases and combinations]].
 3. **Shape the system.** Edit → [[VCF System]] or [[Tied Arch System]]; adjust members with Assign ([[Assign frame sections]], [[Frame local axes]]) or [[Delete objects|Delete]].
 4. **Analyse.** Run → [[Run FEM Analysis]]; watch the [[Analysis monitor]].
 5. **Review results.** [[Showing results]], [[Results table]], [[FEM live results]].
 6. **Design.** Design → a column design ([[Column design]]); find the cheapest section with [[Column design optimization]].
 7. **Explore the design space.** [[Optimization VCF]] or [[Optimization TAS]], then [[Optimization results and charts]].
-8. **Save and share.** File → Save Config; [[Export to SAP2000]] or [[Export to ETABS]] for the design team.
+8. **Save and share.** File → Save; [[Export to SAP2000]] or [[Export to ETABS]] for the design team.
 
 # Model view and selection
 Category: Getting started
@@ -97,42 +100,44 @@ The keys of the main window, for the commands used most often.
 
 - **F1** — open this User Guide.
 - **F4** — show the undeformed shape (clear the result display).
-- **F5** — Show Deformed Shape… (choose the load case).
+- **F5** — Show Deformed Shape… (choose a static case or a solved modal case and mode number).
 - **F6** — Show Member Forces… (load case and N, V or M).
 - **F7** — Show Joint Reactions….
 - **V** — Select tool.
 - **Esc** — clear the selection.
 - **Del** — delete the selected objects ([[Delete objects]]).
 - **Home** — zoom extents.
-- **Ctrl+Shift+S** — Save Config As….
+- **Ctrl+O** — Open…; **Ctrl+S** — Save; **Ctrl+Shift+S** — Save As….
 
 Del, Esc and the F-keys are ignored while you type in a field or a table.
 
-# Configurations
+# Model files
 Category: Files and models
-Where: File → New Config, Load Config…, Save Config, Save Config As…
-See also: Built-in models; Native model workspace; Run FEM Analysis
+Where: File → New Model, Open…, Save, Save As…
+See also: Built-in models; Native models; Run FEM Analysis
 
-A configuration is one Mcotis file (.cotfem.db) that holds the complete analysis model and its setup: geometry, objects and assignments, materials, sections, loads, load cases, analysis and output settings, and the lock state.
+A model is saved as one Mcotis file (.mcotis) that holds the complete analysis model and its setup: geometry, objects and assignments, materials, sections, loads, load cases, analysis and output settings, and the lock state with the results of a locked model.
 
 ## Commands
-- **New Config** starts a blank model. Define the materials and frame / cable sections first, then create the system under Edit → [[VCF System]], which gives the new members the sections chosen there. The start screen also offers the built-in template.
-- **Load Config…** opens a configuration.
-- **Save Config** saves to the active configuration; the first save asks for a file name.
-- **Save Config As…** (Ctrl+Shift+S) saves under a new name; that file becomes the active configuration and the original is left as it was.
+- **New Model** starts a blank model. Define the materials and frame / cable sections first, then create the system under Edit → [[VCF System]], which gives the new members the sections chosen there. The start screen also offers the built-in template.
+- **Open…** (Ctrl+O) opens a model.
+- **Save** (Ctrl+S) writes the model to its file. A model that has no .mcotis file yet — a new model, a built-in one, an import or a file of an earlier version — asks for a file name first.
+- **Save As…** (Ctrl+Shift+S) saves under a new name; that file becomes the model's file and the original is left as it was.
+
+The title bar names the model's file; an asterisk (*) after it marks changes not saved yet. A save replaces the file in one step: if it fails, the file is as it was.
 
 ## Locked models
-A run of [[Run FEM Analysis]] locks the model and stores its results with the configuration; Run → Unlock FEM Model deletes the results and allows editing again (see [[Unlock FEM Model]]).
+A run of [[Run FEM Analysis]] locks the model. Save writes the lock with the model, and its results stay in the folder *name*.results beside the file, so the model opens again locked, with its results. Run → Unlock FEM Model deletes the results and allows editing again (see [[Unlock FEM Model]]).
 
-## Configurations of earlier versions
-A configuration saved by an earlier version of Mcotis opens as it was: every load case with its name, its load patterns and factors, the case it continues from and its Run setting, and the results stored with it stay with it. The file on disk is not changed until you save. Once saved by this version, the file is in the newer format and an earlier version of Mcotis no longer opens it — it reports that the file is newer than it supports. Update Mcotis on every computer before exchanging configurations.
+## Files of earlier versions
+Earlier versions of Mcotis saved a configuration (.cotfem.db, or .cotfem.json). File → Open… opens one as an import: every load case with its name, its load patterns and factors, the case it continues from and its Run setting, and the results stored with it come with the model. Save then asks for a .mcotis file — offered under the same name, beside it — and the older file is never written, so earlier versions of Mcotis can still open it. They cannot open a .mcotis file.
 
-A configuration can hold load cases this version does not analyse yet — a case with P-Delta, a linear static case, a modal case on the stiffness of another case. They are kept, can be edited and are saved back (see [[Load cases and combinations]]). [[Run FEM Analysis]] with such a case ticked stops and says which case and why; it does not analyse the case in a simpler way instead. Untick the case to run the others.
+A model can hold load cases this version does not analyse yet — a case with P-Delta or linear static on the stiffness of another case. They are kept, can be edited and are saved with the model (see [[Load cases and combinations]]). [[Run FEM Analysis]] with such a case ticked stops and says which case and why; it does not analyse the case in a simpler way instead. Untick the case to run the others.
 
 # Built-in models
 Category: Files and models
 Where: File → Load VCF…, File → Load TAS…; Mcotis's start
-See also: Configurations; Tied Arch System; VCF System
+See also: Model files; Tied Arch System; VCF System
 
 Mcotis carries two complete models that open and run without SAP2000 or ETABS.
 
@@ -144,19 +149,23 @@ The default VCF model, COT Framing_V1.2_100m, on 07 FEM, ready to run.
 
 Either command sets the current model aside after a confirmation.
 
-# Native model workspace
+# Native models
 Category: Files and models
-Where: File → Open Native Model…; Edit → TemplateBuilding…
-See also: TemplateBuilding; Run FEM Analysis
+Where: File → Open…; Edit → TemplateBuilding…
+See also: TemplateBuilding; Model files; Run FEM Analysis
 
-The native workspace is a separate window for 3D building frames in the standalone .mcotis format, with its own Save / Open, Undo / Redo, geometry view, degrees-of-freedom settings and Run Analysis (linear static frame results, and cable results for models with cables).
+Mcotis has one window. The separate native model workspace of earlier versions (File → Open Native Model…) is gone: everything it did is in the main window — TemplateBuilding, Undo / Redo, the degrees of freedom, modal cases ([[Load cases and combinations]]), [[Joint masses]], Run FEM Analysis and its results.
 
-Limits: no slabs or diaphragms; frames up to about 600 free degrees of freedom. Create a model with [[TemplateBuilding]] or open one with File → Open Native Model….
+A .mcotis file that native workspace saved opens with File → Open… as the model of the main window, and Save writes it back in the main window's form. Its objects keep their names, and the model is solved as the file defines it: sections with their A, I33, I22 and J, materials with their E, Poisson ratio, weight and mass density, end releases, modifiers, restraints, joint masses, loads, load cases, combinations, mass sources and degrees of freedom. A cable target force becomes the cable's pretension row (Tab 03).
+
+What the main window cannot hold yet is refused, all of it at once, each item with its object, and the open model stays: shells, rotated local axes, releases other than the moment about local 3, shear areas, joint loads along Y or moments about X or Z, frame loads along Y or local 3 (or local 1 / 2 on a frame out of the XZ plane), more than one target force on a cable or one read elsewhere than mid-length, envelope combinations.
+
+Limits: no slabs or diaphragms; frames up to about 3,000 free degrees of freedom.
 
 # Import From SAP2000
 Category: Files and models
 Where: File → Import From SAP2000
-See also: Export to SAP2000; Read FEM properties from SAP; Configurations
+See also: Export to SAP2000; Read FEM properties from SAP; Model files
 
 Brings the model open in SAP2000 into Mcotis in one read-only step, ready to run. SAP2000 is never written.
 
@@ -287,7 +296,7 @@ The **Default Setup** is Pretension → SLS / ULS: Pretension fits the cables to
 A nonlinear case can also be given P-Delta as its **Geometric nonlinearity**, and its own load steps, iterations and tolerances (**Own iteration controls**). The lists under Continue from and Stiffness from hold nonlinear cases only. A case that other cases start from cannot be made linear or modal.
 
 ## What is not analysed yet
-This version analyses Nonlinear Static cases without P-Delta and without iteration controls of their own, and Modal cases on the unstressed stiffness (see [[Modal results]]). P-Delta, Initial P-Delta, Linear Static, Modal on the stiffness of another case and a case's own iteration controls can be defined and saved, so that a model can be prepared and exchanged, but their analysis has not passed its verification. Load Case Data says so, and the **Status** column of the table reads "Unavailable — verification pending". A new case of such a type is added without its Run tick. [[Run FEM Analysis]] with such a case ticked stops and says which case and why; it never analyses the case in a simpler way instead.
+This version analyses Nonlinear Static cases without P-Delta and without iteration controls of their own, Linear Static cases on the unstressed stiffness of a model without cables (a cable carries tension only: such a model needs a nonlinear case, and Run says so), Modal cases on the unstressed frame stiffness, and frame-and-cable modal cases on a converged first-order nonlinear static state (see [[Modal results]]). P-Delta, Initial P-Delta, Linear Static on the stiffness of another case, and a case's own iteration controls can be defined and saved, but are not yet analysed. Load Case Data marks these "Unavailable — verification pending". [[Run FEM Analysis]] with such a case ticked stops and says why; it never substitutes a simpler analysis.
 
 ## Combinations
 Linear additive combinations of cases (and other combinations).
@@ -310,7 +319,7 @@ The tributary width, number of storeys and the qz of each load pattern, and the 
 ## Cable Force
 The cable target forces of the Pretension pattern.
 
-In a blank configuration the editor starts from the built-in VCF layout and creates the members with the sections you choose.
+In a blank model the editor starts from the built-in VCF layout and creates the members with the sections you choose.
 
 # Tied Arch System
 Category: Edit
@@ -337,14 +346,16 @@ With the defaults, Apply builds exactly the model of File → Load TAS….
 # TemplateBuilding
 Category: Edit
 Where: Edit → TemplateBuilding…
-See also: Native model workspace
+See also: Native models; Joint masses; Run FEM Analysis
 
-Creates a building frame in a new [[Native model workspace]]: per-bay X and Y widths, per-storey heights, downward beam line loads, general section properties, fixed or pinned bases and optional self-weight.
+Generates a building frame as the model of the main window, shown in the 3D view: per-bay X and Y widths, per-storey heights, downward beam line loads, general section properties (A, I33, I22, J), the material's E, Poisson ratio, weight and mass density, fixed or pinned bases and optional self-weight. A model with changes not saved is offered to be saved first.
+
+The building has one linear static load case, BuildingStatic, which Run FEM Analysis solves on the unstressed stiffness, in Full 3D (in the XZ or YZ plane for a building with bays in one direction only). Add a modal case in Load Case Data and masses with [[Joint masses]]. A TemplateBuilding model has no generator flag: it can be designed (Design) but not optimized.
 
 # Undo and redo
 Category: Edit
 Where: Edit → Undo (Ctrl+Z), Edit → Redo (Ctrl+Y)
-See also: Delete objects; Configurations; Run FEM Analysis
+See also: Delete objects; Model files; Run FEM Analysis
 
 Every change of the model in the main window is one step of its history: sections and restraints assigned, members deleted, the VCF or tied arch system edited, load patterns, cases and combinations, materials and sections defined, Analysis Options. **Undo** takes the last step back and **Redo** makes it again.
 
@@ -376,7 +387,7 @@ The tied arch system holds every deck joint and every arch joint between the spr
 # Delete objects
 Category: Edit
 Where: Edit → Delete (Del key)
-See also: Model view and selection; Configurations
+See also: Model view and selection; Model files
 
 Removes the joints, frames and cables selected on the model view, after an OK / Cancel confirmation. There is no undo — save first if you may want the model back.
 
@@ -387,6 +398,15 @@ Removes the joints, frames and cables selected on the model view, after an OK / 
 
 The Del key does nothing while you type in a field or a table.
 
+# Joint masses
+Category: Assign
+Where: Assign → Joint → Masses…
+See also: Modal results; Joint restraints
+
+Additional mass lumped at the joints selected on the model view: a translational mass along UX, UY and UZ [t] and a rotational inertia about RX, RY and RZ [t·m²]. The form shows the values of the first selected joint and gives them to every selected joint; six zeros take the mass away. Each assignment is one step of Undo / Redo, and the masses are saved with the model and follow a joint until it is deleted. Object Information lists a joint's mass.
+
+A modal case counts the joint masses through a mass source that includes additional mass — MS1 does, with the self mass of the members. Static cases do not use them.
+
 # Joint restraints
 Category: Assign
 Where: Assign → Joint → Restraints…, Restraints Summary
@@ -394,11 +414,11 @@ See also: Run FEM Analysis; Showing results
 
 The supports of the model: the six components each joint holds — UX, UY, UZ, RX, RY, RZ.
 
-- **Assign → Joint → Restraints…** acts on the joints selected on the model view (click them, or drag a window). Tick the components to hold, or use a fast restraint: **Fixed** (all six), **Pinned** (the translations), **Roller** (UZ), **Free** (none — the restraint is taken away). The form opens on what the joints hold when they all hold the same. **OK** / **Apply** write it; the results of the model are cleared.
+- **Assign → Joint → Restraints…** acts on the joints selected on the model view (click them, or drag a window). Tick the components to hold, or use a fast restraint: **Fixed** (all six), **Pinned** (the translations), **Roller** (UZ), **Free** (none — the restraint is taken away). The form opens on what the joints hold when they all hold the same. **OK** / **Apply** write it to the model document as one Undo step; the viewport and support summary update from that document, and the results of the model are cleared.
 - **Restraints Summary** lists the restraints the model holds.
 - A model imported from SAP2000 or ETABS is held as that model restrains it, component by component: a fixed support stays fixed and a roller stays a roller.
 - A model opened, imported or generated without any restraint — the VCF system, a configuration saved by an older version — gets pins at its lowest column bases (translations restrained, rotations free) once, as restraint assignments. From then on they are the model's own: nothing adds a support afterwards, and a joint made free stays free — the run then says what is not held.
-- The restraints are saved with the configuration and written as they are by Export to SAP2000 / ETABS.
+- The restraints are saved with the model and written as they are by Export to SAP2000 / ETABS.
 - Joints held in the XZ plane are drawn as supports in the viewer, and the reactions are reported at them: Rx and Rz, and **My** at a support that holds the rotation (a fixed support), positive counter-clockwise in the XZ elevation (X to the right, Z up). My is shown in the Results Table, beside the support in the viewer and in its hover read-out.
 
 # Assign frame sections
@@ -449,8 +469,10 @@ Solves the model as it is defined with the Mcotis solver. SAP2000 and ETABS are 
 ## Running
 Choose the load cases to run, then Run; Run → Cancel FEM Analysis stops a run. The [[Analysis monitor]] shows the run, every load case with its convergence and numerical stability, and the cable convergence. A finished run locks the model and stores its results ([[Unlock FEM Model]]). Results: [[Showing results]].
 
+A native model with its own joint/member loads does not need Tab 01 tributary-width loading definitions; even one loaded joint can be analysed. Tab 01's two-location requirement applies only when those candidate-load definitions are used.
+
 ## Limits
-Small displacements, no P-Δ, no shells; modal analysis of frames without cables (see [[Modal results]]); about 1,000 joints (see [[Limitations and known issues]]).
+Small displacements, no P-Δ, no shells; cable-only modal systems are not yet supported (see [[Modal results]]); about 1,000 joints (see [[Limitations and known issues]]).
 
 # Analysis options
 Category: Run
@@ -526,7 +548,7 @@ Each cable's result / target per fitting run, for the stage that fits the cable 
 # Unlock FEM Model
 Category: Run
 Where: Run → Unlock FEM Model
-See also: Run FEM Analysis; Configurations
+See also: Run FEM Analysis; Model files
 
 Deletes this revision's FEM output databases, clears Post-Processing and allows the model to be edited again.
 
@@ -537,7 +559,7 @@ See also: Results table; Display options; FEM live results
 
 Draws the results of the selected load case on the model view.
 
-- **Deformed shape** (F5) — choose the load case.
+- **Deformed shape** (F5) — choose a solved static case/combination, or a modal case and its mode number. A mode shape is a magnified relative amplitude, not a load deflection.
 - **Member forces** (F6) — choose the load case and N, V or M.
 - **Joint reactions** (F7).
 - **Show Results…** — choose the case / combination and the output.
@@ -552,14 +574,17 @@ Category: Results
 Where: Result → Results Table…
 See also: Showing results
 
-The results of the selected load case and output as a table, browsed by load case.
+The results of the selected load case and output as a table, browsed by load case. **Member / joint results** retains
+the compact XZ diagrams and tables used by the 2D viewer and reports. **Joint 6-DOF** lists global UX/UY/UZ,
+RX/RY/RZ and the matching support forces/moments. **Frame 6-component** lists local U1/U2/U3, R1/R2/R3 and
+F1/F2/F3, M1/M2/M3 at every result station. The 3D values are separate; they are never written into a planar column.
 
 # Modal results
 Category: Results
 Where: Result → Modal Results…
 See also: Load cases and combinations; Showing results
 
-The modes of the modal cases of the run. Define a modal case in **Define → Load Cases → Load Case Data** with the type **Modal (Eigenvectors)**, a mass source and the number of modes, and tick it to run with at least one static case; **Run FEM Analysis** then solves it with the static cases.
+The modes of the modal cases of the run. Define a modal case in **Define → Load Cases → Load Case Data** with the type **Modal (Eigenvectors)**, a mass source and the number of modes, then tick it to run. A frame model can use unstressed stiffness. For a frame-and-cable model, set **Stiffness from** to a converged first-order nonlinear static case (for example Pretension); Run FEM Analysis solves that prerequisite before the modal case, even if the prerequisite is not ticked.
 
 - **Modes** — eigenvalue, frequency, period and the scaled residual of each mode.
 - **Modal participation** — the participation factor, effective mass, ratio and cumulative ratio in UX, UY and UZ. A direction with no free mass reads N/A.
@@ -567,7 +592,7 @@ The modes of the modal cases of the run. Define a modal case in **Define → Loa
 - **Modal mass inventory** — the members' self mass, the assigned joint mass and the free mass by direction, and the centre of mass.
 - **Show Mode Shape** draws the mode chosen under Mode shape on the model, magnified, and says it is a relative amplitude. Showing any other result replaces it.
 
-The mass of the case is that of its mass source: **MS1**, offered for the first modal case, is the members' self mass. Modes are those of the unstressed elastic frames with lumped mass. Not available, and refused with the reason: modes on the stiffness at the end of another case, models with cables, shells. The modes are kept with the run until the model is unlocked or closed; they are not written to the output database.
+The mass of the case is that of its mass source: **MS1**, offered for the first modal case, includes members' self mass and assigned joint mass. The cable's taut/slack state and tension come from the selected static result; the mode calculation uses its small-displacement prestressed tangent. A source case with a held mechanism, P-Delta, or no converged result is refused. Cable-only systems, sagged cable modes and shells are not yet verified; a sagged cable needs Cable Sag off in Analysis Options, but only do that if a straight-chord model is appropriate. Modes, shapes, participation and mass inventory are written to output database schema v2 and return when a locked working session reopens. Unlock deletes that revision's output databases and clears them.
 
 # FEM live results
 Category: Results
@@ -610,7 +635,7 @@ Designs columns with the forces of the FEM run: pick a design from the Design me
 - **Optimization** — the cheapest section ([[Column design optimization]]).
 
 ## Assumptions
-The 2D model's moment bends the major axis (depth h in the model plane); the minor axis carries imperfection moments only. One section is checked for every ticked member, each with its own forces.
+The forces are taken in each frame's local axes: the moment about local 3 (M3) bends the major axis y-y — the section's depth h lies along local 2 — and the moment about local 2 (M2) bends the minor axis z-z, each with its imperfection and second-order effects, and both together in the code's biaxial check (EC2 5.8.9, EC4 6.7.3.7, with the imperfection in either plane when both moments act). The shear along local 2 goes with y-y, the shear along local 3 with z-z; each is checked. A plane model analysed in its plane has no M2: the minor axis then carries the imperfection moment only, as before. **Torsion is not designed**: a case whose torsion is more than 1 % of its largest bending moment (and more than 1 kNm) is refused with the value; a smaller torsion is reported in the calculation. The report states this mapping. One section is checked for every ticked member, each with its own forces.
 
 Run Design opens the [[Design results]]. The designs: [[RC column design]], [[CFT column design]], [[Steel encased column design]], [[Mega column design]].
 
@@ -805,7 +830,7 @@ The parametric study of the VCF system: Mcotis builds every combination of the g
 The command is available while the open model is a VCF system its generator made — File → Load VCF… or Edit → [[VCF System]] — and the edits since keep it one ([[Generator flag]]). With another model open it is greyed, and its tooltip says why; the tied arch system has [[Optimization TAS]].
 
 ## Step 1 — Prepare the working model
-1. Open the VCF model through **File → Load VCF…**, a saved configuration, or an existing imported model.
+1. Open the VCF model through **File → Load VCF…**, a saved model, or an existing imported model.
 2. Check **Edit → VCF System…**: geometry, loaded points, storey forces, cable target forces and assigned sections should describe the system you want to vary. The optimization starts from these inputs; it does not fetch a fresh SAP2000 model during the run.
 3. Review **Define → Load Cases / Load Combinations**. Choose which cases run and check any staged pretension definitions. A load pattern such as LL_ABOVE is an assigned loading source; the result checked later is a solved case or combination such as SLS: 1.0DL+1.0LL.
 4. Review **Run → Analysis Options**, including cable target-force fitting, iteration limit, mesh and sag. These apply to the optimization cases as well.
@@ -1043,6 +1068,8 @@ See also: Optimization VCF; Optimization TAS
 
 The results window of the last optimization run, with two sheets.
 
+File → Save keeps the study with the model, in the folder *name*.results beside the .mcotis file, and File → Open shows it again. A study run before the model was edited comes back with the note that it is of the model before those edits. Opening a model saved without a study empties the window.
+
 ## Run
 One row per case: the values of the inputs that vary, the max deflection, span, limit, δ / limit, uplift, check (OK / NG), total cost and status. Sort by any column.
 
@@ -1161,7 +1188,7 @@ See also: Introduction to Mcotis
 - **L** — span. **l0,y / l0,z** — effective (buckling) lengths about the major / minor axis.
 - **Target force** — the tension a cable is fitted to in the Pretension case.
 - **Tab 01 / 02 / 03** — loading, truss height (chord groups) and pretension of the model (the former MB pages 01–03, archived on 2026-10-13).
-- **Configuration** — one .cotfem.db file with the model and its setup.
+- **Model file** — one .mcotis file with the model and its setup. **Configuration** — the .cotfem.db file of earlier versions, opened as an import.
 - **Candidate** — one combination of the study's inputs.
 
 # Limitations and known issues
@@ -1172,7 +1199,7 @@ See also: Help and development plans
 - The Mcotis solver is first-order: no P-Δ (planned), no shells; modal analysis of frames without cables, on the unstressed stiffness; about 1,000 joints in the main window.
 - Export to ETABS writes cables without their pretension (planned).
 - Export to SAP2000 has not yet been run against a live SAP2000 — try it on a copy first.
-- Column design: the model is 2D, so the minor axis carries imperfection moments only.
+- Column design: torsion is not designed — a member with more than 1 % of its largest moment in torsion (and more than 1 kNm) is refused with the value. A model analysed in its plane has no moment about the minor axis: that axis then carries the imperfection moment only.
 - Column design optimization does not price formwork.
 - Import fits Tab 01 with B = 1 m and 1 storey; set the real values before a parametric study.
 - Post-Processing → Post-Processing (Optimization) — multi-candidate optimization reports — is reserved for a later release; use [[Optimization results and charts]] meanwhile.

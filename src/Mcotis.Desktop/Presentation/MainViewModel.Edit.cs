@@ -74,6 +74,9 @@ public sealed partial class MainViewModel
             // a restraint goes with its joint
             State.JointRestraints = State.JointRestraints.Where(item => points.Contains(item.Key))
                 .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
+            // and a joint mass
+            State.JointMasses = State.JointMasses.Where(item => points.Contains(item.Key))
+                .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
             State.Geometry = edited;
             State.Baseline = edited;
             State.SessionBaseline = edited;

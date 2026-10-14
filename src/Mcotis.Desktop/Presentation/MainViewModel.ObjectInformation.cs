@@ -175,6 +175,8 @@ public sealed partial class MainViewModel
                     : restraint == Mcotis.Core.Restraint.Pinned ? "Pin — translations restrained, rotations free"
                     : restraint == Mcotis.Core.Restraint.Fixed ? "Fixed — translations and rotations restrained"
                     : $"Restrained: {RestraintText(restraint)}")]),
+                new("Mass", [Row("Additional mass", !FemJointMasses.TryGetValue(point.Name, out var mass) ? "None"
+                    : $"UX {Number(mass.UX)}, UY {Number(mass.UY)}, UZ {Number(mass.UZ)} t; RX {Number(mass.RX)}, RY {Number(mass.RY)}, RZ {Number(mass.RZ)} t·m²")]),
             ]),
         };
 

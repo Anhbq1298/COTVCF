@@ -13,6 +13,7 @@ internal static class ModalChecks
     {
         SdofAndParticipation();
         MasslessRotation();
+        PrestressedFrameCable();
         FailurePaths();
     }
 
@@ -147,6 +148,65 @@ internal static class ModalChecks
         Assert(!cableOutcome.Success && cableOutcome.Issues.Any(issue => issue.Code == "modal.cable.state"),
             "unstressed cable modal analysis is refused until a verified tangent state exists");
         Assert(source.IncludeAdditionalMass, "mass source remains independent of cable refusal");
+    }
+
+    private static void PrestressedFrameCable()
+    {
+        ObjectId basePoint = Id(410), tip = Id(411), frame = Id(412), cable = Id(413), material = Id(414),
+            frameSection = Id(415), cableSection = Id(416), pattern = Id(417), staticCase = Id(418), modal = Id(419), source = Id(420);
+        const double force = 10_000, mass = 3;
+        var editor = ModelDocument.Create(Id(421)).Edit();
+        editor.PutMaterial(new(material, "M", MaterialType.Steel, E, .3, 0, 0));
+        editor.PutFrameSection(new(frameSection, "F", material, FrameSectionShape.General, new(A, I, I, I / 10)));
+        editor.PutCableSection(new(cableSection, "C", material, A));
+        editor.AddPoint(new(0, 0, 0), "Base", basePoint);
+        editor.AddPoint(new(L, 0, 0), "Tip", tip);
+        editor.AddFrame(basePoint, tip, "Frame", frame); editor.SetFrameSection([frame], frameSection);
+        editor.AddCable(basePoint, tip, "Stay", cable); editor.SetCableSection([cable], cableSection);
+        editor.SetRestraint([basePoint], Restraint.Fixed);
+        editor.SetJointMass(new(tip, mass, 0, mass));
+        editor.PutLoadPattern(new(pattern, "PULL", LoadPatternType.Other));
+        editor.PutLoad(new PointLoad(Id(422), pattern, tip, new(force, 0, 0)));
+        editor.PutLoadCase(new(staticCase, "PULL", CaseKind.NonlinearStatic, [new(pattern, 1)]));
+        editor.PutMassSource(new(source, "MS", IncludeSelfMass: false, IncludeAdditionalMass: true));
+        editor.PutLoadCase(new(modal, "MODES", CaseKind.ModalEigen, [])
+            { StiffnessSourceCaseId = staticCase, ModalOptions = new(source, 1) });
+        editor.SetSettings(AnalysisSettings.Default with { ActiveDofs = DofMask.XZ });
+        var model = ModelCompiler.Compile(editor.Commit().Document).Model!;
+        var staticResult = StaticSolver.Solve(model, staticCase).Result;
+        Assert(staticResult is not null, "frame and cable reach a converged prestressed state");
+        var result = ModalSolver.Solve(model, modal, stiffnessState: staticResult);
+        Assert(result.Success, "modal case uses the converged cable state: " + string.Join(" | ", result.Issues.Select(issue => issue.Message)));
+        double cableTension = staticResult!.Cables.Single().Tension;
+        Near(cableTension, force / 2, 1e-8, "parallel frame and cable share the axial pull equally");
+        double expected = (3 * E * I / Math.Pow(L, 3) + cableTension / L) / mass;
+        Near(result.Result!.Modes[0].EigenvaluePerSecondSquared, expected, 1e-8,
+            "transverse mode has condensed frame bending and prestressed cable geometric stiffness");
+        Assert(result.Result.StiffnessProducerCaseId == staticCase, "modal result records its stiffness source");
+        using var reference = JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
+            "Fixtures", "modal-cable-opensees.json")));
+        double openSeesEigenvalue = reference.RootElement.GetProperty("eigenvalues")[0].GetDouble();
+        Assert(Math.Abs(result.Result.Modes[0].EigenvaluePerSecondSquared / openSeesEigenvalue - 1) < 4e-4,
+            "prestressed transverse mode agrees with independent OpenSees corotTruss to 0.04% (small-displacement chord limit)");
+
+        var missing = ModalSolver.Solve(model, modal);
+        Assert(!missing.Success && missing.Issues.Any(issue => issue.Code == "modal.stiffness.state"),
+            "a missing source-state result is refused instead of using unstressed cable stiffness");
+        var stale = ModalSolver.Solve(model, modal, stiffnessState: staticResult with { InputHash = "other model" });
+        Assert(!stale.Success && stale.Issues.Any(issue => issue.Code == "modal.stiffness.state"),
+            "a modal case cannot use a cable tension from another model revision");
+        var sagged = ModalSolver.Solve(model, modal, stiffnessState: staticResult with
+        {
+            Cables = [staticResult.Cables.Single() with { Sag = .1 }]
+        });
+        Assert(!sagged.Success && sagged.Issues.Any(issue => issue.Code == "modal.cable.sag"),
+            "unverified sagged cable modes are refused instead of displaying an approximate frequency");
+        var cableOnly = model.Input.Edit();
+        cableOnly.Remove([frame]);
+        var cableModel = ModelCompiler.Compile(cableOnly.Commit().Document).Model!;
+        var unsupported = ModalSolver.Solve(cableModel, modal);
+        Assert(!unsupported.Success && unsupported.Issues.Any(issue => issue.Code == "modal.cable.only"),
+            "cable-only modal systems remain explicitly outside the verified scope");
     }
 
     private static void NumericalEdgeCases()

@@ -52,8 +52,8 @@ public partial class App : System.Windows.Application
         viewModel.LoadStartupModel();
         MainWindow = new Presentation.MainWindow { DataContext = viewModel };
         MainWindow.Show();
-        // The model view opens on its own; the Define / Run / Result … pane appears when a menu item is chosen.
-        ((Presentation.MainWindow)MainWindow).ClosePane();
+        // The model view opens on its own, in 3D; the Define / Run / Result … pane appears when a menu item is chosen.
+        ((Presentation.MainWindow)MainWindow).ShowStartupView();
     }
     protected override void OnExit(ExitEventArgs e)
     {

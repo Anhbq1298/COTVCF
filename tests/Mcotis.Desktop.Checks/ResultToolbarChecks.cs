@@ -210,11 +210,11 @@ internal static class ResultToolbarChecks
             Idle();
             Check(ReferenceEquals(picker, window.OwnedWindows.OfType<ShowResultsWindow>().Single()) &&
                   !picker.NoResults.IsVisible && picker.ApplyButton.IsEnabled &&
-                  picker.PickerKind == ShowResultPickerKind.Deflection && picker.LoadCasePicker.IsVisible &&
-                  picker.LoadCasePicker.Items.Count == 2 &&
+                  picker.PickerKind == ShowResultPickerKind.Deflection && picker.ShapePicker.IsVisible &&
+                  picker.ShapeCasePicker.Items.Count == 2 &&
                   picker.OutputGroup.Visibility == Visibility.Collapsed && (string)((ListBoxItem)picker.Outputs.SelectedItem).Tag == "DeflectedShape",
                 "F5 opens a load-case picker fixed to deformed shape");
-            picker.LoadCasePicker.SelectedItem = "Case B";
+            picker.ShapeCasePicker.SelectedItem = picker.ShapeCasePicker.Items.Cast<object>().Single(item => item.ToString() == "Case B");
             picker.ApplySelection();
             Check(vm.FemResultMode == FemResultMode.DeflectedShape && vm.SelectedFemResultName == "Case B",
                 "F5 applies the selected load case's deformed-shape result");

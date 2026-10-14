@@ -28,24 +28,37 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   depend on them. Every later section about an MB page or study report is historical reference, not active UI guidance.
 - **The standalone system** (user, 2026-10-12: "ignore SAP2000 and the MB tab completely … stand on our own feet and
   develop a new system") is the library projects `src/Mcotis.Core`, `src/Mcotis.Application`, `src/Mcotis.Persistence`
-  and `src/Mcotis.Analysis`, with their checks in `tests/Mcotis.Checks`. The desktop now references them for the
-  separate TemplateBuilding native workspace. Plan and
+  and `src/Mcotis.Analysis`, with their checks in `tests/Mcotis.Checks`. The main window runs on them (one window since
+  M8, 2026-10-15). Plan and
   status: `docs/mcotis-standalone-plan.md`. Checks:
   `dotnet run --project tests/Mcotis.Checks`. SAP2000 code is reference only; the MB UI is archived and must not be
   restored or extended.
-- **Native building UI** (user, 2026-10-12): **Edit → TemplateBuilding…** is available even on a blank/locked legacy
-  model and creates a new native workspace, preserving the main window's model. Per-bay X/Y widths, per-storey
-  heights and beam line loads, general section properties, fixed/pinned bases and optional self-weight. Native
-  Save/Open `.mcotis`, Undo/Redo, DOF options, async static analysis (**Run → Run Analysis**, F5) and result tables,
-  including **Cable results**. Main **File →
-  Open Native Model…** reopens saved native input. Main **Run → Analysis Options…** now opens a staged WPF dialog:
+- **One window since M8 (2026-10-15; task of 2026-10-14: "one window, one model")**: the separate native workspace
+  (`NativeModelWindow`, `NativeModelViewModel`, `NativeModalSetupWindow`) and File → Open Native Model… are archived in
+  `archive/Mcotis.Desktop/NativeWorkspace/` (README lists where each function now is). **Edit → TemplateBuilding…**
+  (available on a blank or locked model) generates its building into the main window, in 3D, after the "Save changes?"
+  prompt (`MainWindow.ConfirmDiscardChanges` / `AskSaveChanges`, a static the checks answer; `MainViewModel.MayReplaceModel`
+  guards New Model, Open…, Load VCF…, TemplateBuilding and closing the window). A native document comes in through
+  `Application/NativeDocumentImport` + `MainViewModel.OpenNativeDocument` — like an ETABS import: names kept, values
+  as the document has them (ν per member: `FemSectionProperties.PoissonRatio`), no restraint added, a neutral Tab 01
+  entry (0 kPa on the top joints) so the run takes the document's own loads, the document's identity kept; what the
+  window's model cannot hold yet is refused with every reason first. File → Open… of a `.mcotis` without the main
+  window's configuration takes the same path. **Joint masses are data** (`ApplicationState.JointMasses`,
+  `FemJointMassDto` by joint name, like restraints: saved, deleted with their joint, remapped by Edit → VCF System's
+  bay changes; Assign → Joint → Masses… reuses `NativeJointMassWindow` on the selected joints, one Undo step;
+  `FemMassSourceDto.IncludeAdditionalMass`). **Linear static cases on the unstressed stiffness are solved** since the
+  same step (`FemCaseOptions.NotSolvedYet`), as the native workspace solved them; on another case's stiffness they are
+  still refused. Main **Run → Analysis Options…** opens a staged WPF dialog:
   the same Degrees of Freedom tab as the native dialog, full 3D to start with (see **No silent restraint** below), plus the real planar cable-fit
   tolerance/iterations/mesh/sag; the native dialog offers 3D/planar/custom DOFs and marks cable/mesh controls inactive. Native engine since 2026-10-12: `Mcotis.Analysis.StaticSolver` — frames
   split at points lying on them, tension-only cables, cable target forces, staged nonlinear cases, cable sag; validated
   before its results were shown (`docs/analysis/cable-static-verification.md`). Native limits: 600 free / 2,400 total
   DOFs, small displacements, no result-file storage, no slabs/diaphragms, no shells/P-Delta. Unstressed elastic
-  frame Modal Eigen is available in the native workspace: Define → Modal Eigen Case, Assign → Joint Mass, then
-  Run Analysis; cable/tangent-state modes remain explicitly unavailable. Modal mode shapes are mass-normalized
+  frame Modal Eigen is available in the main window, and a frame-and-straight-cable model can use a converged
+  first-order nonlinear case as its frozen stiffness state (2026-10-15; `docs/analysis/modal-eigen-verification.md`).
+  Cable-only and sagged-cable modes remain explicitly unavailable. Define → Load Cases → Load Case Data chooses
+  the mass source and requested modes; Assign → Joint → Masses edits assigned joint mass. Result → Show Deformed
+  Shape (F5) asks for a static or modal case and, for modal, a mode number. Modal mode shapes are mass-normalized
   relative amplitudes, not physical displacements. The template form
   creates frames only. **One solver everywhere** (user, 2026-10-12: "put in archive for planar frame solver and do the
   general solver now", then "use general solver every where"): the main window's Run FEM Analysis and Optimization VCF
@@ -104,9 +117,11 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   - `MainViewModel.NativeDocumentSession` holds the native document of the model open in the main window. M2 stores the
     complete transitional configuration in that document, makes each committed edit one document-history step, and
     restores the main-window projection from the document for Undo / Redo. Dirty and saved state belong to the session.
-    Controls and the viewer that have not migrated yet still read the legacy projection through the single
-    `NativeToLegacyProjection` bridge; the bridge is removed with its last consumer. Run FEM Analysis does not use that
-    projection: since M1 it solves `NativeDocumentSession.Document` through `FemDocumentRun`.
+    Since M5 the main viewer geometry, support symbols and joint-restraint controls read the document directly through
+    `NativeDocumentView`; Assign Restraints is a native document command and one Undo step. Section, load and definition
+    controls that have not migrated yet still use the legacy projection through the single `NativeToLegacyProjection`
+    bridge; the bridge is removed with its last consumer. Run FEM Analysis does not use that projection: since M1 it
+    solves `NativeDocumentSession.Document` through `FemDocumentRun`.
   - **Joint restraints are data** — `ApplicationState.JointRestraints`, six components by joint name: read from
     SAP2000 (`PointObj.GetRestraint` in `SapGateway.ReadAsync`) and ETABS, saved in `.cotfem.db` and `.cotfem.json`
     (`FemJointRestraintDto`), following joint renames and deletions. **One rule gives the restraints a model is
@@ -139,10 +154,17 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
     on identities**: the engine orders its equations by object id; `FemSolver` numbers ids in creation order, so a
     model always gives the same digits, while `Convert` derives ids from the configuration's `DatabaseId`, which is
     new for each default model — the last digits then differ from session to session.
-  - M2 / M3 done: document history and dirty state, explicit editable restraints, fixed-support `My`, native VCF / TAS
-    generator flags with Re-apply / Detach, and one parametric study engine. Still not done: the viewer and every
-    remaining control reading the document directly, retiring `NativeModelWindow`, `.mcotis` as the main-window file,
-    and the six-component/modal output schema. Plan: `docs/mcotis-standalone-plan.md` phases 5–7.
+  - M2 / M3 / M4 / M5 done: document history and dirty state, explicit editable restraints, fixed-support `My`, native
+    VCF / TAS generator flags with Re-apply / Detach, one parametric study engine, output schema v2 for six-component
+    static and modal results, and the main viewer plus joint-restraint workflow reading/editing the document directly.
+    A reopened locked session restores native results; Results Table has separate joint and frame six-component tabs.
+    M6 (2026-10-14): `.mcotis` is the main window's file (File menu below). M7 (2026-10-15): design reads six-component
+    forces; the optimization study is saved beside the model (`<name>.results/optimization-study.json`). M8 retires
+    `NativeModelWindow`. **M9 is done (2026-10-15):** the application starts on TAS, in the 3D view and Full 3D; ETABS's
+    source I22 / torsional rigidity, member releases, base pins and 24 UY bearing restraints keep the planar arch stable
+    without a solver hold. `--tas-3d` verifies all ten static cases, XZ parity and the frozen TAS optimization output.
+    The remaining migration work is section/load/definition controls reading the document directly and the planned
+    SAP2000 / ETABS adapter library. Plan: `docs/mcotis-standalone-plan.md` ("Đánh số lại M6–M9") and phases 5–7.
 - `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/` and `.work/` wherever they are.
 - The app is a WPF app targeting `net8.0-windows`, `x64`, with SAP2000 API reference `CSiAPIv1.dll`.
 
@@ -210,13 +232,20 @@ earlier tall-header / large-button / blue-block look.
   notifies, and `CanOptimizeTas` is notified again where `tasParameters` is set, because that happens after the
   import's own `Update()`. Greyed items keep their tooltip (`ToolTipService.ShowOnDisabled`). Checks:
   `--result-tools-ui`, `--etabs-import`.
-  - **File**: New Config, Load Config…, Save Config (**Ctrl+S**), Save Config As… (**Ctrl+Shift+S**) · Load VCF… · Load TAS… ·
-    Read FEM Properties from SAP. Save (`SaveFemModel`) overwrites the active configuration and asks for a file only when
-    there is none; Save As (`SaveFemModelAs`, asked for by the user 2026-10-12) always asks, starting from the active
-    file's folder and name, and the file it writes becomes the active configuration. Both are on the toolbar (Save As
-    beside Save) and bound as `Window.InputBindings` in `MainWindow.xaml`; the dialog is `MainViewModel.AskFemSavePath`
-    (a check replaces it). One `.cotfem.db`
-    is the complete MCOTiS configuration; the old split project/model JSON commands are not exposed.
+  - **File**: New Model, Open… (**Ctrl+O**), Save (**Ctrl+S**), Save As… (**Ctrl+Shift+S**) · Load VCF… · Load TAS… ·
+    Read FEM Properties from SAP. **Since M6 (2026-10-14) the file is a native `.mcotis` document**
+    (`Configuration/McotisModelFile`): Save (`SaveFemModel`) writes `NativeDocumentSession.Document` and the file's run
+    state (revision, lock, output registrations) under the file-only application data key `mcotis.desktop.runState`,
+    which `McotisModelFile.Read` strips before the session takes the document; it overwrites the model's own `.mcotis`
+    (`MainViewModel.ActiveModelFile`) and asks for a file only when there is none; Save As (`SaveFemModelAs`, asked for
+    by the user 2026-10-12) always asks, starting from the active file's folder and name, and the file it writes becomes
+    the model's file. Open (`OpenFemModelFile`) takes the document of a `.mcotis` as it is (`ApplyFemModel(…,
+    openedDocument:)`, origins rebuilt on the next edit with `LegacyNativeDocumentMigration.SourceOf`); an older
+    `.cotfem.db` / `.cotfem.json` is an import — `ActiveModelFile` is null, Save offers `<name>.mcotis` beside it and the
+    older file is never written. `SaveFemModelFileAsync(path)` still writes `.cotfem.db` / `.cotfem.json` when a check
+    hands it such a path (that is how the checks make older files); the window never does. Both are on the toolbar (Save
+    As beside Save) and bound as `Window.InputBindings` in `MainWindow.xaml`; the dialog is `MainViewModel.AskFemSavePath`
+    (a check replaces it). Checks: `--mcotis-file`.
     · **Import From SAP2000** (before Read FEM Properties): one read-only step from the active SAP2000 model to a model
     ready to run — `MainViewModel.ImportFromSapAsync` (MainViewModel.Import.cs): fresh session (Tabs 01–05 reset after an
     OK / Cancel confirmation) → connect + geometry → member properties, loads, cases, combinations → material / section
@@ -409,7 +438,7 @@ earlier tall-header / large-button / blue-block look.
     the FEM run of the model (`MainViewModel.RunColumnDesign` → `Application/Design/ColumnDesignEngine`) and opens the
     non-modal `DesignResultsWindow`: summary grid (governing case, NEd, MEd,y, MEd,z, VEd, N / M-y / M-z+biaxial / V
     utilisations, max, OK / CHECK (detailing) / FAIL / ERROR) above the selected member's step-by-step calculation;
-    Copy Report / Save Report… (.txt). The 2D FEM moment bends the major axis y-y; z-z carries imperfections only.
+    Copy Report / Save Report… (.txt). **Since M7 (2026-10-15) the forces are the run's six local components by frame identity** (`Application/Design/NativeDesignForces`; combinations summed as the planar combiner does): M3 + V2 → y-y (depth along local 2), M2 + V3 → z-z, both in the biaxial checks (EC2 5.8.9; EC4 6.7.3.7 with the imperfection in either plane when both moments act), shear along local 3 checked; torsion above 1 % of the largest moment (min. 1 kNm) refuses the case (`ColumnDesignEngine.TorsionRefusal`). A plane model in its plane gives the earlier numbers exactly (production baseline).
     Offline checks: `dotnet run --project tests/Mcotis.Desktop.Checks -- --column-design`.
   - **Help**: Workflow Help, FEM Procedure · Development Plans (`HelpWindow` topic 3: `docs/DEVELOPMENT_LOG.md`, embedded as
     `Mcotis.DevelopmentLog.md`, parsed by `Application/DevelopmentLog`; in progress / planned first, then done). **Every change of
@@ -554,8 +583,9 @@ earlier tall-header / large-button / blue-block look.
   Reports | Lock/Unlock · Run FEM Analysis · Analysis Options · Analysis Monitor | Deformed Shape (F5) · Member Forces
   (F6) · Joint Reactions (F7) | Select · Pan · Clear Selection | Zoom extents · Zoom in · Zoom out | 3-d · xy · xz ·
   yz | Show Undeformed Shape · View Options · Show Results. The lock icon reflects `IsFemModelLocked`; unlocking uses
-  the existing output cleanup and requires another run. F5/F6/F7 share a WPF result picker with a load-case/combo
-  selector: F5 fixes Deflected Shape, F6 offers N/V/M, F7 fixes Reactions. The general Show Results picker still offers
+  the existing output cleanup and requires another run. F5/F6/F7 share a WPF result picker with a case selector:
+  F5 fixes Deflected Shape and offers static cases/combinations or modal case + mode; F6 offers N/V/M, F7 fixes
+  Reactions. The general Show Results picker still offers
   all outputs. The viewer icons call `Structural2DViewer.FitView` / `ZoomBy` / `ShowPlane`.
 - `Connect SAP` connects and immediately loads geometry. Refresh reconnects and updates
   geometry / load patterns / force sources for the current session.

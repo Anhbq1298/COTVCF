@@ -18,6 +18,123 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-15 · Modal shapes in the main viewer for frame-and-cable models
+- Status: In progress
+- Who: markbui, Codex
+- Where: Define → Load Cases → Load Case Data; Result → Show Deformed Shape… (F5); Result → Modal Results…
+- What: A modal case can use the converged first-order nonlinear state of a frame-and-straight-cable model. The solver
+  freezes the cable taut/slack state and tension, adds its prestressed tangent and selected cable self mass, and never
+  invents restraints or mass. F5 offers solved static and modal cases, then a mode-number dropdown; XY, YZ and 3D views
+  include UY and label modal amplitudes as relative. A native model with no Tab 01 candidate-load definitions can run
+  with a single loaded joint; its document loads no longer trigger the legacy tributary-width rule. Native imports
+  retain their mass-source identities through load-table replacement, so their modal cases can run. Cable-only,
+  sagged-cable, P-Delta and shell modes remain explicit
+  refusals. Straight-cable modes are checked against a closed form and independent OpenSeesPy corotTruss fixture.
+- Checks: --main-modal, --full
+
+## 2026-10-15 · M9: tied arch startup in stable Full 3D
+- Status: Done
+- Who: markbui, Claude, Codex
+- Where: Application startup; File → Load TAS…; Edit → Tied Arch System; Run → Run FEM Analysis; Optimization →
+  Optimization TAS
+- What: Mcotis opens its one main window on the tied arch system, with the model view in 3D and all six degrees of
+  freedom active. The planar arch is stable out of its plane because the model carries its source data: ETABS's other-axis
+  inertia and torsional rigidity for every section, the source's out-of-plane member releases, two pinned bases and 24
+  UY bearing restraints. The general solver adds no restraint and holds no unloaded mechanism. The Full-3D main run and
+  every TAS optimization case keep the frozen in-plane answer to round-off. With the current dense solver, the nine-case
+  optimization check measured 436.9 ms/case versus the former XZ baseline's 86.6 ms/case (5.05×); a sparse solver remains
+  the planned performance improvement, not a change of analysis path.
+- Checks: --tas-3d (startup model / view / DOFs, source stiffness / releases / restraints, 10 stable static cases,
+  zero out-of-plane response, XZ parity to 4.4E-15 m/rad and 8.2E-9 kN/kN·m, 304 optimization baseline values to
+  2.8E-13 relative); dotnet build MCOTiS.sln
+
+## 2026-10-15 · M8: one window — TemplateBuilding and native models in the main window
+- Status: Done
+- Who: markbui, Claude
+- Where: Edit → TemplateBuilding…; File → Open…; Assign → Joint → Masses…; Define → Load Cases (linear static);
+  the "Save changes?" prompt (New Model, Open…, Load VCF…, TemplateBuilding, closing the window); File → Open Native
+  Model… removed
+- What: The separate native workspace window is retired (archived in `archive/Mcotis.Desktop/NativeWorkspace/`, not
+  compiled; its README maps each function to the main window). Edit → TemplateBuilding… generates the building into the
+  main window, in the 3D view; File → Open… opens a `.mcotis` the native workspace saved. A native document comes in like
+  an import (`NativeDocumentImport`, `MainViewModel.OpenNativeDocument`): names, sections (A, I33, I22, J), materials
+  (E, ν, weight, mass density), releases, modifiers, restraints (none added), joint masses, loads, cases, combinations,
+  mass sources, degrees of freedom and the document's identity are kept; a cable target force becomes the cable's
+  pretension row; what the window's model cannot hold yet (shells, rotated local axes, releases other than M3, shear
+  areas, loads along Y, envelope combinations …) is refused with every reason before the open model changes. Joint masses
+  are model data in the main window, by joint name like restraints: Assign → Joint → Masses… (the native form, on the
+  selected joints, one Undo step), Object Information, saved in the file, deleted with their joint; MS1 counts them.
+  Linear static cases on the unstressed stiffness are solved in the main window (as the native workspace solved them;
+  the engine's linear solve, verified against OpenSeesPy); on another case's stiffness they are still refused, and a
+  model with cables is refused for them. A model with changes not saved asks "Save changes to …?" (Yes / No / Cancel)
+  before another model takes its place or the window closes.
+- Checks: --template-building-ui (rewritten for one window: the building in the main window, its run equal to its own
+  document solved directly to 4.6E-18 m, reactions 680 kN, joint masses, modal on MS1, Save / Open, a native-workspace
+  file, the prompt); --general-solver (the former native-workspace cable display: the engine directly, and the main
+  window taking the document in); --mcotis-file (a native model the window cannot hold yet is refused with the reason);
+  --case-editor
+
+## 2026-10-15 · M7: design and optimization read the document and its six-component results
+- Status: Done
+- Who: markbui, Claude
+- Where: Design → RC / CFT / Steel Encased / Mega Composite Column Design… (Run Design, Optimization tab); Optimization →
+  Optimization Results…; File → Save / Open
+- What: Column design takes each member's forces from the run's six-component results by frame identity
+  (`Application/Design/NativeDesignForces`: a case as solved, a combination as the sum of its terms, as the planar results
+  are combined) and its length from the document. The local axes map explicitly to the code's: M3 with V2 → y-y (the depth
+  lies along local 2), M2 with V3 → z-z. The RC, CFT / steel encased and mega-column checks take the FEM moment about z-z
+  into their minor-axis and biaxial checks (EC2 5.8.9, EC4 6.7.3.7 with the imperfection in either plane), check the shear
+  along local 3, and refuse a case whose torsion exceeds 1 % of its largest moment (and 1 kNm) — the column checks do not
+  design torsion and never drop it silently; the report states the mapping. A model in its plane gives exactly the earlier
+  results (the frozen design baseline holds). The optimization study shown is saved beside the model
+  (`<name>.results/optimization-study.json`, with its FEM outputs) and shown again on Open, marked as of the model before
+  later edits when it is; a model without one opens with an empty results window. Material unit costs stay in the model's
+  material library, saved in the .mcotis file and shared by Optimization VCF, TAS and column optimization; they are not in
+  the native material definitions yet. Not done in M7: section / load / definition forms editing the document directly,
+  reports reading names other than through `LegacyNames`, SAP2000 / ETABS adapters in a library of their own (Planned).
+- Checks: --column-design (3D forces: axis symmetry, both-plane biaxial, minor shear, torsion refusal and the optimizer;
+  production baseline 352 values, largest relative difference 1.5E-10); --mcotis-file (study saved, reopened, stale,
+  emptied)
+
+## 2026-10-15 · Planned: SAP2000 / ETABS as adapters of the document in a library of their own
+- Status: Planned
+- Who: Unassigned
+- Where: File → Import From SAP2000 / ETABS, Export to SAP2000 / ETABS
+- What: Task of 2026-10-14, step "Move the remaining consumers off the projection": import into a new native document and
+  export from the document, in an interop library (`Mcotis.Interop`) the core libraries do not reference. Today the
+  importers fill the main window's configuration, which is then made a document; the exports read the configuration.
+- Checks: none yet
+
+## 2026-10-14 · M6: the main window's file is a .mcotis document
+- Status: Done
+- Who: markbui, Claude
+- Where: File → New Model, Open… (Ctrl+O), Save (Ctrl+S), Save As… (Ctrl+Shift+S) — formerly New Config, Load Config…,
+  Save Config, Save Config As…
+- What: Save writes the model as a native .mcotis document (`Mcotis.Persistence`, replaced in one step): the document of
+  the main window's session, with the configuration the controls not yet moved still read, and beside it the file's run
+  state — revision, lock and the output databases of a locked revision — so a locked model opens again with its results.
+  Open reads it as it was saved: the same document and identity, a history of its own, clean, its generator flag as the
+  file has it (a model saved detached is never flagged again on Open). An older .cotfem.db / .cotfem.json opens as an
+  import: Save asks for a .mcotis file (offered under the same name) and the older file is never written. A damaged file,
+  or a model of the native workspace (no main-window configuration yet — M8), is refused with the reason and the open
+  model stays. The working-session journal (recovery) still keeps its internal working database; the built-in VCF model
+  is still read from its bundled database. Topic "Configurations" of the user guide is now "Model files".
+- Checks: --mcotis-file (new, in the quick run: Save / Open round trip, analysis equal to 0, locked results, detach,
+  older file never written, refusals, journal); --fem-model (Save / Save As on .mcotis); --model-history; --fem-db;
+  --fem-schema; --sap-import; --etabs-import
+
+## 2026-10-14 · M5: the main viewport and joint restraints read the native document
+- Status: Done
+- Who: markbui, Codex
+- Where: Main window model viewport; Assign → Joint → Restraints…; Restraints Summary; point information; Edit → Undo / Redo
+- What: The shared 2D/3D viewport now projects its geometry and support symbols from the main workspace's authoritative
+  `ModelDocument`, using one presentation-only adapter shared with the temporary native window. Joint-restraint lookup
+  also reads the document. Assign Restraints commits the six-component native assignment and the transitional
+  main-window payload atomically as one `DocumentSession` command, so its autosave does not add another Undo step.
+  `NativeToLegacyProjection` remains only for controls not migrated yet; sections, loads and definitions move next.
+- Checks: --model-history (native viewport projection, atomic restraint assignment, one-step Undo / Redo, autosave,
+  fixed-support analysis and Save); Mcotis.Desktop.Checks
+
 ## 2026-10-14 · One parametric study engine for Optimization VCF and Optimization TAS
 - Status: Done
 - Who: markbui, Claude
@@ -98,17 +215,18 @@ continues on the next lines, indented by two spaces):
   M1); --sap-import (the VCF pins are assignments; a joint made free is free in the run, the viewer and the export);
   --result-tools-ui (the dialog); --user-guide; --etabs-import; --etabs-export; --fem-db; --fem-model
 
-## 2026-10-14 · An output database for six-component and modal results
-- Status: Planned
-- Who: Unassigned
+## 2026-10-14 · Output database v2 for six-component and modal results
+- Status: Done
+- Who: markbui, Codex
 - Where: the FEM output database of Run FEM Analysis (`.cotfem` outputs), reports, Results Table
-- What: Since Run FEM Analysis solves the model's native document, every run has the solver's own results — all six
-  components of every joint and frame — and the modes of its modal cases. The output database still has its planar
-  tables (UX, UZ, the slope; reactions in X and Z), and those are what it writes; the six-component results and the
-  modes are kept in memory with the run and are gone when the model is closed or unlocked. To add: a versioned output
-  schema for six-component joint, frame and reaction results and for modal results (modes, participation, shapes),
-  with the migration of output files of the present schema — never a 3D result written into a planar table.
-- Checks: none yet
+- What: Output schema v2 keeps the existing planar tables for their existing readers and adds separately normalized,
+  identity-based tables for all six joint displacements/rotations and reactions, all six local frame station actions
+  and movements, modal modes, shapes, participation and mass inventory. It records each solver result with its input
+  hash and formulation version and restores the exact native result, object-name map and run notes when a locked
+  working session reopens. Schema-v1 outputs still open as planar results and never acquire invented 3D/modal data.
+  Results Table now has explicit Joint 6-DOF and Frame 6-component tabs; Modal Results reopens from the output database.
+- Checks: --fem-db (v2 normalized rows, exact round-trip, schema-v1 read); --main-modal (six-component result tables);
+  Mcotis.Desktop.Checks
 
 ## 2026-10-14 · Modal cases in the main window
 - Status: Done
@@ -122,8 +240,8 @@ continues on the next lines, indented by two spaces):
   drawn on the model is a mass-normalized eigenvector, magnified and said to be a relative amplitude; showing a static
   result replaces it. Modal cases are not static results: they are not offered in the result pickers. Refused with the
   reason, as before: modes on the stiffness at the end of another case, models with cables (no verified prestressed
-  tangent) and shells. A run needs a static case or combination beside its modal cases. The modes are kept in memory
-  with the run (see the Planned entry above).
+  tangent) and shells. A run needs a static case or combination beside its modal cases. Output schema v2 now persists
+  the modes with the locked revision (see the Done entry above).
 - Checks: --main-modal (six positive modes of the tied arch system, equal to the modal solver on the document solved
   directly, participation, the static results unchanged, the mode drawn, the refusal); --template-building-ui
 

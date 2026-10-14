@@ -52,25 +52,25 @@ public static class StructureModel3D
     /// its joints — a meshed frame through its stations, so it bends — enlarged so the largest displacement is
     /// <see cref="DeflectedShare"/> of the model. With <paramref name="contour"/> the members are shaded by |U| over
     /// <paramref name="rangeMinMm"/> … <paramref name="rangeMaxMm"/> (0 = the largest displacement), as in 2D; with
-    /// <paramref name="undeformedGuide"/> the model as built is drawn as thin grey axes. The solver is planar: the
-    /// displacements are in X and Z.
+    /// <paramref name="undeformedGuide"/> the model as built is drawn as thin grey axes. Spatial joint displacements
+    /// use X, Y and Z; older planar results have zero Y displacement.
     /// </summary>
     public static Scene BuildDeflected(GeometryModel model, IReadOnlyDictionary<string, FemSectionProperties>? sections, FemAnalysisResult result,
         bool contour, double rangeMinMm, double rangeMaxMm, bool undeformedGuide, IReadOnlyDictionary<string, SectionDrawing>? drawings = null)
     {
-        static double Magnitude(double ux, double uz) => Math.Sqrt(ux * ux + uz * uz) * 1000;
+        static double Magnitude(double ux, double uy, double uz) => Math.Sqrt(ux * ux + uy * uy + uz * uz) * 1000;
         var joints = result.Joints.GroupBy(joint => joint.PointName, StringComparer.Ordinal).ToDictionary(same => same.Key, same => same.First(), StringComparer.Ordinal);
         var stations = result.Frames.Where(frame => frame.Stations is { Count: > 2 })
             .GroupBy(frame => frame.MemberName, StringComparer.Ordinal).ToDictionary(same => same.Key, same => same.First().Stations!, StringComparer.Ordinal);
-        var maximum = result.Joints.Select(joint => Magnitude(joint.UXM, joint.UZM))
-            .Concat(result.Frames.SelectMany(frame => frame.Stations ?? []).Select(station => Magnitude(station.UXM, station.UZM))).DefaultIfEmpty().Max();
+        var maximum = result.Joints.Select(joint => Magnitude(joint.UXM, joint.UYM, joint.UZM))
+            .Concat(result.Frames.SelectMany(frame => frame.Stations ?? []).Select(station => Magnitude(station.UXM, 0, station.UZM))).DefaultIfEmpty().Max();
         if (!double.IsFinite(maximum)) maximum = 0;
         var span = model.Points.Count == 0 ? 1 : Math.Max(1e-3, Extent(model));
         var magnification = maximum > 1e-9 ? DeflectedShare * span / (maximum / 1000) : 0;
         var min = double.IsFinite(rangeMinMm) ? Math.Max(0, rangeMinMm) : 0;
         var max = double.IsFinite(rangeMaxMm) && rangeMaxMm > min ? rangeMaxMm : Math.Max(maximum, min + 1e-9);
-        double Shade(double ux, double uz) => Math.Clamp((Magnitude(ux, uz) - min) / (max - min), 0, 1);
-        Vector3D Moved(double ux, double uz) => new(ux * magnification, 0, uz * magnification);
+        double Shade(double ux, double uy, double uz) => Math.Clamp((Magnitude(ux, uy, uz) - min) / (max - min), 0, 1);
+        Vector3D Moved(double ux, double uy, double uz) => new(ux * magnification, uy * magnification, uz * magnification);
 
         var group = new Model3DGroup();
         System.Windows.Media.Media3D.Material shaded = contour ? new DiffuseMaterial(ContourBrush()) : Material(Color.FromRgb(0x2E, 0x90, 0xFA));
@@ -94,8 +94,11 @@ public static class StructureModel3D
                 else withShape++;
             }
             var path = member.Kind == MemberKind.Frame && stations.TryGetValue(member.Name, out var along)
-                ? along.Select(station => (start + (end - start) * station.Fraction + Moved(station.UXM, station.UZM), Shade(station.UXM, station.UZM))).ToArray()
-                : [(start + Moved(u1.UXM, u1.UZM), Shade(u1.UXM, u1.UZM)), (end + Moved(u2.UXM, u2.UZM), Shade(u2.UXM, u2.UZM))];
+                ? along.Select(station => (start + (end - start) * station.Fraction +
+                    Moved(station.UXM, u1.UYM + (u2.UYM - u1.UYM) * station.Fraction, station.UZM),
+                    Shade(station.UXM, u1.UYM + (u2.UYM - u1.UYM) * station.Fraction, station.UZM))).ToArray()
+                : [(start + Moved(u1.UXM, u1.UYM, u1.UZM), Shade(u1.UXM, u1.UYM, u1.UZM)),
+                   (end + Moved(u2.UXM, u2.UYM, u2.UZM), Shade(u2.UXM, u2.UYM, u2.UZM))];
             var mesh = new MeshBuilder();
             // the section keeps the axes of the member as built: at these rotations the cross-sections stay parallel, and
             // consecutive stations share one outline, so a bent member has no gaps

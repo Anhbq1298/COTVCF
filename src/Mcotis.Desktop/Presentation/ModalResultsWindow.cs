@@ -44,7 +44,7 @@ public sealed class ModalResultsWindow : Window
 
         var note = new TextBlock
         {
-            Text = "Modes of the unstressed elastic frame with lumped mass (self mass and assigned joint mass of the case's mass source). Held in memory with the run; not written to the output database.",
+            Text = "Modes of the elastic frame, or a frame-and-cable model on a converged nonlinear static state. Mass is lumped from the case's mass source; mode amplitudes are relative, not load deflections. Stored with output schema v2 until the model is unlocked.",
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(10, 0, 10, 6),
         };
         note.SetResourceReference(TextBlock.ForegroundProperty, "Muted");

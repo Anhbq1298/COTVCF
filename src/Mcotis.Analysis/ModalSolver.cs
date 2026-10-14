@@ -41,7 +41,7 @@ public sealed record ModalAnalysisResult(ObjectId DocumentId, ObjectId ModalCase
     ModalSolverMetadata Solver, ImmutableArray<ModalModeResult> Modes, ModalMassInventory MassSummary,
     ImmutableArray<ValidationIssue> Diagnostics)
 {
-    public const string FormulationVersion = "modal-eigen-lumped-1";
+    public const string FormulationVersion = "modal-eigen-lumped-2";
 }
 
 public sealed record ModalOutcome(ModalAnalysisResult? Result, ImmutableArray<ValidationIssue> Issues)
@@ -123,14 +123,13 @@ public sealed class DenseSymmetricEigenSolver : IGeneralizedEigenSolver
     }
 }
 
-/// <summary>Eigenvector analysis of the native frame model. First release: elastic frame stiffness, lumped element
-/// self mass and explicit joint mass. It never inserts restraints or fictitious mass. Cables require a converged
-/// prestressed tangent and are therefore refused until that separate capability is verified.</summary>
+/// <summary>Eigenvector analysis of frames and cables with lumped element and assigned joint mass. A cable model uses
+/// the converged end state of the nonlinear case named by the modal case; it never inserts restraints or mass.</summary>
 public static class ModalSolver
 {
     public static ModalOutcome Solve(CompiledModel model, ObjectId caseId, ModalOptions? options = null,
         CancellationToken cancellationToken = default, IProgress<ModalProgress>? progress = null,
-        IGeneralizedEigenSolver? eigenSolver = null)
+        IGeneralizedEigenSolver? eigenSolver = null, StaticResult? stiffnessState = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         options ??= new();
@@ -149,14 +148,28 @@ public static class ModalSolver
         Report(ModalProgressKind.Validating);
         if (!model.Input.LoadCases.TryGetValue(caseId, out loadCase) || loadCase.Kind != CaseKind.ModalEigen || loadCase.ModalOptions is not { } modal)
             return Fail("modal.case", ObjectKind.LoadCase, caseId, "Select a Modal Eigen case with a mass source and requested mode count.");
-        if (loadCase.StiffnessSourceCaseId is not null)
-            return Fail("modal.stiffness.source", ObjectKind.LoadCase, caseId,
-                $"Case '{loadCase.Name}' requires end-of-nonlinear-case stiffness. A verified frozen tangent state is not available; elastic stiffness is not substituted.");
         if (model.Input.Shells.Count > 0)
             return Fail("modal.shell.unsupported", ObjectKind.LoadCase, caseId, "Modal analysis has no verified shell stiffness or mass operator.");
-        if (model.Input.Cables.Count > 0)
+        if (model.Input.Cables.Count > 0 && model.Input.Frames.Count == 0)
+            return Fail("modal.cable.only", ObjectKind.LoadCase, caseId,
+                "Cable-only modal systems are not verified yet. This modal formulation currently supports frames and cables together.");
+        if (model.Input.Cables.Count > 0 && loadCase.StiffnessSourceCaseId is null)
             return Fail("modal.cable.state", ObjectKind.LoadCase, caseId,
-                "A cable modal model requires a converged prestressed tangent and frozen taut/slack active set. Unstressed cable stiffness is not invented.");
+                "A cable modal model needs a converged nonlinear static case. Set Stiffness from to that case in Load Case Data; the unstressed cable state has no modal stiffness.");
+        if (loadCase.StiffnessSourceCaseId is { } producer)
+        {
+            if (!model.Input.LoadCases.TryGetValue(producer, out var sourceCase) ||
+                sourceCase.Kind != CaseKind.NonlinearStatic || sourceCase.GeometricMode != GeometricNonlinearity.None)
+                return Fail("modal.stiffness.source", ObjectKind.LoadCase, caseId,
+                    "Modal stiffness from a P-Delta case is not available; choose a converged first-order nonlinear static case.");
+            if (stiffnessState is null || stiffnessState.LoadCaseId != producer || stiffnessState.DocumentId != model.DocumentId ||
+                stiffnessState.InputHash != model.InputHash || stiffnessState.Revision != model.Revision)
+                return Fail("modal.stiffness.state", ObjectKind.LoadCase, caseId,
+                    $"Case '{sourceCase.Name}' has no current converged static result for this model. Run it before '{loadCase.Name}'.");
+            if (stiffnessState.Diagnostics.Stability?.MovementsHeld > 0)
+                return Fail("modal.stiffness.held", ObjectKind.LoadCase, caseId,
+                    $"Case '{sourceCase.Name}' has an unloaded mechanism held for static analysis. Restrain or connect that movement before using its stiffness for modes.");
+        }
         if (!model.Input.MassSources.TryGetValue(modal.MassSourceId, out var source))
             return Fail("modal.mass.source", ObjectKind.LoadCase, caseId, $"Case '{loadCase.Name}' uses a mass source that does not exist.");
         if (model.Dofs.Length > options.MaximumFullDofs)
@@ -202,6 +215,57 @@ public static class ModalSolver
                 weightedCenter += (start + end) * (value / 2);
                 for (int component = 0; component < 3; component++)
                 { mass[indices[component]] += value / 2; mass[indices[6 + component]] += value / 2; }
+            }
+        }
+        if (model.Input.Cables.Count > 0)
+        {
+            var states = stiffnessState!.Cables.ToDictionary(item => item.ParentObjectId);
+            foreach (var member in model.Members.Where(member => member.Kind == ObjectKind.Cable))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var cable = model.Input.Cables[member.ParentObjectId];
+                var assignment = model.Input.AssignmentOfCable(cable.Id);
+                if (assignment.SectionId is not { } sectionId)
+                    return Fail("modal.cable.section", ObjectKind.Cable, cable.Id, $"Cable '{cable.Name}' needs a section for modal analysis.");
+                if (!states.TryGetValue(cable.Id, out var state))
+                    return Fail("modal.cable.state", ObjectKind.Cable, cable.Id, $"Cable '{cable.Name}' has no tension in the chosen static state.");
+                if (state.Sag is > 0)
+                    return Fail("modal.cable.sag", ObjectKind.Cable, cable.Id,
+                        $"Cable '{cable.Name}' has gravity sag in the chosen static state. Dynamic sag stiffness is not verified yet; turn off Cable Sag in Analysis Options only if a straight-chord model is appropriate.");
+                var section = model.Input.CableSections[sectionId];
+                var material = model.Input.Materials[section.MaterialId];
+                var start = model.Input.Points[member.StartPointId].Position;
+                var end = model.Input.Points[member.EndPointId].Position;
+                double length = (end - start).Length;
+                var axis = (end - start) * (1 / length);
+                double axial = material.ElasticModulus * section.Area * assignment.Modifiers.Area / length;
+                double tangent = state.Active ? axial * (state.TangentStiffnessRatio ?? 1) : 0;
+                double geometric = state.Active ? state.Tension / length : 0;
+                if (!double.IsFinite(tangent) || tangent < 0 || !double.IsFinite(geometric) || geometric < 0)
+                    return Fail("modal.cable.tangent", ObjectKind.Cable, cable.Id, $"Cable '{cable.Name}' has an invalid tangent in the chosen static state.");
+                double[] direction = [axis.X, axis.Y, axis.Z];
+                int[] ends = [.. DegreesOfFreedom.Components.Take(3).Select(component => model.DofIndex[new(member.StartPointId, component)].FullIndex),
+                    .. DegreesOfFreedom.Components.Take(3).Select(component => model.DofIndex[new(member.EndPointId, component)].FullIndex)];
+                for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 3; j++)
+                {
+                    double value = tangent * direction[i] * direction[j] +
+                        geometric * ((i == j ? 1 : 0) - direction[i] * direction[j]);
+                    stiffness[ends[i], ends[j]] += value;
+                    stiffness[ends[i + 3], ends[j + 3]] += value;
+                    stiffness[ends[i], ends[j + 3]] -= value;
+                    stiffness[ends[i + 3], ends[j]] -= value;
+                }
+                if (source.IncludeSelfMass)
+                {
+                    double value = material.MassDensity * section.Area * length * assignment.Modifiers.Mass;
+                    if (!double.IsFinite(value) || value < 0)
+                        return Fail("modal.mass.value", ObjectKind.Cable, cable.Id, $"Cable '{cable.Name}' produces invalid self mass.");
+                    elementMass += value;
+                    weightedCenter += (start + end) * (value / 2);
+                    for (int component = 0; component < 3; component++)
+                    { mass[ends[component]] += value / 2; mass[ends[component + 3]] += value / 2; }
+                }
             }
         }
         var additional = new double[6];
@@ -326,8 +390,10 @@ public static class ModalSolver
         var inventory = new ModalMassInventory(elementMass, additional.ToImmutableArray(), freeMass.ToImmutableArray(), center);
         var metadata = new ModalSolverMetadata(eigenSolver is DenseSymmetricEigenSolver ? "Dense symmetric Jacobi after diagonal mass whitening" : eigenSolver.GetType().Name,
             DenseSymmetricEigenSolver.Version, dynamic.Length, zero.Length, options.EigenTolerance, options.ResidualTolerance);
-        var result = new ModalAnalysisResult(model.DocumentId, caseId, model.InputHash, model.Revision, source.Id, null,
-            "elastic:" + model.InputHash, metadata, modes.ToImmutable(), inventory, issues.ToImmutableArray());
+        var result = new ModalAnalysisResult(model.DocumentId, caseId, model.InputHash, model.Revision, source.Id,
+            loadCase.StiffnessSourceCaseId,
+            stiffnessState is null ? "elastic:" + model.InputHash : $"static:{model.InputHash}:{stiffnessState.LoadCaseId}",
+            metadata, modes.ToImmutable(), inventory, issues.ToImmutableArray());
         Report(issues.Any(issue => issue.Severity == ValidationSeverity.Error) ? ModalProgressKind.Failed : ModalProgressKind.Finished, modes.Count,
             issues.FirstOrDefault(issue => issue.Severity == ValidationSeverity.Error));
         return new(result, issues.ToImmutableArray());

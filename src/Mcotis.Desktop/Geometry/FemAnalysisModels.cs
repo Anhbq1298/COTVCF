@@ -1,4 +1,5 @@
 using Mcotis.Desktop.Domain;
+using System.Text.Json.Serialization;
 
 namespace Mcotis.Desktop.Geometry;
 
@@ -25,6 +26,21 @@ public sealed record FemSectionProperties(
     double? OutOfPlaneInertiaM4 = null,
     double? TorsionConstantM4 = null)
 {
+    /// <summary>The material's Poisson ratio for the shear modulus of the native frame, G = E / (2 (1 + ν)); null: 0.3,
+    /// as the main window's members have always been analysed. Set for a member taken from a native document (M8),
+    /// whose material states its own.</summary>
+    public double? PoissonRatio { get; init; }
+
+    /// <summary>The moment about the frame's other local axis — out of the plane of a plane model — is released at the
+    /// start / end (ETABS's M2 of a frame on local axes at 0°, M3 at 90°). The analysis in the plane does not use it; in 3D
+    /// the native frame takes it as its moment-2 release (M9), as the source model has it.</summary>
+    // Keep false absent from the legacy JSON revision form: adding these fields must not orphan results of an older
+    // planar model. True is engineering content and is serialized normally.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ReleaseStartOutOfPlane { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ReleaseEndOutOfPlane { get; init; }
+
     public bool IsCable => InPlaneInertiaM4 is null;
     // SAP modifier order — frames: A, As2, As3, J, I22, I33, Mass, Weight; cables: A, Mass, Weight.
     private double Modifier(int frameIndex, int cableIndex) =>
@@ -65,7 +81,12 @@ public sealed record FemSectionShape(SectionShapeKind Kind, double Depth, double
 
 /// <summary>A Tab 01 study load at a joint; <see cref="Pattern"/> is its SAP load pattern.</summary>
 public sealed record FemAppliedLoad(string PointName, double FxKN, double FzKN, string? Pattern = null);
-public sealed record FemJointResponse(string PointName, double UXM, double UZM, double RotationRad);
+public sealed record FemJointResponse(string PointName, double UXM, double UZM, double RotationRad)
+{
+    /// <summary>Global Y displacement for a spatial result or mode shape; older planar results have zero.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double UYM { get; init; }
+}
 /// <param name="MomentYKNm">The moment of a support that holds the rotation in the plane (RY): positive counter-clockwise in the
 /// XZ elevation (X right, Z up), the sense of the joint slope — the opposite of the right-hand sense about +Y. 0 at a pin.</param>
 public sealed record FemSupportReaction(string PointName, double ReactionXKN, double ReactionZKN, double MomentYKNm = 0);

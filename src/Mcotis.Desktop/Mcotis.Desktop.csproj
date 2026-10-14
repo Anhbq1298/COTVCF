@@ -94,6 +94,8 @@
     <EmbeddedResource Include="Resources\Default.cotfem.db" LogicalName="Mcotis.Default.cotfem.db" />
     <!-- File → Load TAS…: the CoT 120 m composite arch deck as ETABS wrote it (.e2k), imported like Import From ETABS. -->
     <EmbeddedResource Include="Resources\TAS-CoT120.e2k" LogicalName="Mcotis.TAS-CoT120.e2k" />
+    <!-- … with the torsion constants ETABS computed for its sections, which an .e2k does not carry (M9). -->
+    <EmbeddedResource Include="Resources\TAS-CoT120.sections.txt" LogicalName="Mcotis.TAS-CoT120.sections.txt" />
     <!-- Help → Development Plans shows the development log; keeping it is compulsory (AGENTS.md, .githooks/commit-msg). -->
     <EmbeddedResource Include="$(RepoRoot)docs\DEVELOPMENT_LOG.md" LogicalName="Mcotis.DevelopmentLog.md" Link="DEVELOPMENT_LOG.md" />
     <!-- Help → User Guide shows the user guide; whoever adds or changes a function updates its article. -->

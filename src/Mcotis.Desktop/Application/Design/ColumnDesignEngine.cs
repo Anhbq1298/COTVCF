@@ -4,19 +4,31 @@ using Mcotis.Desktop.Domain;
 
 namespace Mcotis.Desktop.Application.Design;
 
-/// <summary>FEM forces at one station of a member: axial tension positive (SAP convention), in-plane shear and moment.</summary>
-public sealed record DesignStation(double AxialKN, double ShearKN, double MomentKNm);
+/// <summary>FEM forces at one station of a member, in the frame's local axes (task of 2026-10-14, §2 "3D forces in
+/// design"): axial force F1, tension positive (SAP convention); <paramref name="ShearKN"/> F2 and <paramref name="MomentKNm"/>
+/// M3 — bending about local 3, the code's major axis y-y (the section's depth lies along local 2); <paramref name="ShearMinorKN"/>
+/// F3 and <paramref name="MomentMinorKNm"/> M2 — bending about local 2, the minor axis z-z; <paramref name="TorsionKNm"/> M1.
+/// A frame of a plane model in its plane, on local axes at 0°, has M3 and F2 only.</summary>
+public sealed record DesignStation(double AxialKN, double ShearKN, double MomentKNm, double ShearMinorKN = 0, double MomentMinorKNm = 0, double TorsionKNm = 0);
 /// <summary>The stations of one member under one load case / combination.</summary>
 public sealed record DesignCaseForces(string Case, IReadOnlyList<DesignStation> Stations);
 /// <summary>A member to design: its FEM section name, member length and forces per case.</summary>
 public sealed record DesignMemberInput(string Member, string Section, double LengthM, IReadOnlyList<DesignCaseForces> Cases);
 
-/// <summary>One case of one member: design actions (compression positive) and utilisations.</summary>
+/// <summary>One case of one member: design actions (compression positive) and utilisations. <see cref="VEdKN"/> is the
+/// shear along local 2 (with y-y bending), <see cref="VEdZKN"/> the shear along local 3 (with z-z bending), <see cref="TEdKNm"/>
+/// the torsion — which these column checks do not design (<see cref="ColumnDesignEngine.TorsionRefusal"/>).</summary>
 public sealed record DesignCaseResult(string Case, double NEdKN, double M0EdKNm, double MEdYKNm, double MEdZKNm, double VEdKN,
-    double AxialUtilization, double MajorUtilization, double MinorUtilization, double ShearUtilization)
+    double AxialUtilization, double MajorUtilization, double MinorUtilization, double ShearUtilization, double VEdZKN = 0, double TEdKNm = 0,
+    double M0EdZKNm = 0)
 {
     public double MaxUtilization => new[] { AxialUtilization, MajorUtilization, MinorUtilization, ShearUtilization }.Max();
 }
+
+/// <summary>The design actions of one case, the largest over the member's stations, in N and N·mm: axial force
+/// (compression positive), the moments about the major (y-y, local 3) and minor (z-z, local 2) axes and the shears that go
+/// with them.</summary>
+internal readonly record struct DesignActions(double NEd, double M0Y, double M0Z, double VY, double VZ);
 
 /// <summary>One curve of an N–M interaction diagram: N in kN (compression +), M in kNm (≥ 0).</summary>
 public sealed record InteractionSeries(string Name, IReadOnlyList<(double NKN, double MKNm)> Points, bool Dashed = false, bool Minor = false);
@@ -46,11 +58,35 @@ public sealed record ColumnMemberDesign(string Member, string Section, double Le
 /// <summary>
 /// Column design to SS EN 1992-1-1 (RC, nominal curvature) and SS EN 1994-1-1 simplified method (CFT, steel encased),
 /// extended for high-strength concrete as BCA BC4 does (η of EC2 Table 3.1 on the concrete block above C50/60). The FEM
-/// is 2D: its moment bends the major (y-y) axis; the minor (z-z) axis is checked for buckling with imperfections only.
+/// forces are taken in the frame's local axes: M3 (about local 3) bends the major axis y-y, M2 (about local 2) the minor
+/// axis z-z, each with its imperfection and second-order effects and both together in the biaxial check the code requires
+/// (EC2 5.8.9, EC4 6.7.3.7). A plane model in its plane gives M2 = 0: the minor axis is then checked with the imperfection
+/// only, as it always was. Torsion is not designed: a case with more than <see cref="TorsionRefusal"/> allows is refused.
 /// Units inside: N, mm, MPa.
 /// </summary>
 public static class ColumnDesignEngine
 {
+    /// <summary>The torsion a case may carry and still be designed without a torsion check: 1 % of its largest bending
+    /// moment, and never less than 1 kNm. Beyond it the case is refused with the value — torsion is never left out silently.</summary>
+    public static string? TorsionRefusal(DesignCaseForces forces)
+    {
+        var torsion = forces.Stations.Max(station => Math.Abs(station.TorsionKNm));
+        var moment = forces.Stations.Max(station => Math.Max(Math.Abs(station.MomentKNm), Math.Abs(station.MomentMinorKNm)));
+        var allowed = Math.Max(1.0, 0.01 * moment);
+        return torsion > allowed
+            ? $"Case {forces.Case}: the member carries a torsion of {F(torsion)} kNm, which the column checks do not design; it is more than " +
+              $"1 % of its largest bending moment ({F(moment)} kNm) and more than 1 kNm. Design the member for torsion, or change the model so that it carries none."
+            : null;
+    }
+
+    /// <summary>The design actions of a case at its axial force <paramref name="axial"/> [N]: the largest moments and shears
+    /// over the stations.</summary>
+    private static DesignActions Actions(DesignCaseForces forces, double axial) => new(axial,
+        forces.Stations.Max(station => Math.Abs(station.MomentKNm)) * 1e6,
+        forces.Stations.Max(station => Math.Abs(station.MomentMinorKNm)) * 1e6,
+        forces.Stations.Max(station => Math.Abs(station.ShearKN)) * 1000,
+        forces.Stations.Max(station => Math.Abs(station.ShearMinorKN)) * 1000);
+
     public static ColumnMemberDesign Design(ColumnDesignBasis basis, DesignMemberInput member)
     {
         var l0y = (basis.EffectiveLengthY ?? 0) * 1000;
@@ -58,19 +94,20 @@ public static class ColumnDesignEngine
         var length = member.LengthM > 0 ? member.LengthM * 1000 : Math.Max(l0y, l0z);
         if (member.Cases.Count == 0 || member.Cases.All(item => item.Stations.Count == 0))
             return new(member.Member, member.Section, member.LengthM, [], null, [], "", "No FEM forces for this member in the chosen load cases.");
+        if (member.Cases.Where(item => item.Stations.Count > 0).Select(TorsionRefusal).FirstOrDefault(text => text is not null) is { } torsion)
+            return new(member.Member, member.Section, member.LengthM, [], null, [], "", torsion);
         var designer = Designer(basis);
         var results = new List<(DesignCaseResult Result, string Log)>();
         foreach (var forces in member.Cases.Where(item => item.Stations.Count > 0))
         {
             var compression = forces.Stations.Max(station => -station.AxialKN) * 1000;
             var tension = forces.Stations.Min(station => -station.AxialKN) * 1000;
-            var moment = forces.Stations.Max(station => Math.Abs(station.MomentKNm)) * 1e6;
-            var shear = forces.Stations.Max(station => Math.Abs(station.ShearKN)) * 1000;
+            var torsionEd = forces.Stations.Max(station => Math.Abs(station.TorsionKNm));
             double[] scenarios = tension < 0 && tension < compression ? [compression, tension] : [compression];
             foreach (var axial in scenarios)
             {
                 var log = new StringBuilder();
-                var result = designer.DesignCase(forces.Case, axial, moment, shear, length, l0y, l0z, log);
+                var result = designer.DesignCase(forces.Case, Actions(forces, axial), length, l0y, l0z, log) with { TEdKNm = torsionEd };
                 results.Add((result, log.ToString()));
             }
         }
@@ -85,6 +122,8 @@ public static class ColumnDesignEngine
         report.AppendLine($"Design code: {basis.DesignCode}");
         report.AppendLine($"Method:      {basis.Method}");
         report.AppendLine($"Effective lengths: l0,y = {F(l0y / 1000, 3)} m (major, in-plane) · l0,z = {F(l0z / 1000, 3)} m (minor)");
+        report.AppendLine("FEM axes → code axes: M3 (about the frame's local 3) → My,Ed about y-y, with V2; M2 (about local 2) → Mz,Ed about z-z, with V3; " +
+                          "the section's depth lies along local 2. Torsion T is not designed (refused above 1 % of the largest moment, min. 1 kNm).");
         report.AppendLine();
         designer.Describe(report);
         report.AppendLine();
@@ -97,6 +136,14 @@ public static class ColumnDesignEngine
         foreach (var (row, _) in perCase)
             report.AppendLine($"{Trim(row.Case, 23),-24}{F(row.NEdKN),11}{F(row.M0EdKNm),11}{F(row.MEdYKNm),11}{F(row.MEdZKNm),11}{F(row.VEdKN),10}" +
                               $"{U(row.AxialUtilization),7}{U(row.MajorUtilization),7}{U(row.MinorUtilization),7}{U(row.ShearUtilization),7}");
+        if (perCase.Any(item => item.Result.M0EdZKNm > 0 || item.Result.VEdZKN > 0 || item.Result.TEdKNm > 0))
+        {
+            report.AppendLine();
+            report.AppendLine("FEM ACTIONS ABOUT THE MINOR AXIS z-z AND TORSION (local 2 / 3)");
+            report.AppendLine($"{"Case",-24}{"M0Ed,z kNm",12}{"VEd,z kN",10}{"TEd kNm",10}");
+            foreach (var (row, _) in perCase)
+                report.AppendLine($"{Trim(row.Case, 23),-24}{F(row.M0EdZKNm),12}{F(row.VEdZKN),10}{F(row.TEdKNm, 2),10}");
+        }
         report.AppendLine();
         report.AppendLine("DETAILING AND SCOPE");
         foreach (var check in detailing)
@@ -122,16 +169,15 @@ public static class ColumnDesignEngine
             double maxCompression = 0;
             foreach (var forces in member.Cases.Where(item => item.Stations.Count > 0))
             {
+                if (TorsionRefusal(forces) is not null) return new(double.PositiveInfinity, false, $"{member.Member} · {forces.Case}", $"{member.Member}: torsion not designed");
                 var compression = forces.Stations.Max(station => -station.AxialKN) * 1000;
                 var tension = forces.Stations.Min(station => -station.AxialKN) * 1000;
-                var moment = forces.Stations.Max(station => Math.Abs(station.MomentKNm)) * 1e6;
-                var shear = forces.Stations.Max(station => Math.Abs(station.ShearKN)) * 1000;
                 maxCompression = Math.Max(maxCompression, compression);
                 double[] scenarios = tension < 0 && tension < compression ? [compression, tension] : [compression];
                 foreach (var axial in scenarios)
                 {
                     log.Clear();
-                    var utilization = designer.DesignCase(forces.Case, axial, moment, shear, length, l0y, l0z, log).MaxUtilization;
+                    var utilization = designer.DesignCase(forces.Case, Actions(forces, axial), length, l0y, l0z, log).MaxUtilization;
                     if (!(utilization <= worst)) { worst = utilization; governing = $"{member.Member} · {forces.Case}"; }
                     if (!(utilization <= 1)) return new(worst, true, governing, null);
                 }
@@ -356,7 +402,12 @@ internal abstract class ColumnDesigner(ColumnDesignBasis basis)
     protected static string F(double value, int decimals = 1) => ColumnDesignEngine.F(value, decimals);
     protected static string Ok(bool pass) => pass ? "OK" : "NOT OK";
 
-    public abstract DesignCaseResult DesignCase(string name, double nEd, double m0, double vEd, double length, double l0y, double l0z, StringBuilder log);
+    public abstract DesignCaseResult DesignCase(string name, DesignActions actions, double length, double l0y, double l0z, StringBuilder log);
+
+    /// <summary>The first line of a case's log: the actions about both axes (the minor ones when the FEM gives them).</summary>
+    protected static void Actions(StringBuilder log, DesignActions a) =>
+        log.AppendLine($"Design actions: NEd = {F(a.NEd / 1000)} kN ({(a.NEd >= 0 ? "compression" : "tension")}), M0Ed,max = {F(a.M0Y / 1e6)} kNm, VEd = {F(a.VY / 1000)} kN" +
+                       (a.M0Z > 0 || a.VZ > 0 ? $"; about z-z (FEM M2, V3): M0Ed,z = {F(a.M0Z / 1e6)} kNm, VEd,z = {F(a.VZ / 1000)} kN" : ""));
     public abstract IReadOnlyList<DetailingCheck> Detailing(double maxNEd, double length, double l0y, double l0z);
     public abstract void Describe(StringBuilder report);
     public abstract InteractionDiagram Interaction();
@@ -469,17 +520,18 @@ internal sealed class RcDesigner : ColumnDesigner
         r.AppendLine($"  MRd,y (N = 0) = {F(majorCurve.MomentAt(0) / 1e6, 1)} kNm · MRd,z (N = 0) = {F(minorCurve.MomentAt(0) / 1e6, 1)} kNm");
     }
 
-    public override DesignCaseResult DesignCase(string name, double nEd, double m0, double vEd, double length, double l0y, double l0z, StringBuilder log)
+    public override DesignCaseResult DesignCase(string name, DesignActions actions, double length, double l0y, double l0z, StringBuilder log)
     {
-        log.AppendLine($"Design actions: NEd = {F(nEd / 1000)} kN ({(nEd >= 0 ? "compression" : "tension")}), M0Ed,max = {F(m0 / 1e6)} kNm, VEd = {F(vEd / 1000)} kN");
+        var (nEd, m0, m0z, vEd, vEdZ) = actions;
+        Actions(log, actions);
         var axial = nEd >= 0 ? nEd / majorCurve.MaxN : -nEd / -majorCurve.MinN;
         log.AppendLine($"Axial: NEd / NRd = {F(Math.Abs(nEd) / 1000)} / {F((nEd >= 0 ? majorCurve.MaxN : -majorCurve.MinN) / 1000)} = {F(axial, 3)}");
         log.AppendLine();
         log.AppendLine("MAJOR AXIS y-y (in-plane, FEM moment)");
         var (mEdY, majorUtil) = Axis(nEd, m0, S.Depth, S.Width, l0y, majorCurve, log);
         log.AppendLine();
-        log.AppendLine("MINOR AXIS z-z (imperfection only, 5.8.9(2))");
-        var (mEdZ, minorUtil) = Axis(nEd, 0, S.Width, S.Depth, l0z, minorCurve, log);
+        log.AppendLine(m0z > 0 ? "MINOR AXIS z-z (FEM moment M2 with the imperfection, 5.8.9)" : "MINOR AXIS z-z (imperfection only, 5.8.9(2))");
+        var (mEdZ, minorUtil) = Axis(nEd, m0z, S.Width, S.Depth, l0z, minorCurve, log);
         if (nEd > 0)
         {
             // 5.8.9(4) Eq. 5.39, taken conservatively with the imperfection in both directions
@@ -489,9 +541,18 @@ internal sealed class RcDesigner : ColumnDesigner
             log.AppendLine($"  Biaxial (5.8.9(4), Eq. 5.39): NEd/NRd = {F(ratio, 3)} → a = {F(a, 2)}; (MEd,z/MRd,z)^a + (MEd,y/MRd,y)^a = {F(biaxial, 3)} {Ok(biaxial <= 1)}");
             minorUtil = Math.Max(minorUtil, biaxial);
         }
+        else if (m0z > 0)
+        {
+            // in tension there is no second-order effect; the two bending ratios are added (linear interaction, on the safe
+            // side) — counted with the y-y check, which it becomes as M2 goes to zero
+            var biaxial = majorUtil + minorUtil;
+            log.AppendLine($"  Biaxial in tension: MEd,y/MRd,y + MEd,z/MRd,z = {F(biaxial, 3)} {Ok(biaxial <= 1)} (linear interaction)");
+            majorUtil = Math.Max(majorUtil, biaxial);
+        }
         log.AppendLine();
-        var shearUtil = Shear(nEd, vEd, log);
-        return new(name, nEd / 1000, m0 / 1e6, mEdY / 1e6, mEdZ / 1e6, vEd / 1000, axial, majorUtil, minorUtil, shearUtil);
+        var shearUtil = Shear(nEd, vEd, S.Depth, S.Width, Math.Max(2, S.BarsAlongWidth), "6.2, in-plane", log);
+        if (vEdZ > 0) shearUtil = Math.Max(shearUtil, Shear(nEd, vEdZ, S.Width, S.Depth, S.BarsAlongDepth + 2, "6.2, along local 3 with z-z bending", log));
+        return new(name, nEd / 1000, m0 / 1e6, mEdY / 1e6, mEdZ / 1e6, vEd / 1000, axial, majorUtil, minorUtil, shearUtil, vEdZ / 1000, M0EdZKNm: m0z / 1e6);
     }
 
     private (double MEd, double Utilization) Axis(double nEd, double m0, double h, double b, double l0, InteractionCurve curve, StringBuilder log)
@@ -567,13 +628,16 @@ internal sealed class RcDesigner : ColumnDesigner
         return (ei, Math.PI * Math.PI * ei / (l0 * l0));
     }
 
-    private double Shear(double nEd, double vEd, StringBuilder log)
+    /// <param name="h">The section's dimension along the shear.</param>
+    /// <param name="b">The width across it.</param>
+    /// <param name="barsOnFace">The bars of the tension face: the longitudinal steel ρl counts.</param>
+    private double Shear(double nEd, double vEd, double h, double b, int barsOnFace, string direction, StringBuilder log)
     {
-        log.AppendLine("SHEAR (6.2, in-plane)");
-        var d = S.Depth - S.Cover - S.LinkDiameter - S.BarDiameter / 2;
-        var bw = S.Width;
+        log.AppendLine($"SHEAR ({direction})");
+        var d = h - S.Cover - S.LinkDiameter - S.BarDiameter / 2;
+        var bw = b;
         var k = Math.Min(2, 1 + Math.Sqrt(200 / d));
-        var asl = Math.Max(2, S.BarsAlongWidth) * Math.PI * S.BarDiameter * S.BarDiameter / 4;
+        var asl = barsOnFace * Math.PI * S.BarDiameter * S.BarDiameter / 4;
         var rho = Math.Min(0.02, asl / (bw * d));
         var sigma = Math.Min(nEd / Ac, 0.2 * fcd);
         var vmin = 0.035 * Math.Pow(k, 1.5) * Math.Sqrt(S.Fck);
@@ -705,9 +769,10 @@ internal sealed class CompositeDesigner : ColumnDesigner
         r.AppendLine($"  Mpl,y,Rd = {F(majorCurve.MomentAt(0) / 1e6, 1)} kNm, Mpl,z,Rd = {F(minorCurve.MomentAt(0) / 1e6, 1)} kNm (plastic, 6.7.3.2(2))");
     }
 
-    public override DesignCaseResult DesignCase(string name, double nEd, double m0, double vEd, double length, double l0y, double l0z, StringBuilder log)
+    public override DesignCaseResult DesignCase(string name, DesignActions actions, double length, double l0y, double l0z, StringBuilder log)
     {
-        log.AppendLine($"Design actions: NEd = {F(nEd / 1000)} kN ({(nEd >= 0 ? "compression" : "tension")}), M0Ed,max = {F(m0 / 1e6)} kNm, VEd = {F(vEd / 1000)} kN");
+        var (nEd, m0, m0z, vEd, vEdZ) = actions;
+        Actions(log, actions);
         var ecEff = Ecm / (1 + S.PermanentLoadRatio * S.CreepRatio);
         log.AppendLine($"Ec,eff = Ecm / (1 + (NG,Ed/NEd) φt) = {F(ecEff, 0)} MPa (6.7.3.3(4))");
 
@@ -718,6 +783,17 @@ internal sealed class CompositeDesigner : ColumnDesigner
         {
             curveY = InteractionCurve.Plastic(major, fc, fyd, (1 - rho) * fyd, fsd);
             log.AppendLine($"  VEd > 0.5 Vpl,a,Rd → (1 − ρ) fyd = {F((1 - rho) * fyd, 1)} MPa in the shear area for the N–M curve");
+        }
+        // the shear along local 3 goes with z-z bending; its shear area is the steel the major shear does not use
+        var curveZ = minorCurve;
+        if (vEdZ > 0)
+        {
+            shearUtil = Math.Max(shearUtil, ShearMinor(vEdZ, out var rhoZ, log));
+            if (rhoZ > 0)
+            {
+                curveZ = InteractionCurve.Plastic(minor, fc, (1 - rhoZ) * fyd, (1 - rhoZ) * fyd, fsd);
+                log.AppendLine($"  VEd,z > 0.5 Vpl,a,z,Rd → (1 − ρz) fyd = {F((1 - rhoZ) * fyd, 1)} MPa on all the steel for the z-z N–M curve (on the safe side)");
+            }
         }
         log.AppendLine();
 
@@ -751,14 +827,24 @@ internal sealed class CompositeDesigner : ColumnDesigner
             log.AppendLine("MAJOR AXIS y-y (in-plane, FEM moment) — 6.7.3.4 / 6.7.3.6");
             (mEdY, majorUtil, var kY, var resistanceY) = Bending(nEd, m0, l0y, filled ? 300 : 200, ncrEffY, curveY, log);
             log.AppendLine();
-            log.AppendLine("MINOR AXIS z-z (imperfection only)");
-            (mEdZ, minorUtil, _, var resistanceZ) = Bending(nEd, 0, l0z, filled ? 300 : 150, ncrEffZ, minorCurve, log);
+            log.AppendLine(m0z > 0 ? "MINOR AXIS z-z (FEM moment M2 with the imperfection)" : "MINOR AXIS z-z (imperfection only)");
+            (mEdZ, minorUtil, var kZ, var resistanceZ) = Bending(nEd, m0z, l0z, filled ? 300 : 150, ncrEffZ, curveZ, log);
             // 6.7.3.7(2): imperfection in the z plane (the more critical out-of-plane buckling) with the in-plane moment
             var myNoImperfection = Math.Max(m0, kY * m0);
             var biaxial = myNoImperfection / resistanceY + mEdZ / resistanceZ;
             log.AppendLine($"  Biaxial (6.7.3.7(2)): My,Ed/(μdy Mpl,y,Rd) + Mz,Ed/(μdz Mpl,z,Rd) = {F(myNoImperfection / 1e6)} / {F(resistanceY / 1e6)} + " +
                            $"{F(mEdZ / 1e6)} / {F(resistanceZ / 1e6)} = {F(biaxial, 3)} {Ok(biaxial <= 1)} (My without imperfection)");
             minorUtil = Math.Max(minorUtil, biaxial);
+            if (m0z > 0)
+            {
+                // with a moment about both axes either plane may be the critical one (6.7.3.7(2)): the imperfection in the y
+                // plane too — counted with the y-y check, which it becomes as M2 goes to zero
+                var mzNoImperfection = Math.Max(m0z, kZ * m0z);
+                var other = mEdY / resistanceY + mzNoImperfection / resistanceZ;
+                log.AppendLine($"  Biaxial, imperfection in the y plane: My,Ed/(μdy Mpl,y,Rd) + Mz,Ed/(μdz Mpl,z,Rd) = {F(mEdY / 1e6)} / {F(resistanceY / 1e6)} + " +
+                               $"{F(mzNoImperfection / 1e6)} / {F(resistanceZ / 1e6)} = {F(other, 3)} {Ok(other <= 1)} (Mz without imperfection)");
+                majorUtil = Math.Max(majorUtil, other);
+            }
         }
         else
         {
@@ -766,13 +852,22 @@ internal sealed class CompositeDesigner : ColumnDesigner
             axialUtil = -nEd / ntRd;
             log.AppendLine($"MEMBER IN TENSION: NEd / Nt,Rd = {F(-nEd / 1000)} / {F(ntRd / 1000, 0)} = {F(axialUtil, 3)} {Ok(axialUtil <= 1)}");
             mEdY = m0;
-            mEdZ = 0;
+            mEdZ = m0z;
             var mRd = curveY.MomentAt(nEd);
             majorUtil = mRd > 0 ? m0 / (AlphaM * mRd) : double.PositiveInfinity;
             log.AppendLine($"  Mpl,N,y,Rd at NEd = {F(mRd / 1e6)} kNm → MEd / (αM Mpl,N,Rd) = {F(majorUtil, 3)} {Ok(majorUtil <= 1)}");
             minorUtil = 0;
+            if (m0z > 0)
+            {
+                var mRdZ = curveZ.MomentAt(nEd);
+                minorUtil = mRdZ > 0 ? m0z / (AlphaM * mRdZ) : double.PositiveInfinity;
+                var biaxial = mRd > 0 && mRdZ > 0 ? m0 / mRd + m0z / mRdZ : double.PositiveInfinity;
+                log.AppendLine($"  Mpl,N,z,Rd at NEd = {F(mRdZ / 1e6)} kNm → MEd,z / (αM Mpl,N,z,Rd) = {F(minorUtil, 3)} {Ok(minorUtil <= 1)}; " +
+                               $"biaxial My/Mpl,N,y,Rd + Mz/Mpl,N,z,Rd = {F(biaxial, 3)} {Ok(biaxial <= 1)} (linear interaction, with the y-y check)");
+                majorUtil = Math.Max(majorUtil, biaxial);
+            }
         }
-        return new(name, nEd / 1000, m0 / 1e6, mEdY / 1e6, mEdZ / 1e6, vEd / 1000, axialUtil, majorUtil, minorUtil, shearUtil);
+        return new(name, nEd / 1000, m0 / 1e6, mEdY / 1e6, mEdZ / 1e6, vEd / 1000, axialUtil, majorUtil, minorUtil, shearUtil, vEdZ / 1000, M0EdZKNm: m0z / 1e6);
     }
 
     private (double Chi, double NcrEff, double Lambda) Buckling(string axis, FibreSection section, double l0, double ecEff, double alpha, StringBuilder log)
@@ -822,6 +917,24 @@ internal sealed class CompositeDesigner : ColumnDesigner
         log.AppendLine("SHEAR (6.7.3.2(3)–(4), steel section, EN 1993-1-1 6.2.6)");
         log.AppendLine($"  Av = {source} = {F(av, 0)} mm²; Vpl,a,Rd = Av fyd / √3 = {F(vpl / 1000)} kN");
         log.AppendLine($"  VEd / Vpl,a,Rd = {F(vEd / 1000)} / {F(vpl / 1000)} = {F(utilization, 3)} {Ok(utilization <= 1)}");
+        return utilization;
+    }
+
+    /// <summary>The shear along local 3 (with z-z bending) on the steel that carries it: the tube's other walls (RHS), the
+    /// tube (CHS), the flanges of the profile (encased).</summary>
+    private double ShearMinor(double vEd, out double rho, StringBuilder log)
+    {
+        double av;
+        string source;
+        if (circular) { av = 2 * Aa / Math.PI; source = "2A/π (CHS)"; }
+        else if (filled) { av = Aa * S.TubeWidth / (S.TubeDepth + S.TubeWidth); source = "A b / (b + h) (RHS)"; }
+        else { av = 2 * S.SteelWidth * S.FlangeThickness; source = "2 b tf (flanges)"; }
+        var vpl = av * fyd / Math.Sqrt(3);
+        var utilization = vEd / vpl;
+        rho = vEd > 0.5 * vpl ? Math.Pow(2 * vEd / vpl - 1, 2) : 0;
+        log.AppendLine("SHEAR ALONG LOCAL 3 (with z-z bending; 6.7.3.2(3)–(4), EN 1993-1-1 6.2.6)");
+        log.AppendLine($"  Av,z = {source} = {F(av, 0)} mm²; Vpl,a,z,Rd = Av,z fyd / √3 = {F(vpl / 1000)} kN");
+        log.AppendLine($"  VEd,z / Vpl,a,z,Rd = {F(vEd / 1000)} / {F(vpl / 1000)} = {F(utilization, 3)} {Ok(utilization <= 1)}");
         return utilization;
     }
 

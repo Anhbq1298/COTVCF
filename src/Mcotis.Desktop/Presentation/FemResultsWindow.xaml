@@ -100,6 +100,59 @@
        </DataGrid>
       </Grid>
      </Border>   </TabItem>
+   <TabItem Header="Joint 6-DOF" Visibility="{Binding HasNativeStaticResults, Converter={StaticResource BoolVisibility}}">
+    <Grid Margin="2,2,6,2">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+     <TextBlock Text="Global axes · translations [m], rotations [rad], support forces [kN] and moments [kN·m] · zero reaction at an unrestrained DOF"
+                Style="{StaticResource Caption}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+     <DataGrid Grid.Row="1" ItemsSource="{Binding NativeJointResultRows}" IsReadOnly="True" FrozenColumnCount="1"
+               AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single"
+               ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Six component joint results">
+      <DataGrid.Columns>
+       <DataGridTextColumn Header="Joint" Binding="{Binding Joint}" Width="110"/>
+       <DataGridTextColumn Header="UX [m]" Binding="{Binding UX, StringFormat=G6}" Width="88" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="UY [m]" Binding="{Binding UY, StringFormat=G6}" Width="88" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="UZ [m]" Binding="{Binding UZ, StringFormat=G6}" Width="88" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="RX [rad]" Binding="{Binding RX, StringFormat=G6}" Width="88" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="RY [rad]" Binding="{Binding RY, StringFormat=G6}" Width="88" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="RZ [rad]" Binding="{Binding RZ, StringFormat=G6}" Width="88" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="FX [kN]" Binding="{Binding FX, StringFormat=G6}" Width="88" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="FY [kN]" Binding="{Binding FY, StringFormat=G6}" Width="88" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="FZ [kN]" Binding="{Binding FZ, StringFormat=G6}" Width="88" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="MX [kN·m]" Binding="{Binding MX, StringFormat=G6}" Width="96" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="MY [kN·m]" Binding="{Binding MY, StringFormat=G6}" Width="96" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="MZ [kN·m]" Binding="{Binding MZ, StringFormat=G6}" Width="96" ElementStyle="{StaticResource NumericCell}"/>
+      </DataGrid.Columns>
+     </DataGrid>
+    </Grid>
+   </TabItem>
+   <TabItem Header="Frame 6-component" Visibility="{Binding HasNativeStaticResults, Converter={StaticResource BoolVisibility}}">
+    <Grid Margin="2,2,6,2">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
+     <TextBlock Text="Frame local axes 1/2/3 · station 0 = I end, 1 = J end · translations [m], rotations [rad], forces [kN], moments [kN·m]"
+                Style="{StaticResource Caption}" Margin="0,0,0,6" TextWrapping="Wrap"/>
+     <DataGrid Grid.Row="1" ItemsSource="{Binding NativeFrameStationResultRows}" IsReadOnly="True" FrozenColumnCount="2"
+               AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single"
+               ScrollViewer.HorizontalScrollBarVisibility="Auto" AutomationProperties.Name="Six component frame station results">
+      <DataGrid.Columns>
+       <DataGridTextColumn Header="Frame" Binding="{Binding Frame}" Width="110"/>
+       <DataGridTextColumn Header="Station" Binding="{Binding Station, StringFormat=F4}" Width="72" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="U1 [m]" Binding="{Binding U1, StringFormat=G6}" Width="84" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="U2 [m]" Binding="{Binding U2, StringFormat=G6}" Width="84" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="U3 [m]" Binding="{Binding U3, StringFormat=G6}" Width="84" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="R1 [rad]" Binding="{Binding R1, StringFormat=G6}" Width="84" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="R2 [rad]" Binding="{Binding R2, StringFormat=G6}" Width="84" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="R3 [rad]" Binding="{Binding R3, StringFormat=G6}" Width="84" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="F1 [kN]" Binding="{Binding F1, StringFormat=G6}" Width="84" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="F2 [kN]" Binding="{Binding F2, StringFormat=G6}" Width="84" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="F3 [kN]" Binding="{Binding F3, StringFormat=G6}" Width="84" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="M1 [kN·m]" Binding="{Binding M1, StringFormat=G6}" Width="94" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="M2 [kN·m]" Binding="{Binding M2, StringFormat=G6}" Width="94" ElementStyle="{StaticResource NumericCell}"/>
+       <DataGridTextColumn Header="M3 [kN·m]" Binding="{Binding M3, StringFormat=G6}" Width="94" ElementStyle="{StaticResource NumericCell}"/>
+      </DataGrid.Columns>
+     </DataGrid>
+    </Grid>
+   </TabItem>
   </TabControl>
  </Grid>
 </Window>

@@ -30,6 +30,28 @@ internal static class LegacyNativeDocumentMigration
         return new(Native.OriginKind.Imported, "Mcotis legacy config", "Legacy", startingModel);
     }
 
+    /// <summary>The source a document of the main window was made with, read back from its objects' origins: a model
+    /// opened from its <c>.mcotis</c> file is made again with the same origins when it is next edited (M6). A document
+    /// whose objects all come from a generator's flag, or from the user, says nothing of it: the configuration of an
+    /// older file, as <see cref="Infer"/> names it when nothing else is known.</summary>
+    public static Source SourceOf(Native.ModelDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        var origins = document.Points.Values.Select(point => point.Origin)
+            .Concat(document.Frames.Values.Select(frame => frame.Origin))
+            .Concat(document.Cables.Values.Select(cable => cable.Origin));
+        foreach (var origin in origins)
+        {
+            if (origin is { Kind: Native.OriginKind.Imported, SourceProduct: { Length: > 0 } product })
+                return product == "Mcotis legacy config" ? new(Native.OriginKind.Imported, product, "Legacy") : Source.Imported(product);
+            // a generated key of this migration reads "<product>/<type>/<name>"; a generator's flag writes "<id>:<key>"
+            if (origin is { Kind: Native.OriginKind.Generated, GenerationKey: { } key } && key.IndexOf('/') is > 0 and var slash &&
+                !key.AsSpan(0, slash).Contains(':'))
+                return Source.Generated(key[..slash]);
+        }
+        return new(Native.OriginKind.Imported, "Mcotis legacy config", "Legacy");
+    }
+
     /// <summary>The joint restraints a model of the main workspace is analysed, shown and exported with, by joint name:
     /// the six-component assignments it holds. A model that holds none — a configuration saved before restraints were
     /// data, and the VCF system, whose supports are not assignments yet — has the pins the application has always
@@ -130,7 +152,7 @@ internal static class LegacyNativeDocumentMigration
             var massDensity = property.MassPerLengthTPerM / area;
             editor.PutMaterial(new(materialId, $"Material of {nativeName}",
                 member.Kind == MemberKind.Frame ? Native.MaterialType.Other : Native.MaterialType.Tendon,
-                property.ElasticModulusKNPerM2, .3, weightDensity, massDensity));
+                property.ElasticModulusKNPerM2, property.PoissonRatio ?? .3, weightDensity, massDensity));
 
             if (member.Kind == MemberKind.Frame)
             {
@@ -142,10 +164,12 @@ internal static class LegacyNativeDocumentMigration
                         property.TorsionConstantM4 ?? 0)));
                 editor.AddFrame(start, end, nativeName, objectId, Origin("Frame", member.Name));
                 editor.SetFrameSection([objectId], sectionId);
-                if (property.ReleaseStartRotation || property.ReleaseEndRotation)
+                // the in-plane moment is the native moment 3 (the frame keeps its axes at 0°, the angle being in its
+                // inertias); the moment about the other axis, out of the plane, is the native moment 2
+                if (property.ReleaseStartRotation || property.ReleaseEndRotation || property.ReleaseStartOutOfPlane || property.ReleaseEndOutOfPlane)
                     editor.SetFrameReleases([objectId], new(
-                        new(false, false, false, false, false, property.ReleaseStartRotation),
-                        new(false, false, false, false, false, property.ReleaseEndRotation)));
+                        new(false, false, false, false, property.ReleaseStartOutOfPlane, property.ReleaseStartRotation),
+                        new(false, false, false, false, property.ReleaseEndOutOfPlane, property.ReleaseEndRotation)));
             }
             else
             {
@@ -166,6 +190,13 @@ internal static class LegacyNativeDocumentMigration
         {
             if (pointIds.TryGetValue(joint, out var pointId)) editor.SetRestraint([pointId], restraint);
             else if (assigned.ContainsKey(joint)) throw new InvalidDataException($"A restraint refers to missing joint '{joint}'.");
+        }
+
+        // the joint masses the model holds (M8), by joint name
+        foreach (var mass in snapshot.JointMasses.Where(item => !item.IsZero))
+        {
+            if (!pointIds.TryGetValue(mass.JointName, out var pointId)) throw new InvalidDataException($"A joint mass refers to missing joint '{mass.JointName}'.");
+            editor.SetJointMass(new(pointId, mass.UX, mass.UY, mass.UZ, mass.RX, mass.RY, mass.RZ));
         }
 
         var patternRows = snapshot.PatternRows.ToDictionary(row => row.Name, StringComparer.OrdinalIgnoreCase);
@@ -226,7 +257,7 @@ internal static class LegacyNativeDocumentMigration
         {
             var id = new Native.ObjectId(Guid.Parse(row.Id));
             massIds[row.Name] = id;
-            editor.PutMassSource(new(id, row.Name, row.IncludeSelfMass));
+            editor.PutMassSource(new(id, row.Name, row.IncludeSelfMass, row.IncludeAdditionalMass));
         }
 
         var caseIds = caseRows.ToDictionary(row => row.Name, row => new Native.ObjectId(Guid.Parse(row.Id!)), StringComparer.OrdinalIgnoreCase);

@@ -1,7 +1,15 @@
 # Native building and analysis forms
 
-Implemented 2026-10-12. Reach the template from **Edit → TemplateBuilding…**, including on a blank or locked
-legacy model. Each template opens a separate native workspace and does not replace the main window's model.
+Implemented 2026-10-12. **One window since 2026-10-15** (M8 of the main-window migration; task of 2026-10-14: "one
+window, one model"): the separate native workspace window and File → Open Native Model… are retired — archived under
+`archive/Mcotis.Desktop/NativeWorkspace/`, not compiled — and everything they did is in the main window, on its one
+native document.
+
+## TemplateBuilding
+
+Reach the template from **Edit → TemplateBuilding…**, including on a blank or locked model. The building it creates
+becomes the model of the main window, shown in the 3D view; a model with changes not saved is offered to be saved first
+("Save changes to …?" — Yes saves, No drops the changes, Cancel keeps the model).
 
 1. Enter X bays, Y bays and storeys; click **Update Tables**. Existing rows retain their inputs when counts change.
 2. Enter each X/Y bay width and each storey height in metres. Heights are increments above the floor below.
@@ -9,77 +17,73 @@ legacy model. Each template opens a separate native workspace and does not repla
 3. Enter each floor's downward X-beam and Y-beam line loads, in kN/m. Each value applies to every beam parallel
    to that axis on that floor; edge beams receive the same value. These are already line loads, not area loads
    converted using tributary widths. Columns receive no imposed line load. Negative values are refused.
-4. Review material E (kN/m²), Poisson ratio, weight density (kN/m³), and general column/beam A (m²), I33, I22 and J
-   (m⁴). Starter values are editable illustrative properties, not a designed section or material specification.
-   Local section axes follow [the frame engine conventions](analysis/spatial-static-verification.md).
+4. Review material E (kN/m²), Poisson ratio, weight density (kN/m³), mass density (t/m³; weight density / g until a
+   value is typed) and general column/beam A (m²), I33, I22 and J (m⁴). Starter values are editable illustrative
+   properties, not a designed section or material specification. Local section axes follow
+   [the frame engine conventions](analysis/spatial-static-verification.md).
 5. Select fixed or pinned bases and optional member self-weight; click **Create Model**.
 
 The generator shares grid points between adjoining members, splits columns at every floor and beams at every bay,
-and creates BuildingLoad and BuildingStatic. Connections are rigid. There are no slabs, diaphragms, braces, offsets
-or cable objects. The generator is one undoable command and refuses an existing geometry document; another
-**Edit → TemplateBuilding…** starts a separate building. This first template does not regenerate an edited building.
+and creates BuildingLoad and BuildingStatic (a linear static case). Connections are rigid. There are no slabs,
+diaphragms, braces, offsets or cable objects. It writes Full 3D degrees of freedom (the XZ or YZ plane for a building
+with bays in one direction only). A TemplateBuilding model carries no generator flag: it can be designed, not optimized.
 
-In the native window, **File → Save / Save As / Open Native Model** uses JSON `.mcotis` files. Save writes the current
-document. Open validates before replacement. Unsaved changes are checked on Open and Close. Results remain in
-memory and are cleared on Open; the input file does not store them. The main window also has **File → Open Native Model…**.
-Native files are schema 5 since 2026-10-13: a load case states its kind (Linear Static, Nonlinear Static, Initial
-P-Delta, Modal), the case it continues from, the case whose stiffness it uses, and its options. An older file is
-upgraded when it is opened — the cases keep their meaning and their identities — and is written as schema 5 on Save.
-Schema 5 adds named modal mass-source components and six-component joint mass assignments.
+## How the main window takes a native document in
 
-**Define → Modal Eigen Case…** creates or modifies an Eigen case, its named mass source and requested mode count.
-**Assign → Joint Mass…** assigns nonnegative UX/UY/UZ lumped masses [t] and RX/RY/RZ inertias [t·m²]. Element
-self mass is `rho A L` times the frame mass modifier and is split equally between its ends; a mass source can include
-self mass, assigned joint mass, or both. **Run → Run Analysis** solves an unstressed elastic frame modal case with
-the active DOFs selected in Analysis Options. P-Delta/tangent-source modes, cables and shells are refused with the
-specific missing capability; elastic stiffness is never silently substituted for a requested tangent state.
+`Application/NativeDocumentImport` reads the document and `MainViewModel.OpenNativeDocument` makes it the window's
+model, the way Import From ETABS makes an ETABS model the window's model: the objects keep their names; sections keep
+A, I33, I22 and J; materials keep E, Poisson ratio (`FemSectionProperties.PoissonRatio`), weight and mass density;
+releases, modifiers, restraints (none is added — a model that holds none is reported unstable by its run), joint
+masses, loads, load cases with their kinds and options, combinations, mass sources and the degrees of freedom are taken
+as they are; a cable target force becomes the cable's pretension row (Tab 03). The Tab 01 storey loads every run of the
+window reads get a neutral entry — 0 kPa on the top joints in a pattern without joint loads there — so the run takes
+the document's own loads exactly. The model keeps the document's identity. What the window's model cannot hold yet is
+refused, all at once with each object, before the open model changes: shells, rotated local axes, releases other than
+the moment about local 3, shear areas, joint loads along Y or moments about X or Z, frame loads along Y or local 3 (or
+local 1 / 2 on a frame out of the XZ plane), more than one target force per cable or one read elsewhere than
+mid-length, envelope combinations.
 
-**Run → Analysis Options… → Degrees of Freedom** provides 3D, XZ, YZ, XY and custom six-DOF selections. Apply commits
-one command; OK commits and closes; Cancel discards edits since the last Apply. Global inactive DOFs are separate
-from point supports. The compiler rejects geometry and loads incompatible with a selected plane; coordinates are
-never projected. Run executes asynchronously and shows diagnostics on failure. Joint translations use m, rotations
-rad, reaction forces kN and moments kN·m. Frame end actions use local axes. The geometry view is undeformed;
-the modal tabs show eigenvalue, frequency, period, residual, UX/UY/UZ participation, the physical/free mass inventory
-and centre of mass, and the selected mass-normalized
-eigenvector. The 2D/3D viewer labels it as relative amplitude, never as physical displacement. Edited inputs mark
-existing results Stale; Undo can restore Current.
+`--template-building-ui` shows that the window's run gives what the building's own document gives solved directly —
+every joint, six components (largest difference 4.6E-18 m on 3.0E-4 m) — with the reactions balancing the line loads.
 
-The native engine retains its documented capability limits, including 600 free / 2,400 total DOFs. The template
-form allows up to 400 points for model creation/persistence, but larger free-DOF counts can still exceed the run limit.
-Since the general solver (2026-10-12) **Run → Run Analysis** also solves a native model that has cables: tension-only
-cables, cable target forces fitted in the case set to fit them, nonlinear static cases continuing from another, and
-cable sag. The **Cable results** tab lists each cable's tension, whether it is taut or slack, its target, the applied
-pretension, its tension at the fit stage, its sag and its remaining stiffness. Warnings of a run that succeeded (a
-joint rotation nothing reaches, a translation held by slack cables only) are shown under the result line. There is
-no shell or P-Delta analysis. Cable modes remain unavailable until a verified prestressed tangent state exists. The
-template form still creates frames only. Modal results remain in memory and are not written to the input file,
-matching the native workspace result-lifetime rule. Template UI does not change the numerical source verification
-gates or establish production readiness; the evidence is in
-[analysis/cable-static-verification.md](analysis/cable-static-verification.md) and
+## Files
+
+**File → Open…** opens a `.mcotis` saved by the former native workspace as the main window's model; Save then writes it
+in the main window's form (see `docs/USER_GUIDE.md`, "Model files"). Native files are schema 6: load case kinds and
+options (schema 5), modal mass sources and six-component joint mass assignments, application data and the generator
+flag. An older schema is upgraded when the file is opened, and written as schema 6 on Save.
+
+## Modal cases and joint masses
+
+Define → Load Cases → **Load Case Data**, kind Modal: a mass source and a number of modes; MS1 counts the members' self
+mass and the joint masses. **Assign → Joint → Masses…** gives the joints selected on the model view nonnegative
+UX / UY / UZ lumped masses [t] and RX / RY / RZ inertias [t·m²] — one step of Undo / Redo, saved with the model, kept by
+name like a restraint. Element self mass is `rho A L` times the frame mass modifier, split equally between its ends.
+Run FEM Analysis solves an unstressed elastic frame modal case with the active degrees of freedom of Analysis Options;
+P-Delta / tangent-source modes, cables and shells are refused with the missing capability; elastic stiffness is never
+silently substituted for a requested tangent state. Result → **Modal Results…** lists the modes, participation, mass
+inventory and the selected mass-normalized eigenvector, drawn as a relative amplitude, never as a displacement.
+
+## Analysis Options
+
+**Run → Analysis Options… → Degrees of Freedom**: the presets (Full 3D, the XZ, YZ and XY planes) and six boxes for the
+model, six for cable joints (UX UY UZ by default). The form keeps any set that has a translation in it; whether the model
+can be analysed with it is for the run to say, in the Run Monitor (user, 2026-10-13: "if not proper then report in the
+log"). A model starts in Full 3D. A model of a plane on pins that are all on one line is not held out of its plane in
+Full 3D; its loads do no work on that movement, so the run holds it, solves and lists it as a warning (user, same day:
+"ETABS can run regardless") — never a movement the loads act on, and never a degree of freedom nothing holds. The other
+tab edits the cable target-fitting tolerance, maximum iterations, frame mesh (1–100: the stations each frame piece is
+read at, which changes no joint result) and cable sag; without cables it is the frame mesh alone.
+
+The engine's limits: 3,000 free / 6,000 total degrees of freedom in the main window, small displacements, no shells,
+no P-Delta. Linear static cases are solved on the unstressed stiffness since 2026-10-15 — the engine's linear elastic
+solve, verified against OpenSeesPy ([analysis/spatial-static-verification.md](analysis/spatial-static-verification.md));
+a model with cables needs a nonlinear case and Run says so. Cable modes remain unavailable until a verified prestressed
+tangent state exists. The evidence: [analysis/cable-static-verification.md](analysis/cable-static-verification.md),
 [analysis/modal-eigen-verification.md](analysis/modal-eigen-verification.md).
 
-The main window's **Run → Analysis Options…** is the form of the main window's own run. That run uses the same
-general solver, and its Degrees of Freedom tab is the same as the native one — the presets, the six degrees of
-freedom, those of cable joints (user, 2026-10-12: a tab of boxes that cannot be changed is redundant; 2026-10-13: the
-tab is wanted, set freely, "if not proper then report in the log", and "make the planar use 3d as 3d is default"). A
-model starts in Full 3D. A model of the main window lies in a plane on pins that are all on one line, so in Full 3D
-nothing holds it out of that plane; its loads do no work on that movement, so the main window's run holds it, solves
-and lists it as a warning (user, same day: "ETABS can run regardless") — the results are those of the XZ plane, which
-the user can choose instead; the form does not choose it for them. The native run does not hold anything: there a
-singular stiffness has no result. The run monitor states the degrees of
-freedom of each run. On its other tab the form edits the
-cable target-fitting tolerance, maximum iterations, frame mesh (1–100: the stations each frame piece is read at,
-which changes no joint result) and cable sag. Individual cable target
-forces remain in the cable assignments/load patterns. In the native options the same four settings are active: the
-native run reads the fitting tolerance, the iteration limit and cable sag, and reads each frame at the mesh stations.
-
-**Degrees of freedom of cable joints** (native options, Degrees of Freedom tab): six checkboxes, UX UY UZ on by
-default. A joint that only cables reach has these, among the active degrees of freedom; the others are switched off
-there. A cable gives stiffness along its own line only, so a movement left on that nothing else holds — another
-member, a restraint — makes the model unstable, and Run reports it with the joint and the movement instead of
-solving. In the main window cable joints move in UX and UZ, and its Degrees of Freedom tab can switch either of them off (see above). Locked/running legacy models show their options read-only.
-
 Verification: `dotnet run --project tests/Mcotis.Checks -- --full` includes template topology, line-load accounting, support
-reactions, self-weight, modal closed forms and OpenSeesPy comparisons, planar cases, invalid input, Undo/Redo and Save/Open. `--template-building-ui` on
-`tests/Mcotis.Desktop.Checks` checks staged forms, native runs, diagnostics, result state, Save/Open and WPF bindings;
-it captures the forms in `.work/*-ui.png`. Existing numerical benchmarks remain unchanged.
+reactions, self-weight, modal closed forms and OpenSeesPy comparisons, planar cases, invalid input, Undo/Redo and Save/Open.
+`--template-building-ui` on `tests/Mcotis.Desktop.Checks` checks the form, the building in the main window (its run against
+the document solved directly, joint masses, the modal case, Save / Open, a native-workspace file, the "Save changes?"
+prompt), the main window's Analysis Options and the run monitor, and WPF bindings; it captures the forms in `.work/*-ui.png`.

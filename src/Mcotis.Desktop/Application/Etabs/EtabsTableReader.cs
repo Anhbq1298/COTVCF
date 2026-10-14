@@ -52,6 +52,20 @@ public static class EtabsTableReader
         return tables;
     }
 
+    /// <summary>The torsion constants an export states [m⁴], by section — FRAME SECTION PROPERTY DEFINITIONS - SUMMARY, in the
+    /// units its PROGRAM CONTROL states: what an .e2k of the same model does not carry.</summary>
+    public static IReadOnlyDictionary<string, double> TorsionConstants(string text)
+    {
+        var tables = Tables(text);
+        var control = tables.GetValueOrDefault("PROGRAM CONTROL")?.FirstOrDefault() ?? throw new InvalidDataException("The ETABS table export has no PROGRAM CONTROL table.");
+        var stated = (control.Text("CurrUnits") ?? "").Split(',', StringSplitOptions.TrimEntries);
+        if (stated.Length < 2) throw new InvalidDataException("The ETABS table export does not state its units.");
+        var units = EtabsUnits.Parse(stated[0], stated[1]);
+        return (tables.GetValueOrDefault("FRAME SECTION PROPERTY DEFINITIONS - SUMMARY") ?? [])
+            .Where(row => row.Text("Name") is not null && row.Number("J") is > 0)
+            .ToDictionary(row => row.Text("Name")!, row => units.Inertia(row.Number("J")!.Value), StringComparer.Ordinal);
+    }
+
     public static EtabsModel Read(string text, string source)
     {
         var tables = Tables(text);
@@ -110,6 +124,7 @@ public static class EtabsTableReader
                 Material = summary.Text("Material") ?? "",
                 Reported = new EtabsSectionValues(Area(summary, "Area"), Inertia(summary, "I33"), Inertia(summary, "I22"), Inertia(summary, "J"),
                     Area(summary, "As2"), Area(summary, "As3")),
+                ReportedTorsion = Inertia(summary, "J") is > 0 and var torsion ? torsion : null,
                 Modifiers = ModifierFields.Select(key => summary.Number(key) ?? 1).ToArray(),
             };
             var definition = shape switch

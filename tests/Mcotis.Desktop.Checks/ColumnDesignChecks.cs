@@ -63,8 +63,55 @@ internal static class ColumnDesignChecks
         if (Environment.GetEnvironmentVariable("COT_PRINT_DESIGN") == "1") { Console.WriteLine(srcResult.Detail); Console.WriteLine(rcResult.Detail); }
         var none = ColumnDesignEngine.Design(src, new DesignMemberInput("S2", "SRC", 8, []));
         Check(none.Status == "ERROR", "Member without forces reports an error");
+        RunSpatialForces(cft, rc, src);
         RunCftOptimization();
         RunColumnOptimization();
+    }
+
+    /// <summary>3D member forces (task of 2026-10-14, §2): M3 bends y-y and M2 bends z-z, both in the biaxial check; the
+    /// shear along local 3 is checked; torsion is refused above its stated threshold — and a member without out-of-plane
+    /// forces is designed exactly as before.</summary>
+    private static void RunSpatialForces(ColumnDesignBasis cft, ColumnDesignBasis rc, ColumnDesignBasis src)
+    {
+        static DesignMemberInput Spatial(string name, double length, double axialKN, double v2, double m3, double v3, double m2, double torsion = 0) =>
+            new(name, "TEST", length, [new DesignCaseForces("ULS1",
+                [new(axialKN, v2, m3, v3, m2, torsion), new(axialKN, v2, -m3 / 2, v3, -m2 / 2, torsion)])]);
+
+        // the square tube is the same about both axes: a moment about local 3 or about local 2 gives the same verdict,
+        // each with its imperfection and the biaxial check in both planes
+        var aboutY = ColumnDesignEngine.Design(cft, Spatial("Y", 4, -3000, 0, 250, 0, 0));
+        var aboutZ = ColumnDesignEngine.Design(cft, Spatial("Z", 4, -3000, 0, 0, 0, 250));
+        var plain = ColumnDesignEngine.Design(cft, Member("P", 4, -3000, 0, 250));
+        Check(Near(aboutY.MaxUtilization, aboutZ.MaxUtilization, 1e-9) && aboutZ.Governing!.MEdZKNm > aboutY.Governing!.MEdZKNm &&
+              aboutY.MaxUtilization == plain.MaxUtilization && aboutY.Detail == plain.Detail.Replace("P ", "Y ", StringComparison.Ordinal),
+            $"a square CFT: 250 kNm about local 3 or about local 2 gives the same utilisation ({aboutY.MaxUtilization:0.000}); about 3 it is the design without out-of-plane forces, word for word");
+        var both = ColumnDesignEngine.Design(cft, Spatial("B", 4, -3000, 0, 250, 0, 150));
+        Check(both.MaxUtilization > aboutY.MaxUtilization && both.Detail.Contains("imperfection in the y plane", StringComparison.Ordinal) &&
+              both.Detail.Contains("M0Ed,z = 150.0 kNm", StringComparison.Ordinal),
+            $"a moment about both axes is checked biaxially with the imperfection in either plane ({both.MaxUtilization:0.000} > {aboutY.MaxUtilization:0.000})");
+        var rcBoth = ColumnDesignEngine.Design(rc, Spatial("R", 3, -800, 30, 80, 0, 40));
+        var rcPlain = ColumnDesignEngine.Design(rc, Member("R", 3, -800, 30, 80));
+        Check(rcBoth.Governing!.MinorUtilization > rcPlain.Governing!.MinorUtilization && rcBoth.Governing.MEdZKNm > rcPlain.Governing.MEdZKNm,
+            $"RC: the FEM moment about local 2 adds to the z-z imperfection moment (MEd,z {rcPlain.Governing.MEdZKNm:0.0} → {rcBoth.Governing.MEdZKNm:0.0} kNm) and to Eq. 5.39");
+
+        // the shear along local 3 of a square tube is resisted as the shear along local 2
+        var shearY = ColumnDesignEngine.Design(cft, Spatial("V2", 4, -1000, 900, 50, 0, 0));
+        var shearZ = ColumnDesignEngine.Design(cft, Spatial("V3", 4, -1000, 0, 50, 900, 0));
+        Check(Near(shearY.Governing!.ShearUtilization, shearZ.Governing!.ShearUtilization, 1e-12) && shearZ.Governing.VEdZKN == 900,
+            $"a square CFT: 900 kN along local 2 or along local 3 uses the same shear resistance ({shearY.Governing.ShearUtilization:0.000})");
+        var srcShear = ColumnDesignEngine.Design(src, Spatial("S3", 8, -20000, 300, 1500, 300, 0));
+        Check(srcShear.Detail.Contains("2 b tf (flanges)", StringComparison.Ordinal),
+            "steel encased: the shear along local 3 is taken by the flanges of the profile");
+
+        // torsion is not designed: refused above 1 % of the largest moment (at least 1 kNm), designed below
+        var twisted = ColumnDesignEngine.Design(cft, Spatial("T", 4, -3000, 0, 250, 0, 0, torsion: 5));
+        var slight = ColumnDesignEngine.Design(cft, Spatial("t", 4, -3000, 0, 250, 0, 0, torsion: 1));
+        Check(twisted.Status == "ERROR" && twisted.Error!.Contains("torsion of 5.0 kNm", StringComparison.Ordinal) &&
+              slight.Status == aboutY.Status && slight.MaxUtilization == aboutY.MaxUtilization && slight.Governing!.TEdKNm == 1,
+            $"torsion is never left out silently: 5 kNm on a member with 250 kNm of bending is refused with the reason; 1 kNm (the floor) is designed and reported");
+        var check = ColumnDesignEngine.Check(cft, [Spatial("T", 4, -3000, 0, 250, 0, 0, torsion: 5)]);
+        Check(!check.Passes && check.FailedRule!.Contains("torsion", StringComparison.Ordinal),
+            "the column optimizer counts a member with torsion beyond the threshold as failing, with the reason");
     }
 
     /// <summary>Design → RC / steel encased / mega → Optimization: cost per metre by hand, and the cheapest passing section

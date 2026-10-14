@@ -141,10 +141,27 @@ internal static class ProductionBaselineChecks
 
     // ---- Optimization TAS: the walkthrough of the guide (TasGuideCapture) ----
 
-    private static IReadOnlyList<Entry> Tas(Dictionary<string, double> timing)
+    /// <summary>Optimization TAS analysed in Full 3D (M9: what the app starts the tied arch system in) against its baseline,
+    /// captured in the XZ plane: every case the same to round-off, and the time per case against the budget.</summary>
+    internal static void RunTasInFullThreeD()
+    {
+        var fixture = Read();
+        var timing = new Dictionary<string, double>(StringComparer.Ordinal);
+        Compare(fixture, "tas/", Tas(timing, Mcotis.Core.DofMask.Full3D),
+            "Optimization TAS in Full 3D — each case of the guide's nine (h 2–4 × LL 5–10) analysed with all six degrees of freedom — against its baseline in the XZ plane: every row, the summary line and the study report");
+        var ms = timing["Optimization TAS"];
+        var before = fixture.MillisecondsPerCase.GetValueOrDefault("Optimization TAS");
+        var ratio = before > 0 ? ms / before : double.NaN;
+        Console.WriteLine(ratio > SlowerFactor
+            ? $"NOTE: Optimization TAS in Full 3D takes {ms:0.0} ms per case against {before:0.0} ms at the baseline in the plane ({ratio:0.00}×) — more than {SlowerFactor}× slower: report it and propose a fix before merging."
+            : $"INFO: Optimization TAS in Full 3D takes {ms:0.0} ms per case (baseline in the plane {before:0.0} ms, {ratio:0.00}×).");
+    }
+
+    private static IReadOnlyList<Entry> Tas(Dictionary<string, double> timing, Mcotis.Core.DofMask? dofs = null)
     {
         var vm = EtabsImportChecks.NewViewModel(out _);
         vm.LoadTasModel();
+        if (dofs is { } active) vm.ApplyPlanarAnalysisSettings(vm.PlanarAnalysisSettings with { ActiveDofs = active, CableDofs = Mcotis.Core.DofMask.Translations });
         var p = TiedArchParameters.Default;
         var settings = TasOptimization.Start(p) with
         {

@@ -144,16 +144,16 @@ public sealed record FemCaseOptions(Mcotis.Core.CaseKind Kind = Mcotis.Core.Case
     public string? NotSolvedYet(string caseName)
     {
         const string pending = "numerical verification pending (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md)";
-        // modal: the main window runs its model's native document since 2026-10-14 (M1), and the modal solver with it —
-        // unstressed elastic frames with lumped mass. Modes on the stiffness at the end of another case are not verified.
-        return Kind == Mcotis.Core.CaseKind.ModalEigen
-            ? StiffnessSourceCase is null ? null
-            : $"Load case '{caseName}' is modal on the stiffness at the end of '{StiffnessSourceCase}'. Modes of a stressed state are not available yet — {pending}. Elastic stiffness is not substituted."
+        // Modal Eigen uses the unstressed frame stiffness or the converged first-order nonlinear source state.
+        return Kind == Mcotis.Core.CaseKind.ModalEigen ? null
             : Kind == Mcotis.Core.CaseKind.InitialPDelta || GeometricMode == Mcotis.Core.GeometricNonlinearity.PDelta
                 ? $"Load case '{caseName}' is analysed with P-Delta. P-Delta is not available yet — {pending}. The case is not solved, and it is not replaced by a first-order analysis."
-            : Kind == Mcotis.Core.CaseKind.LinearStatic
-                ? $"Load case '{caseName}' is linear static{(StiffnessSourceCase is null ? "" : $" on the stiffness at the end of '{StiffnessSourceCase}'")}. " +
-                  $"Linear static cases are not solved in this workspace yet — {pending}. It is not solved as a nonlinear case in its place."
+            // linear static on the unstressed stiffness: solved since 2026-10-15 (M8) — the engine's linear elastic solve,
+            // verified against OpenSeesPy (docs/analysis/spatial-static-verification.md), which the native workspace has
+            // always run; a model with cables is refused by the engine with the reason (a cable carries tension only)
+            : Kind == Mcotis.Core.CaseKind.LinearStatic && StiffnessSourceCase is not null
+                ? $"Load case '{caseName}' is linear static on the stiffness at the end of '{StiffnessSourceCase}'. " +
+                  $"Linear static on the stiffness of another case is not solved yet — {pending}. It is not solved on the unstressed stiffness, nor as a nonlinear case, in its place."
             : Controls is not null ? $"Load case '{caseName}' sets its own load steps, iterations and tolerances. Case-specific iteration controls are not applied yet — {pending}."
             : null;
     }

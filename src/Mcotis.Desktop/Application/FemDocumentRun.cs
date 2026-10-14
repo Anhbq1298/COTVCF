@@ -13,7 +13,12 @@ public sealed record FemDocumentResults(
     IReadOnlyDictionary<string, StaticResult> Static,
     IReadOnlyDictionary<string, ModalAnalysisResult> Modal,
     IReadOnlyList<string> Notes,
-    LegacyNames Names);
+    LegacyNames Names)
+{
+    /// <summary>The declared type of every solved case, persisted with the output so a result is never reclassified
+    /// from its numerical iteration count.</summary>
+    public IReadOnlyDictionary<string, Native.CaseKind> CaseKinds { get; init; } = new Dictionary<string, Native.CaseKind>();
+}
 
 /// <summary>
 /// The one analysis path of the application (task of 2026-10-14, M1): a native <see cref="Native.ModelDocument"/> and the
@@ -148,7 +153,9 @@ public static class FemDocumentRun
         foreach (var item in modals)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var outcome = ModalSolver.Solve(model, item.Id, cancellationToken: cancellationToken);
+            var stiffnessState = item.StiffnessSourceCaseId is { } sourceId && analysed.LoadCases.TryGetValue(sourceId, out var sourceCase)
+                ? native.GetValueOrDefault(sourceCase.Name) : null;
+            var outcome = ModalSolver.Solve(model, item.Id, cancellationToken: cancellationToken, stiffnessState: stiffnessState);
             ended++;
             equilibrium?.Report(new(item.Name, false, outcome.Success ? FemEquilibriumState.Converged : FemEquilibriumState.Failed,
                 model.Dofs.Count(dof => dof.State != DofState.Inactive), model.Dofs.Count(dof => dof.State == DofState.Restrained), model.FreeDofCount,
@@ -157,7 +164,10 @@ public static class FemDocumentRun
             { FailureCode = outcome.Success ? null : outcome.Issues.FirstOrDefault(issue => issue.Severity == Native.ValidationSeverity.Error)?.Code, ModelWarnings = held });
             modal[item.Name] = outcome.Result is { } result && outcome.Success ? result : throw Refused(analysed, outcome.Issues);
         }
-        return new(legacy, native, modal, notes, names);
+        return new(legacy, native, modal, notes, names)
+        {
+            CaseKinds = cases.ToDictionary(item => item.Name, item => item.Kind, StringComparer.OrdinalIgnoreCase),
+        };
     }
 
     /// <summary>The document without the joints that no frame and no cable reaches — the run has never analysed them —
@@ -183,7 +193,8 @@ public static class FemDocumentRun
         var joints = jointResults.Values.Select(joint => (Name: names[joint.PointId], joint.Displacements))
             .OrderBy(joint => joint.Name, StringComparer.Ordinal)
             // the application's slope is positive toward +Z for +X: the opposite of the rotation about global Y
-            .Select(joint => new FemJointResponse(joint.Name, joint.Displacements[0], joint.Displacements[2], -joint.Displacements[4])).ToArray();
+            .Select(joint => new FemJointResponse(joint.Name, joint.Displacements[0], joint.Displacements[2], -joint.Displacements[4])
+                { UYM = joint.Displacements[1] }).ToArray();
         // the supports of the model as it is drawn: the joints held in the XZ plane, left to right
         var supports = jointResults.Keys.Where(id => FemSolver.HoldsInPlane(document.RestraintOf(id)))
             .OrderBy(id => document.Points[id].Position.X).ThenBy(id => names[id], StringComparer.Ordinal)

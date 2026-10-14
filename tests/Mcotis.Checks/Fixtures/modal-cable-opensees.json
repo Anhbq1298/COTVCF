@@ -1,0 +1,26 @@
+{
+  "source": "OpenSeesPy 2D elasticBeamColumn + corotTruss; nonlinear static pull, then eigen",
+  "version": "3.8.0",
+  "units": {
+    "length": "m",
+    "force": "kN",
+    "mass": "t",
+    "time": "s"
+  },
+  "elasticModulus": 200000000.0,
+  "area": 0.02,
+  "inertia": 0.0005,
+  "length": 4.0,
+  "appliedPull": 10000.0,
+  "tipMassUXandUZ": 3.0,
+  "tipAxialDisplacement": 0.005,
+  "cableTension": 5000.0,
+  "eigenvalues": [
+    1978.646483562205,
+    666666.6666666666
+  ],
+  "frequenciesHz": [
+    7.079526886103902,
+    129.94946687227934
+  ]
+}

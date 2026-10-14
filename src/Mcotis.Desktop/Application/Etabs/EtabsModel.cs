@@ -56,6 +56,9 @@ public sealed record EtabsFrameSection
     public IReadOnlyList<EtabsSdShape> SdShapes { get; init; } = [];
     /// <summary>ETABS's own A, I33, I22 … (the tables export has them; an .e2k does not).</summary>
     public EtabsSectionValues? Reported { get; init; }
+    /// <summary>ETABS's torsion constant J [m⁴], of the section's own material, when the source states it: the tables export
+    /// does; an .e2k does not — the bundled tied arch system takes it from its model's table export (M9).</summary>
+    public double? ReportedTorsion { get; init; }
     /// <summary>Section property modifiers in SAP order: A, As2, As3, J, I22, I33, mass, weight.</summary>
     public IReadOnlyList<double> Modifiers { get; init; } = EtabsModel.NoModifiers;
 }

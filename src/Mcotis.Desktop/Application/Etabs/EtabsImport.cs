@@ -112,6 +112,10 @@ public static class EtabsImport
             try
             {
                 var (converted, weight, note) = Section(section, etabsSections, materialByName);
+                // ETABS's torsion constant, as the torsional rigidity G J of the section's own material (M9): each member
+                // turns it into the J of its E and ν, so a transformed composite section keeps the source's stiffness
+                if (section.ReportedTorsion is > 0 and var j && materialByName.TryGetValue(section.Material, out var basis) && basis.ElasticModulusKNPerM2 > 0)
+                    converted = converted with { TorsionalRigidityKNm2 = j * basis.ElasticModulusKNPerM2 / (2 * (1 + basis.PoissonRatio)) };
                 sections.Add(converted);
                 // a general section's weight / mass modifiers are part of its self-weight in ETABS (Export to ETABS writes a
                 // composite's true self-weight that way); Mcotis applies section modifiers to stiffness only, so carry them here
@@ -157,8 +161,11 @@ public static class EtabsImport
                 _ => section.Material,
             };
             var modifiers = frame.Modifiers.Count == 8 ? frame.Modifiers : EtabsModel.NoModifiers;
+            // the moment about the other local axis — out of the plane — released as ETABS releases it (used in 3D, M9)
+            var other = majorInPlane ? "M2" : "M3";
             members.Add(new FemSectionProperties(name, 0, 0, 0, releases.Contains(moment + "I"), releases.Contains(moment + "J"),
-                frame.Section, material, frame.AngleDeg, Modifiers: modifiers.ToArray()));
+                frame.Section, material, frame.AngleDeg, Modifiers: modifiers.ToArray())
+            { ReleaseStartOutOfPlane = releases.Contains(other + "I"), ReleaseEndOutOfPlane = releases.Contains(other + "J") });
         }
         if (problems.Count > 0)
             throw new InvalidOperationException("The ETABS model cannot be analysed by Mcotis as it stands:" + Environment.NewLine +

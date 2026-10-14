@@ -5,7 +5,9 @@ using Mcotis.Core;
 
 namespace Mcotis.Desktop.Presentation;
 
-/// <summary>Assigns lumped translational mass and rotational mass moment of inertia to one native-model joint.</summary>
+/// <summary>Assigns lumped translational mass and rotational mass moment of inertia to joints of a model: one joint chosen
+/// in the form, or — from the main window's Assign → Joint → Masses… — the joints selected on the model view, all alike
+/// (<see cref="AppliesTo"/>).</summary>
 public sealed class NativeJointMassWindow : Window
 {
     private sealed record PointChoice(ObjectId Id, string Name)
@@ -20,14 +22,19 @@ public sealed class NativeJointMassWindow : Window
 
     public NativeJointMassDefinition? Definition { get; private set; }
 
-    public NativeJointMassWindow(ModelDocument document)
+    private readonly IReadOnlyList<ObjectId>? selected;
+    /// <summary>The joints the values are for: the selected joints the form was opened on, else the one chosen in it.</summary>
+    public IReadOnlyList<ObjectId> AppliesTo => selected is { Count: > 0 } joints ? joints : Definition is { } definition ? [definition.PointId] : [];
+
+    public NativeJointMassWindow(ModelDocument document, IReadOnlyList<ObjectId>? selected = null)
     {
         this.document = document;
+        this.selected = selected?.Where(document.Points.ContainsKey).Distinct().ToArray();
         Title = "Joint Mass"; Width = 430; Height = 480; MinWidth = 390; MinHeight = 430;
         WindowStartupLocation = WindowStartupLocation.CenterOwner; ResizeMode = ResizeMode.CanResizeWithGrip;
 
-        point.ItemsSource = document.Points.Values.OrderBy(item => item.Name, StringComparer.Ordinal)
-            .Select(item => new PointChoice(item.Id, item.Name)).ToArray();
+        point.ItemsSource = (this.selected is { Count: > 0 } joints ? joints.Select(id => document.Points[id]) : document.Points.Values)
+            .OrderBy(item => item.Name, StringComparer.Ordinal).Select(item => new PointChoice(item.Id, item.Name)).ToArray();
         point.SelectionChanged += (_, _) => LoadSelection();
 
         var root = new DockPanel { Margin = new Thickness(16) };
@@ -46,7 +53,9 @@ public sealed class NativeJointMassWindow : Window
         Add(form, "UX mass [t]", ux); Add(form, "UY mass [t]", uy); Add(form, "UZ mass [t]", uz);
         Add(form, "RX inertia [t·m²]", rx); Add(form, "RY inertia [t·m²]", ry); Add(form, "RZ inertia [t·m²]", rz);
         form.Children.Add(new TextBlock { Margin = new Thickness(0, 8, 0, 2), TextWrapping = TextWrapping.Wrap,
-            Text = "Values are lumped directly at this joint. Zero in all six fields removes the assignment." });
+            Text = this.selected is { Count: > 1 } many
+                ? $"The values are given to each of the {many.Count} selected joints (the form shows those of the joint chosen above). Zero in all six fields removes the assignment."
+                : "Values are lumped directly at this joint. Zero in all six fields removes the assignment." });
         form.Children.Add(problem); root.Children.Add(form); Content = root;
         if (point.Items.Count > 0) point.SelectedIndex = 0;
     }

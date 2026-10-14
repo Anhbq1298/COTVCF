@@ -21,11 +21,20 @@
     <ComboBox x:Name="LoadCasePicker" Grid.Column="1" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
               IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
               ToolTip="Load case or linear-additive combination shown on the model view and in the results table."/>
+    <StackPanel x:Name="ShapePicker" Grid.Column="1" Visibility="Collapsed">
+     <ComboBox x:Name="ShapeCasePicker" SelectionChanged="ShapeCase_Changed" AutomationProperties.Name="Deformed shape case"
+               ToolTip="Choose a static case or combination, or a solved modal case whose relative mode shape is to be drawn."/>
+     <StackPanel x:Name="ModePicker" Orientation="Horizontal" Margin="0,6,0,0" Visibility="Collapsed">
+      <TextBlock Text="MODE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+      <ComboBox x:Name="ModeNumberPicker" Width="100" AutomationProperties.Name="Mode number"/>
+      <TextBlock Text="Mass-normalized relative amplitude" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{StaticResource Muted}"/>
+     </StackPanel>
+    </StackPanel>
    </Grid>
   </GroupBox>
   <GroupBox x:Name="OutputGroup" Header="Output">
    <StackPanel>
-    <ListBox x:Name="Outputs" BorderThickness="0" Background="Transparent" AutomationProperties.Name="FEM result outputs" MouseDoubleClick="Outputs_DoubleClick">
+    <ListBox x:Name="Outputs" BorderThickness="0" Background="Transparent" AutomationProperties.Name="FEM result outputs" MouseDoubleClick="Outputs_DoubleClick" SelectionChanged="Outputs_Changed">
      <ListBoxItem Content="Axial forces / cables" Tag="AxialForce"/>
      <ListBoxItem Content="Bending moments" Tag="BendingMoment"/>
      <ListBoxItem Content="Shear forces" Tag="Shear"/>

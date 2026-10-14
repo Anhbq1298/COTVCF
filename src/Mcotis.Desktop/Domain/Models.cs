@@ -566,6 +566,7 @@ public sealed class ApplicationState : Observable
     private IReadOnlyList<PointLoad> sessionBaselinePointLoads = [];
     private IReadOnlyDictionary<string, double> sessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
     private IReadOnlyDictionary<string, Mcotis.Core.Restraint> jointRestraints = new Dictionary<string, Mcotis.Core.Restraint>(StringComparer.Ordinal);
+    private IReadOnlyDictionary<string, Mcotis.Desktop.Configuration.FemJointMassDto> jointMasses = new Dictionary<string, Mcotis.Desktop.Configuration.FemJointMassDto>(StringComparer.Ordinal);
     private string connection = "Disconnected";
     private double tributaryWidthB = 1, numberOfStories = 1;
     private double cableStrengthMpa = 1860, cableStrengthReductionFactor = 0.5;
@@ -582,6 +583,8 @@ public sealed class ApplicationState : Observable
     public IReadOnlyDictionary<string, double> SessionBaselinePretensionForces { get => sessionBaselinePretensionForces; internal set => Set(ref sessionBaselinePretensionForces, value); }
     /// <summary>The six global restraint assignments read from the model, by joint name. A missing joint is free.</summary>
     public IReadOnlyDictionary<string, Mcotis.Core.Restraint> JointRestraints { get => jointRestraints; internal set => Set(ref jointRestraints, value); }
+    /// <summary>The joint masses the model holds, by joint name (M8: Assign → Joint → Masses…). A missing joint has none.</summary>
+    public IReadOnlyDictionary<string, Mcotis.Desktop.Configuration.FemJointMassDto> JointMasses { get => jointMasses; internal set => Set(ref jointMasses, value); }
     public bool SessionBaselineCaptured => SessionBaselineModel is not null && SessionBaseline.Points.Count > 0;
     public ObservableCollection<string> LoadPatterns { get; } = [];
     public ObservableCollection<PointLoadConfiguration> PointLoads { get; } = [];

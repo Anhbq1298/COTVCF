@@ -24,7 +24,7 @@ public sealed record FemStudyRun(
 {
     /// <summary>The run of a document (<see cref="FemDocumentRun"/>): the solver's own results — all six components, the
     /// modes of a modal case — beside the results in the application's terms. Null for a run of the legacy path. Held in
-    /// memory only: the output database has planar tables, and a three-dimensional result is never written into them.</summary>
+    /// persisted in output schema v2 beside, never inside, the legacy planar tables.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public FemDocumentResults? Native { get; init; }
 

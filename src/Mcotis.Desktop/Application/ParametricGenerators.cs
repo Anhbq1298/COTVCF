@@ -221,6 +221,19 @@ internal sealed class TasGenerator : ParametricGenerator
     public const string GeneratorId = "TAS";
     /// <summary>The bundled ETABS model the generator builds on.</summary>
     public const string Resource = "Mcotis.TAS-CoT120.e2k";
+    /// <summary>The torsion constants ETABS computed for its sections (its table export of the same model; an .e2k has none).</summary>
+    public const string SectionsResource = "Mcotis.TAS-CoT120.sections.txt";
+
+    /// <summary>The bundled model as its .e2k gives it, with each section's torsion constant as ETABS computed it for that
+    /// model (M9: what holds the arch out of its plane in Full 3D is the source model's own data).</summary>
+    public static EtabsModel WithSourceTorsion(EtabsModel model)
+    {
+        using var resource = typeof(TasGenerator).Assembly.GetManifestResourceStream(SectionsResource)
+            ?? throw new InvalidDataException("The torsion constants of the built-in TAS model are missing from the application.");
+        using var reader = new StreamReader(resource);
+        var torsion = EtabsTableReader.TorsionConstants(reader.ReadToEnd());
+        return model with { Sections = model.Sections.Select(section => torsion.TryGetValue(section.Name, out var j) ? section with { ReportedTorsion = j } : section).ToArray() };
+    }
     public static TasGenerator Instance { get; } = new();
 
     public override string Id => GeneratorId;
@@ -304,7 +317,7 @@ internal sealed class TasGenerator : ParametricGenerator
             using var resource = typeof(TasGenerator).Assembly.GetManifestResourceStream(Resource)
                 ?? throw new InvalidDataException("The built-in TAS model is missing from the application.");
             using var reader = new StreamReader(resource);
-            return template = EtabsE2kReader.Read(reader.ReadToEnd(), "CoT120.e2k");
+            return template = WithSourceTorsion(EtabsE2kReader.Read(reader.ReadToEnd(), "CoT120.e2k"));
         }
     }
 }

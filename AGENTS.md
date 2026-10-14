@@ -32,7 +32,7 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
   legacy MB menu is gone; the separate Optimization menu for VCF/TAS stays last after a separator.
 - One solver (user, 2026-10-12: "use general solver every where"): every analysis runs `Mcotis.Analysis.StaticSolver`.
   The application reaches it through `src/Mcotis.Desktop/Application/FemSolver.cs`, which hands over the application's
-  planar model with the degrees of freedom Analysis Options sets — full 3D to start with, the XZ plane to analyse it in its plane; the native workspace calls it directly. Put no numerical method in the
+  model's native document with the degrees of freedom Analysis Options sets — full 3D to start with, the XZ plane to analyse it in its plane. Put no numerical method in the
   application. The main window is the standalone application — do not call it "Tab 07".
 - The planar frame solver is archived (user, 2026-10-12): it is no longer part of the application. It lives, frozen,
   in `tests/Mcotis.Desktop.Checks/Archive/PlanarFrameSolver.cs`, only as the baseline `--general-solver` compares the
@@ -55,8 +55,11 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
 - Load cases (user, 2026-10-13: "implement this plan", then "continue this plan" — PR-01 to PR-03): a case is one of
   four kinds and keeps the case it continues from apart from the case whose stiffness it uses. The model, the rules
   (`Mcotis.Core.LoadCaseRules`, one set for both windows), the run plan, the files and the main window's Load Case
-  Data hold all of it. P-Delta, linear static and case-specific iteration controls are refused at Run with the reason —
-  never solved as a simpler case; modal cases on the unstressed stiffness are solved since 2026-10-14 (M1). A run solves its cases in the order of the Load
+  Data hold all of it. P-Delta, linear static or modal on the stiffness of another case, and case-specific iteration
+  controls are refused at Run with the reason — never solved as a simpler case; modal cases on the unstressed stiffness
+  are solved since 2026-10-14 (M1), linear static cases on the unstressed stiffness since 2026-10-15 (M8: the engine's
+  linear solve, verified against OpenSeesPy, which the retired native workspace already ran; a model with cables is
+  refused for them). A run solves its cases in the order of the Load
   Cases table, and a case that is not ticked but needed first is solved and said to be a prerequisite. The plan,
   what is done and what is gated (PR-04 on: the literature gate): `docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md`.
 - One central model (user, 2026-10-13: "tao muốn model khởi tạo là trung tâm, có thể lưu đc, template kia chỉ là giúp
@@ -66,7 +69,9 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
   it, and Import / Export must keep working at every step. In progress, in slices that each pass the full checks.
   **The document becomes the source of truth of the main window; one window; the tied arch system in 3D by default**
   (user, 2026-10-14, the migration task M0–M8: "do all"): the legacy model becomes a read-only projection of the
-  document for what has not moved yet, `NativeModelWindow` is retired when everything it has is in the main window,
+  document for what has not moved yet, `NativeModelWindow` is retired when everything it has is in the main window
+  (**done 2026-10-15, M8**: archived under `archive/Mcotis.Desktop/NativeWorkspace/`; TemplateBuilding and native
+  `.mcotis` files open in the main window; joint masses and linear static cases on the unstressed stiffness there),
   and the app opens on the tied arch system as a native document, in the 3D view, analysed in Full 3D — still a plane
   frame, held out of its plane by real section properties and restraints, never by a solver trick. The MB workflow is
   out of that task entirely: not ported, not tested, not deleted. The Optimization and Design menus are production

@@ -1,5 +1,11 @@
 # MCOTiS — Load Case, Nonlinear State, P-Delta, Modal, and Database Refactor Plan
 
+**2026-10-15 update (supersedes the 2026-10-13 status below):** Modal Eigen cases now run on unstressed frame
+stiffness, or on a converged first-order nonlinear state for a frame-and-straight-cable model. The modal solver uses
+the frozen cable active set, tension and prestressed tangent. Cable-only, sagged-cable, P-Delta and shell modes still
+refuse. The main window stores modal output in database schema v2 and offers a static/modal case plus mode-number
+selector under Result → Show Deformed Shape. See [modal verification](modal-eigen-verification.md) for the checked scope.
+
 **Planning date:** 2026-10-13  
 **Repository:** Anhbq1298/COTVCF (master audited 2026-10-13)  
 **Status:** PR-01 through PR-03 implemented 2026-10-13 — see "Implementation status" below. PR-04 to PR-07 not started: no P-Delta, frozen-stiffness or modal number is computed anywhere, and a case that asks for one is refused, not approximated.  

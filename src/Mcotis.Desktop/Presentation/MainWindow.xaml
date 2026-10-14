@@ -1,6 +1,7 @@
 <Window x:Class="Mcotis.Desktop.Presentation.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:p="clr-namespace:Mcotis.Desktop.Presentation" xmlns:c="clr-namespace:Mcotis.Desktop.Presentation.Controls" Title="{Binding WindowTitle, FallbackValue='Mcotis — Meinhardt Cities of Tomorrow Integrated Structures'}" Icon="{x:Static p:AppIcon.Window}" Width="1440" Height="810" MinWidth="1100" MinHeight="660" WindowStartupLocation="Manual">
  <Window.InputBindings>
-  <!-- File shortcuts: Ctrl+S saves the active configuration, Ctrl+Shift+S asks for another file (File → Save Config / Save Config As…) -->
+  <!-- File shortcuts: Ctrl+O opens a model, Ctrl+S saves it to its .mcotis file, Ctrl+Shift+S asks for another file (File → Open… / Save / Save As…) -->
+  <KeyBinding Gesture="Ctrl+O" Command="{Binding LoadFemModel}"/>
   <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveFemModel}"/>
   <KeyBinding Gesture="Ctrl+Shift+S" Command="{Binding SaveFemModelAs}"/>
   <!-- Edit → Undo / Redo: the model's history (a text box keeps its own Ctrl+Z while it has the focus) -->
@@ -15,17 +16,14 @@
   <Menu x:Name="MainMenu" DockPanel.Dock="Top" Background="{StaticResource Surface}" BorderBrush="{StaticResource Border}" BorderThickness="0,0,0,1"
         Padding="6,2" FontSize="12" AutomationProperties.Name="Main menu">
    <MenuItem Header="_File">
-    <MenuItem Header="Open _Native Model…" Click="OpenNativeModel_Click" AutomationProperties.Name="Open Native Model"
-              ToolTip="Open a .mcotis model in the native model workspace"/>
-    <Separator/>
-    <MenuItem Header="_New Config" Command="{Binding NewConfig}"
-              ToolTip="Start a blank MCOTiS model. Define materials and frame/cable sections, then create the VCF system under Edit."/>
-    <MenuItem Header="_Load Config…" Command="{Binding LoadFemModel}"
-              ToolTip="Open one MCOTiS configuration containing the complete analysis model and its current setup"/>
-    <MenuItem Header="_Save Config" Command="{Binding SaveFemModel}" InputGestureText="Ctrl+S"
-              ToolTip="Save geometry, objects, assignments, materials, sections, loads, load cases, analysis and output settings, and the lock state in one MCOTiS configuration file. Save overwrites the active configuration; a new configuration asks for its file name."/>
-    <MenuItem Header="Save Config _As…" Command="{Binding SaveFemModelAs}" InputGestureText="Ctrl+Shift+S"
-              ToolTip="Save the configuration under another file name. That file becomes the active configuration: Save then overwrites it, and the file it came from is left as it was."/>
+    <MenuItem Header="_New Model" Command="{Binding NewConfig}"
+              ToolTip="Start a blank Mcotis model. Define materials and frame/cable sections, then create the VCF system under Edit."/>
+    <MenuItem Header="_Open…" Command="{Binding LoadFemModel}" InputGestureText="Ctrl+O"
+              ToolTip="Open a Mcotis model (.mcotis): the complete analysis model, its setup and, for a locked model, its results. An older MCOTiS configuration (.cotfem.db, .cotfem.json) opens as an import: Save then writes a .mcotis file, and the older file is never written."/>
+    <MenuItem Header="_Save" Command="{Binding SaveFemModel}" InputGestureText="Ctrl+S"
+              ToolTip="Save the model — geometry, objects, assignments, materials, sections, loads, load cases, analysis and output settings, and the lock state — in its .mcotis file. A model without a .mcotis file yet asks for its file name."/>
+    <MenuItem Header="Save _As…" Command="{Binding SaveFemModelAs}" InputGestureText="Ctrl+Shift+S"
+              ToolTip="Save the model under another file name. That file becomes the model's file: Save then overwrites it, and the file it came from is left as it was."/>
     <Separator/>
     <MenuItem Header="Load _VCF…" Command="{Binding LoadDefaultModel}" AutomationProperties.Name="Load VCF"
               ToolTip="Set the current model aside and open the built-in default model (COT Framing_V1.2_100m) on 07 FEM, ready to run without SAP2000"/>
@@ -65,7 +63,7 @@
               ToolTip="Make again the change Undo took back"/>
     <Separator/>
     <MenuItem Header="_TemplateBuilding…" Click="TemplateBuilding_Click" AutomationProperties.Name="TemplateBuilding"
-              ToolTip="Create a native building frame with X/Y bays, storey heights and beam line loads in a new model workspace"/>
+              ToolTip="Generate a building frame — X / Y bays, storey heights, beam line loads, sections, supports — as the model of this window, in 3D (the open model is offered to be saved first)"/>
     <MenuItem Header="_VCF System…" Click="VcfGeometry_Click" AutomationProperties.Name="VCF System" IsEnabled="{Binding CanEditVcfGeometry}"
               ToolTip="{Binding VcfGeometryToolTip}" ToolTipService.ShowOnDisabled="True"/>
     <MenuItem Header="Tied _Arch System…" Click="TiedArch_Click" AutomationProperties.Name="Tied Arch System"
@@ -86,6 +84,8 @@
      <MenuItem Header="_Restraints…" Click="AssignRestraints_Click" AutomationProperties.Name="Assign Joint Restraints"
                ToolTip="Hold UX, UY, UZ, RX, RY, RZ at the joints selected on the model view (Fixed, Pinned, Roller, Free); the model is analysed, drawn and exported on them as they are"/>
      <MenuItem Header="Restraints _Summary" Tag="3" Click="FemPaneMenu_Click" ToolTip="The joint restraints the model holds"/>
+     <MenuItem Header="_Masses…" Click="AssignJointMass_Click" AutomationProperties.Name="Assign Joint Masses"
+               ToolTip="Additional mass at the joints selected on the model view: translational mass along UX, UY, UZ [t] and rotational inertia about RX, RY, RZ [t·m²]. A modal case counts it through a mass source that includes additional mass (MS1 does)."/>
     </MenuItem>
     <MenuItem Header="_Frame">
      <MenuItem Header="Frame _Sections…" Tag="Frame" Click="AssignSections_Click" AutomationProperties.Name="Assign Frame Sections"

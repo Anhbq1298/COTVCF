@@ -53,6 +53,8 @@ public sealed class FemModelFileDto
     /// <summary>The six-component joint restraints the model holds; null when it holds none, as in a version-2 file
     /// written before restraints were data. Such a model is analysed with the pins at its column bases.</summary>
     public List<FemJointRestraintDto>? JointRestraints { get; set; }
+    /// <summary>The joint masses the model holds (M8); null when it holds none.</summary>
+    public List<FemJointMassDto>? JointMasses { get; set; }
     /// <summary>The generator flag (<see cref="FemInputSnapshot.Generator"/>); absent when no generator made the model.</summary>
     public FemGeneratorDto? Generator { get; set; }
     public FemSettingsDto Settings { get; set; } = new();
@@ -90,7 +92,17 @@ public sealed record FemNonlinearControlsDto(int MaxLoadSteps, int MaxIterations
 /// <param name="MassSource">The mass source by name, beside <paramref name="MassSourceId"/>.</param>
 public sealed record FemModalOptionsDto(string MassSource, string? MassSourceId, int RequestedModes);
 
-public sealed record FemMassSourceDto(string Id, string Name, bool IncludeSelfMass = true);
+/// <param name="IncludeAdditionalMass">The joint masses (Assign → Joint → Masses…) count too; absent in a file written
+/// before joint masses were data: they do.</param>
+public sealed record FemMassSourceDto(string Id, string Name, bool IncludeSelfMass = true, bool IncludeAdditionalMass = true);
+
+/// <summary>Additional mass lumped at a joint, by the joint's name (M8): translational mass along UX, UY, UZ [t] and
+/// rotational inertia about RX, RY, RZ [t·m²] — physical properties, not restraints. It follows the joint's renames and
+/// goes with the joint.</summary>
+public sealed record FemJointMassDto(string JointName, double UX, double UY, double UZ, double RX = 0, double RY = 0, double RZ = 0)
+{
+    public bool IsZero => UX == 0 && UY == 0 && UZ == 0 && RX == 0 && RY == 0 && RZ == 0;
+}
 
 /// <summary>The generator flag of a configuration: <see cref="Mcotis.Core.GeneratorOrigin"/> as it is saved, with the
 /// generation key of each object the generator made, by name (<see cref="Joints"/>, <see cref="Members"/>). An object the

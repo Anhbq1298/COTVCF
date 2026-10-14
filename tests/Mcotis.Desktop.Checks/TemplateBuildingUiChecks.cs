@@ -11,6 +11,7 @@ using Mcotis.Desktop.Application;
 using Mcotis.Desktop.Configuration;
 using Mcotis.Desktop.Infrastructure;
 using Mcotis.Desktop.Presentation;
+using Mcotis.Analysis;
 using Mcotis.Application;
 using Mcotis.Core;
 
@@ -25,7 +26,7 @@ internal static class TemplateBuildingUiChecks
         PresentationTraceSources.DataBindingSource.Listeners.Add(listener);
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
         var form = new TemplateBuildingWindow();
-        NativeModelWindow? window = null;
+        MainWindow? window = null;
         try
         {
             form.Show(); Idle();
@@ -57,84 +58,108 @@ internal static class TemplateBuildingUiChecks
                 $"the template form has a Mass density (t/m³): {startMass} = 78.5 / 9.80665 to start with, it follows the weight density ({followed} for 25 kN/m³) until a value is typed, which is kept");
             var selfMass = new DocumentSession();
             selfMass.Execute(TemplateBuilding.Create(new TemplateBuildingViewModel().ReadInput()));
-            var selfModes = new NativeModelViewModel(selfMass);
-            selfModes.DefineModal(new("SelfModes", "SelfMass", IncludeSelfMass: true, IncludeAdditionalMass: false, RequestedModes: 3));
-            Pump(selfModes.RunAsync()); Idle();
-            Check(selfModes.Results.State == ResultState.Current && selfModes.Modes.Count() == 3 &&
-                  selfModes.Modes.All(mode => mode.Frequency is > 0 && mode.Period is > 0 && mode.Residual < 1e-8),
-                $"a TemplateBuilding model with its self mass only (no joint mass) gives positive modes: {string.Join(", ", selfModes.Modes.Select(mode => $"{mode.Frequency:0.###} Hz"))}");
-            window = new NativeModelWindow(form.CreatedSession!);
+            var selfEditor = selfMass.Document.Edit();
+            var selfSource = new MassSource(ObjectId.New(), "SelfMass", IncludeSelfMass: true, IncludeAdditionalMass: false);
+            var selfCase = new LoadCase(ObjectId.New(), "SelfModes", CaseKind.ModalEigen, []) { ModalOptions = new(selfSource.Id, 3) };
+            selfEditor.PutMassSource(selfSource);
+            selfEditor.PutLoadCase(selfCase);
+            var selfModes = ModalSolver.Solve(ModelCompiler.Compile(selfEditor.Commit().Document).Model!, selfCase.Id);
+            Check(selfModes.Success && selfModes.Result!.Modes.Length == 3 &&
+                  selfModes.Result.Modes.All(mode => mode.FrequencyHz is > 0 && mode.PeriodSeconds is > 0 && mode.ScaledResidual < 1e-8),
+                $"a TemplateBuilding model with its self mass only (no joint mass) gives positive modes: {string.Join(", ", selfModes.Result?.Modes.Select(mode => $"{mode.FrequencyHz:0.###} Hz") ?? [])}");
+
+            // ---- one window (M8): the building is the main window's model ----
+            var created = form.CreatedSession!.Document;
+            var mainState = StudyComposerChecks.CreateState();
+            var mainSap = new Program.FakeSap { Snapshot = new(mainState.Model!, mainState.Geometry, mainState.LoadPatterns.ToArray()) };
+            var mainWorkflow = new WorkflowService(mainSap, mainState);
+            var main = new MainViewModel(mainState, mainWorkflow, new NoSelection(), new ConfigService(mainSap, mainState, mainWorkflow),
+                femSessionStore: new FemWorkingSessionStore(Path.Combine(folder, "main")));
+            var mainWarnings = new List<string>();
+            main.WarningSink = (title, body) => mainWarnings.Add($"{title}: {body}");
+            main.LoadDefaultFemModel(replaceCurrent: true);
+            window = new MainWindow { DataContext = main };
             window.Show(); Idle();
-            var vm = window.Model;
-            Check(window.Viewer.Model.Points.Count == 18 && window.Viewer.Model.Members.Count == 26 && window.Viewer.CurrentPlane == "3D",
-                "the native workspace displays the generated spatial geometry");
-            Check(vm.Session.CanUndo && vm.Loads.Count() == 14, "generation is undoable and line loads appear in the workspace");
-            var nativeMenu = (Menu)((DockPanel)window.Content).Children[0];
-            Check(nativeMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Define")) &&
-                  nativeMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Assign")),
-                "the native workspace exposes compact Define and Assign workflows for modal cases and joint mass");
-            vm.Session.Execute(DocumentCommands.Edit("Test modal mass", editor =>
-            {
-                foreach (var point in vm.Session.Document.Points.Values) editor.SetJointMass(new(point.Id, 1, 1, 1));
-            }));
-            vm.DefineModal(new("BuildingModes", "BuildingMass", false, true, 3));
-            Pump(vm.RunAsync()); Idle();
-            Check(vm.Results.State == ResultState.Current && vm.Modes.Count() == 3 && vm.Participation.Count() == 9 &&
-                  vm.Modes.All(mode => mode.Frequency is > 0 && mode.Period is > 0 && mode.Residual < 1e-8),
-                "the native modal run reports three positive frequencies, periods, residuals and directional participation rows");
-            Check(vm.ModalDisplayResult is not null && vm.ModeShape.Count() == 18,
-                "the selected mass-normalized eigenvector is available to both the mode-shape table and viewport adapter");
-            Check(vm.ModalMass.Any(row => row.Item == "Free UX" && row.Value > 0) &&
-                  vm.ModalMass.Count(row => row.Item.StartsWith("Centre of mass", StringComparison.Ordinal)) == 3,
-                "the modal mass inventory states assigned/free components and the physical centre of mass");
-            vm.SelectedCase = vm.Cases.Single(item => item.Kind == CaseKind.LinearStatic);
-            var before = vm.Session.Document;
-            var options = new AnalysisOptionsWindow(before.Settings, settings => vm.Session.Execute(DocumentCommands.SetSettings(settings)));
-            options.Show(); Idle(); Snapshot(options, ".work/analysis-options-ui.png");
-            Check(options.DofTab.Visibility == Visibility.Visible && options.UX.IsVisible && options.CableUX.IsVisible,
-                "the native analysis options open on the degrees of freedom, those of cable joints included");
-            options.UY.IsChecked = false;
-            options.Close();
-            Check(ReferenceEquals(vm.Session.Document, before), "closing the analysis-options form discards uncommitted DOF edits");
-            options = new(before.Settings, settings => vm.Session.Execute(DocumentCommands.SetSettings(settings)));
-            options.UX.IsChecked = options.UY.IsChecked = options.UZ.IsChecked = false;
-            Check(!options.ApplyForm() && ReferenceEquals(vm.Session.Document, before), "rotations-only DOF input is refused atomically");
-            options.Preset.SelectedIndex = 1;
-            Check(options.ApplyForm() && vm.Session.Document.Settings.ActiveDofs == DofMask.XZ, "Apply commits a DOF preset to the native document");
-            options.Close();
-            // the degrees of freedom of cable joints, and the settings the native run now reads
-            var cableOptions = new AnalysisOptionsWindow(before.Settings, settings => vm.Session.Execute(DocumentCommands.SetSettings(settings)));
-            Check(cableOptions.CableDofEditors.IsEnabled && cableOptions.CableUX.IsChecked == true && cableOptions.CableUY.IsChecked == true && cableOptions.CableUZ.IsChecked == true &&
-                  cableOptions.CableRX.IsChecked == false && cableOptions.CableRY.IsChecked == false && cableOptions.CableRZ.IsChecked == false &&
-                  cableOptions.Tolerance.IsEnabled && cableOptions.Iterations.IsEnabled && cableOptions.Mesh.IsEnabled && cableOptions.Sag.IsEnabled,
-                "the native options offer the degrees of freedom of cable joints — the translations by default — and the cable settings the run reads");
-            cableOptions.CableUX.IsChecked = cableOptions.CableUY.IsChecked = cableOptions.CableUZ.IsChecked = false;
-            var unchanged = vm.Session.Document;
-            Check(!cableOptions.ApplyForm() && ReferenceEquals(vm.Session.Document, unchanged), "cable joints without a translation are refused atomically");
-            cableOptions.CableUZ.IsChecked = cableOptions.CableRY.IsChecked = true;
-            cableOptions.Tolerance.Text = "2"; cableOptions.Mesh.Text = "6"; cableOptions.Sag.IsChecked = false;
-            Check(cableOptions.ApplyForm() && vm.Session.Document.Settings is { CableDofs: DofMask.UZ | DofMask.RY, CableFitTolerancePercent: 2, FrameMeshSegments: 6, CableSag: false },
-                "Apply commits the degrees of freedom of cable joints and the cable settings to the native document");
-            cableOptions.Close();
-            vm.Session.Undo();
-            Pump(vm.RunAsync());
-            Check(vm.Results.State == ResultState.Failed && vm.Message.Contains("plane", StringComparison.OrdinalIgnoreCase), "running a spatial building with planar DOFs reports a capability error");
-            vm.Session.Undo();
-            Pump(vm.RunAsync()); Idle();
-            Check(vm.Results.State == ResultState.Current && vm.Joints.Count() == 18 && vm.Frames.Count() == 52,
-                "native 3D Run produces joint results and both ends of every frame");
-            Check(Math.Abs(vm.Joints.Sum(j => j.FZ) - 680) < 1e-6, "WPF-run reactions balance independently counted 680 kN line loads");
-            Snapshot(window, ".work/native-building-ui.png");
-            vm.Session.Execute(DocumentCommands.SetSettings(vm.Session.Document.Settings with { CableFitTolerancePercent = 11 }));
-            Check(vm.Results.State == ResultState.Stale && vm.Joints.Count() == 18 && vm.Summary.Contains("Stale"), "editing preserves results with an explicit stale state");
-            vm.Session.Undo(); Check(vm.Results.State == ResultState.Current, "Undo restores current results");
+            main.OpenNativeDocument(created, "TemplateBuilding", null, LegacyNativeDocumentMigration.Source.Generated("TemplateBuilding")); Idle();
+            window.SharedViewer.ShowPlane("3D"); Idle();
+            var document = main.NativeDocumentSession.Document;
+            Check(main.SharedViewerModel.Points.Count == 18 && main.SharedViewerModel.Members.Count == 26 && window.SharedViewer.CurrentPlane == "3D" &&
+                  document.Loads.Count == 14 && main.FemActiveDofs == DofMask.Full3D && document.DocumentId == created.DocumentId &&
+                  !main.IsModelDirty && main.ActiveModelFile is null && main.GeneratorId is null && !main.CanOptimizeVcf && !main.CanOptimizeTas,
+                "Edit → TemplateBuilding puts the generated building in the main window: 18 joints, 26 frames and its 14 line loads in the 3D view, analysed in Full 3D, " +
+                "with the document's identity; not optimizable (no generator flag), not saved yet" + (mainWarnings.Count > 0 ? " — " + string.Join(" | ", mainWarnings) : ""));
+            var fileMenu = window.MainMenu.Items.OfType<MenuItem>().Single(m => Equals(m.Header, "_File"));
+            var assignJoint = window.MainMenu.Items.OfType<MenuItem>().Single(m => Equals(m.Header, "_Assign")).Items.OfType<MenuItem>().Single(m => Equals(m.Header, "_Joint"));
+            Check(!fileMenu.Items.OfType<MenuItem>().Any(item => item.Header is string header && header.Contains("Native", StringComparison.Ordinal)) &&
+                  assignJoint.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Masses…")),
+                "one window: no File → Open Native Model, and Assign → Joint → Masses… is in the main window");
+
+            // static: what the document gives solved directly, joint by joint, all six components
+            var staticRun = FemModelFileChecks.Analyze(main).SingleOrDefault() ?? throw new Exception($"FAIL: the building does not run in the main window: {main.FemMonitor.Message} | {main.FemProgressText} | {string.Join(" | ", mainWarnings)}");
+            var solvedHere = staticRun.Native!.Static["BuildingStatic"];
+            var direct = StaticSolver.Solve(ModelCompiler.Compile(created).Model!, created.LoadCases.Values.Single(item => item.Name == "BuildingStatic").Id).Result!;
+            var names = LegacyNames.Of(main.NativeDocumentSession.Document);
+            var byName = solvedHere.Joints.ToDictionary(joint => names[joint.PointId]);
+            double worst = direct.Joints.Max(joint => joint.Displacements.Zip(byName[created.Points[joint.PointId].Name].Displacements).Max(pair => Math.Abs(pair.First - pair.Second)));
+            double scale = direct.Joints.Max(joint => joint.Displacements.Max(Math.Abs));
+            Check(worst <= 1e-9 * scale && Math.Abs(solvedHere.Joints.Sum(joint => joint.Reactions[2]) - 680) < 1e-6,
+                $"Run FEM Analysis in the main window gives what the building's own document gives solved directly — every joint, six components " +
+                $"(largest difference {worst:0.#E+0} m of {scale:0.###E+0} m) — and the reactions balance the 680 kN of line loads (a linear static case, on the unstressed stiffness)");
+
+            // modal: joint masses assigned in the main window, the self mass and the joint masses of MS1
+            main.UnlockFemModel.Execute(null);
+            var allJoints = main.SharedViewerModel.Points.Keys.ToArray();
+            Check(main.AssignJointMass(allJoints, new FemJointMassDto("", 1, 1, 1)) == 18 && main.FemJointMasses.Count == 18 &&
+                  main.NativeDocumentSession.Document.JointMassAssignments.Count == 18 && main.CanUndoModel,
+                "Assign → Joint → Masses gives the 18 joints 1 t along UX, UY, UZ: one step of the model's history, in its document");
+            var modalRow = main.SaveFemLoadCase(null, "BuildingModes", null, [], new FemCaseOptions(CaseKind.ModalEigen, MassSource: MainViewModel.DefaultMassSourceName, RequestedModes: 3));
+            var modalRun = FemModelFileChecks.Analyze(main).SingleOrDefault() ?? throw new Exception($"FAIL: the modal run does not run: {main.FemMonitor.Message} | {main.FemProgressText}");
+            var modes = modalRun.Native!.Modal["BuildingModes"];
+            var withMasses = main.NativeDocumentSession.Document;
+            var expected = ModalSolver.Solve(ModelCompiler.Compile(withMasses).Model!, withMasses.LoadCases.Values.Single(item => item.Name == "BuildingModes").Id).Result!;
+            Check(modalRow is { Run: true } && modes.Modes.Length == 3 && main.ModalResults.Participation.Count() == 9 &&
+                  modes.Modes.All(mode => mode.FrequencyHz is > 0 && mode.PeriodSeconds is > 0 && mode.ScaledResidual < 1e-8) &&
+                  modes.Modes.Zip(expected.Modes).All(pair => Math.Abs(pair.First.EigenvaluePerSecondSquared - pair.Second.EigenvaluePerSecondSquared) <= 1e-9 * pair.Second.EigenvaluePerSecondSquared) &&
+                  main.ModalResults.ModalMass.Any(row => row.Item == "Free UX" && row.Value > 0) &&
+                  main.ModalResults.ModalMass.Count(row => row.Item.StartsWith("Centre of mass", StringComparison.Ordinal)) == 3,
+                $"a modal case on MS1 — self mass and joint masses — gives three positive modes ({string.Join(", ", modes.Modes.Select(mode => $"{mode.FrequencyHz:0.###} Hz"))}) " +
+                "with the participation and the mass inventory, those of the modal solver on the model's document");
+
+            // Save / Open: the model's .mcotis keeps the joint masses; a .mcotis of the former native workspace opens in this window
+            main.UnlockFemModel.Execute(null);
             var path = Path.Combine(folder, "building.mcotis");
-            vm.Files.SaveAs(path); var hash = vm.Session.Document.AnalysisInputHash;
-            vm.Files.Open(path); Idle();
-            Check(!vm.Session.IsDirty && vm.Joints.Count() == 0 && vm.Session.Document.AnalysisInputHash == hash && window.Title.Contains("building.mcotis"),
-                "Save/Open preserves native input, updates the title and clears unpersisted results");
-            Check(!vm.Session.CanUndo && !((MenuItem)((MenuItem)((Menu)((DockPanel)window.Content).Children[0]).Items[1]).Items[2]).IsEnabled,
-                "Undo availability refreshes after opening a file");
+            main.SaveFemModelFileAsync(path).GetAwaiter().GetResult();
+            var reopenedState = StudyComposerChecks.CreateState();
+            var reopenedWorkflow = new WorkflowService(mainSap, reopenedState);
+            var reopened = new MainViewModel(reopenedState, reopenedWorkflow, new NoSelection(), new ConfigService(mainSap, reopenedState, reopenedWorkflow),
+                femSessionStore: new FemWorkingSessionStore(Path.Combine(folder, "reopened")));
+            reopened.OpenFemModelFile(path);
+            Check(reopened.FemJointMasses.Count == 18 && reopened.FemCaseRows.Any(row => row.Name == "BuildingModes") && reopened.FemActiveDofs == DofMask.Full3D &&
+                  reopened.NativeDocumentSession.Document.AnalysisInputHash == main.NativeDocumentSession.Document.AnalysisInputHash,
+                "Save / Open: the building's .mcotis gives the same model — its joint masses, its modal case, Full 3D");
+            var nativePath = Path.Combine(folder, "workspace.mcotis");
+            new Mcotis.Persistence.NativeDocumentStore().Save(nativePath, created);
+            reopened.OpenFemModelFile(nativePath);
+            Check(reopened.SharedViewerModel.Points.Count == 18 && reopened.NativeDocumentSession.Document.DocumentId == created.DocumentId && reopened.ActiveModelFile == nativePath,
+                "a model the native workspace saved opens in the main window (File → Open…), as its model, with its identity; Save writes that file");
+
+            // the "Save changes?" question: Cancel keeps the model, No lets the next one in
+            main.AssignJointMass([allJoints[0]], new FemJointMassDto("", 2, 2, 2));
+            var asked = new List<string>();
+            var answer = MessageBoxResult.Cancel;
+            var keep = MainWindow.AskSaveChanges;
+            MainWindow.AskSaveChanges = (_, file) => { asked.Add(file); return answer; };
+            try
+            {
+                var before = main.NativeDocumentSession.Document;
+                main.LoadDefaultModel.Execute(null);
+                var stayed = ReferenceEquals(main.NativeDocumentSession.Document, before);
+                answer = MessageBoxResult.No;
+                main.LoadDefaultModel.Execute(null);
+                Check(asked.Count == 2 && asked[0] == "building.mcotis" && stayed && main.IsDefaultModel,
+                    "a model with changes not saved asks \"Save changes to building.mcotis?\" before another takes its place: Cancel keeps it, No lets File → Load VCF… open");
+            }
+            finally { MainWindow.AskSaveChanges = keep; }
 
             var state = StudyComposerChecks.CreateState();
             var sap = new Program.FakeSap { Snapshot = new(state.Model!, state.Geometry, state.LoadPatterns.ToArray()) };
@@ -222,7 +247,7 @@ internal static class TemplateBuildingUiChecks
         }
         finally
         {
-            if (window is not null) { window.Model.Session.MarkSaved(window.Model.Session.Document, Path.Combine(folder, "closed.mcotis")); window.Close(); }
+            window?.Close();
             form.Close();
             PresentationTraceSources.DataBindingSource.Listeners.Remove(listener);
         }

@@ -364,64 +364,77 @@ internal static class GeneralSolverParityChecks
         }
     }
 
-    /// <summary>What the native workspace shows of a model with a cable: a cantilever of 4 m with a cable from its tip
-    /// to an anchor 3 m above, a 50 kN target force, then 100 kN down or 80 kN up on the tip.</summary>
+    /// <summary>A native document of a model with a cable — a cantilever of 4 m with a cable from its tip to an anchor 3 m
+    /// above, a 50 kN target force, then 100 kN down or 80 kN up on the tip — solved by the engine, and as the main window
+    /// shows it once it takes the document in (M8; the native workspace that showed it before is archived).</summary>
     private static void NativeWorkspace()
     {
-        var editor = ModelDocument.Create().Edit();
-        var (steel, strand, beam, rope) = (ObjectId.New(), ObjectId.New(), ObjectId.New(), ObjectId.New());
-        var (live, wind, prestress) = (ObjectId.New(), ObjectId.New(), ObjectId.New());
-        editor.PutMaterial(new(steel, "Steel", MaterialType.Steel, 2e8, .3, 0, 0));
-        editor.PutMaterial(new(strand, "Strand", MaterialType.Tendon, 1.6e8, .3, 0, 0));
-        editor.PutFrameSection(new(beam, "Beam", steel, FrameSectionShape.General, new(.01, .0008, .0004, .00001)));
-        editor.PutCableSection(new(rope, "Rope", strand, .002));
-        var root = editor.AddPoint(new(0, 0, 0), "Root").Id;
-        var tip = editor.AddPoint(new(4, 0, 0), "Tip").Id;
-        var anchor = editor.AddPoint(new(4, 0, 3), "Anchor").Id;
-        editor.SetRestraint([root], Restraint.Fixed);
-        editor.SetRestraint([anchor], Restraint.Pinned);
-        editor.SetFrameSection([editor.AddFrame(root, tip, "Arm").Id], beam);
-        var stay = editor.AddCable(tip, anchor, "Stay").Id;
-        editor.SetCableSection([stay], rope);
-        editor.PutLoadPattern(new(live, "LIVE", LoadPatternType.Live));
-        editor.PutLoadPattern(new(wind, "WIND", LoadPatternType.Other));
-        editor.PutLoadPattern(new(prestress, "PT", LoadPatternType.Prestress));
-        editor.PutLoad(new NativePointLoad(ObjectId.New(), live, tip, new(0, 0, -100)));
-        editor.PutLoad(new NativePointLoad(ObjectId.New(), wind, tip, new(0, 0, 80)));
-        editor.PutLoad(new NativeTargetForce(ObjectId.New(), prestress, stay, 50));
-        var fit = ObjectId.New();
-        editor.PutLoadCase(new(fit, "Pretension", LoadCaseType.NonlinearStatic, [new(prestress, 1)]) { FitCableTargetForces = true });
-        editor.PutLoadCase(new(ObjectId.New(), "Service", LoadCaseType.NonlinearStatic, [new(live, 1)]) { InitialCaseId = fit });
-        editor.PutLoadCase(new(ObjectId.New(), "Uplift", LoadCaseType.NonlinearStatic, [new(wind, 1)]) { InitialCaseId = fit });
-        editor.PutLoadCase(new(ObjectId.New(), "Linear", LoadCaseType.LinearStatic, [new(live, 1)]));
-        editor.SetSettings(new AnalysisSettings(1e-6, 100, 1, false));
-        var vm = new NativeModelViewModel(new Mcotis.Application.DocumentSession(editor.Commit().Document));
-        void RunCase(string name)
+        ModelDocument Document(bool linear)
         {
-            vm.SelectedCase = vm.Cases.Single(item => item.Name == name);
-            vm.RunAsync().GetAwaiter().GetResult();
+            var editor = ModelDocument.Create().Edit();
+            var (steel, strand, beam, rope) = (ObjectId.New(), ObjectId.New(), ObjectId.New(), ObjectId.New());
+            var (live, wind, prestress) = (ObjectId.New(), ObjectId.New(), ObjectId.New());
+            editor.PutMaterial(new(steel, "Steel", MaterialType.Steel, 2e8, .3, 0, 0));
+            editor.PutMaterial(new(strand, "Strand", MaterialType.Tendon, 1.6e8, .3, 0, 0));
+            editor.PutFrameSection(new(beam, "Beam", steel, FrameSectionShape.General, new(.01, .0008, .0004, .00001)));
+            editor.PutCableSection(new(rope, "Rope", strand, .002));
+            var root = editor.AddPoint(new(0, 0, 0), "Root").Id;
+            var tip = editor.AddPoint(new(4, 0, 0), "Tip").Id;
+            var anchor = editor.AddPoint(new(4, 0, 3), "Anchor").Id;
+            editor.SetRestraint([root], Restraint.Fixed);
+            editor.SetRestraint([anchor], Restraint.Pinned);
+            editor.SetFrameSection([editor.AddFrame(root, tip, "Arm").Id], beam);
+            var stay = editor.AddCable(tip, anchor, "Stay").Id;
+            editor.SetCableSection([stay], rope);
+            editor.PutLoadPattern(new(live, "LIVE", LoadPatternType.Live));
+            editor.PutLoadPattern(new(wind, "WIND", LoadPatternType.Other));
+            editor.PutLoadPattern(new(prestress, "PT", LoadPatternType.Prestress));
+            editor.PutLoad(new NativePointLoad(ObjectId.New(), live, tip, new(0, 0, -100)));
+            editor.PutLoad(new NativePointLoad(ObjectId.New(), wind, tip, new(0, 0, 80)));
+            editor.PutLoad(new NativeTargetForce(ObjectId.New(), prestress, stay, 50));
+            var fit = ObjectId.New();
+            editor.PutLoadCase(new(fit, "Pretension", LoadCaseType.NonlinearStatic, [new(prestress, 1)]) { FitCableTargetForces = true });
+            editor.PutLoadCase(new(ObjectId.New(), "Service", LoadCaseType.NonlinearStatic, [new(live, 1)]) { InitialCaseId = fit });
+            editor.PutLoadCase(new(ObjectId.New(), "Uplift", LoadCaseType.NonlinearStatic, [new(wind, 1)]) { InitialCaseId = fit });
+            if (linear) editor.PutLoadCase(new(ObjectId.New(), "Linear", LoadCaseType.LinearStatic, [new(live, 1)]));
+            editor.SetSettings(new AnalysisSettings(1e-6, 100, 1, false));
+            return editor.Commit().Document;
         }
+        var document = Document(linear: true);
+        var model = Mcotis.Analysis.ModelCompiler.Compile(document).Model!;
+        Mcotis.Analysis.StaticOutcome Solve(string name) =>
+            Mcotis.Analysis.StaticSolver.Solve(model, document.LoadCases.Values.Single(item => item.Name == name).Id);
         void Check(bool condition, string description)
         {
-            if (!condition) throw new Exception("FAIL: " + description + " — " + vm.Message);
+            if (!condition) throw new Exception("FAIL: " + description);
             Console.WriteLine("PASS: " + description);
         }
         const double arm = 3 * 2e8 * .0008 / 64, cable = 1.6e8 * .002 / 3;
-        RunCase("Service");
-        Check(vm.Results.State == Mcotis.Application.ResultState.Current && vm.Cables.Single() is { Cable: "Stay", State: "Taut", Target: 50 } taut &&
-              Math.Abs(taut.Tension - (50 + 100 * cable / (arm + cable))) < 1e-5 && Math.Abs(taut.Pretension - 50 * (arm + cable) / arm) < 1e-4 &&
-              Math.Abs(taut.FitStage!.Value - 50) < 1e-6 && taut.Sag is null,
-            "the native workspace shows a cable's tension, target, applied pretension and fit-stage tension after a staged case");
-        Check(vm.Message.Contains("cable target forces met within", StringComparison.Ordinal) && vm.Message.Contains("cable equilibrium in", StringComparison.Ordinal) &&
-              vm.Summary.Contains("1 cables", StringComparison.Ordinal),
-            "… and says how the cable equilibrium and the fit went");
-        RunCase("Uplift");
-        Check(vm.Cables.Single() is { State: "Slack", Tension: 0 } && Math.Abs(vm.Joints.Single(joint => joint.Point == "Tip").UZ - 80 / arm) < 1e-10,
-            "… a slack cable is shown as slack, with the frame carrying the load alone");
-        RunCase("Linear");
-        Check(vm.Results.State == Mcotis.Application.ResultState.Failed && !vm.Cables.Any() && !vm.Joints.Any() &&
-              vm.Message.Contains("static.cable.linearCase", StringComparison.Ordinal),
-            "… and a case the solver refuses shows the reason and no numbers");
+        var service = Solve("Service");
+        var taut = service.Result?.Cables.Single() ?? throw new Exception("FAIL: the staged case has no result: " + string.Join(" | ", service.Issues.Select(issue => issue.Message)));
+        Check(service.Success && taut is { Active: true, TargetForce: 50 } &&
+              Math.Abs(taut.Tension - (50 + 100 * cable / (arm + cable))) < 1e-5 && Math.Abs(taut.AppliedPretension - 50 * (arm + cable) / arm) < 1e-4 &&
+              Math.Abs(taut.FitStageTension!.Value - 50) < 1e-6 && taut.Sag is null && service.Result.Diagnostics.CableFit is not null,
+            "a native document with a cable: the engine gives the cable's tension, target, applied pretension and fit-stage tension after a staged case");
+        var uplift = Solve("Uplift");
+        var tip = document.Points.Values.Single(point => point.Name == "Tip").Id;
+        Check(uplift.Success && uplift.Result!.Cables.Single() is { Active: false, Tension: 0 } &&
+              Math.Abs(uplift.Result.Joints.Single(joint => joint.PointId == tip).Displacements[2] - 80 / arm) < 1e-10,
+            "… a slack cable is slack, with the frame carrying the load alone");
+        var refused = Solve("Linear");
+        Check(!refused.Success && refused.Result is null && refused.Issues.Any(issue => issue.Code == "static.cable.linearCase"),
+            "… and a linear case of a model with cables is refused with the reason, no numbers");
+
+        // the main window takes the document in and shows the same numbers (the linear case is left out: Run would stop on it)
+        var state = new ApplicationState();
+        var sap = FemModelFileChecks.SapDouble.Create(null!, GeometryModel.Empty, refuseAll: true);
+        var workflow = new WorkflowService(sap.Gateway, state);
+        var vm = new MainViewModel(state, workflow, new NoSelection(), new ConfigService(sap.Gateway, state, workflow));
+        vm.OpenNativeDocument(Document(linear: false), "Cantilever", null, LegacyNativeDocumentMigration.Source.Imported("Mcotis native model"));
+        var shown = FemModelFileChecks.Analyze(vm).Single().ResultFor("Service").Cables.Single();
+        Check(shown.MemberName == "Stay" && Math.Abs(shown.AxialForceKN - taut.Tension) < 1e-6 && Math.Abs(shown.AppliedPretensionKN - taut.AppliedPretension) < 1e-5 &&
+              Math.Abs((shown.PretensionStageForceKN ?? 0) - 50) < 1e-6 && shown.TargetForceKN == 50,
+            $"… the main window, which takes the document in, shows them: tension {shown.AxialForceKN:0.###} kN, applied pretension {shown.AppliedPretensionKN:0.###} kN, fit stage {shown.PretensionStageForceKN:0.###} kN");
     }
 
     private sealed class NoSelection : ISelectionService

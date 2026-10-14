@@ -7,7 +7,9 @@ using Mcotis.Desktop.Application;
 using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Geometry;
 using Mcotis.Desktop.Infrastructure;
+using Mcotis.Analysis;
 using Microsoft.Data.Sqlite;
+using Native = Mcotis.Core;
 
 namespace Mcotis.Desktop.Configuration;
 
@@ -55,6 +57,8 @@ public sealed class FemInputSnapshot
     /// configuration, or the VCF system: it is analysed with the pins at its column bases
     /// (<see cref="Mcotis.Desktop.Application.LegacyNativeDocumentMigration.Restraints"/>).</summary>
     public List<FemJointRestraintDto> JointRestraints { get; set; } = [];
+    /// <summary>The joint masses the model holds, by joint name (M8). Empty for a model that holds none.</summary>
+    public List<FemJointMassDto> JointMasses { get; set; } = [];
     public FemSettingsDto Settings { get; set; } = new();
     /// <summary>The parametric generator the model was built by (2026-10-14, §2): its id, version and parameters. Null for
     /// a model no generator made — an import, a TemplateBuilding model, a detached model, a configuration saved before
@@ -97,6 +101,7 @@ public sealed class FemInputSnapshot
             CombinationRows = combinations,
             MassSources = (file.MassSources ?? []).ToList(),
             JointRestraints = (file.JointRestraints ?? []).ToList(),
+            JointMasses = (file.JointMasses ?? []).ToList(),
             Generator = file.Generator,
             Settings = file.Settings,
         };
@@ -137,6 +142,7 @@ public sealed class FemInputSnapshot
             CombinationRows = CombinationRows.ToList(),
             MassSources = MassSources.Count > 0 ? MassSources.ToList() : null,
             JointRestraints = JointRestraints.Count > 0 ? JointRestraints.ToList() : null,
+            JointMasses = JointMasses.Count > 0 ? JointMasses.ToList() : null,
             Generator = Generator,
             Settings = Settings,
         };
@@ -555,6 +561,7 @@ public sealed record FemOutputDatabaseInfo(string RunId, Guid InputDatabaseId, l
 public static class FemOutputDatabase
 {
     public const string Extension = ".cotfem.out.db";
+    public const int CurrentSchemaVersion = 2;
 
     public static void Write(string path, FemOutputDatabaseInfo info, FemStudyRun run)
     {
@@ -563,14 +570,26 @@ public static class FemOutputDatabase
             using var connection = FemInputDatabase.Open(temporary, readOnly: false);
             using var transaction = connection.BeginTransaction();
             Execute(connection, transaction, """
+                PRAGMA user_version = 2;
                 CREATE TABLE run_info(run_id TEXT PRIMARY KEY,input_database_id TEXT NOT NULL,input_revision INTEGER NOT NULL,input_revision_hash TEXT NOT NULL,created_utc TEXT NOT NULL,state TEXT NOT NULL,source_input_path TEXT NOT NULL,run_payload_json TEXT NOT NULL);
-                CREATE TABLE run_cases(case_id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,nonlinear_iterations INTEGER NOT NULL,target_fit_iterations INTEGER NOT NULL,target_fit_failure TEXT);
+                CREATE TABLE run_cases(case_id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,nonlinear_iterations INTEGER NOT NULL,target_fit_iterations INTEGER NOT NULL,target_fit_failure TEXT,native_case_id TEXT,case_kind TEXT,formulation_version TEXT,input_hash TEXT);
                 CREATE TABLE joint_displacements(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,ux_m REAL NOT NULL,uz_m REAL NOT NULL,rotation_rad REAL NOT NULL,PRIMARY KEY(case_id,object_name));
                 CREATE TABLE support_reactions(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,rx_kn REAL NOT NULL,rz_kn REAL NOT NULL,my_knm REAL NOT NULL DEFAULT 0,PRIMARY KEY(case_id,object_name));
                 CREATE TABLE frame_station_results(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,station_index INTEGER NOT NULL,station REAL NOT NULL,axial_kn REAL NOT NULL,shear_kn REAL NOT NULL,moment_knm REAL NOT NULL,ux_m REAL NOT NULL,uz_m REAL NOT NULL,PRIMARY KEY(case_id,object_name,station_index));
                 CREATE TABLE cable_results(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,axial_kn REAL NOT NULL,active INTEGER NOT NULL,target_kn REAL NOT NULL,applied_pretension_kn REAL NOT NULL,pretension_stage_kn REAL,sag_m REAL,tangent_stiffness_ratio REAL,PRIMARY KEY(case_id,object_name));
                 CREATE TABLE cable_fit_iterations(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,iteration_no INTEGER NOT NULL,result_force_kn REAL NOT NULL,PRIMARY KEY(case_id,object_name,iteration_no));
+                CREATE TABLE native_result_payloads(case_id INTEGER PRIMARY KEY REFERENCES run_cases(case_id),result_kind TEXT NOT NULL,payload_json TEXT NOT NULL);
+                CREATE TABLE result_object_names(object_id TEXT PRIMARY KEY,object_kind TEXT NOT NULL,object_name TEXT NOT NULL);
+                CREATE TABLE run_notes(sequence_no INTEGER PRIMARY KEY,note TEXT NOT NULL);
+                CREATE TABLE joint_dof_results(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_id TEXT NOT NULL,object_name TEXT NOT NULL,dof_name TEXT NOT NULL,displacement_or_rotation REAL NOT NULL,support_force_or_moment REAL NOT NULL,meaning TEXT NOT NULL,PRIMARY KEY(case_id,object_id,dof_name));
+                CREATE TABLE frame_station_components(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_id TEXT NOT NULL,object_name TEXT NOT NULL,segment_index INTEGER NOT NULL,station_index INTEGER NOT NULL,station REAL NOT NULL,component_name TEXT NOT NULL,local_displacement_or_rotation REAL NOT NULL,local_force_or_moment REAL NOT NULL,meaning TEXT NOT NULL,PRIMARY KEY(case_id,object_id,segment_index,station_index,component_name));
+                CREATE TABLE modal_modes(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),mode_number INTEGER NOT NULL,eigenvalue_per_s2 REAL NOT NULL,frequency_hz REAL,period_s REAL,status TEXT NOT NULL,scaled_residual REAL NOT NULL,PRIMARY KEY(case_id,mode_number));
+                CREATE TABLE modal_vectors(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),mode_number INTEGER NOT NULL,object_id TEXT NOT NULL,object_name TEXT NOT NULL,dof_name TEXT NOT NULL,normalized_amplitude REAL NOT NULL,PRIMARY KEY(case_id,mode_number,object_id,dof_name));
+                CREATE TABLE modal_mass_participation(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),mode_number INTEGER NOT NULL,direction TEXT NOT NULL,factor REAL,effective_mass REAL,percentage REAL,cumulative_percentage REAL,PRIMARY KEY(case_id,mode_number,direction));
+                CREATE TABLE modal_mass_inventory(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),item_name TEXT NOT NULL,dof_name TEXT NOT NULL DEFAULT '',value REAL NOT NULL,PRIMARY KEY(case_id,item_name,dof_name));
                 CREATE INDEX ix_frame_results ON frame_station_results(case_id,object_name,station);
+                CREATE INDEX ix_joint_dof_results ON joint_dof_results(case_id,object_name,dof_name);
+                CREATE INDEX ix_modal_vectors ON modal_vectors(case_id,mode_number,object_name,dof_name);
                 """);
             Execute(connection, transaction, "INSERT INTO run_info VALUES($run,$db,$revision,$hash,$created,$state,$source,$payload)",
                 ("$run", info.RunId), ("$db", info.InputDatabaseId.ToString("D")), ("$revision", info.InputRevision),
@@ -612,6 +631,7 @@ public static class FemOutputDatabase
                             ("$case", caseId), ("$name", cable.MemberName), ("$iteration", fit.index + 1), ("$force", fit.force));
                 }
             }
+            WriteNativeResults(connection, transaction, run);
             transaction.Commit();
         });
     }
@@ -627,7 +647,144 @@ public static class FemOutputDatabase
             DateTime.Parse(reader.GetString(4), null, System.Globalization.DateTimeStyles.RoundtripKind), reader.GetString(5), reader.GetString(6));
         var run = JsonSerializer.Deserialize<FemStudyRun>(reader.GetString(7), FemInputDatabase.Json)
             ?? throw new InvalidDataException("The output database run payload is invalid.");
+        if (TableExists(connection, "native_result_payloads")) run = RestoreNativeResults(connection, run);
         return (info, run);
+    }
+
+    private static void WriteNativeResults(SqliteConnection connection, SqliteTransaction transaction, FemStudyRun run)
+    {
+        if (run.Native is not { } native) return;
+        foreach (var (id, name, kind) in native.Names.Entries)
+            Execute(connection, transaction, "INSERT INTO result_object_names VALUES($id,$kind,$name)",
+                ("$id", id.ToString()), ("$kind", kind), ("$name", name));
+        foreach (var note in native.Notes.Select((value, index) => (value, index)))
+            Execute(connection, transaction, "INSERT INTO run_notes VALUES($sequence,$note)", ("$sequence", note.index), ("$note", note.value));
+
+        foreach (var (name, result) in native.Static)
+        {
+            long caseId = CaseId(connection, transaction, name);
+            string kind = native.CaseKinds.TryGetValue(name, out var declared) ? declared.ToString() : "Static";
+            Execute(connection, transaction, "UPDATE run_cases SET native_case_id=$native,case_kind=$kind,formulation_version=$version,input_hash=$hash WHERE case_id=$case",
+                ("$native", result.LoadCaseId.ToString()), ("$kind", kind), ("$version", StaticResult.FormulationVersion), ("$hash", result.InputHash), ("$case", caseId));
+            Execute(connection, transaction, "INSERT INTO native_result_payloads VALUES($case,'Static',$payload)",
+                ("$case", caseId), ("$payload", JsonSerializer.Serialize(result, FemInputDatabase.Json)));
+            foreach (var joint in result.Joints)
+                for (int component = 0; component < Native.DegreesOfFreedom.Components.Length; component++)
+                    Execute(connection, transaction, "INSERT INTO joint_dof_results VALUES($case,$id,$name,$dof,$value,$reaction,'Absolute')",
+                        ("$case", caseId), ("$id", joint.PointId.ToString()), ("$name", native.Names[joint.PointId]),
+                        ("$dof", Native.DegreesOfFreedom.Components[component].ToString()), ("$value", joint.Displacements[component]), ("$reaction", joint.Reactions[component]));
+            foreach (var frame in result.Frames)
+                foreach (var segmentRow in frame.Segments.Select((segment, index) => (segment, index)))
+                    foreach (var stationRow in segmentRow.segment.Stations.Select((station, index) => (station, index)))
+                        for (int component = 0; component < 6; component++)
+                            Execute(connection, transaction, "INSERT INTO frame_station_components VALUES($case,$id,$name,$segment,$station_index,$station,$component,$displacement,$action,'Absolute')",
+                                ("$case", caseId), ("$id", frame.ParentObjectId.ToString()), ("$name", native.Names[frame.ParentObjectId]),
+                                ("$segment", segmentRow.index), ("$station_index", stationRow.index), ("$station", stationRow.station.Relative),
+                                ("$component", component < 3 ? $"U{component + 1}" : $"R{component - 2}"),
+                                ("$displacement", stationRow.station.LocalDisplacements[component]), ("$action", stationRow.station.Actions[component]));
+        }
+
+        foreach (var (name, result) in native.Modal)
+        {
+            long caseId = EnsureCase(connection, transaction, name);
+            Execute(connection, transaction, "UPDATE run_cases SET native_case_id=$native,case_kind='ModalEigen',formulation_version=$version,input_hash=$hash WHERE case_id=$case",
+                ("$native", result.ModalCaseId.ToString()), ("$version", ModalAnalysisResult.FormulationVersion), ("$hash", result.InputHash), ("$case", caseId));
+            Execute(connection, transaction, "INSERT INTO native_result_payloads VALUES($case,'ModalEigen',$payload)",
+                ("$case", caseId), ("$payload", JsonSerializer.Serialize(result, FemInputDatabase.Json)));
+            foreach (var mode in result.Modes)
+            {
+                Execute(connection, transaction, "INSERT INTO modal_modes VALUES($case,$mode,$eigen,$frequency,$period,$status,$residual)",
+                    ("$case", caseId), ("$mode", mode.ModeNumber), ("$eigen", mode.EigenvaluePerSecondSquared), ("$frequency", mode.FrequencyHz),
+                    ("$period", mode.PeriodSeconds), ("$status", mode.Status.ToString()), ("$residual", mode.ScaledResidual));
+                foreach (var amplitude in mode.Shape)
+                    for (int component = 0; component < Native.DegreesOfFreedom.Components.Length; component++)
+                        Execute(connection, transaction, "INSERT INTO modal_vectors VALUES($case,$mode,$id,$name,$dof,$amplitude)",
+                            ("$case", caseId), ("$mode", mode.ModeNumber), ("$id", amplitude.PointId.ToString()), ("$name", native.Names[amplitude.PointId]),
+                            ("$dof", Native.DegreesOfFreedom.Components[component].ToString()), ("$amplitude", amplitude.Values[component]));
+                foreach (var participation in mode.Participation)
+                    Execute(connection, transaction, "INSERT INTO modal_mass_participation VALUES($case,$mode,$direction,$factor,$mass,$percentage,$cumulative)",
+                        ("$case", caseId), ("$mode", mode.ModeNumber), ("$direction", participation.Direction.ToString()), ("$factor", participation.Factor),
+                        ("$mass", participation.EffectiveMass), ("$percentage", participation.RatioPercent), ("$cumulative", participation.CumulativePercent));
+            }
+            Execute(connection, transaction, "INSERT INTO modal_mass_inventory VALUES($case,'Element mass','',$value)", ("$case", caseId), ("$value", result.MassSummary.ElementMass));
+            for (int component = 0; component < Native.DegreesOfFreedom.Components.Length; component++)
+            {
+                string dof = Native.DegreesOfFreedom.Components[component].ToString();
+                Execute(connection, transaction, "INSERT INTO modal_mass_inventory VALUES($case,'Additional mass',$dof,$value)", ("$case", caseId), ("$dof", dof), ("$value", result.MassSummary.AdditionalByDof[component]));
+                Execute(connection, transaction, "INSERT INTO modal_mass_inventory VALUES($case,'Free mass',$dof,$value)", ("$case", caseId), ("$dof", dof), ("$value", result.MassSummary.FreeMassByDof[component]));
+            }
+        }
+    }
+
+    private static FemStudyRun RestoreNativeResults(SqliteConnection connection, FemStudyRun run)
+    {
+        var statics = new Dictionary<string, StaticResult>(StringComparer.OrdinalIgnoreCase);
+        var modals = new Dictionary<string, ModalAnalysisResult>(StringComparer.OrdinalIgnoreCase);
+        var kinds = new Dictionary<string, Native.CaseKind>(StringComparer.OrdinalIgnoreCase);
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT c.name,p.result_kind,p.payload_json,c.case_kind FROM native_result_payloads p JOIN run_cases c ON c.case_id=p.case_id ORDER BY c.case_id";
+            using var rows = command.ExecuteReader();
+            while (rows.Read())
+            {
+                string name = rows.GetString(0), kind = rows.GetString(1), json = rows.GetString(2);
+                if (kind == "Static") statics[name] = JsonSerializer.Deserialize<StaticResult>(json, FemInputDatabase.Json) ?? throw new InvalidDataException($"Static result '{name}' is invalid.");
+                else if (kind == "ModalEigen") modals[name] = JsonSerializer.Deserialize<ModalAnalysisResult>(json, FemInputDatabase.Json) ?? throw new InvalidDataException($"Modal result '{name}' is invalid.");
+                else throw new InvalidDataException($"Unknown native result kind '{kind}'.");
+                if (!rows.IsDBNull(3) && Enum.TryParse<Native.CaseKind>(rows.GetString(3), out var caseKind)) kinds[name] = caseKind;
+            }
+        }
+        if (statics.Count == 0 && modals.Count == 0) return run;
+        var entries = new List<(Native.ObjectId, string, string)>();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT object_id,object_name,object_kind FROM result_object_names ORDER BY object_kind,object_name";
+            using var rows = command.ExecuteReader();
+            while (rows.Read()) entries.Add((new Native.ObjectId(Guid.Parse(rows.GetString(0))), rows.GetString(1), rows.GetString(2)));
+        }
+        var notes = new List<string>();
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT note FROM run_notes ORDER BY sequence_no";
+            using var rows = command.ExecuteReader();
+            while (rows.Read()) notes.Add(rows.GetString(0));
+        }
+        return run with
+        {
+            Native = new(run.Results ?? new Dictionary<string, FemAnalysisResult>(), statics, modals, notes, LegacyNames.FromEntries(entries))
+            {
+                CaseKinds = kinds,
+            },
+        };
+    }
+
+    private static bool TableExists(SqliteConnection connection, string name)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=$name";
+        command.Parameters.AddWithValue("$name", name);
+        return Convert.ToInt64(command.ExecuteScalar()) == 1;
+    }
+
+    private static long CaseId(SqliteConnection connection, SqliteTransaction transaction, string name)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT case_id FROM run_cases WHERE name=$name";
+        command.Parameters.AddWithValue("$name", name);
+        return Convert.ToInt64(command.ExecuteScalar() ?? throw new InvalidDataException($"Result case '{name}' is absent."));
+    }
+
+    private static long EnsureCase(SqliteConnection connection, SqliteTransaction transaction, string name)
+    {
+        using var find = connection.CreateCommand();
+        find.Transaction = transaction;
+        find.CommandText = "SELECT case_id FROM run_cases WHERE name=$name";
+        find.Parameters.AddWithValue("$name", name);
+        var existing = find.ExecuteScalar();
+        if (existing is not null) return Convert.ToInt64(existing);
+        Execute(connection, transaction, "INSERT INTO run_cases(name,nonlinear_iterations,target_fit_iterations) VALUES($name,0,0)", ("$name", name));
+        return CaseId(connection, transaction, name);
     }
 
     private static void Execute(SqliteConnection connection, SqliteTransaction transaction, string sql, params (string Name, object? Value)[] values)

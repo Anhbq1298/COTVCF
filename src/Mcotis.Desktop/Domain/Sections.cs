@@ -32,6 +32,10 @@ public sealed record FrameSectionProperty
     public double CornerRadius { get; init; }        // box
     public IReadOnlyList<double> Modifiers { get; init; } = [1, 1, 1, 1, 1, 1, 1, 1];
     public SectionValues? Given { get; init; }
+    /// <summary>The torsional rigidity G J [kN·m²] the source program states for the section (ETABS's J × G of the
+    /// section's material, M9), or null. A member then takes the torsion constant of its own E and ν from it, in place of
+    /// the polar moment taken for a section without a torsion constant.</summary>
+    public double? TorsionalRigidityKNm2 { get; init; }
     public string Source { get; init; } = "App";
     /// <summary>A CFT / steel encased section's cross-section and design data, in mm and MPa as the Design menu takes them.
     /// <see cref="Material"/> is then the concrete; <see cref="SteelMaterial"/> the tube / encased steel and

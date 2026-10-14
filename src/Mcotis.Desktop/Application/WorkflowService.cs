@@ -18,6 +18,7 @@ public sealed class WorkflowService(ISapGateway sap, ApplicationState state)
             state.SessionBaselinePointLoads = [];
             state.SessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
             state.JointRestraints = new Dictionary<string, Mcotis.Core.Restraint>(StringComparer.Ordinal);
+            state.JointMasses = new Dictionary<string, Configuration.FemJointMassDto>(StringComparer.Ordinal);
         }
         state.Model = info; state.Connection = "Connected";
     }

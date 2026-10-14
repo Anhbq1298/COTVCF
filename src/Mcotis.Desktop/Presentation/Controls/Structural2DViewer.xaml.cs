@@ -232,7 +232,7 @@ public partial class Structural2DViewer : UserControl
         if (scene.Deflected is { Contour: true } contour)
         {
             Deflection3DRange.Text = DeflectionIsModeShape
-                ? $"Relative |amplitude| {contour.ContourMinMm:G5} to {contour.ContourMaxMm:G5}"
+                ? $"Relative |amplitude| {contour.ContourMinMm / 1000:G5} to {contour.ContourMaxMm / 1000:G5}"
                 : $"|U| {contour.ContourMinMm:G5} to {contour.ContourMaxMm:G5} mm";
             Deflection3DBar.Fill ??= new LinearGradientBrush(StructureModel3D.ContourBrush().GradientStops, new Point(0, 0), new Point(1, 0));
             Deflection3DScale.Text = DeflectionIsModeShape
@@ -985,14 +985,14 @@ public sealed class ModelCanvas : FrameworkElement
         if (mode == FemResultMode.DeflectedShape)
         {
             var displacements = result.Joints.ToDictionary(joint => joint.PointName, StringComparer.Ordinal);
-            static double Magnitude(double ux, double uz) => Math.Sqrt(ux * ux + uz * uz) * 1000;
-            var maximum = result.Joints.Select(joint => Magnitude(joint.UXM, joint.UZM))
-                .Concat(result.Frames.SelectMany(frame => frame.Stations ?? []).Select(station => Magnitude(station.UXM, station.UZM))).DefaultIfEmpty().Max();
+            double Magnitude(double ux, double uy, double uz) => Math.Sqrt(ux * ux + uy * uy + uz * uz) * 1000;
+            var maximum = result.Joints.Select(joint => Magnitude(joint.UXM, joint.UYM, joint.UZM))
+                .Concat(result.Frames.SelectMany(frame => frame.Stations ?? []).Select(station => Magnitude(station.UXM, 0, station.UZM))).DefaultIfEmpty().Max();
             if (!double.IsFinite(maximum)) return;
             var scale = maximum > 1e-9 ? 42000 / maximum : 0;
             var min = double.IsFinite(DeflectionRangeMinMm) ? Math.Max(0, DeflectionRangeMinMm) : 0;
             var max = double.IsFinite(DeflectionRangeMaxMm) && DeflectionRangeMaxMm > min ? DeflectionRangeMaxMm : Math.Max(maximum, min + 1e-9);
-            Vector Offset(double ux, double uz) => Plane == "XY" ? new(ux * scale, 0) : Plane == "YZ" ? new(0, -uz * scale) : new(ux * scale, -uz * scale);
+            Vector Offset(double ux, double uy, double uz) => Plane == "XY" ? new(ux * scale, -uy * scale) : Plane == "YZ" ? new(uy * scale, -uz * scale) : new(ux * scale, -uz * scale);
             Brush Contour(double value) => ShowDeflectionContour ? DeflectionBrush((value - min) / (max - min)) : Brush("AccentBright");
             void Segment(Point from, Point to, double v1, double v2)
             {
@@ -1011,32 +1011,34 @@ public sealed class ModelCanvas : FrameworkElement
                     for (var i = 1; i < stations.Count; i++)
                     {
                         var a = stations[i - 1]; var b = stations[i];
-                        Segment(start + (end - start) * a.Fraction + Offset(a.UXM, a.UZM),
-                            start + (end - start) * b.Fraction + Offset(b.UXM, b.UZM), Magnitude(a.UXM, a.UZM), Magnitude(b.UXM, b.UZM));
+                        double ay = u1.UYM + (u2.UYM - u1.UYM) * a.Fraction;
+                        double by = u1.UYM + (u2.UYM - u1.UYM) * b.Fraction;
+                        Segment(start + (end - start) * a.Fraction + Offset(a.UXM, ay, a.UZM),
+                            start + (end - start) * b.Fraction + Offset(b.UXM, by, b.UZM), Magnitude(a.UXM, ay, a.UZM), Magnitude(b.UXM, by, b.UZM));
                     }
                 }
-                else Segment(start + Offset(u1.UXM, u1.UZM), end + Offset(u2.UXM, u2.UZM), Magnitude(u1.UXM, u1.UZM), Magnitude(u2.UXM, u2.UZM));
+                else Segment(start + Offset(u1.UXM, u1.UYM, u1.UZM), end + Offset(u2.UXM, u2.UYM, u2.UZM), Magnitude(u1.UXM, u1.UYM, u1.UZM), Magnitude(u2.UXM, u2.UYM, u2.UZM));
             }
             foreach (var joint in result.Joints)
                 if (screenPoints.TryGetValue(joint.PointName, out var original))
                 {
-                    var point = original + Offset(joint.UXM, joint.UZM);
+                    var point = original + Offset(joint.UXM, joint.UYM, joint.UZM);
                     deflectedNodes[joint.PointName] = point;
-                    dc.DrawEllipse(Contour(Magnitude(joint.UXM, joint.UZM)), new Pen(Brush("ViewportBg"), 1), point, 3.5, 3.5);
+                    dc.DrawEllipse(Contour(Magnitude(joint.UXM, joint.UYM, joint.UZM)), new Pen(Brush("ViewportBg"), 1), point, 3.5, 3.5);
                 }
             if (ShowDeflectionContour)
             {
                 var left = Math.Max(18, ActualWidth - 245); var top = ActualHeight - 70;
                 for (var i = 0; i < 100; i++) dc.DrawRectangle(DeflectionBrush(i / 99.0), null, new Rect(left + i * 1.6, top, 1.7, 10));
-                Text(dc, DeflectionIsModeShape ? $"Relative |amplitude| {min:G5} to {max:G5}" : $"|U| {min:G5} to {max:G5} mm", new Point(left, top - 20), "Text");
+                Text(dc, DeflectionIsModeShape ? $"Relative |amplitude| {min / 1000:G5} to {max / 1000:G5}" : $"|U| {min:G5} to {max:G5} mm", new Point(left, top - 20), "Text");
                 Text(dc, DeflectionIsModeShape ? "Eigenvector magnified - click a node" : "Shape magnified - click a node", new Point(left, top + 14), "Text");
             }
             if (selectedDeflectionNode is { } name && displacements.TryGetValue(name, out var selected) && deflectedNodes.TryGetValue(name, out var selectedPoint))
             {
                 dc.DrawEllipse(null, new Pen(Brush("Text"), 2), selectedPoint, 7, 7);
                 CableLabel(dc, DeflectionIsModeShape
-                    ? $"Ux {selected.UXM * 1000:G8}  Uy 0  Uz {selected.UZM * 1000:G8} (relative amplitude)"
-                    : $"Ux {selected.UXM * 1000:G8} mm  Uy 0 mm  Uz {selected.UZM * 1000:G8} mm", new Point(18, 90), false);
+                    ? $"Ux {selected.UXM:G8}  Uy {selected.UYM:G8}  Uz {selected.UZM:G8} (relative amplitude)"
+                    : $"Ux {selected.UXM * 1000:G8} mm  Uy {selected.UYM * 1000:G8} mm  Uz {selected.UZM * 1000:G8} mm", new Point(18, 90), false);
             }
             return;
         }

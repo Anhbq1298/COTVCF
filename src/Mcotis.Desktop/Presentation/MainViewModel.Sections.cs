@@ -132,9 +132,13 @@ public sealed partial class MainViewModel
         // out of the plane: the other principal inertia as the local axis turns it, and the torsion constant
         var outOfPlane = i33 * Math.Sin(radians) * Math.Sin(radians) + i22 * Math.Cos(radians) * Math.Cos(radians);
         // A section read without a torsion constant — a Section Designer section — takes the polar moment for it, as it
-        // does when it is exported to SAP2000 and ETABS (SapGateway.Export, EtabsGateway.Export).
-        var torsion = (values.Torsion > 0 ? values.Torsion : values.I33 + values.I22) * Mod(section.Modifiers, 3) * Mod(member.Modifiers, 3);
+        // does when it is exported to SAP2000 and ETABS (SapGateway.Export, EtabsGateway.Export). A section whose source
+        // program states its torsional rigidity (ETABS's J × G, M9) gives the member the J of the member's own E and ν.
         var material = Materials.FirstOrDefault(item => item.Name == section.Material);
+        var modulus = composite?.Ecm ?? material?.ElasticModulus ?? member.ElasticModulusKNPerM2;
+        var shear = modulus / (2 * (1 + (member.PoissonRatio ?? 0.3)));
+        var torsion = (section.TorsionalRigidityKNm2 is > 0 and var rigidity && shear > 0 ? rigidity / shear
+            : values.Torsion > 0 ? values.Torsion : values.I33 + values.I22) * Mod(section.Modifiers, 3) * Mod(member.Modifiers, 3);
         var shape = section.Shape switch
         {
             FrameShape.Rectangle => new FemSectionShape(SectionShapeKind.Rectangle, section.Depth, section.Width),

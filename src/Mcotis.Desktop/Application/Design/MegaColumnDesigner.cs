@@ -55,6 +55,8 @@ internal sealed class MegaDesigner : ColumnDesigner
     private double Ac => major.ConcreteArea;
     private double NplRk => Aa * S.Fy + 0.85 * eta * S.Fck * Ac + As * S.Fyk;
     private double ShearArea => count * (S.SteelDepth - 2 * S.FlangeThickness) * S.WebThickness;
+    /// <summary>The flanges of the profiles, which carry a shear along local 3.</summary>
+    private double ShearAreaMinor => count * 2 * S.SteelWidth * S.FlangeThickness;
 
     /// <summary>The CTBUH input for this section (in-plane bending), NEd in kN, MEd in kNm, buckling length in mm.</summary>
     internal MegaColumnInput EngineInput(double nEdKN, double mEdKNm, double l0, double fy)
@@ -116,16 +118,27 @@ internal sealed class MegaDesigner : ColumnDesigner
         r.AppendLine($"  δ = As fyd / Npl,Rd = {F(m.Delta, 3)}, Npl,Rk = {F(m.NplRk, 0)} kN, AISC C1 = {F(m.C1, 3)} (for comparison)");
     }
 
-    public override DesignCaseResult DesignCase(string name, double nEd, double m0, double vEd, double length, double l0y, double l0z, StringBuilder log)
+    public override DesignCaseResult DesignCase(string name, DesignActions actions, double length, double l0y, double l0z, StringBuilder log)
     {
-        log.AppendLine($"Design actions: NEd = {F(nEd / 1000)} kN ({(nEd >= 0 ? "compression" : "tension")}), M0Ed,max = {F(m0 / 1e6)} kNm, VEd = {F(vEd / 1000)} kN");
+        var (nEd, m0, m0z, vEd, vEdZ) = actions;
+        Actions(log, actions);
         // shear on the profile webs (6.7.3.2(3)–(4)); a high shear reduces the steel strength — taken on the web share of the profiles
         var vpl = ShearArea * fyd / Math.Sqrt(3);
         var shearUtil = vEd / vpl;
         var rho = vEd > 0.5 * vpl ? Math.Pow(2 * vEd / vpl - 1, 2) : 0;
-        var fy = S.Fy * (1 - rho * ShearArea / Math.Max(1, Aa));
         log.AppendLine("SHEAR (6.7.3.2(3)–(4), profile webs, EN 1993-1-1 6.2.6)");
         log.AppendLine($"  Av = {count} hw tw = {F(ShearArea, 0)} mm²; Vpl,a,Rd = Av fyd / √3 = {F(vpl / 1000)} kN; VEd / Vpl,a,Rd = {F(shearUtil, 3)} {Ok(shearUtil <= 1)}");
+        if (vEdZ > 0)
+        {
+            // the shear along local 3 (with z-z bending) on the profile flanges, reduced as the web shear is when it is high
+            var vplZ = ShearAreaMinor * fyd / Math.Sqrt(3);
+            var utilizationZ = vEdZ / vplZ;
+            var rhoZ = vEdZ > 0.5 * vplZ ? Math.Pow(2 * vEdZ / vplZ - 1, 2) : 0;
+            log.AppendLine($"  Along local 3: Av,z = {count} × 2 b tf = {F(ShearAreaMinor, 0)} mm²; Vpl,a,z,Rd = {F(vplZ / 1000)} kN; VEd,z / Vpl,a,z,Rd = {F(utilizationZ, 3)} {Ok(utilizationZ <= 1)}");
+            shearUtil = Math.Max(shearUtil, utilizationZ);
+            rho = Math.Max(rho, rhoZ * ShearAreaMinor / Math.Max(1, ShearArea));
+        }
+        var fy = S.Fy * (1 - rho * ShearArea / Math.Max(1, Aa));
         if (rho > 0) log.AppendLine($"  VEd > 0.5 Vpl,a,Rd → (1 − ρ) on the webs: fy,eff = {F(fy, 1)} MPa for the whole profile area (conservative)");
         log.AppendLine();
 
@@ -140,7 +153,17 @@ internal sealed class MegaDesigner : ColumnDesigner
             var bending = mRd > 0 ? m0 / (AlphaM * mRd) : double.PositiveInfinity;
             log.AppendLine($"MEMBER IN TENSION: NEd / Nt,Rd = {F(-nEd / 1000)} / {F(ntRd / 1000, 0)} = {F(axial, 3)} {Ok(axial <= 1)}");
             log.AppendLine($"  M,Rd on the line B (0, Mpl,Rd) → (−Nt,Rd, 0) = {F(mRd / 1e6)} kNm → MEd / (αM M,Rd) = {F(bending, 3)} {Ok(bending <= 1)}");
-            return new(name, nEd / 1000, m0 / 1e6, m0 / 1e6, 0, vEd / 1000, axial, bending, 0, shearUtil);
+            double minorTension = 0;
+            if (m0z > 0)
+            {
+                var mRdZ = minorCurve.MomentAt(0) * Math.Max(0, 1 + nEd / ntRd);
+                var alone = mRdZ > 0 ? m0z / (AlphaM * mRdZ) : double.PositiveInfinity;
+                var together = mRd > 0 && mRdZ > 0 ? m0 / mRd + m0z / mRdZ : double.PositiveInfinity;
+                minorTension = alone;
+                bending = Math.Max(bending, together);   // with the y-y check, which it becomes as M2 goes to zero
+                log.AppendLine($"  z-z: M,z,Rd = {F(mRdZ / 1e6)} kNm → MEd,z / (αM M,z,Rd) = {F(alone, 3)}; biaxial My/M,y,Rd + Mz/M,z,Rd = {F(together, 3)} {Ok(together <= 1)} (linear interaction)");
+            }
+            return new(name, nEd / 1000, m0 / 1e6, m0 / 1e6, m0z / 1e6, vEd / 1000, axial, bending, minorTension, shearUtil, vEdZ / 1000, M0EdZKNm: m0z / 1e6);
         }
 
         // ---- major axis y-y: CTBUH simplified method ----
@@ -174,19 +197,31 @@ internal sealed class MegaDesigner : ColumnDesigner
         var ncrEffZ = Math.PI * Math.PI * 0.9 * (S.Ea * iaZ + S.Es * minor.BarInertia + 0.5 * ecEff * minor.ConcreteInertia) / (l0z * l0z);
         var kZ = nEd < ncrEffZ ? Math.Max(1, 1 / (1 - nEd / ncrEffZ)) : double.PositiveInfinity;
         var e0z = l0z / 150;
-        var mEdZ = kZ * nEd * e0z;
+        var mEdZ = m0z > 0 ? Math.Max(m0z, kZ * (m0z + nEd * e0z)) : kZ * nEd * e0z;
         var mplZ = minorCurve.MomentAt(0);
         var muZ = mplZ > 0 ? Math.Min(1, minorCurve.MomentAt(nEd) / mplZ) : 0;
         var minorUtil = muZ > 0 ? mEdZ / (AlphaM * muZ * mplZ) : double.PositiveInfinity;
-        log.AppendLine("MINOR AXIS z-z (imperfection only; exact plastic distribution of the fibre section)");
+        log.AppendLine(m0z > 0 ? "MINOR AXIS z-z (FEM moment M2 with the imperfection; exact plastic distribution of the fibre section)"
+                               : "MINOR AXIS z-z (imperfection only; exact plastic distribution of the fibre section)");
         log.AppendLine($"  (EI)eff,z = {F(eiZ / 1e12, 1)} × 10¹² Nmm², Ncr,z = {F(ncrZ / 1000, 0)} kN, λ̄z = {F(lambdaZ, 3)} → χz = {F(chiZ, 3)} (curve c, α = 0.49)");
-        log.AppendLine($"  e0 = l0,z / 150 = {F(e0z, 1)} mm; k = {F(kZ, 3)}; MEd,z = k NEd e0 = {F(mEdZ / 1e6)} kNm; μd,z = {F(muZ, 3)}, Mpl,z,Rd = {F(mplZ / 1e6, 0)} kNm");
+        log.AppendLine(m0z > 0
+            ? $"  e0 = l0,z / 150 = {F(e0z, 1)} mm; k = {F(kZ, 3)}; MEd,z = k (M0Ed,z + NEd e0) = {F(mEdZ / 1e6)} kNm; μd,z = {F(muZ, 3)}, Mpl,z,Rd = {F(mplZ / 1e6, 0)} kNm"
+            : $"  e0 = l0,z / 150 = {F(e0z, 1)} mm; k = {F(kZ, 3)}; MEd,z = k NEd e0 = {F(mEdZ / 1e6)} kNm; μd,z = {F(muZ, 3)}, Mpl,z,Rd = {F(mplZ / 1e6, 0)} kNm");
         log.AppendLine($"  MEd,z / (αM μd Mpl,z,Rd) = {F(minorUtil, 3)} {Ok(minorUtil <= 1)}");
         var myNoImperfection = Math.Max(m0, y.KAmp * m0);
         var biaxial = myNoImperfection / resistanceY + mEdZ / (muZ * mplZ);
         log.AppendLine($"  Biaxial (6.7.3.7(2)): My,Ed/(μdy Mpl,y,Rd) + Mz,Ed/(μdz Mpl,z,Rd) = {F(myNoImperfection / 1e6)} / {F(resistanceY / 1e6)} + " +
                        $"{F(mEdZ / 1e6)} / {F(muZ * mplZ / 1e6)} = {F(biaxial, 3)} {Ok(biaxial <= 1)} (My without imperfection)");
         minorUtil = Math.Max(minorUtil, biaxial);
+        if (m0z > 0)
+        {
+            // either plane may be the critical one with a moment about both axes (6.7.3.7(2)): the imperfection in the y plane too
+            var mzNoImperfection = Math.Max(m0z, kZ * m0z);
+            var other = mEdY / resistanceY + mzNoImperfection / (muZ * mplZ);
+            log.AppendLine($"  Biaxial, imperfection in the y plane: {F(mEdY / 1e6)} / {F(resistanceY / 1e6)} + {F(mzNoImperfection / 1e6)} / {F(muZ * mplZ / 1e6)} = " +
+                           $"{F(other, 3)} {Ok(other <= 1)} (Mz without imperfection; with the y-y check)");
+            majorUtil = Math.Max(majorUtil, other);
+        }
         log.AppendLine();
 
         var chi = Math.Min(y.Chi, chiZ);
@@ -194,7 +229,7 @@ internal sealed class MegaDesigner : ColumnDesigner
         log.AppendLine("MEMBER IN COMPRESSION (6.7.3.5)");
         log.AppendLine($"  NEd / (χmin Npl,Rd) = {F(nEd / 1000)} / ({F(chi, 3)} × {F(y.NplRd, 0)}) = {F(axialUtil, 3)} {Ok(axialUtil <= 1)}  (squash NEd / Npl,Rd = {F(nEd / 1000 / y.NplRd, 3)})");
         foreach (var warning in y.Warnings) log.AppendLine("  ⚠ " + warning);
-        return new(name, nEd / 1000, m0 / 1e6, mEdY / 1e6, mEdZ / 1e6, vEd / 1000, axialUtil, majorUtil, minorUtil, shearUtil);
+        return new(name, nEd / 1000, m0 / 1e6, mEdY / 1e6, mEdZ / 1e6, vEd / 1000, axialUtil, majorUtil, minorUtil, shearUtil, vEdZ / 1000, M0EdZKNm: m0z / 1e6);
     }
 
     public override IReadOnlyList<DetailingCheck> Detailing(double maxNEd, double length, double l0y, double l0z)

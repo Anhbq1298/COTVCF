@@ -266,6 +266,9 @@ public sealed partial class MainViewModel
         State.JointRestraints = State.JointRestraints.Select(item => (Joint: Map(item.Key), item.Value))
             .Where(item => points.Contains(item.Joint)).GroupBy(item => item.Joint, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First().Value, StringComparer.Ordinal);
+        State.JointMasses = State.JointMasses.Select(item => (Joint: Map(item.Key), item.Value))
+            .Where(item => points.Contains(item.Joint)).GroupBy(item => item.Joint, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Value with { JointName = group.Key }, StringComparer.Ordinal);
 
         // Tab 01: every top chord point stays loaded when every one was; otherwise the loaded points that still exist
         var appliedNames = State.AppliedPoints.Select(point => point.PointName).ToArray();

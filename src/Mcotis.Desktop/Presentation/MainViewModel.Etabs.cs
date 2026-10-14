@@ -142,7 +142,7 @@ public sealed partial class MainViewModel
             ?? throw new InvalidDataException("The built-in TAS model is missing from the application.");
         var path = Path.Combine(Infrastructure.AppDataPaths.EnsureDirectory(Path.Combine(Infrastructure.AppDataPaths.RootDirectory, "TAS")), "CoT120.e2k");
         using (var file = File.Create(path)) resource.CopyTo(file);
-        return (EtabsE2kReader.Read(File.ReadAllText(path), path), path);
+        return (TasGenerator.WithSourceTorsion(EtabsE2kReader.Read(File.ReadAllText(path), path)), path);
     }
 
     private static ModelInfo TasInfo(EtabsModel model, string path) => new(path, model.ProgramVersion, 6, "kN", "m", false);
@@ -181,6 +181,7 @@ public sealed partial class MainViewModel
             State.SessionBaselinePointLoads = [];
             State.SessionBaselinePretensionForces = new Dictionary<string, double>(StringComparer.Ordinal);
             State.JointRestraints = imported.Restraints;
+            State.JointMasses = new Dictionary<string, FemJointMassDto>(StringComparer.Ordinal);
             State.Geometry = geometry;
             State.Baseline = geometry;
             State.Preview = geometry;

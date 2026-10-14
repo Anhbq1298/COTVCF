@@ -26,15 +26,30 @@ internal static class NativeToLegacyProjection
     {
         var document = LegacyNativeDocumentMigration.Convert(snapshot, source);
         var editor = document.Edit();
-        editor.SetApplicationData(ConfigurationKey, Serialize(snapshot));
+        WriteConfiguration(editor, snapshot);
         editor.SetGenerator(snapshot.Generator?.ToNative());
         return editor.Commit().Document;
+    }
+
+    /// <summary>Updates only the transitional main-window configuration carried by an existing native document.
+    /// Native-first commands use this in the same commit as their engineering edit, so Undo restores both views of
+    /// the model as one step. Delete this with the bridge after the last legacy consumer moves to the document.</summary>
+    public static void WriteConfiguration(Native.DocumentEditor editor, FemInputSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(editor);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        editor.SetApplicationData(ConfigurationKey, Serialize(snapshot));
     }
 
     /// <summary>The configuration a document of the main window holds, or null for a document that holds none.</summary>
     public static FemInputSnapshot? Read(Native.ModelDocument document) =>
         document.ApplicationData.TryGetValue(ConfigurationKey, out var json)
             ? JsonSerializer.Deserialize<FemInputSnapshot>(json, FemInputDatabase.Json) : null;
+
+    /// <summary>Whether the document already carries this exact transitional configuration.</summary>
+    public static bool HoldsConfiguration(Native.ModelDocument document, FemInputSnapshot snapshot) =>
+        document.ApplicationData.TryGetValue(ConfigurationKey, out var json) &&
+        string.Equals(json, Serialize(snapshot), StringComparison.Ordinal);
 
     private static string Serialize(FemInputSnapshot snapshot)
     {

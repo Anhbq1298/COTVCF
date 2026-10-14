@@ -1,3 +1,4 @@
+using System.IO;
 using Native = Mcotis.Core;
 
 namespace Mcotis.Desktop.Application;
@@ -17,6 +18,31 @@ public sealed class LegacyNames
     private readonly Dictionary<string, Native.ObjectId> cables = new(StringComparer.Ordinal);
 
     private LegacyNames() { }
+
+    /// <summary>Names persisted with an analysis output. Output databases are immutable snapshots, so rebuilding this
+    /// map must not require the input document still to be open.</summary>
+    internal static LegacyNames FromEntries(IEnumerable<(Native.ObjectId Id, string Name, string Kind)> entries)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        var map = new LegacyNames();
+        foreach (var (id, name, kind) in entries)
+        {
+            var index = kind switch
+            {
+                "Point" => map.points,
+                "Frame" => map.frames,
+                "Cable" => map.cables,
+                _ => throw new InvalidDataException($"Unknown result object kind '{kind}'."),
+            };
+            map.Add(id, name, index);
+        }
+        return map;
+    }
+
+    internal IEnumerable<(Native.ObjectId Id, string Name, string Kind)> Entries =>
+        points.Select(item => (item.Value, item.Key, "Point"))
+            .Concat(frames.Select(item => (item.Value, item.Key, "Frame")))
+            .Concat(cables.Select(item => (item.Value, item.Key, "Cable")));
 
     public static LegacyNames Of(Native.ModelDocument document)
     {

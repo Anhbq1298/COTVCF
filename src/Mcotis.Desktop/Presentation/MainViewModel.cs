@@ -116,7 +116,14 @@ public sealed partial class MainViewModel : Observable
     public string FxHeader => $"Fx [{ForceUnit}]";
     public string FyHeader => $"Fy [{ForceUnit}]";
     public string FzHeader => $"Fz [{ForceUnit}]";
-    public string GeometrySummary => $"{State.Geometry.Points.Count} points  -  {State.Geometry.Members.Count(m => m.Kind == MemberKind.Frame)} frames  -  {State.Geometry.Members.Count(m => m.Kind != MemberKind.Frame)} cables / tendons";
+    public string GeometrySummary
+    {
+        get
+        {
+            var geometry = SharedViewerModel;
+            return $"{geometry.Points.Count} points  -  {geometry.Members.Count(m => m.Kind == MemberKind.Frame)} frames  -  {geometry.Members.Count(m => m.Kind != MemberKind.Frame)} cables / tendons";
+        }
+    }
     public string TopSummary => $"{State.Truss.TopPoints.Count} points selected";
     public string MiddleSummary => $"{State.Truss.MiddlePoints.Count} points selected";
     public string BottomSummary => $"{State.Truss.BottomPoints.Count} points selected";
@@ -152,7 +159,8 @@ public sealed partial class MainViewModel : Observable
     private const int TabLoading = 0, TabTruss = 1, TabPretension = 2, TabOutput = 3, TabIteration = 4, TabFem = 7;     // 5 = Post-Processing, 6 = 06A Optimization (MainViewModel.Optimization.cs), 8 = Quantity Take-off (MainViewModel.Quantities.cs)
     public bool ShowSharedViewer => selectedTab == TabFem;
     public bool ShowTrussLegend => false;
-    public GeometryModel SharedViewerModel => State.Geometry ?? GeometryModel.Empty;
+    /// <summary>The main viewport is a view of the authoritative native document (M5), not of the compatibility state.</summary>
+    public GeometryModel SharedViewerModel => NativeDocumentView.Geometry(NativeDocumentSession.Document);
     public IEnumerable<AppliedPoint>? SharedViewerAppliedPoints => selectedTab == TabFem ? State.AppliedPoints : null;
     public IEnumerable<string>? SharedViewerTopPoints => null;
     public IEnumerable<string>? SharedViewerMiddlePoints => null;
@@ -166,16 +174,9 @@ public sealed partial class MainViewModel : Observable
     /// imported or generated (<see cref="MakeRestraintsExplicit"/>) — no rule adds a support afterwards. A model whose
     /// restraints are all taken away has none, and its run says what is not held.</summary>
     internal IReadOnlyDictionary<string, Mcotis.Core.Restraint> FemJointRestraints
-    {
-        get
-        {
-            var baseline = State.Baseline;
-            return State.JointRestraints.Where(item => !item.Value.IsFree && baseline.Points.ContainsKey(item.Key))
-                .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
-        }
-    }
-    /// <summary>Whether the model holds a restraint assignment.</summary>
-    private bool HasAssignedJointRestraints => State.JointRestraints.Any(item => !item.Value.IsFree && State.Baseline.Points.ContainsKey(item.Key));
+        => NativeDocumentView.Restraints(NativeDocumentSession.Document);
+    /// <summary>Whether the authoritative document holds a restraint assignment.</summary>
+    private bool HasAssignedJointRestraints => FemJointRestraints.Count > 0;
 
     /// <summary>The migration of a model that holds no restraint — a configuration saved before restraints were data, the
     /// VCF system, an import from a program that restrained nothing: the pins the application has always found at its
@@ -184,7 +185,10 @@ public sealed partial class MainViewModel : Observable
     /// are. Returns how many were written; none when the model holds restraints or no column base is found.</summary>
     internal int MakeRestraintsExplicit()
     {
-        if (HasAssignedJointRestraints || State.Baseline.Points.Count == 0) return 0;
+        // Migration runs before a document is created, so this one bootstrap check necessarily reads the incoming
+        // compatibility snapshot. Once SyncNativeDocument completes, all runtime restraint reads use the document.
+        if (State.JointRestraints.Any(item => !item.Value.IsFree && State.Baseline.Points.ContainsKey(item.Key)) ||
+            State.Baseline.Points.Count == 0) return 0;
         IReadOnlyList<string> pins;
         try { pins = FemStudyService.FindPinSupportPoints(State.Baseline); }
         catch (InvalidOperationException) { return 0; }
@@ -198,11 +202,15 @@ public sealed partial class MainViewModel : Observable
     internal int AssignJointRestraints(IReadOnlyCollection<string> joints, Mcotis.Core.Restraint restraint)
     {
         if (!CanEditFemModel) throw new InvalidOperationException("Unlock the model before changing joint restraints.");
-        var names = joints.Where(State.Baseline.Points.ContainsKey).ToHashSet(StringComparer.Ordinal);
-        if (names.Count == 0) throw new ArgumentException("Select one or more joints of the model first.", nameof(joints));
-        var map = new Dictionary<string, Mcotis.Core.Restraint>(State.JointRestraints, StringComparer.Ordinal);
+        var document = NativeDocumentSession.Document;
+        var legacyNames = LegacyNames.Of(document);
+        var pointIds = joints.Select(name => (Name: name, Id: legacyNames.Point(name)))
+            .Where(item => item.Id is not null).Select(item => (item.Name, Id: item.Id!.Value))
+            .DistinctBy(item => item.Id).ToArray();
+        if (pointIds.Length == 0) throw new ArgumentException("Select one or more joints of the model first.", nameof(joints));
+        var map = new Dictionary<string, Mcotis.Core.Restraint>(FemJointRestraints, StringComparer.Ordinal);
         int changed = 0;
-        foreach (var joint in names)
+        foreach (var (joint, _) in pointIds)
         {
             var before = map.GetValueOrDefault(joint, Mcotis.Core.Restraint.Free);
             if (before == restraint) continue;
@@ -211,11 +219,29 @@ public sealed partial class MainViewModel : Observable
         }
         if (changed > 0)
         {
+            var priorCompatibilityMap = State.JointRestraints;
             State.JointRestraints = map;
+            try
+            {
+                var snapshot = CaptureFemInputSnapshot(advanceRevision: false);
+                NativeDocumentSession.Execute(Mcotis.Application.DocumentCommands.Edit("Assign joint restraints", editor =>
+                {
+                    editor.SetRestraint(pointIds.Select(item => item.Id), restraint);
+                    NativeToLegacyProjection.WriteConfiguration(editor, snapshot);
+                }));
+            }
+            catch
+            {
+                State.JointRestraints = priorCompatibilityMap;
+                throw;
+            }
+            // Compatibility state remains for controls not moved in M5. It mirrors the committed document; it is no
+            // longer the source used by the viewport, restraint form, object information, exports or analysis.
             ClearFemResults();
             ScheduleFemWorkingSave();
             Notify(nameof(FemPinSupportSummary));
             NotifySharedViewer();
+            NotifyModelHistory();
         }
         Message = changed > 0
             ? $"Joint restraints {RestraintText(restraint)} on {changed} joint{(changed == 1 ? "" : "s")} (FEM results cleared; SAP2000 unchanged)."
@@ -223,15 +249,82 @@ public sealed partial class MainViewModel : Observable
         Update();
         return changed;
     }
+    /// <summary>The joint masses the model holds, by joint name (M8), read from its document.</summary>
+    internal IReadOnlyDictionary<string, FemJointMassDto> FemJointMasses
+    {
+        get
+        {
+            var document = NativeDocumentSession.Document;
+            var names = LegacyNames.Of(document);
+            return document.JointMassAssignments.Values.Where(mass => names.TryGetName(mass.PointId, out _))
+                .ToDictionary(mass => names[mass.PointId], mass => new FemJointMassDto(names[mass.PointId], mass.UX, mass.UY, mass.UZ, mass.RX, mass.RY, mass.RZ),
+                    StringComparer.Ordinal);
+        }
+    }
+
+    /// <summary>Assign → Joint → Masses… (M8, what the native workspace's Assign → Joint Mass did): the additional mass of
+    /// every one of <paramref name="joints"/> — translational [t] along UX, UY, UZ, rotational inertia [t·m²] about RX, RY,
+    /// RZ; six zeros take it away. One step of the model's history; the results of the model go. A modal case counts it
+    /// through a mass source that includes additional mass (MS1 does). Returns how many joints changed.</summary>
+    internal int AssignJointMass(IReadOnlyCollection<string> joints, FemJointMassDto mass)
+    {
+        if (!CanEditFemModel) throw new InvalidOperationException("Unlock the model before changing joint masses.");
+        double[] values = [mass.UX, mass.UY, mass.UZ, mass.RX, mass.RY, mass.RZ];
+        if (values.Any(value => !double.IsFinite(value) || value < 0))
+            throw new ArgumentException("Every mass and inertia must be a finite number of zero or more.", nameof(mass));
+        var document = NativeDocumentSession.Document;
+        var legacyNames = LegacyNames.Of(document);
+        var pointIds = joints.Select(name => (Name: name, Id: legacyNames.Point(name)))
+            .Where(item => item.Id is not null).Select(item => (item.Name, Id: item.Id!.Value)).DistinctBy(item => item.Id).ToArray();
+        if (pointIds.Length == 0) throw new ArgumentException("Select one or more joints of the model first.", nameof(joints));
+        var map = new Dictionary<string, FemJointMassDto>(FemJointMasses, StringComparer.Ordinal);
+        int changed = 0;
+        foreach (var (joint, _) in pointIds)
+        {
+            var wanted = mass with { JointName = joint };
+            var before = map.GetValueOrDefault(joint);
+            if (before == wanted || before is null && wanted.IsZero) continue;
+            if (wanted.IsZero) map.Remove(joint); else map[joint] = wanted;
+            changed++;
+        }
+        if (changed > 0)
+        {
+            var prior = State.JointMasses;
+            State.JointMasses = map;
+            try
+            {
+                var snapshot = CaptureFemInputSnapshot(advanceRevision: false);
+                NativeDocumentSession.Execute(Mcotis.Application.DocumentCommands.Edit("Assign joint masses", editor =>
+                {
+                    foreach (var (_, id) in pointIds) editor.SetJointMass(new(id, mass.UX, mass.UY, mass.UZ, mass.RX, mass.RY, mass.RZ));
+                    NativeToLegacyProjection.WriteConfiguration(editor, snapshot);
+                }));
+            }
+            catch
+            {
+                State.JointMasses = prior;
+                throw;
+            }
+            ClearFemResults();
+            ScheduleFemWorkingSave();
+            NotifyModelHistory();
+        }
+        Message = changed == 0 ? "The selected joints already have this mass."
+            : mass.IsZero ? $"Additional mass taken away from {changed} joint{(changed == 1 ? "" : "s")} (FEM results cleared)."
+            : $"Additional mass on {changed} joint{(changed == 1 ? "" : "s")}: {mass.UX:G6}, {mass.UY:G6}, {mass.UZ:G6} t; {mass.RX:G6}, {mass.RY:G6}, {mass.RZ:G6} t·m² (FEM results cleared).";
+        Update();
+        return changed;
+    }
+
     /// <summary>The joints held in the plane of the model (<see cref="FemSolver.HoldsInPlane"/>), left to right: the
     /// support symbols of the viewer and the supports reactions are reported at.</summary>
     public IReadOnlyList<string> FemPinSupportPoints
     {
         get
         {
-            var baseline = State.Baseline;
+            var geometry = SharedViewerModel;
             return FemJointRestraints.Where(item => FemSolver.HoldsInPlane(item.Value)).Select(item => item.Key)
-                .OrderBy(name => baseline.Points[name].Position.X).ThenBy(name => name, StringComparer.Ordinal).ToArray();
+                .OrderBy(name => geometry.Points[name].Position.X).ThenBy(name => name, StringComparer.Ordinal).ToArray();
         }
     }
     /// <summary>The restrained components of a joint as text: "UX, UZ"; "free" when it has none.</summary>
@@ -252,6 +345,7 @@ public sealed partial class MainViewModel : Observable
     };
     public string SharedViewerHint => selectedTab switch
     {
+        TabFem when SelectedFemPage == FemResultsPage && showModeShape => "Mode shape is a magnified, mass-normalized relative amplitude; it is not a load displacement.",
         TabFem when SelectedFemPage == FemResultsPage && FemResultMode == FemResultMode.DeflectedShape => "Deformed shape is visually magnified; displacement values in the Results table are true scale.",
         TabFem when SelectedFemPage == FemResultsPage && FemResultMode == FemResultMode.Reactions => "Green vectors show support reaction direction; labels and the Results table show exact magnitudes and components.",
         TabFem when SelectedFemPage == FemResultsPage => "Blue = positive (tension for axial force); red = negative (compression). Diagram width is auto-scaled; table values are exact.",
@@ -272,6 +366,7 @@ public sealed partial class MainViewModel : Observable
     private void NotifyFemResultSelection()
     {
         Notify(nameof(FemResultRows)); Notify(nameof(FemResultSummary));
+        Notify(nameof(HasNativeStaticResults)); Notify(nameof(NativeJointResultRows)); Notify(nameof(NativeFrameStationResultRows));
         Notify(nameof(FemRunCableFitRows));
         Notify(nameof(FemResultStartHeader)); Notify(nameof(FemResultEndHeader));
         Notify(nameof(FemResultNames)); Notify(nameof(FemResultDiagramTitle));
@@ -1163,6 +1258,7 @@ public sealed partial class MainViewModel : Observable
     {
         get
         {
+            if (showModeShape) return $"Mode shape {ModalResults.SelectedMode} ({ModalResults.SelectedCase}) [relative amplitude]";
             var name = FemResultMode switch
             {
                 FemResultMode.AxialForce => "Axial Force Diagram",
@@ -1265,6 +1361,14 @@ public sealed partial class MainViewModel : Observable
         this.outputGroupPreparation = outputGroupPreparation;
         this.printStore = printStore;
         this.femSessionStore = femSessionStore ?? new FemWorkingSessionStore();
+        NativeDocumentSession.Changed += (_, _) =>
+        {
+            Notify(nameof(GeometrySummary));
+            Notify(nameof(FemPinSupportSummary));
+            NotifySharedViewer();
+            NotifyModelHistory();
+        };
+        NativeDocumentSession.SavedStateChanged += (_, _) => NotifyModelHistory();
         // Print Setup is a per-user preference: loaded once, saved on every edit. Without a store (checks) it is
         // simply held in memory.
         PrintSettings = printStore?.Load() ?? new();
@@ -1404,7 +1508,7 @@ public sealed partial class MainViewModel : Observable
             _ => ConfigTabs.All,
         }), () => CanUseConfig);
         SaveAllConfig = new(_ => SaveAll(), () => CanUseConfig);
-        NewConfig = new(_ => InitializeBlankMcotisConfiguration(), () => !IsBusy && !IsFemModelLocked);
+        NewConfig = new(_ => { if (MayReplaceModel()) InitializeBlankMcotisConfiguration(); }, () => !IsBusy && !IsFemModelLocked);
         LoadConfig = new(_ => OpenProject(), () => CanUseConfig);
         ReadFemProperties = new(_ => ReadFemModelProperties(), () => CanReadFemProperties);
         RunFemAnalysis = new(_ => RunFemAnalysisFromUi(), () => CanRunFemAnalysis);
@@ -2005,12 +2109,15 @@ public sealed partial class MainViewModel : Observable
     {
         if (IsBusy || CommitEditors?.Invoke() == false) return;
 
-        FemStudyCandidate model;
+        IReadOnlyList<FemAppliedLoad> candidateLoads;
         IReadOnlyList<string> supports;
         IReadOnlyDictionary<string, FemSectionProperties> properties;
         try
         {
-            model = femStudy.ComposeModel(State, IsOfflineModel);
+            // Tab 01 candidate loads belong to the parametric generators. A native document with no Tab 01
+            // definitions already carries its own point/member loads and may have only one loaded joint; it must
+            // not be refused by the legacy tributary-width rule before its document reaches the solver.
+            candidateLoads = State.LoadDefinitions.Count == 0 ? [] : femStudy.ComposeModel(State, IsOfflineModel).Loads;
             // the supports of the model as it stands now; the run locks the model below and analyses its native document
             supports = FemPinSupportPoints;
             properties = HeldFemProperties();
@@ -2089,7 +2196,7 @@ public sealed partial class MainViewModel : Observable
                     femSapLoading.Patterns.Count, femSapLoading.JointLoads.Count,
                     femSapLoading.MemberLoads.Count + femSapLoading.MemberPointLoads.Count + femSapLoading.GravityLoads.Count,
                     loadPlan.CaseNames.Count, loadPlan.CombinationNames.Count, femSapLoading.Warnings.Count, loadPlan.Notes),
-                loadPlan.StagesFor(model.Loads).SelectMany(stage => (stage.FitCase is { } fit ? new[] { (fit, true) } : [])
+                loadPlan.StagesFor(candidateLoads).SelectMany(stage => (stage.FitCase is { } fit ? new[] { (fit, true) } : [])
                     .Concat(stage.Cases.Select(item => (item.Name, false)))).Concat(loadPlan.ModalCaseNames.Select(name => (name, false))), loadPlan.PrerequisiteRemarks);
             FemMonitor.Apply(monitor.Snapshot());
             var failure = new FemFailureReport();
@@ -2106,11 +2213,11 @@ public sealed partial class MainViewModel : Observable
                     try
                     {
                         if (documentProblem is not null) throw new InvalidOperationException("The model cannot be analysed: " + documentProblem);
-                        return (IReadOnlyList<FemStudyRun>)[femStudy.AnalyzeDocument(document, loadPlan, FemStudyService.ModelRunId, baseline, model.Loads, equilibrium, cancellationToken)];
+                        return (IReadOnlyList<FemStudyRun>)[femStudy.AnalyzeDocument(document, loadPlan, FemStudyService.ModelRunId, baseline, candidateLoads, equilibrium, cancellationToken)];
                     }
                     catch (InvalidOperationException ex)
                     {
-                        ((IProgress<FemProgress>)failure).Report(new FemProgress(1, 1, model.Id, Failure: ex.Message));
+                        ((IProgress<FemProgress>)failure).Report(new FemProgress(1, 1, FemStudyService.ModelRunId, Failure: ex.Message));
                         return [];
                     }
                 }, cancellationToken);
@@ -2121,7 +2228,7 @@ public sealed partial class MainViewModel : Observable
             if (results.Count == 0)
             {
                 var reason = failure.Reason ?? "The model did not reach equilibrium.";
-                FemCableFitRows.Add(FemCableFitRow.FailedCase(model.Id, reason));
+                FemCableFitRows.Add(FemCableFitRow.FailedCase(FemStudyService.ModelRunId, reason));
                 FemProgressText = $"Analysis failed · {reason}";
                 monitor.End(completed: false, note: reason);
                 Track(false);

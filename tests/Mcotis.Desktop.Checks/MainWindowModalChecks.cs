@@ -43,11 +43,11 @@ internal static class MainWindowModalChecks
                   Math.Abs(pair.First.EigenvaluePerSecondSquared - pair.Second.EigenvaluePerSecondSquared) <= 1e-9 * pair.First.EigenvaluePerSecondSquared),
             "the modes shown are those of the modal solver on the model's native document, solved directly");
 
-        // participation: every row is a share of the free mass, and the inventory states the frame self mass
+        // participation: every row is a share of the free mass, and the inventory states member self mass
         var cumulative = vm.ModalResults.Participation.Where(item => item.Direction == "UZ").Select(item => item.Cumulative ?? 0).ToArray();
         Check(cumulative.Zip(cumulative.Skip(1)).All(pair => pair.Second >= pair.First - 1e-9) && cumulative[^1] <= 100 + 1e-6 &&
-              vm.ModalResults.ModalMass.First().Item == "Frame self mass" && vm.ModalResults.ModalMass.First().Value > 0,
-            $"participation accumulates to at most 100% (UZ {cumulative[^1]:0.0}% in 6 modes); the frame self mass is listed ({vm.ModalResults.ModalMass.First().Value:N1} t)");
+              vm.ModalResults.ModalMass.First().Item == "Member self mass" && vm.ModalResults.ModalMass.First().Value > 0,
+            $"participation accumulates to at most 100% (UZ {cumulative[^1]:0.0}% in 6 modes); the member self mass is listed ({vm.ModalResults.ModalMass.First().Value:N1} t)");
 
         // the static cases are those of a run without the modal case, value for value
         var worst = staticOnly.Results!.Keys.Max(name =>
@@ -60,6 +60,15 @@ internal static class MainWindowModalChecks
         Check(worst <= 1e-9 * scale && !run.Results!.ContainsKey("MODES") && !vm.FemResultNames.Contains("MODES"),
             "the static results of the run are those of a run without the modal case; the modal case is not offered as a static result");
 
+        vm.SelectedFemResultName = run.Native!.Static.Keys.First();
+        var selectedNative = run.Native.Static[vm.SelectedFemResultName];
+        var firstJoint = selectedNative.Joints.First();
+        var jointRow = vm.NativeJointResultRows.Single(item => item.Joint == run.Native.Names[firstJoint.PointId]);
+        Check(vm.HasNativeStaticResults && vm.NativeJointResultRows.Count > 0 && vm.NativeFrameStationResultRows.Count > 0 &&
+              jointRow.UY == firstJoint.Displacements[1] && jointRow.RX == firstJoint.Displacements[3] && jointRow.MZ == firstJoint.Reactions[5] &&
+              vm.NativeFrameStationResultRows.All(item => double.IsFinite(item.F1) && double.IsFinite(item.M3)),
+            "Results Table exposes the run's six global joint DOFs and six local frame components without putting them in the planar columns");
+
         // the mode drawn on the model is a relative amplitude, said as such; any static result takes it away
         vm.ModalResults.SelectedMode = 2;
         vm.ShowModeShape();
@@ -70,10 +79,72 @@ internal static class MainWindowModalChecks
         Check(shape && !vm.SharedViewerIsModeShape && ReferenceEquals(vm.SharedViewerFemResult, vm.SelectedFemResult),
             "Show Mode Shape draws mode 2 on the model as a mass-normalized eigenvector; showing a static result replaces it");
 
-        // what is not solved stays refused, with the reason: modes of a stressed state
+        // The same picker offers static deflections and solved modal cases, then asks for a mode number.
+        var picker = new ShowResultsWindow(vm, _ => { }, ShowResultPickerKind.Deflection);
+        var modalChoice = picker.ShapeCasePicker.Items.Cast<object>().Single(item => item.ToString() == "MODES (modal)");
+        Check(picker.ShapePicker.Visibility == System.Windows.Visibility.Visible &&
+              picker.ShapeCasePicker.Items.Count == vm.FemResultNames.Count + 1,
+            "Show Deformed Shape offers static and modal cases in one case dropdown");
+        picker.ShapeCasePicker.SelectedItem = modalChoice;
+        Check(picker.ModePicker.Visibility == System.Windows.Visibility.Visible && picker.ModeNumberPicker.Items.Count == 6,
+            "selecting a modal case asks which mode number to show");
+        picker.ModeNumberPicker.SelectedItem = 2;
+        picker.ApplySelection();
+        Check(vm.SharedViewerIsModeShape && vm.ModalResults.SelectedMode == 2 && vm.SharedViewerFemResult is not null,
+            "Show Deformed Shape applies the chosen modal mode to the shared viewer");
+        picker.ShapeCasePicker.SelectedItem = picker.ShapeCasePicker.Items.Cast<object>().First(item => item.ToString() == vm.FemResultNames[0]);
+        picker.ApplySelection();
+        Check(!vm.SharedViewerIsModeShape && vm.FemResultMode == FemResultMode.DeflectedShape,
+            "the same dropdown returns to a static deformed shape");
+
         var stressed = options with { StiffnessSourceCase = run.Results!.Keys.First() };
-        Check(stressed.NotSolvedYet("MODAL-PD") is { } reason && reason.Contains("not substituted", StringComparison.Ordinal),
-            "a modal case on the stiffness at the end of another case is still refused, with the reason");
+        Check(stressed.NotSolvedYet("MODAL-STATE") is null,
+            "Load Case Data offers a modal case using the stiffness of a converged static case");
+
+        CheckFrameCableRun();
+    }
+
+    private static void CheckFrameCableRun()
+    {
+        var editor = ModelDocument.Create().Edit();
+        var material = ObjectId.New(); var frameSection = ObjectId.New(); var cableSection = ObjectId.New();
+        var root = ObjectId.New(); var tip = ObjectId.New(); var pattern = ObjectId.New();
+        var staticCase = ObjectId.New(); var modalCase = ObjectId.New(); var massSource = ObjectId.New();
+        editor.PutMaterial(new(material, "Steel", MaterialType.Steel, 200_000_000, .3, 0, 0));
+        editor.PutFrameSection(new(frameSection, "Frame section", material, FrameSectionShape.General, new(.02, .0005, .0005, .00005)));
+        editor.PutCableSection(new(cableSection, "Stay section", material, .02));
+        editor.AddPoint(new(0, 0, 0), "Root", root); editor.AddPoint(new(4, 0, 0), "Tip", tip);
+        editor.SetRestraint([root], Restraint.Fixed);
+        editor.SetFrameSection([editor.AddFrame(root, tip, "Frame").Id], frameSection);
+        editor.SetCableSection([editor.AddCable(root, tip, "Stay").Id], cableSection);
+        editor.SetJointMass(new(tip, 3, 3, 3));
+        editor.PutLoadPattern(new(pattern, "PULL", LoadPatternType.Other));
+        editor.PutLoad(new PointLoad(ObjectId.New(), pattern, tip, new(10_000, 0, 0)));
+        editor.PutLoadCase(new(staticCase, "PULL", CaseKind.NonlinearStatic, [new(pattern, 1)]) { Run = false });
+        editor.PutMassSource(new(massSource, "MS", IncludeSelfMass: false, IncludeAdditionalMass: true));
+        editor.PutLoadCase(new(modalCase, "MODES", CaseKind.ModalEigen, [])
+            { StiffnessSourceCaseId = staticCase, ModalOptions = new(massSource, 3) });
+        editor.SetSettings(AnalysisSettings.Default with { ActiveDofs = DofMask.Full3D, CableSag = false });
+
+        var vm = EtabsImportChecks.NewViewModel(out _);
+        var warnings = new List<string>();
+        vm.WarningSink = (_, body) => warnings.Add(body);
+        Console.WriteLine("INFO: opening the Full-3D frame-and-cable modal fixture");
+        vm.OpenNativeDocument(editor.Commit().Document, "Frame and cable", null,
+            LegacyNativeDocumentMigration.Source.Imported("Mcotis native model"));
+        Console.WriteLine("INFO: running its modal case and static prerequisite");
+        var run = FemModelFileChecks.Analyze(vm).SingleOrDefault()
+            ?? throw new Exception("FAIL: frame-and-cable modal run produced no result: " + vm.FemProgressText + " | " + string.Join(" | ", warnings));
+        var staticState = run.Native!.Static["PULL"];
+        var modes = run.Native.Modal["MODES"];
+        Check(staticState.Cables.Single().Tension > 0 && modes.Modes.Length == 3 && modes.Modes.All(mode => mode.FrequencyHz > 0) &&
+              modes.StiffnessProducerCaseId == staticState.LoadCaseId,
+            $"main-window Run FEM Analysis solves the unticked PULL prerequisite before a Full-3D frame-and-cable modal case " +
+            $"(T={staticState.Cables.Single().Tension:G6}, modes={modes.Modes.Length}, frequencies={string.Join(",", modes.Modes.Select(mode => mode.FrequencyHz?.ToString("G6") ?? "none"))}, source={modes.StiffnessProducerCaseId}, static={staticState.LoadCaseId})");
+        vm.ModalResults.SelectedMode = modes.Modes.First(mode => mode.Shape.Any(joint => Math.Abs(joint.UY) > 1e-9)).ModeNumber;
+        vm.ShowModeShape();
+        Check(vm.SharedViewerIsModeShape && vm.SharedViewerFemResult!.Joints.Any(joint => Math.Abs(joint.UYM) > 0),
+            "the shared 3D viewer receives the selected mode's UY amplitude");
     }
 
     private static void Check(bool condition, string name)

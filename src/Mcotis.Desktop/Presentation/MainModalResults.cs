@@ -38,6 +38,8 @@ public sealed class MainModalResults : Observable
     public IEnumerable<NativeParticipationRow> Participation => ModalResultRows.Participation(Result);
     public IEnumerable<NativeModalMassRow> ModalMass => ModalResultRows.Mass(Result);
     public IEnumerable<int> ModeNumbers => Result?.Modes.Select(mode => mode.ModeNumber) ?? [];
+    public IReadOnlyList<int> ModeNumbersFor(string caseName) => run is not null && run.Modal.TryGetValue(caseName, out var result)
+        ? result.Modes.Select(mode => mode.ModeNumber).ToArray() : [];
     public int SelectedMode
     {
         get => selectedMode;

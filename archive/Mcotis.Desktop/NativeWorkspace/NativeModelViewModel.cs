@@ -12,13 +12,8 @@ public sealed record NativeJointRow(string Point, double UX, double UY, double U
 public sealed record NativeFrameRow(string Frame, string End, double N, double V2, double V3, double T, double M2, double M3);
 public sealed record NativeCableRow(string Cable, double Tension, string State, double? Target, double Pretension, double? FitStage, double? Sag, double? StiffnessRatio);
 public sealed record NativeLoadRow(string Frame, string Pattern, string Direction, double Start, double End, double QI, double QJ);
-public sealed record NativeModeRow(int Mode, double Eigenvalue, double? Frequency, double? Period, string Status, double Residual);
-public sealed record NativeParticipationRow(int Mode, string Direction, double? Factor, double? EffectiveMass, double? Ratio, double? Cumulative);
-public sealed record NativeModeShapeRow(string Point, double UX, double UY, double UZ, double RX, double RY, double RZ);
-public sealed record NativeModalMassRow(string Item, double Value, string Unit, string Scope);
 public sealed record NativeModalDefinition(string CaseName, string MassSourceName, bool IncludeSelfMass,
     bool IncludeAdditionalMass, int RequestedModes);
-public sealed record NativeJointMassDefinition(ObjectId PointId, double UX, double UY, double UZ, double RX, double RY, double RZ);
 
 /// <summary>The desktop adapter owns a native session. The libraries never read legacy geometry or presentation types.</summary>
 public sealed class NativeModelViewModel : Observable
@@ -38,10 +33,8 @@ public sealed class NativeModelViewModel : Observable
     public string Summary => $"{Session.Document.Points.Count} points · {Session.Document.Frames.Count} frames · {Session.Document.Cables.Count} cables · DOFs: {Session.Document.Settings.ActiveDofs} · Results: {Results.State}" +
         (result is not null && resultInput is not null ? $" ({resultInput.LoadCases[result.LoadCaseId].Name}, revision {result.Revision})"
         : modalResult is not null && resultInput is not null ? $" ({resultInput.LoadCases[modalResult.ModalCaseId].Name}, {modalResult.Modes.Length} modes, revision {modalResult.Revision})" : "");
-    public GeometryModel Geometry => new(Session.Document.Points.Values.ToDictionary(p => p.Name, p => new StructuralPoint(p.Name, new(p.Position.X, p.Position.Y, p.Position.Z))),
-        Session.Document.Frames.Values.Select(f => new StructuralMember(f.Name, Session.Document.Points[f.StartPointId].Name, Session.Document.Points[f.EndPointId].Name, MemberKind.Frame))
-            .Concat(Session.Document.Cables.Values.Select(f => new StructuralMember(f.Name, Session.Document.Points[f.StartPointId].Name, Session.Document.Points[f.EndPointId].Name, MemberKind.Cable))).ToArray());
-    public IEnumerable<string> Supports => Session.Document.Restraints.Where(p => !p.Value.IsFree).Select(p => Session.Document.Points[p.Key].Name);
+    public GeometryModel Geometry => NativeDocumentView.Geometry(Session.Document);
+    public IEnumerable<string> Supports => NativeDocumentView.Restraints(Session.Document).Keys;
     public IEnumerable<LoadCase> Cases => Session.Document.LoadCases.Values.OrderBy(c => c.Name);
     private LoadCase? selectedCase;
     public LoadCase? SelectedCase { get => selectedCase; set => Set(ref selectedCase, value); }

@@ -15,16 +15,31 @@ internal static class ModelHistoryChecks
 {
     public static void Run()
     {
-        var (vm, state, _, warnings) = FemModelFileChecks.DefaultModelApp();
+        var (vm, _, _, warnings) = FemModelFileChecks.DefaultModelApp();
         Check(!vm.CanUndoModel && !vm.CanRedoModel && !vm.IsModelDirty && !vm.WindowTitle.EndsWith(" *", StringComparison.Ordinal) &&
               NativeToLegacyProjection.Read(vm.NativeDocumentSession.Document) is not null,
             "a model that is opened starts a history of its own: nothing to undo, clean, and its document holds the whole configuration");
+
+        var nativePoint = vm.NativeDocumentSession.Document.Points.Values.First();
+        var applicationName = LegacyNames.Of(vm.NativeDocumentSession.Document)[nativePoint.Id];
+        var displayedPosition = vm.SharedViewerModel.Points[applicationName].Position;
+        Check(displayedPosition.X == nativePoint.Position.X && displayedPosition.Y == nativePoint.Position.Y && displayedPosition.Z == nativePoint.Position.Z &&
+              vm.SharedViewerModel.Points.Count == vm.NativeDocumentSession.Document.Points.Count &&
+              vm.SharedViewerModel.Members.Count == vm.NativeDocumentSession.Document.Frames.Count + vm.NativeDocumentSession.Document.Cables.Count,
+            "M5: the main viewport reads the native document, not the compatibility geometry");
 
         // two edits: a fixed base, then another section on a frame
         var bases = vm.FemPinSupportPoints;
         var frame = vm.FemSectionProperties.First(property => !property.IsCable);
         var other = vm.FrameSections.Select(section => section.Name).First(name => name != frame.SectionName);
+        Check(vm.CanEditFemModel,
+            $"the opened model is editable before M5 restraint assignment (busy {vm.IsBusy}, working {vm.HasWorkingModel}, geometry {vm.HasModelGeometry}, locked {vm.IsFemModelLocked}; {string.Join(" | ", warnings)}; {vm.FemProgressText})");
         vm.AssignJointRestraints([bases[0]], Native.Restraint.Fixed);
+        var editedPoint = LegacyNames.Of(vm.NativeDocumentSession.Document).Point(bases[0]);
+        var embedded = NativeToLegacyProjection.Read(vm.NativeDocumentSession.Document);
+        Check(editedPoint is { } pointId && vm.NativeDocumentSession.Document.Restraints[pointId] == Native.Restraint.Fixed &&
+              embedded?.JointRestraints.Single(item => item.JointName == bases[0]).ToNative() == Native.Restraint.Fixed,
+            "M5: Assign Restraints commits the native assignment and compatibility payload atomically");
         vm.FlushFemWorkingSession();
         vm.AssignSection([frame.MemberName], other, cable: false);
         vm.FlushFemWorkingSession();
@@ -58,7 +73,7 @@ internal static class ModelHistoryChecks
         try
         {
             vm.UnlockFemModel.Execute(null);
-            var path = Path.Combine(folder, "edited" + FemInputDatabase.Extension);
+            var path = Path.Combine(folder, "edited" + McotisModelFile.Extension);
             vm.SaveFemModelFileAsync(path).GetAwaiter().GetResult();
             Check(!vm.IsModelDirty && !vm.WindowTitle.EndsWith(" *", StringComparison.Ordinal) && vm.NativeDocumentSession.FilePath == path,
                 "Save makes the model clean: the document is what the file holds");

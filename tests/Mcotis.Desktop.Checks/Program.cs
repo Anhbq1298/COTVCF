@@ -27,6 +27,9 @@ internal static class Program
         // --template-building-ui, --fem-model).
         ProductStartingDofs = MainViewModel.StartingDofs;
         MainViewModel.StartingDofs = MainViewModel.PlaneDofs;
+        // A main window a check closes never stops on "Save changes?": the checks drop the changes they made. The prompt
+        // itself is checked where it is the subject (--template-building-ui).
+        MainWindow.AskSaveChanges = (_, _) => MessageBoxResult.No;
         try
         {
             if (args.Contains("--column-guide-capture"))
@@ -74,9 +77,21 @@ internal static class Program
             }
             if (args.Contains("--main-modal"))
             {
+                var app = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/Presentation/Theme.xaml", UriKind.Relative) });
                 MainWindowModalChecks.Run();
                 ModelHistoryChecks.Run();
                 GeneratorFlagChecks.Run();
+                return 0;
+            }
+            if (args.Contains("--mcotis-file"))
+            {
+                McotisFileChecks.Run();
+                return 0;
+            }
+            if (args.Contains("--tas-3d"))
+            {
+                TasSpatialChecks.Run();
                 return 0;
             }
             if (args.Contains("--native-parity"))
@@ -838,10 +853,10 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var showResults = window.OwnedWindows.OfType<ShowResultsWindow>().Single();
                 showResults.UpdateLayout();
-                Assert(showResults.LoadCasePicker.IsVisible && !HasCandidatePicker(showResults) &&
+                Assert(showResults.ShapePicker.IsVisible && !HasCandidatePicker(showResults) &&
                        showResults.Outputs.Items.OfType<ListBoxItem>().Select(item => (string)item.Content)
                            .SequenceEqual(["Axial forces / cables", "Bending moments", "Shear forces", "Support reactions", "Deflection", "Cable target fit"]),
-                    "The Show Results tool opens a window with the load case / combo at the top and the six outputs below");
+                    "The Show Results tool opens a window with the shape-case dropdown at the top and the six outputs below");
                 showResults.Outputs.SelectedIndex = 1;
                 showResults.ApplySelection();
                 Assert(vm.FemResultMode == FemResultMode.BendingMoment && vm.PaneTitle == "BENDING MOMENTS" && ReferenceEquals(vm.SharedViewerFemResult, demoFemRun.Result),
@@ -1137,6 +1152,7 @@ internal static class Program
                 MegaColumnChecks.Run();
             }
             FemDatabaseChecks.Run();
+            McotisFileChecks.Run();
             if (full)
             {
                 FemSchemaChecks.Run();
@@ -1228,7 +1244,7 @@ internal static class Program
                 var fileMenu = (MenuItem)blankWindow.MainMenu.Items[0];
                 var defineMenu = blankWindow.MainMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "_Define"));
                 Assert(blankWindow.Title == "Mcotis — Meinhardt Cities of Tomorrow Integrated Structures — Untitled" &&
-                       fileMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Load Config…")) &&
+                       fileMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Open…")) &&
                        defineMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Materials…")) &&
                        templateButton.IsVisible && templateButton.IsEnabled && continueButton.IsVisible && continueButton.IsEnabled &&
                        !blankWindow.WorkflowTabs.IsEnabled,

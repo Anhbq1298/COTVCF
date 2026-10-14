@@ -1154,7 +1154,8 @@ internal static class FemModelFileChecks
             "a solid round of 191.5 mm — the model's 192T15.7 cable");
     }
 
-    /// <summary>File → Save Config (Ctrl+S) and Save Config As… (Ctrl+Shift+S), with the Save dialog answered by the check.</summary>
+    /// <summary>File → Save (Ctrl+S) and Save As… (Ctrl+Shift+S) — the model's .mcotis file since M6 — with the Save
+    /// dialog answered by the check.</summary>
     private static void RunSaveAs()
     {
         var (vm, _, silent, warnings) = DefaultModelApp();
@@ -1162,8 +1163,8 @@ internal static class FemModelFileChecks
         Directory.CreateDirectory(folder);
         try
         {
-            var first = Path.Combine(folder, "first" + FemInputDatabase.Extension);
-            var second = Path.Combine(folder, "second" + FemInputDatabase.Extension);
+            var first = Path.Combine(folder, "first" + McotisModelFile.Extension);
+            var second = Path.Combine(folder, "second" + McotisModelFile.Extension);
             var asked = new List<(string? Folder, string FileName)>();
             string? answer = Path.Combine(folder, "first");   // typed without the extension
             vm.AskFemSavePath = (startFolder, fileName) => { asked.Add((startFolder, fileName)); return answer; };
@@ -1171,26 +1172,26 @@ internal static class FemModelFileChecks
             const string product = "Mcotis — Meinhardt Cities of Tomorrow Integrated Structures — ";
             var untitled = vm.WindowTitle;
             vm.SaveFemModel.Execute(null);
-            Check(untitled == product + "Default model" && vm.WindowTitle == product + "first" + FemInputDatabase.Extension && vm.CurrentFileName == "first" + FemInputDatabase.Extension,
-                "The window title names the file beside the product: 'Default model' until the configuration is saved, then its file name");
+            Check(untitled == product + "Default model" && vm.WindowTitle == product + "first" + McotisModelFile.Extension && vm.CurrentFileName == "first" + McotisModelFile.Extension,
+                "The window title names the file beside the product: 'Default model' until the model is saved, then its file name");
             Check(vm.SaveFemModel.CanExecute(null) && vm.SaveFemModelAs.CanExecute(null) && asked.Count == 1 &&
-                  asked[0].FileName.EndsWith(FemInputDatabase.Extension, StringComparison.Ordinal) && File.Exists(first) &&
-                  vm.FemProgressText.StartsWith("Saved MCOTiS config first" + FemInputDatabase.Extension, StringComparison.Ordinal),
-                "Save on a configuration that has no file yet asks for one (and adds the extension to the name typed)");
+                  asked[0].FileName.EndsWith(McotisModelFile.Extension, StringComparison.Ordinal) && File.Exists(first) &&
+                  vm.FemProgressText.StartsWith("Saved first" + McotisModelFile.Extension, StringComparison.Ordinal),
+                "Save on a model that has no file yet asks for one — a .mcotis file (the extension is added to the name typed)");
             vm.SaveFemModel.Execute(null);
-            Check(asked.Count == 1 && vm.FemProgressText.StartsWith("Saved MCOTiS config first", StringComparison.Ordinal),
-                "Save again overwrites the active configuration without asking");
+            Check(asked.Count == 1 && vm.FemProgressText.StartsWith("Saved first", StringComparison.Ordinal),
+                "Save again overwrites the model's file without asking");
 
             answer = second;
             var firstWritten = File.GetLastWriteTimeUtc(first);
             vm.SaveFemModelAs.Execute(null);
-            Check(vm.WindowTitle == product + "second" + FemInputDatabase.Extension, "Save As puts the new file name in the window title");
-            Check(asked.Count == 2 && asked[1] == (folder, "first" + FemInputDatabase.Extension) && File.Exists(second) &&
-                  File.GetLastWriteTimeUtc(first) == firstWritten && vm.FemProgressText.StartsWith("Saved MCOTiS config second", StringComparison.Ordinal),
-                "Save As asks for a file, starting from the active configuration's folder and name, writes the new file and leaves the old one as it was");
+            Check(vm.WindowTitle == product + "second" + McotisModelFile.Extension, "Save As puts the new file name in the window title");
+            Check(asked.Count == 2 && asked[1] == (folder, "first" + McotisModelFile.Extension) && File.Exists(second) &&
+                  File.GetLastWriteTimeUtc(first) == firstWritten && vm.FemProgressText.StartsWith("Saved second", StringComparison.Ordinal),
+                "Save As asks for a file, starting from the model's file's folder and name, writes the new file and leaves the old one as it was");
             vm.SaveFemModel.Execute(null);
-            Check(asked.Count == 2 && File.GetLastWriteTimeUtc(first) == firstWritten && vm.FemProgressText.StartsWith("Saved MCOTiS config second", StringComparison.Ordinal),
-                "after Save As, Save overwrites the new file: it is the active configuration");
+            Check(asked.Count == 2 && File.GetLastWriteTimeUtc(first) == firstWritten && vm.FemProgressText.StartsWith("Saved second", StringComparison.Ordinal),
+                "after Save As, Save overwrites the new file: it is the model's file");
 
             // The degrees of freedom of Analysis Options go with the configuration; a file from before them has all on.
             var (before, _, _, _) = DefaultModelApp();
@@ -1207,7 +1208,7 @@ internal static class FemModelFileChecks
 
             // What a model starts with, and what a configuration from before the degrees of freedom were an option
             // opens with: full 3D for the one, the XZ plane it was analysed in for the other.
-            var old = FemInputDatabase.Read(first).Snapshot.ToLegacy();
+            var old = NativeToLegacyProjection.Read(McotisModelFile.Read(first).Document)!.ToLegacy();
             old.Settings.ActiveDofs = null;
             old.Settings.CableJointDofs = null;
             var oldPath = Path.Combine(folder, "before-dofs" + FemModelFile.Extension);
@@ -1234,7 +1235,7 @@ internal static class FemModelFileChecks
             var message = vm.FemProgressText;
             vm.SaveFemModelAs.Execute(null);
             Check(asked.Count == 3 && Directory.GetFiles(folder).Length == files && vm.FemProgressText == message && silent.Reads == 0 && warnings.Count == 0,
-                "cancelling Save As writes nothing and keeps the active configuration");
+                "cancelling Save As writes nothing and keeps the model's file");
         }
         finally
         {
@@ -1244,7 +1245,7 @@ internal static class FemModelFileChecks
         }
     }
 
-    private static VcfOptimizationRow[] Optimize(MainViewModel vm, VcfOptimizationSettings settings)
+    internal static VcfOptimizationRow[] Optimize(MainViewModel vm, VcfOptimizationSettings settings)
     {
         var previous = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(Dispatcher.CurrentDispatcher));

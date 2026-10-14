@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Windows.Input;
 using Mcotis.Desktop.Application;
 using Mcotis.Desktop.Application.Etabs;
+using Mcotis.Desktop.Configuration;
 using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Geometry;
 
@@ -14,6 +15,15 @@ namespace Mcotis.Desktop.Presentation;
 public sealed record VcfOptimizationRow(long Case, IReadOnlyList<string> Values, double? MaxDeflectionMm, string Deflection,
     string Governing, string Point, string Status, string Span = "", string Limit = "", double? Utilisation = null, string Ratio = "",
     string Check = "", double? CostSgd = null, string Cost = "", double? MaxUpliftMm = null, string Uplift = "", string UpliftPoint = "");
+
+/// <summary>An optimization study as it is saved beside its model (M7: <c>&lt;name&gt;.results/optimization-study.json</c>):
+/// what the results window shows — the rows, the varying inputs' column labels, the Chart page — and the model it was run
+/// on: the document's identity and the revision hash of the configuration the run read.</summary>
+public sealed record SavedOptimizationStudy(string Title, string Note, double SpanRatio, double UpliftLimitMm, string Progress, string Best,
+    IReadOnlyList<string> Columns, IReadOnlyList<VcfOptimizationRow> Rows, StudyReport Report, Guid DocumentId, string RevisionHash, DateTime RunUtc)
+{
+    public const string FileName = "optimization-study.json";
+}
 
 // ---- Run → Optimization VCF: the search space of the VCF system and its run ----
 // The settings are kept in memory. Run walks every combination with the internal FEM (ParametricOptimization) and lists the
@@ -128,6 +138,49 @@ public sealed partial class MainViewModel
     public double OptimizationSpanRatio { get; private set; } = VcfOptimization.DefaultSpanRatio;
     public double OptimizationUpliftLimitMm { get; private set; } = VcfOptimization.DefaultUpliftLimitMm;
 
+    /// <summary>The model the study shown was run on: its document and the revision hash of its configuration
+    /// (<see cref="FemInputDatabase.RevisionHash"/>) when the run read it.</summary>
+    private (Guid Document, string Hash, DateTime Utc)? optimizationRunOf;
+
+    /// <summary>The study shown, to be saved beside the model; null when there is none, or while one runs.</summary>
+    internal SavedOptimizationStudy? OptimizationStudyToSave() =>
+        VcfOptimizationRows.Count == 0 || IsVcfOptimizationRunning || optimizationRunOf is not { } of ? null
+        : new(OptimizationTitle, OptimizationResultsNote, OptimizationSpanRatio, OptimizationUpliftLimitMm, VcfOptimizationProgress, VcfOptimizationBest,
+            VcfOptimizationColumns.Select(axis => axis.Label).ToArray(), VcfOptimizationRows.ToArray(), OptimizationReport, of.Document, of.Hash, of.Utc);
+
+    /// <summary>The study saved beside a model that is opened: shown again in Optimization → Optimization Results…, said to
+    /// be of the model before later edits when the model's analysis input is no longer the one it was run on. A study of
+    /// another model, or none, leaves the window empty: it never shows another model's study.</summary>
+    internal void RestoreOptimizationStudy(SavedOptimizationStudy? study, Mcotis.Core.ModelDocument document, string revisionHash)
+    {
+        if (IsVcfOptimizationRunning) return;
+        VcfOptimizationRows.Clear();
+        if (study is null || study.DocumentId != document.DocumentId.Value)
+        {
+            optimizationRunOf = null;
+            VcfOptimizationColumns = [];
+            Notify(nameof(VcfOptimizationColumns));
+            OptimizationReport = StudyReport.Empty;
+            VcfOptimizationProgress = "Not run yet.";
+            VcfOptimizationBest = "";
+            VcfOptimizationPercent = 0;
+            return;
+        }
+        optimizationRunOf = (study.DocumentId, study.RevisionHash, study.RunUtc);
+        OptimizationTitle = study.Title;
+        OptimizationResultsNote = study.Note;
+        OptimizationSpanRatio = study.SpanRatio;
+        OptimizationUpliftLimitMm = study.UpliftLimitMm;
+        VcfOptimizationColumns = study.Columns.Select(label => new VcfOptimizationAxis(label, label, [])).ToArray();
+        Notify(nameof(VcfOptimizationColumns));
+        foreach (var row in study.Rows) VcfOptimizationRows.Add(row);
+        OptimizationReport = study.Report;
+        VcfOptimizationBest = study.Best;
+        VcfOptimizationPercent = 100;
+        VcfOptimizationProgress = $"Saved with the model (run {study.RunUtc.ToLocalTime():yyyy-MM-dd HH:mm}) · " + study.Progress +
+            (study.RevisionHash == revisionHash ? "" : " · Of the model before later edits: run the study again for the model as it is.");
+    }
+
     /// <summary>The run loop of the Optimization menu: prepares the runner on the UI thread, analyses every case off it and
     /// lists each as it completes, with the passing count, the cheapest passing case and the least deflection. Cancel
     /// Optimization stops it. Shared by Optimization VCF and Optimization TAS.</summary>
@@ -164,6 +217,7 @@ public sealed partial class MainViewModel
             return;
         }
 
+        optimizationRunOf = null;
         IsBusy = true;
         IsVcfOptimizationRunning = true;
         vcfOptimizationCancellation = new CancellationTokenSource();
@@ -173,6 +227,8 @@ public sealed partial class MainViewModel
         {
             VcfOptimizationProgress = "Preparing the cases from the model…";
             var runner = prepare();
+            // the model the study is of: its configuration once the run has read it (prepare fills in what it needs)
+            optimizationRunOf = (NativeDocumentSession.Document.DocumentId.Value, FemInputDatabase.RevisionHash(CaptureFemInputSnapshot(advanceRevision: false)), DateTime.UtcNow);
             runAxes = runner.Axes;
             var columns = runner.Axes.Select((axis, index) => (axis, index)).Where(entry => entry.axis.Varies).ToArray();
             VcfOptimizationColumns = columns.Select(entry => entry.axis).ToArray();
