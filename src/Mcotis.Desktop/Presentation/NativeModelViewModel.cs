@@ -41,6 +41,27 @@ public sealed class NativeModelViewModel : Observable
     public GeometryModel Geometry => new(Session.Document.Points.Values.ToDictionary(p => p.Name, p => new StructuralPoint(p.Name, new(p.Position.X, p.Position.Y, p.Position.Z))),
         Session.Document.Frames.Values.Select(f => new StructuralMember(f.Name, Session.Document.Points[f.StartPointId].Name, Session.Document.Points[f.EndPointId].Name, MemberKind.Frame))
             .Concat(Session.Document.Cables.Values.Select(f => new StructuralMember(f.Name, Session.Document.Points[f.StartPointId].Name, Session.Document.Points[f.EndPointId].Name, MemberKind.Cable))).ToArray());
+    private string viewPlane = "3D";
+    private double viewCoordinate;
+    /// <summary>Active viewing plane and its fixed global coordinate, in metres.</summary>
+    public string ViewPlane => viewPlane;
+    public double ViewCoordinate => viewCoordinate;
+    public GeometryModel VisibleGeometry => NativeGridLevelController.Slice(Geometry, viewPlane, viewCoordinate);
+    public IReadOnlyList<double> ViewCoordinates => NativeGridLevelController.ReferenceCoordinates(Session.Document, viewPlane);
+    public void SetViewPlane(string plane)
+    {
+        if (plane is not ("3D" or "XY" or "XZ" or "YZ")) throw new ArgumentOutOfRangeException(nameof(plane));
+        viewPlane = plane;
+        var options = ViewCoordinates;
+        viewCoordinate = options.Count == 0 ? 0 : options.MinBy(v => Math.Abs(v - viewCoordinate));
+        Notify(nameof(ViewPlane)); Notify(nameof(ViewCoordinates)); Notify(nameof(ViewCoordinate)); Notify(nameof(VisibleGeometry));
+    }
+    public void SetViewCoordinate(double coordinate)
+    {
+        if (!double.IsFinite(coordinate)) throw new ArgumentOutOfRangeException(nameof(coordinate));
+        viewCoordinate = coordinate;
+        Notify(nameof(ViewCoordinate)); Notify(nameof(VisibleGeometry));
+    }
     public IEnumerable<string> Supports => Session.Document.Restraints.Where(p => !p.Value.IsFree).Select(p => Session.Document.Points[p.Key].Name);
     public IEnumerable<LoadCase> Cases => Session.Document.LoadCases.Values.OrderBy(c => c.Name);
     private LoadCase? selectedCase;
@@ -122,7 +143,7 @@ public sealed class NativeModelViewModel : Observable
     {
         var id = SelectedCase?.Id;
         SelectedCase = Cases.FirstOrDefault(c => c.Id == id) ?? Cases.FirstOrDefault();
-        foreach (var name in new[] { nameof(Session), nameof(Title), nameof(Summary), nameof(Geometry), nameof(Supports), nameof(Cases), nameof(Joints), nameof(Frames), nameof(Cables), nameof(Loads),
+        foreach (var name in new[] { nameof(Session), nameof(Title), nameof(Summary), nameof(Geometry), nameof(VisibleGeometry), nameof(ViewCoordinates), nameof(Supports), nameof(Cases), nameof(Joints), nameof(Frames), nameof(Cables), nameof(Loads),
             nameof(Modes), nameof(Participation), nameof(ModeNumbers), nameof(ModeShape), nameof(ModalMass), nameof(ModalDisplayResult) }) Notify(name);
     }
 
