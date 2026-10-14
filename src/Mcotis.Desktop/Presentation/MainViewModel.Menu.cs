@@ -173,6 +173,7 @@ public sealed partial class MainViewModel
     /// and the shared viewer — what selecting it in the former result tree did.</summary>
     public void ShowFemResult(FemResultMode? mode)
     {
+        showModeShape = false;
         ShowUndeformed = false;
         SelectedTab = TabFem;
         if (SelectedFemRun is null && FemRuns.Count > 0) SelectedFemRun = FemRuns[0];

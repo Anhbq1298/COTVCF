@@ -101,14 +101,12 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
   etabs export phải sure là xài đc"; "làm đi"). Target: the main window holds one `DocumentSession` / `ModelDocument`,
   VCF / TAS / TemplateBuilding only generate objects into it, every analysis runs from that document and its load
   cases, SAP2000 / ETABS are adapters around it. State on 2026-10-14:
-  - `MainViewModel.NativeDocumentSession` holds the native document of the model open in the main window. It is built
-    from the legacy state by `Application/LegacyNativeDocumentMigration.Convert` (a temporary boundary) at Load VCF /
-    Load TAS / Load Config / Import, at each working autosave and when a run locks the model
-    (`SyncNativeDocument`). **It is a projection, not yet the working model**: the controls, the viewer and
-    `FemSolver` still read the legacy state. Do not read model data for a run or an export from the session — it is
-    as old as the last sync; a freshly connected model had no supports at all that way (`--fem-model` caught it). A
-    model the document cannot express stays open, runs and saves; the session then holds an empty document and
-    `NativeDocumentProblem` the reason.
+  - `MainViewModel.NativeDocumentSession` holds the native document of the model open in the main window. M2 stores the
+    complete transitional configuration in that document, makes each committed edit one document-history step, and
+    restores the main-window projection from the document for Undo / Redo. Dirty and saved state belong to the session.
+    Controls and the viewer that have not migrated yet still read the legacy projection through the single
+    `NativeToLegacyProjection` bridge; the bridge is removed with its last consumer. Run FEM Analysis does not use that
+    projection: since M1 it solves `NativeDocumentSession.Document` through `FemDocumentRun`.
   - **Joint restraints are data** — `ApplicationState.JointRestraints`, six components by joint name: read from
     SAP2000 (`PointObj.GetRestraint` in `SapGateway.ReadAsync`) and ETABS, saved in `.cotfem.db` and `.cotfem.json`
     (`FemJointRestraintDto`), following joint renames and deletions. **One rule gives the restraints a model is
@@ -118,10 +116,9 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
     native document, the exports, the viewer symbols, Object Information and Assign → Joint Restraints all use it.
     `FemSolver.SolveCases(…, jointRestraints)` applies every component; reactions and support symbols are at the
     joints held in the plane (`FemSolver.HoldsInPlane`: UX, UZ or RY) — the TAS model also holds 24 joints in UY only.
-    The reactions table still has X and Z only: **the moment at a fixed support is not reported yet**. The
-    optimizations (`VcfOptimizationRunner`, `TasOptimization`) and the study candidates still pin the column bases
-    of each candidate geometry (`FindPinSupportPoints`): the same as the run for VCF and TAS, not for an imported
-    model with other supports.
+    The reactions table also reports `My` at a fixed support. The optimizations (`VcfOptimizationStudy`,
+    `TasOptimizationStudy` on `ParametricOptimization`) build native candidate documents with the generator's explicit
+    restraints and solve them through the same `FemDocumentRun` path as the main window.
   - Exports: with assignments (`SapExportModel.RestraintsAssigned`) every joint is written as the model holds it and
     a joint it leaves free is freed; without them only a column base the target leaves free becomes a pin and the
     target's own restraints are kept, as before. The preview states how many joints change. Both exports set the
@@ -134,16 +131,18 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
     `LegacyNativeDocumentMigration.Convert` (patterns, cases that continue from one another, target forces in their
     pattern, self-weight by multiplier) and `FemSolver`'s own description (accumulated loads per case, a separate
     fit stage, cable loads at the ends) are the same model. That is the gate for moving the run onto the document.
-    Two things to settle when doing it: (1) **a frame without out-of-plane inertia** — `FemSolver` runs it in the
-    plane (it passes the in-plane inertia where the engine only needs a positive number), `StaticSolver` refuses the
-    document (`static.section.stiffness` asks for I22 and I33 even in a plane preset); the check pins this as the
-    known gap, on the SAP2000 stand-in model. Do not put a made-up inertia in the document. (2) **Round-off depends
+    Two things to settle when doing it: (1) **a frame without out-of-plane inertia** — settled 2026-10-14: a section
+    property is asked for only where its stiffness term moves a degree of freedom that is on
+    (`Mcotis.Analysis.FrameStiffnessDemand`, used by `StaticSolver` and `ModalSolver`); in the XZ plane I22 and J of
+    an XZ frame act on nothing, in full 3D they do and the frame is refused by name. The SAP2000 stand-in model now
+    solves from its document (`--native-parity`). Do not put a made-up inertia in the document. (2) **Round-off depends
     on identities**: the engine orders its equations by object id; `FemSolver` numbers ids in creation order, so a
     model always gives the same digits, while `Convert` derives ids from the configuration's `DatabaseId`, which is
     new for each default model — the last digits then differ from session to session.
-  - Not done: the run and the viewer reading the document, native VCF / TAS generators, editing restraints in the
-    main window, the moment at a fixed support in the reactions, `.mcotis` as the main window's file. Plan:
-    `docs/mcotis-standalone-plan.md` phases 5–7.
+  - M2 / M3 done: document history and dirty state, explicit editable restraints, fixed-support `My`, native VCF / TAS
+    generator flags with Re-apply / Detach, and one parametric study engine. Still not done: the viewer and every
+    remaining control reading the document directly, retiring `NativeModelWindow`, `.mcotis` as the main-window file,
+    and the six-component/modal output schema. Plan: `docs/mcotis-standalone-plan.md` phases 5–7.
 - `.gitignore` includes `.vs/`, plus build folders such as `bin/`, `obj/` and `.work/` wherever they are.
 - The app is a WPF app targeting `net8.0-windows`, `x64`, with SAP2000 API reference `CSiAPIv1.dll`.
 
@@ -314,7 +313,7 @@ earlier tall-header / large-button / blue-block look.
     **Optimization TAS…** (2026-10-12) is the same study for the tied arch system: the modal `OptimizationTasWindow` has
     sheets Geometry (H1, H2, bays, spacing), Storey Force (SW, SDL, LL, floors n, B; SLS / ULS point load per deck joint)
     and Sections (candidates per `TiedArchRole`), the same deflection check (read on the top chord joints, limit L / ratio)
-    and preview corners; `TasOptimizationRunner` builds each case with `TiedArchSystem.Build` and runs through the shared
+    and preview corners; `TasOptimizationStudy` builds each case with `TasGenerator.Build` (`TiedArchSystem.Build`) and runs through the shared
     `MainViewModel.RunOptimizationAsync` loop into the same `OptimizationResultsWindow`, whose title follows the run.
     **Edit → Tied Arch System…** has sheets Geometry and Cable Force: **With elevated cable** raises the arch on H0 columns of
     the arch section (pins on the ground) and ties the springing with the cable TIE (VCF strand 192T15.7, target force in
@@ -363,9 +362,9 @@ earlier tall-header / large-button / blue-block look.
       fan is graded) and showing its force (`VcfCableStep`).
     `Application/VcfOptimization` holds `VcfRange` (Min, Min + Step, … ≤ Max — the Tab 01 / 03 rule, no off-step Max) and
     `VcfOptimizationSettings`; OK keeps them on `MainViewModel.VcfOptimizationSettings` (memory only, not saved in a
-    file). **Run Optimization** (enabled while valid and ≤ `VcfOptimizationRunner.MaxCases` = 10,000) keeps them, opens
+    file). **Run Optimization** (enabled while valid and ≤ `ParametricOptimization.MaxCases` = 10,000) keeps them, opens
     `OptimizationResultsWindow` (also Run → Optimization Results…; Run → Cancel Optimization / Cancel Run) and runs
-    `MainViewModel.RunVcfOptimizationAsync`: `VcfOptimizationRunner` walks the axes mixed-radix (last axis fastest) and builds
+    `MainViewModel.RunVcfOptimizationAsync`: `ParametricOptimization` walks the axes mixed-radix (last axis fastest) and builds
     each case in memory — `VcfGeometry.ChangeBays` / `Build` (middle chord 0.5 × depth), member properties (regenerated
     members copy their template; role / cable sections via `MainViewModel.SectionSwapper`, the same rule as Apply), SAP
     loading remapped for a bay change, Tab 01 point loads −qz × trib. length × B × NStories, the cable targets of the case's

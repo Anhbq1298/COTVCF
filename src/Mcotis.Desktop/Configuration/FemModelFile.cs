@@ -53,6 +53,8 @@ public sealed class FemModelFileDto
     /// <summary>The six-component joint restraints the model holds; null when it holds none, as in a version-2 file
     /// written before restraints were data. Such a model is analysed with the pins at its column bases.</summary>
     public List<FemJointRestraintDto>? JointRestraints { get; set; }
+    /// <summary>The generator flag (<see cref="FemInputSnapshot.Generator"/>); absent when no generator made the model.</summary>
+    public FemGeneratorDto? Generator { get; set; }
     public FemSettingsDto Settings { get; set; } = new();
 }
 
@@ -89,6 +91,19 @@ public sealed record FemNonlinearControlsDto(int MaxLoadSteps, int MaxIterations
 public sealed record FemModalOptionsDto(string MassSource, string? MassSourceId, int RequestedModes);
 
 public sealed record FemMassSourceDto(string Id, string Name, bool IncludeSelfMass = true);
+
+/// <summary>The generator flag of a configuration: <see cref="Mcotis.Core.GeneratorOrigin"/> as it is saved, with the
+/// generation key of each object the generator made, by name (<see cref="Joints"/>, <see cref="Members"/>). An object the
+/// maps do not name was not made by the generator.</summary>
+public sealed record FemGeneratorDto(string Id, int Version, Dictionary<string, string> Parameters)
+{
+    public Dictionary<string, string>? Joints { get; init; }
+    public Dictionary<string, string>? Members { get; init; }
+
+    public Mcotis.Core.GeneratorOrigin ToNative() => Mcotis.Core.GeneratorOrigin.Create(Id, Version, Parameters);
+    public static FemGeneratorDto FromNative(Mcotis.Core.GeneratorOrigin origin) =>
+        new(origin.GeneratorId, origin.Version, new Dictionary<string, string>(origin.Parameters, StringComparer.Ordinal));
+}
 
 public sealed record FemJointRestraintDto(string JointName, bool Ux, bool Uy, bool Uz, bool Rx, bool Ry, bool Rz)
 {

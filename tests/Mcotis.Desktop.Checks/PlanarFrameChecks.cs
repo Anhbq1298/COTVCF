@@ -101,6 +101,10 @@ internal static class PlanarFrameChecks
               Math.Abs(cantilever.Joints.Single(joint => joint.PointName == "C").UZM + loadKN * Math.Pow(spanM, 3) / (3 * modulusKNPerM2 * inertiaM4)) < 1e-9 &&
               Math.Abs(cantilever.MaximumAbsoluteMomentKNm - loadKN * spanM) < 1e-6,
             "An exact fixed restraint from the native model solves a one-support cantilever; it is not replaced by the legacy two-pin rule");
+        // the moment of the fixed support: P L, counter-clockwise in the XZ elevation for a load down at the free end (statics)
+        Check(cantilever.SupportReactions[0] is var fixedBase && Math.Abs(fixedBase.MomentYKNm - loadKN * spanM) < 1e-6 &&
+              Math.Abs(fixedBase.ReactionZKN - loadKN) < 1e-6 && Math.Abs(fixedBase.ReactionXKN) < 1e-9,
+            $"the fixed support reports its moment: My = P L = {loadKN * spanM:0.###} kN·m, counter-clockwise positive, with Rz = P (the reactions balance the load)");
         const double udl = 10;
         var udlCase = new FemCaseLoads("UDL", new FemLoadSet([], [new FemMemberLoad("Beam", FemLoadDirection.Gravity, 0, 1, udl, udl)], []), 0);
         var pointCase = new FemCaseLoads("PL", new FemLoadSet([], [], [new FemMemberPointLoad("Beam", FemLoadDirection.GlobalZ, 0.3, -loadKN)]), 0);

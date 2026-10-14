@@ -49,10 +49,11 @@
      <TextBlock Text="Elastic material" FontWeight="SemiBold" Margin="0,0,0,8"/>
      <Grid>
       <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="140"/></Grid.ColumnDefinitions>
-      <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/></Grid.RowDefinitions>
+      <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/><RowDefinition Height="32"/></Grid.RowDefinitions>
       <TextBlock Text="Elastic modulus E (kN/m²)"/><TextBox Grid.Column="1" Text="{Binding ElasticModulus, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Elastic modulus kN per square metre"/>
       <TextBlock Grid.Row="1" Text="Poisson ratio"/><TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PoissonRatio, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Poisson ratio"/>
       <TextBlock Grid.Row="2" Text="Weight density (kN/m³)"/><TextBox Grid.Row="2" Grid.Column="1" Text="{Binding WeightDensity, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Weight density kN per cubic metre"/>
+      <TextBlock Grid.Row="3" Text="Mass density (t/m³)" ToolTip="Self mass of a modal case. Starts at weight density / 9.80665 and follows it until you type a value."/><TextBox Grid.Row="3" Grid.Column="1" Text="{Binding MassDensity, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="Mass density tonnes per cubic metre"/>
      </Grid>
      <TextBlock Text="General section properties · starter values, review before analysis" FontWeight="SemiBold" Margin="0,12,0,6"/>
      <DataGrid x:Name="SectionGrid" ItemsSource="{Binding Sections}" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" Height="100" AutomationProperties.Name="Column and beam section properties">

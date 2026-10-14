@@ -63,44 +63,8 @@
       </DataGrid.Columns>
      </DataGrid>
     </TabItem>
-    <TabItem Header="Modal modes">
-     <DataGrid ItemsSource="{Binding Modes}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
-      <DataGrid.Columns><DataGridTextColumn Header="Mode" Binding="{Binding Mode}"/>
-       <DataGridTextColumn Header="Eigenvalue (s⁻²)" Binding="{Binding Eigenvalue, StringFormat=G8}"/>
-       <DataGridTextColumn Header="Frequency (Hz)" Binding="{Binding Frequency, StringFormat=G8}"/>
-       <DataGridTextColumn Header="Period (s)" Binding="{Binding Period, StringFormat=G8}"/>
-       <DataGridTextColumn Header="Status" Binding="{Binding Status}"/><DataGridTextColumn Header="Scaled residual" Binding="{Binding Residual, StringFormat=G4}"/>
-      </DataGrid.Columns>
-     </DataGrid>
-    </TabItem>
-    <TabItem Header="Modal participation">
-     <DataGrid ItemsSource="{Binding Participation}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
-      <DataGrid.Columns><DataGridTextColumn Header="Mode" Binding="{Binding Mode}"/><DataGridTextColumn Header="Direction" Binding="{Binding Direction}"/>
-       <DataGridTextColumn Header="Factor" Binding="{Binding Factor, StringFormat=G8}"/><DataGridTextColumn Header="Effective mass (t)" Binding="{Binding EffectiveMass, StringFormat=G8}"/>
-       <DataGridTextColumn Header="Ratio (%)" Binding="{Binding Ratio, StringFormat=F3}"/><DataGridTextColumn Header="Cumulative (%)" Binding="{Binding Cumulative, StringFormat=F3}"/>
-      </DataGrid.Columns>
-     </DataGrid>
-    </TabItem>
-    <TabItem Header="Modal mass inventory">
-     <DataGrid ItemsSource="{Binding ModalMass}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
-      <DataGrid.Columns><DataGridTextColumn Header="Item" Binding="{Binding Item}" Width="170"/>
-       <DataGridTextColumn Header="Value" Binding="{Binding Value, StringFormat=G10}"/><DataGridTextColumn Header="Unit" Binding="{Binding Unit}"/>
-       <DataGridTextColumn Header="Scope" Binding="{Binding Scope}" Width="*"/>
-      </DataGrid.Columns>
-     </DataGrid>
-    </TabItem>
-    <TabItem Header="Mode shape amplitudes">
-     <DockPanel><StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="8">
-       <TextBlock Text="Mode" Margin="0,0,8,0"/><ComboBox ItemsSource="{Binding ModeNumbers}" SelectedItem="{Binding SelectedMode}" Width="80" AutomationProperties.Name="Displayed modal mode"/>
-       <TextBlock Text="Mass-normalized eigenvector; amplitude is not a physical displacement." Margin="12,0,0,0" Foreground="{StaticResource Muted}"/>
-      </StackPanel>
-      <DataGrid ItemsSource="{Binding ModeShape}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False">
-       <DataGrid.Columns><DataGridTextColumn Header="Point" Binding="{Binding Point}"/>
-        <DataGridTextColumn Header="UX" Binding="{Binding UX, StringFormat=G8}"/><DataGridTextColumn Header="UY" Binding="{Binding UY, StringFormat=G8}"/><DataGridTextColumn Header="UZ" Binding="{Binding UZ, StringFormat=G8}"/>
-        <DataGridTextColumn Header="RX" Binding="{Binding RX, StringFormat=G8}"/><DataGridTextColumn Header="RY" Binding="{Binding RY, StringFormat=G8}"/><DataGridTextColumn Header="RZ" Binding="{Binding RZ, StringFormat=G8}"/>
-       </DataGrid.Columns>
-      </DataGrid>
-     </DockPanel>
+    <TabItem Header="Modal results">
+     <c:ModalResultsView/>
     </TabItem>
    </TabControl>
   </Grid>

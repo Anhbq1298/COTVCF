@@ -212,7 +212,13 @@ public static class TiedArchSystem
             Frame($"BX{side}6", "BRACE", ArchJoint(at(3)), DeckJoint(at(2)), Brace, Pinned);
         }
 
-        var restraints = new[] { Joint(0, 0), Joint(n, 0) }.Select(joint => new EtabsRestraint(joint, [true, true, true, false, false, false])).ToArray();
+        // the bearings are pinned; out of the plane (UY) every deck joint and every arch joint between the springings is
+        // held, as the source ETABS model holds them (CoT 120: its 13 deck and 11 arch joints) — the lateral restraint of
+        // the floors and the bracing out of the plane, which the plane frame does not model
+        var restraints = new[] { Joint(0, 0), Joint(n, 0) }.Select(joint => new EtabsRestraint(joint, [true, true, true, false, false, false]))
+            .Concat(Enumerable.Range(0, n + 1).Select(line => new EtabsRestraint(DeckJoint(line), [false, true, false, false, false, false])))
+            .Concat(Enumerable.Range(1, n - 1).Select(line => new EtabsRestraint(ArchJoint(line), [false, true, false, false, false, false])))
+            .ToArray();
         var loads = new List<EtabsJointLoad>();
         void Load(int line, string pattern, double share, double value)
         {

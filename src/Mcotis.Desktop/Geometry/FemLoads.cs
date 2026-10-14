@@ -53,7 +53,8 @@ public static class FemResultCombiner
             items.Sum(item => item.Factor * item.Result.Joints[index].RotationRad))).ToArray();
         var reactions = first.SupportReactions.Select((reaction, index) => new FemSupportReaction(reaction.PointName,
             items.Sum(item => item.Factor * item.Result.SupportReactions[index].ReactionXKN),
-            items.Sum(item => item.Factor * item.Result.SupportReactions[index].ReactionZKN))).ToArray();
+            items.Sum(item => item.Factor * item.Result.SupportReactions[index].ReactionZKN),
+            items.Sum(item => item.Factor * item.Result.SupportReactions[index].MomentYKNm))).ToArray();
         var frames = first.Frames.Select((frame, index) =>
         {
             double Sum(Func<FemFrameResponse, double> value) => items.Sum(item => item.Factor * value(item.Result.Frames[index]));

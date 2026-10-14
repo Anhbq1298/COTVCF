@@ -144,7 +144,11 @@ public sealed record FemCaseOptions(Mcotis.Core.CaseKind Kind = Mcotis.Core.Case
     public string? NotSolvedYet(string caseName)
     {
         const string pending = "numerical verification pending (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md)";
-        return Kind == Mcotis.Core.CaseKind.ModalEigen ? $"Load case '{caseName}' is modal. Eigenvalue analysis is available in the native standalone workspace; this older main-window case table has no native mass assignments, so it is not run here. Nothing is substituted or computed for it."
+        // modal: the main window runs its model's native document since 2026-10-14 (M1), and the modal solver with it —
+        // unstressed elastic frames with lumped mass. Modes on the stiffness at the end of another case are not verified.
+        return Kind == Mcotis.Core.CaseKind.ModalEigen
+            ? StiffnessSourceCase is null ? null
+            : $"Load case '{caseName}' is modal on the stiffness at the end of '{StiffnessSourceCase}'. Modes of a stressed state are not available yet — {pending}. Elastic stiffness is not substituted."
             : Kind == Mcotis.Core.CaseKind.InitialPDelta || GeometricMode == Mcotis.Core.GeometricNonlinearity.PDelta
                 ? $"Load case '{caseName}' is analysed with P-Delta. P-Delta is not available yet — {pending}. The case is not solved, and it is not replaced by a first-order analysis."
             : Kind == Mcotis.Core.CaseKind.LinearStatic
@@ -264,6 +268,7 @@ public sealed class FemLoadPlan
     private readonly IReadOnlySet<string> tab01Patterns;
     private readonly IReadOnlySet<string> pretensionPatterns;
     private readonly IReadOnlyDictionary<string, string?> fitStageOf;
+    private readonly IReadOnlySet<string> modalCases;
 
     /// <summary>The cases the run solves, in the order of the Load Cases table: those set to run, and those the run
     /// needs first (<see cref="PrerequisiteRemarks"/>).</summary>
@@ -272,11 +277,14 @@ public sealed class FemLoadPlan
     /// a case that is set to run continues from it, or a combination that is set to run adds it up.</summary>
     public IReadOnlyDictionary<string, string> PrerequisiteRemarks { get; }
     public IReadOnlyList<string> CombinationNames { get; }
-    /// <summary>The result that stands for the run where one result does: the first case that was set to run.</summary>
-    public string PrimaryResultName => CaseNames.FirstOrDefault(name => !PrerequisiteRemarks.ContainsKey(name)) ?? ResultNames[0];
+    /// <summary>The modal cases of the run: they have modes, not a static result, so they are not among <see cref="ResultNames"/>.</summary>
+    public IReadOnlyList<string> ModalCaseNames => CaseNames.Where(modalCases.Contains).ToArray();
+    private IEnumerable<string> StaticCaseNames => CaseNames.Where(name => !modalCases.Contains(name));
+    /// <summary>The result that stands for the run where one result does: the first static case that was set to run.</summary>
+    public string PrimaryResultName => StaticCaseNames.FirstOrDefault(name => !PrerequisiteRemarks.ContainsKey(name)) ?? ResultNames[0];
     /// <summary>The result a finished run shows first: its first combination, else the last case that was set to run.</summary>
     public string DefaultResultName => CombinationNames.FirstOrDefault()
-        ?? CaseNames.LastOrDefault(name => !PrerequisiteRemarks.ContainsKey(name)) ?? CaseNames[^1];
+        ?? StaticCaseNames.LastOrDefault(name => !PrerequisiteRemarks.ContainsKey(name)) ?? ResultNames[^1];
     /// <summary>Case whose loads (other than the cable target-force pattern) act while the pretension is fitted —
     /// the first of <see cref="FitCases"/>.</summary>
     public string? FitCase { get; }
@@ -285,16 +293,17 @@ public sealed class FemLoadPlan
     /// or through other cases) carries the pretension fitted in that stage — not in some other case.</summary>
     public IReadOnlyList<string> FitCases { get; }
     public IReadOnlyList<string> Notes { get; }
-    /// <summary>Every result name in display order: run cases, then run combinations.</summary>
-    public IReadOnlyList<string> ResultNames => [.. CaseNames, .. CombinationNames];
+    /// <summary>Every static result name in display order: run cases, then run combinations. Modal cases are apart.</summary>
+    public IReadOnlyList<string> ResultNames => [.. StaticCaseNames, .. CombinationNames];
 
     private FemLoadPlan(IReadOnlyDictionary<string, FemLoadSet> patternLoads,
         IReadOnlyDictionary<string, IReadOnlyList<(string, double)>> resolvedCases, IReadOnlyList<string> caseNames,
         IReadOnlyList<(string, IReadOnlyList<(string, bool, double)>)> combinations, string? fitCase,
         IReadOnlySet<string> tab01Patterns, IReadOnlySet<string> pretensionPatterns, IReadOnlyList<string> notes,
-        IReadOnlyDictionary<string, string?> fitStageOf, IReadOnlyDictionary<string, string> prerequisiteRemarks)
+        IReadOnlyDictionary<string, string?> fitStageOf, IReadOnlyDictionary<string, string> prerequisiteRemarks, IReadOnlySet<string> modalCases)
     {
         this.fitStageOf = fitStageOf;
+        this.modalCases = modalCases;
         PrerequisiteRemarks = prerequisiteRemarks;
         FitCases = caseNames.Select(name => fitStageOf[name]).Where(stage => stage is not null).Select(stage => stage!)
             .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(stage => string.Equals(stage, fitCase, StringComparison.OrdinalIgnoreCase) ? 0 : 1).ToArray();
@@ -372,7 +381,9 @@ public sealed class FemLoadPlan
             // a case of a kind, or with an option, that is not solved yet is refused — it is never run as a plain nonlinear static case
             if (row.Options.NotSolvedYet(row.Name) is { } pending) throw new InvalidOperationException(pending);
             if (!visiting.Add(name)) throw new InvalidOperationException($"Load case '{name}' has a circular initial-case chain.");
-            var terms = FemLoadDefinition.Parse(row.Definition).Select(term =>
+            // a modal case has a mass source and modes, no loads
+            var terms = row.Options.Kind == Mcotis.Core.CaseKind.ModalEigen ? []
+                : FemLoadDefinition.Parse(row.Definition).Select(term =>
                 patternNames.Contains(term.Name) ? (patterns.First(pattern => comparer.Equals(pattern.Name, term.Name)).Name, term.Factor)
                     : throw new InvalidOperationException($"Load case '{name}' refers to unknown load pattern '{term.Name}'.")).ToList();
             ownTerms[name] = terms.ToArray();
@@ -492,8 +503,11 @@ public sealed class FemLoadPlan
 
         foreach (var name in neededCases.Where(continued.Contains))
             notes.Add($"Load case '{name}' is not set to run; it is solved because another case of the run needs it first.");
+        var modal = neededCases.Where(name => caseRows[name].Options.Kind == Mcotis.Core.CaseKind.ModalEigen).ToHashSet(comparer);
+        if (neededCases.All(modal.Contains) && orderedCombinations.Count == 0)
+            throw new InvalidOperationException("Tick at least one static load case or combination to run with the modal cases: a run needs a static result to show.");
         return new FemLoadPlan(loads, resolved, neededCases, orderedCombinations, fitCase,
-            tab01, pretension, notes, stages, prerequisites);
+            tab01, pretension, notes, stages, prerequisites, modal);
     }
 
     /// <summary>SAP reports "start from zero / unstressed" as an empty name, "None" or "Zero".</summary>
@@ -537,7 +551,7 @@ public sealed class FemLoadPlan
             .Select(term => term.Factor).FirstOrDefault();
 
         var fit = fitCase is null ? FemLoadSet.Empty : CaseSet(fitCase);
-        var caseLoads = CaseNames.Select(name => new FemCaseLoads(name, CaseSet(name), PretensionFactor(name))).ToArray();
+        var caseLoads = StaticCaseNames.Select(name => new FemCaseLoads(name, CaseSet(name), PretensionFactor(name))).ToArray();
         return (fit, caseLoads);
     }
 

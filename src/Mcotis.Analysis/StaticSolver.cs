@@ -179,6 +179,8 @@ public static class StaticSolver
         private readonly ModelDocument document = model.Input;
         private readonly List<ValidationIssue> issues = [];
         private readonly Dictionary<ObjectId, (Fit Fit, ValidationIssue? Note)> fits = [];
+        // what each frame's section lacks for the degrees of freedom that are on: the same for every case of the run
+        private readonly Dictionary<ObjectId, string?> sectionDemand = [];
         private readonly int n = model.Dofs.Length;
         private readonly ILookup<ObjectId, LoadAssignment> loadsByTarget =
             model.Input.Loads.Values.OrderBy(load => load.Id).ToLookup(load => load.TargetId);
@@ -318,12 +320,10 @@ public static class StaticSolver
             foreach (var frame in document.Frames.Values)
             {
                 var a = document.AssignmentOfFrame(frame.Id);
-                var properties = document.FrameSections[a.SectionId!.Value].Properties;
-                bool plane = model.ActiveDofs is DofMask.XZ or DofMask.XY or DofMask.YZ;
-                if (properties.Inertia22 * a.Modifiers.Inertia22 <= 0 || properties.Inertia33 * a.Modifiers.Inertia33 <= 0 ||
-                    (!plane && properties.TorsionConstant * a.Modifiers.Torsion <= 0))
-                    Error("static.section.stiffness", ObjectKind.Frame, frame.Id,
-                        $"Frame '{frame.Name}' needs positive bending stiffnesses and, outside a standard plane preset, positive torsional stiffness.");
+                // a section property is needed where its term moves a degree of freedom that is on — and then it must be there
+                if (!sectionDemand.TryGetValue(frame.Id, out var missing))
+                    sectionDemand[frame.Id] = missing = FrameStiffnessDemand.Missing(document, frame, model.ActiveDofs);
+                if (missing is not null) Error("static.section.stiffness", ObjectKind.Frame, frame.Id, missing);
                 if (new[] { a.Releases.Start, a.Releases.End }.Any(r => r.Axial || r.Shear2 || r.Shear3 || r.Torsion))
                     Error("static.release.unsupported", ObjectKind.Frame, frame.Id, $"Frame '{frame.Name}': only local M2/M3 releases have been implemented and tested.");
             }

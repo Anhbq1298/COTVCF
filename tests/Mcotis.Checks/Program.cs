@@ -17,11 +17,13 @@ internal static class Program
             ("Commands, undo/redo and revisions", SessionChecks.Run),
             ("Analysis input and result state", ResultStateChecks.Run),
             ("Native file", PersistenceChecks.Run),
+            ("Application data, generator flag and content replacement", DocumentDataChecks.Run),
             ("Load cases: kinds, references, run order, schema migrations and what is not solved yet", CaseStateChecks.Run),
             ("3D topology and DOF compilation", DofCompilationChecks.Run),
             ("Spatial linear static engineering benchmarks", full ? SpatialStaticChecks.Run : SpatialStaticChecks.RunSmoke),
             ("General static solver: split frames, cables, target forces, stages and sag", full ? GeneralStaticChecks.Run : GeneralStaticChecks.RunSmoke),
             ("Modal eigen: lumped mass, condensation, eigenpairs and participation", full ? ModalChecks.Run : ModalChecks.RunSmoke),
+            ("Section stiffness the active degrees of freedom call on", SectionDemandChecks.Run),
             ("Numerical stability diagnostics: digits lost, singular and nearly singular stiffness", StabilityDiagnosticsChecks.Run),
             ("TemplateBuilding generation, loading and analysis", TemplateBuildingChecks.Run),
             ("Independence", IndependenceChecks.Run),
@@ -83,6 +85,8 @@ internal static class Check
     /// schema version. The cases must be ones those schemas could hold: linear or nonlinear static.</summary>
     public static void LoadCasesAsSchema3(System.Text.Json.Nodes.JsonObject file)
     {
+        file.Remove("applicationData");
+        file.Remove("generator");
         file.Remove("jointMassAssignments");
         if (file["massSources"] is System.Text.Json.Nodes.JsonArray sources)
             foreach (var source in sources.Select(node => node!.AsObject())) source.Remove("includeAdditionalMass");

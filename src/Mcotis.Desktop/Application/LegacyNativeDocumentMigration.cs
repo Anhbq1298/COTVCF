@@ -83,9 +83,18 @@ internal static class LegacyNativeDocumentMigration
                 if (objectNames.Add(candidate)) return candidate;
             }
         }
-        Native.ObjectOrigin Origin(string type, string name) => new(source.Kind,
-            source.Kind == Native.OriginKind.Generated ? $"{source.KeyPrefix}/{type}/{name}" : null,
-            source.Kind == Native.OriginKind.Imported ? source.Product : null, type, name);
+        // a model a parametric generator made: what it made carries its generation key, what was added is the user's
+        var flag = snapshot.Generator;
+        Native.ObjectOrigin Origin(string type, string name)
+        {
+            if (flag is not null)
+                return (type == "Joint" ? flag.Joints : flag.Members)?.GetValueOrDefault(name) is { } key
+                    ? new(Native.OriginKind.Generated, $"{flag.Id}:{key}", null, type, name)
+                    : new(Native.OriginKind.User, null, null, type, name);
+            return new(source.Kind,
+                source.Kind == Native.OriginKind.Generated ? $"{source.KeyPrefix}/{type}/{name}" : null,
+                source.Kind == Native.OriginKind.Imported ? source.Product : null, type, name);
+        }
 
         var pointIds = new Dictionary<string, Native.ObjectId>(StringComparer.Ordinal);
         foreach (var point in geometry.Points.Values.OrderBy(point => point.Name, StringComparer.Ordinal))

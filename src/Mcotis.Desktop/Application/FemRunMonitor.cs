@@ -106,6 +106,13 @@ public sealed class FemRunMonitor(Func<DateTime>? clock = null) : IProgress<FemE
         }
     }
 
+    /// <summary>A note on the model the run found while it ran — a joint it left out — said with the model information.</summary>
+    public void Note(string note)
+    {
+        lock (gate)
+            if (model is not null) model = model with { Notes = [.. model.Notes, note] };
+    }
+
     /// <summary>How a case stands by the solver's last report of it.</summary>
     public static FemCaseStatus Classify(FemEquilibriumProgress report)
     {

@@ -70,6 +70,8 @@ public sealed partial class MainViewModel
                 Message = "Reading sections and loading from SAP2000 before applying the VCF system (read-only)…";
                 await ReadAndDisplayFemPropertiesAsync(resetLoadRows: true);
             }
+            // a blank model the first VCF edit seeds is the VCF generator's from here on
+            var seeded = !HasModelGeometry;
             if (FemSectionProperties.Count == 0) SeedBlankVcfModel(sections);
 
             if (topology is not null) ApplyBayChange(geometry, topology);
@@ -136,6 +138,8 @@ public sealed partial class MainViewModel
             RegenerateStudyPreview();
             FemProgressText = "VCF system applied. Run Analysis solves the edited model; SAP2000 is unchanged.";
             Message = "VCF system applied to the working model (SAP2000 unchanged; Connect SAP restores the SAP model).";
+            // the generator's flag follows the parameters it applied; a model no generator made stays without one
+            if ((seeded && HasModelGeometry) || generatorFlag?.Id == VcfGenerator.GeneratorId) FlagVcfSystem();
         }
         catch (Exception ex)
         {

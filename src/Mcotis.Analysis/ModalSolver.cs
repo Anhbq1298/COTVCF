@@ -179,6 +179,8 @@ public static class ModalSolver
                 return Fail("modal.section", ObjectKind.Frame, frame.Id, $"Frame '{frame.Name}' needs a section for modal analysis.");
             var section = model.Input.FrameSections[sectionId];
             var material = model.Input.Materials[section.MaterialId];
+            if (FrameStiffnessDemand.Missing(model.Input, frame, model.ActiveDofs) is { } missing)
+                return Fail("modal.section.stiffness", ObjectKind.Frame, frame.Id, missing);
             var start = model.Input.Points[member.StartPointId].Position;
             var end = model.Input.Points[member.EndPointId].Position;
             SpatialFrameElement element;

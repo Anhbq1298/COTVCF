@@ -36,6 +36,16 @@ internal sealed class FileDto
     public required List<MassSourceDto> MassSources { get; init; }
     /// <summary>Schema 5. Additional inertia assigned to joints.</summary>
     public required List<JointMassDto> JointMassAssignments { get; init; }
+    /// <summary>Schema 6. Data of an application kept with the model, by key (the main window's configuration while it moves onto the document).</summary>
+    public required Dictionary<string, string> ApplicationData { get; init; }
+    /// <summary>Schema 6. The parametric generator the model was built by; null when none.</summary>
+    public GeneratorDto? Generator { get; init; }
+}
+ sealed class GeneratorDto
+{
+    public required string Id { get; init; }
+    public required int Version { get; init; }
+    public required Dictionary<string, string> Parameters { get; init; }
 }
 
 internal sealed class UnitsDto

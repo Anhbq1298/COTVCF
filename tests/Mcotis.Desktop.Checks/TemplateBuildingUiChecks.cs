@@ -42,6 +42,27 @@ internal static class TemplateBuildingUiChecks
             Check(!form.CreateModel() && form.CreatedSession is null, "invalid height cannot create a partial model");
             form.Form.Storeys[0].Height = "3";
             Check(form.CreateModel() && form.CreatedSession!.Document.Points.Count == 18, "Create Model produces a native connected building");
+
+            // The template's material has a mass density: γ / g until a value is typed. It used to be 0, so a modal
+            // case of self mass alone had no mass at all (modal.mass.none) unless joint masses were assigned.
+            var massForm = new TemplateBuildingViewModel();
+            var startMass = massForm.MassDensity;
+            massForm.WeightDensity = "25";
+            var followed = massForm.MassDensity;
+            massForm.MassDensity = "2.5";
+            massForm.WeightDensity = "24";
+            Check(startMass == (78.5 / TemplateBuildingViewModel.Gravity).ToString("0.#####") && followed == (25 / TemplateBuildingViewModel.Gravity).ToString("0.#####") &&
+                  massForm.MassDensity == "2.5" && massForm.ReadInput().Material.MassDensity == 2.5 &&
+                  new TemplateBuildingViewModel().ReadInput().Material.MassDensity == 78.5 / TemplateBuildingViewModel.Gravity,
+                $"the template form has a Mass density (t/m³): {startMass} = 78.5 / 9.80665 to start with, it follows the weight density ({followed} for 25 kN/m³) until a value is typed, which is kept");
+            var selfMass = new DocumentSession();
+            selfMass.Execute(TemplateBuilding.Create(new TemplateBuildingViewModel().ReadInput()));
+            var selfModes = new NativeModelViewModel(selfMass);
+            selfModes.DefineModal(new("SelfModes", "SelfMass", IncludeSelfMass: true, IncludeAdditionalMass: false, RequestedModes: 3));
+            Pump(selfModes.RunAsync()); Idle();
+            Check(selfModes.Results.State == ResultState.Current && selfModes.Modes.Count() == 3 &&
+                  selfModes.Modes.All(mode => mode.Frequency is > 0 && mode.Period is > 0 && mode.Residual < 1e-8),
+                $"a TemplateBuilding model with its self mass only (no joint mass) gives positive modes: {string.Join(", ", selfModes.Modes.Select(mode => $"{mode.Frequency:0.###} Hz"))}");
             window = new NativeModelWindow(form.CreatedSession!);
             window.Show(); Idle();
             var vm = window.Model;

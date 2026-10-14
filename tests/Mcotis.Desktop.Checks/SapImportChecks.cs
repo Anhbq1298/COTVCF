@@ -116,12 +116,22 @@ internal static class SapImportChecks
         }
         finally { File.Delete(jsonPath); }
 
+        // Since 2026-10-14 (M2) the rule is applied once, when the model is opened: the VCF system's column-base pins
+        // are assignments it holds, exported as it holds them — no rule is left to the export
         vcf.LoadDefaultFemModel(replaceCurrent: true);
-        var rule = vcf.BuildSapExportModel();
-        Check(vcfState.JointRestraints.Count == 0 && !rule.RestraintsAssigned && rule.JointRestraints.Count >= 2 &&
-              rule.JointRestraints.Values.All(restraint => restraint == Mcotis.Core.Restraint.Pinned) &&
-              rule.PinSupports.SequenceEqual(FemStudyService.FindPinSupportPoints(vcfState.Baseline)),
-            $"the VCF model holds no restraint: its {rule.JointRestraints.Count} column-base pins are exported as the rule they are, so that the target keeps its own restraints");
+        var pins = FemStudyService.FindPinSupportPoints(vcfState.Baseline);
+        var explicitPins = vcf.BuildSapExportModel();
+        Check(vcfState.JointRestraints.Keys.Order(StringComparer.Ordinal).SequenceEqual(pins.Order(StringComparer.Ordinal)) &&
+              vcfState.JointRestraints.Values.All(restraint => restraint == Mcotis.Core.Restraint.Pinned) &&
+              explicitPins.RestraintsAssigned && explicitPins.JointRestraints.Count == pins.Count && explicitPins.PinSupports.SequenceEqual(pins),
+            $"the VCF model, opened, holds its {pins.Count} column-base pins as restraint assignments, and exports them as it holds them");
+
+        // a restraint taken away is gone from the run, the viewer and the export: nothing puts it back
+        vcf.AssignJointRestraints([pins[0]], Mcotis.Core.Restraint.Free);
+        var without = vcf.BuildSapExportModel();
+        Check(!vcf.FemJointRestraints.ContainsKey(pins[0]) && !vcf.FemPinSupportPoints.Contains(pins[0]) && !without.JointRestraints.ContainsKey(pins[0]) &&
+              without.JointRestraints.Count == pins.Count - 1,
+            $"Assign → Joint Restraints: {pins[0]} made free is a free joint in the run, the viewer and the export — no rule puts its pin back");
     }
 
     private static void Check(bool condition, string name)

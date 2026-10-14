@@ -16,7 +16,7 @@ public sealed record VcfOptimizationRow(long Case, IReadOnlyList<string> Values,
     string Check = "", double? CostSgd = null, string Cost = "", double? MaxUpliftMm = null, string Uplift = "", string UpliftPoint = "");
 
 // ---- Run → Optimization VCF: the search space of the VCF system and its run ----
-// The settings are kept in memory. Run walks every combination with the internal FEM (VcfOptimizationRunner) and lists the
+// The settings are kept in memory. Run walks every combination with the internal FEM (ParametricOptimization) and lists the
 // largest downward deflection of each case; the working model is never changed.
 public sealed partial class MainViewModel
 {
@@ -55,15 +55,8 @@ public sealed partial class MainViewModel
     private double vcfOptimizationPercent;
     public double VcfOptimizationPercent { get => vcfOptimizationPercent; private set => Set(ref vcfOptimizationPercent, value); }
 
-    // ---- Optimization menu: each optimization varies its own system, so only the one of the open model is offered ----
-
-    /// <summary>The open model is a VCF system — the one Optimization VCF varies. Another model (the tied arch system,
-    /// a building, an imported model) has no VCF parameters to vary, so the command is greyed.</summary>
-    public bool CanOptimizeVcf => HasModelGeometry && VcfGeometry.CanAnalyze(State.Geometry, State.Truss);
-
-    /// <summary>The open model is the tied arch system (File → Load TAS… or Edit → Tied Arch System…) — the one
-    /// Optimization TAS varies.</summary>
-    public bool CanOptimizeTas => TiedArchParameters is not null;
+    // ---- Optimization menu: each optimization varies its own system, offered by the open model's generator flag
+    // (MainViewModel.Generator.cs: CanOptimizeVcf, CanOptimizeTas) ----
 
     private bool isVcfOptimizationRunning;
     public bool IsVcfOptimizationRunning
@@ -116,8 +109,10 @@ public sealed partial class MainViewModel
                     FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), Tab01Patterns, PretensionPatterns,
                     State.AppliedPoints.Select(point => point.PointName).ToArray(), State.Cables.ToArray(),
                     FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre())
-                    { ActiveDofs = FemActiveDofs, CableDofs = FemCableDofs };
-                return new VcfOptimizationRunner(inputs, settings);
+                    { ActiveDofs = FemActiveDofs, CableDofs = FemCableDofs, MassSources = femMassSources.ToArray() };
+                // Optimization VCF is a configuration of the one parametric study engine
+                return new ParametricOptimization(new VcfOptimizationStudy(inputs, settings),
+                    new OptimizationCriteria(settings.DeflectionResult, settings.SpanRatio, settings.UpliftLimitMm), inputs.CostPerMetre);
             });
     }
 
@@ -156,9 +151,9 @@ public sealed partial class MainViewModel
         OptimizationResultsNote = resultsNote;
         OptimizationSpanRatio = spanRatio;
         OptimizationUpliftLimitMm = upliftLimitMm;
-        if (combinations > VcfOptimizationRunner.MaxCases)
+        if (combinations > ParametricOptimization.MaxCases)
         {
-            VcfOptimizationProgress = $"{combinations:N0} combinations — the limit for one run is {VcfOptimizationRunner.MaxCases:N0}. Narrow the ranges or widen the steps.";
+            VcfOptimizationProgress = $"{combinations:N0} combinations — the limit for one run is {ParametricOptimization.MaxCases:N0}. Narrow the ranges or widen the steps.";
             Warn(title, VcfOptimizationProgress);
             return;
         }
@@ -191,7 +186,7 @@ public sealed partial class MainViewModel
             {
                 analysed++;
                 collected.Add(result);
-                var values = columns.Select(entry => VcfOptimizationRunner.Text(result.Case.Values[entry.index])).ToArray();
+                var values = columns.Select(entry => ParametricOptimization.Text(result.Case.Values[entry.index])).ToArray();
                 var utilisation = result.MaxDeflectionMm is { } d && result.LimitMm is { } l && l > 0 ? d / l : (double?)null;
                 var row = new VcfOptimizationRow(result.Case.Index + 1, values, result.MaxDeflectionMm,
                     result.MaxDeflectionMm is { } mm ? mm.ToString("0.0", CultureInfo.CurrentCulture) : "—",
@@ -293,7 +288,13 @@ public sealed partial class MainViewModel
         const string note = "Max defl. and Uplift = largest downward and largest upward displacement of a top chord (deck) joint in the result chosen under Deflection Check (Result column); Limit = span L (bays × spacing) / ratio; Check OK when δ ≤ limit and uplift ≤ its limit. Each case is the tied arch system of its H1, H2, bays and spacing — the parabolic arch, the TAS layout — with the deck loads (SW + SDL) and LL × spacing × B × n (half at the end joints) and the sections tried per role. Total cost = Σ member cost per metre × length, as for Optimization VCF. Run → Analysis Options and Define → Load Cases apply. Each case is built in memory; the open model is not changed.";
         await RunOptimizationAsync("Optimization TAS", settings.CombinationCount, settings.SpanRatio, settings.UpliftLimitMm,
             $"δ in {settings.DeflectionResult ?? "every solved result"} ≤ L / {settings.SpanRatio:0.###} and uplift ≤ {settings.UpliftLimitMm:0.###} mm",
-            note, $"cable not fitted within {FemTargetFitPercent:0.###}%", () => new TasOptimizationRunner(TasOptimizationInputs(), settings));
+            note, $"cable not fitted within {FemTargetFitPercent:0.###}%", () =>
+            {
+                // Optimization TAS is a configuration of the one parametric study engine
+                var inputs = TasOptimizationInputs();
+                return new ParametricOptimization(new TasOptimizationStudy(inputs, settings),
+                    new OptimizationCriteria(settings.DeflectionResult, settings.SpanRatio, settings.UpliftLimitMm), inputs.CostPerMetre);
+            });
     }
 
     /// <summary>What an Optimization TAS case takes from the open model: the TAS template, each member's properties with a
@@ -342,6 +343,6 @@ public sealed partial class MainViewModel
         }
         return new TasOptimizationInputs(template, Properties, FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(),
             PretensionPatterns, FemTargetFitPercent, FemTargetFitIterations, FemFrameMeshSegments, FemCableSag, CostPerMetre())
-            { ActiveDofs = FemActiveDofs, CableDofs = FemCableDofs };
+            { ActiveDofs = FemActiveDofs, CableDofs = FemCableDofs, MassSources = femMassSources.ToArray() };
     }
 }

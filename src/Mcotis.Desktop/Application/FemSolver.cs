@@ -501,7 +501,7 @@ public sealed partial class FemSolver
             var joints = usedPoints.Select(name => jointResults[pointIds[name]].Displacements)
                 // the application's slope is positive toward +Z for +X: the opposite of the rotation about global Y
                 .Select((moved, index) => new FemJointResponse(usedPoints[index], moved[0], moved[2], -moved[4])).ToArray();
-            var reactions = supports.Select(name => new FemSupportReaction(name, jointResults[pointIds[name]].Reactions[0], jointResults[pointIds[name]].Reactions[2])).ToArray();
+            var reactions = supports.Select(name => new FemSupportReaction(name, jointResults[pointIds[name]].Reactions[0], jointResults[pointIds[name]].Reactions[2], -jointResults[pointIds[name]].Reactions[4])).ToArray();
             var frameResults = solved.Frames.ToDictionary(frame => frame.ParentObjectId);
             var frames = frameMembers.Select(member =>
             {

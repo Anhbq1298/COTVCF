@@ -34,6 +34,8 @@ public sealed class DocumentEditor
     private readonly ImmutableDictionary<ObjectKind, int>.Builder sequence;
     private readonly ChangeRecorder changes = new();
     private AnalysisSettings settings;
+    private ImmutableSortedDictionary<string, string>.Builder applicationData;
+    private GeneratorOrigin? generator;
     private bool closed, faulted, sequenceRestored;
 
     internal DocumentEditor(ModelDocument source)
@@ -60,6 +62,8 @@ public sealed class DocumentEditor
         loads = data.Loads.ToBuilder();
         sequence = source.Names.Sequence.ToBuilder();
         settings = data.Settings;
+        applicationData = data.ApplicationData.ToBuilder();
+        generator = data.Generator;
     }
 
     // ---- The working state, for an edit that reads what it has built so far ----
@@ -78,6 +82,8 @@ public sealed class DocumentEditor
     public IReadOnlyDictionary<ObjectId, JointMassAssignment> JointMassAssignments => jointMassAssignments;
     public IReadOnlyDictionary<ObjectId, LoadAssignment> Loads => loads;
     public AnalysisSettings Settings => settings;
+    public IReadOnlyDictionary<string, string> ApplicationData => applicationData;
+    public GeneratorOrigin? Generator => generator;
 
     public Restraint RestraintOf(ObjectId pointId) => restraints.TryGetValue(pointId, out var restraint) ? restraint : Restraint.Free;
     public FrameAssignment AssignmentOfFrame(ObjectId frameId) => frameAssignments.TryGetValue(frameId, out var assignment) ? assignment : FrameAssignment.Default;
@@ -293,6 +299,86 @@ public sealed class DocumentEditor
         changes.Record(default, ObjectKind.Settings, ChangeAspects.Definition);
     }
 
+    /// <summary>Sets the application data under <paramref name="key"/>; null removes it (<see cref="ModelDocument.ApplicationData"/>).</summary>
+    public void SetApplicationData(string key, string? value)
+    {
+        Open();
+        if (string.IsNullOrWhiteSpace(key)) throw Fail(DocumentError.Invalid, "Application data needs a key.");
+        if (value is null ? !applicationData.ContainsKey(key) : applicationData.TryGetValue(key, out var held) && held == value) return;
+        if (value is null) applicationData.Remove(key); else applicationData[key] = value;
+        changes.Record(default, ObjectKind.Settings, ChangeAspects.Definition);
+    }
+
+    /// <summary>Sets the generator the model was built by; null detaches it (<see cref="ModelDocument.Generator"/>).</summary>
+    public void SetGenerator(GeneratorOrigin? origin)
+    {
+        Open();
+        if (Equals(generator, origin)) return;
+        if (origin is not null && (string.IsNullOrWhiteSpace(origin.GeneratorId) || origin.Version < 1))
+            throw Fail(DocumentError.Invalid, "A generator needs an id and a version of at least 1.");
+        generator = origin;
+        changes.Record(default, ObjectKind.Settings, ChangeAspects.Definition);
+    }
+
+    /// <summary>
+    /// Makes the content of the edit that of <paramref name="target"/> — a document of the same model (the same
+    /// <see cref="ModelDocument.DocumentId"/>) — as one edit: every object, definition, assignment, load, setting, name and
+    /// the application data and generator. What differs is recorded object by object, so Undo returns to the content before
+    /// and a panel refreshes what changed. An application that still keeps a model of its own writes it into its document
+    /// this way while it moves onto the document.
+    /// </summary>
+    public void ReplaceContent(ModelDocument target)
+    {
+        Open();
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.DocumentId != source.DocumentId)
+            throw Fail(DocumentError.Invalid, "The content of another model cannot replace this one's: the documents differ in identity.");
+        void Replace<T>(ImmutableDictionary<ObjectId, T>.Builder builder, ImmutableDictionary<ObjectId, T> next, ObjectKind kind, ChangeAspects changed)
+        {
+            foreach (var id in builder.Keys.Where(id => !next.ContainsKey(id)).ToArray())
+            {
+                builder.Remove(id);
+                changes.Record(id, kind, ChangeAspects.Removed);
+            }
+            foreach (var (id, value) in next)
+            {
+                if (!builder.TryGetValue(id, out var current)) changes.Record(id, kind, ChangeAspects.Added);
+                else if (!EqualityComparer<T>.Default.Equals(current, value)) changes.Record(id, kind, changed);
+                else continue;
+                builder[id] = value;
+            }
+        }
+        var data = target.Data;
+        Replace(points, data.Points, ObjectKind.Point, ChangeAspects.Geometry | ChangeAspects.Name);
+        Replace(frames, data.Frames, ObjectKind.Frame, ChangeAspects.Geometry | ChangeAspects.Name);
+        Replace(cables, data.Cables, ObjectKind.Cable, ChangeAspects.Geometry | ChangeAspects.Name);
+        Replace(shells, data.Shells, ObjectKind.Shell, ChangeAspects.Geometry | ChangeAspects.Name);
+        Replace(materials, data.Materials, ObjectKind.Material, ChangeAspects.Definition);
+        Replace(frameSections, data.FrameSections, ObjectKind.FrameSection, ChangeAspects.Definition);
+        Replace(cableSections, data.CableSections, ObjectKind.CableSection, ChangeAspects.Definition);
+        Replace(shellSections, data.ShellSections, ObjectKind.ShellSection, ChangeAspects.Definition);
+        Replace(loadPatterns, data.LoadPatterns, ObjectKind.LoadPattern, ChangeAspects.Definition);
+        Replace(loadCases, data.LoadCases, ObjectKind.LoadCase, ChangeAspects.Definition);
+        Replace(loadCombinations, data.LoadCombinations, ObjectKind.LoadCombination, ChangeAspects.Definition);
+        Replace(massSources, data.MassSources, ObjectKind.MassSource, ChangeAspects.Definition);
+        Replace(loads, data.Loads, ObjectKind.Load, ChangeAspects.Definition);
+        Replace(jointMassAssignments, data.JointMassAssignments, ObjectKind.Point, ChangeAspects.Assignment);
+        Replace(restraints, data.Restraints, ObjectKind.Point, ChangeAspects.Assignment);
+        Replace(frameAssignments, data.FrameAssignments, ObjectKind.Frame, ChangeAspects.Assignment);
+        Replace(cableAssignments, data.CableAssignments, ObjectKind.Cable, ChangeAspects.Assignment);
+        Replace(shellAssignments, data.ShellAssignments, ObjectKind.Shell, ChangeAspects.Assignment);
+        SetSettings(data.Settings);
+        foreach (var key in applicationData.Keys.Where(key => !data.ApplicationData.ContainsKey(key)).ToArray()) SetApplicationData(key, null);
+        foreach (var (key, value) in data.ApplicationData) SetApplicationData(key, value);
+        SetGenerator(data.Generator);
+        // names and the numbering of their series are those of the target
+        foreach (var scope in target.Names.Scopes.Keys) names[scope] = target.Names.Scope(scope).ToBuilder();
+        foreach (var scope in source.Names.Scopes.Keys.Where(scope => !target.Names.Scopes.ContainsKey(scope))) names[scope] = NameIndex.EmptyScope.ToBuilder();
+        sequence.Clear();
+        foreach (var (kind, number) in target.Names.Sequence) sequence[kind] = number;
+        if (!target.Names.Sequence.SequenceEqual(source.Names.Sequence)) sequenceRestored = true;
+    }
+
     // ---- Assignments ----
 
     public void SetRestraint(IEnumerable<ObjectId> pointIds, Restraint restraint)
@@ -379,7 +465,7 @@ public sealed class DocumentEditor
             cableSections.ToImmutable(), shellSections.ToImmutable(), loadPatterns.ToImmutable(), loadCases.ToImmutable(),
             loadCombinations.ToImmutable(), restraints.ToImmutable(), frameAssignments.ToImmutable(),
             cableAssignments.ToImmutable(), shellAssignments.ToImmutable(), loads.ToImmutable(), settings, massSources.ToImmutable(),
-            jointMassAssignments.ToImmutable()),
+            jointMassAssignments.ToImmutable(), applicationData.ToImmutable(), generator),
             new NameIndex(scopes, sequence.ToImmutable()));
 
         var errors = DocumentValidator.Validate(document).Where(issue => issue.Severity == ValidationSeverity.Error).ToArray();

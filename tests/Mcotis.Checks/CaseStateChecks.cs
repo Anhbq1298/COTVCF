@@ -256,14 +256,14 @@ internal static class CaseStateChecks
 
         var file = (JsonObject)JsonNode.Parse(json)!;
         JsonObject Case(JsonObject root, ObjectId id) => root["loadCases"]!.AsArray().Select(node => node!.AsObject()).Single(item => (string?)item["id"] == id.ToString());
-        Assert((int)file["schemaVersion"]! == 5 && NativeDocumentFormat.CurrentSchemaVersion == 5 && file["massSources"]!.AsArray().Count == 1 &&
+        Assert((int)file["schemaVersion"]! == 6 && NativeDocumentFormat.CurrentSchemaVersion == 6 && file["massSources"]!.AsArray().Count == 1 &&
                (string?)Case(file, w.PDelta)["kind"] == "InitialPDelta" && (string?)Case(file, w.PDelta)["geometricMode"] == "PDelta" &&
                (string?)Case(file, w.PDelta)["initialState"]!["caseId"] == w.NlPret.ToString() && !Case(file, w.PDelta).ContainsKey("stiffnessSource") &&
                (string?)Case(file, w.NlPret)["initialState"]!["kind"] == "Zero" && !Case(file, w.NlPret)["initialState"]!.AsObject().ContainsKey("caseId") &&
                (string?)Case(file, w.LinWind)["stiffnessSource"]!["kind"] == "EndOfNonlinearCase" && !Case(file, w.LinWind).ContainsKey("initialState") &&
                (string?)Case(file, w.Modes)["modal"]!["massSourceId"] == w.Ms1.ToString() && (int)Case(file, w.Modes)["modal"]!["requestedModes"]! == 12 &&
                !Case(file, w.Modes).ContainsKey("type") && !Case(file, w.NlSls).ContainsKey("initialCaseId"),
-            "The file is schema 5: a case states its kind by name and the one reference of its kind in full, by id — no type, no bare initial case id");
+            "The file is schema 6 (the load cases as schema 5 wrote them): a case states its kind by name and the one reference of its kind in full, by id — no type, no bare initial case id");
 
         void Refuse(string description, Action<JsonObject> damage)
         {

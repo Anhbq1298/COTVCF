@@ -21,7 +21,9 @@ internal sealed record DocumentData(
     ImmutableDictionary<ObjectId, LoadAssignment> Loads,
     AnalysisSettings Settings,
     ImmutableDictionary<ObjectId, MassSource> MassSources,
-    ImmutableDictionary<ObjectId, JointMassAssignment> JointMassAssignments)
+    ImmutableDictionary<ObjectId, JointMassAssignment> JointMassAssignments,
+    ImmutableSortedDictionary<string, string> ApplicationData,
+    GeneratorOrigin? Generator)
 {
     public static DocumentData Empty { get; } = new(
         ImmutableDictionary<ObjectId, PointObject>.Empty, ImmutableDictionary<ObjectId, FrameObject>.Empty,
@@ -33,7 +35,7 @@ internal sealed record DocumentData(
         ImmutableDictionary<ObjectId, FrameAssignment>.Empty, ImmutableDictionary<ObjectId, CableAssignment>.Empty,
         ImmutableDictionary<ObjectId, ShellAssignment>.Empty, ImmutableDictionary<ObjectId, LoadAssignment>.Empty,
         AnalysisSettings.Default, ImmutableDictionary<ObjectId, MassSource>.Empty,
-        ImmutableDictionary<ObjectId, JointMassAssignment>.Empty);
+        ImmutableDictionary<ObjectId, JointMassAssignment>.Empty, ImmutableSortedDictionary<string, string>.Empty.WithComparers(StringComparer.Ordinal), null);
 }
 
 /// <summary>The engineering model: every object, definition, assignment and load of one structure, and nothing of
@@ -88,6 +90,14 @@ public sealed class ModelDocument
     public ImmutableDictionary<ObjectId, ShellAssignment> ShellAssignments => Data.ShellAssignments;
     public ImmutableDictionary<ObjectId, LoadAssignment> Loads => Data.Loads;
     public AnalysisSettings Settings => Data.Settings;
+
+    /// <summary>Data of an application kept with the model, by key, as text: what the application holds of a model that the
+    /// model itself has no place for yet (the main window's configuration while it moves onto the document). Saved and
+    /// undone with the document; no part of the analysis input, and never read by an analysis.</summary>
+    public ImmutableSortedDictionary<string, string> ApplicationData => Data.ApplicationData;
+
+    /// <summary>The parametric generator the model was built by, or null (<see cref="GeneratorOrigin"/>).</summary>
+    public GeneratorOrigin? Generator => Data.Generator;
 
     /// <summary>Identifies the data an analysis reads: everything but names and origins. Renaming an object leaves it
     /// as it is; moving a point, a load, a stiffness or a restraint changes it. Results are current while it matches.</summary>

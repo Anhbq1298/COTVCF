@@ -160,21 +160,69 @@ public sealed partial class MainViewModel : Observable
     /// <summary>All chord points (any tab): the overall span dimension runs between the mega columns they end at.</summary>
     public IEnumerable<string> SharedViewerSpanPoints => State.Truss.TopPoints.Concat(State.Truss.MiddlePoints).Concat(State.Truss.BottomPoints).ToArray();
     /// <summary>The joint restraints of the model as it stands, by joint name — what Run FEM Analysis holds, what the
-    /// native document and the exports carry and what the viewer draws
-    /// (<see cref="LegacyNativeDocumentMigration.Restraints"/>). Read from the model each time it is asked for, never
-    /// from a copy that an edit may have left behind.</summary>
+    /// native document and the exports carry and what the viewer draws. Read from the model each time it is asked for,
+    /// never from a copy that an edit may have left behind. Since 2026-10-14 (M2) they are only the assignments the model
+    /// holds: the pins at the column bases of a model that held none are written into it once, when it is opened,
+    /// imported or generated (<see cref="MakeRestraintsExplicit"/>) — no rule adds a support afterwards. A model whose
+    /// restraints are all taken away has none, and its run says what is not held.</summary>
     internal IReadOnlyDictionary<string, Mcotis.Core.Restraint> FemJointRestraints
     {
         get
         {
             var baseline = State.Baseline;
-            var assigned = State.JointRestraints.Where(item => baseline.Points.ContainsKey(item.Key))
+            return State.JointRestraints.Where(item => !item.Value.IsFree && baseline.Points.ContainsKey(item.Key))
                 .ToDictionary(item => item.Key, item => item.Value, StringComparer.Ordinal);
-            return LegacyNativeDocumentMigration.Restraints(assigned, baseline);
         }
     }
-    /// <summary>Whether the restraints are assignments the model holds, or the pins found at its column bases.</summary>
+    /// <summary>Whether the model holds a restraint assignment.</summary>
     private bool HasAssignedJointRestraints => State.JointRestraints.Any(item => !item.Value.IsFree && State.Baseline.Points.ContainsKey(item.Key));
+
+    /// <summary>The migration of a model that holds no restraint — a configuration saved before restraints were data, the
+    /// VCF system, an import from a program that restrained nothing: the pins the application has always found at its
+    /// column bases (<see cref="FemStudyService.FindPinSupportPoints"/>) are written into it as real assignments, once.
+    /// From then on they are the model's own: shown, edited (Assign → Joint → Restraints), saved and exported as they
+    /// are. Returns how many were written; none when the model holds restraints or no column base is found.</summary>
+    internal int MakeRestraintsExplicit()
+    {
+        if (HasAssignedJointRestraints || State.Baseline.Points.Count == 0) return 0;
+        IReadOnlyList<string> pins;
+        try { pins = FemStudyService.FindPinSupportPoints(State.Baseline); }
+        catch (InvalidOperationException) { return 0; }
+        State.JointRestraints = pins.ToDictionary(name => name, _ => Mcotis.Core.Restraint.Pinned, StringComparer.Ordinal);
+        return pins.Count;
+    }
+
+    /// <summary>Assign → Joint → Restraints: <paramref name="restraint"/> on every one of <paramref name="joints"/>, each of
+    /// its six components as given; Free takes the restraint away. The results of the model go (it is a different model);
+    /// SAP2000 is never written. Returns how many joints changed.</summary>
+    internal int AssignJointRestraints(IReadOnlyCollection<string> joints, Mcotis.Core.Restraint restraint)
+    {
+        if (!CanEditFemModel) throw new InvalidOperationException("Unlock the model before changing joint restraints.");
+        var names = joints.Where(State.Baseline.Points.ContainsKey).ToHashSet(StringComparer.Ordinal);
+        if (names.Count == 0) throw new ArgumentException("Select one or more joints of the model first.", nameof(joints));
+        var map = new Dictionary<string, Mcotis.Core.Restraint>(State.JointRestraints, StringComparer.Ordinal);
+        int changed = 0;
+        foreach (var joint in names)
+        {
+            var before = map.GetValueOrDefault(joint, Mcotis.Core.Restraint.Free);
+            if (before == restraint) continue;
+            if (restraint.IsFree) map.Remove(joint); else map[joint] = restraint;
+            changed++;
+        }
+        if (changed > 0)
+        {
+            State.JointRestraints = map;
+            ClearFemResults();
+            ScheduleFemWorkingSave();
+            Notify(nameof(FemPinSupportSummary));
+            NotifySharedViewer();
+        }
+        Message = changed > 0
+            ? $"Joint restraints {RestraintText(restraint)} on {changed} joint{(changed == 1 ? "" : "s")} (FEM results cleared; SAP2000 unchanged)."
+            : $"The selected joints already have the restraints {RestraintText(restraint)}.";
+        Update();
+        return changed;
+    }
     /// <summary>The joints held in the plane of the model (<see cref="FemSolver.HoldsInPlane"/>), left to right: the
     /// support symbols of the viewer and the supports reactions are reported at.</summary>
     public IReadOnlyList<string> FemPinSupportPoints
@@ -216,7 +264,7 @@ public sealed partial class MainViewModel : Observable
         Notify(nameof(SharedViewerModel)); Notify(nameof(SharedViewerAppliedPoints));
         Notify(nameof(SharedViewerTopPoints)); Notify(nameof(SharedViewerSpanPoints)); Notify(nameof(SharedViewerMiddlePoints)); Notify(nameof(SharedViewerBottomPoints));
         Notify(nameof(SharedViewerCables)); Notify(nameof(SharedViewerPinSupportPoints)); Notify(nameof(ShowFemPinLegend));
-        Notify(nameof(SharedViewerFemResult)); Notify(nameof(SharedViewerFemResultMode));
+        Notify(nameof(SharedViewerFemResult)); Notify(nameof(SharedViewerFemResultMode)); Notify(nameof(SharedViewerIsModeShape));
         Notify(nameof(SharedViewerFrameMeshSegments)); Notify(nameof(SharedViewerMemberSizes));
         Notify(nameof(SharedViewerShowLoads)); Notify(nameof(SharedViewerLoadValues));
         Notify(nameof(SharedViewerCaption)); Notify(nameof(SharedViewerHint));
@@ -1098,6 +1146,7 @@ public sealed partial class MainViewModel : Observable
         set
         {
             if (!Set(ref selectedFemRun, value)) return;
+            ShowRunModes(value);
             NotifyFemResultSelection();
             NotifyFemMonitorChart();
         }
@@ -1107,8 +1156,9 @@ public sealed partial class MainViewModel : Observable
         ? FemCableFitRow.FromRun(run, SelectedFemResultName) : [];
     public IReadOnlyList<FemResultRow> FemResultRows => FemResultTable.Build(SelectedFemResult, FemResultMode);
     public FemAnalysisResult? SharedViewerFemResult =>
-        !ShowUndeformed && selectedTab == TabFem && SelectedFemPage == FemResultsPage ? SelectedFemResult : null;
-    public FemResultMode SharedViewerFemResultMode => FemResultMode;
+        !ShowUndeformed && selectedTab == TabFem && SelectedFemPage == FemResultsPage
+            ? showModeShape ? ModalResults.Display : SelectedFemResult : null;
+    public FemResultMode SharedViewerFemResultMode => showModeShape ? FemResultMode.DeflectedShape : FemResultMode;
     public string FemResultDiagramTitle
     {
         get
@@ -1166,23 +1216,16 @@ public sealed partial class MainViewModel : Observable
     {
         get
         {
-            // the assignments the model holds, each with its components; else the pins found at the column bases
-            if (HasAssignedJointRestraints)
-            {
-                var restraints = FemJointRestraints;
-                var points = FemPinSupportPoints;
-                var outOfPlane = restraints.Count - points.Count;
-                return $"{points.Count} support{(points.Count == 1 ? "" : "s")} from the joint restraints the model holds: " +
-                    string.Join("; ", points.Take(12).Select(name => $"{name} ({RestraintText(restraints[name])})")) +
-                    (points.Count > 12 ? $"; and {points.Count - 12} more" : "") +
-                    (outOfPlane > 0 ? $". {outOfPlane} more joint{(outOfPlane == 1 ? " is" : "s are")} restrained out of the plane only (UY, RX, RZ)" : "");
-            }
-            try
-            {
-                var points = FemStudyService.FindPinSupportPoints(State.Baseline);
-                return $"{points.Count} auto-detected pin supports at lowest frame elevation: {string.Join(", ", points)}";
-            }
-            catch (Exception ex) { return ex.Message; }
+            // the assignments the model holds, each with its components — and nothing else
+            if (!HasAssignedJointRestraints)
+                return "No joint is restrained: nothing holds the model, and Run FEM Analysis will say so. Assign restraints with Assign → Joint → Restraints.";
+            var restraints = FemJointRestraints;
+            var points = FemPinSupportPoints;
+            var outOfPlane = restraints.Count - points.Count;
+            return $"{points.Count} support{(points.Count == 1 ? "" : "s")} from the joint restraints the model holds: " +
+                string.Join("; ", points.Take(12).Select(name => $"{name} ({RestraintText(restraints[name])})")) +
+                (points.Count > 12 ? $"; and {points.Count - 12} more" : "") +
+                (outOfPlane > 0 ? $". {outOfPlane} more joint{(outOfPlane == 1 ? " is" : "s are")} restrained out of the plane only (UY, RX, RZ)" : "");
         }
     }
     public string FemProgressText { get => femProgressText; private set => Set(ref femProgressText, value); }
@@ -1851,6 +1894,19 @@ public sealed partial class MainViewModel : Observable
     private IReadOnlyList<string> PretensionPatterns => State.Cables.Select(cable => cable.LoadPattern)
         .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
+    /// <summary>What Run FEM Analysis was given before it read the native document (to 2026-10-14): the application's own
+    /// description of the model, handed to <see cref="FemStudyService.Analyze"/>. Only <c>--native-parity</c> uses it — the
+    /// evidence that the run on the document gives what that path gave.</summary>
+    internal (FemStudyCandidate Model, IReadOnlyDictionary<string, FemSectionProperties> Properties, FemLoadPlan Plan,
+        IReadOnlyList<string> Supports, IReadOnlyDictionary<string, Mcotis.Core.Restraint> Restraints) LegacyRunInputs()
+    {
+        var properties = HeldFemProperties();
+        return (femStudy.ComposeModel(State, IsOfflineModel), properties,
+            FemLoadPlan.Build(FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), femSapLoading, properties, State.Baseline,
+                Tab01Patterns, PretensionPatterns, State.AppliedPoints.Select(point => point.PointName).ToArray(), FemMassSourceReferences),
+            FemPinSupportPoints, FemJointRestraints);
+    }
+
     /// <summary>The load rows as SAP2000 has them (the snapshot the model holds), with the default cases for what SAP's
     /// own cases leave out.</summary>
     private void ResetFemLoadRows()
@@ -1889,7 +1945,7 @@ public sealed partial class MainViewModel : Observable
             Notify(nameof(FemMonitorChartSummary));
         }
     }
-    private FemAnalysisResult? SelectedFemResult => SelectedFemRun?.ResultFor(SelectedFemResultName);
+    internal FemAnalysisResult? SelectedFemResult => SelectedFemRun?.ResultFor(SelectedFemResultName);
 
     private void RebuildFemCableFitRows()
     {
@@ -1951,15 +2007,11 @@ public sealed partial class MainViewModel : Observable
 
         FemStudyCandidate model;
         IReadOnlyList<string> supports;
-        IReadOnlyDictionary<string, Mcotis.Core.Restraint> restraints;
         IReadOnlyDictionary<string, FemSectionProperties> properties;
         try
         {
             model = femStudy.ComposeModel(State, IsOfflineModel);
-            // The restraints of the model as it stands now. The native document is brought up to this model when the
-            // run locks it, below, so it is not what the run reads them from: an edit made since it was last written
-            // would otherwise be analysed on the supports of the model before the edit.
-            restraints = FemJointRestraints;
+            // the supports of the model as it stands now; the run locks the model below and analyses its native document
             supports = FemPinSupportPoints;
             properties = HeldFemProperties();
         }
@@ -2002,6 +2054,17 @@ public sealed partial class MainViewModel : Observable
         // What the run monitor shows of the run: it takes the solver's reports and hands out snapshots.
         var monitor = new FemRunMonitor();
         FemMonitorPump? pump = null;
+        // the results of this run belong to the document it locked, by its analysis input hash
+        var tracked = FemResultTracker.Begin();
+        bool trackedEnded = false;
+        void Track(bool? completed)
+        {
+            if (trackedEnded) return;
+            trackedEnded = true;
+            if (completed is null) FemResultTracker.Cancel(tracked);
+            else if (completed.Value) FemResultTracker.Complete(tracked);
+            else FemResultTracker.Fail(tracked);
+        }
         try
         {
             var loadPlan = FemLoadPlan.Build(FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), femSapLoading,
@@ -2014,10 +2077,6 @@ public sealed partial class MainViewModel : Observable
 
             var baseline = State.Baseline;
             var targetFitPercent = FemTargetFitPercent;
-            var targetFitIterations = FemTargetFitIterations;
-            var frameMeshSegments = FemFrameMeshSegments;
-            var cableSag = FemCableSag;
-            var (activeDofs, cableDofs) = (FemActiveDofs, FemCableDofs);
             FemMonitorTolerancePercent = targetFitPercent;
             // the members the run analyses: every frame, and the cables that have a section
             var analysed = baseline.Members.Where(member => member.Kind == MemberKind.Frame ||
@@ -2031,24 +2090,41 @@ public sealed partial class MainViewModel : Observable
                     femSapLoading.MemberLoads.Count + femSapLoading.MemberPointLoads.Count + femSapLoading.GravityLoads.Count,
                     loadPlan.CaseNames.Count, loadPlan.CombinationNames.Count, femSapLoading.Warnings.Count, loadPlan.Notes),
                 loadPlan.StagesFor(model.Loads).SelectMany(stage => (stage.FitCase is { } fit ? new[] { (fit, true) } : [])
-                    .Concat(stage.Cases.Select(item => (item.Name, false)))), loadPlan.PrerequisiteRemarks);
+                    .Concat(stage.Cases.Select(item => (item.Name, false)))).Concat(loadPlan.ModalCaseNames.Select(name => (name, false))), loadPlan.PrerequisiteRemarks);
             FemMonitor.Apply(monitor.Snapshot());
             var failure = new FemFailureReport();
             var equilibrium = pump = new FemMonitorPump(this, monitor, SynchronizationContext.Current);
             IReadOnlyList<FemStudyRun> results;
-            // The model's own geometry: no Tab 02 height change, so the chord groups are not passed.
+            // The run reads the native document of the model (task of 2026-10-14, M1): the one the run locked, above —
+            // the model as it stands now. It goes to the solvers of the standalone system as it is.
+            var document = NativeDocumentSession.Document;
+            var documentProblem = NativeDocumentProblem;
             try
             {
-                results = await Task.Run(() => femStudy.Analyze(baseline, [], [], [], supports, [model], properties, failure,
-                    cancellationToken, targetFitPercent, targetFitIterations, frameMeshSegments, loadPlan, cableSag, equilibrium, activeDofs, cableDofs, restraints), cancellationToken);
+                results = await Task.Run(() =>
+                {
+                    try
+                    {
+                        if (documentProblem is not null) throw new InvalidOperationException("The model cannot be analysed: " + documentProblem);
+                        return (IReadOnlyList<FemStudyRun>)[femStudy.AnalyzeDocument(document, loadPlan, FemStudyService.ModelRunId, baseline, model.Loads, equilibrium, cancellationToken)];
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        ((IProgress<FemProgress>)failure).Report(new FemProgress(1, 1, model.Id, Failure: ex.Message));
+                        return [];
+                    }
+                }, cancellationToken);
             }
             finally { equilibrium.Show(ended: false); }
+            if (results.Count == 1 && results[0].Native is { Notes.Count: > 0 } solved)
+                foreach (var note in solved.Notes) monitor.Note(note);
             if (results.Count == 0)
             {
                 var reason = failure.Reason ?? "The model did not reach equilibrium.";
                 FemCableFitRows.Add(FemCableFitRow.FailedCase(model.Id, reason));
                 FemProgressText = $"Analysis failed · {reason}";
                 monitor.End(completed: false, note: reason);
+                Track(false);
             }
             else
             {
@@ -2058,6 +2134,7 @@ public sealed partial class MainViewModel : Observable
                 SelectedFemRun = run;
                 WriteFemOutput(run);
                 monitor.End(completed: true);
+                Track(true);
                 FemProgressText = "Analysis complete" +
                     (loadPlan.FitCases.Count == 0 ? "" // no cable target forces to fit (a model without cables)
                     : run.Result.TargetFitConverged ? $" · pretension stage within {targetFitPercent:0.###}% of target"
@@ -2071,6 +2148,7 @@ public sealed partial class MainViewModel : Observable
             FemProgressText = "Analysis cancelled.";
             Message = FemProgressText;
             monitor.End(completed: false, cancelled: true, note: "The analysis was cancelled.");
+            Track(null);
         }
         catch (Exception ex)
         {
@@ -2078,9 +2156,11 @@ public sealed partial class MainViewModel : Observable
             Message = ex.Message;
             monitor.End(completed: false, note: ex.Message);
             Warn("FEM Analysis", ex.Message);
+            Track(false);
         }
         finally
         {
+            Track(false);   // ended without either (it has already been said how it ended otherwise)
             // the run as it ended; a report still on its way to the window shows nothing after this
             if (pump is not null) pump.Show(ended: true);
             else FemMonitor.Apply(monitor.Snapshot());

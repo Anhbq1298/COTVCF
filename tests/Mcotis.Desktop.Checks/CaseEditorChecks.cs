@@ -196,10 +196,10 @@ internal static class CaseEditorChecks
         Check(noModes?.Contains("at least one mode", StringComparison.Ordinal) == true && noMass?.Contains("mass source", StringComparison.Ordinal) == true && modal.Problem is null,
             "… it needs at least one mode and a mass source: " + noModes + " | " + noMass);
         Check(modal.Accept() && warnings.Count == 0 && modal.Saved is { Name: "MODES", Definition: "", CaseType: "Modal (Eigenvectors)", LoadsOrMass: "MS1 · 6 modes", InitialCase: "" } saved &&
-              saved.Options == new FemCaseOptions(CaseKind.ModalEigen, MassSource: "MS1", RequestedModes: 6) && vm.FemCaseRows.Contains(saved) && !saved.Run &&
-              vm.FemMassSourceReferences.Single().Name == "MS1" && vm.Message.Contains("Run does not solve this type yet", StringComparison.Ordinal),
+              saved.Options == new FemCaseOptions(CaseKind.ModalEigen, MassSource: "MS1", RequestedModes: 6) && vm.FemCaseRows.Contains(saved) && saved.Run &&
+              vm.FemMassSourceReferences.Single().Name == "MS1" && !vm.Message.Contains("Run does not solve this type yet", StringComparison.Ordinal),
             "OK adds the modal case — no loads, MS1, 6 modes, on the unstressed stiffness — and MS1 becomes a mass source of the configuration; " +
-            "a new case of a type that is not solved yet is not set to run, so the cases beside it go on running");
+            "the main window solves a modal case on the unstressed stiffness since 2026-10-14, so the new case is set to run");
         modal.Close();
 
         // an initial P-Delta case: a nonlinear case whose geometric nonlinearity is P-Delta, that can continue another

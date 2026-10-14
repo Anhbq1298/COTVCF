@@ -56,6 +56,10 @@ public sealed class FemInputSnapshot
     /// (<see cref="Mcotis.Desktop.Application.LegacyNativeDocumentMigration.Restraints"/>).</summary>
     public List<FemJointRestraintDto> JointRestraints { get; set; } = [];
     public FemSettingsDto Settings { get; set; } = new();
+    /// <summary>The parametric generator the model was built by (2026-10-14, §2): its id, version and parameters. Null for
+    /// a model no generator made — an import, a TemplateBuilding model, a detached model, a configuration saved before
+    /// the flag existed (that one is flagged when it is opened, if its generator validates it).</summary>
+    public FemGeneratorDto? Generator { get; set; }
 
     public static FemInputSnapshot FromLegacy(FemModelFileDto file, FemInputSnapshot? previous = null)
     {
@@ -93,6 +97,7 @@ public sealed class FemInputSnapshot
             CombinationRows = combinations,
             MassSources = (file.MassSources ?? []).ToList(),
             JointRestraints = (file.JointRestraints ?? []).ToList(),
+            Generator = file.Generator,
             Settings = file.Settings,
         };
     }
@@ -132,6 +137,7 @@ public sealed class FemInputSnapshot
             CombinationRows = CombinationRows.ToList(),
             MassSources = MassSources.Count > 0 ? MassSources.ToList() : null,
             JointRestraints = JointRestraints.Count > 0 ? JointRestraints.ToList() : null,
+            Generator = Generator,
             Settings = Settings,
         };
     }
@@ -227,6 +233,8 @@ public static class FemInputDatabase
         var model = snapshot.ToLegacy();
         model.SavedUtc = default;
         model.Version = FemModelFileDto.RevisionFormVersion;
+        // the generator flag says what may be optimized, not what is analysed: a model detached is the same revision
+        model.Generator = null;
         model.CaseRows = model.CaseRows.Select(FemCaseSchema.Content).ToList();
         model.CombinationRows = model.CombinationRows.Select(FemCaseSchema.Content).ToList();
         var canonical = FemModelFile.Serialize(model);
@@ -558,7 +566,7 @@ public static class FemOutputDatabase
                 CREATE TABLE run_info(run_id TEXT PRIMARY KEY,input_database_id TEXT NOT NULL,input_revision INTEGER NOT NULL,input_revision_hash TEXT NOT NULL,created_utc TEXT NOT NULL,state TEXT NOT NULL,source_input_path TEXT NOT NULL,run_payload_json TEXT NOT NULL);
                 CREATE TABLE run_cases(case_id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL UNIQUE,nonlinear_iterations INTEGER NOT NULL,target_fit_iterations INTEGER NOT NULL,target_fit_failure TEXT);
                 CREATE TABLE joint_displacements(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,ux_m REAL NOT NULL,uz_m REAL NOT NULL,rotation_rad REAL NOT NULL,PRIMARY KEY(case_id,object_name));
-                CREATE TABLE support_reactions(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,rx_kn REAL NOT NULL,rz_kn REAL NOT NULL,PRIMARY KEY(case_id,object_name));
+                CREATE TABLE support_reactions(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,rx_kn REAL NOT NULL,rz_kn REAL NOT NULL,my_knm REAL NOT NULL DEFAULT 0,PRIMARY KEY(case_id,object_name));
                 CREATE TABLE frame_station_results(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,station_index INTEGER NOT NULL,station REAL NOT NULL,axial_kn REAL NOT NULL,shear_kn REAL NOT NULL,moment_knm REAL NOT NULL,ux_m REAL NOT NULL,uz_m REAL NOT NULL,PRIMARY KEY(case_id,object_name,station_index));
                 CREATE TABLE cable_results(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,axial_kn REAL NOT NULL,active INTEGER NOT NULL,target_kn REAL NOT NULL,applied_pretension_kn REAL NOT NULL,pretension_stage_kn REAL,sag_m REAL,tangent_stiffness_ratio REAL,PRIMARY KEY(case_id,object_name));
                 CREATE TABLE cable_fit_iterations(case_id INTEGER NOT NULL REFERENCES run_cases(case_id),object_name TEXT NOT NULL,iteration_no INTEGER NOT NULL,result_force_kn REAL NOT NULL,PRIMARY KEY(case_id,object_name,iteration_no));
@@ -581,8 +589,8 @@ public static class FemOutputDatabase
                     Execute(connection, transaction, "INSERT INTO joint_displacements VALUES($case,$name,$ux,$uz,$rotation)",
                         ("$case", caseId), ("$name", joint.PointName), ("$ux", joint.UXM), ("$uz", joint.UZM), ("$rotation", joint.RotationRad));
                 foreach (var reaction in result.SupportReactions)
-                    Execute(connection, transaction, "INSERT INTO support_reactions VALUES($case,$name,$rx,$rz)",
-                        ("$case", caseId), ("$name", reaction.PointName), ("$rx", reaction.ReactionXKN), ("$rz", reaction.ReactionZKN));
+                    Execute(connection, transaction, "INSERT INTO support_reactions VALUES($case,$name,$rx,$rz,$my)",
+                        ("$case", caseId), ("$name", reaction.PointName), ("$rx", reaction.ReactionXKN), ("$rz", reaction.ReactionZKN), ("$my", reaction.MomentYKNm));
                 foreach (var frame in result.Frames)
                 {
                     var stations = frame.Stations is { Count: > 0 } ? frame.Stations :

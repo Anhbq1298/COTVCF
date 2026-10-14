@@ -110,7 +110,7 @@ public sealed record VcfCableForces(
 /// every cable, the fan cables by their length), the storey force inputs (<see cref="StoreyLoads"/>: qz per Tab 01
 /// load definition [kPa] by load name, plus <see cref="VcfOptimization.StoriesKey"/> and
 /// <see cref="VcfOptimization.TributaryKey"/>) and the candidate sections per member role and per cable. The settings are
-/// kept by the view model and walked by <see cref="VcfOptimizationRunner"/>.
+/// kept by the view model and walked by <see cref="ParametricOptimization"/> (<see cref="VcfOptimizationStudy"/>).
 /// </summary>
 public sealed record VcfOptimizationSettings(
     IReadOnlyDictionary<string, VcfRange> Geometry,

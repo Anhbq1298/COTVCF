@@ -39,7 +39,7 @@ internal static class FemLiveReport
                         .Select(s => new { x = s.Fraction * 100, n = s.AxialKN, v = s.ShearKN, m = s.MomentKNm })
                         .ToArray(),
                 }).ToArray(),
-                reactions = r.SupportReactions.Select(s => new { name = s.PointName, rx = s.ReactionXKN, rz = s.ReactionZKN }).ToArray(),
+                reactions = r.SupportReactions.Select(s => new { name = s.PointName, rx = s.ReactionXKN, rz = s.ReactionZKN, my = s.MomentYKNm }).ToArray(),
                 cables = r.Cables.Select(c => new
                 {
                     name = c.MemberName,

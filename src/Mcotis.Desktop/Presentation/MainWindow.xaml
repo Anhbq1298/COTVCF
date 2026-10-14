@@ -3,6 +3,9 @@
   <!-- File shortcuts: Ctrl+S saves the active configuration, Ctrl+Shift+S asks for another file (File → Save Config / Save Config As…) -->
   <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveFemModel}"/>
   <KeyBinding Gesture="Ctrl+Shift+S" Command="{Binding SaveFemModelAs}"/>
+  <!-- Edit → Undo / Redo: the model's history (a text box keeps its own Ctrl+Z while it has the focus) -->
+  <KeyBinding Gesture="Ctrl+Z" Command="{Binding UndoModelCommand}"/>
+  <KeyBinding Gesture="Ctrl+Y" Command="{Binding RedoModelCommand}"/>
  </Window.InputBindings>
  <DockPanel>
 
@@ -56,6 +59,11 @@
               ToolTip="Define the load cases: the default staged setup (Pretension → SLS / ULS), the cases saved from SAP2000, or your own"/>
    </MenuItem>
    <MenuItem Header="_Edit">
+    <MenuItem Header="_Undo" Command="{Binding UndoModelCommand}" InputGestureText="Ctrl+Z" AutomationProperties.Name="Undo"
+              ToolTip="Take back the last change of the model — the whole model as it was before it (FEM results are cleared)"/>
+    <MenuItem Header="_Redo" Command="{Binding RedoModelCommand}" InputGestureText="Ctrl+Y" AutomationProperties.Name="Redo"
+              ToolTip="Make again the change Undo took back"/>
+    <Separator/>
     <MenuItem Header="_TemplateBuilding…" Click="TemplateBuilding_Click" AutomationProperties.Name="TemplateBuilding"
               ToolTip="Create a native building frame with X/Y bays, storey heights and beam line loads in a new model workspace"/>
     <MenuItem Header="_VCF System…" Click="VcfGeometry_Click" AutomationProperties.Name="VCF System" IsEnabled="{Binding CanEditVcfGeometry}"
@@ -65,10 +73,19 @@
     <Separator/>
     <MenuItem Header="_Delete" Click="DeleteSelection_Click" InputGestureText="Del" IsEnabled="{Binding CanEditFemModel}" AutomationProperties.Name="Delete"
               ToolTip="Delete the joints, frames and cables selected on the model view (a deleted joint takes its connected members); SAP2000 is unchanged"/>
+    <Separator/>
+    <MenuItem Header="Re-apply _Generator…" Click="ReapplyGenerator_Click" AutomationProperties.Name="Re-apply Generator"
+              IsEnabled="{Binding CanReapplyGenerator}" ToolTipService.ShowOnDisabled="True"
+              ToolTip="{Binding GeneratorSummary, StringFormat='Rebuild the VCF or tied arch system from the parameters its generator made it with; shows what it overwrites first. {0}'}"/>
+    <MenuItem Header="Detac_h from Generator" Click="DetachGenerator_Click" AutomationProperties.Name="Detach from Generator"
+              IsEnabled="{Binding CanDetachGenerator}" ToolTipService.ShowOnDisabled="True"
+              ToolTip="{Binding GeneratorSummary, StringFormat='Make the model an ordinary model: it keeps everything but can no longer be optimized (Undo gives the flag back). {0}'}"/>
    </MenuItem>
    <MenuItem Header="_Assign" IsEnabled="{Binding CanEditFemModel}">
     <MenuItem Header="_Joint">
-     <MenuItem Header="_Restraints (Pin Supports)…" Tag="3" Click="FemPaneMenu_Click"/>
+     <MenuItem Header="_Restraints…" Click="AssignRestraints_Click" AutomationProperties.Name="Assign Joint Restraints"
+               ToolTip="Hold UX, UY, UZ, RX, RY, RZ at the joints selected on the model view (Fixed, Pinned, Roller, Free); the model is analysed, drawn and exported on them as they are"/>
+     <MenuItem Header="Restraints _Summary" Tag="3" Click="FemPaneMenu_Click" ToolTip="The joint restraints the model holds"/>
     </MenuItem>
     <MenuItem Header="_Frame">
      <MenuItem Header="Frame _Sections…" Tag="Frame" Click="AssignSections_Click" AutomationProperties.Name="Assign Frame Sections"
@@ -108,6 +125,8 @@
     <MenuItem Header="Show _Results…" Click="ShowResults_Click" ToolTip="Choose the load case / combo and the output to draw on the model"/>
     <MenuItem Header="Results _Table…" Click="OpenFemResultsClick" IsEnabled="{Binding HasFemResults}"
               ToolTip="Open the results table for the selected load case and output"/>
+    <MenuItem x:Name="ModalResultsMenu" Header="_Modal Results…" Click="ModalResults_Click" IsEnabled="{Binding HasFemModalResults}" ToolTipService.ShowOnDisabled="True"
+              ToolTip="The modes of the modal cases of the run: frequencies, participation, mode shapes and the mass — and a mode drawn on the model"/>
    </MenuItem>
    <MenuItem Header="_Post-Processing" IsEnabled="{Binding HasUsableModelGeometry}">
     <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click"
@@ -157,14 +176,14 @@
    <!-- Optimization — the parametric study with the internal solver — has a tab of its own: set apart by a separator and
         highlighted (the header template; the Header stays a string, which the window and the checks read). -->
    <Separator x:Name="OptimizationMenuSeparator" Style="{StaticResource MenuBarSeparator}"/>
-   <MenuItem x:Name="OptimizationMenu" Header="_Optimization" HeaderTemplate="{StaticResource HighlightedMenuHeader}" IsEnabled="{Binding HasUsableModelGeometry}">
-    <!-- Each optimization varies its own system: only the one of the open model is enabled, the other is greyed. -->
+   <MenuItem x:Name="OptimizationMenu" Header="_Optimization" HeaderTemplate="{StaticResource HighlightedMenuHeader}" IsEnabled="{Binding HasUsableModelGeometry}"
+             SubmenuOpened="OptimizationMenu_Opened">
+    <!-- Each optimization varies the system of a generator: the open model's generator flag and the generator's
+         validation of the model enable it (never the model's name); the tooltip says why one is greyed. -->
     <MenuItem Header="_Optimization VCF…" Click="OptimizationVcf_Click" AutomationProperties.Name="Optimization VCF"
-              IsEnabled="{Binding CanOptimizeVcf}" ToolTipService.ShowOnDisabled="True"
-              ToolTip="For a VCF system (File → Load VCF… or Edit → VCF System…). Set the VCF search space — min / max / step for bays, bay width, truss depth (middle chord kept at 0.5 × depth), clear height, back-span and back-stay height, and candidate sections per chord, mega column and cable; Run Optimization analyses every combination and lists the max deflection of each case"/>
+              IsEnabled="{Binding CanOptimizeVcf}" ToolTipService.ShowOnDisabled="True" ToolTip="{Binding OptimizationVcfToolTip}"/>
     <MenuItem Header="Optimization _TAS…" Click="OptimizationTas_Click" AutomationProperties.Name="Optimization TAS"
-              IsEnabled="{Binding CanOptimizeTas}" ToolTipService.ShowOnDisabled="True"
-              ToolTip="For the tied arch system (File → Load TAS… or Edit → Tied Arch System…). Set its search space — min / max / step for H1, H2, bays and spacing and for the storeys above (SW, SDL, LL, floors, B), and candidate sections per role; Run Optimization analyses every combination and lists the max deflection, check and cost of each case"/>
+              IsEnabled="{Binding CanOptimizeTas}" ToolTipService.ShowOnDisabled="True" ToolTip="{Binding OptimizationTasToolTip}"/>
     <MenuItem Header="Optimization _Results…" Click="OptimizationResults_Click" AutomationProperties.Name="Optimization Results"
               ToolTip="Every case of the last Optimization VCF or Optimization TAS run with its max deflection (sortable)"/>
     <MenuItem Header="_Cancel Optimization" Click="CancelOptimization_Click" IsEnabled="{Binding IsVcfOptimizationRunning}"/>
@@ -490,7 +509,7 @@
        <StackPanel Margin="8">
         <TextBlock Text="SUPPORTS" Style="{StaticResource Subheading}"/>
         <TextBlock Text="{Binding FemPinSupportSummary}" TextWrapping="Wrap" Margin="0,0,0,6"/>
-        <TextBlock Text="A model imported from SAP2000 or ETABS is held as that model restrains it, component by component (UX, UY, UZ, RX, RY, RZ). A model that holds no restraint — the VCF system, an older configuration — has pins detected at the lowest joints connected to near-vertical frames: translations restrained, rotations free. Joints held in the XZ plane are drawn as supports in the viewer."
+        <TextBlock Text="The restraints the model holds, component by component (UX, UY, UZ, RX, RY, RZ): read from SAP2000 or ETABS, or assigned with Assign → Joint → Restraints. A model opened or generated without any — the VCF system, an older configuration — gets the pins at the lowest joints connected to near-vertical frames once, as assignments; nothing adds a support afterwards. Joints held in the XZ plane are drawn as supports in the viewer."
                    Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap"/>
        </StackPanel>
       </Border>
@@ -677,7 +696,7 @@
                           BottomPoints="{Binding SharedViewerBottomPoints}"
                           Cables="{Binding SharedViewerCables}"
                           PinSupportPoints="{Binding SharedViewerPinSupportPoints}"
-                          FemResult="{Binding SharedViewerFemResult}"
+                          FemResult="{Binding SharedViewerFemResult}" DeflectionIsModeShape="{Binding SharedViewerIsModeShape}"
                           FemResultMode="{Binding FemResultMode, Mode=TwoWay}"
                           FrameMeshSegments="{Binding SharedViewerFrameMeshSegments}"
                           MemberSizes="{Binding SharedViewerMemberSizes}"

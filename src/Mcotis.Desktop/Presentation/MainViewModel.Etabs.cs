@@ -56,7 +56,7 @@ public sealed partial class MainViewModel
         return ImportEtabsModel(model, info, Path.GetFileName(full), "from the .e2k file");
     }
 
-    internal const string TasResource = "Mcotis.TAS-CoT120.e2k";
+    internal const string TasResource = TasGenerator.Resource;
     internal const string TasName = "TAS - Tied Arch System";
 
     /// <summary>File → Load TAS…: the bundled CoT 120 m composite arch deck, imported as Import From ETABS imports its
@@ -65,10 +65,9 @@ public sealed partial class MainViewModel
     {
         if (IsBusy) throw new InvalidOperationException("Another operation is running; try again when it has finished.");
         var (template, path) = ReadTasTemplate();
-        var summary = ImportEtabsModel(EtabsFrameChains.Join(template), TasInfo(template, path), Path.GetFileName(path), "the built-in TAS model", TasName);
-        tasParameters = TiedArchParameters.Default;
-        Notify(nameof(CanOptimizeTas));
-        return summary;
+        // the TAS generator's model with its default parameters: it carries the generator's flag
+        return ImportEtabsModel(EtabsFrameChains.Join(template), TasInfo(template, path), Path.GetFileName(path), "the built-in TAS model", TasName,
+            generator: geometry => TasGenerator.Instance.Flag(TiedArchParameters.Default, geometry));
     }
 
     /// <summary>The model Mcotis opens with: the tied arch system (as File → Load TAS…). Should it not load, the built-in
@@ -89,11 +88,7 @@ public sealed partial class MainViewModel
         LoadDefaultFemModel();
     }
 
-    // ---- Edit → Tied Arch System: the TAS model built from its parameters (TiedArchSystem) ----
-    private TiedArchParameters? tasParameters;
-
-    /// <summary>The parameters of the open tied arch system (Load TAS or Edit → Tied Arch System), or null for another model.</summary>
-    internal TiedArchParameters? TiedArchParameters => OfflineModelName == TasName ? tasParameters : null;
+    // ---- Edit → Tied Arch System: the TAS model built from its parameters (TiedArchSystem); its parameters are its flag's ----
 
     /// <summary>The tied arch system the parameters give, as the editor's preview shows it: its geometry, supports and
     /// each member's section (for the arch height dimension).</summary>
@@ -113,9 +108,8 @@ public sealed partial class MainViewModel
         var model = TiedArchSystem.Build(template, parameters);
         var summary = ImportEtabsModel(model, TasInfo(template, path), Path.GetFileName(path),
             $"Edit → Tied Arch System (H1 {parameters.ArchRise:0.###} m, H2 {parameters.DeckHeight:0.###} m, L {parameters.Span:0.###} m" +
-            (parameters.ElevatedCable ? $", elevated cable at H0 {parameters.CableHeight:0.###} m)" : ")"), TasName, TieCable(parameters));
-        tasParameters = parameters;
-        Notify(nameof(CanOptimizeTas));
+            (parameters.ElevatedCable ? $", elevated cable at H0 {parameters.CableHeight:0.###} m)" : ")"), TasName, TieCable(parameters),
+            geometry => TasGenerator.Instance.Flag(parameters, geometry));
         return summary;
     }
 
@@ -155,8 +149,10 @@ public sealed partial class MainViewModel
 
     /// <param name="displayName">The model's name in the title bar and messages (Load TAS); null: "file · ETABS".</param>
     /// <param name="cable">A cable to add to the ETABS frames (the tie of a tied arch system with an elevated cable).</param>
+    /// <param name="generator">The flag of the generator that made the model, from its geometry (Load TAS, Edit → Tied Arch
+    /// System); null for an import — an imported model is not flagged, a tied arch system's .e2k included.</param>
     internal EtabsImportSummary ImportEtabsModel(EtabsModel etabsModel, ModelInfo info, string modelName, string source, string? displayName = null,
-        ImportCable? cable = null)
+        ImportCable? cable = null, Func<GeometryModel, FemGeneratorDto>? generator = null)
     {
         if (IsBusy) throw new InvalidOperationException("Another operation is running; try again when it has finished.");
         // everything that can refuse the model does so before the current model is touched
@@ -325,9 +321,9 @@ public sealed partial class MainViewModel
                           $"{femSapLoading.Combinations.Count} combinations." + (ready ? " Run Analysis solves it without SAP2000 or ETABS." : "");
         Message = ready ? $"{done} — ready to run" + (displayName is null ? " (ETABS unchanged)." : ".")
                         : $"{done} — see the import summary for what is still needed.";
-        StartNewMcotisConfigurationFile(displayName == TasName
-            ? LegacyNativeDocumentMigration.Source.Generated("TAS")
-            : LegacyNativeDocumentMigration.Source.Imported("ETABS"));
+        StartNewMcotisConfigurationFile(generator is not null
+            ? LegacyNativeDocumentMigration.Source.Generated(TasGenerator.GeneratorId)
+            : LegacyNativeDocumentMigration.Source.Imported("ETABS"), generator?.Invoke(geometry));
         Notify(nameof(SharedViewerSpanPoints));
         Notify(nameof(SharedViewerMemberSizes));
         Notify(nameof(SharedViewerSections));

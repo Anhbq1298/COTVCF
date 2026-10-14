@@ -1073,6 +1073,9 @@ public sealed class ModelCanvas : FrameworkElement
                     DrawResultArrow(dc, tail, head, brush);
                     ValueLabel(dc, $"Rx {ResultDisplayText.Force(reaction.ReactionXKN)}", tail + new Vector(-direction * 34, 0), "Text");
                 }
+                // the moment of a support that holds the rotation in the plane: written, with its sense
+                if (Math.Abs(reaction.MomentYKNm) > 1e-9)
+                    ValueLabel(dc, $"My {ResultDisplayText.Moment(reaction.MomentYKNm)} {(reaction.MomentYKNm > 0 ? "↺" : "↻")}", point + new Vector(0, -26), "Text");
             }
             return;
         }
@@ -1731,7 +1734,8 @@ public sealed class ModelCanvas : FrameworkElement
             HoverMarker(dc, support.Point);
             HoverBox(dc, cursor, $"Support {support.Result.PointName}",
                 [$"Rx  {ResultDisplayText.Force(support.Result.ReactionXKN, "0.0")}",
-                 $"Rz  {ResultDisplayText.Force(support.Result.ReactionZKN, "0.0")}"]);
+                 $"Rz  {ResultDisplayText.Force(support.Result.ReactionZKN, "0.0")}",
+                 $"My  {ResultDisplayText.Moment(support.Result.MomentYKNm, "0.0")} (counter-clockwise +)"]);
             return;
         }
         var nearest = hoverTargets

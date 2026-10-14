@@ -61,6 +61,24 @@ internal static class Program
                 GeneralSolverParityChecks.Run();
                 return 0;
             }
+            if (args.Contains("--generator-flag"))
+            {
+                GeneratorFlagChecks.Run();
+                return 0;
+            }
+            if (args.Contains("--model-history"))
+            {
+                ModelHistoryChecks.Run();
+                GeneratorFlagChecks.Run();
+                return 0;
+            }
+            if (args.Contains("--main-modal"))
+            {
+                MainWindowModalChecks.Run();
+                ModelHistoryChecks.Run();
+                GeneratorFlagChecks.Run();
+                return 0;
+            }
             if (args.Contains("--native-parity"))
             {
                 NativeDocumentParityChecks.Run();
@@ -100,9 +118,16 @@ internal static class Program
                 SapImportChecks.Run();
                 return 0;
             }
+            // opt-in: freezes the Optimization and Design menus' outputs as they are now (only with an approved difference)
+            if (args.Contains("--baseline-capture"))
+            {
+                ProductionBaselineChecks.Capture();
+                return 0;
+            }
             if (args.Contains("--optimization-study"))
             {
                 OptimizationStudyChecks.Run();
+                ProductionBaselineChecks.RunOptimization();
                 return 0;
             }
             if (args.Contains("--user-guide"))
@@ -923,6 +948,7 @@ internal static class Program
             {
                 ColumnDesignChecks.Run();
                 MegaColumnChecks.Run();
+                ProductionBaselineChecks.RunDesign();
                 return 0;
             }
             // Live: starts its own SAP2000 on a copy of the baseline under .work and checks that cable lengths follow the joints.
@@ -1086,6 +1112,8 @@ internal static class Program
             // Default: essential checks only. Full historical/solver parity, report and
             // integration checks remain opt-in via --full or their existing --flags.
             bool full = args.Contains("--full", StringComparer.OrdinalIgnoreCase);
+            // one WPF application for every check of this run that opens a window: it ends with the run, not when a window closes
+            ProductionBaselineChecks.EnsureApplication();
             NumericInputChecks.Run();
             CheckNewConfiguration();
             if (full) OutputSettingsChecks.Run();
@@ -1116,6 +1144,9 @@ internal static class Program
                 FemModelFileChecks.Run();
                 GeneralSolverParityChecks.Run();
                 NativeDocumentParityChecks.Run();
+                MainWindowModalChecks.Run();
+                ModelHistoryChecks.Run();
+                GeneratorFlagChecks.Run();
                 RunMonitorChecks.Run();
                 SapImportChecks.Run();
                 EtabsImportChecks.Run();
@@ -1126,6 +1157,8 @@ internal static class Program
             {
                 UserGuideChecks.Run();
                 ColumnDesignChecks.Run();
+                ProductionBaselineChecks.RunDesign();
+                ProductionBaselineChecks.RunOptimization();
             }
             Console.WriteLine(full
                 ? "All workflow and SAP write-boundary checks passed (full suite)."

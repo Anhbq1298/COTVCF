@@ -1,0 +1,4921 @@
+{
+  "Captured": "2026-10-14",
+  "Note": "Production baselines of the Optimization and Design menus (task 2026-10-14 \u00A72). Re-capture only with a difference the user approved and the development log records.",
+  "MillisecondsPerCase": {
+    "Optimization VCF": 248.89227777777776,
+    "Optimization TAS": 86.57487777777777
+  },
+  "Entries": [
+    {
+      "Key": "vcf/deflectionResult",
+      "Text": "SLS: 1.0DL\u002B1.0LL",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/columns",
+      "Text": "Depth [m] | qz LL_ABOVE [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/rows",
+      "Number": 9,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/best",
+      "Text": "9 of 9 cases pass \u03B4 in SLS: 1.0DL\u002B1.0LL \u2264 span / 250 and uplift \u2264 0 mm \u00B7 cheapest passing: case 1 \u00B7 SGD 7,248,380 (\u03B4 266.4 mm, limit 400.0 mm) \u00B7 least deflection: case 7 \u00B7 228.1 mm at BTrPt006, limit 400.0 mm (OK)",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/progress",
+      "Text": "Completed 9 of 9 cases \u00B7 working model and SAP2000 unchanged.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case01/inputs",
+      "Text": "18 | 5",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case01/deflectionMm",
+      "Number": 266.42603588013475,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case01/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case01/utilisation",
+      "Number": 0.6660650897003368,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case01/costSgd",
+      "Number": 7248380.036172205,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case01/point",
+      "Text": "BTrPt006",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case01/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case01/governing",
+      "Text": "SLS: 1.0DL\u002B1.0LL",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case01/span",
+      "Text": "100",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case01/limit",
+      "Text": "400.0",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case01/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case01/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case02/inputs",
+      "Text": "18 | 7.5",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case02/deflectionMm",
+      "Number": 319.4530375538983,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case02/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case02/utilisation",
+      "Number": 0.7986325938847457,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case02/costSgd",
+      "Number": 7248380.036172205,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case02/point",
+      "Text": "BTrPt006",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case02/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case02/governing",
+      "Text": "SLS: 1.0DL\u002B1.0LL",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case02/span",
+      "Text": "100",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case02/limit",
+      "Text": "400.0",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case02/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case02/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case03/inputs",
+      "Text": "18 | 10",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case03/deflectionMm",
+      "Number": 372.4794729022156,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case03/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case03/utilisation",
+      "Number": 0.931198682255539,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case03/costSgd",
+      "Number": 7248380.036172205,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case03/point",
+      "Text": "BTrPt006",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case03/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case03/governing",
+      "Text": "SLS: 1.0DL\u002B1.0LL",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case03/span",
+      "Text": "100",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case03/limit",
+      "Text": "400.0",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case03/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case03/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case04/inputs",
+      "Text": "20 | 5",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case04/deflectionMm",
+      "Number": 246.04547319993722,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case04/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case04/utilisation",
+      "Number": 0.615113682999843,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case04/costSgd",
+      "Number": 7650614.6655737385,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case04/point",
+      "Text": "BTrPt006",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case04/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case04/governing",
+      "Text": "SLS: 1.0DL\u002B1.0LL",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case04/span",
+      "Text": "100",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case04/limit",
+      "Text": "400.0",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case04/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case04/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case05/inputs",
+      "Text": "20 | 7.5",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case05/deflectionMm",
+      "Number": 297.0258589661021,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case05/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case05/utilisation",
+      "Number": 0.7425646474152552,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case05/costSgd",
+      "Number": 7650614.6655737385,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case05/point",
+      "Text": "BTrPt006",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case05/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case05/governing",
+      "Text": "SLS: 1.0DL\u002B1.0LL",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case05/span",
+      "Text": "100",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case05/limit",
+      "Text": "400.0",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case05/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case05/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case06/inputs",
+      "Text": "20 | 10",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case06/deflectionMm",
+      "Number": 348.00561037733434,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case06/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case06/utilisation",
+      "Number": 0.8700140259433359,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case06/costSgd",
+      "Number": 7650614.6655737385,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case06/point",
+      "Text": "BTrPt006",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case06/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case06/governing",
+      "Text": "SLS: 1.0DL\u002B1.0LL",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case06/span",
+      "Text": "100",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case06/limit",
+      "Text": "400.0",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case06/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case06/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case07/inputs",
+      "Text": "22 | 5",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case07/deflectionMm",
+      "Number": 228.10249240414612,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case07/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case07/utilisation",
+      "Number": 0.5702562310103653,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case07/costSgd",
+      "Number": 8054650.332686819,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case07/point",
+      "Text": "BTrPt006",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case07/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case07/governing",
+      "Text": "SLS: 1.0DL\u002B1.0LL",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case07/span",
+      "Text": "100",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case07/limit",
+      "Text": "400.0",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case07/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case07/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case08/inputs",
+      "Text": "22 | 7.5",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case08/deflectionMm",
+      "Number": 277.37715563229926,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case08/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case08/utilisation",
+      "Number": 0.6934428890807481,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case08/costSgd",
+      "Number": 8054650.332686819,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case08/point",
+      "Text": "BTrPt006",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case08/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case08/governing",
+      "Text": "SLS: 1.0DL\u002B1.0LL",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case08/span",
+      "Text": "100",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case08/limit",
+      "Text": "400.0",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case08/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case08/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case09/inputs",
+      "Text": "22 | 10",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case09/deflectionMm",
+      "Number": 326.6511183688112,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case09/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case09/utilisation",
+      "Number": 0.8166277959220279,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/case09/costSgd",
+      "Number": 8054650.332686819,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case09/point",
+      "Text": "BTrPt006",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case09/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case09/governing",
+      "Text": "SLS: 1.0DL\u002B1.0LL",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case09/span",
+      "Text": "100",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case09/limit",
+      "Text": "400.0",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case09/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/case09/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Max deflection \u03B4 ~ Depth [m]/swingPercent",
+      "Number": 14.12172229743196,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max deflection \u03B4 ~ Depth [m]/elasticity",
+      "Number": -0.7060861148715979,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max deflection \u03B4 ~ Depth [m]/rSquared",
+      "Number": 0.9985485775788162,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max deflection \u03B4 ~ Depth [m]/direction",
+      "Number": -1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Max deflection \u03B4 ~ Depth [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max deflection \u03B4 ~ qz LL_ABOVE [kPa]/swingPercent",
+      "Number": 34.29662044261983,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max deflection \u03B4 ~ qz LL_ABOVE [kPa]/elasticity",
+      "Number": 0.5144493066392974,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max deflection \u03B4 ~ qz LL_ABOVE [kPa]/rSquared",
+      "Number": 0.9999999999871801,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max deflection \u03B4 ~ qz LL_ABOVE [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Max deflection \u03B4 ~ qz LL_ABOVE [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Utilisation \u03B4 / (span / 250) ~ Depth [m]/swingPercent",
+      "Number": 14.12172229743197,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Utilisation \u03B4 / (span / 250) ~ Depth [m]/elasticity",
+      "Number": -0.7060861148715983,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Utilisation \u03B4 / (span / 250) ~ Depth [m]/rSquared",
+      "Number": 0.9985485775788161,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Utilisation \u03B4 / (span / 250) ~ Depth [m]/direction",
+      "Number": -1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Utilisation \u03B4 / (span / 250) ~ Depth [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Utilisation \u03B4 / (span / 250) ~ qz LL_ABOVE [kPa]/swingPercent",
+      "Number": 34.29662044261987,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Utilisation \u03B4 / (span / 250) ~ qz LL_ABOVE [kPa]/elasticity",
+      "Number": 0.5144493066392979,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Utilisation \u03B4 / (span / 250) ~ qz LL_ABOVE [kPa]/rSquared",
+      "Number": 0.9999999999871801,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Utilisation \u03B4 / (span / 250) ~ qz LL_ABOVE [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Utilisation \u03B4 / (span / 250) ~ qz LL_ABOVE [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base horizontal force H (one end) ~ Depth [m]/swingPercent",
+      "Number": 0.4491160524335197,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base horizontal force H (one end) ~ Depth [m]/elasticity",
+      "Number": 0.010329462447732666,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base horizontal force H (one end) ~ Depth [m]/rSquared",
+      "Number": 0.21114088804750764,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base horizontal force H (one end) ~ Depth [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Base horizontal force H (one end) ~ Depth [m]/turningPointX",
+      "Number": 20,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base horizontal force H (one end) ~ qz LL_ABOVE [kPa]/swingPercent",
+      "Number": 16.418530145128017,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base horizontal force H (one end) ~ qz LL_ABOVE [kPa]/elasticity",
+      "Number": 0.2462779521769203,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base horizontal force H (one end) ~ qz LL_ABOVE [kPa]/rSquared",
+      "Number": 0.9999999999969698,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base horizontal force H (one end) ~ qz LL_ABOVE [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Base horizontal force H (one end) ~ qz LL_ABOVE [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Total cost of the system ~ Depth [m]/swingPercent",
+      "Number": 10.537807332627933,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Total cost of the system ~ Depth [m]/elasticity",
+      "Number": 0.5268903666313968,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Total cost of the system ~ Depth [m]/rSquared",
+      "Number": 0.9999983367316821,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Total cost of the system ~ Depth [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Total cost of the system ~ Depth [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Total cost of the system ~ qz LL_ABOVE [kPa]/swingPercent",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Total cost of the system ~ qz LL_ABOVE [kPa]/elasticity",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Total cost of the system ~ qz LL_ABOVE [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Total cost of the system ~ qz LL_ABOVE [kPa]/direction",
+      "Number": 0,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Total cost of the system ~ qz LL_ABOVE [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Cost per metre of span ~ Depth [m]/swingPercent",
+      "Number": 10.53780733262792,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Cost per metre of span ~ Depth [m]/elasticity",
+      "Number": 0.5268903666313961,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Cost per metre of span ~ Depth [m]/rSquared",
+      "Number": 0.9999983367316821,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Cost per metre of span ~ Depth [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Cost per metre of span ~ Depth [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Cost per metre of span ~ qz LL_ABOVE [kPa]/swingPercent",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Cost per metre of span ~ qz LL_ABOVE [kPa]/elasticity",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Cost per metre of span ~ qz LL_ABOVE [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Cost per metre of span ~ qz LL_ABOVE [kPa]/direction",
+      "Number": 0,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Cost per metre of span ~ qz LL_ABOVE [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Mass of the system ~ Depth [m]/swingPercent",
+      "Number": 4.454744011538064,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Mass of the system ~ Depth [m]/elasticity",
+      "Number": 0.22273720057690316,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Mass of the system ~ Depth [m]/rSquared",
+      "Number": 0.9999998914187317,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Mass of the system ~ Depth [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Mass of the system ~ Depth [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Mass of the system ~ qz LL_ABOVE [kPa]/swingPercent",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Mass of the system ~ qz LL_ABOVE [kPa]/elasticity",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Mass of the system ~ qz LL_ABOVE [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Mass of the system ~ qz LL_ABOVE [kPa]/direction",
+      "Number": 0,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Mass of the system ~ qz LL_ABOVE [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base vertical force V (one end) ~ Depth [m]/swingPercent",
+      "Number": 0.96264928868706,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base vertical force V (one end) ~ Depth [m]/elasticity",
+      "Number": 0.048132464434353,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base vertical force V (one end) ~ Depth [m]/rSquared",
+      "Number": 0.9999998914187159,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base vertical force V (one end) ~ Depth [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Base vertical force V (one end) ~ Depth [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base vertical force V (one end) ~ qz LL_ABOVE [kPa]/swingPercent",
+      "Number": 22.397276915540626,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base vertical force V (one end) ~ qz LL_ABOVE [kPa]/elasticity",
+      "Number": 0.3359591537331093,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base vertical force V (one end) ~ qz LL_ABOVE [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Base vertical force V (one end) ~ qz LL_ABOVE [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Base vertical force V (one end) ~ qz LL_ABOVE [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max cable tension ~ Depth [m]/swingPercent",
+      "Number": 0.6209056312254108,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max cable tension ~ Depth [m]/elasticity",
+      "Number": -0.031045281561270545,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max cable tension ~ Depth [m]/rSquared",
+      "Number": 0.9935346407231636,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max cable tension ~ Depth [m]/direction",
+      "Number": -1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Max cable tension ~ Depth [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max cable tension ~ qz LL_ABOVE [kPa]/swingPercent",
+      "Number": 1.0055120964577746,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max cable tension ~ qz LL_ABOVE [kPa]/elasticity",
+      "Number": 0.01508268144686662,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max cable tension ~ qz LL_ABOVE [kPa]/rSquared",
+      "Number": 0.999999999996148,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max cable tension ~ qz LL_ABOVE [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Max cable tension ~ qz LL_ABOVE [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame axial force ~ Depth [m]/swingPercent",
+      "Number": 0.9957411524792897,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame axial force ~ Depth [m]/elasticity",
+      "Number": 0.04978705762396449,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame axial force ~ Depth [m]/rSquared",
+      "Number": 0.999119455371806,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame axial force ~ Depth [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame axial force ~ Depth [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame axial force ~ qz LL_ABOVE [kPa]/swingPercent",
+      "Number": 10.759825611293355,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame axial force ~ qz LL_ABOVE [kPa]/elasticity",
+      "Number": 0.16139738416940036,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame axial force ~ qz LL_ABOVE [kPa]/rSquared",
+      "Number": 0.9999999999999916,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame axial force ~ qz LL_ABOVE [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame axial force ~ qz LL_ABOVE [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame bending moment ~ Depth [m]/swingPercent",
+      "Number": 10.699179215153357,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame bending moment ~ Depth [m]/elasticity",
+      "Number": -0.5349589607576678,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame bending moment ~ Depth [m]/rSquared",
+      "Number": 0.995348832720419,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame bending moment ~ Depth [m]/direction",
+      "Number": -1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame bending moment ~ Depth [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame bending moment ~ qz LL_ABOVE [kPa]/swingPercent",
+      "Number": 11.535233004996233,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame bending moment ~ qz LL_ABOVE [kPa]/elasticity",
+      "Number": 0.17302849507494347,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame bending moment ~ qz LL_ABOVE [kPa]/rSquared",
+      "Number": 0.9999999999960223,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame bending moment ~ qz LL_ABOVE [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/sensitivity/Max frame bending moment ~ qz LL_ABOVE [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/summary/00 Study",
+      "Text": "9 cases were generated by varying Depth [m] (18, 20, 22); qz LL_ABOVE [kPa] (5, 7.5, 10), every other input held at the model\u0027s value. 9 were analysed with the internal FEM. Responses are read in \u0027SLS: 1.0DL\u002B1.0LL\u0027; the horizontal and vertical base forces are the sums over the supports of one end.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/summary/01 Compliance",
+      "Text": "9 of 9 cases (100%) satisfy \u03B4 in SLS: 1.0DL\u002B1.0LL \u2264 span / 250 and uplift \u2264 0 mm.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/summary/02 Max deflection \u03B4",
+      "Text": "Ranges 228 \u2026 372 mm. Most sensitive to qz LL_ABOVE [kPa] (swing 34.3%, elasticity 0.51 \u2014 \u002B1% of qz LL_ABOVE [kPa] gives \u002B0.51% of the response); it rises almost linearly as qz LL_ABOVE [kPa] increases. Next: Depth [m] (swing 14.1%, elasticity -0.71 \u2014 \u002B1% of Depth [m] gives -0.71% of the response).",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/summary/03 Base horizontal force H (one end)",
+      "Text": "Ranges 16,231 \u2026 19,357 kN. Most sensitive to qz LL_ABOVE [kPa] (swing 16.4%, elasticity 0.25 \u2014 \u002B1% of qz LL_ABOVE [kPa] gives \u002B0.25% of the response); it rises almost linearly as qz LL_ABOVE [kPa] increases. It does not depend on Depth [m] (swing below 0.5%).",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/summary/04 Total cost of the system",
+      "Text": "Ranges 7,248,380 \u2026 8,054,650 SGD. Most sensitive to Depth [m] (swing 10.5%, elasticity 0.53 \u2014 \u002B1% of Depth [m] gives \u002B0.53% of the response); it rises almost linearly as Depth [m] increases. It does not depend on qz LL_ABOVE [kPa] (swing below 0.5%).",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/summary/05 Optimum",
+      "Text": "The cheapest passing case is case 1 (Depth [m] 18, qz LL_ABOVE [kPa] 5): SGD 7,248,380, \u03B4 266.4 mm against 400.0 mm (\u03B4 / limit 0.67), H 16,231 kN at one end. It keeps more than a quarter of the deflection limit in reserve, so a lighter system outside the ranges studied may still pass.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/summary/06 Limitations",
+      "Text": "Trends are main effects: each curve averages over the other parameters, so a strong interaction (see the interaction plot) can hide behind a flat mean. Results hold within the ranges studied; every case is analysed with the app\u0027s internal FEM and the Analysis Options of the model.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/conclusion/00",
+      "Text": "Max deflection \u03B4 is governed by qz LL_ABOVE [kPa]: it rises by 34% of its mean over the range, 2.4\u00D7 the effect of Depth [m].",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/conclusion/01",
+      "Text": "Base horizontal force H (one end) is governed by qz LL_ABOVE [kPa]: it rises by 16% of its mean over the range.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/conclusion/02",
+      "Text": "Total cost of the system is governed by Depth [m]: it rises by 11% of its mean over the range.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/conclusion/03",
+      "Text": "Recommended starting point: case 1 (Depth [m] 18, qz LL_ABOVE [kPa] 5), SGD 7,248,380.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/01/title",
+      "Text": "Max deflection \u03B4 vs qz LL_ABOVE [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/01/caption",
+      "Text": "Max deflection \u03B4 against qz LL_ABOVE [kPa] (mean over the other parameters, band = min \u2026 max). Swing 34.3% of the mean; elasticity 0.51; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/01/000",
+      "Number": 246.85800049473937,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/01/001",
+      "Number": 297.95201738409986,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/01/002",
+      "Number": 349.0454005494537,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/02/title",
+      "Text": "Max deflection \u03B4 vs Depth [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/02/caption",
+      "Text": "Max deflection \u03B4 against Depth [m] (mean over the other parameters, band = min \u2026 max). Swing 14.1% of the mean; elasticity -0.71; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/02/000",
+      "Number": 319.4528487787495,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/02/001",
+      "Number": 297.0256475144579,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/02/002",
+      "Number": 277.3769221350855,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/03/title",
+      "Text": "Utilisation \u03B4 / (span / 250) vs qz LL_ABOVE [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/03/caption",
+      "Text": "Utilisation \u03B4 / (span / 250) against qz LL_ABOVE [kPa] (mean over the other parameters, band = min \u2026 max). Swing 34.3% of the mean; elasticity 0.51; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/03/000",
+      "Number": 0.6171450012368483,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/03/001",
+      "Number": 0.7448800434602497,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/03/002",
+      "Number": 0.8726135013736344,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/04/title",
+      "Text": "Utilisation \u03B4 / (span / 250) vs Depth [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/04/caption",
+      "Text": "Utilisation \u03B4 / (span / 250) against Depth [m] (mean over the other parameters, band = min \u2026 max). Swing 14.1% of the mean; elasticity -0.71; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/04/000",
+      "Number": 0.7986321219468738,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/04/001",
+      "Number": 0.7425641187861447,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/04/002",
+      "Number": 0.6934423053377138,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/05/title",
+      "Text": "Base horizontal force H (one end) vs qz LL_ABOVE [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/05/caption",
+      "Text": "Base horizontal force H (one end) against qz LL_ABOVE [kPa] (mean over the other parameters, band = min \u2026 max). Swing 16.4% of the mean; elasticity 0.25; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/05/000",
+      "Number": 16331.466181527852,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/05/001",
+      "Number": 17792.068401314744,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/05/002",
+      "Number": 19252.661813408246,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/06/title",
+      "Text": "Total cost of the system vs Depth [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/06/caption",
+      "Text": "Total cost of the system against Depth [m] (mean over the other parameters, band = min \u2026 max). Swing 10.5% of the mean; elasticity 0.53; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/06/000",
+      "Number": 7248380.036172205,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/06/001",
+      "Number": 7650614.6655737385,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/06/002",
+      "Number": 8054650.332686819,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/07/title",
+      "Text": "Cost per metre of span vs Depth [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/07/caption",
+      "Text": "Cost per metre of span against Depth [m] (mean over the other parameters, band = min \u2026 max). Swing 10.5% of the mean; elasticity 0.53; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/07/000",
+      "Number": 72483.80036172205,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/07/001",
+      "Number": 76506.14665573738,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/07/002",
+      "Number": 80546.50332686819,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/08/title",
+      "Text": "Mass of the system vs Depth [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/08/caption",
+      "Text": "Mass of the system against Depth [m] (mean over the other parameters, band = min \u2026 max). Swing 4.5% of the mean; elasticity 0.22; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/08/000",
+      "Number": 5771.6482206912115,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/08/001",
+      "Number": 5903.057338425173,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/08/002",
+      "Number": 6034.616542628365,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/09/title",
+      "Text": "Base vertical force V (one end) vs qz LL_ABOVE [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/09/caption",
+      "Text": "Base vertical force V (one end) against qz LL_ABOVE [kPa] (mean over the other parameters, band = min \u2026 max). Swing 22.4% of the mean; elasticity 0.34; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/09/000",
+      "Number": 118944.85460500426,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/09/001",
+      "Number": 133944.85460500492,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/09/002",
+      "Number": 148944.85460500547,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/10/title",
+      "Text": "Base vertical force V (one end) vs Depth [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/10/caption",
+      "Text": "Base vertical force V (one end) against Depth [m] (mean over the other parameters, band = min \u2026 max). Swing 1% of the mean; elasticity 0.05; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/10/000",
+      "Number": 133300.26766376337,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/10/001",
+      "Number": 133944.6092973999,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/10/002",
+      "Number": 134589.68685385137,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/11/title",
+      "Text": "Max cable tension vs qz LL_ABOVE [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/11/caption",
+      "Text": "Max cable tension against qz LL_ABOVE [kPa] (mean over the other parameters, band = min \u2026 max). Swing 1% of the mean; elasticity 0.02; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/11/000",
+      "Number": 103126.28144346201,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/11/001",
+      "Number": 103647.37666395213,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/11/002",
+      "Number": 104168.46834160465,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/12/title",
+      "Text": "Max cable tension vs Depth [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/12/caption",
+      "Text": "Max cable tension against Depth [m] (mean over the other parameters, band = min \u2026 max). Swing 0.6% of the mean; elasticity -0.03; linear fit R\u00B2 0.99.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/12/000",
+      "Number": 103984.13810575638,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/12/001",
+      "Number": 103617.40262849735,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/12/002",
+      "Number": 103340.58571476505,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/13/title",
+      "Text": "Max frame axial force vs qz LL_ABOVE [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/13/caption",
+      "Text": "Max frame axial force against qz LL_ABOVE [kPa] (mean over the other parameters, band = min \u2026 max). Swing 10.8% of the mean; elasticity 0.16; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/13/000",
+      "Number": 243921.61183797606,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/13/001",
+      "Number": 257790.51462058598,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/13/002",
+      "Number": 271659.42181172344,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/14/title",
+      "Text": "Max frame axial force vs Depth [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/14/caption",
+      "Text": "Max frame axial force against Depth [m] (mean over the other parameters, band = min \u2026 max). Swing 1% of the mean; elasticity 0.05; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/14/000",
+      "Number": 256485.0546303956,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/14/001",
+      "Number": 257834.5127535965,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/14/002",
+      "Number": 259051.98088629343,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/15/title",
+      "Text": "Max frame bending moment vs qz LL_ABOVE [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/15/caption",
+      "Text": "Max frame bending moment against qz LL_ABOVE [kPa] (mean over the other parameters, band = min \u2026 max). Swing 11.5% of the mean; elasticity 0.17; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/15/000",
+      "Number": 243782.11483713659,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/15/001",
+      "Number": 258703.1711933302,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/15/002",
+      "Number": 273624.1244617984,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/16/title",
+      "Text": "Max frame bending moment vs Depth [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/16/caption",
+      "Text": "Max frame bending moment against Depth [m] (mean over the other parameters, band = min \u2026 max). Swing 10.7% of the mean; elasticity -0.53; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/16/000",
+      "Number": 273088.8969297513,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/16/001",
+      "Number": 257610.7288775084,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/16/002",
+      "Number": 245409.78468500543,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/17/title",
+      "Text": "Sensitivity ranking",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/17/caption",
+      "Text": "How much each parameter moves each key response over its range: the swing of the main-effect curve (max \u2212 min of the mean) as a share of the response\u0027s mean. The taller the bar, the more sensitive the response to that parameter.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/17/000",
+      "Number": 14.12172229743196,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/17/001",
+      "Number": 34.29662044261983,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/17/002",
+      "Number": 0.4491160524335197,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/17/003",
+      "Number": 16.418530145128017,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/17/004",
+      "Number": 10.537807332627933,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/17/005",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/18/title",
+      "Text": "Cost against utilisation",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/18/caption",
+      "Text": "Every analysed case: its total cost against \u03B4 / limit. The lower-left edge of the cloud left of 1.0 is the economical frontier \u2014 the cheapest systems that still satisfy the deflection limit.",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/18/000",
+      "Number": 7248380.036172205,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/18/001",
+      "Number": 7248380.036172205,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/18/002",
+      "Number": 7248380.036172205,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/18/003",
+      "Number": 7650614.6655737385,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/18/004",
+      "Number": 7650614.6655737385,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/18/005",
+      "Number": 7650614.6655737385,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/18/006",
+      "Number": 8054650.332686819,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/18/007",
+      "Number": 8054650.332686819,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/18/008",
+      "Number": 8054650.332686819,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/19/title",
+      "Text": "Interaction: \u03B4 vs qz LL_ABOVE [kPa] for each Depth [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/19/caption",
+      "Text": "The two parameters that move the deflection most. Parallel curves mean the effects add up; curves that fan out mean the effect of qz LL_ABOVE [kPa] depends on Depth [m].",
+      "Analysis": false
+    },
+    {
+      "Key": "vcf/figure/19/000",
+      "Number": 266.42603588013475,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/19/001",
+      "Number": 319.4530375538983,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/19/002",
+      "Number": 372.4794729022156,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/19/003",
+      "Number": 246.04547319993722,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/19/004",
+      "Number": 297.0258589661021,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/19/005",
+      "Number": 348.00561037733434,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/19/006",
+      "Number": 228.10249240414612,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/19/007",
+      "Number": 277.37715563229926,
+      "Analysis": true
+    },
+    {
+      "Key": "vcf/figure/19/008",
+      "Number": 326.6511183688112,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/deflectionResult",
+      "Text": "SLS1 G\u002BQ full",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/columns",
+      "Text": "h [m] | LL [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/rows",
+      "Number": 9,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/best",
+      "Text": "9 of 9 cases pass \u03B4 in SLS1 G\u002BQ full \u2264 L / 250 and uplift \u2264 0 mm \u00B7 cheapest passing: case 1 \u00B7 SGD 2,558,537 (\u03B4 74.6 mm, limit 480.0 mm) \u00B7 least deflection: case 1 \u00B7 74.6 mm at 8@EL32, limit 480.0 mm (OK)",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/progress",
+      "Text": "Completed 9 of 9 cases \u00B7 working model and SAP2000 unchanged.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case01/inputs",
+      "Text": "2 | 5",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case01/deflectionMm",
+      "Number": 74.5604265158057,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case01/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case01/utilisation",
+      "Number": 0.15533422190792853,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case01/costSgd",
+      "Number": 2558536.748221659,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case01/point",
+      "Text": "8@EL32",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case01/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case01/governing",
+      "Text": "SLS1 G\u002BQ full",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case01/span",
+      "Text": "120",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case01/limit",
+      "Text": "480.0",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case01/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case01/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case02/inputs",
+      "Text": "2 | 7.5",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case02/deflectionMm",
+      "Number": 86.23581788239268,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case02/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case02/utilisation",
+      "Number": 0.17965795392165143,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case02/costSgd",
+      "Number": 2558536.748221659,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case02/point",
+      "Text": "8@EL32",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case02/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case02/governing",
+      "Text": "SLS1 G\u002BQ full",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case02/span",
+      "Text": "120",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case02/limit",
+      "Text": "480.0",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case02/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case02/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case03/inputs",
+      "Text": "2 | 10",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case03/deflectionMm",
+      "Number": 97.91120924897967,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case03/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case03/utilisation",
+      "Number": 0.20398168593537433,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case03/costSgd",
+      "Number": 2558536.748221659,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case03/point",
+      "Text": "8@EL32",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case03/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case03/governing",
+      "Text": "SLS1 G\u002BQ full",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case03/span",
+      "Text": "120",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case03/limit",
+      "Text": "480.0",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case03/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case03/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case04/inputs",
+      "Text": "3 | 5",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case04/deflectionMm",
+      "Number": 75.37558154915371,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case04/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case04/utilisation",
+      "Number": 0.15703246156073689,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case04/costSgd",
+      "Number": 2656438.4482774967,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case04/point",
+      "Text": "8@EL33",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case04/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case04/governing",
+      "Text": "SLS1 G\u002BQ full",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case04/span",
+      "Text": "120",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case04/limit",
+      "Text": "480.0",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case04/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case04/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case05/inputs",
+      "Text": "3 | 7.5",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case05/deflectionMm",
+      "Number": 87.17857774408452,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case05/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case05/utilisation",
+      "Number": 0.18162203696684276,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case05/costSgd",
+      "Number": 2656438.4482774967,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case05/point",
+      "Text": "8@EL33",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case05/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case05/governing",
+      "Text": "SLS1 G\u002BQ full",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case05/span",
+      "Text": "120",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case05/limit",
+      "Text": "480.0",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case05/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case05/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case06/inputs",
+      "Text": "3 | 10",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case06/deflectionMm",
+      "Number": 98.98157393901533,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case06/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case06/utilisation",
+      "Number": 0.2062116123729486,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case06/costSgd",
+      "Number": 2656438.4482774967,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case06/point",
+      "Text": "8@EL33",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case06/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case06/governing",
+      "Text": "SLS1 G\u002BQ full",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case06/span",
+      "Text": "120",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case06/limit",
+      "Text": "480.0",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case06/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case06/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case07/inputs",
+      "Text": "4 | 5",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case07/deflectionMm",
+      "Number": 76.18390717595148,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case07/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case07/utilisation",
+      "Number": 0.15871647328323224,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case07/costSgd",
+      "Number": 2755192.684746875,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case07/point",
+      "Text": "8@EL34",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case07/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case07/governing",
+      "Text": "SLS1 G\u002BQ full",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case07/span",
+      "Text": "120",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case07/limit",
+      "Text": "480.0",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case07/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case07/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case08/inputs",
+      "Text": "4 | 7.5",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case08/deflectionMm",
+      "Number": 88.11393367479519,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case08/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case08/utilisation",
+      "Number": 0.1835706951558233,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case08/costSgd",
+      "Number": 2755192.684746875,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case08/point",
+      "Text": "8@EL34",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case08/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case08/governing",
+      "Text": "SLS1 G\u002BQ full",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case08/span",
+      "Text": "120",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case08/limit",
+      "Text": "480.0",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case08/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case08/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case09/inputs",
+      "Text": "4 | 10",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case09/deflectionMm",
+      "Number": 100.04396017363892,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case09/upliftMm",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case09/utilisation",
+      "Number": 0.20842491702841442,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/case09/costSgd",
+      "Number": 2755192.684746875,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case09/point",
+      "Text": "8@EL34",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case09/upliftPoint",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case09/governing",
+      "Text": "SLS1 G\u002BQ full",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case09/span",
+      "Text": "120",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case09/limit",
+      "Text": "480.0",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case09/check",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/case09/status",
+      "Text": "Analysed",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Max deflection \u03B4 ~ h [m]/swingPercent",
+      "Number": 2.1543927544143573,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max deflection \u03B4 ~ h [m]/elasticity",
+      "Number": 0.03231589131621536,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max deflection \u03B4 ~ h [m]/rSquared",
+      "Number": 0.9999948196811713,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max deflection \u03B4 ~ h [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Max deflection \u03B4 ~ h [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max deflection \u03B4 ~ LL [kPa]/swingPercent",
+      "Number": 27.07807154579582,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max deflection \u03B4 ~ LL [kPa]/elasticity",
+      "Number": 0.40617107318693724,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max deflection \u03B4 ~ LL [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max deflection \u03B4 ~ LL [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Max deflection \u03B4 ~ LL [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Utilisation \u03B4 / (L / 250) ~ h [m]/swingPercent",
+      "Number": 2.154392754414359,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Utilisation \u03B4 / (L / 250) ~ h [m]/elasticity",
+      "Number": 0.03231589131621539,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Utilisation \u03B4 / (L / 250) ~ h [m]/rSquared",
+      "Number": 0.9999948196811713,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Utilisation \u03B4 / (L / 250) ~ h [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Utilisation \u03B4 / (L / 250) ~ h [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Utilisation \u03B4 / (L / 250) ~ LL [kPa]/swingPercent",
+      "Number": 27.07807154579584,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Utilisation \u03B4 / (L / 250) ~ LL [kPa]/elasticity",
+      "Number": 0.4061710731869376,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Utilisation \u03B4 / (L / 250) ~ LL [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Utilisation \u03B4 / (L / 250) ~ LL [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Utilisation \u03B4 / (L / 250) ~ LL [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base horizontal force H (one end) ~ h [m]/swingPercent",
+      "Number": 0.38278772175455494,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base horizontal force H (one end) ~ h [m]/elasticity",
+      "Number": -0.005741815826318325,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base horizontal force H (one end) ~ h [m]/rSquared",
+      "Number": 0.9999896212785466,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base horizontal force H (one end) ~ h [m]/direction",
+      "Number": -1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Base horizontal force H (one end) ~ h [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base horizontal force H (one end) ~ LL [kPa]/swingPercent",
+      "Number": 26.100700584225173,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base horizontal force H (one end) ~ LL [kPa]/elasticity",
+      "Number": 0.39151050876337745,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base horizontal force H (one end) ~ LL [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base horizontal force H (one end) ~ LL [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Base horizontal force H (one end) ~ LL [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Total cost of the system ~ h [m]/swingPercent",
+      "Number": 7.402200535372083,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Total cost of the system ~ h [m]/elasticity",
+      "Number": 0.11103300803058126,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Total cost of the system ~ h [m]/rSquared",
+      "Number": 0.9999937354803242,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Total cost of the system ~ h [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Total cost of the system ~ h [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Total cost of the system ~ LL [kPa]/swingPercent",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Total cost of the system ~ LL [kPa]/elasticity",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Total cost of the system ~ LL [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Total cost of the system ~ LL [kPa]/direction",
+      "Number": 0,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Total cost of the system ~ LL [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Cost per metre of span ~ h [m]/swingPercent",
+      "Number": 7.402200535372064,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Cost per metre of span ~ h [m]/elasticity",
+      "Number": 0.11103300803058098,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Cost per metre of span ~ h [m]/rSquared",
+      "Number": 0.9999937354803242,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Cost per metre of span ~ h [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Cost per metre of span ~ h [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Cost per metre of span ~ LL [kPa]/swingPercent",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Cost per metre of span ~ LL [kPa]/elasticity",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Cost per metre of span ~ LL [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Cost per metre of span ~ LL [kPa]/direction",
+      "Number": 0,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Cost per metre of span ~ LL [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Mass of the system ~ h [m]/swingPercent",
+      "Number": 2.642855740121158,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Mass of the system ~ h [m]/elasticity",
+      "Number": 0.03964283610181737,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Mass of the system ~ h [m]/rSquared",
+      "Number": 0.9999943903143779,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Mass of the system ~ h [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Mass of the system ~ h [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Mass of the system ~ LL [kPa]/swingPercent",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Mass of the system ~ LL [kPa]/elasticity",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Mass of the system ~ LL [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Mass of the system ~ LL [kPa]/direction",
+      "Number": 0,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Mass of the system ~ LL [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base vertical force V (one end) ~ h [m]/swingPercent",
+      "Number": 0.28346798457738986,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base vertical force V (one end) ~ h [m]/elasticity",
+      "Number": 0.004252019768660849,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base vertical force V (one end) ~ h [m]/rSquared",
+      "Number": 0.9999943903143834,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base vertical force V (one end) ~ h [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Base vertical force V (one end) ~ h [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base vertical force V (one end) ~ LL [kPa]/swingPercent",
+      "Number": 25.5069081926981,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base vertical force V (one end) ~ LL [kPa]/elasticity",
+      "Number": 0.3826036228904715,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base vertical force V (one end) ~ LL [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Base vertical force V (one end) ~ LL [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Base vertical force V (one end) ~ LL [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame axial force ~ h [m]/swingPercent",
+      "Number": 0.3344409780909224,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame axial force ~ h [m]/elasticity",
+      "Number": -0.005016614671363835,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame axial force ~ h [m]/rSquared",
+      "Number": 0.9999899093973684,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame axial force ~ h [m]/direction",
+      "Number": -1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Max frame axial force ~ h [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame axial force ~ LL [kPa]/swingPercent",
+      "Number": 25.982536542361746,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame axial force ~ LL [kPa]/elasticity",
+      "Number": 0.38973804813542606,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame axial force ~ LL [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame axial force ~ LL [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Max frame axial force ~ LL [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame bending moment ~ h [m]/swingPercent",
+      "Number": 5.0278369724756375,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame bending moment ~ h [m]/elasticity",
+      "Number": 0.07541755458713456,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame bending moment ~ h [m]/rSquared",
+      "Number": 0.9997353577135062,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame bending moment ~ h [m]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Max frame bending moment ~ h [m]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame bending moment ~ LL [kPa]/swingPercent",
+      "Number": 30.000400079020512,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame bending moment ~ LL [kPa]/elasticity",
+      "Number": 0.45000600118530765,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame bending moment ~ LL [kPa]/rSquared",
+      "Number": 1,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/sensitivity/Max frame bending moment ~ LL [kPa]/direction",
+      "Number": 1,
+      "Analysis": false
+    },
+    {
+      "Key": "tas/sensitivity/Max frame bending moment ~ LL [kPa]/turningPointX",
+      "Analysis": true
+    },
+    {
+      "Key": "tas/summary/00 Study",
+      "Text": "9 cases were generated by varying h [m] (2, 3, 4); LL [kPa] (5, 7.5, 10), every other input held at the model\u0027s value. 9 were analysed with the internal FEM. Responses are read in \u0027SLS1 G\u002BQ full\u0027; the horizontal and vertical base forces are the sums over the supports of one end.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/summary/01 Compliance",
+      "Text": "9 of 9 cases (100%) satisfy \u03B4 in SLS1 G\u002BQ full \u2264 L / 250 and uplift \u2264 0 mm.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/summary/02 Max deflection \u03B4",
+      "Text": "Ranges 74.6 \u2026 100 mm. Most sensitive to LL [kPa] (swing 27.1%, elasticity 0.41 \u2014 \u002B1% of LL [kPa] gives \u002B0.41% of the response); it rises almost linearly as LL [kPa] increases. Next: h [m] (swing 2.2%, elasticity 0.03 \u2014 \u002B1% of h [m] gives \u002B0.03% of the response).",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/summary/03 Base horizontal force H (one end)",
+      "Text": "Ranges 117,229 \u2026 152,999 kN. Most sensitive to LL [kPa] (swing 26.1%, elasticity 0.39 \u2014 \u002B1% of LL [kPa] gives \u002B0.39% of the response); it rises almost linearly as LL [kPa] increases. It does not depend on h [m] (swing below 0.5%).",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/summary/04 Total cost of the system",
+      "Text": "Ranges 2,558,537 \u2026 2,755,193 SGD. Most sensitive to h [m] (swing 7.4%, elasticity 0.11 \u2014 \u002B1% of h [m] gives \u002B0.11% of the response); it rises almost linearly as h [m] increases. It does not depend on LL [kPa] (swing below 0.5%).",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/summary/05 Optimum",
+      "Text": "The cheapest passing case is case 1 (h [m] 2, LL [kPa] 5): SGD 2,558,537, \u03B4 74.6 mm against 480.0 mm (\u03B4 / limit 0.16), H 117,650 kN at one end. It keeps more than a quarter of the deflection limit in reserve, so a lighter system outside the ranges studied may still pass.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/summary/06 Limitations",
+      "Text": "Trends are main effects: each curve averages over the other parameters, so a strong interaction (see the interaction plot) can hide behind a flat mean. Results hold within the ranges studied; every case is analysed with the app\u0027s internal FEM and the Analysis Options of the model.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/conclusion/00",
+      "Text": "Max deflection \u03B4 is governed by LL [kPa]: it rises by 27% of its mean over the range, 12.6\u00D7 the effect of h [m].",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/conclusion/01",
+      "Text": "Base horizontal force H (one end) is governed by LL [kPa]: it rises by 26% of its mean over the range.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/conclusion/02",
+      "Text": "Total cost of the system is governed by h [m]: it rises by 7% of its mean over the range.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/conclusion/03",
+      "Text": "Recommended starting point: case 1 (h [m] 2, LL [kPa] 5), SGD 2,558,537.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/01/title",
+      "Text": "Max deflection \u03B4 vs LL [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/01/caption",
+      "Text": "Max deflection \u03B4 against LL [kPa] (mean over the other parameters, band = min \u2026 max). Swing 27.1% of the mean; elasticity 0.41; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/01/000",
+      "Number": 75.37330508030364,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/01/001",
+      "Number": 87.1761097670908,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/01/002",
+      "Number": 98.97891445387798,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/02/title",
+      "Text": "Max deflection \u03B4 vs h [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/02/caption",
+      "Text": "Max deflection \u03B4 against h [m] (mean over the other parameters, band = min \u2026 max). Swing 2.2% of the mean; elasticity 0.03; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/02/000",
+      "Number": 86.23581788239268,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/02/001",
+      "Number": 87.17857774408452,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/02/002",
+      "Number": 88.11393367479519,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/03/title",
+      "Text": "Utilisation \u03B4 / (L / 250) vs LL [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/03/caption",
+      "Text": "Utilisation \u03B4 / (L / 250) against LL [kPa] (mean over the other parameters, band = min \u2026 max). Swing 27.1% of the mean; elasticity 0.41; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/03/000",
+      "Number": 0.15702771891729922,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/03/001",
+      "Number": 0.1816168953481058,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/03/002",
+      "Number": 0.20620607177891248,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/04/title",
+      "Text": "Utilisation \u03B4 / (L / 250) vs h [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/04/caption",
+      "Text": "Utilisation \u03B4 / (L / 250) against h [m] (mean over the other parameters, band = min \u2026 max). Swing 2.2% of the mean; elasticity 0.03; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/04/000",
+      "Number": 0.17965795392165143,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/04/001",
+      "Number": 0.18162203696684276,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/04/002",
+      "Number": 0.18357069515582333,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/05/title",
+      "Text": "Base horizontal force H (one end) vs LL [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/05/caption",
+      "Text": "Base horizontal force H (one end) against LL [kPa] (mean over the other parameters, band = min \u2026 max). Swing 26.1% of the mean; elasticity 0.39; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/05/000",
+      "Number": 117439.62437779696,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/05/001",
+      "Number": 135066.24209797566,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/05/002",
+      "Number": 152692.85981815428,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/06/title",
+      "Text": "Total cost of the system vs h [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/06/caption",
+      "Text": "Total cost of the system against h [m] (mean over the other parameters, band = min \u2026 max). Swing 7.4% of the mean; elasticity 0.11; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/06/000",
+      "Number": 2558536.748221659,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/06/001",
+      "Number": 2656438.4482774967,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/06/002",
+      "Number": 2755192.684746875,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/07/title",
+      "Text": "Cost per metre of span vs h [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/07/caption",
+      "Text": "Cost per metre of span against h [m] (mean over the other parameters, band = min \u2026 max). Swing 7.4% of the mean; elasticity 0.11; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/07/000",
+      "Number": 21321.139568513827,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/07/001",
+      "Number": 22136.98706897914,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/07/002",
+      "Number": 22959.93903955729,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/08/title",
+      "Text": "Mass of the system vs h [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/08/caption",
+      "Text": "Mass of the system against h [m] (mean over the other parameters, band = min \u2026 max). Swing 2.6% of the mean; elasticity 0.04; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/08/000",
+      "Number": 3046.599519101827,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/08/001",
+      "Number": 3087.2291368395104,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/08/002",
+      "Number": 3128.1934803283925,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/09/title",
+      "Text": "Base vertical force V (one end) vs LL [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/09/caption",
+      "Text": "Base vertical force V (one end) against LL [kPa] (mean over the other parameters, band = min \u2026 max). Swing 25.5% of the mean; elasticity 0.38; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/09/000",
+      "Number": 123138.23489710828,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/09/001",
+      "Number": 141138.23489710825,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/09/002",
+      "Number": 159138.23489710828,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/10/title",
+      "Text": "Max frame axial force vs LL [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/10/caption",
+      "Text": "Max frame axial force against LL [kPa] (mean over the other parameters, band = min \u2026 max). Swing 26% of the mean; elasticity 0.39; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/10/000",
+      "Number": 158431.0177860337,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/10/001",
+      "Number": 182086.3431038359,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/10/002",
+      "Number": 205741.66842163805,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/11/title",
+      "Text": "Max frame bending moment vs LL [kPa]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/11/caption",
+      "Text": "Max frame bending moment against LL [kPa] (mean over the other parameters, band = min \u2026 max). Swing 30% of the mean; elasticity 0.45; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/11/000",
+      "Number": 42645.6962732485,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/11/001",
+      "Number": 50171.52545426139,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/11/002",
+      "Number": 57697.354635274554,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/12/title",
+      "Text": "Max frame bending moment vs h [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/12/caption",
+      "Text": "Max frame bending moment against h [m] (mean over the other parameters, band = min \u2026 max). Swing 5% of the mean; elasticity 0.08; linear fit R\u00B2 1.00.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/12/000",
+      "Number": 48898.40647606697,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/12/001",
+      "Number": 50195.22090420612,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/12/002",
+      "Number": 51420.948982511356,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/13/title",
+      "Text": "Sensitivity ranking",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/13/caption",
+      "Text": "How much each parameter moves each key response over its range: the swing of the main-effect curve (max \u2212 min of the mean) as a share of the response\u0027s mean. The taller the bar, the more sensitive the response to that parameter.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/13/000",
+      "Number": 2.1543927544143573,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/13/001",
+      "Number": 27.07807154579582,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/13/002",
+      "Number": 0.38278772175455494,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/13/003",
+      "Number": 26.100700584225173,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/13/004",
+      "Number": 7.402200535372083,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/13/005",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/14/title",
+      "Text": "Cost against utilisation",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/14/caption",
+      "Text": "Every analysed case: its total cost against \u03B4 / limit. The lower-left edge of the cloud left of 1.0 is the economical frontier \u2014 the cheapest systems that still satisfy the deflection limit.",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/14/000",
+      "Number": 2558536.748221659,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/14/001",
+      "Number": 2558536.748221659,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/14/002",
+      "Number": 2558536.748221659,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/14/003",
+      "Number": 2656438.4482774967,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/14/004",
+      "Number": 2656438.4482774967,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/14/005",
+      "Number": 2656438.4482774967,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/14/006",
+      "Number": 2755192.684746875,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/14/007",
+      "Number": 2755192.684746875,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/14/008",
+      "Number": 2755192.684746875,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/15/title",
+      "Text": "Interaction: \u03B4 vs LL [kPa] for each h [m]",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/15/caption",
+      "Text": "The two parameters that move the deflection most. Parallel curves mean the effects add up; curves that fan out mean the effect of LL [kPa] depends on h [m].",
+      "Analysis": false
+    },
+    {
+      "Key": "tas/figure/15/000",
+      "Number": 74.5604265158057,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/15/001",
+      "Number": 86.23581788239268,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/15/002",
+      "Number": 97.91120924897967,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/15/003",
+      "Number": 75.37558154915371,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/15/004",
+      "Number": 87.17857774408452,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/15/005",
+      "Number": 98.98157393901533,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/15/006",
+      "Number": 76.18390717595148,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/15/007",
+      "Number": 88.11393367479519,
+      "Analysis": true
+    },
+    {
+      "Key": "tas/figure/15/008",
+      "Number": 100.04396017363892,
+      "Analysis": true
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/status",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/maxUtilisation",
+      "Number": 0.5003388330307903,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/governing",
+      "Text": "ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/NEd",
+      "Number": 12000,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/MEdY",
+      "Number": 1250.0408236705716,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/MEdZ",
+      "Number": 263.1664891938046,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/VEd",
+      "Number": 300,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/axial",
+      "Number": 0.5003388330307903,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/major",
+      "Number": 0.4142611238143853,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/minor",
+      "Number": 0.37283501143294684,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C1/shear",
+      "Number": 0.07832325063167193,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/status",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/maxUtilisation",
+      "Number": 0.5606225729840858,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/governing",
+      "Text": "ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/NEd",
+      "Number": 9000,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/MEdY",
+      "Number": 1691.6892815057977,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/MEdZ",
+      "Number": 192.72409536141998,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/VEd",
+      "Number": 500,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/axial",
+      "Number": 0.37525412477309267,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/major",
+      "Number": 0.5606225729840858,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/minor",
+      "Number": 0.5045603156856773,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ConcreteFilledTube/C2/shear",
+      "Number": 0.13053875105278653,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/candidates",
+      "Number": 228,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/evaluated",
+      "Number": 35,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/passing",
+      "Number": 10,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank01/section",
+      "Text": "RHS 500 \u00D7 500 \u00D7 15 \u00B7 S355 / C60/75 \u00B7 \u2014",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank01/costPerM",
+      "Number": 877.3814252173913,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank01/utilisation",
+      "Number": 0.9665847542527846,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank01/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank02/section",
+      "Text": "RHS 500 \u00D7 500 \u00D7 15 \u00B7 S355 / C70/85 \u00B7 \u2014",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank02/costPerM",
+      "Number": 882.6388452173913,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank02/utilisation",
+      "Number": 0.9279601007806981,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank02/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank03/section",
+      "Text": "RHS 500 \u00D7 500 \u00D7 15 \u00B7 S420 / C50/60 \u00B7 \u2014",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank03/costPerM",
+      "Number": 1042.5563791304348,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank03/utilisation",
+      "Number": 0.979323279650789,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank03/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank04/section",
+      "Text": "RHS 500 \u00D7 500 \u00D7 15 \u00B7 S420 / C55/67 \u00B7 \u2014",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank04/costPerM",
+      "Number": 1045.1850891304348,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank04/utilisation",
+      "Number": 0.948488949612439,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank04/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank05/section",
+      "Text": "RHS 500 \u00D7 500 \u00D7 15 \u00B7 S420 / C60/75 \u00B7 \u2014",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank05/costPerM",
+      "Number": 1047.8137991304347,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank05/utilisation",
+      "Number": 0.9227569372056146,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank05/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank06/section",
+      "Text": "RHS 500 \u00D7 500 \u00D7 15 \u00B7 S420 / C70/85 \u00B7 \u2014",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank06/costPerM",
+      "Number": 1053.0712191304347,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank06/utilisation",
+      "Number": 0.8925236872808601,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank06/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank07/section",
+      "Text": "RHS 600 \u00D7 600 \u00D7 15 \u00B7 S355 / C50/60 \u00B7 \u2014",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank07/costPerM",
+      "Number": 1061.7986660869562,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank07/utilisation",
+      "Number": 0.600622668398166,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank07/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank08/section",
+      "Text": "RHS 600 \u00D7 600 \u00D7 15 \u00B7 S355 / C55/67 \u00B7 \u2014",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank08/costPerM",
+      "Number": 1065.6649760869564,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank08/utilisation",
+      "Number": 0.5975272523360804,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank08/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank09/section",
+      "Text": "RHS 600 \u00D7 600 \u00D7 15 \u00B7 S355 / C60/75 \u00B7 \u2014",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank09/costPerM",
+      "Number": 1069.5312860869565,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank09/utilisation",
+      "Number": 0.5948359491824272,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank09/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank10/section",
+      "Text": "RHS 600 \u00D7 600 \u00D7 15 \u00B7 S355 / C70/85 \u00B7 \u2014",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank10/costPerM",
+      "Number": 1077.2639060869565,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank10/utilisation",
+      "Number": 0.5904372244638271,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ConcreteFilledTube/rank10/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/status",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/maxUtilisation",
+      "Number": 0.53878032429854,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/governing",
+      "Text": "ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/NEd",
+      "Number": 12000,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/MEdY",
+      "Number": 1369.582466756723,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/MEdZ",
+      "Number": 469.58246675672325,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/VEd",
+      "Number": 300,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/axial",
+      "Number": 0.53878032429854,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/major",
+      "Number": 0.5077918957873168,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/minor",
+      "Number": 0.48821955931669764,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C1/shear",
+      "Number": 0.35480149040672254,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/status",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/maxUtilisation",
+      "Number": 0.6124171082174015,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/governing",
+      "Text": "ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/NEd",
+      "Number": 9000,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/MEdY",
+      "Number": 1807.742357435059,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/MEdZ",
+      "Number": 407.74235743505875,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/VEd",
+      "Number": 500,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/axial",
+      "Number": 0.404085243223905,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/major",
+      "Number": 0.6029411449898772,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/minor",
+      "Number": 0.6124171082174015,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/ReinforcedConcrete/C2/shear",
+      "Number": 0.5913358173445376,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/candidates",
+      "Number": 1057,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/evaluated",
+      "Number": 831,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/passing",
+      "Number": 10,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank01/section",
+      "Text": "800 \u00D7 800 \u00B7 \u2014 / C45/55 \u00B7 4 \u00D832",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank01/costPerM",
+      "Number": 122.99159443321622,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank01/utilisation",
+      "Number": 0.9637497765293114,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank01/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank02/section",
+      "Text": "800 \u00D7 800 \u00B7 \u2014 / C45/55 \u00B7 12 \u00D820",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank02/costPerM",
+      "Number": 125.8998446641421,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank02/utilisation",
+      "Number": 0.9918786306311277,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank02/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank03/section",
+      "Text": "800 \u00D7 800 \u00B7 \u2014 / C45/55 \u00B7 8 \u00D825",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank03/costPerM",
+      "Number": 126.72605211610968,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank03/utilisation",
+      "Number": 0.9762925803579048,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank03/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank04/section",
+      "Text": "850 \u00D7 850 \u00B7 \u2014 / C40/50 \u00B7 4 \u00D832",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank04/costPerM",
+      "Number": 127.76827110325189,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank04/utilisation",
+      "Number": 0.8633873536467326,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank04/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank05/section",
+      "Text": "850 \u00D7 850 \u00B7 \u2014 / C35/45 \u00B7 16 \u00D820",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank05/costPerM",
+      "Number": 128.7697806067275,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank05/utilisation",
+      "Number": 0.973730170524739,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank05/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank06/section",
+      "Text": "800 \u00D7 800 \u00B7 \u2014 / C50/60 \u00B7 4 \u00D832",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank06/costPerM",
+      "Number": 130.56931224177666,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank06/utilisation",
+      "Number": 0.8666756506566471,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank06/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank07/section",
+      "Text": "850 \u00D7 850 \u00B7 \u2014 / C40/50 \u00B7 12 \u00D820",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank07/costPerM",
+      "Number": 130.68310108583142,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank07/utilisation",
+      "Number": 0.8898887889472341,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank07/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank08/section",
+      "Text": "900 \u00D7 900 \u00B7 \u2014 / C30/37 \u00B7 16 \u00D820",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank08/costPerM",
+      "Number": 131.22774100944793,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank08/utilisation",
+      "Number": 0.9682886937010174,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank08/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank09/section",
+      "Text": "900 \u00D7 900 \u00B7 \u2014 / C35/45 \u00B7 4 \u00D832",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank09/costPerM",
+      "Number": 131.24594777328753,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank09/utilisation",
+      "Number": 0.7992999154173697,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank09/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank10/section",
+      "Text": "850 \u00D7 850 \u00B7 \u2014 / C40/50 \u00B7 8 \u00D825",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank10/costPerM",
+      "Number": 131.51117778542792,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank10/utilisation",
+      "Number": 0.8755416751870871,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/ReinforcedConcrete/rank10/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/status",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/maxUtilisation",
+      "Number": 0.3765586481624236,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/governing",
+      "Text": "ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/NEd",
+      "Number": 12000,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/MEdY",
+      "Number": 1328.0960878584217,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/MEdZ",
+      "Number": 517.810864060396,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/VEd",
+      "Number": 300,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/axial",
+      "Number": 0.3765586481624236,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/major",
+      "Number": 0.27686635506464896,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/minor",
+      "Number": 0.30285959310666405,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C1/shear",
+      "Number": 0.13940046740997,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/status",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/maxUtilisation",
+      "Number": 0.36502225215538353,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/governing",
+      "Text": "ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/NEd",
+      "Number": 9000,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/MEdY",
+      "Number": 1736.7883677798484,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/MEdZ",
+      "Number": 380.85785401176935,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/VEd",
+      "Number": 500,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/axial",
+      "Number": 0.2824189861218177,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/major",
+      "Number": 0.3620658695571342,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/minor",
+      "Number": 0.36502225215538353,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/SteelEncased/C2/shear",
+      "Number": 0.23233411234995002,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/candidates",
+      "Number": 8640,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/evaluated",
+      "Number": 60,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/passing",
+      "Number": 10,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank01/section",
+      "Text": "700 \u00D7 700 \u002B I 300\u00D7300\u00D720/15 \u00B7 S355 / C40/50 \u00B7 12 \u00D832",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank01/costPerM",
+      "Number": 580.6644805872828,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank01/utilisation",
+      "Number": 0.9879711559079772,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank01/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank02/section",
+      "Text": "800 \u00D7 800 \u002B I 300\u00D7300\u00D720/15 \u00B7 S355 / C40/50 \u00B7 12 \u00D825",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank02/costPerM",
+      "Number": 583.3771133561355,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank02/utilisation",
+      "Number": 0.9700926309510132,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank02/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank03/section",
+      "Text": "700 \u00D7 700 \u002B I 300\u00D7300\u00D720/15 \u00B7 S355 / C45/55 \u00B7 12 \u00D832",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank03/costPerM",
+      "Number": 586.191424012964,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank03/utilisation",
+      "Number": 0.9653943151115136,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank03/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank04/section",
+      "Text": "800 \u00D7 800 \u002B I 300\u00D7300\u00D720/15 \u00B7 S355 / C40/50 \u00B7 8 \u00D832",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank04/costPerM",
+      "Number": 586.2422587367392,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank04/utilisation",
+      "Number": 0.9235550725715199,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank04/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank05/section",
+      "Text": "800 \u00D7 800 \u002B I 300\u00D7300\u00D720/15 \u00B7 S355 / C50/60 \u00B7 8 \u00D825",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank05/costPerM",
+      "Number": 587.7862722297353,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank05/utilisation",
+      "Number": 0.9989535847381191,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank05/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank06/section",
+      "Text": "800 \u00D7 800 \u002B I 300\u00D7300\u00D720/15 \u00B7 S355 / C45/55 \u00B7 12 \u00D825",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank06/costPerM",
+      "Number": 590.7338065700523,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank06/utilisation",
+      "Number": 0.9351544808234923,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank06/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank07/section",
+      "Text": "700 \u00D7 700 \u002B I 300\u00D7300\u00D720/15 \u00B7 S355 / C50/60 \u00B7 12 \u00D832",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank07/costPerM",
+      "Number": 591.7183674386453,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank07/utilisation",
+      "Number": 0.9442417911022112,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank07/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank08/section",
+      "Text": "800 \u00D7 800 \u002B I 300\u00D7300\u00D720/15 \u00B7 S355 / C45/55 \u00B7 8 \u00D832",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank08/costPerM",
+      "Number": 593.5924843538601,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank08/utilisation",
+      "Number": 0.891988310847104,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank08/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank09/section",
+      "Text": "800 \u00D7 800 \u002B I 300\u00D7300\u00D720/15 \u00B7 S355 / C55/67 \u00B7 8 \u00D825",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank09/costPerM",
+      "Number": 595.1663310390132,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank09/utilisation",
+      "Number": 0.9732498393983744,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank09/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank10/section",
+      "Text": "700 \u00D7 700 \u002B I 300\u00D7300\u00D720/15 \u00B7 S355 / C55/67 \u00B7 12 \u00D832",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank10/costPerM",
+      "Number": 597.2453108643265,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank10/utilisation",
+      "Number": 0.9293406670335227,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/SteelEncased/rank10/governing",
+      "Text": "C2 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/status",
+      "Text": "CHECK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/maxUtilisation",
+      "Number": 0.04229884876271408,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/governing",
+      "Text": "ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/NEd",
+      "Number": 12000,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/MEdY",
+      "Number": 2119.5068669978223,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/MEdZ",
+      "Number": 1615.1845318222654,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/VEd",
+      "Number": 300,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/axial",
+      "Number": 0.04229884876271408,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/major",
+      "Number": 0.025155872494646042,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/minor",
+      "Number": 0.021401047254517677,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C1/shear",
+      "Number": 0.02008531921696855,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/status",
+      "Text": "CHECK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/maxUtilisation",
+      "Number": 0.033475532028280915,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/governing",
+      "Text": "ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/NEd",
+      "Number": 9000,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/MEdY",
+      "Number": 2315.9863735977888,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/MEdZ",
+      "Number": 1208.5210821744865,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/VEd",
+      "Number": 500,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/axial",
+      "Number": 0.03172413657203556,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/major",
+      "Number": 0.02748783635510793,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/minor",
+      "Number": 0.022944833101268,
+      "Analysis": false
+    },
+    {
+      "Key": "design/guide/MegaComposite/C2/shear",
+      "Number": 0.033475532028280915,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/candidates",
+      "Number": 120,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/evaluated",
+      "Number": 10,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/passing",
+      "Number": 10,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank01/section",
+      "Text": "1800 \u00D7 1800 \u002B 4 \u00D7 I 500\u00D7430\u00D740/37 \u00B7 S460 / C80/95 \u00B7 48 \u00D840",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank01/costPerM",
+      "Number": 8683.62158032521,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank01/utilisation",
+      "Number": 0.07007134458405952,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank01/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank02/section",
+      "Text": "1800 \u00D7 1800 \u002B 4 \u00D7 I 500\u00D7430\u00D740/37 \u00B7 S460 / C80/95 \u00B7 52 \u00D840",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank02/costPerM",
+      "Number": 8709.641507319302,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank02/utilisation",
+      "Number": 0.06931914632238101,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank02/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank03/section",
+      "Text": "1800 \u00D7 1800 \u002B 4 \u00D7 I 500\u00D7430\u00D740/37 \u00B7 S460 / C80/95 \u00B7 56 \u00D840",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank03/costPerM",
+      "Number": 8735.661434313393,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank03/utilisation",
+      "Number": 0.06858433088448887,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank03/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank04/section",
+      "Text": "1800 \u00D7 1800 \u002B 4 \u00D7 I 500\u00D7430\u00D740/37 \u00B7 S460 / C80/95 \u00B7 60 \u00D840",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank04/costPerM",
+      "Number": 8761.681361307486,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank04/utilisation",
+      "Number": 0.06786627334587421,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank04/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank05/section",
+      "Text": "1800 \u00D7 1800 \u002B 4 \u00D7 I 500\u00D7430\u00D740/37 \u00B7 S460 / C80/95 \u00B7 64 \u00D840",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank05/costPerM",
+      "Number": 8787.701288301578,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank05/utilisation",
+      "Number": 0.06716437404651948,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank05/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank06/section",
+      "Text": "1800 \u00D7 1800 \u002B 4 \u00D7 I 500\u00D7430\u00D740/37 \u00B7 S460 / C90/105 \u00B7 48 \u00D840",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank06/costPerM",
+      "Number": 8802.818437167254,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank06/utilisation",
+      "Number": 0.06848916317952665,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank06/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank07/section",
+      "Text": "1800 \u00D7 1800 \u002B 4 \u00D7 I 500\u00D7430\u00D740/37 \u00B7 S460 / C90/105 \u00B7 52 \u00D840",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank07/costPerM",
+      "Number": 8828.637302231515,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank07/utilisation",
+      "Number": 0.06776897176865167,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank07/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank08/section",
+      "Text": "1800 \u00D7 1800 \u002B 4 \u00D7 I 500\u00D7430\u00D740/37 \u00B7 S460 / C90/105 \u00B7 56 \u00D840",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank08/costPerM",
+      "Number": 8854.456167295777,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank08/utilisation",
+      "Number": 0.06706520877129384,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank08/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank09/section",
+      "Text": "2000 \u00D7 2000 \u002B 4 \u00D7 I 500\u00D7430\u00D740/37 \u00B7 S460 / C80/95 \u00B7 48 \u00D840",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank09/costPerM",
+      "Number": 8868.471947196787,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank09/utilisation",
+      "Number": 0.058975505022301464,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank09/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank10/section",
+      "Text": "1800 \u00D7 1800 \u002B 4 \u00D7 I 500\u00D7430\u00D740/37 \u00B7 S460 / C90/105 \u00B7 60 \u00D840",
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank10/costPerM",
+      "Number": 8880.27503236004,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank10/utilisation",
+      "Number": 0.06637728897797347,
+      "Analysis": false
+    },
+    {
+      "Key": "design/optimization/MegaComposite/rank10/governing",
+      "Text": "C1 \u00B7 ULS1",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/ReinforcedConcrete/members",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/members",
+      "Text": "BottomChord | TopChord",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/status",
+      "Text": "FAIL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/maxUtilisation",
+      "Number": 1.497445618611833,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/governing",
+      "Text": "ULS: 1.35DL\u002B1.5LL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/NEd",
+      "Number": -96964.88371288752,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/MEdY",
+      "Number": 287491.7636909038,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/MEdZ",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/VEd",
+      "Number": 35835.73120435073,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/axial",
+      "Number": 0.2422910637503436,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/major",
+      "Number": 1.497445618611833,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/minor",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/BottomChord/shear",
+      "Number": 0.24815315211321096,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/status",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/maxUtilisation",
+      "Number": 0.4848830507479543,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/governing",
+      "Text": "ULS: 1.35DL\u002B1.5LL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/NEd",
+      "Number": 140444.10589197127,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/MEdY",
+      "Number": 96141.35960678713,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/MEdZ",
+      "Number": 4873.597460810175,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/VEd",
+      "Number": 16348.996236088364,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/axial",
+      "Number": 0.31342748187077224,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/major",
+      "Number": 0.4848830507479543,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/minor",
+      "Number": 0.3985640310847189,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/ConcreteFilledTube/TopChord/shear",
+      "Number": 0.11321256225350278,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/SteelEncased/members",
+      "Text": "",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/members",
+      "Text": "170 | 181 | 186 | 187 | 188 | 191",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/170/status",
+      "Text": "FAIL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/170/maxUtilisation",
+      "Number": 1.8411643827141382,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/170/governing",
+      "Text": "ULS: 1.35DL\u002B1.5LL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/170/NEd",
+      "Number": 216003.00798355567,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/170/MEdY",
+      "Number": 99556.18582576723,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/170/MEdZ",
+      "Number": 15057.019772402351,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/170/VEd",
+      "Number": 9234.347788805884,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/170/axial",
+      "Number": 0.7084713371935161,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/170/major",
+      "Number": 1.8411643827141382,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/170/minor",
+      "Number": 1.4777882386886019,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/170/shear",
+      "Number": 0.6182494103289128,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/181/status",
+      "Text": "FAIL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/181/maxUtilisation",
+      "Number": 1.8411643827202056,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/181/governing",
+      "Text": "ULS: 1.35DL\u002B1.5LL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/181/NEd",
+      "Number": 216003.00798346812,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/181/MEdY",
+      "Number": 99556.18582611105,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/181/MEdZ",
+      "Number": 15057.01977239597,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/181/VEd",
+      "Number": 9234.347788849256,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/181/axial",
+      "Number": 0.7084713371933887,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/181/major",
+      "Number": 1.8411643827202056,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/181/minor",
+      "Number": 1.477788238693358,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/181/shear",
+      "Number": 0.6182494103318167,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/186/status",
+      "Text": "FAIL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/186/maxUtilisation",
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/186/governing",
+      "Text": "ULS: 1.35DL\u002B1.5LL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/186/NEd",
+      "Number": 285970.65245251375,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/186/MEdY",
+      "Number": 317090.07740537234,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/186/MEdZ",
+      "Number": 20233.223265730736,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/186/VEd",
+      "Number": 51759.808444600036,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/186/axial",
+      "Number": "NaN",
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/186/major",
+      "Number": "Infinity",
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/186/minor",
+      "Number": 0.8178270603033181,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/186/shear",
+      "Number": 3.4653742507297873,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/187/status",
+      "Text": "FAIL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/187/maxUtilisation",
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/187/governing",
+      "Text": "ULS: 1.35DL\u002B1.5LL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/187/NEd",
+      "Number": 285970.652452538,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/187/MEdY",
+      "Number": 317090.07740647055,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/187/MEdZ",
+      "Number": 20233.223265732555,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/187/VEd",
+      "Number": 51759.80844462558,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/187/axial",
+      "Number": "NaN",
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/187/major",
+      "Number": "Infinity",
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/187/minor",
+      "Number": 0.8178270603039932,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/187/shear",
+      "Number": 3.4653742507314975,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/188/status",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/188/maxUtilisation",
+      "Number": 0.12184804524638781,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/188/governing",
+      "Text": "ULS: 1.35DL\u002B1.5LL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/188/NEd",
+      "Number": -18981.694672957987,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/188/MEdY",
+      "Number": 7953.44943349305,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/188/MEdZ",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/188/VEd",
+      "Number": 795.3449433493079,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/188/axial",
+      "Number": 0.12184804524638781,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/188/major",
+      "Number": 0.10629083701747574,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/188/minor",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/188/shear",
+      "Number": 0.05324919024924205,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/191/status",
+      "Text": "OK",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/191/maxUtilisation",
+      "Number": 0.12184804524649859,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/191/governing",
+      "Text": "ULS: 1.35DL\u002B1.5LL",
+      "Analysis": false
+    },
+    {
+      "Key": "design/model/MegaComposite/191/NEd",
+      "Number": -18981.69467297524,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/191/MEdY",
+      "Number": 7953.449432340683,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/191/MEdZ",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/191/VEd",
+      "Number": 795.3449432340567,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/191/axial",
+      "Number": 0.12184804524649859,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/191/major",
+      "Number": 0.1062908370020888,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/191/minor",
+      "Number": 0,
+      "Analysis": true
+    },
+    {
+      "Key": "design/model/MegaComposite/191/shear",
+      "Number": 0.053249190241525864,
+      "Analysis": true
+    }
+  ]
+}

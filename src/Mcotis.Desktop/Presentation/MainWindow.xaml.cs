@@ -341,6 +341,20 @@ public partial class MainWindow : Window
         new AssignSectionWindow(vm, chosen, cable) { Owner = this }.ShowDialog();
     }
 
+    /// <summary>Assign → Joint → Restraints: the restraint of the joints selected on the model view.</summary>
+    private void AssignRestraints_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        var joints = SharedViewer.SelectedJoints.Where(vm.State.Baseline.Points.ContainsKey).ToArray();
+        if (joints.Length == 0)
+        {
+            MessageBox.Show(this, "Select one or more joints on the model view first (click them, or drag a window), then choose Assign → Joint → Restraints.",
+                "Assign Joint Restraints", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        new JointRestraintWindow(vm, joints) { Owner = this }.ShowDialog();
+    }
+
     private void AssignFrameAxes_Click(object sender, RoutedEventArgs e)
     {
         if (DataContext is not MainViewModel vm) return;
@@ -692,6 +706,27 @@ public partial class MainWindow : Window
 
     private void CancelOptimization_Click(object sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.CancelVcfOptimization();
 
+    // the Optimization menu shows the model as last edited: the edit still waiting for the autosave is written first, so
+    // the generator validates the model the user sees
+    private void OptimizationMenu_Opened(object sender, RoutedEventArgs e) => (DataContext as MainViewModel)?.FlushFemWorkingSession();
+
+    // Edit → Re-apply Generator: says what it overwrites, then rebuilds the system from its parameters (one Undo step)
+    private async void ReapplyGenerator_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel { CanReapplyGenerator: true } vm) return;
+        vm.FlushFemWorkingSession();
+        if (MessageBox.Show(this, vm.ReapplyGeneratorText(), "Re-apply Generator", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
+        await vm.ReapplyGeneratorAsync();
+    }
+
+    // Edit → Detach from Generator: the model becomes an ordinary model (one Undo step)
+    private void DetachGenerator_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel { CanDetachGenerator: true } vm) return;
+        vm.FlushFemWorkingSession();
+        vm.DetachGenerator();
+    }
+
     // Run → Optimization Results: the table of the last (or running) optimization, one instance brought forward on repeat
     private OptimizationResultsWindow? optimizationResultsWindow;
     private void OptimizationResults_Click(object sender, RoutedEventArgs e)
@@ -737,7 +772,8 @@ public partial class MainWindow : Window
             || !Enum.TryParse<Mcotis.Desktop.Domain.ColumnDesignType>(tag, out var type)) return;
         var dialog = new DesignReferenceWindow(vm.DesignBasis(type), vm.DesignMemberOptions(type), vm.DesignCaseNames(), vm.DesignDefaultCases(),
             vm.DesignRunId, member => vm.DesignSectionDefaults(type, member), SharedViewer.SelectedMembers,
-            (members, cases) => vm.DesignMemberInputs(type, members, cases), vm.Materials.ToArray()) { Owner = this };
+            (members, cases) => vm.DesignMemberInputs(type, members, cases), vm.Materials.ToArray(),
+            vm.FemResultStateText, vm.FemResultState == Mcotis.Application.ResultState.Stale) { Owner = this };
         if (dialog.ShowDialog() != true || dialog.Result is not { } basis) return;
         vm.SetDesignBasis(basis);
         var title = Mcotis.Desktop.Domain.ColumnDesignCodes.Title(type);
@@ -807,6 +843,21 @@ public partial class MainWindow : Window
         femResultsWindow.SelectCableFit(vm.FemCableFitView);
         if (femResultsWindow.WindowState == WindowState.Minimized) femResultsWindow.WindowState = WindowState.Normal;
         femResultsWindow.Activate();
+    }
+
+    private ModalResultsWindow? modalResultsWindow;
+    /// <summary>Result → Modal Results: one window, brought forward on repeat.</summary>
+    private void ModalResults_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || !vm.HasFemModalResults) return;
+        if (modalResultsWindow is null)
+        {
+            modalResultsWindow = new ModalResultsWindow(vm) { Owner = this };
+            modalResultsWindow.Closed += (_, _) => modalResultsWindow = null;
+            modalResultsWindow.Show();
+        }
+        if (modalResultsWindow.WindowState == WindowState.Minimized) modalResultsWindow.WindowState = WindowState.Normal;
+        modalResultsWindow.Activate();
     }
 
     private FemRunMonitorWindow? femMonitor;

@@ -168,9 +168,9 @@ public partial class OptimizationTasWindow : Window
             : "";
         ProblemText.Text = string.Join("\n", problems);
         OkButton.IsEnabled = valid;
-        RunButton.IsEnabled = valid && settings.CombinationCount <= VcfOptimizationRunner.MaxCases && !viewModel.IsBusy && viewModel.TiedArchParameters is not null;
+        RunButton.IsEnabled = valid && settings.CombinationCount <= ParametricOptimization.MaxCases && !viewModel.IsBusy && viewModel.TiedArchParameters is not null;
         RunButton.ToolTip = viewModel.TiedArchParameters is null ? "Open the tied arch system first: File → Load TAS… or Edit → Tied Arch System…"
-            : settings.CombinationCount > VcfOptimizationRunner.MaxCases ? $"{settings.CombinationCount:N0} combinations — one run takes at most {VcfOptimizationRunner.MaxCases:N0}"
+            : settings.CombinationCount > ParametricOptimization.MaxCases ? $"{settings.CombinationCount:N0} combinations — one run takes at most {ParametricOptimization.MaxCases:N0}"
             : "Analyse every combination with the internal FEM and list the max deflection of each case (the open model is not changed)";
         ShowLoads(settings, valid);
         ShowLimit(settings, valid);

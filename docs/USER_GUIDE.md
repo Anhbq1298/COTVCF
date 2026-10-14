@@ -127,7 +127,7 @@ A run of [[Run FEM Analysis]] locks the model and stores its results with the co
 ## Configurations of earlier versions
 A configuration saved by an earlier version of Mcotis opens as it was: every load case with its name, its load patterns and factors, the case it continues from and its Run setting, and the results stored with it stay with it. The file on disk is not changed until you save. Once saved by this version, the file is in the newer format and an earlier version of Mcotis no longer opens it — it reports that the file is newer than it supports. Update Mcotis on every computer before exchanging configurations.
 
-A configuration can hold load cases this version does not analyse yet — a case with P-Delta, a modal case, a linear static case. They are kept, can be edited and are saved back (see [[Load cases and combinations]]). [[Run FEM Analysis]] with such a case ticked stops and says which case and why; it does not analyse the case in a simpler way instead. Untick the case to run the others.
+A configuration can hold load cases this version does not analyse yet — a case with P-Delta, a linear static case, a modal case on the stiffness of another case. They are kept, can be edited and are saved back (see [[Load cases and combinations]]). [[Run FEM Analysis]] with such a case ticked stops and says which case and why; it does not analyse the case in a simpler way instead. Untick the case to run the others.
 
 # Built-in models
 Category: Files and models
@@ -287,7 +287,7 @@ The **Default Setup** is Pretension → SLS / ULS: Pretension fits the cables to
 A nonlinear case can also be given P-Delta as its **Geometric nonlinearity**, and its own load steps, iterations and tolerances (**Own iteration controls**). The lists under Continue from and Stiffness from hold nonlinear cases only. A case that other cases start from cannot be made linear or modal.
 
 ## What is not analysed yet
-This version analyses Nonlinear Static cases without P-Delta and without iteration controls of their own. P-Delta, Initial P-Delta, Linear Static, Modal and a case's own iteration controls can be defined and saved, so that a model can be prepared and exchanged, but their analysis has not passed its verification. Load Case Data says so, and the **Status** column of the table reads "Unavailable — verification pending". A new case of such a type is added without its Run tick. [[Run FEM Analysis]] with such a case ticked stops and says which case and why; it never analyses the case in a simpler way instead.
+This version analyses Nonlinear Static cases without P-Delta and without iteration controls of their own, and Modal cases on the unstressed stiffness (see [[Modal results]]). P-Delta, Initial P-Delta, Linear Static, Modal on the stiffness of another case and a case's own iteration controls can be defined and saved, so that a model can be prepared and exchanged, but their analysis has not passed its verification. Load Case Data says so, and the **Status** column of the table reads "Unavailable — verification pending". A new case of such a type is added without its Run tick. [[Run FEM Analysis]] with such a case ticked stops and says which case and why; it never analyses the case in a simpler way instead.
 
 ## Combinations
 Linear additive combinations of cases (and other combinations).
@@ -341,6 +341,38 @@ See also: Native model workspace
 
 Creates a building frame in a new [[Native model workspace]]: per-bay X and Y widths, per-storey heights, downward beam line loads, general section properties, fixed or pinned bases and optional self-weight.
 
+# Undo and redo
+Category: Edit
+Where: Edit → Undo (Ctrl+Z), Edit → Redo (Ctrl+Y)
+See also: Delete objects; Configurations; Run FEM Analysis
+
+Every change of the model in the main window is one step of its history: sections and restraints assigned, members deleted, the VCF or tied arch system edited, load patterns, cases and combinations, materials and sections defined, Analysis Options. **Undo** takes the last step back and **Redo** makes it again.
+
+- The model a step returns to is the whole model as it was then — geometry, assignments, loads, cases, libraries and the Tab 01 / Tab 03 setup — and its FEM results are cleared, as after any change.
+- A model that is opened, imported or generated starts a history of its own.
+- While the model holds the results of a run it is locked, and Undo waits: unlock it first (Run → Unlock FEM Model).
+- A `*` after the file name in the title says the model differs from what its file holds; Save makes it clean, and Undo back to the saved model makes it clean again.
+
+# Generator flag
+Category: Edit
+Where: Edit → Re-apply Generator…, Edit → Detach from Generator; the Optimization menu
+See also: Optimization VCF; Optimization TAS; Undo and redo; VCF System; Tied Arch System
+
+A model that a generator made carries the generator's **flag**: the VCF system (File → Load VCF…, Edit → VCF System) and the tied arch system (File → Load TAS…, Edit → Tied Arch System). The flag holds the generator, its version, the parameters the model was built from and the place of every object it made. It is saved with the model and kept through Undo and Redo. The Optimization menu offers the optimization of the flag's generator — never because of the model's name or file.
+
+Before an optimization is offered, the generator rebuilds its system from the flag's parameters and compares it with the model, object by object:
+
+- **Edits that keep the model optimizable:** sections, materials, assignments, loads, load cases and combinations, mass sources, Analysis Options, unit costs. The optimization starts from them.
+- **Edits that break the system:** a generated joint or member deleted, a generated joint moved, a generated member connected to other joints, a member added by hand, a restraint changed on a generated joint. The optimization is greyed and its tooltip lists each object and the reason. Undo the edits, re-apply the generator, or detach the model.
+
+**Re-apply Generator…** rebuilds the system from the flag's parameters, as Edit → VCF System or Edit → Tied Arch System would make it — geometry, supports, sections, loads, cases and combinations. It first lists what it overwrites. It is one step of the model's history: Edit → Undo takes it back.
+
+**Detach from Generator** makes the model an ordinary model: it keeps everything and can no longer be optimized. Only this command removes the flag, and Undo gives the flag back.
+
+A model no generator made has no flag and cannot be optimized: an imported SAP2000 or ETABS model — a tied arch imported from its .e2k included — a TemplateBuilding model, or a detached model. A configuration saved before the flag existed gets the VCF flag when it is opened, if the VCF generator validates it; a tied arch system saved before then opens without one, as its parameters were not saved (Edit → Tied Arch System → Apply gives it the flag).
+
+The tied arch system holds every deck joint and every arch joint between the springings out of the plane (UY), as the bundled ETABS model does, and pins its two bearings.
+
 # Delete objects
 Category: Edit
 Where: Edit → Delete (Del key)
@@ -357,15 +389,17 @@ The Del key does nothing while you type in a field or a table.
 
 # Joint restraints
 Category: Assign
-Where: Assign → Joint → Restraints (Pin Supports)…
-See also: Run FEM Analysis
+Where: Assign → Joint → Restraints…, Restraints Summary
+See also: Run FEM Analysis; Showing results
 
-The supports of the model; the page shows which joints are restrained.
+The supports of the model: the six components each joint holds — UX, UY, UZ, RX, RY, RZ.
 
-- A model imported from SAP2000 or ETABS is held as that model restrains it, component by component (UX, UY, UZ, RX, RY, RZ): a fixed support stays fixed and a roller stays a roller. The restraints are saved with the configuration and written back by Export to SAP2000 / ETABS.
-- A model that holds no restraint — the VCF system, a configuration saved by an older version — has its lowest column bases pinned automatically (translations restrained, rotations free).
-- Joints held in the XZ plane are drawn as supports in the viewer, and the reactions are reported at them. The reactions are the forces in X and Z; the moment at a fixed support is not listed yet.
-- The page is read-only: restraints cannot be edited here yet.
+- **Assign → Joint → Restraints…** acts on the joints selected on the model view (click them, or drag a window). Tick the components to hold, or use a fast restraint: **Fixed** (all six), **Pinned** (the translations), **Roller** (UZ), **Free** (none — the restraint is taken away). The form opens on what the joints hold when they all hold the same. **OK** / **Apply** write it; the results of the model are cleared.
+- **Restraints Summary** lists the restraints the model holds.
+- A model imported from SAP2000 or ETABS is held as that model restrains it, component by component: a fixed support stays fixed and a roller stays a roller.
+- A model opened, imported or generated without any restraint — the VCF system, a configuration saved by an older version — gets pins at its lowest column bases (translations restrained, rotations free) once, as restraint assignments. From then on they are the model's own: nothing adds a support afterwards, and a joint made free stays free — the run then says what is not held.
+- The restraints are saved with the configuration and written as they are by Export to SAP2000 / ETABS.
+- Joints held in the XZ plane are drawn as supports in the viewer, and the reactions are reported at them: Rx and Rz, and **My** at a support that holds the rotation (a fixed support), positive counter-clockwise in the XZ elevation (X to the right, Z up). My is shown in the Results Table, beside the support in the viewer and in its hover read-out.
 
 # Assign frame sections
 Category: Assign
@@ -416,7 +450,7 @@ Solves the model as it is defined with the Mcotis solver. SAP2000 and ETABS are 
 Choose the load cases to run, then Run; Run → Cancel FEM Analysis stops a run. The [[Analysis monitor]] shows the run, every load case with its convergence and numerical stability, and the cable convergence. A finished run locks the model and stores its results ([[Unlock FEM Model]]). Results: [[Showing results]].
 
 ## Limits
-Small displacements, no P-Δ, no shells or modal analysis, about 1,000 joints (see [[Limitations and known issues]]).
+Small displacements, no P-Δ, no shells; modal analysis of frames without cables (see [[Modal results]]); about 1,000 joints (see [[Limitations and known issues]]).
 
 # Analysis options
 Category: Run
@@ -519,6 +553,21 @@ Where: Result → Results Table…
 See also: Showing results
 
 The results of the selected load case and output as a table, browsed by load case.
+
+# Modal results
+Category: Results
+Where: Result → Modal Results…
+See also: Load cases and combinations; Showing results
+
+The modes of the modal cases of the run. Define a modal case in **Define → Load Cases → Load Case Data** with the type **Modal (Eigenvectors)**, a mass source and the number of modes, and tick it to run with at least one static case; **Run FEM Analysis** then solves it with the static cases.
+
+- **Modes** — eigenvalue, frequency, period and the scaled residual of each mode.
+- **Modal participation** — the participation factor, effective mass, ratio and cumulative ratio in UX, UY and UZ. A direction with no free mass reads N/A.
+- **Mode shape** — the amplitudes of a mode at every joint. They are a mass-normalized eigenvector, not a displacement.
+- **Modal mass inventory** — the members' self mass, the assigned joint mass and the free mass by direction, and the centre of mass.
+- **Show Mode Shape** draws the mode chosen under Mode shape on the model, magnified, and says it is a relative amplitude. Showing any other result replaces it.
+
+The mass of the case is that of its mass source: **MS1**, offered for the first modal case, is the members' self mass. Modes are those of the unstressed elastic frames with lumped mass. Not available, and refused with the reason: modes on the stiffness at the end of another case, models with cables, shells. The modes are kept with the run until the model is unlocked or closed; they are not written to the output database.
 
 # FEM live results
 Category: Results
@@ -753,7 +802,7 @@ See also: Optimization results and charts; VCF System; Materials; Load cases and
 
 The parametric study of the VCF system: Mcotis builds every combination of the geometry, cable force, storey force and candidate section inputs, analyses it with the internal solver, checks bottom-chord deflection and uplift, and prices its members. The working model is not changed. A single Run FEM Analysis analyses the model as defined; Optimization VCF compares many variants without applying them to that model.
 
-The command is available while the open model is a VCF system (File → Load VCF… or Edit → [[VCF System]]). With another system open it is greyed; the tied arch system has [[Optimization TAS]].
+The command is available while the open model is a VCF system its generator made — File → Load VCF… or Edit → [[VCF System]] — and the edits since keep it one ([[Generator flag]]). With another model open it is greyed, and its tooltip says why; the tied arch system has [[Optimization TAS]].
 
 ## Step 1 — Prepare the working model
 1. Open the VCF model through **File → Load VCF…**, a saved configuration, or an existing imported model.
@@ -882,7 +931,7 @@ See also: Optimization results and charts; Tied Arch System; Load cases and comb
 
 The parametric study of the tied arch system: Mcotis builds every combination of the geometry, storey loading, optional cable pretension and candidate sections, analyses it with the internal solver, checks the deck deflection and uplift, and calculates its member cost. Like [[Optimization VCF]], it runs in memory and leaves the open model unchanged. SAP2000 and ETABS are not needed.
 
-The command is available while the tied arch system is open (File → Load TAS… or Edit → [[Tied Arch System]]). With another system open it is greyed; a VCF system has [[Optimization VCF]].
+The command is available while the open model is a tied arch system its generator made — File → Load TAS… or Edit → [[Tied Arch System]] — and the edits since keep it one ([[Generator flag]]). With another model open it is greyed, and its tooltip says why; a VCF system has [[Optimization VCF]].
 
 ## Step 1 — Open and check the TAS model
 1. Choose **File → Load TAS…** for the built-in 120 m system, or use **Edit → Tied Arch System…** to create your own system first.
@@ -1120,7 +1169,7 @@ Category: Reference
 Where: The whole application
 See also: Help and development plans
 
-- The Mcotis solver is first-order: no P-Δ (planned), no shells, no modal analysis; about 1,000 joints in the main window.
+- The Mcotis solver is first-order: no P-Δ (planned), no shells; modal analysis of frames without cables, on the unstressed stiffness; about 1,000 joints in the main window.
 - Export to ETABS writes cables without their pretension (planned).
 - Export to SAP2000 has not yet been run against a live SAP2000 — try it on a copy first.
 - Column design: the model is 2D, so the minor axis carries imperfection moments only.

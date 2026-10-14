@@ -66,7 +66,9 @@ public sealed record FemSectionShape(SectionShapeKind Kind, double Depth, double
 /// <summary>A Tab 01 study load at a joint; <see cref="Pattern"/> is its SAP load pattern.</summary>
 public sealed record FemAppliedLoad(string PointName, double FxKN, double FzKN, string? Pattern = null);
 public sealed record FemJointResponse(string PointName, double UXM, double UZM, double RotationRad);
-public sealed record FemSupportReaction(string PointName, double ReactionXKN, double ReactionZKN);
+/// <param name="MomentYKNm">The moment of a support that holds the rotation in the plane (RY): positive counter-clockwise in the
+/// XZ elevation (X right, Z up), the sense of the joint slope — the opposite of the right-hand sense about +Y. 0 at a pin.</param>
+public sealed record FemSupportReaction(string PointName, double ReactionXKN, double ReactionZKN, double MomentYKNm = 0);
 /// <summary>Result at one frame mesh node: <see cref="Fraction"/> runs 0 (I-end) to 1 (J-end) along the frame.</summary>
 public sealed record FemFrameStation(double Fraction, double AxialKN, double ShearKN, double MomentKNm, double UXM, double UZM);
 public sealed record FemFrameResponse(string MemberName, double AxialStartKN, double AxialEndKN,

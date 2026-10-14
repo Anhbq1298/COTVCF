@@ -83,7 +83,7 @@ public partial class DesignReferenceWindow : Window
         IReadOnlyList<string> defaultCases, string? runId, Func<string, ColumnSectionInput> sectionFromMember,
         IReadOnlyList<string>? viewerSelection = null,
         Func<IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<DesignMemberInput>>? memberForces = null,
-        IReadOnlyList<MaterialProperty>? materials = null)
+        IReadOnlyList<MaterialProperty>? materials = null, string? resultState = null, bool resultsStale = false)
     {
         InitializeComponent();
         type = basis.Type;
@@ -114,7 +114,11 @@ public partial class DesignReferenceWindow : Window
         var ticked = (basis.LoadCases.Count > 0 ? basis.LoadCases : defaultCases).ToHashSet(StringComparer.Ordinal);
         cases = caseNames.Select(name => new CheckItem(name, "", ticked.Contains(name))).ToList();
         CaseList.ItemsSource = cases;
-        RunText.Text = runId is null ? "No FEM results — run the FEM analysis first." : "Forces from the FEM analysis of the model (Run → Run FEM Analysis).";
+        // the forces are those of the run on hand; results of a model that has changed since are said to be stale, never used silently
+        RunText.Text = runId is null ? "No FEM results — run the FEM analysis first."
+            : "Forces from the FEM analysis of the model (Run → Run FEM Analysis)" + (resultState is null ? "." : $" · {resultState}.") +
+              (resultsStale ? " Run the analysis again before relying on this design." : "");
+        if (resultsStale) RunText.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "Warning");
         Show(basis);
         InitOptimization(basis, memberForces, materials);
     }

@@ -55,10 +55,8 @@ public sealed class NativeModelViewModel : Observable
         resultInput.Cables[c.ParentObjectId].Name, c.Tension, c.Active ? "Taut" : "Slack", c.TargetForce, c.AppliedPretension, c.FitStageTension, c.Sag, c.TangentStiffnessRatio));
     public IEnumerable<NativeLoadRow> Loads => Session.Document.Loads.Values.OfType<FrameDistributedLoad>().OrderBy(l => Session.Document.Frames[l.TargetId].Name, StringComparer.Ordinal).Select(l => new NativeLoadRow(
         Session.Document.Frames[l.TargetId].Name, Session.Document.LoadPatterns[l.PatternId].Name, l.Direction.ToString(), l.RelativeStart, l.RelativeEnd, l.ValueStart, l.ValueEnd));
-    public IEnumerable<NativeModeRow> Modes => modalResult?.Modes.Select(mode => new NativeModeRow(mode.ModeNumber,
-        mode.EigenvaluePerSecondSquared, mode.FrequencyHz, mode.PeriodSeconds, mode.Status.ToString(), mode.ScaledResidual)) ?? [];
-    public IEnumerable<NativeParticipationRow> Participation => modalResult?.Modes.SelectMany(mode => mode.Participation.Select(value =>
-        new NativeParticipationRow(mode.ModeNumber, value.Direction.ToString(), value.Factor, value.EffectiveMass, value.RatioPercent, value.CumulativePercent))) ?? [];
+    public IEnumerable<NativeModeRow> Modes => ModalResultRows.Modes(modalResult);
+    public IEnumerable<NativeParticipationRow> Participation => ModalResultRows.Participation(modalResult);
     private int selectedMode = 1;
     public int SelectedMode
     {
@@ -66,45 +64,10 @@ public sealed class NativeModelViewModel : Observable
         set { if (Set(ref selectedMode, value)) { Notify(nameof(ModeShape)); Notify(nameof(ModalDisplayResult)); } }
     }
     public IEnumerable<int> ModeNumbers => modalResult?.Modes.Select(mode => mode.ModeNumber) ?? [];
-    public IEnumerable<NativeModeShapeRow> ModeShape => modalResult is null || resultInput is null ? []
-        : modalResult.Modes.FirstOrDefault(mode => mode.ModeNumber == SelectedMode)?.Shape
-            .OrderBy(item => resultInput.Points[item.PointId].Name, StringComparer.Ordinal)
-            .Select(item => new NativeModeShapeRow(resultInput.Points[item.PointId].Name, item.UX, item.UY, item.UZ, item.RX, item.RY, item.RZ)) ?? [];
-    public IEnumerable<NativeModalMassRow> ModalMass
-    {
-        get
-        {
-            if (modalResult is null) return [];
-            var rows = new List<NativeModalMassRow>
-            {
-                new("Frame self mass", modalResult.MassSummary.ElementMass, "t", "Physical inventory")
-            };
-            string[] components = ["UX", "UY", "UZ", "RX", "RY", "RZ"];
-            for (var i = 0; i < components.Length; i++)
-            {
-                string unit = i < 3 ? "t" : "t·m²";
-                rows.Add(new($"Assigned {components[i]}", modalResult.MassSummary.AdditionalByDof[i], unit, "All joints"));
-                rows.Add(new($"Free {components[i]}", modalResult.MassSummary.FreeMassByDof[i], unit, "Active, unrestrained DOFs"));
-            }
-            if (modalResult.MassSummary.CenterOfMass is { } center)
-            {
-                rows.Add(new("Centre of mass X", center.X, "m", "Physical frame + assigned translational mass"));
-                rows.Add(new("Centre of mass Y", center.Y, "m", "Physical frame + assigned translational mass"));
-                rows.Add(new("Centre of mass Z", center.Z, "m", "Physical frame + assigned translational mass"));
-            }
-            return rows;
-        }
-    }
+    public IEnumerable<NativeModeShapeRow> ModeShape => resultInput is null ? [] : ModalResultRows.Shape(modalResult, SelectedMode, id => resultInput.Points[id].Name);
+    public IEnumerable<NativeModalMassRow> ModalMass => ModalResultRows.Mass(modalResult);
     /// <summary>Drawing adapter only. The viewer magnifies these relative amplitudes; they are not a load-caused displacement.</summary>
-    public FemAnalysisResult? ModalDisplayResult
-    {
-        get
-        {
-            if (modalResult is null || resultInput is null || modalResult.Modes.FirstOrDefault(mode => mode.ModeNumber == SelectedMode) is not { } mode) return null;
-            var joints = mode.Shape.Select(item => new FemJointResponse(resultInput.Points[item.PointId].Name, item.UX, item.UZ, -item.RY)).ToArray();
-            return new(joints, [], [], [], 0);
-        }
-    }
+    public FemAnalysisResult? ModalDisplayResult => resultInput is null ? null : ModalResultRows.Display(modalResult, SelectedMode, id => resultInput.Points[id].Name);
 
     public NativeModelViewModel(DocumentSession session)
     {

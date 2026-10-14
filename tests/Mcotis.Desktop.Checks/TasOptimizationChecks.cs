@@ -36,7 +36,7 @@ internal static class TasOptimizationChecks
         var reference = EtabsImportChecks.NewViewModel(out _);
         reference.LoadTasModel();
         var run = FemModelFileChecks.Analyze(reference)[0].ResultFor(Sls);
-        var deck = TasOptimizationRunner.TopChord(reference.State.Geometry, d).ToHashSet(StringComparer.Ordinal);
+        var deck = TasOptimizationStudy.TopChord(reference.State.Geometry, d).ToHashSet(StringComparer.Ordinal);
         var expected = run.Joints.Where(joint => deck.Contains(joint.PointName)).Max(joint => -joint.UZM * 1000);
 
         var vm = EtabsImportChecks.NewViewModel(out _);
@@ -126,7 +126,7 @@ internal static class TasOptimizationChecks
         var pretension = run.ResultFor("Pretension").Cables.Single(cable => cable.MemberName == "TIE").AxialForceKN;
         var loaded = run.ResultFor(Sls);
         var tieLoaded = loaded.Cables.Single(cable => cable.MemberName == "TIE").AxialForceKN;
-        var deck = TasOptimizationRunner.TopChord(g, p).ToHashSet(StringComparer.Ordinal);
+        var deck = TasOptimizationStudy.TopChord(g, p).ToHashSet(StringComparer.Ordinal);
         var deflection = loaded.Joints.Where(joint => deck.Contains(joint.PointName)).Max(joint => -joint.UZM * 1000);
         Check(Math.Abs(pretension - 20_000) <= 20_000 * vm.FemTargetFitPercent / 100 + 1 && tieLoaded > pretension && deflection > 0,
             $"the run meets the tie's target in Pretension ({pretension:N0} kN) and the loaded {Sls} pulls it harder ({tieLoaded:N0} kN); deck deflection {deflection:0.0} mm");

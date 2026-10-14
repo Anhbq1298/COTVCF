@@ -49,6 +49,7 @@
                                    </Style.Triggers>
                                   </Style></TextBlock.Style></TextBlock></DataGridTextColumn.Header>
                                  </DataGridTextColumn>
+                                 <DataGridTextColumn x:Name="SupportMomentColumn" Header="My [kN·m]" Binding="{Binding MomentValue, StringFormat=F4}" Width="1*" MinWidth="78" ElementStyle="{StaticResource NumericCell}" Visibility="Collapsed"/>
                                  <DataGridTextColumn Header="Unit" Binding="{Binding Unit}" Width=".8*" MinWidth="68"/>
                                 </DataGrid.Columns>
                          </DataGrid>

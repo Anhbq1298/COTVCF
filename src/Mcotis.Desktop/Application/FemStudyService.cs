@@ -22,6 +22,12 @@ public sealed record FemStudyRun(
     IReadOnlyList<FemAppliedLoad>? Loads = null,
     IReadOnlyDictionary<string, FemAnalysisResult>? Results = null)
 {
+    /// <summary>The run of a document (<see cref="FemDocumentRun"/>): the solver's own results — all six components, the
+    /// modes of a modal case — beside the results in the application's terms. Null for a run of the legacy path. Held in
+    /// memory only: the output database has planar tables, and a three-dimensional result is never written into them.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public FemDocumentResults? Native { get; init; }
+
     /// <summary>The named load case / combination result, or <see cref="Result"/> when there is none by that name.</summary>
     public FemAnalysisResult ResultFor(string? name) =>
         name is not null && Results is not null && Results.TryGetValue(name, out var result) ? result : Result;
@@ -60,7 +66,9 @@ public sealed record FemCableFitRow(string RunId, string CableName, double? Targ
 }
 
 public enum FemResultMode { AxialForce, BendingMoment, Shear, Reactions, DeflectedShape }
-public sealed record FemResultRow(string ObjectName, double StartValue, double? EndValue, string Unit);
+/// <summary>A row of the Results Table. <paramref name="MomentValue"/>: the moment of a support (reactions only).</summary>
+public sealed record FemResultRow(string ObjectName, double StartValue, double? EndValue, string Unit, double? MomentValue = null);
+/// <summary>A row of the Results Table. <paramref name="MomentValue"/>: the moment of a support (reactions only).</summary>
 
 public static class FemResultTable
 {
@@ -80,7 +88,7 @@ public static class FemResultTable
                 .Select(frame => new FemResultRow(frame.MemberName, frame.ShearStartKN, frame.ShearEndKN, "kN"))
                 .OrderBy(row => row.ObjectName, StringComparer.Ordinal).ToArray(),
             FemResultMode.Reactions => result.SupportReactions
-                .Select(reaction => new FemResultRow(reaction.PointName, reaction.ReactionXKN, reaction.ReactionZKN, "kN · X / Z"))
+                .Select(reaction => new FemResultRow(reaction.PointName, reaction.ReactionXKN, reaction.ReactionZKN, "kN · X / Z · kN·m", reaction.MomentYKNm))
                 .OrderBy(row => row.ObjectName, StringComparer.Ordinal).ToArray(),
             FemResultMode.DeflectedShape => result.Joints
                 .Select(joint => new FemResultRow(joint.PointName, joint.UXM, joint.UZM, "m · X / Z"))
@@ -92,6 +100,26 @@ public static class FemResultTable
 
 public sealed record FemProgress(int Completed, int Total, string CandidateId, FemStudyRun? CompletedRun = null,
     string? Failure = null);
+
+/// <summary>What every candidate of an optimization is analysed with besides its own geometry, members, storey loads and
+/// cable targets: the load rows of the open model, its loading, its analysis options — the same as Run FEM Analysis.</summary>
+public sealed record FemCandidateSetup(
+    SapFemLoading Loading,
+    IReadOnlyList<FemPatternRow> Patterns,
+    IReadOnlyList<FemCaseRow> Cases,
+    IReadOnlyList<FemCombinationRow> Combinations,
+    IReadOnlyCollection<string> Tab01Patterns,
+    IReadOnlyCollection<string> PretensionPatterns,
+    IReadOnlyCollection<string> AppliedPoints,
+    double TargetFitPercent,
+    int TargetFitIterations,
+    int FrameMeshSegments,
+    bool CableSag,
+    Mcotis.Core.DofMask ActiveDofs,
+    Mcotis.Core.DofMask CableDofs)
+{
+    public IReadOnlyList<Configuration.FemMassSourceDto> MassSources { get; init; } = [];
+}
 
 public sealed class FemStudyService
 {
@@ -237,6 +265,95 @@ public sealed class FemStudyService
         if (supports.Length < 2)
             throw new InvalidOperationException("Could not find at least two column-base joints at the lowest frame elevation.");
         return supports;
+    }
+
+    /// <summary>
+    /// Run FEM Analysis of a document: the cases of <paramref name="plan"/>, solved from <paramref name="document"/> by
+    /// <see cref="FemDocumentRun"/> stage by stage — the fit of each stage's cable target forces, then its cases — and the
+    /// combinations of the plan added up. <paramref name="order"/> is the application's model, whose order the results keep.
+    /// </summary>
+    public FemStudyRun AnalyzeDocument(Mcotis.Core.ModelDocument document, FemLoadPlan plan, string runId, GeometryModel? order,
+        IReadOnlyList<FemAppliedLoad>? loads = null, IProgress<FemEquilibriumProgress>? equilibrium = null, CancellationToken cancellationToken = default,
+        bool modal = true)
+    {
+        // the order the monitor plans the run in: per pretension stage its cases, the case that fits first
+        var names = plan.StagesFor(loads ?? []).SelectMany(stage => stage.Cases.Select(item => item.Name))
+            .Concat(plan.CaseNames).Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(name => modal || document.LoadCases.Values.FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))?.Kind != Mcotis.Core.CaseKind.ModalEigen)
+            .ToArray();
+        var solved = FemDocumentRun.Solve(document, names, order, solver.StabilityThresholds, solver.MaximumEquilibriumIterations, equilibrium, cancellationToken);
+        var results = plan.Complete(solved.Cases);
+        var primary = results.TryGetValue(plan.PrimaryResultName, out var first) ? first : results[plan.ResultNames.First(results.ContainsKey)];
+        return new FemStudyRun(runId, "", "", "", primary, loads, results) { Native = solved };
+    }
+
+    /// <summary>
+    /// One candidate of an optimization, analysed as Run FEM Analysis analyses the model (task of 2026-10-14, M1: "candidate
+    /// document → solver"): the candidate — its geometry, its members, the open model's load rows with the candidate's
+    /// storey loads and cable targets — is made a native document the way the model's own document is made
+    /// (<see cref="LegacyNativeDocumentMigration.Convert"/>), and solved by <see cref="FemDocumentRun"/>. Its supports
+    /// are the pins at its column bases, as they have always been for a candidate. Refusals are
+    /// <see cref="InvalidOperationException"/>s with the reason.
+    /// </summary>
+    public FemStudyRun AnalyzeCandidate(string id, GeometryModel geometry, IReadOnlyDictionary<string, FemSectionProperties> properties,
+        FemCandidateSetup setup, IReadOnlyList<FemAppliedLoad> loads, IReadOnlyDictionary<string, double> targets,
+        IReadOnlyDictionary<string, string>? targetPatterns = null, CancellationToken cancellationToken = default)
+    {
+        var plan = FemLoadPlan.Build(setup.Patterns, setup.Cases, setup.Combinations, setup.Loading, properties, geometry,
+            setup.Tab01Patterns, setup.PretensionPatterns, setup.AppliedPoints, setup.MassSources.Select(source => (Guid.Parse(source.Id), source.Name)).ToArray());
+        var document = CandidateDocument(geometry, properties, setup, loads, targets, targetPatterns);
+        // a study reads static results: the modes of each candidate are not asked for
+        return AnalyzeDocument(document, plan, id, geometry, loads, null, cancellationToken, modal: false);
+    }
+
+    /// <summary>A fixed identity for candidate documents: the same candidate is always the same document, to the last digit.</summary>
+    private static readonly Guid CandidateDatabaseId = new("6d636f74-6973-4f70-8000-63616e646964");
+
+    internal static Mcotis.Core.ModelDocument CandidateDocument(GeometryModel geometry, IReadOnlyDictionary<string, FemSectionProperties> properties,
+        FemCandidateSetup setup, IReadOnlyList<FemAppliedLoad> loads, IReadOnlyDictionary<string, double> targets, IReadOnlyDictionary<string, string>? targetPatterns)
+    {
+        var tab01 = setup.Tab01Patterns.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var applied = setup.AppliedPoints.ToHashSet(StringComparer.Ordinal);
+        // the candidate's storey loads replace what the model holds in their patterns at the loaded points (FemLoadPlan)
+        var joints = setup.Loading.JointLoads.Where(item => !(tab01.Contains(item.Pattern) && applied.Contains(item.Load.PointName)))
+            .Concat(loads.Where(load => load.Pattern is { } pattern && tab01.Contains(pattern))
+                .Select(load => new SapPatternJointLoad(load.Pattern!, new FemJointLoad(load.PointName, load.FxKN, load.FzKN))))
+            .ToArray();
+        string? fallbackPattern = setup.PretensionPatterns.FirstOrDefault();
+        var cableRows = targets.Where(pair => pair.Value > 0 && properties.ContainsKey(pair.Key))
+            .Select(pair => new Configuration.CableForceRowDto
+            {
+                CableName = pair.Key,
+                PretensionLoadCase = targetPatterns?.GetValueOrDefault(pair.Key) ?? fallbackPattern
+                    ?? throw new InvalidOperationException($"Cable '{pair.Key}' has a target force but the model has no cable target-force load pattern."),
+                Mode = Configuration.CableForceMode.Fixed, FixedForce = pair.Value,
+            }).ToList();
+        static List<string> Names(Mcotis.Core.DofMask mask) => Mcotis.Core.DegreesOfFreedom.Components
+            .Where(component => Mcotis.Core.DegreesOfFreedom.Contains(mask, component)).Select(component => component.ToString()).ToList();
+        var snapshot = new Configuration.FemInputSnapshot
+        {
+            DatabaseId = CandidateDatabaseId,
+            Geometry = geometry,
+            Baseline = geometry,
+            SectionProperties = properties.Values.OrderBy(property => property.MemberName, StringComparer.Ordinal).ToList(),
+            Loading = setup.Loading with { JointLoads = joints },
+            PatternRows = setup.Patterns.Select(Configuration.FemRowDtos.Pattern).ToList(),
+            CaseRows = setup.Cases.Select(row => Configuration.FemRowDtos.Case(row, setup.MassSources)).ToList(),
+            CombinationRows = setup.Combinations.Select(Configuration.FemRowDtos.Combination).ToList(),
+            CableSetup = cableRows.Count > 0 ? new Configuration.CableForceConfigDto { Cables = cableRows } : null,
+            MassSources = setup.MassSources.ToList(),
+            Settings = new Configuration.FemSettingsDto
+            {
+                TargetFitPercent = setup.TargetFitPercent, TargetFitIterations = setup.TargetFitIterations,
+                FrameMeshSegments = setup.FrameMeshSegments, CableSag = setup.CableSag,
+                ActiveDofs = Names(setup.ActiveDofs), CableJointDofs = Names(setup.CableDofs),
+            },
+        };
+        try { return LegacyNativeDocumentMigration.Convert(snapshot, LegacyNativeDocumentMigration.Source.Generated("Candidate")); }
+        catch (Exception ex) when (ex is System.IO.InvalidDataException or ArgumentException or FormatException or Mcotis.Core.DocumentException)
+        {
+            throw new InvalidOperationException(ex.Message, ex);
+        }
     }
 
     public IReadOnlyList<FemStudyRun> Analyze(

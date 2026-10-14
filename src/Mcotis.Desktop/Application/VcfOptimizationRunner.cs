@@ -29,6 +29,8 @@ public sealed record VcfOptimizationInputs(
     /// <summary>The degrees of freedom of Analysis Options: those of the model, and those of a joint only cables reach.</summary>
     public Mcotis.Core.DofMask ActiveDofs { get; init; } = Mcotis.Core.DofMask.XZ;
     public Mcotis.Core.DofMask CableDofs { get; init; } = Mcotis.Core.DofMask.Translations;
+    /// <summary>The mass sources of the model, which its load case rows name.</summary>
+    public IReadOnlyList<Configuration.FemMassSourceDto> MassSources { get; init; } = [];
 }
 
 /// <summary>One variable of the search space: its key ("geometry:Bay", "cable:step", "storey:LL", "role:TopChord",
@@ -42,7 +44,7 @@ public sealed record VcfOptimizationAxis(string Key, string Label, IReadOnlyList
 /// results column is named after.</summary>
 public sealed record VcfCableStep(int Index, double ForceKN);
 
-/// <summary>One combination: the value picked on every axis (same order as <see cref="VcfOptimizationRunner.Axes"/>).</summary>
+/// <summary>One combination: the value picked on every axis (same order as <see cref="IOptimizationRunner.Axes"/>).</summary>
 public sealed record VcfOptimizationCase(long Index, IReadOnlyList<object> Values);
 
 /// <summary>A case's outcome, read on the bottom chord points (BTrPt…) in the deflection result (or over every solved
@@ -106,22 +108,21 @@ public static class OptimizationResponses
 }
 
 /// <summary>
-/// Run → Optimization VCF: walks the search space of <see cref="VcfOptimizationSettings"/> case by case. Each case is
-/// built in memory from the working model — geometry (with another number of bays when asked), member sections, SAP
-/// loading, Tab 01 point loads from qz × tributary length × B × NStories, the cable targets of the case's step
-/// (<see cref="VcfOptimization.CableTargets"/>: every cable steps together, the fan cables by their length) — and analysed
-/// with the same internal FEM as Run → Run FEM Analysis. The working model is never changed.
+/// Optimization → Optimization VCF, as a configuration of <see cref="ParametricOptimization"/>: the search space of
+/// <see cref="VcfOptimizationSettings"/>, and each case built by the VCF generator from the open model — the generator's
+/// system with another number of bays (<see cref="VcfGenerator.WithBays"/>) and the case's dimensions
+/// (<see cref="VcfGenerator.Candidate"/>), the open model's member sections, SAP loading, Tab 01 point loads from qz ×
+/// tributary length × B × NStories, and the cable targets of the case's step (<see cref="VcfOptimization.CableTargets"/>:
+/// every cable steps together, the fan cables by their length). The deflection and uplift are read on the bottom chord
+/// points. The open model is never changed.
 /// </summary>
-public sealed class VcfOptimizationRunner : IOptimizationRunner
+public sealed class VcfOptimizationStudy : IParametricStudy
 {
-    public const int MaxCases = 10_000;
-    public const string CableStepKey = "cable:step";
     private readonly VcfOptimizationInputs inputs;
     private readonly VcfOptimizationSettings settings;
-    private readonly FemStudyService fem = new();
     private readonly Dictionary<int, (VcfGeometryAnalysis Model, VcfTopology? Topology)> byBays = [];
 
-    public VcfOptimizationRunner(VcfOptimizationInputs inputs, VcfOptimizationSettings settings)
+    public VcfOptimizationStudy(VcfOptimizationInputs inputs, VcfOptimizationSettings settings)
     {
         this.inputs = inputs;
         this.settings = settings;
@@ -155,7 +156,7 @@ public sealed class VcfOptimizationRunner : IOptimizationRunner
             var force = span.At(forces.Fraction(index));
             return (object)new VcfCableStep(index, rounded ? VcfOptimization.RoundForce(force) : force);
         }).ToArray();
-        return new(CableStepKey, $"{name} [kN]", steps);
+        return new(ParametricOptimization.CableStepKey, $"{name} [kN]", steps);
     }
 
     private static string ShortLabel(string key, string label) => key switch
@@ -167,130 +168,58 @@ public sealed class VcfOptimizationRunner : IOptimizationRunner
     public IReadOnlyList<VcfOptimizationAxis> Axes { get; }
     public long Count { get; }
 
-    /// <summary>Case <paramref name="index"/> (0-based): mixed-radix over the axes, the last axis changing fastest.</summary>
-    public VcfOptimizationCase CaseAt(long index)
-    {
-        var values = new object[Axes.Count];
-        var rest = index;
-        for (var axis = Axes.Count - 1; axis >= 0; axis--)
-        {
-            var count = Axes[axis].Values.Count;
-            values[axis] = Axes[axis].Values[(int)(rest % count)];
-            rest /= count;
-        }
-        return new(index, values);
-    }
-
-    public IEnumerable<VcfOptimizationCase> Cases()
-    {
-        for (long index = 0; index < Count; index++) yield return CaseAt(index);
-    }
-
     private double Number(VcfOptimizationCase item, string key) => Convert.ToDouble(item.Values[IndexOf(key)], CultureInfo.InvariantCulture);
     private int IndexOf(string key) => Axes.ToList().FindIndex(axis => axis.Key == key);
     private bool Has(string key) => IndexOf(key) >= 0;
 
-    /// <summary>Builds and analyses one case. Never throws for an invalid or non-converging case — the result says why.</summary>
-    public VcfOptimizationResult Run(VcfOptimizationCase item, CancellationToken cancellationToken = default)
+    /// <summary>The VCF system of a case, with its sections, loads and cable targets.</summary>
+    public ParametricCandidate Candidate(VcfOptimizationCase item)
     {
-        try
-        {
-            var analysis = inputs.Analysis;
-            var bays = (int)Number(item, "geometry:" + VcfOptimization.Bays.Key);
-            var (model, topology) = ModelFor(bays);
-            double Geometry(VcfOptimization.Parameter parameter, double fallback) =>
-                Has("geometry:" + parameter.Key) ? Number(item, "geometry:" + parameter.Key) : fallback;
-            var p = analysis.Parameters;
-            var depth = Geometry(VcfOptimization.Depth, p.TrussDepth);
-            var form = new VcfGeometryParameters(Geometry(VcfOptimization.BayWidth, p.BayWidth), depth,
-                analysis.HasMiddleChord ? VcfOptimization.MiddleChordRatio * depth : p.MiddleChordHeight, Geometry(VcfOptimization.Clear, p.ClearHeight),
-                p.BackSpan is null ? null : Geometry(VcfOptimization.BackSpan, p.BackSpan.Value),
-                p.BackStayHeight is null ? null : Geometry(VcfOptimization.BackStay, p.BackStayHeight.Value));
-            var problems = VcfGeometry.Validate(model, form);
-            if (problems.Count > 0) return VcfOptimizationRunner.Failed(item, "Invalid geometry: " + string.Join(" ", problems));
-            var geometry = VcfGeometry.Build(model, form);
+        var analysis = inputs.Analysis;
+        var bays = (int)Number(item, "geometry:" + VcfOptimization.Bays.Key);
+        var (model, topology) = ModelFor(bays);
+        double Geometry(VcfOptimization.Parameter parameter, double fallback) =>
+            Has("geometry:" + parameter.Key) ? Number(item, "geometry:" + parameter.Key) : fallback;
+        var p = analysis.Parameters;
+        var depth = Geometry(VcfOptimization.Depth, p.TrussDepth);
+        var form = new VcfGeometryParameters(Geometry(VcfOptimization.BayWidth, p.BayWidth), depth,
+            analysis.HasMiddleChord ? VcfOptimization.MiddleChordRatio * depth : p.MiddleChordHeight, Geometry(VcfOptimization.Clear, p.ClearHeight),
+            p.BackSpan is null ? null : Geometry(VcfOptimization.BackSpan, p.BackSpan.Value),
+            p.BackStayHeight is null ? null : Geometry(VcfOptimization.BackStay, p.BackStayHeight.Value));
+        var problems = VcfGeometry.Validate(model, form);
+        if (problems.Count > 0) throw new ParametricCandidateException("Invalid geometry: " + string.Join(" ", problems));
+        var geometry = VcfGenerator.Candidate(model, form);
 
-            var properties = Properties(item, model, topology, geometry);
-            var (cost, costNote) = Cost(geometry, properties);
-            VcfOptimizationResult Failed(string reason) => VcfOptimizationRunner.Failed(item, reason) with { CostSgd = cost, CostNote = costNote };
-            var loading = Loading(topology, geometry);
-            var applied = AppliedPoints(model, topology, geometry);
-            var loads = PointLoads(item, geometry, applied);
-            var targets = Targets(item, model, topology, geometry, properties);
-            var plan = FemLoadPlan.Build(inputs.Patterns, inputs.Cases, inputs.Combinations, loading, properties, geometry,
-                inputs.Tab01Patterns, inputs.PretensionPatterns, applied);
-            var supports = FemStudyService.FindPinSupportPoints(geometry);
-            var candidate = new FemStudyCandidate($"OPT{item.Index + 1:00000}", "L", "H", "P",
-                new TrussCandidate(1, depth, 0, "Bottom", 0, 0, 0), loads, targets);
-            var failure = new FailureCapture();
-            var runs = fem.Analyze(geometry, model.TopPoints, model.MiddlePoints, model.BottomPoints, supports, [candidate], properties,
-                failure, cancellationToken, inputs.TargetFitPercent, inputs.TargetFitIterations, inputs.FrameMeshSegments, plan, inputs.CableSag,
-                activeDofs: inputs.ActiveDofs, cableDofs: inputs.CableDofs);
-            if (runs.Count == 0) return Failed(failure.Message ?? "The case did not reach equilibrium.");
-            var run = runs[0];
-            IReadOnlyDictionary<string, FemAnalysisResult> results = run.Results ?? new Dictionary<string, FemAnalysisResult> { [plan.PrimaryResultName] = run.Result };
-            if (settings.DeflectionResult is { } wanted)
-            {
-                var match = results.Keys.FirstOrDefault(key => string.Equals(key, wanted, StringComparison.OrdinalIgnoreCase));
-                if (match is null) return Failed($"'{wanted}' was not solved — tick it to run on Define → Load Cases / Load Combinations.");
-                results = new Dictionary<string, FemAnalysisResult> { [match] = results[match] };
-            }
-            // Both limits are read on the bottom chord points (BTrPt…) only — the points the deflection is monitored at. Over
-            // every joint the downward maximum is the top of a mega column once the fan lifts the span, and a back-stay
-            // pulls the outer column tops up.
-            var bottom = model.BottomPoints.ToHashSet(StringComparer.Ordinal);
-            var checkedJoints = results
-                .SelectMany(pair => pair.Value.Joints.Where(joint => bottom.Contains(joint.PointName)).Select(joint => (Name: pair.Key, Point: joint.PointName, Mm: -joint.UZM * 1000)))
-                .ToArray();
-            if (checkedJoints.Length == 0) return Failed("No bottom chord point has a displacement to check.");
-            var (name, point, deflection) = checkedJoints.MaxBy(entry => entry.Mm);
-            var (_, upliftPoint, risen) = checkedJoints.MinBy(entry => entry.Mm);
-            var uplift = -risen;
-            var span = bays * form.BayWidth;
-            return new(item, deflection, name, point, results.Values.All(result => result.TargetFitConverged), null, span, span * 1000 / settings.SpanRatio,
-                cost, costNote, Math.Max(0, uplift), uplift > 0 ? upliftPoint : null, settings.UpliftLimitMm, OptimizationResponses.Of(geometry, properties, results[name]));
-        }
-        catch (OperationCanceledException) { throw; }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or KeyNotFoundException)
-        {
-            return VcfOptimizationRunner.Failed(item, ex.Message);
-        }
+        var properties = Properties(item, model, topology, geometry);
+        var applied = AppliedPoints(model, topology, geometry);
+        // the case is analysed as Run FEM Analysis analyses the model: as a native document, by the same solver path
+        var setup = new FemCandidateSetup(Loading(topology, geometry), inputs.Patterns, inputs.Cases, inputs.Combinations, inputs.Tab01Patterns,
+            inputs.PretensionPatterns, applied, inputs.TargetFitPercent, inputs.TargetFitIterations, inputs.FrameMeshSegments, inputs.CableSag,
+            inputs.ActiveDofs, inputs.CableDofs) { MassSources = inputs.MassSources };
+        // Both limits are read on the bottom chord points (BTrPt…) only — the points the deflection is monitored at. Over
+        // every joint the downward maximum is the top of a mega column once the fan lifts the span, and a back-stay
+        // pulls the outer column tops up.
+        return new($"OPT{item.Index + 1:00000}", geometry, properties, setup, PointLoads(item, geometry, applied),
+            Targets(item, model, topology, geometry, properties), TargetPatterns(topology),
+            model.BottomPoints.ToHashSet(StringComparer.Ordinal), "bottom chord point", bays * form.BayWidth);
+    }
+    /// <summary>The load pattern of each cable's target force: its own Tab 03 pattern, or — a cable the bays add — that of
+    /// the cable it copies.</summary>
+    private Dictionary<string, string> TargetPatterns(VcfTopology? topology)
+    {
+        var patterns = inputs.Cables.Where(cable => !string.IsNullOrWhiteSpace(cable.LoadPattern))
+            .GroupBy(cable => cable.CableName, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First().LoadPattern, StringComparer.Ordinal);
+        if (topology is not null)
+            foreach (var (added, source) in topology.AddedCables)
+                if (patterns.TryGetValue(source, out var pattern)) patterns.TryAdd(added, pattern);
+        return patterns;
     }
 
-    private static VcfOptimizationResult Failed(VcfOptimizationCase item, string reason) => new(item, null, null, null, false, reason);
-
-    /// <summary>Total cost of the case's members: Σ cost per metre × member length (frames and cables of the analysed model).
-    /// Null with a note naming the sections / materials without a unit cost.</summary>
-    private (double? Sgd, string? Note) Cost(GeometryModel geometry, IReadOnlyDictionary<string, FemSectionProperties> properties)
-    {
-        if (inputs.CostPerMetre is null) return (null, null);
-        double total = 0;
-        var missing = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var member in geometry.Members)
-        {
-            if (!properties.TryGetValue(member.Name, out var property)) continue;
-            var (start, end) = (geometry.Points[member.Start].Position, geometry.Points[member.End].Position);
-            var length = Math.Sqrt(Math.Pow(end.X - start.X, 2) + Math.Pow(end.Y - start.Y, 2) + Math.Pow(end.Z - start.Z, 2));
-            var (rate, why) = inputs.CostPerMetre(property);
-            if (rate is { } sgdPerM) total += sgdPerM * length;
-            else missing.Add(why ?? property.SectionName ?? member.Name);
-        }
-        return missing.Count == 0 ? (total, null) : (null, "No unit cost for " + string.Join(", ", missing));
-    }
-
-    private sealed class FailureCapture : IProgress<FemProgress>
-    {
-        public string? Message { get; private set; }
-        public void Report(FemProgress value) { if (value.Failure is not null) Message = value.Failure; }
-    }
-
+    /// <summary>The system with <paramref name="bays"/> bays, by the VCF generator from the open model (once per number).</summary>
     private (VcfGeometryAnalysis Model, VcfTopology? Topology) ModelFor(int bays)
     {
         if (byBays.TryGetValue(bays, out var cached)) return cached;
-        var analysis = inputs.Analysis;
-        if (bays == analysis.Bays) return byBays[bays] = (analysis, null);
-        var topology = VcfGeometry.ChangeBays(analysis, bays);
-        return byBays[bays] = (VcfGeometry.Analyze(topology), topology);
+        return byBays[bays] = VcfGenerator.WithBays(inputs.Analysis, bays);
     }
 
     /// <summary>Member properties: a regenerated member copies its template's, then the case's sections are assigned.</summary>
@@ -381,17 +310,9 @@ public sealed class VcfOptimizationRunner : IOptimizationRunner
     private Dictionary<string, double> Targets(VcfOptimizationCase item, VcfGeometryAnalysis model, VcfTopology? topology, GeometryModel geometry,
         IReadOnlyDictionary<string, FemSectionProperties> properties)
     {
-        var axis = IndexOf(CableStepKey);
+        var axis = IndexOf(ParametricOptimization.CableStepKey);
         var step = axis >= 0 && item.Values[axis] is VcfCableStep cableStep ? cableStep.Index : 0;
         return VcfOptimization.CableTargets(settings.CableForces, step, model, geometry, topology?.AddedCables, inputs.Cables)
             .Where(pair => properties.ContainsKey(pair.Key)).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
     }
-
-    /// <summary>Text of a case's value on an axis, for the results table.</summary>
-    public static string Text(object value) => value switch
-    {
-        double number => number.ToString("0.###", CultureInfo.CurrentCulture),
-        VcfCableStep step => step.ForceKN.ToString("0.###", CultureInfo.CurrentCulture),
-        _ => value.ToString() ?? "",
-    };
 }

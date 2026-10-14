@@ -35,7 +35,39 @@ public sealed class TemplateBuildingViewModel : Observable
     public string StoreyCount { get; set; } = "3";
     public string ElasticModulus { get; set; } = "200000000";
     public string PoissonRatio { get; set; } = "0.3";
-    public string WeightDensity { get; set; } = "78.5";
+
+    /// <summary>Standard gravity [m/s²]: a mass density follows the weight density as γ / g until it is typed.</summary>
+    public const double Gravity = 9.80665;
+    private string weightDensity = "78.5";
+    public string WeightDensity
+    {
+        get => weightDensity;
+        set
+        {
+            if (!Set(ref weightDensity, value) || massDensityTyped) return;
+            massDensity = FollowingMass();
+            Notify(nameof(MassDensity));
+        }
+    }
+
+    private bool massDensityTyped;
+    private string massDensity = (78.5 / Gravity).ToString("0.#####", CultureInfo.CurrentCulture);
+    /// <summary>Mass density ρ [t/m³] of the material — the self mass of a modal case. It starts at weight density / g
+    /// and follows it until the user types a value of their own; it is never 0 by default (a modal case with self
+    /// mass then had no mass at all).</summary>
+    public string MassDensity
+    {
+        get => massDensity;
+        set
+        {
+            if (!Set(ref massDensity, value)) return;
+            massDensityTyped = value != FollowingMass();
+        }
+    }
+
+    private string FollowingMass() =>
+        double.TryParse(weightDensity, NumberStyles.Float, CultureInfo.CurrentCulture, out var gamma) && double.IsFinite(gamma)
+            ? (gamma / Gravity).ToString("0.#####", CultureInfo.CurrentCulture) : "";
     public bool IncludeSelfWeight { get; set; }
     public bool FixedBases { get; set; } = true;
     public ObservableCollection<BuildingBayRow> XWidths { get; } = [];
@@ -86,8 +118,11 @@ public sealed class TemplateBuildingViewModel : Observable
             throw new ArgumentException("Click Update Tables after changing the bay or storey counts, then review the dimensions and loads.");
         double nu = Number(PoissonRatio, "Poisson ratio", true);
         if (nu >= 0.5) throw new ArgumentException("Poisson ratio must be between 0 and 0.5 (exclusive upper limit).");
+        double gamma = Number(WeightDensity, "Weight density (kN/m³)", true);
+        // the mass density as shown is rounded; while it follows the weight density it is γ / g exactly
+        double rho = massDensityTyped ? Number(MassDensity, "Mass density (t/m³)", true) : gamma / Gravity;
         var material = new MaterialDefinition(ObjectId.New(), "TemplateMaterial", MaterialType.Other,
-            Number(ElasticModulus, "E (kN/m²)"), nu, Number(WeightDensity, "Weight density (kN/m³)", true), 0);
+            Number(ElasticModulus, "E (kN/m²)"), nu, gamma, rho);
         FrameSectionDefinition Section(BuildingSectionRow row) => new(ObjectId.New(), row.Name, material.Id, FrameSectionShape.General,
             new(Number(row.Area, row.Name + " A"), Number(row.I33, row.Name + " I33"), Number(row.I22, row.Name + " I22"), Number(row.J, row.Name + " J")));
         return new(XWidths.Select(r => Number(r.Width, $"X bay {r.Bay} width (m)")).ToImmutableArray(),

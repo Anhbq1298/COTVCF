@@ -41,17 +41,8 @@ internal sealed class SpatialFrameElement
         var assignment = document.AssignmentOfFrame(frame.Id);
         var section = document.FrameSections[assignment.SectionId!.Value];
         var material = document.Materials[section.MaterialId];
-        var delta = end - start;
-        Length = delta.Length;
-        Axis1 = delta * (1 / Length);
-        // Native axis convention: project global Z as local 2; use global X for near-vertical members.
-        Xyz reference = Math.Abs(Axis1.Z) < 0.99 ? new(0, 0, 1) : new(1, 0, 0);
-        var y = reference - Axis1 * reference.Dot(Axis1);
-        y *= 1 / y.Length;
-        var z = Axis1.Cross(y);
-        double angle = assignment.LocalAxisAngle * Math.PI / 180;
-        Axis2 = y * Math.Cos(angle) + z * Math.Sin(angle);
-        Axis3 = z * Math.Cos(angle) - y * Math.Sin(angle);
+        Length = (end - start).Length;
+        (Axis1, Axis2, Axis3) = LocalAxes(start, end, assignment.LocalAxisAngle);
         var p = section.Properties;
         var m = assignment.Modifiers;
         axialRigidity = material.ElasticModulus * p.Area * m.Area;
@@ -81,11 +72,32 @@ internal sealed class SpatialFrameElement
             for (int i = 0; i < 12; i++) Stiffness[r, i] = Stiffness[i, r] = 0;
     }
 
+    /// <summary>The local axes of a frame from <paramref name="start"/> to <paramref name="end"/>, turned by its local-axis
+    /// angle [degrees] about local 1. Native convention: global Z projected as local 2; global X for a near-vertical frame.</summary>
+    internal static (Xyz Axis1, Xyz Axis2, Xyz Axis3) LocalAxes(Xyz start, Xyz end, double angleDegrees)
+    {
+        var delta = end - start;
+        var axis1 = delta * (1 / delta.Length);
+        Xyz reference = Math.Abs(axis1.Z) < 0.99 ? new(0, 0, 1) : new(1, 0, 0);
+        var y = reference - axis1 * reference.Dot(axis1);
+        y *= 1 / y.Length;
+        var z = axis1.Cross(y);
+        double angle = angleDegrees * Math.PI / 180;
+        return (axis1, y * Math.Cos(angle) + z * Math.Sin(angle), z * Math.Cos(angle) - y * Math.Sin(angle));
+    }
+
     internal static double[,] LocalStiffness(double length, double ea, double ei2, double ei3, double gj)
     {
         double[] values = [length, ea, ei2, ei3, gj];
         if (values.Any(value => !double.IsFinite(value)) || length <= Tolerances.Length || ea <= 0 || ei2 < 0 || ei3 < 0 || gj < 0)
             throw new ArgumentException("Element length and stiffness must be finite with positive length/EA and nonnegative EI/GJ.");
+        return Terms(length, ea, ei2, ei3, gj);
+    }
+
+    /// <summary>The local stiffness of the given rigidities, unchecked — one term alone when the others are 0
+    /// (<see cref="FrameStiffnessDemand"/>).</summary>
+    internal static double[,] Terms(double length, double ea, double ei2, double ei3, double gj)
+    {
         var k = new double[12, 12];
         void Pair(int i, int j, double value) { k[i, i] = k[j, j] = value; k[i, j] = k[j, i] = -value; }
         Pair(0, 6, ea / length);

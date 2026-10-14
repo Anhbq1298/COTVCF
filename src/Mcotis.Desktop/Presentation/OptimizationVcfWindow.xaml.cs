@@ -322,9 +322,9 @@ public partial class OptimizationVcfWindow : Window
             : $"{settings.GeometryCount:N0} geometry × {settings.ForceCount:N0} force × {settings.SectionCount:N0} section variants = {settings.CombinationCount:N0} combinations";
         ProblemText.Text = string.Join("\n", problems);
         OkButton.IsEnabled = problems.Count == 0;
-        RunButton.IsEnabled = problems.Count == 0 && settings.CombinationCount <= VcfOptimizationRunner.MaxCases && !viewModel.IsBusy;
-        RunButton.ToolTip = settings.CombinationCount > VcfOptimizationRunner.MaxCases
-            ? $"{settings.CombinationCount:N0} combinations — one run takes at most {VcfOptimizationRunner.MaxCases:N0}"
+        RunButton.IsEnabled = problems.Count == 0 && settings.CombinationCount <= ParametricOptimization.MaxCases && !viewModel.IsBusy;
+        RunButton.ToolTip = settings.CombinationCount > ParametricOptimization.MaxCases
+            ? $"{settings.CombinationCount:N0} combinations — one run takes at most {ParametricOptimization.MaxCases:N0}"
             : "Analyse every combination with the internal FEM and list the max deflection of each case (the working model is not changed)";
         ShowStoreyTotals(settings, problems.Count == 0);
         ShowLimit(settings, problems.Count == 0);

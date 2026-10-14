@@ -18,15 +18,188 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
-## 2026-10-14 · Moment at a fixed support in the reactions
+## 2026-10-14 · One parametric study engine for Optimization VCF and Optimization TAS
+- Status: Done
+- Who: markbui, Claude
+- Where: Optimization → Optimization VCF / Optimization TAS → Run Optimization; `Application/ParametricOptimization.cs`
+- What: The two optimizations are two configurations of one engine (`ParametricOptimization`): it walks a study's cases,
+  has each built by the study's generator (`IParametricStudy.Candidate`: `VcfOptimizationStudy` through
+  `VcfGenerator.WithBays` / `Candidate`, `TasOptimizationStudy` through `TasGenerator.Build`), costs it, analyses it with
+  the general solver through the same document path as Run FEM Analysis, and judges it with pluggable evaluators (the
+  deflection and uplift check, the structural responses). A future generator becomes optimizable by giving a study.
+  No result changes: the §2 baselines are reproduced, at 0.86× (VCF) and 1.07× (TAS) of the baseline time per case.
+- Checks: --optimization-study (§2 baselines and timing); --etabs-import (Optimization TAS); --generator-flag;
+  Mcotis.Desktop.Checks --full
+
+## 2026-10-14 · The generator flag: Optimization VCF / TAS offered by the model's generator, not its name
+- Status: Done
+- Who: markbui, Claude
+- Where: Optimization → Optimization VCF / Optimization TAS (enabled, and the tooltip says why not); Edit → Re-apply
+  Generator…, Edit → Detach from Generator; File → Load VCF / Load TAS, Edit → VCF System / Tied Arch System
+- What: A model a parametric generator made carries its flag (`GeneratorOrigin` in the native document; the
+  configuration's `generator`): the generator, its version, its parameters, and the generation key of each object
+  (VCF: chord and line along the truss, other joints by name; TAS: joint by name; a member by its two joints). The
+  generators (`ParametricGenerators.cs`: `IParametricGenerator`, `VcfGenerator`, `TasGenerator`) rebuild the system
+  from the flag and validate the document against it: sections, loads, cases and the other compatible edits keep it
+  optimizable; a generated object deleted, a joint moved, a member reconnected, a member added, a restraint changed on
+  a generated joint disable it, each listed with the object and the reason. The Optimization menu reads the flag and
+  the validation only (`CanOptimizeVcf` / `CanOptimizeTas`; before, a VCF-looking geometry or the model's name).
+  Re-apply rebuilds the system from the flag's parameters and Detach removes the flag, each one step of the model's
+  history. A configuration saved before the flag (the built-in VCF model included) gets the VCF flag when it is opened
+  if the VCF generator validates it; a TAS configuration saved before cannot (its parameters were not saved), and an
+  imported model — an .e2k of the tied arch included — has none. Intended differences (for the user's approval):
+  an imported SAP2000 / ETABS VCF model is no longer offered Optimization VCF; Edit → Tied Arch System now holds every
+  deck joint and every arch joint between the springings in UY, as the bundled ETABS model (and so File → Load TAS)
+  does — in-plane results unchanged (`--optimization-study` reproduces the §2 baselines). Also fixed: deleting a joint
+  that took a fan cable crashed the study preview when another cable followed that cable; the follower now keeps the
+  force it had as its own target.
+- Checks: --generator-flag (Load TAS / Load VCF flagged and valid; compatible edit; restraint change and deletions
+  listed per object; Undo restores; Re-apply and its Undo / Redo; Detach and its Undo; other parameters and the
+  elevated cable; Save / Open in both file forms; an imported .e2k not flagged; a VCF system through 12 and back to
+  10 bays; moved, reconnected, added and renamed objects on the document); --optimization-study; --native-parity;
+  --etabs-import; --user-guide; Mcotis.Desktop.Checks --full
+
+## 2026-10-14 · Undo and Redo in the main window: the model's document history
+- Status: Done
+- Who: markbui, Claude
+- Where: Edit → Undo (Ctrl+Z) / Redo (Ctrl+Y); the window title (`*` while the model differs from its file); File → Save
+  Config
+- What: Every change of the model in the main window is now one step of its native document's history (the document
+  session of `Mcotis.Application`): the whole configuration is written into the document — the engineering model as
+  native objects, and what the native model has no place for yet (section and material libraries, the Tab 01 / Tab 03
+  setup, the extras of the case rows) as the document's application data (`NativeToLegacyProjection`, the one bridge).
+  Undo and Redo move the session and restore the configuration the document holds. A model opened, imported or
+  generated starts its own history; a locked model (results on hand) waits for Unlock. Dirty state is the session's:
+  Save makes the model clean, Undo back to the saved document clean again. The core document (schema 6 of `.mcotis`)
+  gained the application data and the generator flag of a parametric model (`GeneratorOrigin`, for Optimization, next),
+  and an edit that replaces a document's content as one recorded step. This is the transitional form of the authority
+  flip: the main window still edits its own model and writes each edit into the document; the parts of the
+  configuration move into the native model one by one, and the bridge goes with the last of them.
+- Checks: --model-history (two edits undone and redone, no step added by writing the restored model again, dirty and
+  clean, Save, no Undo while locked); Mcotis.Checks group "Application data, generator flag and content replacement"
+  (schema 6 round trip, the hash unaffected, undo, migration from 5, replacement as one step); --user-guide;
+  Mcotis.Desktop.Checks --full; --template-building-ui; --result-tools-ui
+
+## 2026-10-14 · Joint restraints are explicit and editable; the moment at a fixed support is in the reactions
+- Status: Done
+- Who: markbui, Claude
+- Where: Assign → Joint → Restraints… and Restraints Summary; every model opened, imported or generated; Run FEM
+  Analysis → reactions (Results Table column My, the label beside the support, its hover read-out); the output database
+- What: A model that holds no restraint — the VCF system, an older configuration, an import that restrained nothing —
+  gets the column-base pins written into it once, as real assignments (`MainViewModel.MakeRestraintsExplicit`). After
+  that no rule adds a support: the run, the viewer and the exports use the restraints the model holds, a joint made free
+  stays free, and a model with none says so. Assign → Joint → Restraints… edits the six components of the joints
+  selected on the model view, with the fast restraints Fixed / Pinned / Roller / Free (OK / Apply / Close). The
+  reactions carry the moment of a support that holds the rotation (My, counter-clockwise positive in the XZ elevation),
+  combinations included; the output database has the column `my_knm`. User-visible change: Export to SAP2000 / ETABS of
+  the VCF system now writes its pins as assignments the model holds (before, as a rule that left the target's own
+  restraints alone).
+- Checks: --fem (My = P L at a fixed cantilever, closed form); --native-parity (the moment compared with the run before
+  M1); --sap-import (the VCF pins are assignments; a joint made free is free in the run, the viewer and the export);
+  --result-tools-ui (the dialog); --user-guide; --etabs-import; --etabs-export; --fem-db; --fem-model
+
+## 2026-10-14 · An output database for six-component and modal results
 - Status: Planned
 - Who: Unassigned
-- Where: Run → Run FEM Analysis → Reactions (viewer, table, hover); the FEM output database and reports
-- What: Since a model can be held on fixed supports (entry below), a support can carry a moment. The reactions list
-  the forces in X and Z only; the moment about Y is in the frame's end moment on the bending moment diagram, not in
-  the reactions. To add: the moment in the support reaction, its arrow and value in the viewer, the table, the
-  output database and the reports — with its sign convention stated.
+- Where: the FEM output database of Run FEM Analysis (`.cotfem` outputs), reports, Results Table
+- What: Since Run FEM Analysis solves the model's native document, every run has the solver's own results — all six
+  components of every joint and frame — and the modes of its modal cases. The output database still has its planar
+  tables (UX, UZ, the slope; reactions in X and Z), and those are what it writes; the six-component results and the
+  modes are kept in memory with the run and are gone when the model is closed or unlocked. To add: a versioned output
+  schema for six-component joint, frame and reaction results and for modal results (modes, participation, shapes),
+  with the migration of output files of the present schema — never a 3D result written into a planar table.
 - Checks: none yet
+
+## 2026-10-14 · Modal cases in the main window
+- Status: Done
+- Who: markbui, Claude
+- Where: Define → Load Cases → Load Case Data (type Modal (Eigenvectors)); Run → Run FEM Analysis; Result → Modal
+  Results… (Modes, Modal participation, Mode shape, Modal mass inventory; Show Mode Shape draws a mode on the model)
+- What: A modal case of the Load Cases table on the unstressed stiffness is now solved by Run FEM Analysis with the
+  static cases — the modal solver of the standalone system on the model's native document (the capability verified in
+  `docs/analysis/modal-eigen-verification.md`). Its mass is that of its mass source (`MS1`, the members' self mass, is
+  offered). The tables are those of the native workspace (one control, `ModalResultsView`, for both windows). A mode
+  drawn on the model is a mass-normalized eigenvector, magnified and said to be a relative amplitude; showing a static
+  result replaces it. Modal cases are not static results: they are not offered in the result pickers. Refused with the
+  reason, as before: modes on the stiffness at the end of another case, models with cables (no verified prestressed
+  tangent) and shells. A run needs a static case or combination beside its modal cases. The modes are kept in memory
+  with the run (see the Planned entry above).
+- Checks: --main-modal (six positive modes of the tied arch system, equal to the modal solver on the document solved
+  directly, participation, the static results unchanged, the mode drawn, the refusal); --template-building-ui
+
+## 2026-10-14 · Run FEM Analysis and the optimizations analyse native documents
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis; Optimization → Optimization VCF / Optimization TAS (every case)
+- What: Run FEM Analysis no longer hands the solver the application's own description of the model: it solves the
+  model's native document (`MainViewModel.NativeDocumentSession`, brought up to the model when the run locks it) with
+  `Mcotis.Analysis` — `FemDocumentRun`, the one analysis path of the application. Each case of Optimization VCF and
+  Optimization TAS is made a native document the same way (`FemStudyService.AnalyzeCandidate`) and solved by the same
+  path. The results are named for the tables, the viewer, the reports and Design by one map (`LegacyNames`, origin name
+  → identity); they carry the solver's own six-component results too. The results of the main window are now tracked
+  by the analysis input hash of the document they were computed from (Not run / Running / Current / Stale / Failed, the
+  library's rule), and the Design dialog says which. A joint connected to no frame or cable is left out of the
+  analysis, as the run always did, and the run says so. Nothing a user sees changes in the numbers: the run on the
+  document gives what the run gave before to round-off (relative 2.4E-10 at most, 42,000 values over six models), and
+  the optimizations reproduce their production baselines (VCF 6E-10, TAS 4E-13). Time per case: VCF 217 ms (was 249),
+  TAS 105 ms (was 87, 1.22×, within the 1.5× budget — half of the first build's extra time was the new section check,
+  now made once per run).
+- Checks: --native-parity (the run on the document against the run before it, every result of six models);
+  --optimization-study and --column-design (the production baselines); --fem-model; --run-monitor; --general-solver;
+  --fem-db; --sap-import; --etabs-import; Mcotis.Checks --full; Mcotis.Desktop.Checks --full
+
+## 2026-10-14 · TemplateBuilding: the material has a mass density
+- Status: Done
+- Who: markbui, Claude
+- Where: Edit → TemplateBuilding… → Properties and Supports → Mass density (t/m³)
+- What: The template's material had a mass density of 0, so a modal case with self mass only had no mass at all
+  (`modal.mass.none`) unless joint masses were assigned. The form now has Mass density (t/m³): it starts at weight
+  density / 9.80665 (8.00477 for 78.5 kN/m³), follows the weight density until a value is typed, and keeps a typed
+  value. A building with its self mass alone now gives its modes.
+- Checks: --template-building-ui (the field, and three positive modes of a template building on self mass only)
+
+## 2026-10-14 · A frame section is asked only for the stiffness the active degrees of freedom use
+- Status: Done
+- Who: markbui, Claude
+- Where: the analysis of the standalone system (`Mcotis.Analysis`): the native window's Run Analysis, and the native
+  document of the main window (`--native-parity`)
+- What: A section property is needed only where its stiffness term moves a degree of freedom that is on
+  (`FrameStiffnessDemand`). A frame of the XZ plane analysed in the XZ plane bends about local 3 alone: its I22 and J
+  act on UY, RX and RZ, which are off, so a section without them is analysed as it is. In full 3D the same terms act
+  and the frame is refused by name (`static.section.stiffness`, `modal.section.stiffness`), saying which property is
+  missing. The rule is the same for XY, YZ, custom sets and turned local axes (then I22 may be the in-plane inertia).
+  Nothing is assumed for a term that acts. This closes the known gap of the native document: the model imported from
+  SAP2000, whose frames hold no inertia out of the plane, is now solved from its document with the results of Run FEM
+  Analysis (2,990 values, relative 1.9E-10), and is refused frame by frame in full 3D.
+- Checks: Mcotis.Checks group "Section stiffness the active degrees of freedom call on" (closed form, XZ / XY / 3D,
+  turned axes, modal); --native-parity (the gap is gone); Mcotis.Checks --full (3,081)
+
+## 2026-10-14 · Production baselines of the Optimization and Design menus
+- Status: Done
+- Who: markbui, Claude
+- Where: Optimization → Optimization VCF / Optimization TAS / Optimization Results; Design → RC / CFT / Steel Encased /
+  Mega Composite Column Design (Run Design and the Optimization tab) — checks only, nothing changes in the app
+- What: Before the main window moves onto the native document, what these production tools give is frozen in
+  `tests/Mcotis.Desktop.Checks/Fixtures/production-baselines.json` (990 values): Optimization VCF on the default model
+  with the user guide's nine cases (truss depth 18–22 m × LL_ABOVE 5–10 kPa, read from the real form) and Optimization
+  TAS on the built-in system with its nine cases (h 2–4 m × LL 5–10 kPa) — every row, the summary line and the study
+  report (sensitivities, summary with the flat parameters, conclusions, figures); column design and column design
+  optimization of the four types on the guide's C1 / C2 forces; Run Design on the FEM forces of the default model.
+  Every later change must reproduce them — analysis numbers to round-off, the rest exactly — or list the difference
+  here with its cause and the user's approval, and capture again (`--baseline-capture`). The time per case is recorded
+  (VCF 249 ms, TAS 87 ms) and a study more than 1.5× slower is reported. Recorded as it is: on the default model, two
+  mega columns (186, 187) have an infinite major-axis utilisation in Run Design.
+- Checks: --optimization-study; --column-design; both in Mcotis.Desktop.Checks --full; --baseline-capture (opt-in)
+
+## 2026-10-14 · Moment at a fixed support in the reactions
+- Status: Done
+- Who: markbui, Claude
+- Where: Run → Run FEM Analysis → Reactions (viewer, table, hover); the FEM output database and reports
+- What: Since a model can be held on fixed supports (entry below), a support can carry a moment. Done 2026-10-14 with
+  the explicit restraints (entry "Joint restraints are explicit and editable…", above): My, counter-clockwise positive
+  in the XZ elevation, in the Results Table, beside the support in the viewer, in its hover read-out and in the output
+  database. The printed FEM reports do not list it yet.
+- Checks: --fem; --native-parity
 
 ## 2026-10-14 · Run FEM Analysis holds a model as SAP2000 or ETABS restrains it
 - Status: Done
@@ -61,14 +234,13 @@ continues on the next lines, indented by two spaces):
   imports with their source names. The handoff preserves XYZ geometry, effective frame/cable properties, the joint
   restraints the model is analysed with (see the entry above), pattern loads, cable targets, load cases,
   combinations, mass sources and analysis DOFs, and the document can round-trip through `.mcotis`. The document is
-  brought up to the model when it is loaded or imported, at each working autosave and when a run locks it. It is a
-  copy of the model, not yet the model the window works on: the controls, the viewer and the run still read the
-  window's own model, and nothing a user sees changes yet. A model the document cannot express still opens, runs
-  and saves. The document is the same model as the one that is run: solved as it is by the standalone solver it
+  brought up to the model when it is loaded or imported, at each working autosave and when a run locks it. Since
+  2026-10-14 Run FEM Analysis solves it (entry above); the controls and the viewer still read the window's own model.
+  A model the document cannot express still opens and saves; its run is refused with the reason. The document is the same model as the one that is run: solved as it is by the standalone solver it
   gives the results of Run FEM Analysis to round-off (relative differences of the order of 1E-11; the check accepts
   1E-8) in every static case of the VCF system, the tied arch system with and without its cable, the ETABS import
-  and a VCF model on a fixed base — 17,856 values. One gap is known: a frame whose section holds no bending inertia out of the plane (members
-  of the SAP2000 check model) is solved by the run in its plane and refused when the document is solved. Next: the
+  and a VCF model on a fixed base — 17,856 values. The gap first known — a frame whose section holds no bending inertia
+  out of the plane (members of the SAP2000 check model) — is closed (entry above, 2026-10-14). Next: the
   run reading the document, VCF and TAS as native generators, the viewer reading the document, `.mcotis` as the
   window's file.
 - Checks: --native-parity (the document solved against the run, and the known gap); --fem-db; --fem-schema;

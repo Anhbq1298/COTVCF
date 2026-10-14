@@ -106,9 +106,26 @@ public sealed partial class MainViewModel
                 foreach (var point in State.AppliedPoints.Where(point => !points.Contains(point.PointName)).ToArray()) State.AppliedPoints.Remove(point);
                 foreach (var load in State.PointLoads.Where(load => !points.Contains(load.PointName)).ToArray()) State.PointLoads.Remove(load);
 
-                foreach (var cable in State.Cables.Where(cable => !kept.Contains(cable.CableName)).ToArray()) State.Cables.Remove(cable);
-                foreach (var cable in State.Cables)
-                    if (cable.ReferenceCableName is { } reference && !kept.Contains(reference)) cable.SyncMode = CableSyncMode.Independent;
+                // a cable that follows a deleted cable is set free first, with the force it had from it as its own target —
+                // every change of the cables recomposes the study, which cannot read a follower whose reference is gone
+                var cables = State.Cables.ToArray();
+                foreach (var cable in cables.Where(cable => kept.Contains(cable.CableName)))
+                {
+                    if (cable.ReferenceCableName is not { } reference || kept.Contains(reference)) continue;
+                    var forces = cable.IsFollower ? CableSyncGraph.ResolvedForces(cable, cables) : [];
+                    cable.SyncMode = CableSyncMode.Independent;
+                    cable.ReferenceCableName = null;
+                    if (forces.Count > 1)
+                    {
+                        cable.MinForce = forces[0];
+                        cable.MaxForce = forces[^1];
+                        cable.StepForce = (forces[^1] - forces[0]) / (forces.Count - 1);
+                        cable.ApplyRange = true;
+                    }
+                    else if (forces.Count == 1) { cable.ApplyRange = false; cable.TargetForce = forces[0]; }
+                    else if (!cable.ApplyRange) cable.TargetForce ??= 0;
+                }
+                foreach (var cable in cables.Where(cable => !kept.Contains(cable.CableName))) State.Cables.Remove(cable);
 
                 var output = State.OutputSettings;
                 Keep(output.DeflectionPoints, points);

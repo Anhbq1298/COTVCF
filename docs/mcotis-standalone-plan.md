@@ -52,6 +52,47 @@ từ nay được giải và liệt kê như một prerequisite (trước đây 
 dồn (CASE-01); state transfer là PR-04, bước tiếp theo, còn bị chặn bởi literature gate (ALG-07, ALG-08). Native
 workspace chưa có form load case.
 
+**Cập nhật di chuyển cửa sổ chính (2026-10-14, người dùng giao nhiệm vụ M0–M8: "do all"):** các quyết định sau thay cho
+mọi chỗ cũ nói khác.
+
+1. **`ModelDocument` là nguồn dữ liệu duy nhất của cửa sổ chính.** Model cũ (`GeometryModel`, `FemConfiguration`,
+   `FemSectionProperties`, `.cotfem.db`) trở thành bản chiếu chỉ đọc sinh ra từ document, chỉ tồn tại cho các tính năng
+   chưa chuyển, và bị xóa khi tính năng cuối cùng đã chuyển.
+2. **Một cửa sổ.** Khi chuyển xong, `NativeModelWindow` được gỡ; Edit → TemplateBuilding… sinh model vào cửa sổ chính.
+3. **Model mặc định khi khởi động: hệ vòm có dây căng (TAS), dạng native document, view 3D, phân tích Full 3D.** TAS
+   vẫn là khung phẳng; ứng xử ngoài mặt phẳng phải được giữ bằng dữ liệu thật (tiết diện, gối), không bằng mẹo của
+   solver. Hệ vòm không gian không thuộc nhiệm vụ này.
+4. Modal, 2D theo DOF mask và mọi khả năng tĩnh chạy trong cửa sổ chính vì cửa sổ chính chạy cùng đường
+   `ModelDocument` → `Mcotis.Analysis` như cửa sổ native.
+5. **Bỏ hẳn workflow MB** khỏi nhiệm vụ: không port, không kiểm, không xóa; code dùng chung (VCF, báo cáo FEM…) được
+   chuyển theo phần mà tính năng đang dùng.
+
+Optimization (menu Optimization VCF / TAS / Results) và Design là công cụ sản xuất: phải cho đúng kết quả đã đóng băng
+ở cuối mỗi bước (`tests/Mcotis.Desktop.Checks/Fixtures/production-baselines.json`, `--optimization-study`,
+`--column-design`); mọi khác biệt có chủ đích phải ghi vào development log và được người dùng duyệt. Quyền tối ưu do
+cờ `GeneratorOrigin` lưu trong document quyết định (generator VCF / TAS), không theo tên model.
+
+**Trạng thái (2026-10-14): M0–M3 xong.**
+
+- **M0 — baseline và capability gate:** khoảng trống inertia ngoài mặt phẳng đã đóng ở tầng solver
+  (`FrameStiffnessDemand`), template có khối lượng riêng, kết quả Optimization và Design được đóng băng trong
+  `production-baselines.json`.
+- **M1 — một đường phân tích:** Run FEM Analysis và mọi case của Optimization VCF / TAS giải native document qua
+  `FemDocumentRun`; tên đi qua `LegacyNames`, kết quả có trạng thái theo `AnalysisInputHash`, modal chạy trong cửa sổ
+  chính. Kết quả 6 thành phần và modal còn giữ trong bộ nhớ (chưa có schema output — việc của giai đoạn persistence).
+- **M2 — document lifecycle của cửa sổ chính:** document giữ toàn bộ cấu hình cần để phục hồi model; mỗi lệnh edit là
+  một bước của `DocumentSession`, Undo / Redo phục hồi model từ document, dirty state và dấu `*` theo document, Save
+  đánh dấu đúng revision. Joint restraints là assignment tường minh, sửa được và phản lực gối fixed có `My`. Phần UI
+  chưa chuyển vẫn dùng `NativeToLegacyProjection` như ranh giới chuyển tiếp; bridge này chỉ được xóa khi consumer cũ
+  cuối cùng chuyển xong, không tạo model thứ hai để phân tích.
+- **M3 — native generators và parametric studies:** VCF / TAS mang `GeneratorOrigin` và `GenerationKey`, validation
+  quyết định Optimization có được bật; Re-apply / Detach là các bước Undo được. Hai optimization dùng chung
+  `ParametricOptimization`, sinh một native document cho từng candidate và giữ nguyên production baselines.
+
+Gate đã chạy trên working tree này: build; `Mcotis.Checks --full` (3.093 checks, gồm OpenSees static / cable / modal);
+`Mcotis.Desktop.Checks --full` (gồm model history, generator flags, native parity và production baselines). Live
+SAP2000 / ETABS vẫn chưa nằm trong gate này.
+
 ## 0. Định hướng đã chốt
 
 | Nội dung | Quyết định (người dùng, 2026-10-12) |
@@ -177,8 +218,8 @@ Dialog làm việc trên dữ liệu tạm: Apply = validate + commit; OK = comm
 | **2 — Document lifecycle** | `DocumentSession`, New / Open / Save / Save As | Save đúng document đang mở; Open lỗi giữ nguyên model | Xong ở tầng thư viện |
 | **3 — Edit commands** | Commands, Undo/Redo, change sets, revision, dirty, result state | Mọi thao tác phục hồi được; invalidation nhất quán | Xong ở tầng thư viện |
 | **4 — Analysis boundary** | Shared 3D engine, planar DOF presets, snapshot từ `ModelDocument`; capability check (chặn Shell…); results gắn document ID + input hash | Numerical source gates + XZ regression + analytical/OpenSeesPy checks | Compiler và `StaticSolver` xong cho frame và cable (target force, staged case, sag, frame có nút giữa, station dọc frame), đã đối chiếu ba nguồn kể cả default model; toàn bộ app đã chạy trên engine này và solver planar đã archive. Chẩn đoán ổn định số đã có (2026-10-13): số chữ số chính xác bị mất theo từng DOF, stiffness suy biến / gần suy biến và các DOF tham gia — [solver/numerical-stability-diagnostics.md](solver/numerical-stability-diagnostics.md). Còn shell, solver sparse |
-| **5 — Hệ VCF trên native model** | Generator VCF tạo/sinh lại geometry qua command, giữ ID bằng `GenerationKey`; tên theo vai trò | Đổi số bay giữ ID và assignments của object không đổi | Đang làm: VCF/TAS hiện khởi tạo native document với ID/`GenerationKey` ổn định; bước kế là regenerate theo command và giữ assignment của phần tử còn lại |
-| **6 — Desktop** | `Mcotis.Desktop`: shell, các ViewModel ở mục 5, selection chung, viewport đọc document | Tạo → lưu → mở → phân tích → xem kết quả hoàn toàn trên hệ mới | Đang làm: main workspace đã giữ một `DocumentSession` native cho VCF/TAS/config/SAP/ETABS (bản chiếu của model cũ, đồng bộ khi load / import / autosave / khóa để Run — chưa phải model làm việc); SAP/ETABS import/export đã giữ restraint 6-DOF và active DOF; **Run của cửa sổ chính đã giữ đúng restraint của model theo từng component** (2026-10-14: fixed / roller không còn bị đổi thành pin; model không có restraint — VCF, config cũ — vẫn dùng pin ở chân cột; một quy tắc chung cho Run, native document, export và viewer: `LegacyNativeDocumentMigration.Restraints`). **Document đã được chứng minh là đúng model đang chạy** (`--native-parity`, 2026-10-14): giải trực tiếp document bằng `ModelCompiler` + `StaticSolver` cho kết quả của Run FEM Analysis tới sai số làm tròn (~1E-11 tương đối, 17.856 giá trị) ở mọi static case của VCF, TAS, TAS có cable, ETABS import và VCF có gối fixed — đây là gate để chuyển Run sang đọc document. Một khoảng trống đã biết: frame không có inertia ngoài mặt phẳng thì Run giải được trong mặt phẳng còn `StaticSolver` từ chối document (`static.section.stiffness`). Còn lại: Run, controls và viewport đọc trực tiếp document; sửa restraint trong cửa sổ chính; moment phản lực tại gối fixed; chạy thử export trên SAP2000 / ETABS thật |
+| **5 — Hệ VCF trên native model** | Generator VCF tạo/sinh lại geometry qua command, giữ ID bằng `GenerationKey`; tên theo vai trò | Đổi số bay giữ ID và assignments của object không đổi | M3 xong: VCF/TAS có `GeneratorOrigin`, stable `GenerationKey`, validation, Re-apply / Detach có Undo; đổi số bay giữ identity theo generation key. Optimization đọc flag, không đoán theo tên model |
+| **6 — Desktop** | `Mcotis.Desktop`: shell, các ViewModel ở mục 5, selection chung, viewport đọc document | Tạo → lưu → mở → phân tích → xem kết quả hoàn toàn trên hệ mới | Đang làm sau M2/M3: main workspace có một `DocumentSession`; Run FEM Analysis, modal và mọi optimization candidate đã đọc native document qua `FemDocumentRun`. Undo / Redo, dirty state, explicit six-DOF restraints, fixed-support `My`, generator validation và Re-apply / Detach đã xong. Controls và viewport chưa chuyển hết nên còn đọc `NativeToLegacyProjection`; `NativeModelWindow` chưa retire; chưa chạy export trên SAP2000 / ETABS thật |
 | **7 — Persistence hoàn chỉnh** | Autosave nền theo revision, recovery, results store, đọc file `.cotfem.db` cũ, default model dạng `.mcotis` | Recovery không báo thành công giả; file cũ mở được | Đang làm: `.cotfem.db` được chuyển xác định sang native, giữ restraint 6-DOF qua Save/Open và round-trip `.mcotis`; default file và autosave chính vẫn chưa đổi sang `.mcotis` |
 | **8 — Release** | CI, đo hiệu năng, đóng gói; gỡ phần app cũ đã được thay | App chạy trọn vẹn trên máy không có SAP/ETABS | |
 

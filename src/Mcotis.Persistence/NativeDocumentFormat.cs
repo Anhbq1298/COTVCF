@@ -21,7 +21,7 @@ public interface IDocumentMigration
 public static class NativeDocumentFormat
 {
     public const string FormatName = "Mcotis.Document";
-    public const int CurrentSchemaVersion = 5;
+    public const int CurrentSchemaVersion = 6;
     public const string Extension = ".mcotis";
 
     /// <summary>Schema 1 had no DOF setting; preserve its planar XZ analysis assumption. Schema 2 had no setting for the
@@ -29,7 +29,18 @@ public static class NativeDocumentFormat
     /// of load case with one reference to another case; schema 4 states the kind, the reference by its meaning, the
     /// geometric nonlinearity and the mass sources (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md §5.1).</summary>
     public static IReadOnlyList<IDocumentMigration> Migrations { get; } =
-        [new AddActiveDofs(), new AddCableDofs(), new AddLoadCaseStateConfig(), new AddModalMassAssignments()];
+        [new AddActiveDofs(), new AddCableDofs(), new AddLoadCaseStateConfig(), new AddModalMassAssignments(), new AddApplicationDataAndGenerator()];
+
+    /// <summary>5 → 6. A schema-5 document held no application data and was not flagged as generated: both are empty.</summary>
+    private sealed class AddApplicationDataAndGenerator : IDocumentMigration
+    {
+        public int FromVersion => 5;
+        public void Upgrade(JsonObject file)
+        {
+            if (file.ContainsKey("applicationData") || file.ContainsKey("generator")) throw new DocumentFileException("Schema 5 has no application data and no generator.");
+            file["applicationData"] = new JsonObject();
+        }
+    }
 
     /// <summary>4 → 5. Existing mass sources keep their self-mass choice and opt into the newly explicit
     /// additional-mass component. Old files had no joint assignments, so the list is empty.</summary>
@@ -290,6 +301,8 @@ public static class NativeDocumentFormat
                     PointId = item.PointId.ToString(), UX = item.UX, UY = item.UY, UZ = item.UZ,
                     RX = item.RX, RY = item.RY, RZ = item.RZ,
                 }).ToList(),
+            ApplicationData = new(d.ApplicationData, StringComparer.Ordinal),
+            Generator = d.Generator is { } generator ? new() { Id = generator.GeneratorId, Version = generator.Version, Parameters = new(generator.Parameters, StringComparer.Ordinal) } : null,
         };
     }
 
@@ -427,6 +440,10 @@ public static class NativeDocumentFormat
         var settings = Member(file.Settings, "settings");
         editor.SetSettings(new(settings.CableFitTolerancePercent, settings.CableFitMaxIterations, settings.FrameMeshSegments, settings.CableSag)
         { ActiveDofs = settings.ActiveDofs, CableDofs = settings.CableDofs });
+
+        foreach (var (key, value) in Member(file.ApplicationData, "applicationData")) editor.SetApplicationData(key, value);
+        if (file.Generator is { } generator)
+            editor.SetGenerator(GeneratorOrigin.Create(generator.Id, generator.Version, Member(generator.Parameters, "generator.parameters")));
 
         // Where the automatic names had got to — beyond what the names still in the file show, when objects were deleted.
         foreach (var (key, number) in Member(file.NameSequence, "nameSequence"))

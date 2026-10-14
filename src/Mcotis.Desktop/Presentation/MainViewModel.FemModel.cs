@@ -60,7 +60,7 @@ public sealed partial class MainViewModel
 
     public const string ProductTitle = "Mcotis — Meinhardt Cities of Tomorrow Integrated Structures";
     /// <summary>The main window's title: the product, then the file the configuration is in (<see cref="CurrentFileName"/>).</summary>
-    public string WindowTitle => $"{ProductTitle} — {CurrentFileName}";
+    public string WindowTitle => $"{ProductTitle} — {CurrentFileName}{(IsModelDirty ? " *" : "")}";
     /// <summary>The file name of the active configuration — the one Save overwrites. While it has no file: "Default model"
     /// for the built-in model, the name of a model opened from an older file or from SAP2000, else "Untitled".</summary>
     public string CurrentFileName =>
@@ -84,6 +84,10 @@ public sealed partial class MainViewModel
     public Command SaveFemModel => saveFemModel ??= new(_ => SaveFemModelToFile(saveAs: false), () => CanSaveFemModel);
     /// <summary>File → Save Config As… (Ctrl+Shift+S): always asks for the file; the saved file becomes the active configuration.</summary>
     public Command SaveFemModelAs => saveFemModelAs ??= new(_ => SaveFemModelToFile(saveAs: true), () => CanSaveFemModel);
+    private Command? undoModel, redoModel;
+    /// <summary>Edit → Undo (Ctrl+Z) / Redo (Ctrl+Y): one step of the document's history (<see cref="UndoModel"/>).</summary>
+    public Command UndoModelCommand => undoModel ??= new(_ => UndoModel(), () => CanUndoModel);
+    public Command RedoModelCommand => redoModel ??= new(_ => RedoModel(), () => CanRedoModel);
 
     /// <summary>Asks where to save the configuration, starting from a folder (null: the dialog's own) and a file name; null
     /// cancels. The Windows Save dialog — a check replaces it.</summary>
@@ -147,6 +151,7 @@ public sealed partial class MainViewModel
             femWorkingDatabasePath = null;
             femOutputRegistrations.Clear();
             femWorkingDirty = false;
+            generatorFlag = null;
             ClearNativeDocument();
             SelectedAppliedPoint = null;
             SelectedCable = null;
@@ -223,6 +228,11 @@ public sealed partial class MainViewModel
                 femWorkingDirty = false;
                 femWorkingDatabasePath = femSessionStore.Save(snapshot, femOutputRegistrations, path);
             }
+            // the document is what the file now holds: clean until the next edit
+            SyncNativeDocument(femInputSnapshot is not null && !path.EndsWith(FemModelFile.Extension, StringComparison.OrdinalIgnoreCase)
+                ? femInputSnapshot : FemInputSnapshot.FromLegacy(file, femInputSnapshot), edit: true);
+            NativeDocumentSession.MarkSaved(NativeDocumentSession.Document, path);
+            NotifyModelHistory();
             FemProgressText = $"Saved MCOTiS config {Path.GetFileName(path)} · {file.SectionProperties.Count:N0} members, {file.CaseRows.Count} load cases, " +
                 $"{file.CombinationRows.Count} combinations. Load MCOTiS Config reopens this complete setup without SAP2000.";
             Message = FemProgressText;
@@ -268,27 +278,11 @@ public sealed partial class MainViewModel
             CableSections = CableSections.Count > 0 ? CableSections.ToList() : null,
             TendonSections = TendonSections.Count > 0 ? TendonSections.ToList() : null,
             Loading = femSapLoading,
-            PatternRows = FemPatternRows.Select(row => new FemPatternRowDto(row.Name, row.Type, row.SelfWeightMultiplier, row.Role, row.Loads)).ToList(),
-            // A row is saved with its identity; the case it continues from, or takes its stiffness from, is named here
-            // and resolved to that case's identity where the rows are completed (FemCaseSchema). An option that is the
-            // default is left out: the row then says what a row has always said.
-            CaseRows = FemCaseRows.Select(row => new FemDefinitionRowDto(row.Name,
-                // the type as text: a case of the application says what it is; one read from another program keeps
-                // that program's word for it, unless Load Case Data gave it another type
-                row.Source == "App" || row.Options.Kind != Mcotis.Core.CaseKind.NonlinearStatic ? row.CaseType : row.Type,
-                row.Definition, row.InitialCase, row.Run, row.Supported, row.Source, row.Note, row.CableTargetForces)
-            {
-                Id = row.Id.ToString("D"),
-                CaseKind = row.Options.Kind == Mcotis.Core.CaseKind.NonlinearStatic ? null : row.Options.Kind.ToString(),
-                GeometricMode = row.Options.GeometricMode == Mcotis.Core.GeometricNonlinearity.None ? null : row.Options.GeometricMode.ToString(),
-                StiffnessSourceCase = row.Options.StiffnessSourceCase,
-                NonlinearControls = row.Options.Controls is { } controls
-                    ? new(controls.MaxLoadSteps, controls.MaxIterationsPerStep, controls.RelativeResidualTolerance, controls.RelativeDisplacementTolerance) : null,
-                Modal = row.Options.MassSource is { } mass
-                    ? new(mass, femMassSources.FirstOrDefault(source => source.Name.Equals(mass, StringComparison.OrdinalIgnoreCase))?.Id, row.Options.RequestedModes ?? 0) : null,
-            }).ToList(),
-            CombinationRows = FemCombinationRows.Select(row => new FemDefinitionRowDto(row.Name, row.Type, row.Definition, null, row.Run, row.Supported, row.Source, row.Note) { Id = row.Id.ToString("D") }).ToList(),
+            PatternRows = FemPatternRows.Select(FemRowDtos.Pattern).ToList(),
+            CaseRows = FemCaseRows.Select(row => FemRowDtos.Case(row, femMassSources)).ToList(),
+            CombinationRows = FemCombinationRows.Select(FemRowDtos.Combination).ToList(),
             MassSources = femMassSources.Count > 0 ? femMassSources.ToList() : null,
+            Generator = generatorFlag,
             // the six-component restraints the model holds; a model that holds none is written without the field
             JointRestraints = State.JointRestraints.Any(item => !item.Value.IsFree)
                 ? State.JointRestraints.Where(item => !item.Value.IsFree).OrderBy(item => item.Key, StringComparer.Ordinal)
@@ -366,7 +360,7 @@ public sealed partial class MainViewModel
     }
 
     private void ApplyFemModel(FemModelFileDto file, string path, bool isDefault, FemInputSnapshot? databaseSnapshot = null,
-        IReadOnlyList<FemOutputRegistration>? outputs = null)
+        IReadOnlyList<FemOutputRegistration>? outputs = null, bool keepDocument = false)
     {
         IsBusy = true;
         applyingFemDatabase = true;
@@ -387,6 +381,8 @@ public sealed partial class MainViewModel
             State.Geometry = file.Geometry!;
             State.Baseline = file.Baseline!;
             State.Preview = file.Geometry!;
+            // a configuration that holds no restraint is migrated once: its column-base pins become assignments
+            MakeRestraintsExplicit();
             State.LoadPatterns.Clear();
             foreach (var pattern in file.LoadPatterns) State.LoadPatterns.Add(pattern);
             offlineLoadCaseNames = file.LoadCaseNames;
@@ -406,6 +402,11 @@ public sealed partial class MainViewModel
             // The model file is not a project file: the next Save All/Save Config (after Connect SAP) chooses a file.
             config.Session.Close();
             config.Session.ClearDirty();
+            // the generator flag: the configuration's own; for a configuration saved before flags existed (and the built-in
+            // VCF model) the VCF flag, if its generator validates the model. Undo and Redo give back the flag of the step.
+            string? generatorNote = null;
+            generatorFlag = restoredSnapshot.Generator ?? (keepDocument ? null : MigratedGeneratorFlag(out generatorNote));
+            restoredSnapshot.Generator = generatorFlag;
 
             FemSectionProperties.Clear();
             foreach (var property in file.SectionProperties) FemSectionProperties.Add(property);
@@ -430,10 +431,14 @@ public sealed partial class MainViewModel
             offlineModelPath = path;
             isDefaultModel = isDefault;
             femInputSnapshot = restoredSnapshot;
-            nativeDocumentSource = restoredSource;
-            nativeDocumentSourceKnown = true;
-            SyncNativeDocument(restoredSnapshot);
-            femInputDatabasePath = isDefault || databaseSnapshot is null ? null : path;
+            if (!keepDocument)
+            {
+                nativeDocumentSource = restoredSource;
+                nativeDocumentSourceKnown = true;
+            }
+            // a configuration restored from the document (Undo, Redo) keeps the document and its history
+            if (!keepDocument) SyncNativeDocument(restoredSnapshot);
+            femInputDatabasePath = keepDocument ? femInputDatabasePath : isDefault || databaseSnapshot is null ? null : path;
             femOutputRegistrations.Clear();
             femOutputRegistrations.AddRange(outputs ?? []);
             femWorkingDirty = false;
@@ -447,6 +452,7 @@ public sealed partial class MainViewModel
             FemProgressText = $"Loaded {(isDefault ? "default " : "")}MCOTiS config {Path.GetFileName(path)} (saved {file.SavedUtc.ToLocalTime():yyyy-MM-dd HH:mm}). " +
                 "Run Analysis solves this model as defined, without SAP2000; Connect SAP for the SAP2000 study tabs.";
             Message = $"{(isDefault ? "Default MCOTiS config" : "MCOTiS config")} {Path.GetFileName(path)} loaded offline from {file.Model!.Name} — SAP2000 not connected.";
+            if (generatorNote is not null) FemProgressText += " " + generatorNote;
         }
         catch (Exception ex)
         {
@@ -525,6 +531,7 @@ public sealed partial class MainViewModel
         femOutputRegistrations.Clear();
         femWorkingDirty = false;
         State.JointRestraints = new Dictionary<string, Mcotis.Core.Restraint>(StringComparer.Ordinal);
+        generatorFlag = null;
         ClearNativeDocument();
     }
 
@@ -547,14 +554,19 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Starts a new user-facing MCOTiS configuration while keeping the connected model as its source.</summary>
-    private void StartNewMcotisConfigurationFile(LegacyNativeDocumentMigration.Source? source = null)
+    /// <param name="generator">The flag of the generator that made the model (Load TAS, Edit → Tied Arch System); null for
+    /// a model no generator made.</param>
+    private void StartNewMcotisConfigurationFile(LegacyNativeDocumentMigration.Source? source = null, FemGeneratorDto? generator = null)
     {
+        generatorFlag = generator;
         femWorkingSaveTimer?.Stop();
         femInputSnapshot = null;
         femInputDatabasePath = null;
         femWorkingDatabasePath = null;
         femOutputRegistrations.Clear();
         femWorkingDirty = true;
+        // a model imported or generated without restraints gets the column-base pins as real assignments, once
+        MakeRestraintsExplicit();
         // Give a newly generated/imported model its native identity immediately. Revision zero is the unsaved base;
         // the first working-database checkpoint advances it to revision one without changing the document id. The
         // snapshot carries the restraints the model holds (State.JointRestraints), as every snapshot does.
@@ -562,10 +574,12 @@ public sealed partial class MainViewModel
         {
             var snapshot = CaptureFemInputSnapshot(advanceRevision: false);
             snapshot.Revision = 0;
+            // Re-apply Generator: the rebuilt model is a step of the same document's history
+            if (regeneratingIdentity is { } identity) snapshot.DatabaseId = identity;
             femInputSnapshot = snapshot;
             nativeDocumentSource = source ?? LegacyNativeDocumentMigration.Infer(snapshot, startingModel: true);
             nativeDocumentSourceKnown = true;
-            SyncNativeDocument(snapshot);
+            SyncNativeDocument(snapshot, edit: regeneratingIdentity is not null);
         }
         NotifyFemDatabaseState();
         ScheduleFemWorkingSave();
@@ -577,7 +591,7 @@ public sealed partial class MainViewModel
     /// <summary>Brings the native document to the model a snapshot holds. A model the workspace holds and the standalone
     /// document cannot express is still the user's model: it stays open, runs and is saved as before; the session is
     /// then left with an empty document, not with the document of an earlier state, and the reason is kept.</summary>
-    private void SyncNativeDocument(FemInputSnapshot snapshot)
+    private void SyncNativeDocument(FemInputSnapshot snapshot, bool edit = false)
     {
         // A model that was connected, and never loaded or imported, is named here by where it is from.
         if (!nativeDocumentSourceKnown) nativeDocumentSource = LegacyNativeDocumentMigration.Infer(snapshot);
@@ -585,7 +599,8 @@ public sealed partial class MainViewModel
         Mcotis.Core.ModelDocument document;
         try
         {
-            document = LegacyNativeDocumentMigration.Convert(snapshot, nativeDocumentSource);
+            // the whole configuration, the parts the native model has no place for yet included (NativeToLegacyProjection)
+            document = NativeToLegacyProjection.Write(snapshot, nativeDocumentSource);
             NativeDocumentProblem = null;
         }
         catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException or ArgumentException or FormatException or Mcotis.Core.DocumentException)
@@ -593,7 +608,71 @@ public sealed partial class MainViewModel
             document = Mcotis.Core.ModelDocument.Create();
             NativeDocumentProblem = ex.Message;
         }
-        NativeDocumentSession.Replace(document, null);
+        // An edit of the open model is one step of the document's history (2026-10-14, M2): Edit → Undo goes back to the
+        // document before it. A model that is opened, imported or generated starts a history of its own.
+        var current = NativeDocumentSession.Document;
+        if (edit && NativeDocumentProblem is null && current.DocumentId == document.DocumentId && !current.Points.IsEmpty)
+        {
+            if (!restoringFromDocument)
+                NativeDocumentSession.Execute(Mcotis.Application.DocumentCommands.Edit(nextStepName ?? "Edit model", editor => editor.ReplaceContent(document)));
+        }
+        else NativeDocumentSession.Replace(document, null);
+        nextStepName = null;
+        NotifyModelHistory();
+    }
+
+    /// <summary>The name the next step of the history is given (Edit → Undo names it); "Edit model" when none is set.</summary>
+    private string? nextStepName;
+
+    /// <summary>True while the configuration is being restored from a document (Undo, Redo): it is not a new edit.</summary>
+    private bool restoringFromDocument;
+
+    public bool CanUndoModel => CanEditFemModel && NativeDocumentSession.CanUndo;
+    public bool CanRedoModel => CanEditFemModel && NativeDocumentSession.CanRedo;
+    /// <summary>The model differs from what its file holds (the document session's own rule: Undo back to it is clean).</summary>
+    public bool IsModelDirty => NativeDocumentSession.IsDirty;
+
+    private void NotifyModelHistory()
+    {
+        Notify(nameof(CanUndoModel));
+        Notify(nameof(CanRedoModel));
+        Notify(nameof(IsModelDirty));
+        Notify(nameof(WindowTitle));
+        NotifyGenerator();
+    }
+
+    /// <summary>Edit → Undo / Redo: the document session goes back (or forward) one step, and the configuration that
+    /// document holds becomes the model of the window (<see cref="NativeToLegacyProjection.Read"/>). The edit not yet
+    /// written is written first, so that it is the step undone. Results go, as with any change of the model.</summary>
+    internal bool UndoModel() => MoveInHistory(undo: true);
+    internal bool RedoModel() => MoveInHistory(undo: false);
+
+    private bool MoveInHistory(bool undo)
+    {
+        if (!CanEditFemModel || IsBusy) return false;
+        if (femWorkingDirty && HasWorkingModel && State.Baseline.Points.Count > 0 && FemSectionProperties.Count > 0)
+            PersistFemWorkingSnapshot(advanceRevision: true);
+        var name = undo ? NativeDocumentSession.UndoName : NativeDocumentSession.RedoName;
+        if (!(undo ? NativeDocumentSession.Undo() : NativeDocumentSession.Redo())) return false;
+        if (NativeToLegacyProjection.Read(NativeDocumentSession.Document) is not { } configuration)
+        {
+            Warn(undo ? "Undo" : "Redo", "The document holds no configuration of the main window to go back to.");
+            if (undo) NativeDocumentSession.Redo(); else NativeDocumentSession.Undo();
+            return false;
+        }
+        configuration.DatabaseId = femInputSnapshot?.DatabaseId ?? configuration.DatabaseId;
+        configuration.Revision = (femInputSnapshot?.Revision ?? 0) + 1;
+        configuration.SavedUtc = DateTime.UtcNow;
+        restoringFromDocument = true;
+        try
+        {
+            var path = offlineModelPath ?? FemInputDatabase.DefaultModelName;
+            ApplyFemModel(configuration.ToLegacy(), path, isDefaultModel, configuration, keepDocument: true);
+        }
+        finally { restoringFromDocument = false; }
+        Message = $"{(undo ? "Undo" : "Redo")}: {name ?? "edit"} — the model as it was {(undo ? "before" : "after")} it (FEM results cleared).";
+        NotifyModelHistory();
+        return true;
     }
 
     private FemInputSnapshot CaptureFemInputSnapshot(bool advanceRevision)
@@ -633,7 +712,7 @@ public sealed partial class MainViewModel
         femInputSnapshot = snapshot;
         femWorkingDatabasePath = femSessionStore.Save(snapshot, femOutputRegistrations, femInputDatabasePath);
         femWorkingDirty = false;
-        SyncNativeDocument(snapshot);
+        SyncNativeDocument(snapshot, edit: true);
         Notify(nameof(IsFemModelLocked));
         Notify(nameof(CanEditFemModel));
         Notify(nameof(CanUnlockFemModel));
@@ -676,7 +755,7 @@ public sealed partial class MainViewModel
         femWorkingDirty = false;
         femWorkingDatabasePath = femSessionStore.Save(snapshot, femOutputRegistrations, femInputDatabasePath);
         // the native document is the model that is locked and run, not the model of the last autosave
-        SyncNativeDocument(snapshot);
+        SyncNativeDocument(snapshot, edit: true);
         NotifyFemDatabaseState();
     }
 

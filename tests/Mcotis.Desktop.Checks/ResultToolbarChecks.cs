@@ -46,6 +46,20 @@ internal static class ResultToolbarChecks
                 "F5/F6/F7 stay visible but disabled before analysis has results");
             Check(window.Title == MainViewModel.ProductTitle + " — Default model" && window.Title == vm.WindowTitle,
                 "the window title shows the product and, beside it, what is open: the default model");
+
+            // Assign → Joint → Restraints: the dialog shows what the selected joints hold and writes what it is set to
+            var bases = vm.FemPinSupportPoints;
+            var restraintForm = new JointRestraintWindow(vm, [bases[0]]) { Owner = window };
+            restraintForm.Show(); Idle();
+            var heldBefore = restraintForm.FormRestraint;
+            restraintForm.Show(Mcotis.Core.Restraint.Fixed);
+            bool applied = restraintForm.ApplyForm();
+            restraintForm.Close();
+            Check(heldBefore == Mcotis.Core.Restraint.Pinned && applied && vm.FemJointRestraints[bases[0]] == Mcotis.Core.Restraint.Fixed &&
+                  window.ResultMenu.Parent is Menu menu && menu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_Assign") &&
+                      item.Items.OfType<MenuItem>().Any(joint => joint.Items.OfType<MenuItem>().Any(entry => Equals(entry.Header, "_Restraints…")))),
+                $"Assign → Joint → Restraints opens on what the joint holds (the pin of {bases[0]}) and makes it fixed — the model holds the fixed base");
+            vm.AssignJointRestraints([bases[0]], Mcotis.Core.Restraint.Pinned);
             // Strand Bundle: the section from its strands — number × steel area of one — named by the convention
             var bundleForm = new StrandSectionWindow(vm, new StrandSectionProperty { Name = "192T15.7", Area = 0.028802317797652074 }, new HashSet<string>()) { Owner = window };
             bundleForm.Show();
