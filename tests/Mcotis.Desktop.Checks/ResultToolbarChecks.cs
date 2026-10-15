@@ -19,6 +19,12 @@ using Mcotis.Desktop.SAP2000;
 
 internal static class ResultToolbarChecks
 {
+    internal static void RunSpatial3D()
+    {
+        CheckSpatialDeflectedShape();
+        Check3DCentreLineDisplay();
+    }
+
     internal static void Run()
     {
         var state = StudyComposerChecks.CreateState();
@@ -138,6 +144,27 @@ internal static class ResultToolbarChecks
             Idle();
             Check(!vm.ShowFrameLocalAxes && axesVisual.Content is null,
                 "turning off the A toggle removes the local-axis overlay");
+            var extrusionToggle = Descendants<ToggleButton>(window.SharedViewer)
+                .Single(button => AutomationProperties.GetName(button) == "Extruded 3D members");
+            extrusionToggle.IsChecked = false;
+            Idle();
+            Check(!vm.ShowExtruded3D && !window.SharedViewer.ShowExtruded3D,
+                "the 3D E toggle and Display setting share the centre-line view state");
+            window.SharedViewer.ClearSelection();
+            var lineViewport = (Viewport3D)window.SharedViewer.FindName("View3D")!;
+            var lineVisual = (ModelVisual3D)window.SharedViewer.FindName("Structure3D")!;
+            Point LineScreen(Position position) => lineVisual.TransformToAncestor(lineViewport)!.Transform(new Point3D(position.X, position.Y, position.Z));
+            var lineJointPositions = window.SharedViewer.Model.Points.Values.Select(point => LineScreen(point.Position)).ToArray();
+            var lineMiddle = window.SharedViewer.Model.Members.Where(member => member.Kind == MemberKind.Frame)
+                .Select(member => LineScreen(window.SharedViewer.Model.Points[member.Start].Position) +
+                    (LineScreen(window.SharedViewer.Model.Points[member.End].Position) - LineScreen(window.SharedViewer.Model.Points[member.Start].Position)) / 2)
+                .First(middle => lineJointPositions.All(joint => (joint - middle).Length > 12));
+            Check(window.SharedViewer.Select3DAt(lineMiddle) && window.SharedViewer.SelectedMembers.Count == 1,
+                "a 3D centre-line can still be selected near its projected axis");
+            extrusionToggle.IsChecked = true;
+            Idle();
+            Check(vm.ShowExtruded3D && window.SharedViewer.ShowExtruded3D,
+                "the 3D E toggle restores extruded member sections");
             window.SharedViewer.ClearSelection();
             Idle();
             // the 3D view extrudes the real sections; a composite section's enclosing material is see-through (front faces only)
@@ -180,6 +207,8 @@ internal static class ResultToolbarChecks
             CheckObjectSelection(window, vm);
             CheckIntegratedAssignments(window, vm);
             Check3DDeflectedShape();
+            Check3DCentreLineDisplay();
+            CheckSpatialDeflectedShape();
 
             Tool("Show Results").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Idle();
@@ -212,12 +241,29 @@ internal static class ResultToolbarChecks
                   !picker.NoResults.IsVisible && picker.ApplyButton.IsEnabled &&
                   picker.PickerKind == ShowResultPickerKind.Deflection && picker.ShapePicker.IsVisible &&
                   picker.ShapeCasePicker.Items.Count == 2 &&
+                  picker.DeformationOptions.IsVisible && picker.CaseRadio.IsChecked == true &&
                   picker.OutputGroup.Visibility == Visibility.Collapsed && (string)((ListBoxItem)picker.Outputs.SelectedItem).Tag == "DeflectedShape",
-                "F5 opens a load-case picker fixed to deformed shape");
+                "F5 opens the deformed-shape box with case selection, scaling, contours and shape options");
             picker.ShapeCasePicker.SelectedItem = picker.ShapeCasePicker.Items.Cast<object>().Single(item => item.ToString() == "Case B");
+            picker.UserScale.IsChecked = true;
+            picker.UserScale.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            picker.ScaleFactor.Text = "0";
+            Check(!picker.ApplySelection() && picker.OptionError.Text.Contains("positive", StringComparison.Ordinal) &&
+                  window.SharedViewer.DeflectionScaleFactor == 0,
+                "an invalid user-defined magnification is refused before changing the view");
+            picker.ScaleFactor.Text = "12";
+            picker.ContourComponent.SelectedItem = picker.ContourComponent.Items.OfType<ComboBoxItem>().Single(item => (string)item.Tag == "UZ");
+            picker.MinimumRange.Text = "-5";
+            picker.MaximumRange.Text = "5";
+            picker.WireShadow.IsChecked = false;
+            picker.CubicCurve.IsChecked = false;
             picker.ApplySelection();
-            Check(vm.FemResultMode == FemResultMode.DeflectedShape && vm.SelectedFemResultName == "Case B",
-                "F5 applies the selected load case's deformed-shape result");
+            Check(vm.FemResultMode == FemResultMode.DeflectedShape && vm.SelectedFemResultName == "Case B" &&
+                  window.SharedViewer.DeflectionScaleFactor == 12 &&
+                  window.SharedViewer.DeflectionContourComponent == DisplacementContourComponent.UZ &&
+                  window.SharedViewer.DeflectionRangeMinMm == -5 && window.SharedViewer.DeflectionRangeMaxMm == 5 &&
+                  !window.SharedViewer.ShowUndeformed && !window.SharedViewer.DeflectionCubicCurve,
+                "F5 applies the selected case and display-only magnification, UZ range, wire shadow and curve style");
 
             Tool("Show Member Forces F6").RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
             Idle();
@@ -585,6 +631,126 @@ internal static class ResultToolbarChecks
             Idle();
             Check(info.Text.StartsWith("Isometric 3D", StringComparison.Ordinal) && Math.Abs(structure.Content.Bounds.Z - asBuilt.Z) < 1e-9,
                 "leaving the deflected shape returns the 3D view to the model as built");
+        }
+        finally { host.Close(); }
+    }
+
+    private static void CheckSpatialDeflectedShape()
+    {
+        var beam = new GeometryModel(new Dictionary<string, StructuralPoint>(StringComparer.Ordinal)
+        {
+            ["A"] = new("A", new(0, 0, 0)), ["B"] = new("B", new(10, 0, 0)),
+        }, [new("AB", "A", "B", MemberKind.Frame)]);
+        var box = new FemSectionShape(SectionShapeKind.Rectangle, 0.1, 0.1);
+        var viewer = new Structural2DViewer
+        {
+            Model = beam,
+            MemberSections = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal)
+                { ["AB"] = new("AB", 0.01, 2e8, 0.001, Shape: box) },
+        };
+        var host = new Window { Content = viewer, Width = 720, Height = 460, ShowInTaskbar = false };
+        try
+        {
+            host.Show();
+            viewer.ShowPlane("3D");
+            Idle();
+            var structure = (ModelVisual3D)viewer.FindName("Structure3D")!;
+            var markers = (JointMarkers3D)viewer.FindName("Joints3D")!;
+            var card = (Border)viewer.FindName("Joint3DReadout")!;
+            var values = (TextBlock)viewer.FindName("Joint3DReadoutValues")!;
+            var staticResult = new FemAnalysisResult(
+                [new("A", 0, 0, 0) { RXRad = 0.003 }, new("B", 0, 0, 0)], [],
+                [new("AB", 0, 0, 0, 0, 0, 0,
+                    [new FemFrameStation(0, 0, 0, 0, 0, 0),
+                     new FemFrameStation(0.5, 0, 0, 0, 0, 0) { UYM = 0.02 },
+                     new FemFrameStation(1, 0, 0, 0, 0, 0)])], [], 0);
+            viewer.FemResult = staticResult;
+            viewer.FemResultMode = FemResultMode.DeflectedShape;
+            Idle();
+            Check(structure.Content.Bounds.Y + structure.Content.Bounds.SizeY > 0.45,
+                "the 3D deflected frame uses native out-of-plane station UY, not a planar station with linearly interpolated Y");
+            viewer.ShowJoint3DReadout(markers.Markers[0].At);
+            Check(card.Visibility == Visibility.Visible && values.Text.Contains("UX", StringComparison.Ordinal) &&
+                  values.Text.Contains("UY", StringComparison.Ordinal) && values.Text.Contains("UZ", StringComparison.Ordinal) &&
+                  values.Text.Contains("RX 3.0000", StringComparison.Ordinal) && values.Text.Contains("RY", StringComparison.Ordinal) &&
+                  values.Text.Contains("RZ", StringComparison.Ordinal) && values.Text.Contains("[mm]", StringComparison.Ordinal) &&
+                  values.Text.Contains("[mrad]", StringComparison.Ordinal),
+                "hovering a 3D joint shows all six global components with physical units in the upper-left card");
+            viewer.ShowJoint3DReadout(new Point(2, 2));
+            Check(card.Visibility == Visibility.Collapsed, "the 3D joint card hides when the cursor leaves the joint");
+
+            viewer.DeflectionScaleFactor = 10;
+            viewer.DeflectionContourComponent = DisplacementContourComponent.UY;
+            viewer.DeflectionRangeMinMm = -10;
+            viewer.DeflectionRangeMaxMm = 20;
+            Idle();
+            var componentLegend = (TextBlock)viewer.FindName("Deflection3DRange")!;
+            Check(structure.Content.Bounds.Y + structure.Content.Bounds.SizeY is > 0.15 and < 0.35 &&
+                  componentLegend.Text.Contains("UY -10 to 20 mm", StringComparison.Ordinal),
+                "user-defined scale and signed UY contours act on the 3D deformed shape with mm units");
+            viewer.DeflectionCubicCurve = false;
+            Idle();
+            Check(structure.Content.Bounds.Y + structure.Content.Bounds.SizeY < 0.1,
+                "turning cubic curve off connects displaced frame joints without the interior station bend");
+            viewer.DeflectionScaleFactor = 0;
+            viewer.DeflectionCubicCurve = true;
+
+            // Zero joint translations still allow a modal frame to bend from its end rotations.
+            viewer.FemResult = new FemAnalysisResult(
+                [new("A", 0, 0, 0) { RZRad = 0.01 }, new("B", 0, 0, 0) { RZRad = -0.01 }], [], [], [], 0);
+            viewer.DeflectionIsModeShape = true;
+            Idle();
+            Check(structure.Content.Bounds.Y + structure.Content.Bounds.SizeY > 0.45,
+                "a spatial mode shape curves between frame joints using RZ even when both joint translations are zero");
+            viewer.ShowJoint3DReadout(markers.Markers[0].At);
+            Check(card.Visibility == Visibility.Visible && values.Text.Contains("[relative]", StringComparison.Ordinal) &&
+                  values.Text.Contains("RZ 0.01", StringComparison.Ordinal),
+                "modal hover values are marked relative rather than given physical displacement units");
+        }
+        finally { host.Close(); }
+    }
+
+    private static void Check3DCentreLineDisplay()
+    {
+        var model = new GeometryModel(new Dictionary<string, StructuralPoint>(StringComparer.Ordinal)
+        {
+            ["A"] = new("A", new(0, 0, 0)), ["B"] = new("B", new(10, 0, 0)), ["C"] = new("C", new(10, 4, 0)),
+        }, [new("AB", "A", "B", MemberKind.Frame), new("BC", "B", "C", MemberKind.Cable)]);
+        var viewer = new Structural2DViewer
+        {
+            Model = model,
+            MemberSections = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal)
+                { ["AB"] = new("AB", 1, 2e8, 0.1, Shape: new FemSectionShape(SectionShapeKind.Rectangle, 1.5, 1.2)) },
+        };
+        var host = new Window { Content = viewer, Width = 720, Height = 460, ShowInTaskbar = false };
+        try
+        {
+            host.Show();
+            viewer.ShowPlane("3D");
+            Idle();
+            var visual = (ModelVisual3D)viewer.FindName("Structure3D")!;
+            var info = (TextBlock)viewer.FindName("View3DInfo")!;
+            var thick = ((Model3DGroup)visual.Content).Children.OfType<GeometryModel3D>().First().Bounds.SizeY;
+            viewer.ShowExtruded3D = false;
+            Idle();
+            var lines = ((Model3DGroup)visual.Content).Children.OfType<GeometryModel3D>().ToArray();
+            Check(thick > 1 && lines.Length == 2 && lines[0].Bounds.SizeY < 0.1 &&
+                  info.Text.Contains("member centre-lines", StringComparison.Ordinal),
+                "3D line view replaces frame section extrusion and cable size with thin centre-lines");
+            viewer.FemResult = new FemAnalysisResult([new("A", 0, 0, 0), new("B", 0, 0, 0), new("C", 0, 0, 0)], [],
+                [new("AB", 0, 0, 0, 0, 0, 0,
+                    [new FemFrameStation(0, 0, 0, 0, 0, 0), new FemFrameStation(0.5, 0, 0, 0, 0, -0.02),
+                     new FemFrameStation(1, 0, 0, 0, 0, 0)])], [], 0);
+            viewer.FemResultMode = FemResultMode.DeflectedShape;
+            Idle();
+            var deformedLine = ((Model3DGroup)visual.Content).Children.OfType<GeometryModel3D>().First();
+            Check(deformedLine.Bounds.SizeY < 0.1 && deformedLine.Bounds.Z < -0.45 &&
+                  info.Text.Contains("centre-lines", StringComparison.Ordinal),
+                "3D line view follows the curved deformed result instead of reverting to extruded sections");
+            viewer.ShowExtruded3D = true;
+            Idle();
+            Check(((Model3DGroup)visual.Content).Children.OfType<GeometryModel3D>().First().Bounds.SizeY > 1,
+                "the 3D display option can restore the original extruded section view");
         }
         finally { host.Close(); }
     }

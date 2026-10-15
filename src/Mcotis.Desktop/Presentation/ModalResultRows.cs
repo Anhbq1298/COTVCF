@@ -55,7 +55,7 @@ public static class ModalResultRows
     {
         if (result?.Modes.FirstOrDefault(mode => mode.ModeNumber == modeNumber) is not { } mode) return null;
         var joints = mode.Shape.Select(item => new FemJointResponse(name(item.PointId), item.UX, item.UZ, -item.RY)
-            { UYM = item.UY }).ToArray();
+            { UYM = item.UY, RXRad = item.RX, RZRad = item.RZ }).ToArray();
         return new(joints, [], [], [], 0);
     }
 }

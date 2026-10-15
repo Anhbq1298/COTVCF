@@ -194,7 +194,7 @@ public static class FemDocumentRun
             .OrderBy(joint => joint.Name, StringComparer.Ordinal)
             // the application's slope is positive toward +Z for +X: the opposite of the rotation about global Y
             .Select(joint => new FemJointResponse(joint.Name, joint.Displacements[0], joint.Displacements[2], -joint.Displacements[4])
-                { UYM = joint.Displacements[1] }).ToArray();
+                { UYM = joint.Displacements[1], RXRad = joint.Displacements[3], RZRad = joint.Displacements[5] }).ToArray();
         // the supports of the model as it is drawn: the joints held in the XZ plane, left to right
         var supports = jointResults.Keys.Where(id => FemSolver.HoldsInPlane(document.RestraintOf(id)))
             .OrderBy(id => document.Points[id].Position.X).ThenBy(id => names[id], StringComparer.Ordinal)
@@ -209,7 +209,8 @@ public static class FemDocumentRun
             {
                 var moved = Global(station.LocalDisplacements, 0);
                 // one sign convention along the frame: axial force in tension, shear and moment as the application draws them
-                return new FemFrameStation(station.Relative, station.Actions[0], -normal.Dot(Global(station.Actions, 0)), -Global(station.Actions, 3).Y, moved.X, moved.Z);
+                return new FemFrameStation(station.Relative, station.Actions[0], -normal.Dot(Global(station.Actions, 0)), -Global(station.Actions, 3).Y, moved.X, moved.Z)
+                    { UYM = moved.Y };
             }).ToArray();
             var (first, last) = (stations[0], stations[^1]);
             return new FemFrameResponse(names[frame.ParentObjectId], first.AxialKN, last.AxialKN, first.ShearKN, last.ShearKN, first.MomentKNm, last.MomentKNm, stations);

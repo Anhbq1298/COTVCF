@@ -141,13 +141,18 @@ public sealed partial class MainViewModel
 
             ClearFemResults();
             RegenerateStudyPreview();
+            // one step of the model's history, named, at once (geometry editing plan): Edit → Undo restores the objects
+            // with their names, assignments and loads
+            femWorkingDirty = true;
+            nextStepName = "Delete";
+            PersistFemWorkingSnapshot(advanceRevision: true);
             var what = string.Join(" and ", new[]
             {
                 removedMembers.Count > 0 ? $"{removedMembers.Count} member{(removedMembers.Count == 1 ? "" : "s")}" : null,
                 removedPoints.Count > 0 ? $"{removedPoints.Count} joint{(removedPoints.Count == 1 ? "" : "s")}" : null,
             }.Where(part => part is not null));
             FemProgressText = $"Deleted {what}. Run Analysis solves the edited model; SAP2000 is unchanged.";
-            Message = $"Deleted {what} from the working model (FEM results cleared; SAP2000 unchanged).{note}";
+            Message = $"Deleted {what} from the working model (FEM results cleared; SAP2000 unchanged; Edit → Undo restores them).{note}";
             return (removedMembers.Count, removedPoints.Count);
         }
         finally

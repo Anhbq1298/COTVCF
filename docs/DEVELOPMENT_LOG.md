@@ -18,8 +18,66 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-15 · Geometry editing: grids and levels, view planes, Draw, Move, snapping
+- Status: Done
+- Who: markbui, Claude
+- Where: Define → Grid Systems… / Levels…; Draw menu and the tool strip at the left of the model view; Edit → Move… /
+  Move by Two Points / Delete; the PLANE bar above the model view; Display → View Options… (Ctrl+W)
+- What: The plan of docs/geometry (branch feature/geometry-editing-plan), built in the main window. Grid systems
+  (Cartesian, origin, rotation, X lines 1, 2, 3 …, Y lines A, B, C …, Quick Grid) and levels (Generate Levels) are
+  saved with the document (.mcotis schema 7), undone as one step and no part of the analysis input — they make and move
+  no joint. One view context: the plane (XY / XZ / YZ / 3D) and its level or grid line, shared by the projection box, the
+  toolbar and the PLANE bar; a plane shows the members lying in it; the view holds still while the model is edited. Draw
+  Point / Frame / Cable by clicks with snapping (points, midpoints, member and grid intersections, grid lines,
+  perpendicular, nearest, ortho; Alt off, Shift ortho), chained, on the plane shown or in 3D on the work plane (never a
+  guessed depth), and by coordinates; Generate Points at Grid Intersections; Move by DX DY DZ or two points; Delete lists
+  what goes with the selection. Each edit is one named Undo step; a point within 1 mm of a point, a member of no length,
+  doubled or along another, and a move onto a point are refused with the reason. Display Options hide points, frames,
+  cables, grid lines and levels (hidden is not picked). TemplateBuilding gives its building its grid and levels.
+- Checks: --geometry-editing (also in --full); Mcotis.Checks group "Geometry editing"; --template-building-ui
+
+## 2026-10-15 · Geometry editing: what the first milestone leaves open
+- Status: Planned
+- Who: Unassigned
+- Where: docs/geometry/GEOMETRY_EDITING_PLAN.md ("Implementation status", unchecked items)
+- What: Grids and levels in the working-session autosave (crash recovery restores the model without them; the .mcotis
+  keeps them); the native name sequence for drawn objects (names now follow the model's names, so a deleted name can be
+  given again); drawing the first member of a blank model; end releases and local axes in the draw tool; a preview
+  crosshair in Point by Coordinates; snap and display settings kept between sessions; members crossing a plane drawn as
+  cut outlines; radial grids; Copy / Replicate / Mirror / Divide / Merge Joints; measured performance.
+- Checks: none yet
+
+## 2026-10-15 · Deformed-shape display dialog
+- Status: Done
+- Who: Codex
+- Where: Result → Show Deformed Shape… (F5)
+- What: The dedicated F5 box groups solved Case / Combo / Mode selection with automatic or user-defined scale,
+  displacement magnitude or UX/UY/UZ contours, an automatic or entered signed range, undeformed wire shadow and
+  cubic frame curve. Apply updates the 2D/3D viewer without editing the model; OK applies and closes, Close discards
+  unapplied inputs. Modal values are labelled relative. Hinge-state dots are explicitly unavailable because there are
+  no hinge results.
+- Checks: --result-tools-ui, --main-modal, --spatial-3d
+
+## 2026-10-15 · Optional 3D member centre-lines
+- Status: Done
+- Who: Codex
+- Where: 3D model view → E toggle; Display → Extruded 3D members; Display → View Options → General Options
+- What: Turn extrusion off to show thin frame and cable centre-lines in the 3D view, including static and modal
+  deformed shapes. The original section-sized view remains the default. Joint hover, member selection, result contours
+  and the current camera stay available when switching.
+- Checks: --spatial-3d, --result-tools-ui
+
+## 2026-10-15 · Spatial deformation and six-component joint hover in 3D
+- Status: Done
+- Who: Codex
+- Where: Result → Show Deformed Shape… (F5) → 3D view; hover a joint
+- What: Static deformed frames use the native X/Y/Z displacement at every station; modal frames curve in 3D from
+  joint translations and rotations. The 3D joint hover card shows UX, UY, UZ, RX, RY and RZ, in mm/mrad for static
+  results and as relative amplitudes for a mode shape. Displayed joint markers follow the magnified shape.
+- Checks: --spatial-3d, --main-modal
+
 ## 2026-10-15 · Modal shapes in the main viewer for frame-and-cable models
-- Status: In progress
+- Status: Done
 - Who: markbui, Codex
 - Where: Define → Load Cases → Load Case Data; Result → Show Deformed Shape… (F5); Result → Modal Results…
 - What: A modal case can use the converged first-order nonlinear state of a frame-and-straight-cable model. The solver
@@ -28,9 +86,9 @@ continues on the next lines, indented by two spaces):
   include UY and label modal amplitudes as relative. A native model with no Tab 01 candidate-load definitions can run
   with a single loaded joint; its document loads no longer trigger the legacy tributary-width rule. Native imports
   retain their mass-source identities through load-table replacement, so their modal cases can run. Cable-only,
-  sagged-cable, P-Delta and shell modes remain explicit
-  refusals. Straight-cable modes are checked against a closed form and independent OpenSeesPy corotTruss fixture.
-- Checks: --main-modal, --full
+  sagged-cable, P-Delta and shell modes remain explicit refusals. Straight-cable modes are checked against a closed
+  form and independent OpenSeesPy corotTruss fixture.
+- Checks: --main-modal, --result-tools-ui, --full (both Mcotis.Checks and Mcotis.Desktop.Checks)
 
 ## 2026-10-15 · M9: tied arch startup in stable Full 3D
 - Status: Done

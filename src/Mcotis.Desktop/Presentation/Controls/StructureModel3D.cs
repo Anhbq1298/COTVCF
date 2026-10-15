@@ -23,6 +23,8 @@ public static class StructureModel3D
     public sealed record Scene(Model3DGroup Model, Rect3D Bounds, int FramesWithSapShape, int FramesApproximated,
         IReadOnlyList<MemberVisual> MemberVisuals)
     {
+        /// <summary>Displayed member centreline paths, used for reliable screen-space picking in line view.</summary>
+        public IReadOnlyDictionary<string, IReadOnlyList<Point3D>> CentreLines { get; init; } = new Dictionary<string, IReadOnlyList<Point3D>>(StringComparer.Ordinal);
         /// <summary>The deflected shape (<see cref="BuildDeflected"/>): how many times the displacements are drawn enlarged,
         /// and the |U| range [mm] its contour colours span. Null for the model as built.</summary>
         public DeflectedShape? Deflected { get; init; }
@@ -32,6 +34,7 @@ public static class StructureModel3D
     private const int CircleSegments = 20;
     /// <summary>The largest displacement of a deflected shape is drawn as this share of the model's largest dimension.</summary>
     private const double DeflectedShare = 0.05;
+    private const double CentreLineDiameterShare = 0.003;
     /// <summary>Opacity of the enclosing material of a composite section (0 = invisible, 1 = solid).</summary>
     public const double CompositeShellOpacity = 0.55;
     private static readonly Color[] ContourColors = [Colors.RoyalBlue, Colors.Cyan, Colors.LimeGreen, Colors.Gold, Colors.Red];
@@ -49,33 +52,50 @@ public static class StructureModel3D
 
     /// <summary>
     /// The deflected shape of <paramref name="result"/> in 3D: every member with its section, moved by the displacement of
-    /// its joints — a meshed frame through its stations, so it bends — enlarged so the largest displacement is
+    /// its joints — through native spatial stations for static results, or a spatial cubic frame centreline derived
+    /// from joint translations and rotations for mode shapes — enlarged so the largest displacement is
     /// <see cref="DeflectedShare"/> of the model. With <paramref name="contour"/> the members are shaded by |U| over
     /// <paramref name="rangeMinMm"/> … <paramref name="rangeMaxMm"/> (0 = the largest displacement), as in 2D; with
     /// <paramref name="undeformedGuide"/> the model as built is drawn as thin grey axes. Spatial joint displacements
     /// use X, Y and Z; older planar results have zero Y displacement.
     /// </summary>
     public static Scene BuildDeflected(GeometryModel model, IReadOnlyDictionary<string, FemSectionProperties>? sections, FemAnalysisResult result,
-        bool contour, double rangeMinMm, double rangeMaxMm, bool undeformedGuide, IReadOnlyDictionary<string, SectionDrawing>? drawings = null)
+        bool contour, double rangeMinMm, double rangeMaxMm, bool undeformedGuide, IReadOnlyDictionary<string, SectionDrawing>? drawings = null,
+        bool extrudedSections = true, double scaleFactor = 0, DisplacementContourComponent component = DisplacementContourComponent.Magnitude,
+        bool cubicCurve = true)
     {
         static double Magnitude(double ux, double uy, double uz) => Math.Sqrt(ux * ux + uy * uy + uz * uz) * 1000;
         var joints = result.Joints.GroupBy(joint => joint.PointName, StringComparer.Ordinal).ToDictionary(same => same.Key, same => same.First(), StringComparer.Ordinal);
-        var stations = result.Frames.Where(frame => frame.Stations is { Count: > 2 })
+        var stations = result.Frames.Where(frame => frame.Stations is { Count: > 2 } && cubicCurve)
             .GroupBy(frame => frame.MemberName, StringComparer.Ordinal).ToDictionary(same => same.Key, same => same.First().Stations!, StringComparer.Ordinal);
+        var curved = model.Members.Where(member => cubicCurve && member.Kind == MemberKind.Frame && !stations.ContainsKey(member.Name) &&
+            joints.ContainsKey(member.Start) && joints.ContainsKey(member.End) && model.Points.ContainsKey(member.Start) && model.Points.ContainsKey(member.End))
+            .SelectMany(member =>
+            {
+                var a = model.Points[member.Start].Position;
+                var b = model.Points[member.End].Position;
+                var chord = new Vector3D(b.X - a.X, b.Y - a.Y, b.Z - a.Z);
+                return chord.Length < 1e-9 ? [] : Enumerable.Range(1, 15)
+                    .Select(index => FrameDisplacement(joints[member.Start], joints[member.End], chord, index / 16.0));
+            }).ToArray();
         var maximum = result.Joints.Select(joint => Magnitude(joint.UXM, joint.UYM, joint.UZM))
-            .Concat(result.Frames.SelectMany(frame => frame.Stations ?? []).Select(station => Magnitude(station.UXM, 0, station.UZM))).DefaultIfEmpty().Max();
+            .Concat(result.Frames.SelectMany(frame => cubicCurve ? frame.Stations ?? [] : []).Select(station => Magnitude(station.UXM, station.UYM, station.UZM)))
+            .Concat(curved.Select(value => value.Length * 1000)).DefaultIfEmpty().Max();
         if (!double.IsFinite(maximum)) maximum = 0;
         var span = model.Points.Count == 0 ? 1 : Math.Max(1e-3, Extent(model));
-        var magnification = maximum > 1e-9 ? DeflectedShare * span / (maximum / 1000) : 0;
-        var min = double.IsFinite(rangeMinMm) ? Math.Max(0, rangeMinMm) : 0;
-        var max = double.IsFinite(rangeMaxMm) && rangeMaxMm > min ? rangeMaxMm : Math.Max(maximum, min + 1e-9);
-        double Shade(double ux, double uy, double uz) => Math.Clamp((Magnitude(ux, uy, uz) - min) / (max - min), 0, 1);
+        var magnification = double.IsFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : maximum > 1e-9 ? DeflectedShare * span / (maximum / 1000) : 0;
+        var contourValues = result.Joints.Select(joint => DeformationDisplay.ComponentMm(joint.UXM, joint.UYM, joint.UZM, component))
+            .Concat(result.Frames.SelectMany(frame => cubicCurve ? frame.Stations ?? [] : []).Select(station => DeformationDisplay.ComponentMm(station.UXM, station.UYM, station.UZM, component)))
+            .Concat(curved.Select(value => DeformationDisplay.ComponentMm(value.X, value.Y, value.Z, component)));
+        var (min, max) = DeformationDisplay.Range(contourValues, component, rangeMinMm, rangeMaxMm);
+        double Shade(double ux, double uy, double uz) => Math.Clamp((DeformationDisplay.ComponentMm(ux, uy, uz, component) - min) / (max - min), 0, 1);
         Vector3D Moved(double ux, double uy, double uz) => new(ux * magnification, uy * magnification, uz * magnification);
 
         var group = new Model3DGroup();
         System.Windows.Media.Media3D.Material shaded = contour ? new DiffuseMaterial(ContourBrush()) : Material(Color.FromRgb(0x2E, 0x90, 0xFA));
         if (!shaded.IsFrozen) shaded.Freeze();
         var memberVisuals = new List<MemberVisual>();
+        var centreLines = new Dictionary<string, IReadOnlyList<Point3D>>(StringComparer.Ordinal);
         int withShape = 0, approximated = 0;
         var guide = new MeshBuilder();
         foreach (var member in model.Members)
@@ -95,16 +115,26 @@ public static class StructureModel3D
             }
             var path = member.Kind == MemberKind.Frame && stations.TryGetValue(member.Name, out var along)
                 ? along.Select(station => (start + (end - start) * station.Fraction +
-                    Moved(station.UXM, u1.UYM + (u2.UYM - u1.UYM) * station.Fraction, station.UZM),
-                    Shade(station.UXM, u1.UYM + (u2.UYM - u1.UYM) * station.Fraction, station.UZM))).ToArray()
+                    Moved(station.UXM, station.UYM, station.UZM),
+                    Shade(station.UXM, station.UYM, station.UZM))).ToArray()
+                : member.Kind == MemberKind.Frame && cubicCurve
+                ? Enumerable.Range(0, 17).Select(index =>
+                {
+                    var t = index / 16.0;
+                    var u = FrameDisplacement(u1, u2, end - start, t);
+                    return (start + (end - start) * t + u * magnification, Shade(u.X, u.Y, u.Z));
+                }).ToArray()
                 : [(start + Moved(u1.UXM, u1.UYM, u1.UZM), Shade(u1.UXM, u1.UYM, u1.UZM)),
                    (end + Moved(u2.UXM, u2.UYM, u2.UZM), Shade(u2.UXM, u2.UYM, u2.UZM))];
+            centreLines[member.Name] = path.Select(item => item.Item1).ToArray();
             var mesh = new MeshBuilder();
             // the section keeps the axes of the member as built: at these rotations the cross-sections stay parallel, and
             // consecutive stations share one outline, so a bent member has no gaps
             var (_, l2, l3) = LocalAxes(start, end, member.Kind == MemberKind.Frame ? section?.LocalAngleDeg ?? 0 : 0);
             // every material of the real section in the one contour colour: shaded solid, nothing shows through
-            ExtrudeAlong(mesh, drawing?.Regions.SelectMany(region => region.Polygons).ToArray() ?? MemberOutline(member, section, span), path, l2, l3);
+            ExtrudeAlong(mesh, extrudedSections
+                ? drawing?.Regions.SelectMany(region => region.Polygons).ToArray() ?? MemberOutline(member, section, span)
+                : Circle(span * CentreLineDiameterShare, 0, 8), path, l2, l3);
             if (!mesh.HasGeometry) continue;
             var visual = new GeometryModel3D(mesh.ToMesh(), shaded) { BackMaterial = shaded };
             group.Children.Add(visual);
@@ -115,11 +145,31 @@ public static class StructureModel3D
             var grey = Material(Color.FromRgb(0xB4, 0xBA, 0xC2));
             group.Children.Add(new GeometryModel3D(guide.ToMesh(), grey) { BackMaterial = grey });
         }
-        return new Scene(group, group.Bounds, withShape, approximated, memberVisuals) { Deflected = new(magnification, maximum, min, max, contour) };
+        return new Scene(group, group.Bounds, withShape, approximated, memberVisuals)
+        {
+            Deflected = new(magnification, maximum, min, max, contour), CentreLines = centreLines
+        };
+    }
+
+    /// <summary>Spatial Hermite interpolation for a frame mode with no recovered stations.</summary>
+    internal static Vector3D FrameDisplacement(FemJointResponse a, FemJointResponse b, Vector3D chord, double t)
+    {
+        var axis = chord; axis.Normalize();
+        var ua = new Vector3D(a.UXM, a.UYM, a.UZM);
+        var ub = new Vector3D(b.UXM, b.UYM, b.UZM);
+        var ta = ua - axis * Vector3D.DotProduct(ua, axis);
+        var tb = ub - axis * Vector3D.DotProduct(ub, axis);
+        var h00 = 2 * t * t * t - 3 * t * t + 1;
+        var h10 = t * t * t - 2 * t * t + t;
+        var h01 = -2 * t * t * t + 3 * t * t;
+        var h11 = t * t * t - t * t;
+        return ua * (1 - t) + ub * t + ta * (h00 - (1 - t)) + tb * (h01 - t)
+            + Vector3D.CrossProduct(new Vector3D(a.RXRad, a.RYRad, a.RZRad), chord) * h10
+            + Vector3D.CrossProduct(new Vector3D(b.RXRad, b.RYRad, b.RZRad), chord) * h11;
     }
 
     public static Scene Build(GeometryModel model, IReadOnlyDictionary<string, FemSectionProperties>? sections,
-        IReadOnlyDictionary<string, SectionDrawing>? drawings = null)
+        IReadOnlyDictionary<string, SectionDrawing>? drawings = null, bool extrudedSections = true)
     {
         var group = new Model3DGroup();
         var steel = Material(Color.FromRgb(0x7D, 0x8A, 0x99));
@@ -132,6 +182,7 @@ public static class StructureModel3D
         var cable = Material(Color.FromRgb(0x2E, 0x90, 0xFA));
         var unknown = Material(Color.FromRgb(0xA0, 0xA6, 0xAE));
         var memberVisuals = new List<MemberVisual>();
+        var centreLines = new Dictionary<string, IReadOnlyList<Point3D>>(StringComparer.Ordinal);
         int withShape = 0, approximated = 0;
 
         var span = model.Points.Count == 0 ? 1 : Math.Max(1e-3, Extent(model));
@@ -141,7 +192,18 @@ public static class StructureModel3D
             var start = new Point3D(a.Position.X, a.Position.Y, a.Position.Z);
             var end = new Point3D(b.Position.X, b.Position.Y, b.Position.Z);
             if ((end - start).Length < 1e-9) continue;
+            centreLines[member.Name] = [start, end];
             var section = sections?.GetValueOrDefault(member.Name);
+            if (!extrudedSections)
+            {
+                var line = new MeshBuilder();
+                Extrude(line, Circle(span * CentreLineDiameterShare, 0, 8), start, end, 0);
+                var paint = member.Kind == MemberKind.Cable ? cable : steel;
+                var lineVisual = new GeometryModel3D(line.ToMesh(), paint) { BackMaterial = paint };
+                group.Children.Add(lineVisual);
+                memberVisuals.Add(new MemberVisual(member.Name, lineVisual, paint, paint));
+                continue;
+            }
             if (member.Kind == MemberKind.Frame && drawings?.GetValueOrDefault(member.Name) is { } drawing)
             {
                 // the real section: one piece per material, the enclosing one of a composite section see-through
@@ -182,7 +244,7 @@ public static class StructureModel3D
             memberVisuals.Add(new MemberVisual(member.Name, visual, material, material));
         }
         foreach (var part in seeThrough) group.Children.Add(part);
-        return new Scene(group, group.Bounds, withShape, approximated, memberVisuals);
+        return new Scene(group, group.Bounds, withShape, approximated, memberVisuals) { CentreLines = centreLines };
     }
 
     /// <summary>The outline a member is extruded with: a frame's SAP section (a small square when it has none), a cable as a

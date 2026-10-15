@@ -16,6 +16,7 @@ public partial class Structural2DViewer : UserControl
     public Structural2DViewer()
     {
         InitializeComponent();
+        InitializeEditing();
         Canvas.SelectionChanged += (_, _) => { Update3DSelection(); Update3DAxes(); };
         Canvas.MemberDoubleClicked += (_, name) => MemberDoubleClicked?.Invoke(this, name);
         Canvas.MemberInformationRequested += (_, name) => MemberInformationRequested?.Invoke(this, name);
@@ -127,6 +128,12 @@ public partial class Structural2DViewer : UserControl
             (d, _) => ((Structural2DViewer)d).Update3DAxes()));
     public bool ShowFrameLocalAxes { get => (bool)GetValue(ShowFrameLocalAxesProperty); set => SetValue(ShowFrameLocalAxesProperty, value); }
 
+    public static readonly DependencyProperty ShowExtruded3DProperty = DependencyProperty.Register(nameof(ShowExtruded3D),
+        typeof(bool), typeof(Structural2DViewer), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault,
+            (d, _) => ((Structural2DViewer)d).Rebuild3D(keepCamera: true)));
+    /// <summary>True draws real 3D section outlines; false draws thin member centre-lines.</summary>
+    public bool ShowExtruded3D { get => (bool)GetValue(ShowExtruded3DProperty); set => SetValue(ShowExtruded3DProperty, value); }
+
     public static readonly DependencyProperty ShowUndeformedProperty = DependencyProperty.Register(nameof(ShowUndeformed), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
     public bool ShowUndeformed { get => (bool)GetValue(ShowUndeformedProperty); set => SetValue(ShowUndeformedProperty, value); }
     public static readonly DependencyProperty ShowDeflectionContourProperty = DependencyProperty.Register(nameof(ShowDeflectionContour), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
@@ -135,6 +142,13 @@ public partial class Structural2DViewer : UserControl
     public double DeflectionRangeMinMm { get => (double)GetValue(DeflectionRangeMinMmProperty); set => SetValue(DeflectionRangeMinMmProperty, value); }
     public static readonly DependencyProperty DeflectionRangeMaxMmProperty = DependencyProperty.Register(nameof(DeflectionRangeMaxMm), typeof(double), typeof(Structural2DViewer), new PropertyMetadata(0.0));
     public double DeflectionRangeMaxMm { get => (double)GetValue(DeflectionRangeMaxMmProperty); set => SetValue(DeflectionRangeMaxMmProperty, value); }
+    public static readonly DependencyProperty DeflectionScaleFactorProperty = DependencyProperty.Register(nameof(DeflectionScaleFactor), typeof(double), typeof(Structural2DViewer), new PropertyMetadata(0.0));
+    /// <summary>Zero uses automatic magnification; a positive value multiplies physical displacement or modal amplitude.</summary>
+    public double DeflectionScaleFactor { get => (double)GetValue(DeflectionScaleFactorProperty); set => SetValue(DeflectionScaleFactorProperty, value); }
+    public static readonly DependencyProperty DeflectionContourComponentProperty = DependencyProperty.Register(nameof(DeflectionContourComponent), typeof(DisplacementContourComponent), typeof(Structural2DViewer), new PropertyMetadata(DisplacementContourComponent.Magnitude));
+    public DisplacementContourComponent DeflectionContourComponent { get => (DisplacementContourComponent)GetValue(DeflectionContourComponentProperty); set => SetValue(DeflectionContourComponentProperty, value); }
+    public static readonly DependencyProperty DeflectionCubicCurveProperty = DependencyProperty.Register(nameof(DeflectionCubicCurve), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
+    public bool DeflectionCubicCurve { get => (bool)GetValue(DeflectionCubicCurveProperty); set => SetValue(DeflectionCubicCurveProperty, value); }
     private bool Is3D => View3DHost?.Visibility == Visibility.Visible;
 
     private void Fit(object sender, RoutedEventArgs e)
@@ -191,7 +205,8 @@ public partial class Structural2DViewer : UserControl
             if (ShowsDeflected3D || scene3D?.Deflected is not null) Rebuild3D(keepCamera: true);
         }
         else if (scene3D?.Deflected is not null && (e.Property == ShowUndeformedProperty || e.Property == ShowDeflectionContourProperty ||
-                 e.Property == DeflectionRangeMinMmProperty || e.Property == DeflectionRangeMaxMmProperty))
+                 e.Property == DeflectionRangeMinMmProperty || e.Property == DeflectionRangeMaxMmProperty ||
+                 e.Property == DeflectionScaleFactorProperty || e.Property == DeflectionContourComponentProperty || e.Property == DeflectionCubicCurveProperty))
             Rebuild3D(keepCamera: true);
     }
 
@@ -205,14 +220,20 @@ public partial class Structural2DViewer : UserControl
     private bool dragged3D;
     private bool panning;
     private StructureModel3D.Scene? scene3D;
+    private IReadOnlyDictionary<string, FemJointResponse> jointResults3D = new Dictionary<string, FemJointResponse>(StringComparer.Ordinal);
     private static readonly Material Selected3DMaterial = new DiffuseMaterial(new SolidColorBrush(Color.FromRgb(0xFF, 0xB0, 0x00)));
 
     private void Rebuild3D(bool keepCamera)
     {
         if (!Is3D || Structure3D is null) return;
+        Joint3DReadout.Visibility = Visibility.Collapsed;
+        jointResults3D = FemResult?.Joints.GroupBy(joint => joint.PointName, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal)
+            ?? new Dictionary<string, FemJointResponse>(StringComparer.Ordinal);
         var scene = ShowsDeflected3D
-            ? StructureModel3D.BuildDeflected(Model, MemberSections, FemResult!, ShowDeflectionContour, DeflectionRangeMinMm, DeflectionRangeMaxMm, ShowUndeformed, SectionDrawings)
-            : StructureModel3D.Build(Model, MemberSections, SectionDrawings);
+            ? StructureModel3D.BuildDeflected(Model3D, MemberSections, FemResult!, ShowDeflectionContour, DeflectionRangeMinMm, DeflectionRangeMaxMm, ShowUndeformed, SectionDrawings, ShowExtruded3D,
+                DeflectionScaleFactor, DeflectionContourComponent, DeflectionCubicCurve)
+            : StructureModel3D.Build(Model3D, MemberSections, SectionDrawings, ShowExtruded3D);
         scene3D = scene;
         Structure3D.Content = scene.Model;
         Update3DSelection();
@@ -220,8 +241,10 @@ public partial class Structural2DViewer : UserControl
         const string gestures = " · click a point, frame or cable to select · right-click for its information · drag rotate · right-drag pan · wheel zoom · double-click fit";
         View3DInfo.Text = scene.Deflected is { } shape
             ? DeflectionIsModeShape
-                ? $"Mode shape 3D · mass-normalized relative amplitude, drawn × {shape.Magnification:G3}" + gestures
-                : $"Deflected shape 3D · largest |U| {shape.MaximumMm:G4} mm, drawn × {shape.Magnification:G3}" + gestures
+                ? $"Mode shape 3D · {(ShowExtruded3D ? "sections" : "centre-lines")} · mass-normalized relative amplitude, drawn × {shape.Magnification:G3}" + gestures
+                : $"Deflected shape 3D · {(ShowExtruded3D ? "sections" : "centre-lines")} · largest |U| {shape.MaximumMm:G4} mm, drawn × {shape.Magnification:G3}" + gestures
+            : !ShowExtruded3D
+            ? "Isometric 3D · member centre-lines" + gestures
             : MemberSections is null
             ? "Isometric 3D · geometry view; section outlines unavailable · drag rotate · right-drag pan · wheel zoom · double-click fit"
             : $"Isometric 3D · to scale · {scene.FramesWithSapShape} frames with their section dimensions" +
@@ -231,9 +254,10 @@ public partial class Structural2DViewer : UserControl
         Deflection3DLegend.Visibility = scene.Deflected is { Contour: true } ? Visibility.Visible : Visibility.Collapsed;
         if (scene.Deflected is { Contour: true } contour)
         {
+            var label = DeformationDisplay.Label(DeflectionContourComponent);
             Deflection3DRange.Text = DeflectionIsModeShape
-                ? $"Relative |amplitude| {contour.ContourMinMm / 1000:G5} to {contour.ContourMaxMm / 1000:G5}"
-                : $"|U| {contour.ContourMinMm:G5} to {contour.ContourMaxMm:G5} mm";
+                ? $"Relative {label} {contour.ContourMinMm / 1000:G5} to {contour.ContourMaxMm / 1000:G5}"
+                : $"{label} {contour.ContourMinMm:G5} to {contour.ContourMaxMm:G5} mm";
             Deflection3DBar.Fill ??= new LinearGradientBrush(StructureModel3D.ContourBrush().GradientStops, new Point(0, 0), new Point(1, 0));
             Deflection3DScale.Text = DeflectionIsModeShape
                 ? $"Eigenvector magnified × {contour.Magnification:G3}"
@@ -287,19 +311,26 @@ public partial class Structural2DViewer : UserControl
             View3DHost.ActualHeight / 2 - Vector3D.DotProduct(offset, up) * pixelsPerMetre);
     }
 
-    /// <summary>The points of the model on the 3D view, as the 2D view draws them, with the selected ones marked. The
-    /// deflected shape is drawn away from the points as built, so it has none.</summary>
+    /// <summary>The points of the model on the 3D view, at their displayed positions and with selected points marked.</summary>
     private void Update3DJoints()
     {
         if (Joints3D is null) return;
-        if (!Is3D || scene3D is not { Deflected: null })
+        if (!Is3D || scene3D is null || !ShowJoints)
         {
             Joints3D.Show([]);
             return;
         }
         var selected = Canvas.SelectedJoints.ToHashSet(StringComparer.Ordinal);
-        Joints3D.Show(Model.Points.Values.Select(point => (Project3D(point.Position), Picked: selected.Contains(point.Name)))
+        Joints3D.Show(Model.Points.Values.Select(point => (Project3D(JointPosition3D(point.Name, point.Position)), Picked: selected.Contains(point.Name)))
             .Where(item => item.Item1 is not null).Select(item => (item.Item1!.Value, item.Picked)).ToArray());
+    }
+
+    private Position JointPosition3D(string name, Position position)
+    {
+        if (scene3D?.Deflected is not { } shape || !jointResults3D.TryGetValue(name, out var joint))
+            return position;
+        return new Position(position.X + joint.UXM * shape.Magnification,
+            position.Y + joint.UYM * shape.Magnification, position.Z + joint.UZM * shape.Magnification);
     }
 
     private void View3DMouseDown(object sender, MouseButtonEventArgs e)
@@ -326,6 +357,12 @@ public partial class Structural2DViewer : UserControl
 
     private void View3DMouseMove(object sender, MouseEventArgs e)
     {
+        if (dragStart is null)
+        {
+            ShowJoint3DReadout(e.GetPosition(View3D));
+            return;
+        }
+        Joint3DReadout.Visibility = Visibility.Collapsed;
         if (dragStart is not { } start || !View3DHost.IsMouseCaptured) return;
         var now = e.GetPosition(View3DHost);
         if (!dragged3D && dragOrigin is { } origin && (now - origin).Length <= 4) return;
@@ -349,6 +386,22 @@ public partial class Structural2DViewer : UserControl
             elevationDeg = Math.Clamp(elevationDeg + delta.Y * 0.4, -89, 89);
         }
         UpdateCamera();
+    }
+
+    private void View3DMouseLeave(object sender, MouseEventArgs e) => Joint3DReadout.Visibility = Visibility.Collapsed;
+
+    internal void ShowJoint3DReadout(Point position)
+    {
+        var name = FemResult is null ? null : Hit3DJoint(position);
+        var joint = name is not null && jointResults3D.TryGetValue(name, out var response) ? response : null;
+        if (joint is null)
+        {
+            Joint3DReadout.Visibility = Visibility.Collapsed;
+            return;
+        }
+        Joint3DReadoutName.Text = $"{name}  ·  {(DeflectionIsModeShape ? "relative mode amplitude" : "joint result")}";
+        Joint3DReadoutValues.Text = JointDisplacementReadout.Format(joint, DeflectionIsModeShape);
+        Joint3DReadout.Visibility = Visibility.Visible;
     }
 
     private void View3DMouseUp(object sender, MouseButtonEventArgs e)
@@ -380,6 +433,7 @@ public partial class Structural2DViewer : UserControl
     /// and asks for its information. False on empty space.</summary>
     internal bool RequestInformation3DAt(Point position)
     {
+        if (ToolRightClick3D()) return true;   // a drawing tool: the right-click ends the chain or the tool
         if (Hit3DJoint(position) is { } joint)
         {
             Canvas.SelectJoint(joint);
@@ -395,8 +449,8 @@ public partial class Structural2DViewer : UserControl
     /// <summary>The point drawn nearest to a position of the 3D view, within the reach of a click.</summary>
     private string? Hit3DJoint(Point position)
     {
-        if (scene3D is not { Deflected: null }) return null;
-        return Model.Points.Values.Select(point => (point.Name, At: Project3D(point.Position)))
+        if (scene3D is null || !ShowJoints) return null;
+        return Model.Points.Values.Select(point => (point.Name, At: Project3D(JointPosition3D(point.Name, point.Position))))
             .Where(item => item.At is { } at && (at - position).Length <= 7)
             .OrderBy(item => (item.At!.Value - position).Length).Select(item => item.Name).FirstOrDefault();
     }
@@ -404,6 +458,15 @@ public partial class Structural2DViewer : UserControl
     private string? Hit3DMember(Point position)
     {
         if (scene3D is not { } scene) return null;
+        if (!ShowExtruded3D)
+        {
+            var nearest = scene.CentreLines.SelectMany(member => member.Value.Zip(member.Value.Skip(1), (a, b) =>
+                (member.Key, A: Project3D(new Position(a.X, a.Y, a.Z)), B: Project3D(new Position(b.X, b.Y, b.Z)))))
+                .Where(segment => segment.A is not null && segment.B is not null)
+                .Select(segment => (segment.Key, Distance: DistanceTo3DSegment(position, segment.A!.Value, segment.B!.Value)))
+                .OrderBy(item => item.Distance).FirstOrDefault();
+            return nearest.Distance <= 7 ? nearest.Key : null;
+        }
         string? hit = null;
         VisualTreeHelper.HitTest(View3D, null, result =>
         {
@@ -416,6 +479,14 @@ public partial class Structural2DViewer : UserControl
             return HitTestResultBehavior.Continue;
         }, new PointHitTestParameters(position));
         return hit;
+    }
+
+    private static double DistanceTo3DSegment(Point point, Point a, Point b)
+    {
+        var ab = b - a;
+        if (ab.LengthSquared < 1e-12) return (point - a).Length;
+        var t = Math.Clamp(Vector.Multiply(point - a, ab) / ab.LengthSquared, 0, 1);
+        return (point - (a + ab * t)).Length;
     }
 
     private void Update3DSelection()
@@ -447,6 +518,21 @@ public partial class Structural2DViewer : UserControl
         viewWidth = Math.Max(1e-3, viewWidth * (e.Delta > 0 ? 1 / 1.15 : 1.15));
         UpdateCamera();
         e.Handled = true;
+    }
+}
+
+/// <summary>Compact, explicitly unit-labelled six-component readout for a joint under the 3D cursor.</summary>
+internal static class JointDisplacementReadout
+{
+    internal static string Format(FemJointResponse joint, bool relative)
+    {
+        string Number(double value) => value.ToString(relative ? "G5" : "F4", CultureInfo.CurrentCulture);
+        var translationScale = relative ? 1 : 1000;
+        var rotationScale = relative ? 1 : 1000;
+        var translationUnit = relative ? "relative" : "mm";
+        var rotationUnit = relative ? "relative" : "mrad";
+        return $"UX {Number(joint.UXM * translationScale)}  UY {Number(joint.UYM * translationScale)}  UZ {Number(joint.UZM * translationScale)}  [{translationUnit}]\n" +
+               $"RX {Number(joint.RXRad * rotationScale)}  RY {Number(joint.RYRad * rotationScale)}  RZ {Number(joint.RZRad * rotationScale)}  [{rotationUnit}]";
     }
 }
 
@@ -482,9 +568,10 @@ public sealed class JointMarkers3D : FrameworkElement
     }
 }
 
-public sealed class ModelCanvas : FrameworkElement
+public sealed partial class ModelCanvas : FrameworkElement
 {
-    public static readonly DependencyProperty ModelProperty = DependencyProperty.Register(nameof(Model), typeof(GeometryModel), typeof(ModelCanvas), new FrameworkPropertyMetadata(GeometryModel.Empty, FrameworkPropertyMetadataOptions.AffectsRender, (d, _) => ((ModelCanvas)d).Fit()));
+    public static readonly DependencyProperty ModelProperty = DependencyProperty.Register(nameof(Model), typeof(GeometryModel), typeof(ModelCanvas),
+        new FrameworkPropertyMetadata(GeometryModel.Empty, FrameworkPropertyMetadataOptions.AffectsRender, (d, e) => ((ModelCanvas)d).ModelChanged(e)));
     public static readonly DependencyProperty ShowPointLabelsProperty = DependencyProperty.Register(nameof(ShowPointLabels), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty ShowFrameLabelsProperty = DependencyProperty.Register(nameof(ShowFrameLabels), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty ShowCableLabelsProperty = DependencyProperty.Register(nameof(ShowCableLabels), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(false, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -541,6 +628,12 @@ public sealed class ModelCanvas : FrameworkElement
     public double DeflectionRangeMinMm { get => (double)GetValue(DeflectionRangeMinMmProperty); set => SetValue(DeflectionRangeMinMmProperty, value); }
     public static readonly DependencyProperty DeflectionRangeMaxMmProperty = DependencyProperty.Register(nameof(DeflectionRangeMaxMm), typeof(double), typeof(ModelCanvas), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
     public double DeflectionRangeMaxMm { get => (double)GetValue(DeflectionRangeMaxMmProperty); set => SetValue(DeflectionRangeMaxMmProperty, value); }
+    public static readonly DependencyProperty DeflectionScaleFactorProperty = DependencyProperty.Register(nameof(DeflectionScaleFactor), typeof(double), typeof(ModelCanvas), new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    public double DeflectionScaleFactor { get => (double)GetValue(DeflectionScaleFactorProperty); set => SetValue(DeflectionScaleFactorProperty, value); }
+    public static readonly DependencyProperty DeflectionContourComponentProperty = DependencyProperty.Register(nameof(DeflectionContourComponent), typeof(DisplacementContourComponent), typeof(ModelCanvas), new FrameworkPropertyMetadata(DisplacementContourComponent.Magnitude, FrameworkPropertyMetadataOptions.AffectsRender));
+    public DisplacementContourComponent DeflectionContourComponent { get => (DisplacementContourComponent)GetValue(DeflectionContourComponentProperty); set => SetValue(DeflectionContourComponentProperty, value); }
+    public static readonly DependencyProperty DeflectionCubicCurveProperty = DependencyProperty.Register(nameof(DeflectionCubicCurve), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
+    public bool DeflectionCubicCurve { get => (bool)GetValue(DeflectionCubicCurveProperty); set => SetValue(DeflectionCubicCurveProperty, value); }
     public static readonly DependencyProperty ShowDimensionsProperty = DependencyProperty.Register(nameof(ShowDimensions), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty SpanPointsProperty = DependencyProperty.Register(nameof(SpanPoints), typeof(IEnumerable<string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public IEnumerable<string>? SpanPoints { get => (IEnumerable<string>?)GetValue(SpanPointsProperty); set => SetValue(SpanPointsProperty, value); }
@@ -697,7 +790,7 @@ public sealed class ModelCanvas : FrameworkElement
             Cross(p1, p2, q1) * Cross(p1, p2, q2) <= 0 && Cross(q1, q2, p1) * Cross(q1, q2, p2) <= 0;
     }
 
-    private void UpdateCursor() { Cursor = PanMode ? Cursors.SizeAll : Cursors.Arrow; InvalidateVisual(); }
+    private void UpdateCursor() { Cursor = PanMode ? Cursors.SizeAll : DrawingTool != DrawingTool.None ? Cursors.Cross : Cursors.Arrow; InvalidateVisual(); }
 
     private void DrawSelection(DrawingContext dc)
     {
@@ -771,6 +864,7 @@ public sealed class ModelCanvas : FrameworkElement
     {
         zoom = 1;
         pan = default;
+        frozenFrame = null;
         InvalidateVisual();
     }
 
@@ -799,29 +893,32 @@ public sealed class ModelCanvas : FrameworkElement
         for (double x = 0; x < ActualWidth; x += 32) dc.DrawLine(grid, new(x, 0), new(x, ActualHeight));
         for (double y = 0; y < ActualHeight; y += 32) dc.DrawLine(grid, new(0, y), new(ActualWidth, y));
 
-        if (Model.Points.Count > 0)
+        var projected = Model.Points.ToDictionary(item => item.Key, item => Project(item.Value.Position));
+        var reference = ReferenceLayoutForRender();
+        hasTransform = false;
+        jointLocations.Clear();
+        memberLocations.Clear();
+        if (projected.Count > 0 || reference.Lines.Count > 0 || DrawingTool != DrawingTool.None)
         {
-            var projected = Model.Points.ToDictionary(item => item.Key, item => Project(item.Value.Position));
-            var minX = projected.Values.Min(point => point.X);
-            var maxX = projected.Values.Max(point => point.X);
-            var minY = projected.Values.Min(point => point.Y);
-            var maxY = projected.Values.Max(point => point.Y);
-            double spanX = maxX - minX;
-            double spanY = maxY - minY;
+            // The frame is the model's extent (and the grid's); with KeepViewOnEdit it is held while the model is edited,
+            // so a click lands on the same model position before and after an edit.
+            var frame = FrameFor(projected.Values, reference);
+            double minX = frame.Left, minY = frame.Top, spanX = frame.Width, spanY = frame.Height;
             // Dimensions sit below and to the right of the model, an arch's height to its left; leave room for them when fitting.
-            var arch = ShowDimensions && Plane == "XZ" ? ArchRise.Find(Model, PinSupportPoints, name => MemberSections?.GetValueOrDefault(name)?.SectionName) : null;
+            var arch = ShowDimensions && Plane == "XZ" && projected.Count > 0 ? ArchRise.Find(Model, PinSupportPoints, name => MemberSections?.GetValueOrDefault(name)?.SectionName) : null;
             var archBand = arch is null ? 0 : ArchBandX;
-            double marginX = ShowDimensions ? 96 + DimensionBandX + archBand : 96, marginY = ShowDimensions ? 96 + DimensionBandY : 96;
+            double marginX = (ShowDimensions ? 96 + DimensionBandX + archBand : 96) + LeftInset, marginY = ShowDimensions ? 96 + DimensionBandY : 96;
             double scale = Math.Min(Math.Max(1, ActualWidth - marginX) / Math.Max(spanX, 1e-9), Math.Max(1, ActualHeight - marginY) / Math.Max(spanY, 1e-9)) * zoom;
             var shift = ShowDimensions ? new Vector((archBand - DimensionBandX) / 2, -DimensionBandY / 2) : default;
-            Point Screen(Point point) => new((point.X - (minX + spanX / 2)) * scale + ActualWidth / 2 + pan.X + shift.X, -(point.Y - (minY + spanY / 2)) * scale + ActualHeight / 2 + pan.Y + shift.Y);
+            shift.X += LeftInset / 2;   // room for a tool strip over the left edge of the view
+            SetTransform(new(minX + spanX / 2, minY + spanY / 2), scale, new(ActualWidth / 2 + pan.X + shift.X, ActualHeight / 2 + pan.Y + shift.Y));
+            Point Screen(Point point) => ProjectedToScreen(point);
+            DrawReference(dc, reference, Screen);
             var screenPoints = projected.ToDictionary(item => item.Key, item => Screen(item.Value));
-            jointLocations.Clear();
-            foreach (var (name, point) in screenPoints) jointLocations[name] = point;
-            memberLocations.Clear();
-            foreach (var member in Model.Members)
+            if (ShowJoints) foreach (var (name, point) in screenPoints) jointLocations[name] = point;
+            foreach (var member in Model.Members.Where(IsShown))
                 if (screenPoints.TryGetValue(member.Start, out var a) && screenPoints.TryGetValue(member.End, out var b)) memberLocations[member.Name] = (a, b, member.Kind);
-            if (ShowDimensions) DrawDimensions(dc, projected.Values, Screen, arch is not null);
+            if (ShowDimensions && projected.Count > 0) DrawDimensions(dc, projected.Values, Screen, arch is not null);
             if (arch is not null) DrawArchHeight(dc, arch, minX, Screen);
 
             var deflectionView = FemResult is not null && FemResultMode == FemResultMode.DeflectedShape;
@@ -836,6 +933,7 @@ public sealed class ModelCanvas : FrameworkElement
                 : null;
             foreach (var member in Model.Members)
             {
+                if (!IsShown(member)) continue;   // hidden in Display Options: not drawn, not picked — still in the model
                 if (!screenPoints.TryGetValue(member.Start, out var start) || !screenPoints.TryGetValue(member.End, out var end)) continue;
                 var pen = new Pen(Brush(member.Kind == MemberKind.Frame ? "ViewportGeom" : "AccentBright"), 1.5);
                 if (deflectionView) pen.DashStyle = DashStyles.Dash;
@@ -847,7 +945,7 @@ public sealed class ModelCanvas : FrameworkElement
             }
 
             if (MemberSizes is { } sizes)
-                foreach (var member in Model.Members)
+                foreach (var member in Model.Members.Where(IsShown))
                     if (sizes.TryGetValue(member.Name, out var size) && !string.IsNullOrWhiteSpace(size) &&
                         screenPoints.TryGetValue(member.Start, out var sizeStart) && screenPoints.TryGetValue(member.End, out var sizeEnd))
                         MemberLabel(dc, size, sizeStart, sizeEnd, -9, member.Kind == MemberKind.Frame ? "Accent" : "AccentBright");
@@ -887,7 +985,7 @@ public sealed class ModelCanvas : FrameworkElement
             if (ShowFrameLabels || ShowCableLabels)
             {
                 var configuredCableNames = (Cables ?? []).Select(c => c.CableName).ToHashSet(StringComparer.Ordinal);
-                foreach (var member in Model.Members)
+                foreach (var member in Model.Members.Where(IsShown))
                 {
                     var isFrame = member.Kind == MemberKind.Frame;
                     if (isFrame ? !ShowFrameLabels : !ShowCableLabels) continue;
@@ -897,8 +995,9 @@ public sealed class ModelCanvas : FrameworkElement
                 }
             }
 
-            foreach (var point in screenPoints.Values)
-                dc.DrawEllipse(Brush("ViewportBg"), new Pen(Brush("ViewportEdge"), 1), point, 2.5, 2.5);
+            if (ShowJoints)
+                foreach (var point in screenPoints.Values)
+                    dc.DrawEllipse(Brush("ViewportBg"), new Pen(Brush("ViewportEdge"), 1), point, 2.5, 2.5);
 
             DrawGroup(dc, screenPoints, BottomPoints, Color.FromRgb(0x2E, 0x7D, 0x32));
             DrawGroup(dc, screenPoints, MiddlePoints, Color.FromRgb(0x25, 0x63, 0xEB));
@@ -930,7 +1029,7 @@ public sealed class ModelCanvas : FrameworkElement
             }
             else hoverTargets.Clear();
 
-            if (ShowPointLabels && (!deflectionView || ShowUndeformed))
+            if (ShowPointLabels && ShowJoints && (!deflectionView || ShowUndeformed))
                 foreach (var item in screenPoints.OrderBy(item => item.Key))
                     Label(dc, item.Key, item.Value + new Vector(6, -18));
         }
@@ -939,7 +1038,9 @@ public sealed class ModelCanvas : FrameworkElement
         DrawSelection(dc);
         if (ShowFrameLocalAxes) DrawFrameLocalAxes(dc);
         DrawAxes(dc);
-        Text(dc, Plane + " projection" + (PanMode ? "  ·  PAN — drag to move the model (V to select)" : ""), new(16, 12), "ViewportEdge");
+        if (ShowTitle)
+            Text(dc, (string.IsNullOrEmpty(ViewTitle) ? Plane + " projection" : ViewTitle) + (PanMode ? "  ·  PAN — drag to move the model (V to select)" : ""), new(16, 12), "ViewportEdge");
+        RefreshToolOverlay();
     }
 
     private void DrawGroup(DrawingContext dc, IReadOnlyDictionary<string, Point> screen, IEnumerable<string>? names, Color color)
@@ -986,12 +1087,29 @@ public sealed class ModelCanvas : FrameworkElement
         {
             var displacements = result.Joints.ToDictionary(joint => joint.PointName, StringComparer.Ordinal);
             double Magnitude(double ux, double uy, double uz) => Math.Sqrt(ux * ux + uy * uy + uz * uz) * 1000;
+            var stationNames = result.Frames.Where(frame => DeflectionCubicCurve && frame.Stations is { Count: > 2 })
+                .Select(frame => frame.MemberName).ToHashSet(StringComparer.Ordinal);
+            var curved = Model.Members.Where(member => DeflectionCubicCurve && member.Kind == MemberKind.Frame &&
+                !stationNames.Contains(member.Name) && displacements.ContainsKey(member.Start) && displacements.ContainsKey(member.End) &&
+                Model.Points.ContainsKey(member.Start) && Model.Points.ContainsKey(member.End))
+                .SelectMany(member =>
+                {
+                    var a = Model.Points[member.Start].Position; var b = Model.Points[member.End].Position;
+                    var chord = new Vector3D(b.X - a.X, b.Y - a.Y, b.Z - a.Z);
+                    return chord.Length < 1e-9 ? [] : Enumerable.Range(1, 15)
+                        .Select(index => StructureModel3D.FrameDisplacement(displacements[member.Start], displacements[member.End], chord, index / 16.0));
+                }).ToArray();
             var maximum = result.Joints.Select(joint => Magnitude(joint.UXM, joint.UYM, joint.UZM))
-                .Concat(result.Frames.SelectMany(frame => frame.Stations ?? []).Select(station => Magnitude(station.UXM, 0, station.UZM))).DefaultIfEmpty().Max();
+                .Concat(result.Frames.SelectMany(frame => DeflectionCubicCurve ? frame.Stations ?? [] : []).Select(station => Magnitude(station.UXM, station.UYM, station.UZM)))
+                .Concat(curved.Select(value => value.Length * 1000)).DefaultIfEmpty().Max();
             if (!double.IsFinite(maximum)) return;
-            var scale = maximum > 1e-9 ? 42000 / maximum : 0;
-            var min = double.IsFinite(DeflectionRangeMinMm) ? Math.Max(0, DeflectionRangeMinMm) : 0;
-            var max = double.IsFinite(DeflectionRangeMaxMm) && DeflectionRangeMaxMm > min ? DeflectionRangeMaxMm : Math.Max(maximum, min + 1e-9);
+            var scale = double.IsFinite(DeflectionScaleFactor) && DeflectionScaleFactor > 0
+                ? DeflectionScaleFactor * transformScale : maximum > 1e-9 ? 42000 / maximum : 0;
+            double Value(double ux, double uy, double uz) => DeformationDisplay.ComponentMm(ux, uy, uz, DeflectionContourComponent);
+            var contourValues = result.Joints.Select(joint => Value(joint.UXM, joint.UYM, joint.UZM))
+                .Concat(result.Frames.SelectMany(frame => DeflectionCubicCurve ? frame.Stations ?? [] : []).Select(station => Value(station.UXM, station.UYM, station.UZM)))
+                .Concat(curved.Select(value => Value(value.X, value.Y, value.Z)));
+            var (min, max) = DeformationDisplay.Range(contourValues, DeflectionContourComponent, DeflectionRangeMinMm, DeflectionRangeMaxMm);
             Vector Offset(double ux, double uy, double uz) => Plane == "XY" ? new(ux * scale, -uy * scale) : Plane == "YZ" ? new(uy * scale, -uz * scale) : new(ux * scale, -uz * scale);
             Brush Contour(double value) => ShowDeflectionContour ? DeflectionBrush((value - min) / (max - min)) : Brush("AccentBright");
             void Segment(Point from, Point to, double v1, double v2)
@@ -1000,7 +1118,7 @@ public sealed class ModelCanvas : FrameworkElement
                 { MappingMode = BrushMappingMode.Absolute, StartPoint = from, EndPoint = to };
                 dc.DrawLine(new Pen(gradient, 3), from, to);
             }
-            var meshedFrames = result.Frames.Where(frame => frame.Stations is { Count: > 2 })
+            var meshedFrames = result.Frames.Where(frame => DeflectionCubicCurve && frame.Stations is { Count: > 2 })
                 .ToDictionary(frame => frame.MemberName, frame => frame.Stations!, StringComparer.Ordinal);
             foreach (var member in Model.Members)
             {
@@ -1011,26 +1129,44 @@ public sealed class ModelCanvas : FrameworkElement
                     for (var i = 1; i < stations.Count; i++)
                     {
                         var a = stations[i - 1]; var b = stations[i];
-                        double ay = u1.UYM + (u2.UYM - u1.UYM) * a.Fraction;
-                        double by = u1.UYM + (u2.UYM - u1.UYM) * b.Fraction;
-                        Segment(start + (end - start) * a.Fraction + Offset(a.UXM, ay, a.UZM),
-                            start + (end - start) * b.Fraction + Offset(b.UXM, by, b.UZM), Magnitude(a.UXM, ay, a.UZM), Magnitude(b.UXM, by, b.UZM));
+                        Segment(start + (end - start) * a.Fraction + Offset(a.UXM, a.UYM, a.UZM),
+                            start + (end - start) * b.Fraction + Offset(b.UXM, b.UYM, b.UZM), Value(a.UXM, a.UYM, a.UZM), Value(b.UXM, b.UYM, b.UZM));
                     }
                 }
-                else Segment(start + Offset(u1.UXM, u1.UYM, u1.UZM), end + Offset(u2.UXM, u2.UYM, u2.UZM), Magnitude(u1.UXM, u1.UYM, u1.UZM), Magnitude(u2.UXM, u2.UYM, u2.UZM));
+                else if (member.Kind == MemberKind.Frame && DeflectionCubicCurve && Model.Points.TryGetValue(member.Start, out var startNode) &&
+                         Model.Points.TryGetValue(member.End, out var endNode))
+                {
+                    var a = startNode.Position; var b = endNode.Position;
+                    var chord = new Vector3D(b.X - a.X, b.Y - a.Y, b.Z - a.Z);
+                    if (chord.Length > 1e-9)
+                    {
+                        var before = StructureModel3D.FrameDisplacement(u1, u2, chord, 0);
+                        for (var i = 1; i <= 16; i++)
+                        {
+                            var t = i / 16.0;
+                            var after = StructureModel3D.FrameDisplacement(u1, u2, chord, t);
+                            Segment(start + (end - start) * ((i - 1) / 16.0) + Offset(before.X, before.Y, before.Z),
+                                start + (end - start) * t + Offset(after.X, after.Y, after.Z),
+                                Value(before.X, before.Y, before.Z), Value(after.X, after.Y, after.Z));
+                            before = after;
+                        }
+                    }
+                }
+                else Segment(start + Offset(u1.UXM, u1.UYM, u1.UZM), end + Offset(u2.UXM, u2.UYM, u2.UZM), Value(u1.UXM, u1.UYM, u1.UZM), Value(u2.UXM, u2.UYM, u2.UZM));
             }
             foreach (var joint in result.Joints)
                 if (screenPoints.TryGetValue(joint.PointName, out var original))
                 {
                     var point = original + Offset(joint.UXM, joint.UYM, joint.UZM);
                     deflectedNodes[joint.PointName] = point;
-                    dc.DrawEllipse(Contour(Magnitude(joint.UXM, joint.UYM, joint.UZM)), new Pen(Brush("ViewportBg"), 1), point, 3.5, 3.5);
+                    dc.DrawEllipse(Contour(Value(joint.UXM, joint.UYM, joint.UZM)), new Pen(Brush("ViewportBg"), 1), point, 3.5, 3.5);
                 }
             if (ShowDeflectionContour)
             {
                 var left = Math.Max(18, ActualWidth - 245); var top = ActualHeight - 70;
                 for (var i = 0; i < 100; i++) dc.DrawRectangle(DeflectionBrush(i / 99.0), null, new Rect(left + i * 1.6, top, 1.7, 10));
-                Text(dc, DeflectionIsModeShape ? $"Relative |amplitude| {min / 1000:G5} to {max / 1000:G5}" : $"|U| {min:G5} to {max:G5} mm", new Point(left, top - 20), "Text");
+                var label = DeformationDisplay.Label(DeflectionContourComponent);
+                Text(dc, DeflectionIsModeShape ? $"Relative {label} {min / 1000:G5} to {max / 1000:G5}" : $"{label} {min:G5} to {max:G5} mm", new Point(left, top - 20), "Text");
                 Text(dc, DeflectionIsModeShape ? "Eigenvector magnified - click a node" : "Shape magnified - click a node", new Point(left, top + 14), "Text");
             }
             if (selectedDeflectionNode is { } name && displacements.TryGetValue(name, out var selected) && deflectedNodes.TryGetValue(name, out var selectedPoint))
@@ -1621,6 +1757,8 @@ public sealed class ModelCanvas : FrameworkElement
     {
         Focus();
         var position = e.GetPosition(this);
+        // a drawing tool takes the left button (the middle button still pans, the wheel still zooms)
+        if (ToolMouseDown(e, position)) { e.Handled = true; return; }
         // pan: the middle button always, the left button in pan mode
         if (e.ChangedButton == MouseButton.Middle || e.ChangedButton == MouseButton.Left && PanMode)
         {
@@ -1668,6 +1806,7 @@ public sealed class ModelCanvas : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         var next = e.GetPosition(this);
+        if (!panning) ToolMouseMove(next);
         if (windowStart is not null && IsMouseCaptured)
         {
             windowEnd = next;
@@ -1690,6 +1829,7 @@ public sealed class ModelCanvas : FrameworkElement
     protected override void OnMouseLeave(MouseEventArgs e)
     {
         base.OnMouseLeave(e);
+        ToolMouseLeave();
         if (hoverCursor is null) return;
         hoverCursor = null;
         InvalidateVisual();
@@ -1853,6 +1993,8 @@ public sealed class ModelCanvas : FrameworkElement
         last = null;
         panning = false;
         if (IsMouseCaptured) ReleaseMouseCapture();
+        // with a drawing tool a right-click ends the chain, or the tool; otherwise it shows the information
+        if (e.ChangedButton == MouseButton.Right && ToolRightClick()) { e.Handled = true; return; }
         if (e.ChangedButton == MouseButton.Right && RequestInformationAt(e.GetPosition(this))) e.Handled = true;
     }
 
@@ -1868,6 +2010,7 @@ public sealed class ModelCanvas : FrameworkElement
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && CancelToolInteraction()) { e.Handled = true; return; }   // a member half drawn is dropped first
         if (e.Key == Key.Escape) { ClearSelection(); e.Handled = true; }   // clears; the tool (Select / Pan) stays as it is
         else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.None) { PanMode = false; e.Handled = true; }
         else if (e.Key == Key.Home) Fit();

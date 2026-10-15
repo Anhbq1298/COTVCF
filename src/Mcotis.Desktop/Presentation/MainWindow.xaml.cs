@@ -58,6 +58,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        InitializeGeometryEditing();
 
         // Default launch size: 90% of the available work area, centred.
         var work = SystemParameters.WorkArea;
@@ -292,6 +293,13 @@ public partial class MainWindow : Window
     private void ToolbarPlane_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { Tag: string plane }) SharedViewer.ShowPlane(plane);
+    }
+
+    private void ForceButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && sender is FrameworkElement { Tag: string tag } &&
+            Enum.TryParse<FemResultMode>(tag, out var mode))
+            vm.ShowForces(mode);
     }
 
     private void ClosePane_Click(object sender, RoutedEventArgs e)
@@ -603,7 +611,8 @@ public partial class MainWindow : Window
         var connected = members.Count - SharedViewer.SelectedMembers.Count(members.Contains);
         var text = $"Delete {members.Count} member(s) and {joints.Length} joint(s) from the working model?" +
                    (connected > 0 ? $"{Environment.NewLine}{Environment.NewLine}{connected} of the members are connected to the selected joints." : "") +
-                   $"{Environment.NewLine}{Environment.NewLine}FEM results are cleared. There is no undo; SAP2000 is not changed (Connect SAP restores the SAP model).";
+                   $"{Environment.NewLine}{Environment.NewLine}{vm.DeleteConsequences(joints, SharedViewer.SelectedMembers)}" +
+                   $"{Environment.NewLine}{Environment.NewLine}FEM results are cleared. Edit → Undo (Ctrl+Z) restores everything deleted; SAP2000 is not changed.";
         if (MessageBox.Show(this, text, "Delete", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
         try
         {
@@ -616,8 +625,12 @@ public partial class MainWindow : Window
         }
     }
 
-    // Select tool: always returns to selecting (clicking it while on must not switch to pan)
-    private void SelectTool_Click(object sender, RoutedEventArgs e) => SharedViewer.PanMode = false;
+    // Select tool: always returns to selecting (clicking it while on must not switch to pan); a drawing tool goes off too
+    private void SelectTool_Click(object sender, RoutedEventArgs e)
+    {
+        SharedViewer.PanMode = false;
+        if (DataContext is MainViewModel vm) vm.DrawingTool = Controls.DrawingTool.None;
+    }
 
     protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
     {
@@ -659,9 +672,29 @@ public partial class MainWindow : Window
         if (e.Key == System.Windows.Input.Key.V && System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.None &&
             System.Windows.Input.Keyboard.FocusedElement is not (System.Windows.Controls.Primitives.TextBoxBase or System.Windows.Controls.ComboBox or
                 System.Windows.Controls.DataGrid or System.Windows.Controls.DataGridCell or MenuItem) &&
-            DataContext is MainViewModel { ShowSharedViewer: true })
+            DataContext is MainViewModel { ShowSharedViewer: true } selecting)
         {
             SharedViewer.PanMode = false;
+            selecting.DrawingTool = Controls.DrawingTool.None;
+            e.Handled = true;
+            return;
+        }
+        // Ctrl+W: Display Options (not while typing in a field); Ctrl+Page Up / Down: the next / previous plane
+        if (System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control &&
+            System.Windows.Input.Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase && DataContext is MainViewModel { HasUsableModelGeometry: true } viewing)
+        {
+            if (e.Key == System.Windows.Input.Key.W) { ViewOptions_Click(this, new RoutedEventArgs()); e.Handled = true; return; }
+            if (e.Key is System.Windows.Input.Key.PageUp or System.Windows.Input.Key.PageDown)
+            {
+                viewing.StepViewPlane(e.Key == System.Windows.Input.Key.PageUp ? 1 : -1);
+                e.Handled = true;
+                return;
+            }
+        }
+        // Esc: a member or move half made on the model view is dropped first (the tool stays on)
+        if (e.Key == System.Windows.Input.Key.Escape && System.Windows.Input.Keyboard.FocusedElement is not (System.Windows.Controls.Primitives.TextBoxBase or System.Windows.Controls.ComboBox) &&
+            SharedViewer.CancelToolInteraction())
+        {
             e.Handled = true;
             return;
         }
@@ -813,7 +846,7 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel vm) return;
         if (showResultsWindow is null)
         {
-            showResultsWindow = new ShowResultsWindow(vm, cableFit => { vm.FemCableFitView = cableFit; OpenFemResultsClick(this, new RoutedEventArgs()); }, kind) { Owner = this };
+            showResultsWindow = new ShowResultsWindow(vm, cableFit => { vm.FemCableFitView = cableFit; OpenFemResultsClick(this, new RoutedEventArgs()); }, kind, SharedViewer) { Owner = this };
             showResultsWindow.Closed += (_, _) => showResultsWindow = null;
             showResultsWindow.Show();
         }

@@ -83,6 +83,11 @@ public static class TemplateBuilding
                         if (ix < nx) Frame(points[floor, ix, iy], points[floor, ix + 1, iy], $"BeamX_{floor}_{ix}_{iy}", input.BeamSection.Id, input.Storeys[floor - 1].BeamXLineLoad);
                         if (iy < ny) Frame(points[floor, ix, iy], points[floor, ix, iy + 1], $"BeamY_{floor}_{ix}_{iy}", input.BeamSection.Id, input.Storeys[floor - 1].BeamYLineLoad);
                     }
+            // the grid and the storeys the building is laid out on, as references to draw and navigate on (no analysis input)
+            editor.SetReferenceGeometry(new(
+                [new GridSystem("GLOBAL", new(0, 0, 0), 0, GeometryEditService.LinesFromSpacings(true, 0, input.XBayWidths),
+                    GeometryEditService.LinesFromSpacings(false, 0, input.YBayWidths))],
+                GeometryEditService.LevelsFromHeights(0, [.. input.Storeys.Select(storey => storey.Height)])));
         });
     }
 }

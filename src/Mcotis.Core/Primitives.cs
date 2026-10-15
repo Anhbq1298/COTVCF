@@ -15,6 +15,9 @@ public enum ObjectKind
 {
     Point, Frame, Cable, Shell, Material, FrameSection, CableSection, ShellSection, LoadPattern, LoadCase, LoadCombination, Load, Settings,
     MassSource,
+    /// <summary>The grid systems and levels of the model (<see cref="Core.ReferenceGeometry"/>), recorded under
+    /// <see cref="Core.ReferenceGeometry.ChangeId"/>.</summary>
+    ReferenceGeometry,
 }
 
 /// <summary>Every number a document holds is in these units. Conversion belongs to the edges (UI, import), never to the model.</summary>

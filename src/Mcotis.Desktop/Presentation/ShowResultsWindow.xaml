@@ -14,14 +14,17 @@
   <Style x:Key="FormButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Setter Property="MinWidth" Value="84"/><Setter Property="Margin" Value="6,0"/></Style>
  </Window.Resources>
  <StackPanel Margin="10">
-  <GroupBox Header="Case">
+  <GroupBox x:Name="CaseGroup" Header="Load Case / Load Combination / Modal Case">
    <Grid>
-    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-    <TextBlock Text="LOAD CASE / COMBO" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-    <ComboBox x:Name="LoadCasePicker" Grid.Column="1" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
+    <ComboBox x:Name="LoadCasePicker" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName}"
               IsEnabled="{Binding IsIdle}" AutomationProperties.Name="FEM load case or combination"
               ToolTip="Load case or linear-additive combination shown on the model view and in the results table."/>
-    <StackPanel x:Name="ShapePicker" Grid.Column="1" Visibility="Collapsed">
+    <StackPanel x:Name="ShapePicker" Visibility="Collapsed">
+     <UniformGrid Columns="3" Margin="0,0,0,7">
+      <RadioButton x:Name="CaseRadio" GroupName="ShapeCategory" Content="Case" IsChecked="True" Click="ShapeCategory_Click" ToolTip="Solved static load cases"/>
+      <RadioButton x:Name="ComboRadio" GroupName="ShapeCategory" Content="Combo" Click="ShapeCategory_Click" ToolTip="Solved load combinations"/>
+      <RadioButton x:Name="ModeRadio" GroupName="ShapeCategory" Content="Mode" Click="ShapeCategory_Click" ToolTip="Solved modal cases and their mode shapes"/>
+     </UniformGrid>
      <ComboBox x:Name="ShapeCasePicker" SelectionChanged="ShapeCase_Changed" AutomationProperties.Name="Deformed shape case"
                ToolTip="Choose a static case or combination, or a solved modal case whose relative mode shape is to be drawn."/>
      <StackPanel x:Name="ModePicker" Orientation="Horizontal" Margin="0,6,0,0" Visibility="Collapsed">
@@ -32,6 +35,61 @@
     </StackPanel>
    </Grid>
   </GroupBox>
+  <StackPanel x:Name="DeformationOptions" Visibility="Collapsed">
+   <GroupBox Header="Scaling">
+    <StackPanel>
+     <RadioButton x:Name="AutomaticScale" GroupName="ShapeScale" Content="Automatic" IsChecked="True" Click="ScaleChoice_Click"/>
+     <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+      <RadioButton x:Name="UserScale" GroupName="ShapeScale" Content="User defined" VerticalAlignment="Center" Click="ScaleChoice_Click"/>
+      <TextBlock Text="Scale factor" VerticalAlignment="Center" Margin="20,0,8,0"/>
+      <TextBox x:Name="ScaleFactor" Width="94" Text="1" FontFamily="{StaticResource MonoFont}" AutomationProperties.Name="Deformed shape scale factor"
+               ToolTip="Positive multiplier of displacement or relative mode amplitude; automatic uses a visible fit."/>
+     </StackPanel>
+    </StackPanel>
+   </GroupBox>
+   <GroupBox Header="Contour Options">
+    <StackPanel>
+     <CheckBox x:Name="DrawContours" Content="Draw contours on objects" Margin="0,0,0,8"/>
+     <Grid Margin="14,0,0,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="140"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <TextBlock Text="Show contours for" VerticalAlignment="Center"/>
+      <ComboBox x:Name="ContourComponent" Grid.Column="1" AutomationProperties.Name="Displacement contour component">
+       <ComboBoxItem Content="Displacement magnitude |U|" Tag="Magnitude"/>
+       <ComboBoxItem Content="Displacement UX" Tag="UX"/>
+       <ComboBoxItem Content="Displacement UY" Tag="UY"/>
+       <ComboBoxItem Content="Displacement UZ" Tag="UZ"/>
+      </ComboBox>
+     </Grid>
+     <TextBlock Text="Contour range" Style="{StaticResource Subheading}" Margin="14,10,0,5"/>
+     <Grid Margin="14,0,0,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="140"/><ColumnDefinition Width="94"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <TextBlock Text="Minimum value" VerticalAlignment="Center"/>
+      <TextBox x:Name="MinimumRange" Grid.Column="1" Text="0" FontFamily="{StaticResource MonoFont}" AutomationProperties.Name="Contour minimum"/>
+      <TextBlock x:Name="MinimumUnit" Grid.Column="2" Text="mm" VerticalAlignment="Center" Margin="6,0,0,0"/>
+      <TextBlock Grid.Row="1" Text="Maximum value" VerticalAlignment="Center" Margin="0,5,0,0"/>
+      <TextBox x:Name="MaximumRange" Grid.Row="1" Grid.Column="1" Text="0" FontFamily="{StaticResource MonoFont}" Margin="0,5,0,0" AutomationProperties.Name="Contour maximum"
+               ToolTip="Both range values at zero use the automatic result range."/>
+      <TextBlock x:Name="MaximumUnit" Grid.Row="1" Grid.Column="2" Text="mm" VerticalAlignment="Center" Margin="6,5,0,0"/>
+     </Grid>
+    </StackPanel>
+   </GroupBox>
+   <GroupBox Header="Options">
+    <Grid>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <StackPanel>
+      <CheckBox x:Name="WireShadow" Content="Wire shadow" ToolTip="Show the undeformed model as a wire guide behind the deformed shape"/>
+      <CheckBox x:Name="CubicCurve" Content="Cubic curve" Margin="0,7,0,0" ToolTip="Follow recovered frame stations or interpolate bending from joint rotations; off connects displaced joints directly"/>
+     </StackPanel>
+     <StackPanel Grid.Column="1" IsEnabled="False" ToolTip="Hinge-state dots are unavailable: this solver does not produce hinge-state results.">
+      <TextBlock Text="Hinge state colored dots" Style="{StaticResource Subheading}"/>
+      <RadioButton Content="B, C, D and E points" Margin="0,5,0,0"/>
+      <RadioButton Content="IO, LS and CP points" Margin="0,5,0,0"/>
+     </StackPanel>
+    </Grid>
+   </GroupBox>
+   <TextBlock x:Name="OptionError" Foreground="{StaticResource Warning}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,7"/>
+  </StackPanel>
   <GroupBox x:Name="OutputGroup" Header="Output">
    <StackPanel>
     <ListBox x:Name="Outputs" BorderThickness="0" Background="Transparent" AutomationProperties.Name="FEM result outputs" MouseDoubleClick="Outputs_DoubleClick" SelectionChanged="Outputs_Changed">

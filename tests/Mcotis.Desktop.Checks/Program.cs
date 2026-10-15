@@ -54,6 +54,13 @@ internal static class Program
                 TemplateBuildingUiChecks.Run();
                 return 0;
             }
+            if (args.Contains("--geometry-editing"))
+            {
+                var app = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/Presentation/Theme.xaml", UriKind.Relative) });
+                GeometryEditingUiChecks.Run();
+                return 0;
+            }
             if (args.Contains("--spatial-frame-regression"))
             {
                 SpatialFrameRegressionChecks.Run();
@@ -196,6 +203,13 @@ internal static class Program
                 ResultToolbarChecks.Run();
                 return 0;
             }
+            if (args.Contains("--spatial-3d"))
+            {
+                var app = new System.Windows.Application();
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/Presentation/Theme.xaml", UriKind.Relative) });
+                ResultToolbarChecks.RunSpatial3D();
+                return 0;
+            }
             var liveMatrixIndex = Array.IndexOf(args, "--study-live-matrix");
             var liveStudyIndex = liveMatrixIndex >= 0 ? liveMatrixIndex : Array.IndexOf(args, "--study-live");
             if (liveStudyIndex >= 0)
@@ -250,7 +264,7 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 MenuItem TopMenu(string header) => window.MainMenu.Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == header);
                 Assert(window.MainMenu.Items.OfType<MenuItem>().Select(item => (item.Header as string)!.Replace("_", ""))
-                           .SequenceEqual(["File", "Define", "Edit", "Assign", "Run", "Result", "Post-Processing", "Display", "Design", "Help", "Optimization"]) &&
+                           .SequenceEqual(["File", "Define", "Edit", "Draw", "Assign", "Run", "Result", "Post-Processing", "Display", "Design", "Help", "Optimization"]) &&
                        window.MainMenu.Items[^2] is Separator && ReferenceEquals(window.MainMenu.Items[^1], TopMenu("Optimization")),
                     "The active menu bar ends with the standalone Optimization workspace after a separator; the legacy MB menu is absent");
                 Assert(!FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
@@ -1163,6 +1177,7 @@ internal static class Program
                 MainWindowModalChecks.Run();
                 ModelHistoryChecks.Run();
                 GeneratorFlagChecks.Run();
+                GeometryEditingUiChecks.Run();
                 RunMonitorChecks.Run();
                 SapImportChecks.Run();
                 EtabsImportChecks.Run();

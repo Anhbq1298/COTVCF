@@ -148,8 +148,10 @@ public sealed partial class MainViewModel
         // without members has no document to make: the window then holds an empty one, never the previous model's.
         ClearNativeDocument();
         importedIdentity = document.DocumentId.Value;
+        // the document's grids and levels come with it (the window's configuration has no place for them)
+        carriedReferenceGeometry = document.ReferenceGeometry.IsEmpty ? null : document.ReferenceGeometry;
         try { StartNewMcotisConfigurationFile(source, generator: null, migrateRestraints: false); }
-        finally { importedIdentity = null; }
+        finally { importedIdentity = null; carriedReferenceGeometry = null; }
         if (path is not null && McotisModelFile.IsModelFile(path)) femInputDatabasePath = path;
         RestoreOptimizationStudy(null, NativeDocumentSession.Document, "");
         FemProgressText = $"Opened {displayName} · {imported.Geometry.Points.Count} joints, {State.Geometry.Members.Count(member => member.Kind == MemberKind.Frame)} frames, " +

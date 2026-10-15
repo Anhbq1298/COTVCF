@@ -45,6 +45,14 @@
         <CheckBox x:Name="MemberSizes" Content="Member size (section name)" ToolTip="Label each frame and cable with its assigned SAP section (FEM panes)."/>
        </StackPanel>
       </GroupBox>
+      <!-- what of the model is drawn: a hidden kind is neither drawn nor picked, and stays in the model and its analysis -->
+      <GroupBox Header="Objects">
+       <StackPanel>
+        <CheckBox x:Name="ShowJoints" Content="Points (joints)" ToolTip="Hidden points are not drawn and cannot be picked or snapped to; they stay in the model and its analysis."/>
+        <CheckBox x:Name="ShowFrames" Content="Frames" ToolTip="Hidden frames are not drawn and cannot be picked; they stay in the model and its analysis."/>
+        <CheckBox x:Name="ShowCables" Content="Cables" ToolTip="Hidden cables are not drawn and cannot be picked; they stay in the model and its analysis."/>
+       </StackPanel>
+      </GroupBox>
      </StackPanel>
      <StackPanel Grid.Column="2">
       <GroupBox Header="Show">
@@ -70,7 +78,17 @@
         <RadioButton x:Name="PlaneXY" GroupName="ViewType" Content="Plan (XY)"/>
         <RadioButton x:Name="PlaneXZ" GroupName="ViewType" Content="Elevation (XZ)"/>
         <RadioButton x:Name="PlaneYZ" GroupName="ViewType" Content="Elevation (YZ)"/>
-        <RadioButton x:Name="Plane3D" GroupName="ViewType" Content="Extrude (3D, members to section size)"/>
+        <RadioButton x:Name="Plane3D" GroupName="ViewType" Content="3D (isometric)"/>
+        <CheckBox x:Name="Extruded3D" Content="Extruded member sections in 3D" Margin="22,2,0,4"
+                  ToolTip="Off shows thin member centre-lines, including in a deformed or modal view."/>
+       </StackPanel>
+      </GroupBox>
+      <!-- the grids and levels of the model (Define → Grid Systems / Levels): references, drawn under the model -->
+      <GroupBox Header="Grids &amp; Levels">
+       <StackPanel>
+        <CheckBox x:Name="ShowGridLines" Content="Grid lines" ToolTip="The lines of the visible grid systems — in plan, and where they cross an elevation. Snapping uses only what is shown."/>
+        <CheckBox x:Name="ShowLevels" Content="Levels in elevations" ToolTip="The visible levels as horizontal lines of the XZ and YZ elevations."/>
+        <CheckBox x:Name="ShowReferenceLabels" Content="Grid bubbles and level names"/>
        </StackPanel>
       </GroupBox>
      </StackPanel>

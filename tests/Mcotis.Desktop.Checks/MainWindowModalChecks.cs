@@ -81,10 +81,14 @@ internal static class MainWindowModalChecks
 
         // The same picker offers static deflections and solved modal cases, then asks for a mode number.
         var picker = new ShowResultsWindow(vm, _ => { }, ShowResultPickerKind.Deflection);
-        var modalChoice = picker.ShapeCasePicker.Items.Cast<object>().Single(item => item.ToString() == "MODES (modal)");
         Check(picker.ShapePicker.Visibility == System.Windows.Visibility.Visible &&
-              picker.ShapeCasePicker.Items.Count == vm.FemResultNames.Count + 1,
-            "Show Deformed Shape offers static and modal cases in one case dropdown");
+              picker.DeformationOptions.Visibility == System.Windows.Visibility.Visible &&
+              picker.CaseRadio.IsChecked == true && picker.ShapeCasePicker.Items.Count ==
+              vm.FemResultNames.Count(name => vm.FemCombinationRows.All(row => row.Name != name)),
+            "Show Deformed Shape opens with a case category and the display options");
+        picker.ModeRadio.IsChecked = true;
+        picker.ModeRadio.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        var modalChoice = picker.ShapeCasePicker.Items.Cast<object>().Single(item => item.ToString() == "MODES (modal)");
         picker.ShapeCasePicker.SelectedItem = modalChoice;
         Check(picker.ModePicker.Visibility == System.Windows.Visibility.Visible && picker.ModeNumberPicker.Items.Count == 6,
             "selecting a modal case asks which mode number to show");
@@ -92,6 +96,8 @@ internal static class MainWindowModalChecks
         picker.ApplySelection();
         Check(vm.SharedViewerIsModeShape && vm.ModalResults.SelectedMode == 2 && vm.SharedViewerFemResult is not null,
             "Show Deformed Shape applies the chosen modal mode to the shared viewer");
+        picker.CaseRadio.IsChecked = true;
+        picker.CaseRadio.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
         picker.ShapeCasePicker.SelectedItem = picker.ShapeCasePicker.Items.Cast<object>().First(item => item.ToString() == vm.FemResultNames[0]);
         picker.ApplySelection();
         Check(!vm.SharedViewerIsModeShape && vm.FemResultMode == FemResultMode.DeflectedShape,
@@ -145,6 +151,11 @@ internal static class MainWindowModalChecks
         vm.ShowModeShape();
         Check(vm.SharedViewerIsModeShape && vm.SharedViewerFemResult!.Joints.Any(joint => Math.Abs(joint.UYM) > 0),
             "the shared 3D viewer receives the selected mode's UY amplitude");
+        var nativeJoint = vm.ModalResults.ModeShape.OrderByDescending(joint => Math.Abs(joint.RX) + Math.Abs(joint.RY) + Math.Abs(joint.RZ)).First();
+        var displayedJoint = vm.SharedViewerFemResult!.Joints.Single(joint => joint.PointName == nativeJoint.Point);
+        Check(Math.Abs(nativeJoint.RX) + Math.Abs(nativeJoint.RY) + Math.Abs(nativeJoint.RZ) > 1e-12 &&
+              displayedJoint.RXRad == nativeJoint.RX && displayedJoint.RYRad == nativeJoint.RY && displayedJoint.RZRad == nativeJoint.RZ,
+            "the 3D viewer receives all three global modal rotations without changing the native sign convention");
     }
 
     private static void Check(bool condition, string name)

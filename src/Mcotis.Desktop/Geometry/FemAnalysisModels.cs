@@ -86,12 +86,23 @@ public sealed record FemJointResponse(string PointName, double UXM, double UZM, 
     /// <summary>Global Y displacement for a spatial result or mode shape; older planar results have zero.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public double UYM { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double RXRad { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double RZRad { get; init; }
+    /// <summary>Global right-hand rotation about Y; the legacy XZ slope is its negative.</summary>
+    [JsonIgnore]
+    public double RYRad => -RotationRad;
 }
 /// <param name="MomentYKNm">The moment of a support that holds the rotation in the plane (RY): positive counter-clockwise in the
 /// XZ elevation (X right, Z up), the sense of the joint slope — the opposite of the right-hand sense about +Y. 0 at a pin.</param>
 public sealed record FemSupportReaction(string PointName, double ReactionXKN, double ReactionZKN, double MomentYKNm = 0);
 /// <summary>Result at one frame mesh node: <see cref="Fraction"/> runs 0 (I-end) to 1 (J-end) along the frame.</summary>
-public sealed record FemFrameStation(double Fraction, double AxialKN, double ShearKN, double MomentKNm, double UXM, double UZM);
+public sealed record FemFrameStation(double Fraction, double AxialKN, double ShearKN, double MomentKNm, double UXM, double UZM)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double UYM { get; init; }
+}
 public sealed record FemFrameResponse(string MemberName, double AxialStartKN, double AxialEndKN,
     double ShearStartKN, double ShearEndKN,
     double MomentStartKNm, double MomentEndKNm,

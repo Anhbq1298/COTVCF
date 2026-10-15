@@ -55,6 +55,11 @@
               ToolTip="The load patterns of the model. Their loads are part of the VCF system: Edit → VCF System → Storey Force and Cable Force"/>
     <MenuItem Header="Load _Cases / Load Combinations" Tag="2" Click="FemPaneMenu_Click" IsEnabled="{Binding HasUsableModelGeometry}"
               ToolTip="Define the load cases: the default staged setup (Pretension → SLS / ULS), the cases saved from SAP2000, or your own"/>
+    <Separator/>
+    <MenuItem Header="_Grid Systems…" Click="GridSystems_Click" AutomationProperties.Name="Grid Systems"
+              ToolTip="Named Cartesian grid systems: X lines 1, 2, 3 … and Y lines A, B, C … at their coordinates, an origin and a rotation; Quick Grid from bays and spacings. References to draw and navigate on — a grid is no joint and no analysis input."/>
+    <MenuItem Header="_Levels…" Click="Levels_Click" AutomationProperties.Name="Levels"
+              ToolTip="The levels (storeys) of the model: name and elevation Z; Generate Levels from a base and storey heights. The XY plan navigator steps through them; changing a level moves no joint."/>
    </MenuItem>
    <MenuItem Header="_Edit">
     <MenuItem Header="_Undo" Command="{Binding UndoModelCommand}" InputGestureText="Ctrl+Z" AutomationProperties.Name="Undo"
@@ -69,8 +74,12 @@
     <MenuItem Header="Tied _Arch System…" Click="TiedArch_Click" AutomationProperties.Name="Tied Arch System"
               ToolTip="Build the tied arch system (TAS) from H1 (support → arch crown), H2 (support → top chord), the number of bays and their spacing, and the storeys above (SW, SDL, LL, floors) — with the SLS / ULS point load on each top chord joint and a live preview"/>
     <Separator/>
+    <MenuItem Header="_Move…" Click="MoveSelection_Click" IsEnabled="{Binding CanEditFemModel}" AutomationProperties.Name="Move"
+              ToolTip="Move the points, frames and cables selected on the model view by DX, DY, DZ: each point once, so the members on them follow. One Undo step."/>
+    <MenuItem Header="Move by _Two Points" Click="MoveTool_Click" IsEnabled="{Binding CanEditFemModel}" AutomationProperties.Name="Move by Two Points"
+              ToolTip="Move the selection on the model view: click a base point, then its destination (with snapping). Esc cancels."/>
     <MenuItem Header="_Delete" Click="DeleteSelection_Click" InputGestureText="Del" IsEnabled="{Binding CanEditFemModel}" AutomationProperties.Name="Delete"
-              ToolTip="Delete the joints, frames and cables selected on the model view (a deleted joint takes its connected members); SAP2000 is unchanged"/>
+              ToolTip="Delete the joints, frames and cables selected on the model view (a deleted joint takes its connected members; a deleted member leaves its end points). One Undo step; SAP2000 is unchanged"/>
     <Separator/>
     <MenuItem Header="Re-apply _Generator…" Click="ReapplyGenerator_Click" AutomationProperties.Name="Re-apply Generator"
               IsEnabled="{Binding CanReapplyGenerator}" ToolTipService.ShowOnDisabled="True"
@@ -78,6 +87,37 @@
     <MenuItem Header="Detac_h from Generator" Click="DetachGenerator_Click" AutomationProperties.Name="Detach from Generator"
               IsEnabled="{Binding CanDetachGenerator}" ToolTipService.ShowOnDisabled="True"
               ToolTip="{Binding GeneratorSummary, StringFormat='Make the model an ordinary model: it keeps everything but can no longer be optimized (Undo gives the flag back). {0}'}"/>
+   </MenuItem>
+   <!-- Draw (geometry editing plan): tools on the model view and forms by coordinates; every edit is one Undo step -->
+   <MenuItem Header="Dra_w" IsEnabled="{Binding CanDefineFemModel}">
+    <MenuItem Header="_Point" Click="DrawTool_Click" Tag="Point" IsEnabled="{Binding CanDrawGeometry}" AutomationProperties.Name="Draw Point"
+              ToolTip="Click on the model view to place points: on a grid crossing, on a member or anywhere in the plane shown (in 3D: on the work plane). Right-click ends."/>
+    <MenuItem Header="Point by _Coordinates…" Click="PointCoordinates_Click" IsEnabled="{Binding CanDrawGeometry}" AutomationProperties.Name="Point by Coordinates"
+              ToolTip="Add points by X, Y, Z — absolute, relative to a point, or on the plane shown — one at a time or pasted as a table"/>
+    <Separator/>
+    <MenuItem Header="_Frame" Click="DrawTool_Click" Tag="Frame" IsEnabled="{Binding CanDrawGeometry}" AutomationProperties.Name="Draw Frame"
+              ToolTip="Click the start and end of each frame on the model view; an end on a point uses it, an end in empty space makes a point. Draw Continuous chains them; right-click or Esc ends the chain."/>
+    <MenuItem Header="C_able" Click="DrawTool_Click" Tag="Cable" IsEnabled="{Binding CanDrawGeometry}" AutomationProperties.Name="Draw Cable"
+              ToolTip="As Draw Frame, for tension-only cables with the drawing cable section"/>
+    <MenuItem Header="Frame / Cable by Coo_rdinates…" Click="MemberCoordinates_Click" IsEnabled="{Binding CanDrawGeometry}" AutomationProperties.Name="Frame by Coordinates"
+              ToolTip="Add a frame or a cable from the coordinates of its ends I and J (or the points selected on the model view)"/>
+    <MenuItem Header="Draw C_ontinuous" IsCheckable="True" IsChecked="{Binding ChainDrawing}" AutomationProperties.Name="Draw Continuous"
+              ToolTip="On: the next member starts where the last one ended, until a right-click or Esc. Off: every member is two clicks."/>
+    <Separator/>
+    <MenuItem Header="_Generate Points at Grid Intersections…" Click="GenerateGridPoints_Click" IsEnabled="{Binding CanDrawGeometry}" AutomationProperties.Name="Generate Points at Grid Intersections"
+              ToolTip="A point at every crossing of the visible grid lines, at the levels chosen — never at a position that has a point already. One Undo step."/>
+    <Separator/>
+    <MenuItem Header="_Snap To" AutomationProperties.Name="Snap To">
+     <MenuItem Header="_Points and member ends" IsCheckable="True" IsChecked="{Binding SnapToPoints}"/>
+     <MenuItem Header="_Midpoints" IsCheckable="True" IsChecked="{Binding SnapToMidpoints}"/>
+     <MenuItem Header="_Intersections of members" IsCheckable="True" IsChecked="{Binding SnapToIntersections}"
+               ToolTip="Where two members cross in the plane. A joint drawn there connects to both: the analysis divides frames at the joints on them."/>
+     <MenuItem Header="_Grid intersections" IsCheckable="True" IsChecked="{Binding SnapToGrid}"/>
+     <MenuItem Header="Along grid _lines and levels" IsCheckable="True" IsChecked="{Binding SnapToGridLines}"/>
+     <MenuItem Header="P_erpendicular" IsCheckable="True" IsChecked="{Binding SnapPerpendicular}"/>
+     <MenuItem Header="_Nearest on a member" IsCheckable="True" IsChecked="{Binding SnapNearest}"/>
+     <MenuItem Header="_Ortho (also: hold Shift)" IsCheckable="True" IsChecked="{Binding SnapOrtho}"/>
+    </MenuItem>
    </MenuItem>
    <MenuItem Header="_Assign" IsEnabled="{Binding CanEditFemModel}">
     <MenuItem Header="_Joint">
@@ -146,12 +186,15 @@
               ToolTip="Label each frame and cable with its assigned SAP section."/>
     <MenuItem Header="Frame local _axes" IsCheckable="True" IsChecked="{Binding ShowFrameLocalAxes}"
               ToolTip="Show local 1/2/3 axes of frames; select frames to isolate their axes."/>
+    <MenuItem Header="_Extruded 3D members" IsCheckable="True" IsChecked="{Binding ShowExtruded3D}"
+              ToolTip="In 3D, show member section outlines when checked; show thin member centre-lines when unchecked."/>
     <MenuItem Header="_Dimensions" IsCheckable="True" IsChecked="{Binding ShowDimensions}"
               ToolTip="Dimension the model: bay spans and overall span below it; level heights, overall height and node elevations beside it"/>
     <MenuItem Header="_Loading" IsCheckable="True" IsChecked="{Binding ShowFemLoads}"
               ToolTip="Show the assigned model-load arrows; with a completed case selected, each arrow is labelled with its Fz."/>
     <Separator/>
-    <MenuItem Header="_View Options…" Click="ViewOptions_Click"/>
+    <MenuItem Header="_View Options…" Click="ViewOptions_Click" InputGestureText="Ctrl+W"
+              ToolTip="Display Options (Ctrl+W): labels, what is shown — points, frames, cables, grid lines, levels — dimensions, loads, the view type and the result display. A view only: nothing of the model or its analysis changes."/>
    </MenuItem>
    <MenuItem Header="Desi_gn" IsEnabled="{Binding HasUsableModelGeometry}">
     <MenuItem Header="_RC Column Design…" Tag="ReinforcedConcrete" Click="DesignMenu_Click" AutomationProperties.Name="RC Column Design"
@@ -195,10 +238,11 @@
    <DockPanel>
     <Grid VerticalAlignment="Center">
      <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="Auto" MaxWidth="300"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto" MaxWidth="260"/><ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="Auto" MaxWidth="300"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto" MaxWidth="260"/><ColumnDefinition Width="Auto"/>
      </Grid.ColumnDefinitions>
-     <!-- Tool icons (ETABS-like): file · run · zoom · projection · view options. Same commands as the menus. -->
-     <StackPanel x:Name="TopToolbar" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" AutomationProperties.Name="Toolbar">
+     <!-- Tool icons (ETABS-like): file · run · select and draw · zoom · plane · view · results. Same commands as the menus.
+          The one place for the view: the model view itself carries no controls (ShowViewChrome off). It wraps when narrow. -->
+     <WrapPanel x:Name="TopToolbar" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,8,0" AutomationProperties.Name="Toolbar">
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE8A5;" Command="{Binding NewConfig}" ToolTip="New Config (File → New Config)" AutomationProperties.Name="New Config"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE8E5;" Command="{Binding LoadFemModel}" ToolTip="Open — Load MCOTiS Config (File → Load Config)" AutomationProperties.Name="Load Config"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE74E;" Command="{Binding SaveFemModel}" ToolTip="Save MCOTiS Config (File → Save Config · Ctrl+S)" AutomationProperties.Name="Save Config"/>
@@ -212,9 +256,14 @@
       <Border Style="{StaticResource ToolbarSeparator}"/>
       <!-- SAP2000-style tools: Select (default — a click selects joints / members, a drag draws a window) and Pan -->
       <ToggleButton Style="{StaticResource ToolbarDrawingToggle}" IsEnabled="{Binding ShowSharedViewer}"
-                    IsChecked="{Binding PanMode, ElementName=SharedViewer, Converter={x:Static p:InverseBoolConverter.Instance}}"
                     ToolTip="Select (V, default) — left-click a point, frame or cable to select it (again to deselect), right-click it for its information; drag a window: left to right selects what is inside, right to left also what it crosses. Works in the 3D view too. Esc clears the selection."
                     Click="SelectTool_Click" AutomationProperties.Name="Select">
+       <ToggleButton.IsChecked>
+        <MultiBinding Converter="{x:Static p:SelectToolConverter.Instance}" Mode="OneWay">
+         <Binding Path="PanMode" ElementName="SharedViewer"/>
+         <Binding Path="DrawingTool"/>
+        </MultiBinding>
+       </ToggleButton.IsChecked>
        <Path Data="M3,1 L3,14 L6.4,10.8 L8.8,15.5 L10.9,14.5 L8.5,9.9 L13,9.9 Z" Fill="{StaticResource Accent}" Stroke="{StaticResource Accent}" StrokeThickness="0.6" StrokeLineJoin="Round"/>
       </ToggleButton>
       <ToggleButton Style="{StaticResource ToolbarDrawingToggle}" IsEnabled="{Binding ShowSharedViewer}" IsChecked="{Binding PanMode, ElementName=SharedViewer}"
@@ -227,6 +276,41 @@
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE894;" Click="ClearSelection_Click" IsEnabled="{Binding ShowSharedViewer}" FontSize="12"
               ToolTip="Clear Selection (Esc)" AutomationProperties.Name="Clear Selection"/>
       <Border Style="{StaticResource ToolbarSeparator}"/>
+      <!-- drawing tools (Draw menu): each edit is one Undo step; right-click or Esc ends a chain -->
+      <ToggleButton Style="{StaticResource ToolbarDrawingToggle}" Tag="Point" IsEnabled="{Binding CanDrawGeometry}" Click="DrawTool_Click"
+                    IsChecked="{Binding DrawingTool, Mode=TwoWay, Converter={x:Static p:DrawingToolConverter.Instance}, ConverterParameter={x:Static c:DrawingTool.Point}}"
+                    ToolTip="Draw Point — click to place points on the plane shown (Draw → Point)" AutomationProperties.Name="Point tool">
+       <Canvas Width="16" Height="16"><Ellipse Canvas.Left="5" Canvas.Top="5" Width="6" Height="6" Fill="{StaticResource Accent}"/>
+        <Path Data="M8,0.5 L8,3.5 M8,12.5 L8,15.5 M0.5,8 L3.5,8 M12.5,8 L15.5,8" Stroke="{StaticResource Accent}" StrokeThickness="1.2"/></Canvas>
+      </ToggleButton>
+      <ToggleButton Style="{StaticResource ToolbarDrawingToggle}" Tag="Frame" IsEnabled="{Binding CanDrawGeometry}" Click="DrawTool_Click"
+                    IsChecked="{Binding DrawingTool, Mode=TwoWay, Converter={x:Static p:DrawingToolConverter.Instance}, ConverterParameter={x:Static c:DrawingTool.Frame}}"
+                    ToolTip="Draw Frame — click its start and end; Draw Continuous chains them (Draw → Frame)" AutomationProperties.Name="Frame tool">
+       <Canvas Width="16" Height="16"><Path Data="M3,13 L13,3" Stroke="{StaticResource Accent}" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+        <Ellipse Canvas.Left="1" Canvas.Top="11" Width="4" Height="4" Fill="White" Stroke="{StaticResource Accent}"/><Ellipse Canvas.Left="11" Canvas.Top="1" Width="4" Height="4" Fill="White" Stroke="{StaticResource Accent}"/></Canvas>
+      </ToggleButton>
+      <ToggleButton Style="{StaticResource ToolbarDrawingToggle}" Tag="Cable" IsEnabled="{Binding CanDrawGeometry}" Click="DrawTool_Click"
+                    IsChecked="{Binding DrawingTool, Mode=TwoWay, Converter={x:Static p:DrawingToolConverter.Instance}, ConverterParameter={x:Static c:DrawingTool.Cable}}"
+                    ToolTip="Draw Cable — as Draw Frame, a tension-only cable (Draw → Cable)" AutomationProperties.Name="Cable tool">
+       <Canvas Width="16" Height="16"><Path Data="M3,13 L13,3" Stroke="{StaticResource AccentBright}" StrokeThickness="1.8" StrokeDashArray="2,1.5"/>
+        <Ellipse Canvas.Left="1" Canvas.Top="11" Width="4" Height="4" Fill="White" Stroke="{StaticResource AccentBright}"/><Ellipse Canvas.Left="11" Canvas.Top="1" Width="4" Height="4" Fill="White" Stroke="{StaticResource AccentBright}"/></Canvas>
+      </ToggleButton>
+      <ToggleButton Style="{StaticResource ToolbarDrawingToggle}" Tag="Move" IsEnabled="{Binding CanEditFemModel}" Click="DrawTool_Click"
+                    IsChecked="{Binding DrawingTool, Mode=TwoWay, Converter={x:Static p:DrawingToolConverter.Instance}, ConverterParameter={x:Static c:DrawingTool.Move}}"
+                    ToolTip="Move by two points — select first, then click a base point and its destination (Edit → Move… by DX, DY, DZ)" AutomationProperties.Name="Move tool">
+       <Canvas Width="16" Height="16"><Rectangle Canvas.Left="1" Canvas.Top="8" Width="7" Height="7" Stroke="{StaticResource Accent}" StrokeDashArray="1.5,1"/>
+        <Path Data="M5,11 L14,2 M9,2 L14,2 L14,7" Stroke="{StaticResource Accent}" StrokeThickness="1.6" StrokeLineJoin="Round"/></Canvas>
+      </ToggleButton>
+      <Button Style="{StaticResource ToolbarButton}" Content="&#xE74D;" FontSize="13" Click="DeleteSelection_Click" IsEnabled="{Binding CanEditFemModel}"
+              ToolTip="Delete the selection (Del) — shows what goes with it first; one Undo step" AutomationProperties.Name="Delete selection"/>
+      <!-- the section a drawn member takes, shown while its tool is on -->
+      <ComboBox Width="150" Margin="4,0,0,0" VerticalAlignment="Center" ItemsSource="{Binding FrameSections}" DisplayMemberPath="Name" SelectedValuePath="Name"
+                SelectedValue="{Binding DrawFrameSection, Mode=TwoWay}" Visibility="{Binding IsDrawingFrame, Converter={StaticResource BoolVisibility}}"
+                AutomationProperties.Name="Drawing frame section" ToolTip="The section a drawn frame takes (Assign → Frame → Frame Sections changes it afterwards)"/>
+      <ComboBox Width="130" Margin="4,0,0,0" VerticalAlignment="Center" ItemsSource="{Binding CableSections}" DisplayMemberPath="Name" SelectedValuePath="Name"
+                SelectedValue="{Binding DrawCableSection, Mode=TwoWay}" Visibility="{Binding IsDrawingCable, Converter={StaticResource BoolVisibility}}"
+                AutomationProperties.Name="Drawing cable section" ToolTip="The section a drawn cable takes"/>
+      <Border Style="{StaticResource ToolbarSeparator}"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE9A6;" Click="ToolbarFit_Click" IsEnabled="{Binding ShowSharedViewer}" ToolTip="Zoom extents / fit (Home)" AutomationProperties.Name="Zoom extents"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE8A3;" Tag="1.25" Click="ToolbarZoom_Click" IsEnabled="{Binding ShowSharedViewer}" ToolTip="Zoom in (+)" AutomationProperties.Name="Zoom in"/>
       <Button Style="{StaticResource ToolbarButton}" Content="&#xE71F;" Tag="0.8" Click="ToolbarZoom_Click" IsEnabled="{Binding ShowSharedViewer}" ToolTip="Zoom out (−)" AutomationProperties.Name="Zoom out"/>
@@ -235,6 +319,20 @@
       <Button Style="{StaticResource ToolbarTextButton}" Content="xy" Tag="XY" Click="ToolbarPlane_Click" IsEnabled="{Binding ShowSharedViewer}" ToolTip="Plan view (XY)" AutomationProperties.Name="XY view"/>
       <Button Style="{StaticResource ToolbarTextButton}" Content="xz" Tag="XZ" Click="ToolbarPlane_Click" IsEnabled="{Binding ShowSharedViewer}" ToolTip="Elevation view (XZ)" AutomationProperties.Name="XZ view"/>
       <Button Style="{StaticResource ToolbarTextButton}" Content="yz" Tag="YZ" Click="ToolbarPlane_Click" IsEnabled="{Binding ShowSharedViewer}" ToolTip="Elevation view (YZ)" AutomationProperties.Name="YZ view"/>
+      <!-- the plane picker of xy / xz / yz: the levels (xy) or the grid lines (xz, yz) defined, the coordinates of the
+           points, All (projection), or a typed coordinate; hidden in 3D (geometry editing: one view context) -->
+      <StackPanel x:Name="ToolbarPlaneNavigator" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,0,0"
+                  Visibility="{Binding ViewPlaneIsPlane, Converter={StaticResource BoolVisibility}}">
+       <TextBlock Text="{Binding ViewPlaneAxisLabel}" FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" Margin="0,0,2,0"/>
+       <Button Style="{StaticResource ToolbarButton}" Content="&#xE76B;" FontSize="11" Width="20" Click="PreviousPlane_Click"
+               ToolTip="Previous level or grid line (Ctrl+Page Down)" AutomationProperties.Name="Previous plane"/>
+       <ComboBox x:Name="ToolbarPlaneChoiceBox" Width="200" IsEditable="True" VerticalAlignment="Center" ItemsSource="{Binding ViewPlaneChoices}"
+                 SelectedItem="{Binding SelectedViewPlaneChoice, Mode=TwoWay}" KeyDown="PlaneChoice_KeyDown" LostKeyboardFocus="PlaneChoice_LostFocus"
+                 AutomationProperties.Name="View plane"
+                 ToolTip="The plane shown: a level (xy), a grid line (xz, yz), a coordinate the model's points sit at, or All — the whole model projected. Type a coordinate in metres for any other plane. A member is shown only when it lies in the plane. In 3D the last plane is the work plane a drawing tool uses."/>
+       <Button Style="{StaticResource ToolbarButton}" Content="&#xE76C;" FontSize="11" Width="20" Click="NextPlane_Click"
+               ToolTip="Next level or grid line (Ctrl+Page Up)" AutomationProperties.Name="Next plane"/>
+      </StackPanel>
       <Border Style="{StaticResource ToolbarSeparator}"/>
       <Button Style="{StaticResource ToolbarDrawingButton}" Click="ShowUndeformed_Click" IsEnabled="{Binding HasUsableModelGeometry}"
               ToolTip="Show Undeformed Shape — clear the result display and show the model (Display → Show Undeformed Shape, F4)" AutomationProperties.Name="Show Undeformed Shape">
@@ -272,7 +370,26 @@
         <Path Data="M8,7 L8,1 M8,1 L5.5,4 M8,1 L10.5,4" Stroke="{StaticResource AccentBright}" StrokeThickness="1.6" Fill="Transparent"/>
        </Canvas>
       </Button>
-     </StackPanel>
+      <!-- N / V / M of the case or combination chosen, in any view: the shear and moment of the plane shown -->
+      <ComboBox Width="150" Margin="6,0,2,0" VerticalAlignment="Center" ItemsSource="{Binding FemResultNames}" SelectedItem="{Binding SelectedFemResultName, Mode=TwoWay}"
+                IsEnabled="{Binding HasFemResults}" ToolTipService.ShowOnDisabled="True" AutomationProperties.Name="Result case"
+                ToolTip="The load case or combination the N, V and M buttons draw (Run FEM Analysis first)"/>
+      <ToggleButton Style="{StaticResource ToolbarDrawingToggle}" Tag="AxialForce" Click="ForceButton_Click" IsEnabled="{Binding HasFemResults}"
+                    IsChecked="{Binding ShowingAxial, Mode=OneWay}" AutomationProperties.Name="Axial force"
+                    ToolTip="Axial force N of the case chosen (frames and cables), tension positive">
+       <TextBlock Text="N" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Accent}"/>
+      </ToggleButton>
+      <ToggleButton Style="{StaticResource ToolbarDrawingToggle}" Tag="Shear" Click="ForceButton_Click" IsEnabled="{Binding HasFemResults}"
+                    IsChecked="{Binding ShowingShear, Mode=OneWay}" AutomationProperties.Name="Shear force"
+                    ToolTip="Shear force V of the case chosen, in the plane shown">
+       <TextBlock Text="V" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Accent}"/>
+      </ToggleButton>
+      <ToggleButton Style="{StaticResource ToolbarDrawingToggle}" Tag="BendingMoment" Click="ForceButton_Click" IsEnabled="{Binding HasFemResults}"
+                    IsChecked="{Binding ShowingMoment, Mode=OneWay}" AutomationProperties.Name="Bending moment"
+                    ToolTip="Bending moment M of the case chosen, about the normal of the plane shown">
+       <TextBlock Text="M" FontWeight="Bold" FontSize="13" Foreground="{StaticResource Accent}"/>
+      </ToggleButton>
+     </WrapPanel>
     </Grid>
    </DockPanel>
   </Border>
@@ -283,6 +400,9 @@
     <ProgressBar Height="2" IsIndeterminate="True" Visibility="{Binding IsBusy, Converter={StaticResource BoolVisibility}}" Margin="0,0,0,4"/>
     <DockPanel>
      <TextBlock DockPanel.Dock="Right" Text="{Binding State.Units}" Style="{StaticResource MonoSmall}" Margin="16,0,0,0"/>
+     <!-- plane · cursor X Y Z · snap · mode, as the model view reads them (geometry editing) -->
+     <TextBlock x:Name="CursorStatus" DockPanel.Dock="Right" Style="{StaticResource MonoSmall}" Margin="16,0,0,0" MaxWidth="560" TextTrimming="CharacterEllipsis"
+                ToolTip="The plane shown, where the cursor is in the model (snapped while a drawing tool is on), the snap and the tool" AutomationProperties.Name="Cursor coordinates"/>
      <!-- what is selected on the model view (2D or 3D), by kind of object -->
      <TextBlock x:Name="SelectionStatus" DockPanel.Dock="Right" Style="{StaticResource MonoSmall}" Margin="16,0,0,0" Text="Selected: 0 Frames · 0 Cables · 0 Points · 0 Shells"
                 ToolTip="The frames, cables, points and shells selected on the model view" AutomationProperties.Name="Selection" AutomationProperties.LiveSetting="Polite"/>
@@ -684,11 +804,35 @@
   <GridSplitter x:Name="ViewerSplitter" Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="{StaticResource Border}"/>
 
   <DockPanel x:Name="SharedViewerPane" Grid.Column="2" Margin="10,10,10,10" LastChildFill="True">
+   <!-- the view plane (geometry editing, slice 01): where the plane shown is — a named level or grid line, a coordinate of
+        the model's points, or the whole model projected — and previous / next. The same view as the projection box. -->
+   <WrapPanel x:Name="PlaneNavigator" DockPanel.Dock="Top" Margin="0,0,0,6" Visibility="{Binding HasUsableModelGeometry, Converter={StaticResource BoolVisibility}}">
+    <TextBlock Text="PLANE" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+    <TextBlock Text="{Binding ViewPlaneAxisLabel}" FontFamily="{StaticResource MonoFont}" FontSize="11" VerticalAlignment="Center" MinWidth="26" Margin="0,0,2,0"/>
+    <Button Style="{StaticResource ToolbarButton}" Content="&#xE76B;" FontSize="12" Click="PreviousPlane_Click" IsEnabled="{Binding ViewPlaneIsPlane}"
+            ToolTip="Previous level or grid line (Ctrl+Page Down)" AutomationProperties.Name="Previous plane"/>
+    <ComboBox x:Name="PlaneChoiceBox" Width="240" IsEditable="True" ItemsSource="{Binding ViewPlaneChoices}" SelectedItem="{Binding SelectedViewPlaneChoice, Mode=TwoWay}"
+              IsEnabled="{Binding ViewPlaneIsPlane}" KeyDown="PlaneChoice_KeyDown" LostKeyboardFocus="PlaneChoice_LostFocus" AutomationProperties.Name="View plane"
+              ToolTip="The plane shown: a level (XY), a grid line (XZ, YZ), a coordinate the model's points sit at, or All — the whole model projected. Type a coordinate in metres for any other plane. A member is shown only when it lies in the plane. In 3D the last plane is the work plane a drawing tool uses."/>
+    <Button Style="{StaticResource ToolbarButton}" Content="&#xE76C;" FontSize="12" Click="NextPlane_Click" IsEnabled="{Binding ViewPlaneIsPlane}"
+            ToolTip="Next level or grid line (Ctrl+Page Up)" AutomationProperties.Name="Next plane"/>
+    <Border Style="{StaticResource ToolbarSeparator}"/>
+    <TextBlock Text="DRAW WITH" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+    <ComboBox Width="150" ItemsSource="{Binding FrameSections}" DisplayMemberPath="Name" SelectedValuePath="Name" SelectedValue="{Binding DrawFrameSection, Mode=TwoWay}"
+              AutomationProperties.Name="Drawing frame section" ToolTip="The section a drawn frame takes (Assign → Frame → Frame Sections changes it afterwards)"/>
+    <ComboBox Width="110" Margin="4,0,0,0" ItemsSource="{Binding CableSections}" DisplayMemberPath="Name" SelectedValuePath="Name" SelectedValue="{Binding DrawCableSection, Mode=TwoWay}"
+              AutomationProperties.Name="Drawing cable section" ToolTip="The section a drawn cable takes"/>
+   </WrapPanel>
    <TextBlock DockPanel.Dock="Top" Text="{Binding SharedViewerCaption}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
    <TextBlock DockPanel.Dock="Bottom" Text="{Binding SharedViewerHint}" Style="{StaticResource Hint}" Margin="2,6,0,0"/>
    <Grid>
-    <c:Structural2DViewer x:Name="SharedViewer" ShowPointLabels="True" ShowDimensions="{Binding ShowDimensions, Mode=TwoWay}" ShowFrameLocalAxes="{Binding ShowFrameLocalAxes, Mode=TwoWay}" SpanPoints="{Binding SharedViewerSpanPoints}"
-                          Model="{Binding SharedViewerModel}"
+    <c:Structural2DViewer x:Name="SharedViewer" ShowPointLabels="True" ShowDimensions="{Binding ShowDimensions, Mode=TwoWay}" ShowFrameLocalAxes="{Binding ShowFrameLocalAxes, Mode=TwoWay}" ShowExtruded3D="{Binding ShowExtruded3D, Mode=TwoWay}" SpanPoints="{Binding SharedViewerSpanPoints}"
+                          Model="{Binding SharedViewerVisibleModel}" ExtentsModel="{Binding SharedViewerModel}" KeepViewOnEdit="True" LeftInset="44"
+                          ViewPlane="{Binding ViewPlane, Mode=TwoWay}" PlaneCoordinate="{Binding SharedViewerPlaneCoordinate}" ViewTitle="{Binding ViewPlaneTitle}"
+                          ReferenceGeometry="{Binding SharedViewerReference}" WorkPlane="{Binding SharedViewerWorkPlane}" WorkPlaneCoordinate="{Binding SharedViewerWorkCoordinate}"
+                          ShowJoints="{Binding ShowJoints}" ShowFrames="{Binding ShowFrames}" ShowCables="{Binding ShowCables}"
+                          ShowGridLines="{Binding ShowGridLines}" ShowLevels="{Binding ShowLevels}" ShowReferenceLabels="{Binding ShowReferenceLabels}"
+                          DrawingTool="{Binding DrawingTool, Mode=TwoWay}" SnapModes="{Binding SnapModes}" ChainDrawing="{Binding ChainDrawing}"
                           AppliedPoints="{Binding SharedViewerAppliedPoints}"
                           SelectedAppliedPoint="{Binding SelectedAppliedPoint, Mode=TwoWay}"
                           TopPoints="{Binding SharedViewerTopPoints}"
@@ -707,6 +851,42 @@
                           SectionDrawings="{Binding SharedViewerSectionDrawings}"
                           SelectedCable="{Binding SelectedCable, Mode=TwoWay}"
                           AutomationProperties.Name="Shared structural model preview"/>
+    <!-- the drawing tools (CAD-like strip at the left of the view): Select · Point · Frame · Cable · Move · Delete -->
+    <Border x:Name="DrawToolStrip" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="6,0,0,0" Padding="2" CornerRadius="3"
+            Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1"
+            Visibility="{Binding HasUsableModelGeometry, Converter={StaticResource BoolVisibility}}" AutomationProperties.Name="Drawing tools">
+     <StackPanel>
+      <StackPanel.Resources>
+       <Style TargetType="ToggleButton" BasedOn="{StaticResource ToolbarDrawingToggle}"><Setter Property="Margin" Value="0,1"/></Style>
+      </StackPanel.Resources>
+      <ToggleButton IsChecked="{Binding DrawingTool, Mode=TwoWay, Converter={x:Static p:DrawingToolConverter.Instance}, ConverterParameter={x:Static c:DrawingTool.None}}"
+                    Click="SelectTool_Click" ToolTip="Select (V) — click or drag a window on the model view" AutomationProperties.Name="Select tool">
+       <Path Data="M3,1 L3,14 L6.4,10.8 L8.8,15.5 L10.9,14.5 L8.5,9.9 L13,9.9 Z" Fill="{StaticResource Accent}" Stroke="{StaticResource Accent}" StrokeThickness="0.6" StrokeLineJoin="Round"/>
+      </ToggleButton>
+      <ToggleButton IsEnabled="{Binding CanDrawGeometry}" IsChecked="{Binding DrawingTool, Mode=TwoWay, Converter={x:Static p:DrawingToolConverter.Instance}, ConverterParameter={x:Static c:DrawingTool.Point}}"
+                    ToolTip="Draw Point — click to place points (Draw → Point)" AutomationProperties.Name="Point tool">
+       <Canvas Width="16" Height="16"><Ellipse Canvas.Left="5" Canvas.Top="5" Width="6" Height="6" Fill="{StaticResource Accent}"/>
+        <Path Data="M8,0.5 L8,3.5 M8,12.5 L8,15.5 M0.5,8 L3.5,8 M12.5,8 L15.5,8" Stroke="{StaticResource Accent}" StrokeThickness="1.2"/></Canvas>
+      </ToggleButton>
+      <ToggleButton IsEnabled="{Binding CanDrawGeometry}" IsChecked="{Binding DrawingTool, Mode=TwoWay, Converter={x:Static p:DrawingToolConverter.Instance}, ConverterParameter={x:Static c:DrawingTool.Frame}}"
+                    ToolTip="Draw Frame — click its start and end; Draw Continuous chains them (Draw → Frame)" AutomationProperties.Name="Frame tool">
+       <Canvas Width="16" Height="16"><Path Data="M3,13 L13,3" Stroke="{StaticResource Accent}" StrokeThickness="2.2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+        <Ellipse Canvas.Left="1" Canvas.Top="11" Width="4" Height="4" Fill="White" Stroke="{StaticResource Accent}"/><Ellipse Canvas.Left="11" Canvas.Top="1" Width="4" Height="4" Fill="White" Stroke="{StaticResource Accent}"/></Canvas>
+      </ToggleButton>
+      <ToggleButton IsEnabled="{Binding CanDrawGeometry}" IsChecked="{Binding DrawingTool, Mode=TwoWay, Converter={x:Static p:DrawingToolConverter.Instance}, ConverterParameter={x:Static c:DrawingTool.Cable}}"
+                    ToolTip="Draw Cable — as Draw Frame, a tension-only cable (Draw → Cable)" AutomationProperties.Name="Cable tool">
+       <Canvas Width="16" Height="16"><Path Data="M3,13 L13,3" Stroke="{StaticResource AccentBright}" StrokeThickness="1.8" StrokeDashArray="2,1.5"/>
+        <Ellipse Canvas.Left="1" Canvas.Top="11" Width="4" Height="4" Fill="White" Stroke="{StaticResource AccentBright}"/><Ellipse Canvas.Left="11" Canvas.Top="1" Width="4" Height="4" Fill="White" Stroke="{StaticResource AccentBright}"/></Canvas>
+      </ToggleButton>
+      <ToggleButton IsEnabled="{Binding CanEditFemModel}" IsChecked="{Binding DrawingTool, Mode=TwoWay, Converter={x:Static p:DrawingToolConverter.Instance}, ConverterParameter={x:Static c:DrawingTool.Move}}"
+                    ToolTip="Move by two points — select first, then click a base point and its destination (Edit → Move by Two Points; Edit → Move… by DX, DY, DZ)" AutomationProperties.Name="Move tool">
+       <Canvas Width="16" Height="16"><Rectangle Canvas.Left="1" Canvas.Top="8" Width="7" Height="7" Stroke="{StaticResource Accent}" StrokeDashArray="1.5,1"/>
+        <Path Data="M5,11 L14,2 M9,2 L14,2 L14,7" Stroke="{StaticResource Accent}" StrokeThickness="1.6" StrokeLineJoin="Round"/></Canvas>
+      </ToggleButton>
+      <Button Style="{StaticResource ToolbarButton}" Content="&#xE74D;" FontSize="13" Margin="0,1" Click="DeleteSelection_Click" IsEnabled="{Binding CanEditFemModel}"
+              ToolTip="Delete the selection (Del) — shows what goes with it first; one Undo step" AutomationProperties.Name="Delete selection"/>
+     </StackPanel>
+    </Border>
     <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="390" MaxWidth="390" Padding="18,14"
             Background="{StaticResource Raised}" BorderBrush="{StaticResource Border}" BorderThickness="1" CornerRadius="4"
             Visibility="{Binding ShowBlankModelChoice, Converter={StaticResource BoolVisibility}}">

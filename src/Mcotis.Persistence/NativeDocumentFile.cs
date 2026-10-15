@@ -40,6 +40,38 @@ internal sealed class FileDto
     public required Dictionary<string, string> ApplicationData { get; init; }
     /// <summary>Schema 6. The parametric generator the model was built by; null when none.</summary>
     public GeneratorDto? Generator { get; init; }
+    /// <summary>Schema 7. The grid systems and levels of the model: reference data, no part of the analysis input.</summary>
+    public required ReferenceGeometryDto ReferenceGeometry { get; init; }
+}
+
+internal sealed class ReferenceGeometryDto
+{
+    public required List<GridSystemDto> GridSystems { get; init; }
+    public required List<LevelDto> Levels { get; init; }
+}
+
+internal sealed class GridSystemDto
+{
+    public required string Name { get; init; }
+    public required VectorDto Origin { get; init; }
+    public required double RotationDeg { get; init; }
+    public required bool Visible { get; init; }
+    public required List<GridLineDto> XLines { get; init; }
+    public required List<GridLineDto> YLines { get; init; }
+}
+
+internal sealed class GridLineDto
+{
+    public required string Label { get; init; }
+    public required double Coordinate { get; init; }
+    public required bool Visible { get; init; }
+}
+
+internal sealed class LevelDto
+{
+    public required string Name { get; init; }
+    public required double Elevation { get; init; }
+    public required bool Visible { get; init; }
 }
  sealed class GeneratorDto
 {

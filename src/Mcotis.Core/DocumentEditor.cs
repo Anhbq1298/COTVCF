@@ -36,6 +36,7 @@ public sealed class DocumentEditor
     private AnalysisSettings settings;
     private ImmutableSortedDictionary<string, string>.Builder applicationData;
     private GeneratorOrigin? generator;
+    private ReferenceGeometry referenceGeometry;
     private bool closed, faulted, sequenceRestored;
 
     internal DocumentEditor(ModelDocument source)
@@ -64,6 +65,7 @@ public sealed class DocumentEditor
         settings = data.Settings;
         applicationData = data.ApplicationData.ToBuilder();
         generator = data.Generator;
+        referenceGeometry = data.ReferenceGeometry;
     }
 
     // ---- The working state, for an edit that reads what it has built so far ----
@@ -84,6 +86,7 @@ public sealed class DocumentEditor
     public AnalysisSettings Settings => settings;
     public IReadOnlyDictionary<string, string> ApplicationData => applicationData;
     public GeneratorOrigin? Generator => generator;
+    public ReferenceGeometry ReferenceGeometry => referenceGeometry;
 
     public Restraint RestraintOf(ObjectId pointId) => restraints.TryGetValue(pointId, out var restraint) ? restraint : Restraint.Free;
     public FrameAssignment AssignmentOfFrame(ObjectId frameId) => frameAssignments.TryGetValue(frameId, out var assignment) ? assignment : FrameAssignment.Default;
@@ -320,10 +323,25 @@ public sealed class DocumentEditor
         changes.Record(default, ObjectKind.Settings, ChangeAspects.Definition);
     }
 
+    /// <summary>Sets the grid systems and levels of the model (<see cref="ModelDocument.ReferenceGeometry"/>) in their
+    /// stored form (<see cref="ReferenceGeometry.Normalized"/>). Definitions that are not valid refuse the edit with every
+    /// problem; nothing else of the document changes — no point is made or moved by a grid.</summary>
+    public void SetReferenceGeometry(ReferenceGeometry value)
+    {
+        Open();
+        ArgumentNullException.ThrowIfNull(value);
+        ReferenceGeometry normalized;
+        try { normalized = value.Normalized(); }
+        catch (DocumentException ex) { throw Fail(ex.Error, ex.Message); }
+        if (normalized.Equals(referenceGeometry)) return;
+        referenceGeometry = normalized;
+        changes.Record(ReferenceGeometry.ChangeId, ObjectKind.ReferenceGeometry, ChangeAspects.Definition);
+    }
+
     /// <summary>
     /// Makes the content of the edit that of <paramref name="target"/> — a document of the same model (the same
     /// <see cref="ModelDocument.DocumentId"/>) — as one edit: every object, definition, assignment, load, setting, name and
-    /// the application data and generator. What differs is recorded object by object, so Undo returns to the content before
+    /// the application data, generator and reference geometry. What differs is recorded object by object, so Undo returns to the content before
     /// and a panel refreshes what changed. An application that still keeps a model of its own writes it into its document
     /// this way while it moves onto the document.
     /// </summary>
@@ -371,6 +389,7 @@ public sealed class DocumentEditor
         foreach (var key in applicationData.Keys.Where(key => !data.ApplicationData.ContainsKey(key)).ToArray()) SetApplicationData(key, null);
         foreach (var (key, value) in data.ApplicationData) SetApplicationData(key, value);
         SetGenerator(data.Generator);
+        SetReferenceGeometry(data.ReferenceGeometry);
         // names and the numbering of their series are those of the target
         foreach (var scope in target.Names.Scopes.Keys) names[scope] = target.Names.Scope(scope).ToBuilder();
         foreach (var scope in source.Names.Scopes.Keys.Where(scope => !target.Names.Scopes.ContainsKey(scope))) names[scope] = NameIndex.EmptyScope.ToBuilder();
@@ -465,7 +484,7 @@ public sealed class DocumentEditor
             cableSections.ToImmutable(), shellSections.ToImmutable(), loadPatterns.ToImmutable(), loadCases.ToImmutable(),
             loadCombinations.ToImmutable(), restraints.ToImmutable(), frameAssignments.ToImmutable(),
             cableAssignments.ToImmutable(), shellAssignments.ToImmutable(), loads.ToImmutable(), settings, massSources.ToImmutable(),
-            jointMassAssignments.ToImmutable(), applicationData.ToImmutable(), generator),
+            jointMassAssignments.ToImmutable(), applicationData.ToImmutable(), generator, referenceGeometry),
             new NameIndex(scopes, sequence.ToImmutable()));
 
         var errors = DocumentValidator.Validate(document).Where(issue => issue.Severity == ValidationSeverity.Error).ToArray();

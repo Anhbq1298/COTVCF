@@ -18,6 +18,7 @@ internal static class Program
             ("Analysis input and result state", ResultStateChecks.Run),
             ("Native file", PersistenceChecks.Run),
             ("Application data, generator flag and content replacement", DocumentDataChecks.Run),
+            ("Geometry editing: grids and levels, draw, move and delete", GeometryEditingChecks.Run),
             ("Load cases: kinds, references, run order, schema migrations and what is not solved yet", CaseStateChecks.Run),
             ("3D topology and DOF compilation", DofCompilationChecks.Run),
             ("Spatial linear static engineering benchmarks", full ? SpatialStaticChecks.Run : SpatialStaticChecks.RunSmoke),
@@ -85,6 +86,7 @@ internal static class Check
     /// schema version. The cases must be ones those schemas could hold: linear or nonlinear static.</summary>
     public static void LoadCasesAsSchema3(System.Text.Json.Nodes.JsonObject file)
     {
+        file.Remove("referenceGeometry");
         file.Remove("applicationData");
         file.Remove("generator");
         file.Remove("jointMassAssignments");
@@ -110,7 +112,7 @@ internal static class Check
             Same(a.ShellSections, b.ShellSections) && Same(a.Restraints, b.Restraints) && Same(a.FrameAssignments, b.FrameAssignments) &&
             Same(a.CableAssignments, b.CableAssignments) && Same(a.ShellAssignments, b.ShellAssignments) &&
             Same(a.LoadPatterns, b.LoadPatterns) && Same(a.Loads, b.Loads) && Same(a.LoadCases, b.LoadCases) && Same(a.LoadCombinations, b.LoadCombinations) &&
-            Same(a.MassSources, b.MassSources);
+            Same(a.MassSources, b.MassSources) && a.ReferenceGeometry.Equals(b.ReferenceGeometry);
     }
 }
 

@@ -207,8 +207,8 @@ earlier tall-header / large-button / blue-block look.
 
 ## Navigation Style — desktop menu bar (ETABS-like)
 
-- A menu bar (`MainMenu`, top of the window) replaces the left tab rail: **File · Define · Edit · Assign · Run ·
-  Result · Post-Processing · Display · Design · Help | Optimization**. Menu items reuse the existing commands; navigation is presentation only
+- A menu bar (`MainMenu`, top of the window) replaces the left tab rail: **File · Define · Edit · Draw · Assign · Run ·
+  Result · Post-Processing · Display · Design · Help | Optimization** (Draw since 2026-10-15, see "Geometry editing"). Menu items reuse the existing commands; navigation is presentation only
   (`MainViewModel.Menu.cs`, click handlers in `MainWindow.xaml.cs`). Do not bring the rail or the toolbar buttons back.
   **Optimization is a tab of its own, after a separator, and highlighted** (user, 2026-10-12: "thêm 1 separator for tab
   optimization, highlight this tab") — `OptimizationMenu` holds Optimization VCF…, Optimization TAS…, Optimization
@@ -320,16 +320,19 @@ earlier tall-header / large-button / blue-block look.
     the CoT model into its blank model, previews again (143 matched, nothing to change), imports it back and runs it: same
     members, joint loads, deflections and reactions (self-weight within 3·10⁻⁶ — ETABS keeps the weight modifier to ~6 figures).
   - **MB**: archived completely. No active menu, command, toolbar button or startup flow may select an MB slot.
-  - **Define**: Materials, Section Properties, Load Patterns, Load Cases / Load Combinations · Result Load Case.
+  - **Define**: Materials, Section Properties, Load Patterns, Load Cases / Load Combinations · Result Load Case ·
+    Grid Systems… / Levels… (one `ReferenceGeometryWindow`, see "Geometry editing").
     There is no Define → Loading: the loads of the model are entered in Edit → VCF System (Storey Force / Cable Force),
     one fixed value each — see Tab 07 FEM, "The flow the user set". The archived 01 Loading implementation and its
     commands remain compatibility code only; they are not reachable from the active UI.
   - **Edit**: VCF System…. A blank configuration enables this after at least one frame section and one cable section
     exist. The window previews the built-in VCF topology without putting objects in the working model; Apply creates and
     names the joints, frames and cables and assigns the selected library sections.
+    · **Move…** (DX DY DZ) and **Move by Two Points**, see "Geometry editing".
     · **Delete** (Del key too, not while typing): removes the joints / frames / cables selected on the model view after an
-    OK / Cancel confirmation (no undo). As SAP2000, a deleted joint takes its connected members; a deleted member leaves its
-    end joints. `MainViewModel.DeleteObjectsAsync` (MainViewModel.Edit.cs) also drops member properties, SAP loading, Tab 01
+    OK / Cancel confirmation that lists what goes with them (`DeleteConsequences`); since 2026-10-15 it is one named step
+    of the history at once ("Delete", Edit → Undo restores it). As SAP2000, a deleted joint takes its connected members; a
+    deleted member leaves its end joints. `MainViewModel.DeleteObjectsAsync` (MainViewModel.Edit.cs) also drops member properties, SAP loading, Tab 01
     loaded points / point loads, Tab 02 chord-group entries (re-captures the baseline; a note if a group becomes invalid),
     Tab 03 cables (followers of a removed cable become Independent) and Tab 04 output entries; FEM results are cleared and the
     model becomes an offline "· edited" model — SAP2000 is never written.
@@ -620,6 +623,47 @@ earlier tall-header / large-button / blue-block look.
   taskbar, Alt-Tab); `AppLogo.png` (256 px, `Theme.xaml` `AppLogo`) is the same picture for in-app use.
 - Still supports wheel zoom, drag pan, double-click fit, `Home` to fit.
 
+## Geometry editing (main window, 2026-10-15)
+
+The plan is `docs/geometry/GEOMETRY_EDITING_PLAN.md` and `GRID_LEVEL_CONTROLLER.md` (first written for the native
+workspace on branch `feature/geometry-editing-plan`; built in the main window, M8 having retired that workspace). Its
+"Implementation status" lists what is done, where, and what stays open. Check: `--geometry-editing` (in `--full`);
+library rules: `Mcotis.Checks` group "Geometry editing".
+
+- **Grids and levels are document data, never analysis input**: `Mcotis.Core.ReferenceGeometry` (grid systems: name,
+  origin, rotation, X / Y lines with label, coordinate, visible; levels: name, elevation, visible), set only through
+  `DocumentEditor.SetReferenceGeometry` (normalized: names trimmed, lines and levels ordered; duplicates refused), `.mcotis`
+  schema 7 (migration 6 → 7: empty). Not in `AnalysisInputHasher` — keep it so: a grid edit must never make results
+  stale. The main window's configuration has no place for them, so `SyncNativeDocument` **carries the current document's
+  reference geometry into every document it makes from the configuration** (same identity), and `OpenNativeDocument`
+  hands a native document's own over (`carriedReferenceGeometry`). A step that changed only the grids is undone without
+  `ApplyFemModel` (`OnlyReferenceDiffers`). The working-session autosave does not hold them (known gap).
+- **Rules live in the library**: `Mcotis.Application.GeometryEditService` plans every edit on the native document — a
+  position within 1 mm of a point is that point; members need a length, are never doubled and never lie along another
+  (`Overlap`); a move moves each point once and is refused onto another point; Delete takes the members and shells on a
+  deleted point, leaves a deleted member's end points, and lists loads / restraints / masses. The main window applies the
+  plan to its legacy model and makes the step through the existing bridge (`CommitGeometryEdit`: `nextStepName` +
+  `PersistFemWorkingSnapshot`), so each edit is one named Undo step at once. Names: P / F / C after the model's names.
+- **One view context**: `MainViewModel.ViewPlane` (TwoWay to `Structural2DViewer.ViewPlane`, which follows the projection
+  box) and `ViewCoordinate` (null = All, the whole model projected — the default unless every point shares the plane's
+  coordinate, so no existing view loses objects). `SharedViewerVisibleModel` = `ViewPlanes.Slice` (members lying in the
+  plane only); `SharedViewerModel` stays the whole model (many readers need it — do not slice it). The PLANE bar
+  (`PlaneNavigator`) lists levels / grid lines / point coordinates (`ViewPlanes.Choices`), steps with ‹ › and Ctrl+Page
+  Up / Down. The last 2D plane is the **work plane** of the 3D view (`SharedViewerWorkPlane`). A view is never DOF data.
+- **The viewer edits nothing**: `ModelCanvas.Editing.cs` / `Structural2DViewer.Editing.cs` resolve clicks to model
+  positions and raise `PointPlaced`, `MemberDrawn` (handler sets `Accepted` and `EndJoint` for chaining), `MoveRequested`;
+  `MainWindow.GeometryEditing.cs` calls the view model, and a refusal goes to the status bar (no dialog). The 2D view holds
+  its frame while editing (`KeepViewOnEdit`, `ExtentsModel` = the whole model; opt-in — previews elsewhere still refit)
+  and leaves `LeftInset` 44 px for the tool strip. Tool previews draw on `OverlayLayer` (`ToolLayer`), not by redrawing
+  the model. Snapping is pure (`GeometryEditing/Snapping.cs`): screen radius 10 px, rank point > member intersection >
+  midpoint > grid crossing > perpendicular > nearest > grid line; Alt off, Shift ortho; only what is shown. In 3D a click
+  lands on the work plane by a ray (`RayToWorkPlane`), refused edge-on or without a work plane — never a guessed depth.
+  Esc drops a member under way first (window `OnPreviewKeyDown`), then clears the selection; it never changes the tool.
+  A right-click ends the chain, then the tool.
+- **Display Options** (`ViewOptionsWindow`, Ctrl+W, still the two tabs Object / General Options the checks expect) has
+  Objects (points / frames / cables) and Grids & Levels groups bound to `MainViewModel.ShowJoints` … — hidden kinds are not
+  drawn, picked or snapped to.
+
 ## Engineering Inputs
 
 - Standalone `EngineeringInput` defaults to 220 px wide with an 11 px muted label above a 24 px
@@ -841,9 +885,18 @@ earlier tall-header / large-button / blue-block look.
   pipe/concrete pipe, general) via FemSectionProperties.Shape, else an equivalent solid rectangle with the same A, I33,
   I22 (SD, filled-tube, built-up…); cables are rods of their gross area; concrete materials are shaded concrete.
   Drag orbit, right/Shift-drag pan, wheel zoom, double-click / Fit fits. Needs Read from SAP for sizes.
+  The 3D E toggle, Display → Extruded 3D members and Display Options → General Options share `ShowExtruded3D`
+  (default on). Off draws thin frame/cable centre-lines, including deformed or modal paths, with screen-space member
+  picking; it changes display only, not the sections, analysis or results. Switching keeps the current 3D camera.
 - FEM deflection viewer colours the magnified shape by displacement magnitude |U| [mm], with a displayed range
   (maximum 0 = automatic). Undeformed geometry is a light dashed guide, independently hideable; contour can be disabled.
   Clicking a displayed joint shows only Ux, Uy, Uz [mm]; Uy is zero for the planar solver. These are presentation controls only.
+  **2026-10-15 F5 display box:** `ShowResultsWindow` in Deflection mode groups solved Case / Combo / Mode choice,
+  automatic or positive user-defined scale, contour component |U| / UX / UY / UZ with signed min/max (both zero = automatic),
+  wire shadow (the undeformed guide), and cubic curve (station path or modal Hermite interpolation; off joins displaced
+  joints). Apply/OK validate then set viewer-only properties; Close drops unapplied edits. Static ranges use mm, modal
+  ranges relative amplitudes. Hinge-state dots from the reference screenshot are unavailable because no hinge states
+  exist in the result model; do not fabricate them.
 - **FEM panes** (07 FEM, `SelectedTab` 7; `FemPane` 0–7 selects a pane in the hidden-strip `FemPanes` TabControl): Define →
   Sections (0) / Load Patterns (1) / Load Cases & Combinations (2) / Result Load Case (4), Assign → Joint
   Restraints (3), Run → Analysis Options (5: the INTERNAL 2D FRAME ANALYSIS card with Run Analysis / Cancel / Monitor),
@@ -1766,6 +1819,6 @@ ViewModels; project save/load never mutates SAP.
 - **Assign menu (SAP2000 layout):** Joint ▸ Restraints (Pin Supports)…, Frame ▸ Frame Sections…, Cable ▸ Cable Sections…. The section items act on the members selected on the model view (frames / cables only; otherwise a 'select first' message) through `AssignSectionWindow` (Find this property, the library list with the selection's section preselected, Define Frame/Cable Sections…, OK / Close / Apply, double-click = OK) → `MainViewModel.AssignSection` (`PropertiesFor` from the library section; each member keeps its local axis and modifiers; cables also update Tab 03 area / capacity; FEM results cleared; SAP2000 never written).
 - **Frame local axes:** Assign ▸ Frame ▸ Local Axes… acts on selected frames from either the 2D canvas or a click in the 3D view (drag still orbits; selected members highlight amber). `AssignFrameAxisWindow` accepts an absolute angle in degrees about local 1. `MainViewModel.AssignFrameLocalAxis` keeps each member's section, recalculates its in-plane inertia from I33 cos²θ + I22 sin²θ, updates the 3D section orientation, clears results and saves the angle in the model database; SAP2000 is not written.
 - **Real sections in 3D** (asked for by the user, 2026-10-12: "it only shows a rectangular box — show the real section; a composite one see-through"): a frame whose plain `FemSectionShape` is not its outline gets a `SectionDrawing` (`Application/SectionDrawing.cs`: regions of convex polygons per material in the local 2 / 3 axes, the enclosing one marked `Shell`), handed to the viewer as `Structural2DViewer.SectionDrawings` (`MainViewModel.SharedViewerSectionDrawings`, by member; it follows `SharedViewerSections`). `StructureModel3D.Build` extrudes one piece per material — steel and concrete in their own colours — and, for a composite section, draws the shell see-through (`CompositeShellOpacity` 0.55, front faces only, added after every solid piece because WPF blends only over what is already drawn) so the material inside shows. Sources: (1) the library's composite sections as defined — CFT = tube walls + concrete core (rectangular or round), steel encased = concrete + the I profile, mega composite = concrete + its 4 / 6 profiles (reinforcement is not drawn); (2) a **General / Section Designer section**, which the model holds only as transformed A / I33 / I22: `SectionDrawings.Recover` reads the dimensions its name states and accepts them only when they reproduce those properties — three dimensions (`CFT_SHS[1200x2000x150_S460]_C70/85`) as a tube, hollow or filled (Ea / Ec from the materials), each property within 1 %; two dimensions on a concrete section (`MegaCol_1.5x3_…`) as a solid block when the stored properties are the block's plus a little steel — drawn as concrete alone, its embedded steel is not known. The inertias decide which dimension is the depth. Anything else stays the equivalent solid, as before; never draw an outline that does not check. On the default model all 38 frames are now real (chords 2.0 × 1.2 m instead of the 2.27 × 1.45 equivalent). A standard shape (box, I, pipe …) needs no drawing. Selection restores each piece's own back material (`MemberVisual.BackMaterial`; a see-through piece has none). The deflected shape uses the same outlines, shaded solid by the contour. Frame Information's Shape row reads the drawing's description.
-- **Deflected shape in 3D** (asked for by the user, 2026-10-12): with the result on Deflected shape, the 3D view draws it too (`StructureModel3D.BuildDeflected`, chosen in `Structural2DViewer.Rebuild3D`): every member with its to-scale section moved by its joint displacements — a meshed frame through its stations, so it bends, keeping the section axes of the member as built — enlarged so the largest |U| is 5 % of the model's largest dimension, shaded by |U| with the 2D palette (one mesh per member, the contour read by texture coordinate from `ContourBrush`, so selection and hit-testing still work per member), and the model as built as thin grey axes. The Undeformed guide / Contour |U| / Range options are the same controls as in 2D (drawn above the 3D host) and rebuild the scene; a legend sits bottom-right (`Deflection3DLegend`: range and `Shape magnified × n`). The solver is planar: displacements are X and Z. There is no node read-out in 3D (2D: click a node).
+- **Deflected shape in 3D** (asked for by the user, 2026-10-12; spatial update 2026-10-15): with the result on Deflected shape, the 3D view draws it too (`StructureModel3D.BuildDeflected`, chosen in `Structural2DViewer.Rebuild3D`): every member with its to-scale section moved by its joint displacements — a meshed frame through its native X/Y/Z stations, or a spatial cubic centreline from six-component modal joint amplitudes when no stations exist, keeping the section axes of the member as built — enlarged so the largest |U| is 5 % of the model's largest dimension, shaded by |U| with the 2D palette (one mesh per member, the contour read by texture coordinate from `ContourBrush`, so selection and hit-testing still work per member), and the model as built as thin grey axes. The Undeformed guide / Contour |U| / Range options are the same controls as in 2D (drawn above the 3D host) and rebuild the scene; a legend sits bottom-right (`Deflection3DLegend`: range and `Shape magnified × n`). Joint markers follow the magnified result; hovering a joint shows UX/UY/UZ and RX/RY/RZ in a compact upper-left card, mm/mrad for static and relative for modal. The 2D view still uses a click to select a deflection node.
 - **Right-click → Frame / Cable Information** (asked for by the user, 2026-10-12: "open the dialogue just like ETABS for frame properties"): a right-click on a member in the 2D canvas (`ModelCanvas.RequestInformationAt`) or in the 3D view (a right-click that does not drag — a right-drag still pans; `RequestInformation3DAt`) selects it and raises `Structural2DViewer.MemberInformationRequested`; `MainWindow` opens the modal `ObjectInformationWindow`. Tabs **Geometry** (identification with the VCF role, length, slope, End I / End J with coordinates), **Assignments** (section, shape, material; E, A, I, unit weight, self-weight and mass per length; property modifiers; a frame's local-axis angle and end moment releases, or a cable's 03 Pretension pattern / target force or range / sync / capacity) and **Loads** (self-weight per pattern with a multiplier, distributed / point / gravity member loads, the cable target force). Section bands over name / value lines; values are read-only boxes so they can be copied. Content comes from `MainViewModel.MemberInformation` (testable, no window). **The form is also where the assignments are changed — one form per member** (user, 2026-10-12, on the separate Member Assignments form: "redundant, can be integrated?"; `MemberAssignmentWindow` and the Modify Assignments… button are gone — do not bring a second form back). The lines `MemberInformation` marks with an `InformationEdit` are editors in place while the model can be edited (`ObjectInformationWindow.Editor`): Section property (the frame or cable library), Local-axis angle and Moment release at End I / J of a frame, Target-force load pattern and Target force of a cable that does not follow another (a 03 Pretension range shows its first value and stays a range unless another value is typed). Buttons **OK / Cancel / Apply**; `Apply()` writes **only the editors the user changed** — re-assigning an untouched section would take its properties from the library again and clear the results — through `AssignSection` / `AssignFrameLocalAxis` / `AssignFrameEndReleases` / `AssignCableTarget`, refills the form and reports under the tabs. A locked model shows the same lines read-only with `Model locked. Unlock it to change member assignments.` and a Close button. A **double-click** on a member opens the same form on its Assignments tab (`openAssignments`); a right-click opens it on Geometry. **A point has its information too** (user, 2026-10-12): a right-click on a point selects it, raises `JointInformationRequested` and opens the same window as **Point Information** (`MainViewModel.PointInformation`): Geometry (label, VCF chord group, X / Y / Z, the frames and cables that meet at it), Assignments (pin support or free) and Loads (the storey forces the model is analysed with — a 01 Loading range at its first value — and SAP joint loads by pattern); it has no Modify button. A right-click on empty space does nothing.
 - **Axis display:** the model viewer's top-right **A** toggle, Display ▸ Frame local axes, and Display Options ▸ Frame local axes share `ShowFrameLocalAxes`. They draw red local 1, green local 2 and blue local 3 arrows on frames in 2D and 3D. With frame selection, only those frames' axes are shown; otherwise all frames are shown. The 3D arrows use the same section angle and local-axis basis as the extruded frame sections.

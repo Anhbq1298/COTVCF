@@ -50,7 +50,12 @@ public static class FemResultCombiner
         var joints = first.Joints.Select((joint, index) => new FemJointResponse(joint.PointName,
             items.Sum(item => item.Factor * item.Result.Joints[index].UXM),
             items.Sum(item => item.Factor * item.Result.Joints[index].UZM),
-            items.Sum(item => item.Factor * item.Result.Joints[index].RotationRad))).ToArray();
+            items.Sum(item => item.Factor * item.Result.Joints[index].RotationRad))
+            {
+                UYM = items.Sum(item => item.Factor * item.Result.Joints[index].UYM),
+                RXRad = items.Sum(item => item.Factor * item.Result.Joints[index].RXRad),
+                RZRad = items.Sum(item => item.Factor * item.Result.Joints[index].RZRad)
+            }).ToArray();
         var reactions = first.SupportReactions.Select((reaction, index) => new FemSupportReaction(reaction.PointName,
             items.Sum(item => item.Factor * item.Result.SupportReactions[index].ReactionXKN),
             items.Sum(item => item.Factor * item.Result.SupportReactions[index].ReactionZKN),
@@ -62,7 +67,7 @@ public static class FemResultCombiner
             {
                 double StationSum(Func<FemFrameStation, double> value) => items.Sum(item => item.Factor * value(item.Result.Frames[index].Stations![stationIndex]));
                 return new FemFrameStation(station.Fraction, StationSum(s => s.AxialKN), StationSum(s => s.ShearKN), StationSum(s => s.MomentKNm),
-                    StationSum(s => s.UXM), StationSum(s => s.UZM));
+                    StationSum(s => s.UXM), StationSum(s => s.UZM)) { UYM = StationSum(s => s.UYM) };
             }).ToArray();
             return new FemFrameResponse(frame.MemberName, Sum(f => f.AxialStartKN), Sum(f => f.AxialEndKN), Sum(f => f.ShearStartKN),
                 Sum(f => f.ShearEndKN), Sum(f => f.MomentStartKNm), Sum(f => f.MomentEndKNm), stations);

@@ -40,6 +40,7 @@ internal static class DocumentDataChecks
 
         // a schema-5 file opens with no application data and no flag
         var old = (JsonObject)JsonNode.Parse(NativeDocumentFormat.Serialize(new Sample().Document))!;
+        old.Remove("referenceGeometry");
         old.Remove("applicationData");
         old.Remove("generator");
         old["schemaVersion"] = 5;

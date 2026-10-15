@@ -362,6 +362,7 @@ public sealed partial class MainViewModel : Observable
         Notify(nameof(SharedViewerFrameMeshSegments)); Notify(nameof(SharedViewerMemberSizes));
         Notify(nameof(SharedViewerShowLoads)); Notify(nameof(SharedViewerLoadValues));
         Notify(nameof(SharedViewerCaption)); Notify(nameof(SharedViewerHint));
+        NotifyViewPlane();
     }
     private void NotifyFemResultSelection()
     {
@@ -1252,7 +1253,7 @@ public sealed partial class MainViewModel : Observable
     public IReadOnlyList<FemResultRow> FemResultRows => FemResultTable.Build(SelectedFemResult, FemResultMode);
     public FemAnalysisResult? SharedViewerFemResult =>
         !ShowUndeformed && selectedTab == TabFem && SelectedFemPage == FemResultsPage
-            ? showModeShape ? ModalResults.Display : SelectedFemResult : null;
+            ? showModeShape ? ModalResults.Display : ViewedFemResult : null;
     public FemResultMode SharedViewerFemResultMode => showModeShape ? FemResultMode.DeflectedShape : FemResultMode;
     public string FemResultDiagramTitle
     {

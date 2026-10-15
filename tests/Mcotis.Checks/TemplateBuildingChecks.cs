@@ -22,6 +22,10 @@ internal static class TemplateBuildingChecks
         var d = session.Document;
         Check.Assert(d.Points.Count == 18 && d.Frames.Count == 26, "2X × 1Y × 2 storeys has 18 points, 12 columns, 8 X beams and 6 Y beams");
         Check.Assert(d.Points.Values.Single(p => p.Name == "P_2_2_1").Position == new Xyz(10, 5, 7), "bay widths and storey heights accumulate independently");
+        Check.Assert(d.ReferenceGeometry.GridSystems.Single().XLines.Select(line => (line.Label, line.Coordinate)).SequenceEqual([("1", 0d), ("2", 4d), ("3", 10d)]) &&
+               d.ReferenceGeometry.GridSystems[0].YLines.Select(line => (line.Label, line.Coordinate)).SequenceEqual([("A", 0d), ("B", 5d)]) &&
+               d.ReferenceGeometry.Levels.Select(level => (level.Name, level.Elevation)).SequenceEqual([("Base", 0d), ("L1", 3d), ("Roof", 7d)]),
+            "the building comes with its grid (1–3 × A–B on the bay lines) and its levels (Base, L1, Roof) to draw and navigate on");
         Check.Assert(d.Restraints.Count == 6 && d.Restraints.Values.All(r => r == Restraint.Fixed), "only six base points are restrained");
         Check.Assert(d.FrameAssignments.Count == 26 && d.Frames.Values.All(f => d.AssignmentOfFrame(f.Id).SectionId ==
             (f.Name.StartsWith("Column_") ? input.ColumnSection.Id : input.BeamSection.Id)), "columns and beams use the requested sections");

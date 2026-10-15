@@ -222,6 +222,7 @@ Hệ quả: mọi mục của plan cũ nói về CSI service, version adapter, I
 | Mass source | ID, Name, có tính khối lượng bản thân hay không — dữ liệu cho modal; chưa có phép tính nào đọc nó |
 | Combination | Terms (case hoặc combination × hệ số), loại |
 | Analysis settings | Dung sai và số vòng fit cáp, số đoạn mesh, cable sag, DOF đang bật, DOF của nút cable (mặc định UX UY UZ) |
+| Reference geometry (2026-10-15, schema 7) | Grid systems (tên, gốc, góc xoay, đường lưới X / Y với nhãn và tọa độ) và levels (tên, cao độ Z) — dữ liệu tham chiếu để vẽ và điều hướng, **không** phải analysis input (không vào `AnalysisInputHash`), không tạo hay dời điểm nào; Undo như mọi edit. Xem `docs/geometry/` |
 
 Đơn vị cố định trong document: kN, m, t. Chuyển đổi đơn vị thuộc về UI.
 

@@ -24,16 +24,21 @@
  </UserControl.Resources>
  <Border BorderBrush="{StaticResource Border}" BorderThickness="1" Background="{StaticResource ViewportBg}">
   <Grid>
-    <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" PanMode="{Binding PanMode, ElementName=Root, Mode=TwoWay}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" ShowFrameLabels="{Binding ShowFrameLabels, ElementName=Root}" ShowCableLabels="{Binding ShowCableLabels, ElementName=Root}" ShowFrameLocalAxes="{Binding ShowFrameLocalAxes, ElementName=Root}" MemberSections="{Binding MemberSections, ElementName=Root}" ShowDimensions="{Binding ShowDimensions, ElementName=Root}" SpanPoints="{Binding SpanPoints, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}" Cables="{Binding Cables, ElementName=Root}" SelectedCable="{Binding SelectedCable, ElementName=Root, Mode=TwoWay}" TopPoints="{Binding TopPoints, ElementName=Root}" MiddlePoints="{Binding MiddlePoints, ElementName=Root}" BottomPoints="{Binding BottomPoints, ElementName=Root}" PinSupportPoints="{Binding PinSupportPoints, ElementName=Root}" FemResult="{Binding FemResult, ElementName=Root}" FemResultMode="{Binding FemResultMode, ElementName=Root}" DeflectionIsModeShape="{Binding DeflectionIsModeShape, ElementName=Root}" FrameMeshSegments="{Binding FrameMeshSegments, ElementName=Root}" MemberSizes="{Binding MemberSizes, ElementName=Root}" ShowLoads="{Binding ShowLoads, ElementName=Root}" LoadValues="{Binding LoadValues, ElementName=Root}" MemberNotes="{Binding MemberNotes, ElementName=Root}" JointNotes="{Binding JointNotes, ElementName=Root}" HighlightedMembers="{Binding HighlightedMembers, ElementName=Root}" ShowAxialValues="{Binding ShowAxialValues, ElementName=Root}" ShowUndeformed="{Binding ShowUndeformed, ElementName=Root}" ShowDeflectionContour="{Binding ShowDeflectionContour, ElementName=Root}" DeflectionRangeMinMm="{Binding DeflectionRangeMinMm, ElementName=Root}" DeflectionRangeMaxMm="{Binding DeflectionRangeMaxMm, ElementName=Root}"/>
+    <local:ModelCanvas x:Name="Canvas" Model="{Binding Model, ElementName=Root}" PanMode="{Binding PanMode, ElementName=Root, Mode=TwoWay}" ShowPointLabels="{Binding ShowPointLabels, ElementName=Root}" ShowFrameLabels="{Binding ShowFrameLabels, ElementName=Root}" ShowCableLabels="{Binding ShowCableLabels, ElementName=Root}" ShowFrameLocalAxes="{Binding ShowFrameLocalAxes, ElementName=Root}" MemberSections="{Binding MemberSections, ElementName=Root}" ShowDimensions="{Binding ShowDimensions, ElementName=Root}" SpanPoints="{Binding SpanPoints, ElementName=Root}" AppliedPoints="{Binding AppliedPoints, ElementName=Root}" SelectedAppliedPoint="{Binding SelectedAppliedPoint, ElementName=Root, Mode=TwoWay}" Cables="{Binding Cables, ElementName=Root}" SelectedCable="{Binding SelectedCable, ElementName=Root, Mode=TwoWay}" TopPoints="{Binding TopPoints, ElementName=Root}" MiddlePoints="{Binding MiddlePoints, ElementName=Root}" BottomPoints="{Binding BottomPoints, ElementName=Root}" PinSupportPoints="{Binding PinSupportPoints, ElementName=Root}" FemResult="{Binding FemResult, ElementName=Root}" FemResultMode="{Binding FemResultMode, ElementName=Root}" DeflectionIsModeShape="{Binding DeflectionIsModeShape, ElementName=Root}" FrameMeshSegments="{Binding FrameMeshSegments, ElementName=Root}" MemberSizes="{Binding MemberSizes, ElementName=Root}" ShowLoads="{Binding ShowLoads, ElementName=Root}" LoadValues="{Binding LoadValues, ElementName=Root}" MemberNotes="{Binding MemberNotes, ElementName=Root}" JointNotes="{Binding JointNotes, ElementName=Root}" HighlightedMembers="{Binding HighlightedMembers, ElementName=Root}" ShowAxialValues="{Binding ShowAxialValues, ElementName=Root}" ShowUndeformed="{Binding ShowUndeformed, ElementName=Root}" ShowDeflectionContour="{Binding ShowDeflectionContour, ElementName=Root}" DeflectionRangeMinMm="{Binding DeflectionRangeMinMm, ElementName=Root}" DeflectionRangeMaxMm="{Binding DeflectionRangeMaxMm, ElementName=Root}" DeflectionScaleFactor="{Binding DeflectionScaleFactor, ElementName=Root}" DeflectionContourComponent="{Binding DeflectionContourComponent, ElementName=Root}" DeflectionCubicCurve="{Binding DeflectionCubicCurve, ElementName=Root}"
+                      KeepViewOnEdit="{Binding KeepViewOnEdit, ElementName=Root}" ExtentsModel="{Binding ExtentsModel, ElementName=Root}" ReferenceGeometry="{Binding ReferenceGeometry, ElementName=Root}"
+                      PlaneCoordinate="{Binding PlaneCoordinate, ElementName=Root}" ViewTitle="{Binding ViewTitle, ElementName=Root}" LeftInset="{Binding LeftInset, ElementName=Root}"
+                      ShowJoints="{Binding ShowJoints, ElementName=Root}" ShowFrames="{Binding ShowFrames, ElementName=Root}" ShowCables="{Binding ShowCables, ElementName=Root}"
+                      ShowGridLines="{Binding ShowGridLines, ElementName=Root}" ShowLevels="{Binding ShowLevels, ElementName=Root}" ShowReferenceLabels="{Binding ShowReferenceLabels, ElementName=Root}"
+                      DrawingTool="{Binding DrawingTool, ElementName=Root, Mode=TwoWay}" SnapModes="{Binding SnapModes, ElementName=Root}" ChainDrawing="{Binding ChainDrawing, ElementName=Root}"/>
 
    <!-- deflected shape options: shared by the 2D and the 3D view (drawn above the 3D host) -->
-   <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,32,8,0" Padding="6" Panel.ZIndex="1" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1">
+   <Border x:Name="ResultOptionsBox" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,32,8,0" Padding="6" Panel.ZIndex="1" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1">
     <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
      <DataTrigger Binding="{Binding FemResultMode, ElementName=Root}" Value="DeflectedShape"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
     </Style.Triggers></Style></Border.Style>
     <WrapPanel>
      <CheckBox Content="Undeformed guide" IsChecked="{Binding ShowUndeformed, ElementName=Root}" Margin="0,0,10,0"/>
-     <CheckBox Content="Contour |U|" IsChecked="{Binding ShowDeflectionContour, ElementName=Root}" Margin="0,0,10,0"/>
+     <CheckBox Content="Contours" IsChecked="{Binding ShowDeflectionContour, ElementName=Root}" Margin="0,0,10,0" ToolTip="Contour component and scale are set in Show Deformed Shape"/>
      <TextBlock VerticalAlignment="Center" Margin="0,0,4,0">
       <TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Text" Value="Range [mm]"/><Style.Triggers>
        <DataTrigger Binding="{Binding DeflectionIsModeShape, ElementName=Root}" Value="True"><Setter Property="Text" Value="Relative range"/></DataTrigger>
@@ -48,7 +53,7 @@
    <!-- 3D isometric view: to-scale extruded sections (shown when the projection is "3D") -->
    <Grid x:Name="View3DHost" Visibility="Collapsed" Background="{StaticResource ViewportBg}" ClipToBounds="True"
          MouseLeftButtonDown="View3DMouseDown" MouseRightButtonDown="View3DMouseDown" MouseMove="View3DMouseMove"
-         MouseLeftButtonUp="View3DMouseUp" MouseRightButtonUp="View3DMouseUp" MouseWheel="View3DMouseWheel">
+         MouseLeftButtonUp="View3DMouseUp" MouseRightButtonUp="View3DMouseUp" MouseWheel="View3DMouseWheel" MouseLeave="View3DMouseLeave">
     <Viewport3D x:Name="View3D">
      <Viewport3D.Camera>
       <OrthographicCamera x:Name="Camera3D" UpDirection="0,0,1"/>
@@ -65,9 +70,19 @@
      <ModelVisual3D x:Name="Structure3D"/>
      <ModelVisual3D x:Name="LocalAxes3D"/>
     </Viewport3D>
+    <!-- the grid at the base level and the work plane a drawing tool uses in 3D (references: never picked) -->
+    <local:OverlayLayer x:Name="Reference3D"/>
     <!-- the model's points on the 3D view, so they can be clicked as in 2D; the selected ones carry the amber cross -->
     <local:JointMarkers3D x:Name="Joints3D"/>
     <TextBlock x:Name="View3DInfo" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,12,0,0" Style="{StaticResource Caption}"/>
+    <Border x:Name="Joint3DReadout" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="16,108,0,0"
+            Padding="8,5" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1"
+            Visibility="Collapsed" IsHitTestVisible="False" AutomationProperties.Name="Joint displacement and rotation">
+     <StackPanel>
+      <TextBlock x:Name="Joint3DReadoutName" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+      <TextBlock x:Name="Joint3DReadoutValues" FontFamily="{StaticResource MonoFont}" FontSize="11" Foreground="{StaticResource Text}"/>
+     </StackPanel>
+    </Border>
     <Border x:Name="FrameAxisLegend" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="5,2" Background="{StaticResource Overlay}" Visibility="Collapsed">
      <!-- below the deflected shape options while those show -->
      <Border.Style><Style TargetType="Border"><Setter Property="Margin" Value="16,36,0,0"/><Style.Triggers>
@@ -89,11 +104,14 @@
     </Border>
    </Grid>
 
+   <!-- the preview of a drawing tool (snap, member being drawn, instruction), in the 2D and the 3D view: redrawn alone on a mouse move -->
+   <local:OverlayLayer x:Name="ToolLayer"/>
+
    <!-- floating viewer controls (top-right) -->
-   <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" CornerRadius="3" Padding="3" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1">
+   <Border x:Name="ViewerControls" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" CornerRadius="3" Padding="3" Background="{StaticResource Overlay}" BorderBrush="{StaticResource Border}" BorderThickness="1">
     <StackPanel Orientation="Horizontal">
      <ComboBox x:Name="Plane" Width="52" SelectedIndex="1" SelectionChanged="PlaneChanged" ToolTip="Projection plane" VerticalAlignment="Center">
-      <ComboBoxItem Content="XY"/><ComboBoxItem Content="XZ"/><ComboBoxItem Content="YZ"/><ComboBoxItem Content="3D" ToolTip="Isometric 3D view; member outlines use section dimensions when available"/>
+      <ComboBoxItem Content="XY"/><ComboBoxItem Content="XZ"/><ComboBoxItem Content="YZ"/><ComboBoxItem Content="3D" ToolTip="Isometric 3D view; use E to switch between section outlines and member centre-lines"/>
      </ComboBox>
      <Button Style="{StaticResource ViewerTool}" Click="Fit" ToolTip="Fit / zoom extents (Home)">
       <Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M2,6 L2,2 L6,2 M14,2 L18,2 L18,6 M18,14 L18,18 L14,18 M6,18 L2,18 L2,14"/>
@@ -101,6 +119,11 @@
      <Button Style="{StaticResource ViewerTool}" Click="ResetView" ToolTip="Reset view (XZ)">
       <Path Stroke="{StaticResource Accent}" StrokeThickness="1.6" Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M13,4 A6,6 0 1 0 15,9.5 M15,9.5 L15,5 M15,9.5 L10.5,9.5"/>
      </Button>
+     <ToggleButton Style="{StaticResource ViewerTool}" IsChecked="{Binding ShowExtruded3D, ElementName=Root, Mode=TwoWay}"
+                   IsEnabled="{Binding IsVisible, ElementName=View3DHost}" ToolTip="Toggle extruded section shapes in 3D; off shows member centre-lines"
+                   AutomationProperties.Name="Extruded 3D members">
+      <TextBlock Text="E" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+     </ToggleButton>
      <Border Width="1" Background="{StaticResource Border}" Margin="4,3,2,3"/>
      <ToggleButton Style="{StaticResource ViewerTool}" IsChecked="{Binding ShowLoads, ElementName=Root, Mode=TwoWay}"
                    ToolTip="Show or hide applied load arrows and values" AutomationProperties.Name="Show applied loads">

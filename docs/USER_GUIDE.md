@@ -37,7 +37,7 @@ See also: Model view and selection; Keyboard shortcuts; Display options
 The main window has the menu bar at the top, a toolbar below it, the model view in the middle, a pane on the left for the page chosen from a menu, and the status bar at the bottom.
 
 ## Menu bar
-File · Define · Edit · Assign · Run · Result · Post-Processing · Display · Design · Help · Optimization · MB. Menus that need a model stay disabled until one is open. Optimization is set apart and highlighted; MB holds the pages of the SAP2000 candidate study ([[MB study workflow]]).
+File · Define · Edit · Draw · Assign · Run · Result · Post-Processing · Display · Design · Help · Optimization · MB. Menus that need a model stay disabled until one is open. Optimization is set apart and highlighted; MB holds the pages of the SAP2000 candidate study ([[MB study workflow]]).
 
 ## Toolbar
 Buttons for the common commands: new / open / save model, run analysis, analysis options and monitor, zoom extents, zoom in and out, the 3-d, xy, xz and yz views, the Select tool, view options and the result pickers. Every button repeats a menu command and says which in its tooltip.
@@ -75,7 +75,7 @@ See also: Object information; Delete objects; Keyboard shortcuts
 The model view draws the model and its results, and is where you select objects for Assign, Delete and Design.
 
 ## Views
-The 3-d, xy, xz and yz buttons (or the drop-down in the view's corner) choose the view. Zoom with the wheel or the toolbar, fit with Zoom extents (Home). In 3D a drag rotates the model.
+The 3-d, xy, xz and yz buttons (or the drop-down in the view's corner) choose the view. Zoom with the wheel or the toolbar, fit with Zoom extents (Home). In 3D a drag rotates the model. The **E** button switches between section-sized extruded members and thin member centre-lines; it also works on deformed and mode shapes. Display → Extruded 3D members and Display → View Options offer the same choice.
 
 ## Selecting
 - **Click** a point, frame or cable to select it; click again to add more.
@@ -103,8 +103,11 @@ The keys of the main window, for the commands used most often.
 - **F5** — Show Deformed Shape… (choose a static case or a solved modal case and mode number).
 - **F6** — Show Member Forces… (load case and N, V or M).
 - **F7** — Show Joint Reactions….
-- **V** — Select tool.
-- **Esc** — clear the selection.
+- **V** — Select tool (a drawing tool goes off).
+- **Esc** — drop the member or move under way with a drawing tool ([[Draw geometry]]); otherwise clear the selection. Esc never changes the tool.
+- **Shift** while drawing — Ortho; **Alt** — no snapping.
+- **Ctrl+W** — Display Options ([[Display options]]).
+- **Ctrl+Page Up / Ctrl+Page Down** — the next / previous level or grid line of the plane shown ([[View planes]]).
 - **Del** — delete the selected objects ([[Delete objects]]).
 - **Home** — zoom extents.
 - **Ctrl+O** — Open…; **Ctrl+S** — Save; **Ctrl+Shift+S** — Save As….
@@ -357,9 +360,9 @@ Category: Edit
 Where: Edit → Undo (Ctrl+Z), Edit → Redo (Ctrl+Y)
 See also: Delete objects; Model files; Run FEM Analysis
 
-Every change of the model in the main window is one step of its history: sections and restraints assigned, members deleted, the VCF or tied arch system edited, load patterns, cases and combinations, materials and sections defined, Analysis Options. **Undo** takes the last step back and **Redo** makes it again.
+Every change of the model in the main window is one step of its history: points, frames and cables drawn ([[Draw geometry]]), objects moved and deleted, sections and restraints assigned, the VCF or tied arch system edited, load patterns, cases and combinations, materials and sections defined, Analysis Options, grids and levels. **Undo** takes the last step back and **Redo** makes it again; Edit → Undo names the step.
 
-- The model a step returns to is the whole model as it was then — geometry, assignments, loads, cases, libraries and the Tab 01 / Tab 03 setup — and its FEM results are cleared, as after any change.
+- The model a step returns to is the whole model as it was then — geometry, assignments, loads, cases, libraries and the Tab 01 / Tab 03 setup — and its FEM results are cleared, as after any change. A step of the grids and levels only ([[Grids and levels]]) changes nothing of the analysis model: its Undo gives the grid back and leaves the model as it is.
 - A model that is opened, imported or generated starts a history of its own.
 - While the model holds the results of a run it is locked, and Undo waits: unlock it first (Run → Unlock FEM Model).
 - A `*` after the file name in the title says the model differs from what its file holds; Save makes it clean, and Undo back to the saved model makes it clean again.
@@ -389,14 +392,89 @@ Category: Edit
 Where: Edit → Delete (Del key)
 See also: Model view and selection; Model files
 
-Removes the joints, frames and cables selected on the model view, after an OK / Cancel confirmation. There is no undo — save first if you may want the model back.
+Removes the joints, frames and cables selected on the model view, after an OK / Cancel confirmation that says what goes with them — the members on deleted joints, the loads on deleted objects, their restraints and joint masses. The delete is one step of [[Undo and redo]]: Edit → Undo (Ctrl+Z) restores every object with its name, assignments and loads.
 
-- As in SAP2000, deleting a joint also deletes the members connected to it; deleting a member leaves its end joints.
+- As in SAP2000, deleting a joint also deletes the members connected to it; deleting a member leaves its end joints, even when no other member uses them.
+- The Delete button of the drawing tool strip at the left of the model view does the same (see [[Draw geometry]]).
 - Everything that names a removed object follows: member properties, loads on removed objects, Tab 01 loaded points and point loads, the Tab 02 chord groups (the baseline is captured again; if a group becomes invalid the message says so), Tab 03 cables (a cable that followed a removed one becomes independent) and the output lists.
 - FEM results are cleared. A restraint the model holds goes with its joint; the automatic pins of a model without restraints are worked out again from the new geometry.
 - The model becomes an offline "· edited" model; SAP2000 is never changed.
 
 The Del key does nothing while you type in a field or a table.
+
+# Move objects
+Category: Edit
+Where: Edit → Move…, Move by Two Points; the Move button of the drawing tool strip
+See also: Draw geometry; Delete objects; Undo and redo
+
+Moves the points, frames and cables selected on the model view. A member is moved by moving its end points, each point once, so the members connected to a moved point follow it and the model stays connected.
+
+- **Move…** asks for DX, DY and DZ in metres.
+- **Move by Two Points** (or the Move button of the tool strip): select first, then click a base point and its destination on the model view. Both clicks snap as drawing does ([[Draw geometry]]); a dashed copy of the selection follows the cursor. Esc cancels.
+- A move that would put a point on another point is refused with the reason: two joints in one place would not be connected (merging joints is planned). A move that would leave a member without length is refused too.
+- A move is one step of [[Undo and redo]]; FEM results are cleared, as with any change of the model.
+
+# Grids and levels
+Category: Define
+Where: Define → Grid Systems…, Levels…
+See also: View planes; Draw geometry; Model files
+
+Grid systems and levels are the references a model is drawn and navigated on, as in SAP2000 and ETABS. They are saved in the .mcotis file with the model, and they are no part of the analysis: defining, moving or renaming a grid line or a level makes and moves no joint, clears no result and leaves the analysis input as it was. Joints are made at grid crossings only when you ask (Draw → Generate Points at Grid Intersections, [[Draw geometry]]). Like every Define form, the form is closed while the model is locked by its results.
+
+## Grid Systems
+One or more named Cartesian systems, each with an origin X, Y, Z, a rotation about Z and two tables:
+- **X grid lines** — lines of constant x, labelled 1, 2, 3 … by default — and **Y grid lines** — lines of constant y, labelled A, B, C … Each line has its label, its coordinate in metres from the system's origin, the spacing from the line before (read-only) and Visible.
+- **Quick Grid** writes the lines of both axes from the first line, a number of equal bays and their spacing, or a list of unequal spacings (e.g. 6, 8, 6).
+- **Suggest from Model** fills the form with a line at every distinct X and Y of the model's points and a level at every distinct Z — nothing is written until Apply.
+- The preview shows the grid over the model in plan as you type.
+
+A label names one line of a system; two lines of one axis cannot share a coordinate. Radial and curved grids are not available yet.
+
+## Levels
+The storeys of the model: a name (Base, L1, L2 … Roof), an elevation Z in metres — negative below the base — the height to the level above (read-only) and Visible. **Generate Levels** writes them from a base elevation and a number of storeys of one height, or a list of storey heights. Names and elevations must be unique.
+
+## Apply, OK and Cancel
+The form works on a copy. **Apply** writes it as one step of [[Undo and redo]] and keeps the form open; **OK** writes it and closes; **Cancel** leaves the model as it was. A problem — a label used twice, two levels at one elevation — is said under the form and holds OK and Apply back. [[TemplateBuilding]] gives its building the grid of its bays and its levels.
+
+# View planes
+Category: Display
+Where: The PLANE bar above the model view; the projection box of the model view; the xy / xz / yz / 3-d toolbar buttons
+See also: Grids and levels; Model view and selection; Draw geometry
+
+The model view shows the whole model in 3D, or one plane of it: an XY plan at a level (constant Z), an XZ elevation at a Y grid line (constant Y) or a YZ elevation at an X grid line (constant X).
+
+- The projection box at the top right of the model view, the toolbar buttons and Display Options set the same view.
+- The **PLANE** bar above the view chooses where the plane is: **All (projection)** — the whole model projected, as the view always showed it — a named level or grid line, any coordinate the model's points sit at, or a coordinate you type in metres. The arrows (and Ctrl+Page Up / Ctrl+Page Down) step to the next or previous plane.
+- A plane shows the joints on it and the members that lie in it. A member that only crosses the plane — a column through a floor — is not drawn there, so nothing looks connected that is not.
+- A plane is a view only: it changes nothing of the model or the degrees of freedom of an analysis.
+- The plane last shown in 2D is the **work plane** of the 3D view: the drawing tools place points on it there, and it is shaded in 3D.
+- While you edit, the view does not jump: it frames the model again only for a new model, a plane of another direction, Fit, or a change that would leave part of the model off the screen.
+
+# Draw geometry
+Category: Draw
+Where: Draw menu; the drawing tool strip at the left of the model view
+See also: Grids and levels; View planes; Move objects; Delete objects; Undo and redo
+
+The Draw menu and the tool strip at the left of the model view add points, frames and cables. Every point or member drawn is one step of [[Undo and redo]], and FEM results are cleared as with any change of the model.
+
+## Tools on the model view
+- **Point** — click to place points. A click on a point of the model is refused (a second point there would not be connected to it).
+- **Frame** and **Cable** — click the start and the end of each member. An end on a point uses that point; an end in empty space makes a new point there, on the plane shown (in 3D, on the work plane). With **Draw Continuous** on, the next member starts where the last one ended; a right-click or Esc ends the chain, and a right-click without a member under way leaves the tool. The member takes the section chosen under DRAW WITH, above the view.
+- **Select** (V) returns to selecting; the tool strip also has **Move** ([[Move objects]]) and **Delete** ([[Delete objects]]).
+- A member of no length, a member between two points another member joins, and a member that would lie along another member are refused, with the reason in the status bar.
+- In a projection (All) or in 3D without a work plane, a click lands only on what the model has: the depth of a point in empty space is never guessed.
+
+## Snap To
+The cursor snaps to what is within 10 pixels, the best kind first — a point, then an intersection, a midpoint, a grid crossing, a perpendicular, the nearest position on a member, and a grid line. Draw → Snap To switches each kind on or off:
+- **Points and member ends**, **Midpoints**, **Intersections of members**, **Grid intersections**, **Along grid lines and levels**, **Perpendicular** (from the start of the member being drawn), **Nearest on a member**, and **Ortho (also: hold Shift)**, which keeps the member horizontal or vertical in the view.
+- Hold **Alt** to place without snapping.
+- A label beside the cursor names the snap and gives X, Y, Z; the status bar repeats them with the plane and the tool. A point drawn on a member, or where members cross, is connected to them by the analysis — frames are divided at the joints on them — and the label says so.
+- Snapping uses only what is shown: a hidden kind ([[Display options]]) is not snapped to.
+
+## By coordinates
+- **Point by Coordinates…** adds a point at X, Y, Z — absolute, relative to a point of the model (DX, DY, DZ), or on the plane shown with its fixed coordinate held — named P1, P2 … unless you name it. **Add Next** keeps the form open. The **Table** tab adds a pasted table of X Y Z rows as one step; positions that have a point already are left out.
+- **Frame / Cable by Coordinates…** adds a member from end I to end J, typed or taken from two points selected on the model view, with the section chosen in the form.
+- **Generate Points at Grid Intersections…** makes a point at every crossing of the visible lines of a grid system at the levels you tick, and says first how many are new.
 
 # Joint masses
 Category: Assign
@@ -559,7 +637,7 @@ See also: Results table; Display options; FEM live results
 
 Draws the results of the selected load case on the model view.
 
-- **Deformed shape** (F5) — choose a solved static case/combination, or a modal case and its mode number. A mode shape is a magnified relative amplitude, not a load deflection.
+- **Deformed shape** (F5) — the box separates solved Cases, Combos and modal Modes. Choose automatic scaling or a positive user-defined multiplier; optionally colour by |U|, UX, UY or UZ, with both range values zero for automatic range or an entered minimum and maximum. Static contour ranges are in mm; modal ranges are relative amplitudes. Wire shadow shows the undeformed model, and Cubic curve follows recovered frame stations or modal joint rotations (off connects displaced joints directly). Apply previews the settings, OK applies and closes, Close discards inputs not yet applied. A mode shape is relative, not a load deflection. Hinge-state dots are unavailable because the solver has no hinge-state results.
 - **Member forces** (F6) — choose the load case and N, V or M.
 - **Joint reactions** (F7).
 - **Show Results…** — choose the case / combination and the output.
@@ -610,16 +688,17 @@ The result cases, monitored objects (deflection points, foundation points, cable
 
 # Display options
 Category: Results
-Where: Display → Show Undeformed Shape, Frame mesh, Member size, Frame local axes, Dimensions, Loading, View Options…
+Where: Display → Show Undeformed Shape, Frame mesh, Member size, Frame local axes, Extruded 3D members, Dimensions, Loading, View Options…
 See also: Showing results; Model view and selection
 
 - **Show Undeformed Shape** (F4) — clear the result display.
 - **Frame mesh** — frames drawn in their analysis mesh segments.
 - **Member size** — each member labelled with its section.
 - **Frame local axes** — the local 1 / 2 / 3 axes.
+- **Extruded 3D members** — show section-sized members in 3D; turn off for thin frame and cable centre-lines (also the E button on the view).
 - **Dimensions** — bay spans, overall span, level heights and elevations; for an arch, the arch height H.
 - **Loading** — the Tab 01 load arrows, labelled with Fz after a run.
-- **View Options…** — the full display form.
+- **View Options…** (Ctrl+W) — the full display form, Display Options: labels, dimensions, loads and frame mesh; the view type; the result display; **Objects** — points, frames and cables shown or hidden; **Grids & Levels** — grid lines, levels in elevations, grid bubbles and level names ([[Grids and levels]]). A hidden kind is neither drawn nor picked nor snapped to, and stays in the model and its analysis. The form is applied by Apply or OK; Close discards it.
 
 # Column design
 Category: Design

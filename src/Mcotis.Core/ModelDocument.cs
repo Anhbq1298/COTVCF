@@ -23,7 +23,8 @@ internal sealed record DocumentData(
     ImmutableDictionary<ObjectId, MassSource> MassSources,
     ImmutableDictionary<ObjectId, JointMassAssignment> JointMassAssignments,
     ImmutableSortedDictionary<string, string> ApplicationData,
-    GeneratorOrigin? Generator)
+    GeneratorOrigin? Generator,
+    ReferenceGeometry ReferenceGeometry)
 {
     public static DocumentData Empty { get; } = new(
         ImmutableDictionary<ObjectId, PointObject>.Empty, ImmutableDictionary<ObjectId, FrameObject>.Empty,
@@ -35,7 +36,8 @@ internal sealed record DocumentData(
         ImmutableDictionary<ObjectId, FrameAssignment>.Empty, ImmutableDictionary<ObjectId, CableAssignment>.Empty,
         ImmutableDictionary<ObjectId, ShellAssignment>.Empty, ImmutableDictionary<ObjectId, LoadAssignment>.Empty,
         AnalysisSettings.Default, ImmutableDictionary<ObjectId, MassSource>.Empty,
-        ImmutableDictionary<ObjectId, JointMassAssignment>.Empty, ImmutableSortedDictionary<string, string>.Empty.WithComparers(StringComparer.Ordinal), null);
+        ImmutableDictionary<ObjectId, JointMassAssignment>.Empty, ImmutableSortedDictionary<string, string>.Empty.WithComparers(StringComparer.Ordinal), null,
+        ReferenceGeometry.Empty);
 }
 
 /// <summary>The engineering model: every object, definition, assignment and load of one structure, and nothing of
@@ -98,6 +100,10 @@ public sealed class ModelDocument
 
     /// <summary>The parametric generator the model was built by, or null (<see cref="GeneratorOrigin"/>).</summary>
     public GeneratorOrigin? Generator => Data.Generator;
+
+    /// <summary>The grid systems and levels the model is drawn and edited on (<see cref="Core.ReferenceGeometry"/>): saved
+    /// and undone with the document, no part of the analysis input.</summary>
+    public ReferenceGeometry ReferenceGeometry => Data.ReferenceGeometry;
 
     /// <summary>Identifies the data an analysis reads: everything but names and origins. Renaming an object leaves it
     /// as it is; moving a point, a load, a stiffness or a restraint changes it. Results are current while it matches.</summary>

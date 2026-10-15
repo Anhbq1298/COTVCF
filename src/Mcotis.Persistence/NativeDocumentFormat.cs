@@ -21,7 +21,7 @@ public interface IDocumentMigration
 public static class NativeDocumentFormat
 {
     public const string FormatName = "Mcotis.Document";
-    public const int CurrentSchemaVersion = 6;
+    public const int CurrentSchemaVersion = 7;
     public const string Extension = ".mcotis";
 
     /// <summary>Schema 1 had no DOF setting; preserve its planar XZ analysis assumption. Schema 2 had no setting for the
@@ -29,7 +29,20 @@ public static class NativeDocumentFormat
     /// of load case with one reference to another case; schema 4 states the kind, the reference by its meaning, the
     /// geometric nonlinearity and the mass sources (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md §5.1).</summary>
     public static IReadOnlyList<IDocumentMigration> Migrations { get; } =
-        [new AddActiveDofs(), new AddCableDofs(), new AddLoadCaseStateConfig(), new AddModalMassAssignments(), new AddApplicationDataAndGenerator()];
+        [new AddActiveDofs(), new AddCableDofs(), new AddLoadCaseStateConfig(), new AddModalMassAssignments(), new AddApplicationDataAndGenerator(),
+         new AddReferenceGeometry()];
+
+    /// <summary>6 → 7. A schema-6 document had no grid systems and no levels: both lists are empty. No grid is made up
+    /// from the points of the model — the view offers their coordinates as planes without saving them as grids.</summary>
+    private sealed class AddReferenceGeometry : IDocumentMigration
+    {
+        public int FromVersion => 6;
+        public void Upgrade(JsonObject file)
+        {
+            if (file.ContainsKey("referenceGeometry")) throw new DocumentFileException("Schema 6 has no grid systems and no levels.");
+            file["referenceGeometry"] = new JsonObject { ["gridSystems"] = new JsonArray(), ["levels"] = new JsonArray() };
+        }
+    }
 
     /// <summary>5 → 6. A schema-5 document held no application data and was not flagged as generated: both are empty.</summary>
     private sealed class AddApplicationDataAndGenerator : IDocumentMigration
@@ -303,8 +316,19 @@ public static class NativeDocumentFormat
                 }).ToList(),
             ApplicationData = new(d.ApplicationData, StringComparer.Ordinal),
             Generator = d.Generator is { } generator ? new() { Id = generator.GeneratorId, Version = generator.Version, Parameters = new(generator.Parameters, StringComparer.Ordinal) } : null,
+            ReferenceGeometry = new()
+            {
+                GridSystems = d.ReferenceGeometry.GridSystems.Select(system => new GridSystemDto
+                {
+                    Name = system.Name, Origin = ToVector(system.Origin), RotationDeg = system.RotationDeg, Visible = system.Visible,
+                    XLines = system.XLines.Select(ToGridLine).ToList(), YLines = system.YLines.Select(ToGridLine).ToList(),
+                }).ToList(),
+                Levels = d.ReferenceGeometry.Levels.Select(level => new LevelDto { Name = level.Name, Elevation = level.Elevation, Visible = level.Visible }).ToList(),
+            },
         };
     }
+
+    private static GridLineDto ToGridLine(GridLine line) => new() { Label = line.Label, Coordinate = line.Coordinate, Visible = line.Visible };
 
     private static OriginDto? ToOrigin(ObjectOrigin? origin) => origin is null ? null : new()
     {
@@ -444,6 +468,13 @@ public static class NativeDocumentFormat
         foreach (var (key, value) in Member(file.ApplicationData, "applicationData")) editor.SetApplicationData(key, value);
         if (file.Generator is { } generator)
             editor.SetGenerator(GeneratorOrigin.Create(generator.Id, generator.Version, Member(generator.Parameters, "generator.parameters")));
+        var reference = Member(file.ReferenceGeometry, "referenceGeometry");
+        static GridLine FromGridLine(GridLineDto line) => new(Member(line.Label, "label"), line.Coordinate, line.Visible);
+        editor.SetReferenceGeometry(new(
+            [.. Member(reference.GridSystems, "referenceGeometry.gridSystems").Select(system => new GridSystem(Member(system.Name, "name"),
+                FromVector(Member(system.Origin, "origin")), system.RotationDeg,
+                [.. Member(system.XLines, "xLines").Select(FromGridLine)], [.. Member(system.YLines, "yLines").Select(FromGridLine)], system.Visible))],
+            [.. Member(reference.Levels, "referenceGeometry.levels").Select(level => new Level(Member(level.Name, "name"), level.Elevation, level.Visible))]));
 
         // Where the automatic names had got to — beyond what the names still in the file show, when objects were deleted.
         foreach (var (key, number) in Member(file.NameSequence, "nameSequence"))

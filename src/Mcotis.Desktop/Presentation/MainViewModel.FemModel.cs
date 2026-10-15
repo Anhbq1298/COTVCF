@@ -728,6 +728,11 @@ public sealed partial class MainViewModel
         // An edit of the open model is one step of the document's history (2026-10-14, M2): Edit → Undo goes back to the
         // document before it. A model that is opened, imported or generated starts a history of its own.
         var current = NativeDocumentSession.Document;
+        // the grids and levels are the document's own (the configuration has no place for them): an edit keeps them, and
+        // a native document opened into the window hands its own over (geometry editing plan, 2026-10-15)
+        var reference = carriedReferenceGeometry ?? (current.DocumentId == document.DocumentId ? current.ReferenceGeometry : null);
+        carriedReferenceGeometry = null;
+        if (reference is { IsEmpty: false } && NativeDocumentProblem is null) document = WithReferenceGeometry(document, reference);
         if (edit && NativeDocumentProblem is null && current.DocumentId == document.DocumentId && !current.Points.IsEmpty)
         {
             if (!restoringFromDocument)
@@ -770,7 +775,16 @@ public sealed partial class MainViewModel
         if (femWorkingDirty && HasWorkingModel && State.Baseline.Points.Count > 0 && FemSectionProperties.Count > 0)
             PersistFemWorkingSnapshot(advanceRevision: true);
         var name = undo ? NativeDocumentSession.UndoName : NativeDocumentSession.RedoName;
+        var before = NativeDocumentSession.Document;
         if (!(undo ? NativeDocumentSession.Undo() : NativeDocumentSession.Redo())) return false;
+        // a step of the grids and levels only: the model and its results stay as they are
+        if (OnlyReferenceDiffers(before, NativeDocumentSession.Document))
+        {
+            Message = $"{(undo ? "Undo" : "Redo")}: {name ?? "edit"} — the grids and levels as they were {(undo ? "before" : "after")} it; no point moved.";
+            NotifySharedViewer();
+            NotifyModelHistory();
+            return true;
+        }
         if (NativeToLegacyProjection.Read(NativeDocumentSession.Document) is not { } configuration)
         {
             Warn(undo ? "Undo" : "Redo", "The document holds no configuration of the main window to go back to.");
