@@ -100,10 +100,13 @@ public sealed class ParametricOptimization : IOptimizationRunner
     private readonly Func<FemSectionProperties, (double? SgdPerM, string? Missing)>? costPerMetre;
     private readonly IReadOnlyList<IOptimizationEvaluator> evaluators;
     private readonly FemStudyService fem = new();
+    private readonly MemberUtilizationCheck? memberCheck;
 
     public ParametricOptimization(IParametricStudy study, OptimizationCriteria criteria,
-        Func<FemSectionProperties, (double? SgdPerM, string? Missing)>? costPerMetre, IReadOnlyList<IOptimizationEvaluator>? evaluators = null)
+        Func<FemSectionProperties, (double? SgdPerM, string? Missing)>? costPerMetre, IReadOnlyList<IOptimizationEvaluator>? evaluators = null,
+        MemberUtilizationCheck? memberCheck = null)
     {
+        this.memberCheck = memberCheck;
         this.study = study;
         this.criteria = criteria;
         this.costPerMetre = costPerMetre;
@@ -152,6 +155,7 @@ public sealed class ParametricOptimization : IOptimizationRunner
             }
             catch (InvalidOperationException ex) { return CaseFailed(ex.Message); }
             IReadOnlyDictionary<string, FemAnalysisResult> results = run.Results!;
+            var solved = results;       // the member check reads every solved result, the deflection check only the one it names
             if (criteria.DeflectionResult is { } wanted)
             {
                 var match = results.Keys.FirstOrDefault(key => string.Equals(key, wanted, StringComparison.OrdinalIgnoreCase));
@@ -165,6 +169,7 @@ public sealed class ParametricOptimization : IOptimizationRunner
                 result = evaluator.Evaluate(result, candidate, results);
                 if (result.Failure is not null) return result;
             }
+            if (memberCheck is not null) result = result with { Members = memberCheck.Evaluate(candidate, solved) };
             return result;
         }
         catch (OperationCanceledException) { throw; }

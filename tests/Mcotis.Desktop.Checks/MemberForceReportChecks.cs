@@ -50,6 +50,9 @@ internal static class MemberForceReportChecks
             "member-force HTML is self-contained and exposes scalable profile, envelope, and matrix views");
         Check(html.Contains("className='ms'") && html.Contains("className='pop'") && html.Contains("Reset filters"),
             "member-force HTML uses compact multi-select L/H/P filters");
+        Check(html.Contains("id=\"groupFilter\"") && html.Contains("chosenGroups") &&
+              html.Contains("<select id=\"group\" hidden"),
+            "member-force HTML supports any combination of member groups instead of only one or all");
         Check(html.Contains("station-hit") && html.Contains("Frame object:") && html.Contains("Analysis element:"),
             "member-force chart exposes exact station values and SAP identifiers on hover");
         Check(html.Contains("Start + middle + end per element") && html.Contains("All SAP stations") &&
@@ -57,6 +60,8 @@ internal static class MemberForceReportChecks
             "member-force chart defaults to three positions per SAP analysis element without discarding detailed stations");
         Check(html.Contains("VierendeelMembers") && html.Contains("MegaColumns"),
             "member-force HTML exposes Vierendeel and mega-column groups in the shared group selector");
+        Check(html.Contains("Candidate definitions") && html.Contains("candidate-pretension-matrix"),
+            "member-force HTML includes the shared compact L/H/P candidate definitions");
 
         var folder = Path.Combine(Path.GetTempPath(), "mcotis_mf_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);

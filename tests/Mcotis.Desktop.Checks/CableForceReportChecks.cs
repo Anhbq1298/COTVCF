@@ -69,6 +69,8 @@ internal static class CableForceReportChecks
               html.Contains("Source Data") && html.Contains("id=\"warns\"") &&
               !html.Contains("http://") && !html.Contains("https://") && !html.Contains("cdn."),
             "Cable Forces HTML is self-contained, keeps the Result Library / Source Data / warnings, and shows 'Result unavailable' for gaps");
+        Check(html.Contains("Candidate definitions") && html.Contains("candidate-pretension-matrix"),
+            "Cable Forces HTML includes the shared compact L/H/P candidate definitions");
         Check(html.Contains("01 · Cable Force Overview") && html.Contains("02 · Force Development by Pretension Candidate") &&
               html.Contains("03 · Governing / Capacity Review"),
             "the report is organised as overview, force development per pretension candidate, and governing / capacity review");

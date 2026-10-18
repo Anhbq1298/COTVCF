@@ -65,7 +65,8 @@ public sealed record VcfOptimizationResult(
     double? MaxUpliftMm = null,
     string? UpliftPoint = null,
     double? UpliftLimitMm = null,
-    OptimizationResponse? Response = null)
+    OptimizationResponse? Response = null,
+    IReadOnlyList<MemberUtilization>? Members = null)
 {
     /// <summary>True when the uplift is within its limit (<see cref="VcfOptimization.UpliftToleranceMm"/>); null when there is none to check.</summary>
     public bool? UpliftPasses => MaxUpliftMm is { } uplift && UpliftLimitMm is { } limit ? uplift <= limit + VcfOptimization.UpliftToleranceMm : null;

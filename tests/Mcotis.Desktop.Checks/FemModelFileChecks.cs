@@ -394,6 +394,10 @@ internal static class FemModelFileChecks
               vm.FemRunSummary.Contains("LL_ABOVE qz 5 kPa", StringComparison.Ordinal),
             $"the default model is ready to run ({vm.FemRunSummary})");
         var runs = Analyze(vm);
+        var roleDesign = vm.RunColumnDesign(vm.DesignBasis(ColumnDesignType.MegaComposite) with { EffectiveLengthY = 10, EffectiveLengthZ = 10, LoadCases = vm.DesignDefaultCases() });
+        Check(roleDesign.Where(design => design.Member is "170" or "181" or "186" or "187").Select(design => design.Role).Distinct().SequenceEqual(["Mega column"]) &&
+              roleDesign.Any(design => design.Role == "End frames"),
+            "the design results carry the member's role in the VCF system (Frame Information's wording): " + string.Join(", ", roleDesign.Select(design => design.Member + "=" + design.Role)));
         var midSpan = runs.SelectMany(run => run.Loads ?? []).Where(load => load.PointName == "TTrPt006").Select(load => load.FzKN).Order().ToArray();
         Check(warnings.Count == 0 && silent.Reads == 0 && runs.Count == 1 && runs[0].Id == FemStudyService.ModelRunId && vm.FemCableFitRows.All(row => !row.Failed) &&
               midSpan.SequenceEqual([-12000.0, -6000.0]) && vm.FemStatus == "ANALYSIS COMPLETE" && vm.FemMonitor.Status is FemRunStatus.Completed or FemRunStatus.CompletedWithWarnings &&

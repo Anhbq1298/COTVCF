@@ -100,6 +100,10 @@ public sealed record ColumnOptimizationInput
     public SizeRange ProfileWidth { get; init; } = new(300, 500, 100);
     public SizeRange FlangeThickness { get; init; } = new(25, 60, 10);
     public SizeRange WebThickness { get; init; } = new(20, 40, 10);
+    /// <summary>True: the web is as thick as the flange (tw = tf), so tw is not stepped and the cases are fewer.</summary>
+    public bool WebEqualsFlange { get; init; }
+    /// <summary>True: the profile is as wide as it is deep (b = h), so the flange width is not stepped.</summary>
+    public bool WidthEqualsDepth { get; init; }
     public IReadOnlyList<int> ProfileCounts { get; init; } = [4];         // mega: 4 and / or 6
     public double ProfileEdge { get; init; } = 160;                       // mega: concrete face to the outer profile's face
     // grades
@@ -175,6 +179,14 @@ public static class ColumnOptimizer
 {
     private const double SteelDensity = 7850;   // kg/m³
 
+    /// <summary>How many section combinations (geometry × steel grade × concrete grade × bar arrangement) the ranges give, before the
+    /// candidates that cannot be built are left out and before any is designed: the number of cases of a run.</summary>
+    public static long CombinationCount(ColumnOptimizationInput input, ColumnSectionInput template)
+    {
+        var steelCount = input.UsesSteel ? input.SteelGrades.Count : 1;
+        return (long)Shapes(input, template).Count() * steelCount * input.ConcreteGrades.Count * BarOptions(input).Count;
+    }
+
     public static IReadOnlyList<ColumnCandidate> Candidates(ColumnOptimizationInput input, ColumnSectionInput template)
     {
         var steel = input.UsesSteel ? input.SteelGrades : [new SteelGrade("—", "", [(1e9, template.Fy)])];
@@ -244,9 +256,9 @@ public static class ColumnOptimizer
             var outline = template with { Depth = depth, Width = width };
             if (!input.UsesProfile) { yield return outline; continue; }
             foreach (var hs in input.ProfileDepth.Values())
-                foreach (var bf in input.ProfileWidth.Values())
+                foreach (var bf in input.WidthEqualsDepth ? [hs] : input.ProfileWidth.Values())
                     foreach (var tf in input.FlangeThickness.Values())
-                        foreach (var tw in input.WebThickness.Values())
+                        foreach (var tw in input.WebEqualsFlange ? [tf] : input.WebThickness.Values())
                         {
                             if (2 * tf >= hs || tw >= bf) continue;
                             var profile = outline with { SteelDepth = hs, SteelWidth = bf, FlangeThickness = tf, WebThickness = tw, ProfileName = "" };

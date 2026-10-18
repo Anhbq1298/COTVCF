@@ -18,6 +18,41 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Publish consolidated master and synchronize the working copy
+- Status: Done
+- Who: Codex
+- Where: Help → Development Plans; repository master branch
+- What: Consolidates all available branches and local optimization work into master, the repository's primary branch, and publishes that history for the team. Includes member utilization, linked column-profile dimensions and the planned frame distributed-load workflow. Saved member-utilization fields preserve infinite utilizations explicitly in JSON so an overloaded column cannot prevent saving its study. Earlier default-CFT production-baseline differences remain documented and pending approval; no frozen answers were recaptured.
+- Checks: solution build; quick library and desktop checks (saved optimization rows compare member-utilization contents, not list references); --dev-log. Remote publication and the local pull are verified against origin/master.
+
+## 2026-10-18 · Optimization results: Member Utilization tab
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Optimization → Optimization VCF / Optimization TAS → results window → Member Utilization (between Run and Chart)
+- What: Every analysed case now keeps the utilization of all the members of its model, and the new tab lists them for the case chosen in its Case box (or selected on the Run sheet), most utilized first, with the governing result and a summary line. Cables: largest tension of the solved results over the design capacity (section area × cable strength × φ). Columns whose section a Design type takes (RC, CFT, steel encased, mega composite): the Design engine, with the Design window's code, method and factors, on the ULS results (all solved results when none is named ULS); an effective length not keyed there is the member's length. Other frames (chords, braces) have no design engine and are listed as not designed. Saved with the study; a study saved before this shows a note asking for a new run. Design runs per case, so a study with many column members takes longer.
+- Checks: --optimization-study (cable ratio and not-designed frame on a synthetic case). The engine on a real column case is not covered yet, and --optimization-study's frozen-baseline comparison reports the default VCF model's cost and deflection moving; this change adds a field after those values are computed and does not alter them.
+
+## 2026-10-18 · Consolidate pending branches and column-design work
+- Status: Done
+- Who: Codex
+- Where: Main application; Design; retained study-report services; analysis plans
+- What: Merged all pending remote branches into master and committed the local column-design changes. Kept the current main-window geometry implementation and retired workspace archive intact; removed the obsolete unused native-workspace controller brought by the older geometry branch. Current load-case and modal verification records remain authoritative; earlier conflicting specifications are retained under docs/analysis/archived-plans.
+- Checks: solution build and quick library/desktop smoke checks pass. --column-design passes its engineering checks but reports 66 frozen design/model baseline differences, the pre-existing default-CFT change recorded below; baselines were not recaptured. Historical report suites were not run for this consolidation.
+
+## 2026-10-18 · Column optimization: tw = tf and b = h options and the number of cases shown
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Design → Steel Encased / Mega Composite Column Design… → Optimization tab
+- What: A **tw = tf** tick next to the web range makes the web as thick as the flange, and a **b = h** tick next to the flange width makes the profile as wide as it is deep; that dimension is not stepped, so a run has far fewer cases. The tab shows the number of cases a run would design (size × steel grade × concrete grade × bar arrangement) above the Run button and recounts it whenever a range, grade, bar or profile input changes; over the 250,000 limit it says so.
+- Checks: --study-ui (the count, with and without tw = tf, and after a range change; run past the unrelated assertions noted in the Design tab entry); --dev-log.
+
+## 2026-10-18 · Column design: results in a Design tab; members show the effective length
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Design → any column design → Design Reference dialog (Members & Loads, Design tab)
+- What: Run Design no longer closes the dialog and opens a separate results window: the results (summary per member and the step-by-step calculation, Copy / Save Report) appear in a new **Design** tab placed before Optimization, so the basis, section, members and results are always in one window; Cancel becomes Close and Run Design can be repeated. The Members & Loads list shows each member's section, material and the effective length l0 of the Design Basis (following what is keyed in there) instead of the member's geometric length, which read 20 m against an l0 of 10 m.
+  The summary table has a **Role** column after Member (Mega column, Top chord, End frames…, as Frame Information gives it for the VCF system; empty for a model that has no such roles).
+- Checks: --study-ui (Design tab and member lines; that suite stops earlier on an unrelated viewer-supports assertion and at Assign → Joint → Restraints from uncommitted menu work, so the new check was run past them); --dev-log.
 ## 2026-10-18 · Frame loads, still to come: drawing, Object Information, SAP2000 / ETABS adapters
 - Status: Planned
 - Who: Unassigned
@@ -26,12 +61,11 @@ continues on the next lines, indented by two spaces):
 - Checks: none yet
 
 ## 2026-10-18 · Assign → Frame → Frame Load: distributed loads as SAP2000 defines them
-- Status: In progress
+- Status: Done
 - Who: Mark (with Claude Code)
 - Where: Assign → Frame → Frame Load…
-- What: Distributed forces or moments on the frames selected on the model view, in SAP2000's Frame Distributed Loads form: load pattern; Forces / Moments; GLOBAL or Local; directions X, Y, Z, X/Y/Z Projected, Gravity, Gravity Projected or Local 1, 2, 3; four trapezoid points, relative or absolute distance from End-I (linear between points, zero outside them); a uniform load; Add to / Replace / Delete existing loads of the pattern (point loads and other patterns untouched). One step of Undo; results cleared. The loads are data of the native document (`Mcotis.Core.FrameLoads`: `Segments`, `Assign`, `Of`, `IntensityAt`; file schema 8), kept through the main window's rebuilds (`Application/NativeFrameLoads`) and saved in the `.mcotis` file — not in the older `.cotfem` files or the working-session recovery. The solver takes projected loads (per unit projected length) and distributed bending and torsional moments (`SpatialFrameElement`), verified against closed forms (`docs/analysis/frame-distributed-load-verification.md`). Not yet: drawing them, Object Information, the SAP2000 / ETABS export (it warns) and the VCF / TAS optimisation candidates, which are built from the legacy loading.
-  The desktop project was not built where this was written (no WPF there): build it and run the desktop checks on Windows before merging.
-- Checks: Mcotis.Checks quick and --full (group "Frame distributed loads", 129 checks); desktop checks not run yet
+- What: Distributed forces and moments on selected frames use SAP2000-style pattern, type, direction, projection, trapezoid, uniform-load, and Add / Replace / Delete options. Native-document assignment is one Undo step, clears FEM results, survives legacy configuration rebuilds, and saves in `.mcotis`. Projected forces and distributed moments are solved and verified against closed forms. Loads are not yet drawn or listed in Object Information, exported to SAP2000 / ETABS, or used by VCF / TAS optimization candidates; those remain in the planned follow-up above.
+- Checks: `dotnet build MCOTiS.sln`; `dotnet run --project tests/Mcotis.Checks` (1,383); `dotnet run --project tests/Mcotis.Checks -- --full` (3,298); `dotnet run --project tests/Mcotis.Desktop.Checks` (quick smoke checks)
 
 ## 2026-10-18 · Default VCF model: CFT chords as a defined filled tube; CFT exports as a steel tube
 - Status: In progress

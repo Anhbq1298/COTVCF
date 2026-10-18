@@ -119,6 +119,8 @@ public partial class DesignReferenceWindow
         Sync(OptLengthYBox, LengthYBox); Sync(LengthYBox, OptLengthYBox);
         Sync(OptLengthZBox, LengthZBox); Sync(LengthZBox, OptLengthZBox);
         OptShape_Changed(this, new RoutedEventArgs());
+        WatchRanges(OptimizationTab.Content as DependencyObject);
+        UpdateCaseCount();
         RefreshRates();
         UpdateOptimizationMembers();
         foreach (var member in members) member.PropertyChanged += (_, _) => UpdateOptimizationMembers();
@@ -141,8 +143,39 @@ public partial class DesignReferenceWindow
         var width = !circular && OptSquareBox.IsChecked != true;
         OptDepthLabel.Text = circular ? "D  diameter" : "H  depth (in-plane)";
         foreach (var control in new FrameworkElement[] { OptWidthLabel, OptWidthMin, OptWidthMax, OptWidthStep }) control.IsEnabled = width;
+        foreach (var control in new FrameworkElement[] { OptWebMin, OptWebMax, OptWebStep }) control.IsEnabled = OptWebEqualsFlange.IsChecked != true;
+        foreach (var control in new FrameworkElement[] { OptProfileWidthMin, OptProfileWidthMax, OptProfileWidthStep }) control.IsEnabled = OptWidthEqualsDepth.IsChecked != true;
+        UpdateCaseCount();
         var outlineWidth = OptOutlineSquareBox.IsChecked != true;
         foreach (var control in new FrameworkElement[] { OptOutlineWidthLabel, OptOutlineWidthMin, OptOutlineWidthMax, OptOutlineWidthStep }) control.IsEnabled = outlineWidth;
+    }
+
+    /// <summary>The number of cases a run would design, shown above the Run button and kept up to date as the ranges change.</summary>
+    private void UpdateCaseCount()
+    {
+        if (OptCountText is null || OptWebEqualsFlange is null || OptWidthEqualsDepth is null || OptSteelFrom?.SelectedItem is null || OptSteelTo?.SelectedItem is null ||
+            OptConcreteFrom?.SelectedItem is null || OptConcreteTo?.SelectedItem is null) return;
+        try
+        {
+            var input = ReadRanges() with { Type = type };
+            var count = ColumnOptimizer.CombinationCount(input, shownSection);
+            OptCountText.Text = count == 0 ? "No cases: the ranges give no section."
+                : $"{count:N0} cases for this run" + (count > ColumnOptimizationInput.MaxCandidates ? $" — over the limit of {ColumnOptimizationInput.MaxCandidates:N0}; narrow a range or use larger steps" : "");
+        }
+        catch (ArgumentException ex) { OptCountText.Text = "Cases: " + ex.Message; }
+    }
+
+    /// <summary>Recounts the cases whenever a range, grade, bar or profile input of the Optimization tab changes.</summary>
+    private void WatchRanges(DependencyObject? parent)
+    {
+        if (parent is null) return;
+        switch (parent)
+        {
+            case TextBox box when !ReferenceEquals(box, OptLengthYBox) && !ReferenceEquals(box, OptLengthZBox): box.TextChanged += (_, _) => UpdateCaseCount(); break;
+            case CheckBox check: check.Click += (_, _) => UpdateCaseCount(); break;
+            case ComboBox combo: combo.SelectionChanged += (_, _) => UpdateCaseCount(); break;
+        }
+        foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>()) WatchRanges(child);
     }
 
     private void OptGrades_Changed(object sender, SelectionChangedEventArgs e)
@@ -193,6 +226,8 @@ public partial class DesignReferenceWindow
             ProfileWidth = Range(OptProfileWidthMin, OptProfileWidthMax, OptProfileWidthStep),
             FlangeThickness = Range(OptFlangeMin, OptFlangeMax, OptFlangeStep),
             WebThickness = Range(OptWebMin, OptWebMax, OptWebStep),
+            WebEqualsFlange = OptWebEqualsFlange.IsChecked == true,
+            WidthEqualsDepth = OptWidthEqualsDepth.IsChecked == true,
             ProfileCounts = counts,
             ProfileEdge = Number(OptProfileEdge),
             SteelFrom = OptSteelFrom.SelectedItem as string ?? "S355",
@@ -225,7 +260,9 @@ public partial class DesignReferenceWindow
             if (!input.SquareOutline) ranges.Add(("b (outline)", input.OutlineWidth));
         }
         if (input.UsesProfile)
-            ranges.AddRange([("profile h", input.ProfileDepth), ("flange b", input.ProfileWidth), ("tf", input.FlangeThickness), ("tw", input.WebThickness)]);
+            ranges.AddRange([("profile h", input.ProfileDepth), ("tf", input.FlangeThickness)]);
+        if (input.UsesProfile && !input.WidthEqualsDepth) ranges.Add(("flange b", input.ProfileWidth));
+        if (input.UsesProfile && !input.WebEqualsFlange) ranges.Add(("tw", input.WebThickness));
         foreach (var (name, range) in ranges)
             if (!(range.Min > 0) || !(range.Max >= range.Min) || !(range.Step > 0))
                 throw new ArgumentException($"{name}: enter min > 0, max ≥ min and a step > 0 (mm).");

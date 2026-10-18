@@ -42,6 +42,7 @@ public sealed record StudyExecutionSnapshot(
     // provenance fingerprint; Tab 06 may replace them with the user's current values.
     public IReadOnlyDictionary<string, double> CableDesignCapacities { get; init; } =
         new Dictionary<string, double>();
+    public IReadOnlyList<string> ConfiguredCableNames { get; init; } = [];
     // Deflection post-processing (Tab 06): monitored points + the SAP case their Uz is read under.
     public IReadOnlyList<string> DeflectionPoints { get; init; } = [];
     public string DeflectionOutputCase { get; init; } = "";

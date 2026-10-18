@@ -14,7 +14,8 @@ namespace Mcotis.Desktop.Presentation;
 /// downward deflection of a bottom chord point against span / ratio, its largest uplift against the uplift limit, the
 /// check of both, the load case / combination and point where the deflection occurs, and the case status. Columns follow the
 /// run (<see cref="MainViewModel.VcfOptimizationColumns"/>). The Chart sheet shows the run's parametric study
-/// (<see cref="MainViewModel.OptimizationReport"/>): numbered figures, then the summary and conclusions.
+/// (<see cref="MainViewModel.OptimizationReport"/>): numbered figures, then the summary and conclusions. The Member Utilization sheet
+/// lists every member of a chosen case with its utilization (<see cref="MemberUtilizationCheck"/>).
 /// </summary>
 public partial class OptimizationResultsWindow : Window
 {
@@ -27,8 +28,54 @@ public partial class OptimizationResultsWindow : Window
         DataContext = viewModel;
         BuildColumns();
         BuildChartPage();
+        BuildMemberColumns();
+        MemberCaseBox.ItemsSource = viewModel.VcfOptimizationRows;
+        ResultsGrid.SelectionChanged += (_, _) => { if (ResultsGrid.SelectedItem is VcfOptimizationRow row) MemberCaseBox.SelectedItem = row; };
+        if (viewModel.VcfOptimizationRows.Count > 0) MemberCaseBox.SelectedIndex = 0;
+        viewModel.VcfOptimizationRows.CollectionChanged += OnRowsChanged;
         viewModel.PropertyChanged += OnViewModelChanged;
-        Closed += (_, _) => viewModel.PropertyChanged -= OnViewModelChanged;
+        Closed += (_, _) => { viewModel.PropertyChanged -= OnViewModelChanged; viewModel.VcfOptimizationRows.CollectionChanged -= OnRowsChanged; };
+    }
+
+    // ---- Member Utilization sheet ----
+
+    /// <summary>A run lists its cases as they complete: the first one is shown until the user picks another.</summary>
+    private void OnRowsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (viewModel.VcfOptimizationRows.Count == 0) { MemberCaseBox.SelectedItem = null; ShowMembers(null); }
+        else if (MemberCaseBox.SelectedItem is null) MemberCaseBox.SelectedIndex = 0;
+    }
+
+    private void MemberCase_Changed(object sender, SelectionChangedEventArgs e) => ShowMembers(MemberCaseBox.SelectedItem as VcfOptimizationRow);
+
+    private void BuildMemberColumns()
+    {
+        var numeric = (Style)FindResource("NumericCell");
+        MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Member", Binding = new Binding(nameof(MemberUtilization.Member)), MinWidth = 90 });
+        MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Type", Binding = new Binding(nameof(MemberUtilization.Type)), MinWidth = 70 });
+        MemberGrid.Columns.Add(new DataGridTextColumn { Header = new TextBlock { Text = "Section" }, Binding = new Binding(nameof(MemberUtilization.Section)), MinWidth = 140 });
+        MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Utilization", MinWidth = 90, ElementStyle = numeric,
+            Binding = new Binding(nameof(MemberUtilization.UtilizationText)), SortMemberPath = nameof(MemberUtilization.Utilization) });
+        MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Check", Binding = new Binding(nameof(MemberUtilization.Check)), MinWidth = 54, ElementStyle = CheckStyle(nameof(MemberUtilization.Check)) });
+        MemberGrid.Columns.Add(new DataGridTextColumn { Header = new TextBlock { Text = "Governing result" }, Binding = new Binding(nameof(MemberUtilization.Case)), MinWidth = 130 });
+        MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Note", Binding = new Binding(nameof(MemberUtilization.Note)), Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 160 });
+    }
+
+    /// <summary>The members of <paramref name="row"/>'s case, the most utilized first.</summary>
+    private void ShowMembers(VcfOptimizationRow? row)
+    {
+        if (row is null) { MemberGrid.ItemsSource = null; MemberSummary.Text = ""; return; }
+        if (row.Members is not { Count: > 0 } members)
+        {
+            MemberGrid.ItemsSource = null;
+            MemberSummary.Text = row.MaxDeflectionMm is null ? "This case could not be analysed — no members." : "No member utilization saved for this case (a study run before this sheet existed): run it again.";
+            return;
+        }
+        MemberGrid.ItemsSource = members.OrderByDescending(item => item.Utilization ?? -1).ThenBy(item => item.Member, StringComparer.Ordinal).ToArray();
+        var checkedMembers = members.Where(item => item.Utilization is not null).ToArray();
+        var worst = checkedMembers.MaxBy(item => item.Utilization);
+        MemberSummary.Text = $"{members.Count} members · {checkedMembers.Length} checked · {checkedMembers.Count(item => item.Check == "OK")} OK" +
+            (worst is null ? "" : $" · governing {worst.Member} {worst.UtilizationText} ({worst.Check})");
     }
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)
@@ -65,14 +112,14 @@ public partial class OptimizationResultsWindow : Window
     }
 
     /// <summary>OK in the success colour, NG in the error colour.</summary>
-    private Style CheckStyle()
+    private Style CheckStyle(string path = nameof(VcfOptimizationRow.Check))
     {
         var style = new Style(typeof(TextBlock));
         style.Setters.Add(new Setter(TextBlock.FontWeightProperty, FontWeights.SemiBold));
         style.Setters.Add(new Setter(TextBlock.HorizontalAlignmentProperty, HorizontalAlignment.Center));
-        foreach (var (value, brush) in new[] { ("OK", "Success"), ("NG", "Error") })
+        foreach (var (value, brush) in new[] { ("OK", "Success"), ("NG", "Error"), ("FAIL", "Error"), ("ERROR", "Error") })
         {
-            var trigger = new DataTrigger { Binding = new Binding(nameof(VcfOptimizationRow.Check)), Value = value };
+            var trigger = new DataTrigger { Binding = new Binding(path), Value = value };
             trigger.Setters.Add(new Setter(TextBlock.ForegroundProperty, TryFindResource(brush) ?? System.Windows.Media.Brushes.Black));
             style.Triggers.Add(trigger);
         }

@@ -178,7 +178,8 @@ internal static class McotisFileChecks
               reopened.OptimizationReport.Charts.Count == report.Charts.Count &&
               reopened.VcfOptimizationProgress.StartsWith("Saved with the model", StringComparison.Ordinal) && !reopened.VcfOptimizationProgress.Contains("before later edits", StringComparison.Ordinal),
             $"the optimization study ({rows.Length} cases) is saved beside the model, in {Path.GetFileName(McotisModelFile.ResultsFolder(path))}, and comes back with it: " +
-            "every row, the columns, the Chart page and its summary");
+            "every row, the columns, the Chart page and its summary" +
+            $" (file exists: {File.Exists(beside)}; reopened rows: {reopened.VcfOptimizationRows.Count}; rows match: {reopened.VcfOptimizationRows.SequenceEqual(rows, RowComparer.Instance)}; progress: {reopened.VcfOptimizationProgress}; warnings: {string.Join("; ", warnings)})");
 
         // an edit after the study: the study saved with the model is said to be of the model before it
         var bases = reopened.FemPinSupportPoints;
@@ -203,7 +204,8 @@ internal static class McotisFileChecks
     {
         public static RowComparer Instance { get; } = new();
         public bool Equals(VcfOptimizationRow? a, VcfOptimizationRow? b) =>
-            a is not null && b is not null && a with { Values = [] } == b with { Values = [] } && a.Values.SequenceEqual(b.Values);
+            a is not null && b is not null && a with { Values = [], Members = null } == b with { Values = [], Members = null } &&
+            a.Values.SequenceEqual(b.Values) && (a.Members is null ? b.Members is null : b.Members is not null && a.Members.SequenceEqual(b.Members));
         public int GetHashCode(VcfOptimizationRow row) => row.Case.GetHashCode();
     }
 

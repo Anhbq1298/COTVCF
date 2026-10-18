@@ -11,7 +11,8 @@ public sealed partial class StudyPathService
         var baseline = NormalizeBaselinePath(baselinePath);
         var parent = Path.GetDirectoryName(baseline)
             ?? throw new InvalidOperationException("The baseline model must have a parent directory.");
-        return Path.Combine(parent, "Study");
+        var modelFolder = SanitizeFileName(Path.GetFileNameWithoutExtension(baseline));
+        return Path.Combine(parent, "Study", modelFolder);
     }
 
     public string GetIterationDirectory(string baselinePath, string iterationId)

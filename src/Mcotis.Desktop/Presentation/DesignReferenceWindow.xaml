@@ -1,6 +1,6 @@
 <Window x:Class="Mcotis.Desktop.Presentation.DesignReferenceWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:p="clr-namespace:Mcotis.Desktop.Presentation"
-        Title="Design Reference" Icon="{x:Static p:AppIcon.Window}" Width="660" Height="600" MinWidth="600" MinHeight="520"
+        Title="Design Reference" Icon="{x:Static p:AppIcon.Window}" Width="980" Height="720" MinWidth="640" MinHeight="520"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Surface}">
  <!-- Design → RC Column / CFT / Steel Encased: confirm the design basis, section and members, then Run Design. -->
  <Window.Resources>
@@ -25,7 +25,7 @@
    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
     <Button Content="Reset" MinWidth="80" Margin="0,0,10,0" Click="Reset_Click" ToolTip="Restore the default code, method, factors and section"/>
     <Button Content="Run Design" MinWidth="90" Margin="0,0,10,0" IsDefault="True" Click="Run_Click"/>
-    <Button Content="Cancel" MinWidth="80" IsCancel="True"/>
+    <Button x:Name="CancelButton" Content="Cancel" MinWidth="80" IsCancel="True"/>
    </StackPanel>
   </DockPanel>
 
@@ -135,6 +135,11 @@
     </Grid>
    </TabItem>
 
+   <!-- Run Design shows its results here, so the basis, the section, the members and the results are always in one window. -->
+   <TabItem x:Name="DesignTab" Header="Design">
+    <p:DesignResultsPanel x:Name="ResultsPanel"/>
+   </TabItem>
+
    <!-- The cheapest section of the column type for the ticked members and load cases over the ranges below (ColumnOptimizer). -->
    <TabItem x:Name="OptimizationTab" Header="Optimization">
     <Grid Margin="0,6,0,0">
@@ -195,10 +200,12 @@
          <TextBox x:Name="OptProfileDepthMin" Grid.Row="1" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptProfileDepthMax" Grid.Row="1" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptProfileDepthStep" Grid.Row="1" Grid.Column="3" Margin="0,0,4,6"/>
          <TextBlock Grid.Row="2" Text="b  flange width" Style="{StaticResource Label}"/>
          <TextBox x:Name="OptProfileWidthMin" Grid.Row="2" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptProfileWidthMax" Grid.Row="2" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptProfileWidthStep" Grid.Row="2" Grid.Column="3" Margin="0,0,4,6"/>
+         <CheckBox x:Name="OptWidthEqualsDepth" Grid.Row="2" Grid.Column="4" Content="b = h" VerticalAlignment="Center" Margin="4,0,0,6" Click="OptShape_Changed" ToolTip="Profile as wide as it is deep: b is not stepped, so fewer cases"/>
          <TextBlock Grid.Row="3" Text="tf  flange" Style="{StaticResource Label}"/>
          <TextBox x:Name="OptFlangeMin" Grid.Row="3" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptFlangeMax" Grid.Row="3" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptFlangeStep" Grid.Row="3" Grid.Column="3" Margin="0,0,4,6"/>
          <TextBlock Grid.Row="4" Text="tw  web" Style="{StaticResource Label}"/>
          <TextBox x:Name="OptWebMin" Grid.Row="4" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptWebMax" Grid.Row="4" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptWebStep" Grid.Row="4" Grid.Column="3" Margin="0,0,4,6"/>
+         <CheckBox x:Name="OptWebEqualsFlange" Grid.Row="4" Grid.Column="4" Content="tw = tf" VerticalAlignment="Center" Margin="4,0,0,6" Click="OptShape_Changed" ToolTip="Web as thick as the flange: tw is not stepped, so fewer cases"/>
          <StackPanel x:Name="OptMegaRow" Grid.Row="5" Grid.ColumnSpan="5" Orientation="Horizontal" Margin="0,0,0,4">
           <TextBlock Text="Profiles" Style="{StaticResource Label}" Width="122"/>
           <CheckBox x:Name="OptFourProfiles" Content="4" IsChecked="True" VerticalAlignment="Center" Margin="0,0,12,6"/>
@@ -268,7 +275,10 @@
        <Button x:Name="OptStopButton" Content="Stop" MinWidth="60" Margin="0,0,6,0" IsEnabled="False" Click="OptStop_Click"/>
        <Button x:Name="OptUseButton" Content="Use Selected" MinWidth="96" IsEnabled="False" Click="OptUse_Click" ToolTip="Put the selected section on the Section tab; Run Design then gives its full report"/>
       </StackPanel>
-      <TextBlock x:Name="OptStatus" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{StaticResource Muted}" FontSize="11"/>
+      <StackPanel VerticalAlignment="Center">
+       <TextBlock x:Name="OptCountText" FontWeight="SemiBold" FontSize="11" TextWrapping="Wrap" AutomationProperties.Name="Number of cases"/>
+       <TextBlock x:Name="OptStatus" TextWrapping="Wrap" Foreground="{StaticResource Muted}" FontSize="11"/>
+      </StackPanel>
      </DockPanel>
 
      <DataGrid x:Name="OptResults" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" HeadersVisibility="Column"

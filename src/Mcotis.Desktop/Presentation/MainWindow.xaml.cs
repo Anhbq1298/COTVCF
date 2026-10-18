@@ -899,27 +899,18 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel vm
             || (sender as FrameworkElement)?.Tag is not string tag
             || !Enum.TryParse<Mcotis.Desktop.Domain.ColumnDesignType>(tag, out var type)) return;
-        var dialog = new DesignReferenceWindow(vm.DesignBasis(type), vm.DesignMemberOptions(type), vm.DesignCaseNames(), vm.DesignDefaultCases(),
+        // Run Design runs inside the dialog and shows its results in the dialog's Design tab, so everything stays in one window
+        IReadOnlyList<Mcotis.Desktop.Application.Design.ColumnMemberDesign> RunDesign(Mcotis.Desktop.Domain.ColumnDesignBasis basis)
+        {
+            vm.SetDesignBasis(basis);
+            if (vm.DesignRunId is null)
+                throw new InvalidOperationException("There are no FEM results to design with. Run the FEM analysis (Run → Run FEM Analysis) first; the design basis is kept.");
+            return vm.RunColumnDesign(basis);
+        }
+        new DesignReferenceWindow(vm.DesignBasis(type), vm.DesignMemberOptions(type), vm.DesignCaseNames(), vm.DesignDefaultCases(),
             vm.DesignRunId, member => vm.DesignSectionDefaults(type, member), SharedViewer.SelectedMembers,
             (members, cases) => vm.DesignMemberInputs(type, members, cases), vm.Materials.ToArray(),
-            vm.FemResultStateText, vm.FemResultState == Mcotis.Application.ResultState.Stale) { Owner = this };
-        if (dialog.ShowDialog() != true || dialog.Result is not { } basis) return;
-        vm.SetDesignBasis(basis);
-        var title = Mcotis.Desktop.Domain.ColumnDesignCodes.Title(type);
-        if (vm.DesignRunId is null)
-        {
-            MessageBox.Show(this, "There are no FEM results to design with. Run the FEM analysis (Run → Run FEM Analysis) first; the design basis is kept.",
-                title, MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
-        }
-        IReadOnlyList<Mcotis.Desktop.Application.Design.ColumnMemberDesign> results;
-        try { results = vm.RunColumnDesign(basis); }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, "The design could not be completed: " + ex.Message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-        new DesignResultsWindow(basis, results, vm.DesignRunId) { Owner = this }.Show();
+            vm.FemResultStateText, vm.FemResultState == Mcotis.Application.ResultState.Stale, RunDesign) { Owner = this }.ShowDialog();
     }
 
     private void ShowWorkflowHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.Workflow);
