@@ -59,7 +59,7 @@ public sealed class SectionFigureView : FrameworkElement
                     context.PolyLineTo(points.Skip(1).Select(Place).ToArray(), isStroked: true, isSmoothJoin: false);
                 }
             geometry.Freeze();
-            drawing.DrawGeometry(fill, outline, geometry);
+            drawing.DrawGeometry(shape.OutlineOnly ? null : fill, outline, geometry);
         }
     }
 

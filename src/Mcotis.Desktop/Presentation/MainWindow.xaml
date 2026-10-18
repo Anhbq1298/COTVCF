@@ -203,10 +203,18 @@
     <MenuItem Header="Steel _Beam / Column Design…" Tag="Steel" Click="DesignMenu_Click" AutomationProperties.Name="Steel Beam Column Design"
               ToolTip="Bare steel beam and column design (I, RHS, CHS) to SS EN 1993-1-1 (EC3) + Singapore NA: classification, cross-section, flexural and lateral-torsional buckling, Annex B interaction"/>
     <MenuItem Header="Tension C_able Design…" Click="TensionCableDesign_Click" AutomationProperties.Name="Tension Cable Design"
-              ToolTip="Choose the number and type of stay units for each tension cable — VSL SSI 2000 strand groups, FATZER full-locked-coil ropes — at 50 % or 60 % of the breaking load, with stiffness, elongation, mass and an indicative cost (Technical Options Study, Oct 2026). Optimization VCF / TAS suggest the same for every cable of a case."/>
+              ToolTip="Check each cable's assigned section with editable breaking stress and reduction factor, then optimize strand counts with iteration history and Apply. The stay-system sizing tools are also available here."/>
     <Separator/>
     <MenuItem Header="_Override Design Procedure…" Click="OverrideDesignProcedure_Click" AutomationProperties.Name="Override Design Procedure"
               ToolTip="Select members and assign each the design procedure of any Design engine; the member's size comes from its section and its forces from the FEM analysis"/>
+   </MenuItem>
+   <MenuItem Header="_Post-Processing" IsEnabled="{Binding HasUsableModelGeometry}">
+    <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click"
+              ToolTip="Choose result cases, monitored objects and limits for FEM output"/>
+    <MenuItem Header="FEM Live Results (_HTML)…" Click="OpenFemHtml_Click" IsEnabled="{Binding HasFemResults}"
+              ToolTip="Open the interactive FEM report: switch load cases and result families, inspect values, zoom and pan without regenerating HTML">
+     <MenuItem.Icon><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D9;" FontSize="14"/></MenuItem.Icon>
+    </MenuItem>
    </MenuItem>
    <MenuItem Header="_Help">
     <MenuItem Header="_User Guide" Click="ShowUserGuide" InputGestureText="F1" AutomationProperties.Name="User Guide"
@@ -218,8 +226,8 @@
     <MenuItem Header="_Development Plans" Click="ShowDevelopmentPlans" AutomationProperties.Name="Development Plans"
               ToolTip="What has been built in Mcotis, by whom, where to find it and how it is checked — and what is planned (docs/DEVELOPMENT_LOG.md)"/>
    </MenuItem>
-   <!-- Optimization — the parametric study with the internal solver — has a tab of its own: set apart by a separator and
-        highlighted (the header template; the Header stays a string, which the window and the checks read). -->
+   <!-- Optimization has a tab of its own, set apart by a separator and highlighted (the header template; the Header
+        stays a string, which the window and the checks read). It is the final menu on the bar. -->
    <Separator x:Name="OptimizationMenuSeparator" Style="{StaticResource MenuBarSeparator}"/>
    <MenuItem x:Name="OptimizationMenu" Header="_Optimization" HeaderTemplate="{StaticResource HighlightedMenuHeader}" IsEnabled="{Binding HasUsableModelGeometry}"
              SubmenuOpened="OptimizationMenu_Opened">
@@ -235,14 +243,6 @@
               IsEnabled="{Binding HasFemResults}" ToolTipService.ShowOnDisabled="True"
               ToolTip="The member force table of Export Results with a SAP2000 column beside every Mcotis column: the forces of the model exported to SAP2000 and analysed there, member by member (SAP2000 is only read)"/>
     <MenuItem Header="_Cancel Optimization" Click="CancelOptimization_Click" IsEnabled="{Binding IsVcfOptimizationRunning}"/>
-   </MenuItem>
-   <MenuItem Header="_Post-Processing" IsEnabled="{Binding HasUsableModelGeometry}">
-    <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click"
-              ToolTip="Choose result cases, monitored objects and limits for FEM output"/>
-    <MenuItem Header="FEM Live Results (_HTML)…" Click="OpenFemHtml_Click" IsEnabled="{Binding HasFemResults}"
-              ToolTip="Open the interactive FEM report: switch load cases and result families, inspect values, zoom and pan without regenerating HTML">
-     <MenuItem.Icon><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D9;" FontSize="14"/></MenuItem.Icon>
-    </MenuItem>
    </MenuItem>
   </Menu>
 

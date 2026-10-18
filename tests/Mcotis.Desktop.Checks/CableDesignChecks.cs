@@ -206,9 +206,13 @@ internal static class CableDesignChecks
         window.Show();
         window.UpdateLayout();
         var buttons = Visuals<System.Windows.Controls.Button>(window).ToArray();
+        var sectionStress = Visuals<System.Windows.Controls.TextBox>(window).Distinct().Single(box => System.Windows.Automation.AutomationProperties.GetName(box) == "Cable check breaking stress MPa");
+        var sectionReduction = Visuals<System.Windows.Controls.TextBox>(window).Distinct().Single(box => System.Windows.Automation.AutomationProperties.GetName(box) == "Cable check reduction factor percent");
+        var checkGrid = Visuals<System.Windows.Controls.DataGrid>(window).Distinct().Single(grid => System.Windows.Automation.AutomationProperties.GetName(grid) == "Cable section checks");
         Check(window.Title == "Tension Cable Design" && buttons.Any(button => Equals(button.Content, "Run Design")) && buttons.Any(button => Equals(button.Content, "Size this stay")) &&
-              buttons.Any(button => Equals(button.Content, "Export to Word…")),
-            "the Tension Cable Design window opens with its Run Design, Size this stay and Export to Word commands");
+              buttons.Any(button => Equals(button.Content, "Export to Word…")) && buttons.Any(button => Equals(button.Content, "Check Sections")) &&
+              buttons.Any(button => Equals(button.Content, "Optimize Tendon Sections…")) && sectionStress.Text == "2160" && sectionReduction.Text == "50" && checkGrid.Columns.Count == 8,
+            "the Tension Cable Design module includes the 2160 MPa / 50% section check and opens strand optimization beside its existing stay design commands");
         buttons.First(button => Equals(button.Content, "Run Design")).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
         var grids = Visuals<System.Windows.Controls.DataGrid>(window).ToArray();
         var results = grids.First(grid => System.Windows.Automation.AutomationProperties.GetName(grid) == "Cable designs");

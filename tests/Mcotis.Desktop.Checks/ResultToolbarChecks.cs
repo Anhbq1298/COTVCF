@@ -459,7 +459,10 @@ internal static class ResultToolbarChecks
             "Optimization is a tab of its own on the menu bar — after a separator, highlighted, the last one — and Run no longer lists it");
         // each optimization varies its own system: on the VCF model only Optimization VCF is offered
         var (optimizeVcf, optimizeTas) = (OptimizationItem(window, "Optimization VCF…"), OptimizationItem(window, "Optimization TAS…"));
+        var designMenu = window.MainMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Desi_gn"));
+        var cableDesign = designMenu.Items.OfType<MenuItem>().Single(item => Equals(((string)item.Header).Replace("_", ""), "Tension Cable Design…"));
         Check(vm.CanOptimizeVcf && !vm.CanOptimizeTas && optimizeVcf.IsEnabled && !optimizeTas.IsEnabled && OptimizationItem(window, "Optimization Results…").IsEnabled &&
+              vm.CanOptimizeCableSections && cableDesign.IsEnabled && !optimization.Items.OfType<MenuItem>().Any(item => ((string)item.Header).Contains("Cable", StringComparison.OrdinalIgnoreCase)) &&
               ToolTipService.GetShowOnDisabled(optimizeTas) && ToolTipService.GetShowOnDisabled(optimizeVcf) && ((string)optimizeTas.ToolTip).StartsWith("For the tied arch system", StringComparison.Ordinal),
             "on a VCF system Optimization VCF is offered and Optimization TAS is greyed; its tooltip, shown while greyed, says which system it is for");
 

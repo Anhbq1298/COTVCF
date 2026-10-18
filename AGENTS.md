@@ -98,7 +98,7 @@ Decided by the user on 2026-10-12; it takes precedence over older guidance that 
   `Domain`, `Configuration`, `Geometry`, `Infrastructure`, `SAP2000`, `Resources`, `UI`) and the library projects above.
 - `tests/` holds the check projects — `Mcotis.Desktop.Checks` for the application, `Mcotis.Checks` for the libraries — and the
   fixtures the application's checks read by path (`tests/fem-sap-benchmark`, `tests/etabs-import`).
-- `bin/` at the repository root is the built application (`./build-desktop.ps1`); ordinary builds write to each
+- `build/` at the repository root is the built application (`./build-desktop.ps1`); ordinary builds write to each
   project's own `bin/` and `obj/`.
 - Run builds and checks from the repository root: the checks find fixtures and documents by paths relative to it.
 

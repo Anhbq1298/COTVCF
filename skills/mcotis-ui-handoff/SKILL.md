@@ -176,14 +176,14 @@ Use this when continuing work on the Mcotis WPF desktop app in this repository. 
 - For compile-only checks while the app is open, use `dotnet build src/Mcotis.Desktop/Mcotis.Desktop.csproj -o .work\build-check`.
 - Launch the app from `src/Mcotis.Desktop/bin/Debug/net8.0-windows/win-x64/Mcotis.exe`.
 - **Brand:** the product is **Mcotis** (Meinhardt Cities of Tomorrow Integrated Structures) — main window title `Mcotis — Meinhardt Cities of Tomorrow Integrated Structures — <file>` (`MainViewModel.WindowTitle`, bound in `MainWindow.xaml`; asked for by the user 2026-10-12: the file name beside the title. `<file>` = `CurrentFileName`: the active configuration's file name — the one Save overwrites — else `Default model`, the name of a model opened from an older file / SAP2000, or `Untitled`), exe / assembly `Mcotis` (pack URIs `/Mcotis;component/…`). Internal identifiers carry the name too (user, 2026-10-12: "rename entirely"; until then they kept the old name for compatibility): namespaces `Mcotis.Desktop.*` — not `Mcotis.*`, which belongs to the library projects — `McotisConfigDto`, the checks project `tests/Mcotis.Desktop.Checks`, the FEM file format `Mcotis.FemModel` (extension still `.cotfem.json`; a file saved as `COTVCF.FemModel` still opens, `FemModelFileDto.LegacyFormatName`), `%LOCALAPPDATA%\Mcotis` (the old `%LOCALAPPDATA%\COTVCF` folder is neither read nor moved) and the report keys (`mcotis.printSetup.v1`, `mcotis.cableGroups:`, `{ mcotis: "print" }`; a report generated before the rename must be regenerated before it prints in a package).
-- The built application folder is `bin/COT ParametricTools_V2` (version 2.0.0.0). Produce it with
-  `dotnet publish src/Mcotis.Desktop/Mcotis.Desktop.csproj -c Release --self-contained false -o "bin/COT ParametricTools_V2"` — never by
+- The built application folder is `build/COT ParametricTools_V2` (version 2.0.0.0). Produce it with
+  `dotnet publish src/Mcotis.Desktop/Mcotis.Desktop.csproj -c Release --self-contained false -o "build/COT ParametricTools_V2"` — never by
   copying a build output by hand: the earlier hand-copied `COT VCF Tools V1.0` folder went stale and showed an old app.
 - The solution also has a `FreshBuild` configuration. `dotnet build MCOTiS.sln -c FreshBuild` deletes the existing
-  `bin/` directory and builds a complete app directly into a newly created `bin/` directory (`bin/Mcotis.exe`).
-  Close any running Mcotis instance from `bin/` first; this build also removes any Debug or published outputs there.
+  `build/` directory and builds a complete app directly into a newly created `build/` directory (`build/Mcotis.exe`).
+  Close any running Mcotis instance from `build/` first; this build also removes any Debug or published outputs there.
 - To rebuild and create the **Mcotis desktop icon**, run `./build-desktop.ps1`. The script checks for a running app,
-  performs `FreshBuild`, and creates `Desktop/Mcotis.lnk` pointing to `bin/Mcotis.exe`. Keep the DLLs in `bin/` beside
+  performs `FreshBuild`, and creates `Desktop/Mcotis.lnk` pointing to `build/Mcotis.exe`. Keep the DLLs in `build/` beside
   the executable; a standalone `.exe` on the desktop cannot run without them.
 - `src/Mcotis.Desktop/Presentation/MainWindow.xaml` is UTF-8. A previous encoding error turned em dashes, ellipses and engineering
   symbols into broken multi-character text; do not re-encode this XAML through Windows-1252.

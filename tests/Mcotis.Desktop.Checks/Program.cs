@@ -87,6 +87,13 @@ internal static class Program
                 GeneralSolverParityChecks.Run();
                 return 0;
             }
+            if (args.Contains("--cable-section-optimization"))
+            {
+                var app = new System.Windows.Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+                app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Mcotis;component/Presentation/Theme.xaml", UriKind.Relative) });
+                CableSectionOptimizationChecks.Run();
+                return 0;
+            }
             if (args.Contains("--generator-flag"))
             {
                 GeneratorFlagChecks.Run();

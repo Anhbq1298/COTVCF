@@ -1,20 +1,20 @@
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
-$binRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'bin'))
-if ($binRoot -ne (Join-Path $repoRoot 'bin')) { throw "Unexpected build output path: $binRoot" }
-$binItem = Get-Item -LiteralPath $binRoot -ErrorAction SilentlyContinue
-if ($binItem -and ($binItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
-    throw "The bin directory is a reparse point: $binRoot"
+$buildRoot = [System.IO.Path]::GetFullPath((Join-Path $repoRoot 'build'))
+if ($buildRoot -ne (Join-Path $repoRoot 'build')) { throw "Unexpected build output path: $buildRoot" }
+$buildItem = Get-Item -LiteralPath $buildRoot -ErrorAction SilentlyContinue
+if ($buildItem -and ($buildItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+    throw "The build directory is a reparse point: $buildRoot"
 }
 
-$runningFromBin = @(Get-Process -Name Mcotis -ErrorAction SilentlyContinue | Where-Object {
+$runningFromBuild = @(Get-Process -Name Mcotis -ErrorAction SilentlyContinue | Where-Object {
     $_.Path -and [System.IO.Path]::GetFullPath($_.Path).StartsWith(
-        $binRoot + [System.IO.Path]::DirectorySeparatorChar,
+        $buildRoot + [System.IO.Path]::DirectorySeparatorChar,
         [System.StringComparison]::OrdinalIgnoreCase)
 })
-if ($runningFromBin.Count -gt 0) {
-    throw 'Close Mcotis launched from bin before rebuilding; Windows locks its DLLs.'
+if ($runningFromBuild.Count -gt 0) {
+    throw 'Close Mcotis launched from build before rebuilding; Windows locks its DLLs.'
 }
 
 Push-Location $repoRoot
@@ -24,9 +24,9 @@ try {
 }
 finally { Pop-Location }
 
-$exePath = Join-Path $binRoot 'Mcotis.exe'
+$exePath = Join-Path $buildRoot 'Mcotis.exe'
 foreach ($name in 'Mcotis.exe', 'Mcotis.dll', 'Mcotis.runtimeconfig.json') {
-    if (-not (Test-Path -LiteralPath (Join-Path $binRoot $name))) { throw "Build output is missing $name" }
+    if (-not (Test-Path -LiteralPath (Join-Path $buildRoot $name))) { throw "Build output is missing $name" }
 }
 
 $desktop = [Environment]::GetFolderPath('DesktopDirectory')
@@ -35,7 +35,7 @@ $shortcutPath = Join-Path $desktop 'Mcotis.lnk'
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = $exePath
-$shortcut.WorkingDirectory = $binRoot
+$shortcut.WorkingDirectory = $buildRoot
 $shortcut.IconLocation = "$exePath,0"
 $shortcut.Description = 'Mcotis - Meinhardt Cities of Tomorrow Integrated Structures'
 $shortcut.Save()

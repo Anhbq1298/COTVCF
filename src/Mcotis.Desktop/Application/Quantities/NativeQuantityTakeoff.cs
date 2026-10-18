@@ -9,11 +9,14 @@ namespace Mcotis.Desktop.Application.Quantities;
 /// <summary>A section group counted from the active native model document.</summary>
 public sealed record NativeQuantityRow(string Section, string SectionType, QuantityMemberKind Kind, int MemberCount,
     double? TotalLengthM, double? ConcreteVolumeM3, double? SteelMassT, QuantitySectionFigure? Figure,
-    string FigureDescription, string Details)
+    string FigureDescription, string Details, double? ReinforcementRatio)
 {
     public string LengthText => Format(TotalLengthM, "m");
     public string ConcreteText => Format(ConcreteVolumeM3, "m³");
     public string SteelText => Format(SteelMassT, "t");
+    public double? EstimatedCostSgd { get; init; }
+    public string EstimatedCostText => EstimatedCostSgd is { } cost ? $"S$ {cost:N0}" : "Unavailable";
+    public string ReinforcementRatioText => ReinforcementRatio is { } ratio ? $"{ratio:P2}" : "—";
     private static string Format(double? value, string unit) => value is { } number ? $"{number:N3} {unit}" : "Unavailable";
 }
 
@@ -22,10 +25,21 @@ public sealed record NativeQuantityTotals(int MemberCount, double? TotalLengthM,
     public string LengthText => Text(TotalLengthM, "m");
     public string ConcreteText => Text(ConcreteVolumeM3, "m³");
     public string SteelText => Text(SteelMassT, "t");
+    public double? EstimatedCostSgd { get; init; }
+    public string EstimatedCostText => EstimatedCostSgd is { } cost ? $"S$ {cost:N0}" : "Unavailable";
     private static string Text(double? value, string unit) => value is { } number ? $"{number:N3} {unit}" : "Unavailable";
 }
 
 public sealed record NativeQuantityTakeoff(IReadOnlyList<NativeQuantityRow> Rows, NativeQuantityTotals Total, IReadOnlyList<string> Notes);
+
+/// <summary>Section-level design utilisation, enveloped over the members assigned to the section.</summary>
+public sealed record NativeQuantityUtilizationRow(string Section, string Procedure, int MemberCount, double? Utilization,
+    string GoverningCombinations, string CaseEnvelopes, string Status, string Details)
+{
+    public string UtilizationText => Utilization is { } value
+        ? double.IsFinite(value) ? value.ToString("0.00", System.Globalization.CultureInfo.CurrentCulture) : ">9.99"
+        : "—";
+}
 
 /// <summary>
 /// Takes quantities from Mcotis's own document: member endpoints, section assignments, section areas and material types.
@@ -34,7 +48,8 @@ public sealed record NativeQuantityTakeoff(IReadOnlyList<NativeQuantityRow> Rows
 /// </summary>
 public static class NativeQuantityTakeoffCalculator
 {
-    public static NativeQuantityTakeoff Calculate(ModelDocument document)
+    public static NativeQuantityTakeoff Calculate(ModelDocument document,
+        IReadOnlyDictionary<string, MaterialProperty>? costMaterials = null)
     {
         ArgumentNullException.ThrowIfNull(document);
         FemInputSnapshot? transitional = null;
@@ -86,7 +101,7 @@ public static class NativeQuantityTakeoffCalculator
                 richCable is not null || nativeCable is not null ? "Cable" : "—";
             var notes = new List<string>();
 
-            double? concrete = null, steel = null;
+            double? concrete = null, steel = null, reinforcementRatio = null;
             if (first.SectionId is null) notes.Add("No section is assigned to these members.");
             else if (first.SectionData is null) notes.Add("The assigned section is not present in the native document.");
             else if (richFrame is not null && richFrame.Composite is { } composite)
@@ -99,9 +114,14 @@ public static class NativeQuantityTakeoffCalculator
                     var rebarDensity = Density(transitional, richFrame.RebarMaterial);
                     var rebarArea = parts.RebarArea + parts.LinkAreaPerMetre;
                     if (parts.SteelArea > 0 && steelDensity is null) notes.Add($"Steel mass is unavailable: material '{richFrame.SteelMaterial}' has no positive stored mass density.");
-                    if (rebarArea > 0 && rebarDensity is null) notes.Add($"Reinforcement mass is unavailable: material '{richFrame.RebarMaterial}' has no positive stored mass density.");
-                    steel = totalLength is { } steelLength && (parts.SteelArea == 0 || steelDensity is not null) && (rebarArea == 0 || rebarDensity is not null)
-                        ? (parts.SteelArea * (steelDensity ?? 0) + rebarArea * (rebarDensity ?? 0)) * steelLength : null;
+                    if (parts.RebarArea > 0 && parts.ConcreteArea > 0)
+                        reinforcementRatio = parts.RebarArea / parts.ConcreteArea;
+                    if (rebarArea > 0)
+                        notes.Add(rebarDensity is null
+                            ? $"Steel mass is structural profile steel only; reinforcement mass is unavailable because material '{richFrame.RebarMaterial}' has no positive stored mass density."
+                            : "Steel mass is structural profile steel only; reinforcement mass is not included.");
+                    steel = totalLength is { } steelLength && (parts.SteelArea == 0 || steelDensity is not null)
+                        ? parts.SteelArea * (steelDensity ?? 0) * steelLength : null;
                 }
                 catch (ArgumentException) { notes.Add("Composite section component geometry is incomplete."); }
             }
@@ -129,18 +149,25 @@ public static class NativeQuantityTakeoffCalculator
             }
 
             if (totalLength is null) notes.Add("Member length could not be read from the document's endpoint coordinates.");
-            var figure = richFrame is not null ? Figure(richFrame, transitional) : nativeFrame is not null ? Figure(nativeFrame, first.NativeMaterial?.Type) : null;
+            var figure = richFrame is not null ? Figure(richFrame, transitional) : nativeFrame is not null ? Figure(nativeFrame, first.NativeMaterial?.Type) :
+                richCable is not null ? Figure(richCable.Name, richCable.Area, first.LegacyMaterial?.Kind ?? NativeMaterialKind(first.NativeMaterial?.Type)) :
+                nativeCable is not null ? Figure(nativeCable.Name, nativeCable.Area, NativeMaterialKind(first.NativeMaterial?.Type)) : null;
             var figureDescription = FigureDescription(richFrame, richCable, nativeFrame, nativeCable, figure);
+            var estimatedCost = EstimateCost(first, richFrame, transitional, costMaterials, totalLength, concrete, steel);
             rows.Add(new(name, sectionType, group.Key.Kind, group.Count(), totalLength, concrete, steel, figure, figureDescription,
-                string.Join(" ", notes.Distinct(StringComparer.Ordinal))));
+                string.Join(" ", notes.Distinct(StringComparer.Ordinal)), reinforcementRatio) { EstimatedCostSgd = estimatedCost });
         }
 
         rows = rows.OrderBy(row => row.Kind).ThenBy(row => row.Section, StringComparer.Ordinal).ToList();
         var allLength = rows.All(row => row.TotalLengthM is not null);
         var allConcrete = rows.All(row => row.ConcreteVolumeM3 is not null);
         var allSteel = rows.All(row => row.SteelMassT is not null);
+        var allCosts = rows.All(row => row.EstimatedCostSgd is not null);
         var total = new NativeQuantityTotals(rows.Sum(row => row.MemberCount), allLength ? rows.Sum(row => row.TotalLengthM!.Value) : null,
-            allConcrete ? rows.Sum(row => row.ConcreteVolumeM3!.Value) : null, allSteel ? rows.Sum(row => row.SteelMassT!.Value) : null);
+            allConcrete ? rows.Sum(row => row.ConcreteVolumeM3!.Value) : null, allSteel ? rows.Sum(row => row.SteelMassT!.Value) : null)
+        {
+            EstimatedCostSgd = allCosts ? rows.Sum(row => row.EstimatedCostSgd!.Value) : null,
+        };
         var notesSummary = rows.Where(row => row.Details.Length > 0)
             .Select(row => $"{row.Kind} · {row.Section}: {row.Details}").ToArray();
         return new(rows, total, notesSummary);
@@ -165,6 +192,40 @@ public static class NativeQuantityTakeoffCalculator
 
     private static bool IsSteel(MaterialKind? kind) => kind is MaterialKind.Steel or MaterialKind.Rebar or MaterialKind.Tendon or MaterialKind.ColdFormed;
     private static bool IsSteel(MaterialType? type) => type is MaterialType.Steel or MaterialType.Rebar or MaterialType.Tendon;
+
+    private static double? EstimateCost(Member member, FrameSectionProperty? richFrame, FemInputSnapshot? snapshot,
+        IReadOnlyDictionary<string, MaterialProperty>? costMaterials, double? lengthM, double? concreteVolumeM3, double? steelMassT)
+    {
+        if (member.SectionId is null || lengthM is not { } length || !double.IsFinite(length)) return null;
+
+        MaterialProperty? Material(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            if (costMaterials is not null && costMaterials.TryGetValue(name, out var current)) return current;
+            return snapshot?.Materials.FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (richFrame?.Composite is { } composite)
+        {
+            try
+            {
+                var parts = CompositeSection.Parts(richFrame.Shape, composite);
+                var cost = CompositeSection.Cost(parts, Material(richFrame.Material), Material(richFrame.SteelMaterial), Material(richFrame.RebarMaterial));
+                return cost.CostPerM is { } perMetre && double.IsFinite(perMetre) ? perMetre * length : null;
+            }
+            catch (ArgumentException) { return null; }
+        }
+
+        var materialName = member.LegacyMaterial?.Name ?? member.NativeMaterial?.Name ?? member.LegacyProperties?.MaterialName;
+        var material = Material(materialName);
+        if (member.LegacyMaterial?.Kind == MaterialKind.Concrete || member.NativeMaterial?.Type == MaterialType.Concrete)
+            return concreteVolumeM3 is { } concrete && material?.UnitCostPerCubicMetre is { } concreteRate && double.IsFinite(concreteRate)
+                ? concrete * concreteRate : null;
+        if (IsSteel(member.LegacyMaterial?.Kind) || IsSteel(member.NativeMaterial?.Type))
+            return steelMassT is { } steel && material?.UnitCost is { } steelRate && double.IsFinite(steelRate)
+                ? steel * steelRate : null;
+        return null;
+    }
 
     private static double? Density(FemInputSnapshot? snapshot, string materialName)
     {
@@ -193,9 +254,9 @@ public static class NativeQuantityTakeoffCalculator
             var values = new[] { richFrame.Depth, richFrame.Width, richFrame.WebThickness, richFrame.FlangeThickness }.Where(value => value > 0).ToArray();
             return values.Length == 0 ? "Section outline unavailable." : string.Join(" · ", values.Select(value => $"{value * 1000:0.###} mm"));
         }
-        if (richCable is not null) return $"Area {richCable.Area * 1e6:0.###} mm²; outline not stored.";
+        if (richCable is not null) return CableDescription(richCable.Name, richCable.Area);
         if (frame is not null && figure is null) return "No stored outline dimensions; section geometry is unavailable.";
-        if (cable is not null) return $"Cable area {cable.Area * 1e6:0.###} mm²";
+        if (cable is not null) return CableDescription(cable.Name, cable.Area);
         if (frame is null) return "Section outline unavailable.";
         var dimensions = frame.Dimensions.Where(pair => pair.Value > 0 && double.IsFinite(pair.Value))
             .Select(pair => $"{pair.Key} {pair.Value * 1000:0.###} mm").ToArray();
@@ -223,6 +284,73 @@ public static class NativeQuantityTakeoffCalculator
         if (plates.Count == 0) return null;
         var shapes = plates.Select(rect => new QuantityFigureShape(section.Name, section.Material, className,
             [Rectangle(rect.X, rect.Y, rect.W, rect.H)])).ToArray();
+        return BuildFigure(shapes);
+    }
+
+    private static string CableDescription(string name, double area)
+    {
+        var areaText = $"Area {area * 1e6:0.###} mm²";
+        return StrandBundle.Parse(name) is { } bundle
+            ? $"{bundle.Count} × Ø{bundle.DiameterMm:0.###} mm strands · {areaText}"
+            : $"Equivalent solid round · {areaText}";
+    }
+
+    private static MaterialKind? NativeMaterialKind(MaterialType? type) => type switch
+    {
+        MaterialType.Steel => MaterialKind.Steel,
+        MaterialType.Rebar => MaterialKind.Rebar,
+        MaterialType.Tendon => MaterialKind.Tendon,
+        MaterialType.Concrete => MaterialKind.Concrete,
+        _ => null,
+    };
+
+    private static QuantitySectionFigure? Figure(string name, double area, MaterialKind? materialType)
+    {
+        var materialClass = materialType is MaterialKind.Steel or MaterialKind.Rebar or MaterialKind.Tendon or MaterialKind.ColdFormed
+            ? QuantityMaterialClass.Steel : (QuantityMaterialClass?)null;
+        var material = materialType?.ToString() ?? "Steel";
+        if (area is not > 0 || !double.IsFinite(area)) return null;
+        if (StrandBundle.Parse(name) is not { } bundle)
+        {
+            var radius = Math.Sqrt(area / Math.PI);
+            return BuildFigure([new(name, material, materialClass, [Circle(radius)])]);
+        }
+
+        var strandRadius = bundle.DiameterMm * 0.0005;
+        var strands = new List<(double X, double Y)> { (0, 0) };
+        for (var ring = 1; strands.Count < bundle.Count; ring++)
+        {
+            var q = -ring;
+            var r = ring;
+            foreach (var (dq, dr) in new (int Q, int R)[] { (1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1) })
+                for (var step = 0; step < ring && strands.Count < bundle.Count; step++)
+                {
+                    strands.Add(((q + r * 0.5) * strandRadius * 2, r * Math.Sqrt(3) * strandRadius));
+                    q += dq;
+                    r += dr;
+                }
+        }
+
+        var wireArea = StrandBundle.StandardArea(bundle.DiameterMm);
+        var shapes = new List<QuantityFigureShape>(bundle.Count * (wireArea is null ? 1 : 8));
+        foreach (var (x, y) in strands)
+        {
+            shapes.Add(new(name, material, materialClass, [Circle(strandRadius)], OutlineOnly: true));
+            if (wireArea is null) shapes.Add(new(name, material, materialClass, [Circle(strandRadius)]));
+            else
+            {
+                var wireRadius = Math.Sqrt(wireArea.Value / 7 * 1e-6 / Math.PI);
+                shapes.Add(new(name, material, materialClass, [Circle(wireRadius).Select(point => new QuantityFigurePoint(point.X + x, point.Y + y)).ToArray()]));
+                for (var wire = 0; wire < 6; wire++)
+                {
+                    var angle = wire * Math.PI / 3;
+                    var centreX = x + 2 * wireRadius * Math.Cos(angle);
+                    var centreY = y + 2 * wireRadius * Math.Sin(angle);
+                    shapes.Add(new(name, material, materialClass,
+                        [Circle(wireRadius).Select(point => new QuantityFigurePoint(point.X + centreX, point.Y + centreY)).ToArray()]));
+                }
+            }
+        }
         return BuildFigure(shapes);
     }
 

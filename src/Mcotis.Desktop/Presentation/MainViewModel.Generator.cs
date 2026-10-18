@@ -101,7 +101,7 @@ public sealed partial class MainViewModel
 
     private void NotifyGenerator()
     {
-        foreach (var name in new[] { nameof(CanOptimizeVcf), nameof(CanOptimizeTas), nameof(OptimizationVcfToolTip), nameof(OptimizationTasToolTip),
+        foreach (var name in new[] { nameof(CanOptimizeVcf), nameof(CanOptimizeTas), nameof(CanOptimizeCableSections), nameof(OptimizationVcfToolTip), nameof(OptimizationTasToolTip),
                      nameof(CanDetachGenerator), nameof(CanReapplyGenerator), nameof(GeneratorSummary) })
             Notify(name);
     }

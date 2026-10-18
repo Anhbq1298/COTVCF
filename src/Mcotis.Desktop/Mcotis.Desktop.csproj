@@ -11,7 +11,7 @@
     <SapInstallDir Condition="'$(SapInstallDir)' == '' and !Exists('C:\Program Files\Computers and Structures\SAP2000 26\CSiAPIv1.dll') and Exists('C:\Program Files\Computers and Structures\SAP2000 27\CSiAPIv1.dll')">C:\Program Files\Computers and Structures\SAP2000 27</SapInstallDir>
     <SapInstallDir Condition="'$(SapInstallDir)' == ''">C:\Program Files\Computers and Structures\SAP2000 26</SapInstallDir>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <!-- The repository root, two levels up: where .git, .githooks, docs and the built app's bin folder are. -->
+    <!-- The repository root, two levels up: where .git, .githooks, docs and the built app's build folder are. -->
     <RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\'))</RepoRoot>
     
     <!-- Code Features -->
@@ -52,13 +52,13 @@
     <DefineConstants>TRACE</DefineConstants>
   </PropertyGroup>
 
-  <!-- FreshBuild replaces the repository's bin folder with a complete app at its root. -->
+  <!-- FreshBuild replaces the repository's build folder with a complete app at its root. -->
   <PropertyGroup Condition="'$(Configuration)' == 'FreshBuild'">
     <DebugSymbols>false</DebugSymbols>
     <DebugType>none</DebugType>
     <Optimize>true</Optimize>
     <DefineConstants>TRACE</DefineConstants>
-    <OutputPath>$(RepoRoot)bin\</OutputPath>
+    <OutputPath>$(RepoRoot)build\</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   </PropertyGroup>
@@ -72,7 +72,7 @@
 
   <Target Name="ClearFreshBuildOutput" BeforeTargets="PrepareForBuild"
           Condition="'$(Configuration)' == 'FreshBuild' and '$(DesignTimeBuild)' != 'true'">
-    <RemoveDir Directories="$(RepoRoot)bin" />
+    <RemoveDir Directories="$(RepoRoot)build" />
   </Target>
 
   <ItemGroup>

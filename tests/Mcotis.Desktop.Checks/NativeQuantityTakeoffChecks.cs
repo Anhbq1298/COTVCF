@@ -2,6 +2,7 @@ using Mcotis.Core;
 using Mcotis.Desktop.Application.Quantities;
 using Mcotis.Desktop.Application;
 using Mcotis.Desktop.Configuration;
+using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Infrastructure;
 using Mcotis.Desktop.Presentation;
 using System.IO;
@@ -62,6 +63,19 @@ internal static class NativeQuantityTakeoffChecks
         Check(steelRow.SectionType == "I Section" && Math.Abs(steelRow.TotalLengthM!.Value - 8) < 1e-9 &&
               Math.Abs(steelRow.SteelMassT!.Value - 1.256) < 1e-9 && steelRow.ConcreteVolumeM3 == 0 && steelRow.Figure is not null,
             "native takeoff calculates steel mass from stored area and material mass density and shows the section type");
+
+        var rates = new Dictionary<string, MaterialProperty>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["C40"] = new() { Name = "C40", Kind = MaterialKind.Concrete, WeightPerVolume = 24, UnitCost = 100 },
+            ["S355"] = new() { Name = "S355", Kind = MaterialKind.Steel, WeightPerVolume = 77, UnitCost = 1500 },
+        };
+        var costed = NativeQuantityTakeoffCalculator.Calculate(session.Document, rates);
+        var rcCost = .48 * 100 * 24 / MaterialProperty.Gravity;
+        var steelCost = 1.256 * 1500;
+        Check(Math.Abs(costed.Rows.Single(row => row.Section == "RC 300").EstimatedCostSgd!.Value - rcCost) < 1e-6 &&
+              Math.Abs(costed.Rows.Single(row => row.Section == "I 400").EstimatedCostSgd!.Value - steelCost) < 1e-6 &&
+              Math.Abs(costed.Total.EstimatedCostSgd!.Value - (rcCost + steelCost)) < 1e-6 && takeoff.Total.EstimatedCostSgd is null,
+            "estimated cost uses the stored material rates: concrete volume x cost per m3 and steel mass x cost per tonne, totalled only when every row has a rate");
 
         var withUnassigned = session.Document.Edit();
         var free = ObjectId.New();

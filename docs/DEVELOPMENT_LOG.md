@@ -18,6 +18,55 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Add cable section check and bring strand optimisation into Design
+- Status: Done
+- Who: Codex
+- Where: Design → Tension Cable Design → Section Check
+- What: Adds an editable assigned-section check with breaking stress (default 2160 MPa) and reduction factor (default 50%), calculating capacity from the cable section area and reporting the governing combo and UR. Opens iterative tendon optimisation from this same module and passes its stress and factor into the optimizer; removes the separate cable optimizer entry from the Optimization menu.
+- Checks: `--cable-design-ui`
+
+## 2026-10-18 · Estimate stored-material cost in quantities and simplify UR summary
+- Status: Done
+- Who: Codex
+- Where: Result → Show Quantities… → Quantities / Design Utilization
+- What: Adds estimated cost in SGD from the unit costs stored under Define → Materials, including cable steel mass × tendon cost per tonne. Removes Notes columns and per-case envelope detail; the UR table keeps the governing combo, and its summary explains cable UR as axial tension divided by the selected assembly reference capacity.
+- Checks: `--native-quantities`
+
+## 2026-10-18 · Apply tendon optimisation to locked models and Sync pairs
+- Status: Done
+- Who: Codex
+- Where: Optimization → Cable / Tendon Section Optimisation
+- What: Apply now unlocks a locked model after explaining that its previous FEM results and registered output databases will be cleared. Cable Force Sync references group linked tendons so pairs such as Cable4a/Cable4b receive one suggested strand count.
+- Checks: `--cable-section-optimization`
+
+## 2026-10-18 · Optimise cable and tendon strand sections
+- Status: Done
+- Who: Codex
+- Where: Optimization → Cable / Tendon Section Optimisation
+- What: Iterates 15.7 mm strand counts on the native model, preserving explicit section groups and target-force loads. Reports force and pretension-stage deflection convergence with iteration history; applying suggestions is a single undoable edit, with confirmation required for unconverged results. Post-Processing sits before Help so Optimization remains the last separated menu. Method and near-zero tolerances are documented in `docs/analysis/cable-section-optimization.md`.
+- Checks: `--cable-section-optimization`, `--result-tools-ui`, and `--dev-log`
+
+## 2026-10-18 · Persist per-member design inputs for utilization summaries
+- Status: Done
+- Who: Codex
+- Where: Design modules → Run Design; Result → Show Quantities… → Design Utilization
+- What: Saves the selected procedure and design basis per member in the native model's application data. Refresh runs every applicable member design on the current FEM run before building section envelopes; a section with a failed or missing member result does not show a partial UR.
+- Checks: desktop project build to `build/quantities` (0 warnings)
+
+## 2026-10-18 · Summarize section design utilization in Show Quantities
+- Status: Done
+- Who: Codex
+- Where: Result → Show Quantities… → Design Utilization
+- What: Adds section-level utilization envelopes from the current FEM run, grouped by section and design procedure. Shows each available case envelope and the governing combination; frames use their assigned or section-suggested design engine, and cables use the selected tension-cable basis.
+- Checks: desktop project build to `build/quantities` (0 warnings)
+
+## 2026-10-18 · Show composite reinforcement ratio and cable sections in quantities
+- Status: Done
+- Who: Codex
+- Where: Result → Show Quantities…
+- What: Composite steel mass now uses the stored structural steel area and material density independently of reinforcement mass availability. Shows the longitudinal reinforcement ratio As/Ac and notes when bar mass is excluded. Cable rows draw the stored strand bundle layout when the section name supplies strand count and diameter, or an equivalent round section from its stored area otherwise.
+- Checks: solution build
+
 ## 2026-10-18 · Clear User Guide title helper warning
 - Status: Done
 - Who: Codex

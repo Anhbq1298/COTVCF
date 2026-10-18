@@ -19,9 +19,14 @@ public partial class QuantityTakeoffWindow : Window
 
     private void Refresh()
     {
-        var takeoff = NativeQuantityTakeoffCalculator.Calculate(viewModel.NativeDocumentSession.Document);
+        viewModel.EnsureMaterials();
+        var materialRates = viewModel.Materials
+            .GroupBy(material => material.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        var takeoff = NativeQuantityTakeoffCalculator.Calculate(viewModel.NativeDocumentSession.Document, materialRates);
         RowsGrid.ItemsSource = takeoff.Rows;
+        UtilizationGrid.ItemsSource = viewModel.QuantityUtilizationSummary();
         NotesList.ItemsSource = takeoff.Notes;
-        TotalsLabel.Text = $"TOTAL · {takeoff.Total.MemberCount:N0} members · {takeoff.Total.LengthText} · concrete {takeoff.Total.ConcreteText} · steel {takeoff.Total.SteelText}";
+        TotalsLabel.Text = $"TOTAL · {takeoff.Total.MemberCount:N0} members · {takeoff.Total.LengthText} · concrete {takeoff.Total.ConcreteText} · steel {takeoff.Total.SteelText} · estimated material cost {takeoff.Total.EstimatedCostText}";
     }
 }

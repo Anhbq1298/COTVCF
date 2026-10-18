@@ -1,6 +1,8 @@
 using Mcotis.Desktop.Application;
 using Mcotis.Desktop.Application.Design;
+using Mcotis.Desktop.Application.Quantities;
 using Mcotis.Desktop.Domain;
+using System.Text.Json;
 
 namespace Mcotis.Desktop.Presentation;
 
@@ -12,11 +14,28 @@ public sealed record DesignMemberOption(string Member, string Section, string Ma
 // last code, method, section, members and factors used. The design runs on the forces of the FEM run of the model.
 public sealed partial class MainViewModel
 {
+    private const string DesignParametersKey = "mcotis.design.parameters.v1";
+    private sealed class DesignParameterStore
+    {
+        public Dictionary<ColumnDesignType, ColumnDesignBasis> Bases { get; set; } = [];
+        public Dictionary<string, StoredMemberDesignParameters> Members { get; set; } = new(StringComparer.Ordinal);
+        public TensionCableBasis? CableBasis { get; set; }
+    }
+    private sealed record StoredMemberDesignParameters(ColumnDesignType? Procedure, ColumnDesignType? OverrideProcedure,
+        ColumnDesignBasis? ColumnBasis, TensionCableBasis? CableBasis, string Section, string? FemRunId,
+        string LastStatus = "Not run");
+
     private readonly Dictionary<ColumnDesignType, ColumnDesignBasis> designBases = [];
 
     internal ColumnDesignBasis DesignBasis(ColumnDesignType type)
     {
-        if (designBases.TryGetValue(type, out var basis)) return basis;
+        var stored = ReadDesignParameterStore();
+        if (stored.Bases.TryGetValue(type, out var basis))
+        {
+            designBases[type] = basis;
+            return basis;
+        }
+        designBases.Remove(type);
         var members = DesignMemberOptions(type);
         var first = members.FirstOrDefault(member => member.Suggested);
         return ColumnDesignCodes.Default(type) with
@@ -26,7 +45,19 @@ public sealed partial class MainViewModel
         };
     }
 
-    internal void SetDesignBasis(ColumnDesignBasis basis) => designBases[basis.Type] = basis;
+    internal void SetDesignBasis(ColumnDesignBasis basis)
+    {
+        designBases[basis.Type] = basis;
+        var store = ReadDesignParameterStore();
+        store.Bases[basis.Type] = basis;
+        foreach (var member in basis.Members)
+        {
+            var previous = store.Members.GetValueOrDefault(member);
+            store.Members[member] = new(basis.Type, previous?.OverrideProcedure, basis with { Members = [member] }, null,
+                FemSectionProperties.FirstOrDefault(item => item.MemberName == member)?.SectionName ?? "", DesignRunId);
+        }
+        SaveDesignParameterStore(store);
+    }
 
     /// <summary>The FEM run whose forces the design uses (null before Run FEM Analysis).</summary>
     internal string? DesignRunId => (SelectedFemRun ?? FemRuns.FirstOrDefault())?.Id;
@@ -99,7 +130,22 @@ public sealed partial class MainViewModel
     // ---- Design → Tension Cable Design ----
     // The basis confirmed in the window is kept for the session; the optimization cases suggest each cable's assembly with it
     // (MemberUtilizationCheck), so a stay system, screening level or rate set in the Design window carries into Optimization VCF / TAS.
-    internal TensionCableBasis CableDesignBasis { get; set; } = TensionCableBasis.Default;
+    internal TensionCableBasis CableDesignBasis
+    {
+        get => ReadDesignParameterStore().CableBasis ?? TensionCableBasis.Default;
+        set
+        {
+            var store = ReadDesignParameterStore();
+            store.CableBasis = value;
+            foreach (var member in value.Members)
+            {
+                var previous = store.Members.GetValueOrDefault(member);
+                store.Members[member] = new(null, previous?.OverrideProcedure, null,
+                    value with { Members = [member] }, FemSectionProperties.FirstOrDefault(item => item.MemberName == member)?.SectionName ?? "", DesignRunId);
+            }
+            SaveDesignParameterStore(store);
+        }
+    }
 
     /// <summary>A cable of the model offered in Design → Tension Cable Design.</summary>
     public sealed record CableDesignOption(string Member, string Section, double LengthM, double AreaMm2, double? CapacityKN);
@@ -140,7 +186,13 @@ public sealed partial class MainViewModel
     // the user's, kept for the session; the member's size comes from its own section, its forces from the FEM run.
     private readonly Dictionary<string, ColumnDesignType> designProcedures = new(StringComparer.Ordinal);
 
-    internal ColumnDesignType? DesignProcedureOf(string member) => designProcedures.TryGetValue(member, out var type) ? type : null;
+    internal ColumnDesignType? DesignProcedureOf(string member)
+    {
+        if (designProcedures.TryGetValue(member, out var type)) return type;
+        if (ReadDesignParameterStore().Members.GetValueOrDefault(member)?.OverrideProcedure is not { } found) return null;
+        designProcedures[member] = found;
+        return found;
+    }
 
     /// <summary>The procedure the Design menu would offer a member by its section and material alone (none for a section no design takes).</summary>
     internal ColumnDesignType? SuggestedDesignProcedure(string member)
@@ -176,12 +228,25 @@ public sealed partial class MainViewModel
     internal IReadOnlyList<string> AssignDesignProcedure(IEnumerable<string> members, ColumnDesignType? type)
     {
         var refused = new List<string>();
+        var store = ReadDesignParameterStore();
         foreach (var member in members)
         {
-            if (type is not { } procedure) { designProcedures.Remove(member); continue; }
+            if (type is not { } procedure)
+            {
+                designProcedures.Remove(member);
+                if (store.Members.TryGetValue(member, out var prior)) store.Members[member] = prior with { OverrideProcedure = null };
+                continue;
+            }
             if (DesignProcedureProblem(procedure, member) is { } problem) refused.Add(problem);
-            else designProcedures[member] = procedure;
+            else
+            {
+                designProcedures[member] = procedure;
+                var prior = store.Members.GetValueOrDefault(member);
+                store.Members[member] = new(prior?.Procedure, procedure, prior?.ColumnBasis, prior?.CableBasis,
+                    FemSectionProperties.FirstOrDefault(item => item.MemberName == member)?.SectionName ?? "", prior?.FemRunId, prior?.LastStatus ?? "Not run");
+            }
         }
+        SaveDesignParameterStore(store);
         return refused;
     }
 
@@ -190,6 +255,7 @@ public sealed partial class MainViewModel
     /// <paramref name="effectiveLengthM"/> [m] about both axes (10 m by default in the window).</summary>
     internal IReadOnlyList<ColumnMemberDesign> RunOverriddenDesign(IReadOnlyList<string> members, IReadOnlyList<string> loadCases, double effectiveLengthM)
     {
+        var storedParameters = ReadDesignParameterStore();
         IReadOnlyDictionary<string, VcfMemberRole> roles;
         try { roles = VcfGeometry.Analyze(State.Geometry, State.Truss).Roles; }
         catch (InvalidOperationException) { roles = new Dictionary<string, VcfMemberRole>(); }
@@ -210,10 +276,31 @@ public sealed partial class MainViewModel
                     EffectiveLengthY = effectiveLengthM, EffectiveLengthZ = effectiveLengthM,
                 };
                 result = ColumnDesignEngine.Design(basis, input);
+                var previous = storedParameters.Members.GetValueOrDefault(member);
+                storedParameters.Members[member] = new(type, type, basis, null, input.Section, DesignRunId, result.Status);
             }
             results.Add(result with { Procedure = title, Role = roles.TryGetValue(member, out var role) ? VcfGeometry.Title(role) : "" });
         }
+        SaveDesignParameterStore(storedParameters);
         return results;
+    }
+
+    private DesignParameterStore ReadDesignParameterStore()
+    {
+        var document = NativeDocumentSession.Document;
+        if (!document.ApplicationData.TryGetValue(DesignParametersKey, out var json)) return new();
+        try { return JsonSerializer.Deserialize<DesignParameterStore>(json) ?? new(); }
+        catch (JsonException) { return new(); }
+    }
+
+    private void SaveDesignParameterStore(DesignParameterStore store)
+    {
+        var document = NativeDocumentSession.Document;
+        var json = JsonSerializer.Serialize(store);
+        if (document.ApplicationData.TryGetValue(DesignParametersKey, out var held) && held == json) return;
+        NativeDocumentSession.Execute(Mcotis.Application.DocumentCommands.Edit("Store member design parameters", editor =>
+            editor.SetApplicationData(DesignParametersKey, json)));
+        ScheduleFemWorkingSave();
     }
 
     /// <summary>The length of a frame of the model's document, by its identity (M7); 0 for a member the document lacks.</summary>
@@ -224,6 +311,144 @@ public sealed partial class MainViewModel
             !document.Points.TryGetValue(frame.StartPointId, out var start) || !document.Points.TryGetValue(frame.EndPointId, out var end)) return 0;
         var (dx, dy, dz) = (end.Position.X - start.Position.X, end.Position.Y - start.Position.Y, end.Position.Z - start.Position.Z);
         return Math.Sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    /// <summary>Section-level utilisation summaries from the selected FEM run and the same design engines as Design.</summary>
+    internal IReadOnlyList<NativeQuantityUtilizationRow> QuantityUtilizationSummary()
+    {
+        var run = SelectedFemRun ?? FemRuns.FirstOrDefault();
+        if (run is null || FemResultState != Mcotis.Application.ResultState.Current)
+            return [new("—", "—", 0, null, "—", "", "RUN FEM", "Run FEM Analysis for the current model before calculating utilization.")];
+        var allCases = DesignCaseNames();
+        var caseOrder = allCases.Select((name, index) => (name, index)).ToDictionary(item => item.name, item => item.index, StringComparer.Ordinal);
+        var store = ReadDesignParameterStore();
+        var parameters = new Dictionary<string, StoredMemberDesignParameters>(StringComparer.Ordinal);
+        foreach (var property in FemSectionProperties)
+        {
+            var section = property.SectionName ?? "(no section assigned)";
+            var prior = store.Members.GetValueOrDefault(property.MemberName);
+            if (property.IsCable)
+            {
+                var basis = prior?.Section == section && prior.CableBasis is not null
+                    ? prior.CableBasis : store.CableBasis ?? TensionCableBasis.Default;
+                var cases = (basis.LoadCases.Count > 0 ? basis.LoadCases : allCases).Where(allCases.Contains).Distinct(StringComparer.Ordinal).ToArray();
+                parameters[property.MemberName] = new(null, prior?.OverrideProcedure, null,
+                    basis with { Members = [property.MemberName], LoadCases = cases }, section, run.Id, "Not run");
+                continue;
+            }
+
+            var type = prior?.OverrideProcedure ?? DesignProcedureOf(property.MemberName) ?? SuggestedDesignProcedure(property.MemberName);
+            if (type is null) continue;
+            var hasStoredInput = prior?.Procedure == type && prior.Section == section && prior.ColumnBasis is not null;
+            var basisForType = hasStoredInput ? prior!.ColumnBasis! : DesignBasis(type.Value);
+            var sectionInput = hasStoredInput
+                ? basisForType.Section : DesignSectionDefaults(type.Value, property.MemberName);
+            var chosenCases = (basisForType.LoadCases.Count > 0 ? basisForType.LoadCases : allCases)
+                .Where(allCases.Contains).Distinct(StringComparer.Ordinal).ToArray();
+            var l0 = prior?.OverrideProcedure == type
+                ? basisForType.EffectiveLengthY ?? 10
+                : (double?)null;
+            var memberBasis = basisForType with
+            {
+                Section = sectionInput,
+                Members = [property.MemberName],
+                LoadCases = chosenCases,
+                EffectiveLengthY = l0 ?? basisForType.EffectiveLengthY,
+                EffectiveLengthZ = l0 ?? basisForType.EffectiveLengthZ,
+            };
+            parameters[property.MemberName] = new(type, prior?.OverrideProcedure, memberBasis, null, section, run.Id, "Not run");
+        }
+        // Store a complete per-member input snapshot before running any checks. The summary below is emitted only after
+        // every applicable member has been evaluated against this FEM run.
+        foreach (var (member, input) in parameters) store.Members[member] = input;
+        SaveDesignParameterStore(store);
+
+        var samples = new List<(string Section, string Procedure, string Member, IReadOnlyList<(string Case, double Util)> Cases, string Status, string Details)>();
+
+        foreach (var property in FemSectionProperties.OrderBy(property => property.MemberName, StringComparer.Ordinal))
+        {
+            var section = property.SectionName ?? "(no section assigned)";
+            parameters.TryGetValue(property.MemberName, out var memberParameters);
+            if (property.IsCable)
+            {
+                var cableBasis = memberParameters?.CableBasis ?? store.CableBasis ?? TensionCableBasis.Default;
+                var caseNames = cableBasis.LoadCases;
+                var cableCases = caseNames.Select(name => (Case: name, Force: run.ResultFor(name).Cables
+                    .Where(cable => cable.MemberName == property.MemberName).Select(cable => cable.AxialForceKN)
+                    .DefaultIfEmpty(double.NaN).Max())).Where(item => double.IsFinite(item.Force)).ToArray();
+                if (cableCases.Length == 0)
+                {
+                    samples.Add((section, "Tension Cable Design", property.MemberName, [], "NO RESULT", "No cable forces are available in the selected FEM cases."));
+                    store.Members[property.MemberName] = memberParameters! with { FemRunId = run.Id, LastStatus = "NO RESULT" };
+                    continue;
+                }
+                var governingForce = cableCases.MaxBy(item => item.Force);
+                var length = CableLength(property.MemberName);
+                var design = TensionCableDesigner.Design(cableBasis,
+                    property.MemberName, section, length, governingForce.Case, governingForce.Force,
+                    property.AreaM2 > 0 ? property.AreaM2 * 1e6 : null);
+                var capacity = design.Selected?.GroupCapacityKN;
+                var utilizationCases = capacity is > 0
+                    ? cableCases.Select(item => (item.Case, Util: Math.Max(0, item.Force) / capacity.Value)).ToArray()
+                    : [];
+                var slack = governingForce.Force <= 1e-6;
+                if (slack) utilizationCases = cableCases.Select(item => (item.Case, Util: 0.0)).ToArray();
+                var cableStatus = slack ? "OK" : capacity is null ? design.Status == "ERROR" ? "ERROR" : "NO RESULT" : design.Status;
+                samples.Add((section, "Tension Cable Design", property.MemberName, utilizationCases, cableStatus,
+                    slack ? "Cable is slack in the selected cases; UR = 0.00." : capacity is > 0 ? "UR uses the selected cable assembly capacity." : design.Error ?? design.Detail.Trim()));
+                store.Members[property.MemberName] = memberParameters! with { FemRunId = run.Id, LastStatus = cableStatus };
+                continue;
+            }
+
+            var type = memberParameters?.Procedure;
+            if (type is null)
+            {
+                samples.Add((section, "Not designed", property.MemberName, [], "NOT DESIGNED",
+                    "No current design procedure is compatible with this section."));
+                continue;
+            }
+
+            var basis = memberParameters!.ColumnBasis!;
+            var caseNamesForMember = basis.LoadCases;
+            try
+            {
+                var input = DesignMemberInputs(type.Value, [property.MemberName], caseNamesForMember).FirstOrDefault();
+                var design = input is null
+                    ? new ColumnMemberDesign(property.MemberName, section, MemberLength(property.MemberName), [], null, [], "", "No FEM forces are available for this member.")
+                    : ColumnDesignEngine.Design(basis, input);
+                samples.Add((section, ColumnDesignCodes.Title(type.Value), property.MemberName,
+                    design.Cases.Select(result => (result.Case, result.MaxUtilization)).ToArray(), design.Status,
+                    design.Error ?? design.Detailing.FirstOrDefault(check => !check.Pass)?.Text ?? ""));
+                store.Members[property.MemberName] = memberParameters with { FemRunId = run.Id, LastStatus = design.Status };
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or KeyNotFoundException or ArithmeticException)
+            {
+                samples.Add((section, ColumnDesignCodes.Title(type.Value), property.MemberName, [], "ERROR", ex.Message));
+                store.Members[property.MemberName] = memberParameters with { FemRunId = run.Id, LastStatus = "ERROR" };
+            }
+        }
+        SaveDesignParameterStore(store);
+
+        return samples.GroupBy(sample => (sample.Section, sample.Procedure))
+            .Select(group =>
+            {
+                var perCase = group.SelectMany(sample => sample.Cases).GroupBy(item => item.Case, StringComparer.Ordinal)
+                    .Select(cases => (Case: cases.Key, Util: cases.Max(item => item.Util)))
+                    .OrderBy(item => caseOrder.GetValueOrDefault(item.Case, int.MaxValue)).ThenBy(item => item.Case, StringComparer.Ordinal).ToArray();
+                var incomplete = group.Any(sample => sample.Status is "ERROR" or "NO RESULT");
+                if (incomplete) perCase = [];
+                var envelope = perCase.Length == 0 ? (double?)null : perCase.Max(item => item.Util);
+                var governing = envelope is { } max
+                    ? string.Join(", ", perCase.Where(item => Math.Abs(item.Util - max) <= 1e-9 * Math.Max(1, Math.Abs(max))).Select(item => item.Case))
+                    : "—";
+                var status = group.Any(sample => sample.Status == "ERROR") ? "ERROR" : group.Any(sample => sample.Status == "NO RESULT") ? "NO RESULT" : envelope is null ? group.First().Status :
+                    envelope > 1 ? "FAIL" : group.Any(sample => sample.Status == "CHECK") ? "CHECK" : "OK";
+                var details = string.Join(" ", group.Select(sample => sample.Details).Where(text => text.Length > 0)
+                    .Distinct(StringComparer.Ordinal).Take(4));
+                var casesText = string.Join(" · ", perCase.Select(item => $"{item.Case}: {item.Util:0.00}"));
+                return new NativeQuantityUtilizationRow(group.Key.Section, group.Key.Procedure, group.Count(), envelope, governing, casesText, status, details);
+            })
+            .OrderBy(row => row.Section, StringComparer.Ordinal).ThenBy(row => row.Procedure, StringComparer.Ordinal).ToArray();
     }
 
     /// <summary>Section and material values taken from <paramref name="member"/>'s FEM section, in mm and MPa; what the

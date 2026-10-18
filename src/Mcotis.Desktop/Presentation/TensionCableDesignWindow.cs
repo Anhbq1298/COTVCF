@@ -10,10 +10,9 @@ using Microsoft.Win32;
 namespace Mcotis.Desktop.Presentation;
 
 /// <summary>
-/// Design → Tension Cable Design: for each tension cable of the model, the number and type of stay units that carry its largest tension —
-/// VSL SSI 2000 6-N strand groups, FATZER full-locked-coil ropes or (unqualified) Utracon PT tendons — screened at 50 % or 60 % of the
-/// breaking load, with the stay's stiffness, elongation, steel mass and an indicative cost (<see cref="TensionCableDesigner"/>). The basis
-/// is kept by the view model, and Optimization VCF / TAS suggest each cable's assembly in the Member Utilization sheet with it.
+/// Design → Tension Cable Design: checks each model cable's assigned section and iteratively optimizes strand counts, as well as sizing
+/// catalogue stay systems — VSL SSI 2000 strand groups, FATZER full-locked-coil ropes or (unqualified) Utracon PT tendons — with the
+/// stay's stiffness, elongation, mass and indicative cost (<see cref="TensionCableDesigner"/>).
 /// </summary>
 public sealed class TensionCableDesignWindow : Window
 {
@@ -26,6 +25,15 @@ public sealed class TensionCableDesignWindow : Window
         public string Length { get; } = option.LengthM > 0 ? option.LengthM.ToString("0.###", CultureInfo.InvariantCulture) : "";
         public string Area { get; } = option.AreaMm2 > 0 ? option.AreaMm2.ToString("#,0", CultureInfo.InvariantCulture) : "";
         public string Capacity { get; } = option.CapacityKN is { } kn ? kn.ToString("#,0", CultureInfo.InvariantCulture) : "";
+    }
+
+    public sealed record SectionCheckRow(string Member, string Section, double AreaMm2, double? TensionKN,
+        string GoverningCombo, double? CapacityKN, double? Utilization, string Status)
+    {
+        public string AreaText => AreaMm2 > 0 ? AreaMm2.ToString("#,0.##", CultureInfo.CurrentCulture) : "—";
+        public string TensionText => TensionKN is { } tension ? tension.ToString("#,0.##", CultureInfo.CurrentCulture) : "—";
+        public string CapacityText => CapacityKN is { } capacity ? capacity.ToString("#,0.##", CultureInfo.CurrentCulture) : "—";
+        public string UtilizationText => Utilization is { } utilization ? utilization.ToString("0.00", CultureInfo.CurrentCulture) : "—";
     }
 
     public sealed class RateRow(TensionCableRates.Entry entry, double value) : Observable
@@ -68,11 +76,15 @@ public sealed class TensionCableDesignWindow : Window
     private readonly TextBox maxUnits = new() { Width = 70 };
     private readonly TextBox manualForce = new() { Text = "60", Width = 80 };
     private readonly TextBox manualLength = new() { Text = "50", Width = 80 };
+    private readonly TextBox sectionStress = new() { Text = "2160", Width = 90 };
+    private readonly TextBox sectionReduction = new() { Text = "50", Width = 90 };
     private readonly DataGrid cableGrid = new() { AutoGenerateColumns = false, SelectionMode = DataGridSelectionMode.Extended, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
+    private readonly DataGrid sectionCheckGrid = new() { AutoGenerateColumns = false, IsReadOnly = true, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
     private readonly DataGrid rateGrid = new() { AutoGenerateColumns = false, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
     private readonly DataGrid resultGrid = new() { AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Single, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
     private readonly TextBox detail = new() { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontFamily = new System.Windows.Media.FontFamily("Consolas"), FontSize = 12 };
     private readonly TextBlock countText = new() { FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6), TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock sectionCheckSummary = new() { FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 560, VerticalAlignment = VerticalAlignment.Center, FontSize = 11 };
     private readonly TabControl tabs = new();
     private readonly TabItem designTab = new() { Header = "Design" };
@@ -118,7 +130,10 @@ public sealed class TensionCableDesignWindow : Window
         System.Windows.Automation.AutomationProperties.SetName(forceBasis, "Force basis");
         System.Windows.Automation.AutomationProperties.SetName(maxUse, "Maximum use");
         System.Windows.Automation.AutomationProperties.SetName(maxUnits, "Most units per stay");
+        System.Windows.Automation.AutomationProperties.SetName(sectionStress, "Cable check breaking stress MPa");
+        System.Windows.Automation.AutomationProperties.SetName(sectionReduction, "Cable check reduction factor percent");
         System.Windows.Automation.AutomationProperties.SetName(cableGrid, "Cables");
+        System.Windows.Automation.AutomationProperties.SetName(sectionCheckGrid, "Cable section checks");
         System.Windows.Automation.AutomationProperties.SetName(rateGrid, "Cost rates");
         System.Windows.Automation.AutomationProperties.SetName(resultGrid, "Cable designs");
 
@@ -139,6 +154,7 @@ public sealed class TensionCableDesignWindow : Window
         DockPanel.SetDock(bottom, Dock.Bottom);
         root.Children.Add(bottom);
 
+        tabs.Items.Add(new TabItem { Header = "Section Check", Content = BuildSectionCheckTab() });
         tabs.Items.Add(new TabItem { Header = "Design Basis", Content = BuildBasisTab() });
         tabs.Items.Add(new TabItem { Header = "Cables & Loads", Content = BuildCablesTab() });
         tabs.Items.Add(new TabItem { Header = "Cost Rates", Content = BuildRatesTab() });
@@ -166,6 +182,156 @@ public sealed class TensionCableDesignWindow : Window
         row.Children.Add(control);
         if (unit is not null) row.Children.Add(new TextBlock { Text = unit, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
         return row;
+    }
+
+    private UIElement BuildSectionCheckTab()
+    {
+        var root = new DockPanel { Margin = new Thickness(8, 6, 8, 0) };
+        var top = new StackPanel();
+        sectionCheckSummary.Text = "Check the assigned cable sections against the selected FEM load cases.";
+        top.Children.Add(sectionCheckSummary);
+        top.Children.Add(Hint("Capacity [kN] = section area [mm²] × breaking stress [MPa] × reduction factor ÷ 1,000. UR = maximum tensile force ÷ section capacity. Area comes from each assigned cable section; force comes from the selected FEM results.", new Thickness(0, 0, 0, 8)));
+
+        var controls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        controls.Children.Add(Field("Breaking stress", sectionStress, "MPa"));
+        controls.Children.Add(Field("Reduction factor", sectionReduction, "%"));
+        var check = new Button { Content = "Check Sections", MinWidth = 110, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 3, 10, 3), IsDefault = true };
+        check.Click += (_, _) => RunSectionCheck();
+        controls.Children.Add(check);
+        var optimize = new Button
+        {
+            Content = "Optimize Tendon Sections…", MinWidth = 170, Margin = new Thickness(0, 0, 0, 8), Padding = new Thickness(10, 3, 10, 3),
+            IsEnabled = viewModel.CanOptimizeCableSections,
+            ToolTip = viewModel.CableSectionOptimizationToolTip
+        };
+        System.Windows.Controls.ToolTipService.SetShowOnDisabled(optimize, true);
+        optimize.Click += (_, _) => OptimizeSections();
+        controls.Children.Add(optimize);
+        top.Children.Add(controls);
+        DockPanel.SetDock(top, Dock.Top);
+        root.Children.Add(top);
+
+        foreach (var (header, path, width) in new[]
+        {
+            ("Cable", nameof(SectionCheckRow.Member), 100.0), ("Section", nameof(SectionCheckRow.Section), 150.0),
+            ("Area [mm²]", nameof(SectionCheckRow.AreaText), 100.0), ("Governing combo", nameof(SectionCheckRow.GoverningCombo), 1.0),
+            ("Tension [kN]", nameof(SectionCheckRow.TensionText), 110.0), ("Capacity [kN]", nameof(SectionCheckRow.CapacityText), 110.0),
+            ("UR", nameof(SectionCheckRow.UtilizationText), 70.0), ("Status", nameof(SectionCheckRow.Status), 100.0),
+        })
+            sectionCheckGrid.Columns.Add(new DataGridTextColumn { Header = header, IsReadOnly = true,
+                Binding = new System.Windows.Data.Binding(path), Width = new DataGridLength(width, width == 1 ? DataGridLengthUnitType.Star : DataGridLengthUnitType.Pixel) });
+        sectionCheckGrid.ItemsSource = Array.Empty<SectionCheckRow>();
+        root.Children.Add(sectionCheckGrid);
+        return root;
+    }
+
+    private bool TryReadSectionCheckInputs(out double breakingStressMpa, out double reductionFactor)
+    {
+        breakingStressMpa = 0;
+        reductionFactor = 0;
+        if (!TryReadNumber(sectionStress.Text, out breakingStressMpa) || breakingStressMpa <= 0 || !double.IsFinite(breakingStressMpa))
+        {
+            Message("Breaking stress: enter a positive value in MPa.");
+            sectionStress.Focus();
+            return false;
+        }
+        if (!TryReadNumber(sectionReduction.Text, out var reductionPercent) || reductionPercent <= 0 || reductionPercent > 100 || !double.IsFinite(reductionPercent))
+        {
+            Message("Reduction factor: enter a percentage greater than 0 and at most 100.");
+            sectionReduction.Focus();
+            return false;
+        }
+        reductionFactor = reductionPercent / 100;
+        return true;
+    }
+
+    private static bool TryReadNumber(string? text, out double value) =>
+        double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out value) ||
+        double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+
+    private void RunSectionCheck()
+    {
+        if (!TryReadSectionCheckInputs(out var breakingStress, out var reductionFactor)) return;
+        var members = cables.Where(row => row.Selected).Select(row => row.Member).ToArray();
+        if (members.Length == 0) { Message("Tick at least one cable on the Cables & Loads tab."); return; }
+        var selectedCases = cases.Where(item => item.IsChecked).Select(item => item.Name).ToArray();
+        if (cases.Count > 0 && selectedCases.Length == 0) { Message("Tick at least one load case or combination on the Cables & Loads tab."); return; }
+
+        var run = viewModel.DesignRunId is not null ? viewModel.SelectedFemRun : null;
+        var options = viewModel.CableDesignOptions().Where(option => members.Contains(option.Member, StringComparer.Ordinal)).ToArray();
+        var rows = new List<SectionCheckRow>();
+        foreach (var option in options)
+        {
+            var area = option.AreaMm2;
+            var capacity = area > 0 && double.IsFinite(area) ? area * breakingStress * reductionFactor / 1000 : (double?)null;
+            if (capacity is not > 0)
+            {
+                rows.Add(new(option.Member, option.Section, area, null, "—", null, null, "NO SECTION"));
+                continue;
+            }
+            if (run is null)
+            {
+                rows.Add(new(option.Member, option.Section, area, null, "—", capacity, null, "NO RESULT"));
+                continue;
+            }
+
+            var forces = selectedCases.SelectMany(caseName => run.ResultFor(caseName).Cables
+                .Where(cable => cable.MemberName == option.Member)
+                .Select(cable => (Case: caseName, Force: cable.AxialForceKN)))
+                .Where(sample => double.IsFinite(sample.Force)).ToArray();
+            if (forces.Length == 0)
+            {
+                rows.Add(new(option.Member, option.Section, area, null, "—", capacity, null, "NO RESULT"));
+                continue;
+            }
+            var governing = forces.MaxBy(sample => sample.Force);
+            var tension = Math.Max(0, governing.Force);
+            var utilization = tension / capacity.Value;
+            var statusText = tension <= 1e-6 ? "SLACK" : utilization <= 1 ? "OK" : "FAIL";
+            rows.Add(new(option.Member, option.Section, area, tension, governing.Case, capacity, utilization, statusText));
+        }
+
+        sectionCheckGrid.ItemsSource = rows;
+        var failCount = rows.Count(row => row.Status == "FAIL");
+        var slackCount = rows.Count(row => row.Status == "SLACK");
+        var missingCount = rows.Count(row => row.Status is "NO SECTION" or "NO RESULT");
+        sectionCheckSummary.Text = $"Section property check · fpu {breakingStress:0.##} MPa · φ {reductionFactor:P0} · {rows.Count - failCount - slackCount - missingCount} OK · {failCount} FAIL · {slackCount} slack · {missingCount} unavailable";
+        Message(run is null ? "Run FEM Analysis for the current model before checking cable utilization." : "");
+    }
+
+    private void OptimizeSections()
+    {
+        if (!TryReadSectionCheckInputs(out var breakingStress, out var reductionFactor)) return;
+        var before = viewModel.CableDesignOptions().ToDictionary(option => option.Member, option => option.Section, StringComparer.Ordinal);
+        var prior = viewModel.LoadCableSectionOptimization();
+        var settings = (prior?.DocumentId == viewModel.NativeDocumentSession.Document.DocumentId.Value
+                ? prior.Settings : CableSectionOptimizationSettings.Default) with
+        {
+            BreakingStressMpa = breakingStress,
+            PreliminaryCoefficient = reductionFactor,
+        };
+        new CableSectionOptimizationWindow(viewModel, settings) { Owner = this }.ShowDialog();
+
+        var options = viewModel.CableDesignOptions();
+        var changed = options.Any(option => before.TryGetValue(option.Member, out var oldSection) && oldSection != option.Section);
+        RefreshCableRows();
+        if (changed)
+        {
+            sectionCheckGrid.ItemsSource = Array.Empty<SectionCheckRow>();
+            sectionCheckSummary.Text = "Tendon sections changed. Run FEM Analysis again, then recheck utilization on this tab.";
+            Message("Suggested tendon sections were applied. Run FEM Analysis again before checking the updated sections.");
+        }
+    }
+
+    private void RefreshCableRows()
+    {
+        var selected = cables.Where(row => row.Selected).Select(row => row.Member).ToHashSet(StringComparer.Ordinal);
+        cables.Clear();
+        cables.AddRange(viewModel.CableDesignOptions().Select(option => new CableRow(option, selected.Contains(option.Member))));
+        if (cableGrid.ItemsSource is null) return;
+        cableGrid.ItemsSource = null;
+        cableGrid.ItemsSource = cables;
+        foreach (var row in cables.Where(row => row.Selected)) cableGrid.SelectedItems.Add(row);
     }
 
     private UIElement BuildBasisTab()

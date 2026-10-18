@@ -3389,7 +3389,7 @@ public sealed partial class MainViewModel : Observable
             nameof(HasSapConnection), nameof(HasWorkingModel), nameof(IsOfflineModel), nameof(IsDefaultModel), nameof(OfflineModelSummary), nameof(WindowTitle), nameof(CanSaveFemModel), nameof(CanUseConfig), nameof(HasProject), nameof(ProjectName), nameof(PrintSetupProjectStatus),
             nameof(FemRunSummary), nameof(FemPinSupportSummary), nameof(FemProgressText), nameof(FemStatus), nameof(IsFemModelLocked),
             nameof(CanDefineFemModel), nameof(HasModelGeometry), nameof(HasUsableModelGeometry), nameof(ShowBlankModelChoice), nameof(CanEditFemModel), nameof(CanEditVcfGeometry), nameof(NeedsVcfModelReplacement), nameof(VcfGeometryToolTip),
-            nameof(CanOptimizeVcf), nameof(CanOptimizeTas), nameof(HasCableMembers), nameof(FemCableFitView),
+            nameof(CanOptimizeVcf), nameof(CanOptimizeTas), nameof(CanOptimizeCableSections), nameof(HasCableMembers), nameof(FemCableFitView),
             nameof(CanUnlockFemModel), nameof(CanToggleFemModelLock), nameof(FemLockGlyph), nameof(FemLockActionText), nameof(FemModelEditState), nameof(FemDatabaseSummary),
             nameof(FemOutputCaseChoices), nameof(FemDeflectionOutputCase), nameof(FemMemberForceOutputCase), nameof(FemFoundationOutputCase), nameof(FemCableOutputCase),
             nameof(FemDeflectionJointNames), nameof(FemFoundationLeftJointNames), nameof(FemFoundationRightJointNames), nameof(FemCableObjectNames), nameof(FemFrameObjectNames),
