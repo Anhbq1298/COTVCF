@@ -16,7 +16,6 @@ public sealed partial record ResultReport
 
     private void AppendTables(StringBuilder html)
     {
-        string E(string text) => WebUtility.HtmlEncode(text);
         html.Append("<style>table{border-collapse:collapse;width:100%;table-layout:fixed;margin:6pt 0 12pt;font-size:9pt}th,td{border:1px solid #222;padding:4pt;overflow-wrap:anywhere;vertical-align:middle}" +
                     "th{background:#8fb3df;font-weight:normal;text-align:center;print-color-adjust:exact}td{text-align:right}td.l{text-align:left}td.c{text-align:center}td img{height:1.2cm;width:auto;display:inline-block}" +
                     "tr{break-inside:avoid}tr.t td{font-weight:bold}thead{display:table-header-group}h2{font-size:9pt;break-after:avoid;margin:12pt 0 4pt}p.n{font-size:9pt;margin:0 0 4pt}" +

@@ -22,7 +22,7 @@ continues on the next lines, indented by two spaces):
 - Status: Done
 - Who: aBui (with Claude Code)
 - Where: Result → Export… → Support reactions
-- What: Each Support reactions figure of the report has a small table directly below it: Rx, Rz (MN) and My (MN·m) at each support, to one decimal, with their sums.
+- What: Each Support reactions figure of the report has a small table directly below it: Rx, Rz (MN) and My (MN·m) at each support, to one decimal, with their sums. A force that rounds to zero reads 0.0, never -0.0.
 - Checks: `--result-export`
 
 ## 2026-10-18 · Export: one Cable forces tick
