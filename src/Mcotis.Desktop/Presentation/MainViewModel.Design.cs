@@ -1,3 +1,4 @@
+using Mcotis.Desktop.Application;
 using Mcotis.Desktop.Application.Design;
 using Mcotis.Desktop.Domain;
 
@@ -161,8 +162,14 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Designs every member of <paramref name="basis"/> with the forces of the FEM run.</summary>
-    internal IReadOnlyList<ColumnMemberDesign> RunColumnDesign(ColumnDesignBasis basis) =>
-        DesignMemberInputs(basis.Type, basis.Members, basis.LoadCases).Select(input => ColumnDesignEngine.Design(basis, input)).ToArray();
+    internal IReadOnlyList<ColumnMemberDesign> RunColumnDesign(ColumnDesignBasis basis)
+    {
+        IReadOnlyDictionary<string, VcfMemberRole> roles;
+        try { roles = VcfGeometry.Analyze(State.Geometry, State.Truss).Roles; }
+        catch (InvalidOperationException) { roles = new Dictionary<string, VcfMemberRole>(); }   // not a VCF system: no roles
+        return DesignMemberInputs(basis.Type, basis.Members, basis.LoadCases)
+            .Select(input => ColumnDesignEngine.Design(basis, input) with { Role = roles.TryGetValue(input.Member, out var role) ? VcfGeometry.Title(role) : "" }).ToArray();
+    }
 
     /// <summary>The FEM forces of <paramref name="members"/> under <paramref name="loadCases"/> (empty: all) in the design
     /// candidate, as the design engine and the optimisation take them: the six local components of the run's results by

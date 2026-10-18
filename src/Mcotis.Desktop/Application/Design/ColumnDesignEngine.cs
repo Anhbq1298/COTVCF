@@ -50,6 +50,8 @@ public sealed record DetailingCheck(string Name, string Clause, bool Pass, strin
 public sealed record ColumnMemberDesign(string Member, string Section, double LengthM, IReadOnlyList<DesignCaseResult> Cases,
     DesignCaseResult? Governing, IReadOnlyList<DetailingCheck> Detailing, string Detail, string? Error = null)
 {
+    /// <summary>The member's role in the model (the VCF system's, as Frame Information gives it); empty when the model has none.</summary>
+    public string Role { get; init; } = "";
     public double MaxUtilization => Governing?.MaxUtilization ?? double.PositiveInfinity;
     public bool DetailingOk => Detailing.All(check => check.Pass);
     public string Status => Error is not null ? "ERROR" : MaxUtilization > 1.0 ? "FAIL" : DetailingOk ? "OK" : "CHECK";

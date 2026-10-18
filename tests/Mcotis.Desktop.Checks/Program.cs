@@ -743,6 +743,36 @@ internal static class Program
                        megaWidth.Text == defaultVm.DesignSectionDefaults(ColumnDesignType.MegaComposite, megaMember.Name).Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     "the mega column design starts at l0 = 10 m and its Section tab follows the first ticked member's section");
                 megaDesign.Close();
+                var designRuns = 0;
+                var runDialog = new DesignReferenceWindow(defaultVm.DesignBasis(ColumnDesignType.MegaComposite), defaultVm.DesignMemberOptions(ColumnDesignType.MegaComposite),
+                    defaultVm.DesignCaseNames(), defaultVm.DesignDefaultCases(), "run", member => defaultVm.DesignSectionDefaults(ColumnDesignType.MegaComposite, member),
+                    runDesign: _ => { designRuns++; return []; }) { Owner = window };
+                runDialog.Show();
+                runDialog.UpdateLayout();
+                var tabHeaders = runDialog.Tabs.Items.OfType<TabItem>().Select(tab => tab.Header as string).ToArray();
+                var memberLines = ((IEnumerable<DesignReferenceWindow.CheckItem>)runDialog.MemberList.ItemsSource).Select(item => item.Text).ToArray();
+                runDialog.LengthYBox.Text = "8";
+                var afterEdit = ((IEnumerable<DesignReferenceWindow.CheckItem>)runDialog.MemberList.ItemsSource).First().Text;
+                runDialog.LengthYBox.Text = "10";
+                var runButton = FindVisuals<Button>(runDialog).First(button => Equals(button.Content, "Run Design"));
+                runButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Assert(tabHeaders.SequenceEqual(["Design Basis", "Section", "Members & Loads", "Design", "Optimization"]) &&
+                       memberLines.All(line => line.Contains("l0 = 10 m", StringComparison.Ordinal) && !line.Contains("L = ", StringComparison.Ordinal)) &&
+                       afterEdit.Contains("l0,y = 8 m, l0,z = 10 m", StringComparison.Ordinal) &&
+                       designRuns == 1 && runDialog.IsVisible && ReferenceEquals(runDialog.Tabs.SelectedItem, runDialog.DesignTab),
+                    "Run Design shows its results in the Design tab (before Optimization) and keeps the dialog open; each member shows the effective length l0 of the Design Basis");
+                // the Optimization tab counts its cases live; tw = tf drops the web range from the count
+                int Cases() => int.Parse(System.Text.RegularExpressions.Regex.Match(runDialog.OptCountText.Text, @"^([\d,.]+) cases").Groups[1].Value.Replace(",", "").Replace(".", ""));
+                var casesBoth = Cases();
+                runDialog.OptWebEqualsFlange.IsChecked = true;
+                runDialog.OptWebEqualsFlange.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                var casesEqual = Cases();
+                var webSteps = 1 + (int)Math.Round((double.Parse(runDialog.OptWebMax.Text) - double.Parse(runDialog.OptWebMin.Text)) / double.Parse(runDialog.OptWebStep.Text));
+                runDialog.OptFlangeMax.Text = "60";
+                var casesNarrow = Cases();
+                Assert(casesEqual < casesBoth && !runDialog.OptWebMin.IsEnabled && casesBoth % casesEqual == 0 && casesNarrow < casesEqual && webSteps > 1,
+                    $"the Optimization tab shows the number of cases ({casesBoth:N0}; {casesEqual:N0} with tw = tf) and recounts when a range changes ({casesNarrow:N0})");
+                runDialog.Close();
                 var cableForm = new StrandSectionWindow(vm, new StrandSectionProperty { Name = "Strand", Area = 0.01 }, new HashSet<string>()) { Owner = window };
                 cableForm.Show();
                 cableForm.SetArea("0.02");

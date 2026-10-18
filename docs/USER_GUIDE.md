@@ -715,13 +715,14 @@ Designs columns with the forces of the FEM run: pick a design from the Design me
 ## The Design Reference dialog
 - **Design Basis** — the design code and its references, the method, the Singapore National Annex, the effective lengths l0,y (major, in-plane) and l0,z (minor) in m, the partial factors (γC, γS, γM0) and the grade limits.
 - **Section** — the section and materials (mm, MPa), always taken from the first ticked member's section (its Member Section), when the dialog opens and whenever the first ticked member changes; you may edit the fields for one run, and From Member Section fills them again.
-- **Members & Loads** — the members to design (frames selected on the model view are ticked; Suggested / All / None) and the load cases.
+- **Members & Loads** — the members to design (frames selected on the model view are ticked; Suggested / All / None; each line shows the member's section, material and the effective length l0 keyed in on Design Basis) and the load cases.
+- **Design** — the results of Run Design ([[Design results]]), shown here so the basis, section, members and results are always in one window.
 - **Optimization** — the cheapest section ([[Column design optimization]]).
 
 ## Assumptions
 The forces are taken in each frame's local axes: the moment about local 3 (M3) bends the major axis y-y — the section's depth h lies along local 2 — and the moment about local 2 (M2) bends the minor axis z-z, each with its imperfection and second-order effects, and both together in the code's biaxial check (EC2 5.8.9, EC4 6.7.3.7, with the imperfection in either plane when both moments act). The shear along local 2 goes with y-y, the shear along local 3 with z-z; each is checked. A plane model analysed in its plane has no M2: the minor axis then carries the imperfection moment only, as before. **Torsion is not designed**: a case whose torsion is more than 1 % of its largest bending moment (and more than 1 kNm) is refused with the value; a smaller torsion is reported in the calculation. The report states this mapping. One section is checked for every ticked member, each with its own forces.
 
-Run Design opens the [[Design results]]. The designs: [[RC column design]], [[CFT column design]], [[Steel encased column design]], [[Mega column design]].
+Run Design runs the design and shows the [[Design results]] in the dialog's **Design** tab; the dialog stays open, so you can change the basis, section or members and run again. Cancel becomes Close. The designs: [[RC column design]], [[CFT column design]], [[Steel encased column design]], [[Mega column design]].
 
 # RC column design
 Category: Design
@@ -764,10 +765,10 @@ Columns with several concrete-encased steel profiles (4, or 6 with two on the be
 
 # Design results
 Category: Design
-Where: Design → a column design → Run Design
+Where: Design → a column design → Run Design (the Design tab)
 See also: Column design
 
-A summary per member — governing case, NEd, MEd,y, MEd,z, VEd, the axial, major, minor / biaxial and shear utilisations and the status — above the step-by-step calculation of the selected member with clause references.
+A summary per member — its role in the VCF system (as Frame Information shows it), governing case, NEd, MEd,y, MEd,z, VEd, the axial, major, minor / biaxial and shear utilisations and the status — above the step-by-step calculation of the selected member with clause references.
 
 - **OK** — every utilisation ≤ 1.00 and the detailing passes.
 - **CHECK** — utilisations pass but a detailing rule does not.
@@ -838,6 +839,8 @@ Choose steel and concrete grades plus longitudinal bars and cover to links. Cand
 
 ### Mega composite — multiple profiles and placement
 Set the concrete outline and dimensions of one steel I profile, then tick **4 and/or 6 profiles**. Ticking both tries both arrangements. Enter the **edge distance from the concrete face to the profile [mm]**; it controls placement, rather than being a centre-to-centre spacing.
+
+Tick **tw = tf** (steel encased and mega) to make the web as thick as the flange: the web is not stepped, so the run has far fewer cases. Above the Run button the tab shows the **number of cases** the run would design (every combination of size, steel grade, concrete grade and bar arrangement) and updates it as you change a range, a grade, the bars or the profile options; over the limit of 250,000 it says so and the run is refused until you narrow a range or use larger steps.
 
 Choose grades, bars and cover as for the mega section. More profiles do not automatically produce the cheapest result: their added capacity and material cost are both considered. The screenshot illustrates the mega-specific controls, not a completed mega optimization run.
 

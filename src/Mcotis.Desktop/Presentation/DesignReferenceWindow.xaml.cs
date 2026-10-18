@@ -19,7 +19,8 @@ public partial class DesignReferenceWindow : Window
     {
         private bool isChecked = isChecked;
         public string Name { get; } = name;
-        public string Text { get; } = text;
+        private string text = text;
+        public string Text { get => text; set => Set(ref text, value); }
         public bool Suggested { get; } = suggested;
         public bool IsChecked { get => isChecked; set => Set(ref isChecked, value); }
     }
@@ -68,6 +69,9 @@ public partial class DesignReferenceWindow : Window
 
     private readonly ColumnDesignType type;
     private readonly Func<string, ColumnSectionInput> sectionFromMember;
+    private readonly Func<ColumnDesignBasis, IReadOnlyList<ColumnMemberDesign>>? runDesign;
+    private readonly string? runId;
+    private readonly IReadOnlyList<DesignMemberOption> memberOptions;
     private readonly Dictionary<SectionField, TextBox> fieldBoxes = [];
     private readonly ComboBox tubeBox = new() { ItemsSource = Enum.GetValues<TubeShape>(), Width = 140, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 6) };
     private readonly List<CheckItem> members;
@@ -85,11 +89,15 @@ public partial class DesignReferenceWindow : Window
         IReadOnlyList<string> defaultCases, string? runId, Func<string, ColumnSectionInput> sectionFromMember,
         IReadOnlyList<string>? viewerSelection = null,
         Func<IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<DesignMemberInput>>? memberForces = null,
-        IReadOnlyList<MaterialProperty>? materials = null, string? resultState = null, bool resultsStale = false)
+        IReadOnlyList<MaterialProperty>? materials = null, string? resultState = null, bool resultsStale = false,
+        Func<ColumnDesignBasis, IReadOnlyList<ColumnMemberDesign>>? runDesign = null)
     {
         InitializeComponent();
         type = basis.Type;
         this.sectionFromMember = sectionFromMember;
+        this.runDesign = runDesign;
+        this.runId = runId;
+        this.memberOptions = memberOptions;
         this.defaultCases = defaultCases;
         Title = "Design Reference — " + ColumnDesignCodes.Title(type);
         DesignTitle.Text = ColumnDesignCodes.Title(type);
@@ -107,7 +115,7 @@ public partial class DesignReferenceWindow : Window
         selection = (viewerSelection ?? []).Where(name => memberOptions.Any(option => option.Member == name)).ToHashSet(StringComparer.Ordinal);
         var chosen = selection.Count > 0 ? selection : basis.Members.ToHashSet(StringComparer.Ordinal);
         members = memberOptions.OrderBy(option => selection.Contains(option.Member) ? 0 : 1).Select(option => new CheckItem(option.Member,
-            $"   {option.Section}{(option.Material.Length > 0 ? " · " + option.Material : "")}{(option.LengthM > 0 ? $" · L = {option.LengthM:0.###} m" : "")}",
+            MemberText(option),
             chosen.Contains(option.Member), option.Suggested)).ToList();
         MemberList.ItemsSource = members;
         SelectionButton.Visibility = selection.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -125,6 +133,10 @@ public partial class DesignReferenceWindow : Window
         sectionMember = members.FirstOrDefault(member => member.IsChecked)?.Name;
         Show(sectionMember is null ? basis : basis with { Section = sectionFromMember(sectionMember) });
         foreach (var member in members) member.PropertyChanged += (_, _) => FollowMemberSection();
+        // the length shown for a member is the effective length of the Design Basis, so it follows what is keyed in there
+        LengthYBox.TextChanged += (_, _) => RefreshMemberTexts();
+        LengthZBox.TextChanged += (_, _) => RefreshMemberTexts();
+        RefreshMemberTexts();
         InitOptimization(basis, memberForces, materials);
     }
 
@@ -200,6 +212,21 @@ public partial class DesignReferenceWindow : Window
         Show(sectionMember is null ? basis : basis with { Section = sectionFromMember(sectionMember) });
     }
 
+    /// <summary>A member's line in the list: its section, material and the effective length(s) l0 of the Design Basis.</summary>
+    private string MemberText(DesignMemberOption option)
+    {
+        var y = LengthYBox.Text.Trim();
+        var z = LengthZBox.Text.Trim();
+        var length = y.Length == 0 && z.Length == 0 ? "" : y == z || z.Length == 0 ? $" · l0 = {y} m" : y.Length == 0 ? $" · l0,z = {z} m" : $" · l0,y = {y} m, l0,z = {z} m";
+        return $"   {option.Section}{(option.Material.Length > 0 ? " · " + option.Material : "")}{length}";
+    }
+
+    private void RefreshMemberTexts()
+    {
+        foreach (var member in members)
+            if (memberOptions.FirstOrDefault(option => option.Member == member.Name) is { } option) member.Text = MemberText(option);
+    }
+
     /// <summary>Shows the section of the first ticked member when that member changes.</summary>
     private void FollowMemberSection()
     {
@@ -234,7 +261,13 @@ public partial class DesignReferenceWindow : Window
     {
         if (ReadBasis() is not { } basis) return;
         Result = basis;
-        DialogResult = true;
+        if (runDesign is null) { DialogResult = true; return; }
+        // the design runs here and its results go in the Design tab; the dialog stays open
+        try { ResultsPanel.Show(basis, runDesign(basis), runId); }
+        catch (Exception ex) { StatusText.Text = ex is InvalidOperationException ? ex.Message : "The design could not be completed: " + ex.Message; return; }
+        StatusText.Text = "";
+        CancelButton.Content = "Close";
+        Tabs.SelectedItem = DesignTab;
     }
 
     /// <summary>The design basis as the form holds it, checked; null (with the problem shown and its tab selected) when

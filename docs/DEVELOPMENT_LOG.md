@@ -18,6 +18,21 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Column optimization: tw = tf option and the number of cases shown
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Design → Steel Encased / Mega Composite Column Design… → Optimization tab
+- What: A **tw = tf** tick next to the web range makes the web as thick as the flange, so the web is not stepped and a run has far fewer cases. The tab shows the number of cases a run would design (size × steel grade × concrete grade × bar arrangement) above the Run button and recounts it whenever a range, grade, bar or profile input changes; over the 250,000 limit it says so.
+- Checks: --study-ui (the count, with and without tw = tf, and after a range change; run past the unrelated assertions noted in the Design tab entry); --dev-log.
+
+## 2026-10-18 · Column design: results in a Design tab; members show the effective length
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Design → any column design → Design Reference dialog (Members & Loads, Design tab)
+- What: Run Design no longer closes the dialog and opens a separate results window: the results (summary per member and the step-by-step calculation, Copy / Save Report) appear in a new **Design** tab placed before Optimization, so the basis, section, members and results are always in one window; Cancel becomes Close and Run Design can be repeated. The Members & Loads list shows each member's section, material and the effective length l0 of the Design Basis (following what is keyed in there) instead of the member's geometric length, which read 20 m against an l0 of 10 m.
+  The summary table has a **Role** column after Member (Mega column, Top chord, End frames…, as Frame Information gives it for the VCF system; empty for a model that has no such roles).
+- Checks: --study-ui (Design tab and member lines; that suite stops earlier on an unrelated viewer-supports assertion and at Assign → Joint → Restraints from uncommitted menu work, so the new check was run past them); --dev-log.
+
 ## 2026-10-18 · Default VCF model: CFT chords as a defined filled tube; CFT exports as a steel tube
 - Status: In progress
 - Who: Philip Pham (with Claude Code)
