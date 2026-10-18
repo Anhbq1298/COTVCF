@@ -86,7 +86,12 @@ internal static class AnalysisInputHasher
             switch (load)
             {
                 case PointLoad point: w.Int(1); w.Xyz(point.Force); w.Xyz(point.Moment); break;
-                case FrameDistributedLoad line: w.Int(2); w.Int((int)line.Direction); w.Doubles(line.RelativeStart, line.RelativeEnd, line.ValueStart, line.ValueEnd); break;
+                case FrameDistributedLoad line:
+                    w.Int(2); w.Int((int)line.Direction); w.Doubles(line.RelativeStart, line.RelativeEnd, line.ValueStart, line.ValueEnd);
+                    // a moment or a projected load is a different input; a plain force hashes as it always did, so the
+                    // results stored with existing documents stay current (how the distances were entered is not input)
+                    if (line.Type != FrameLoadType.Force || line.Projected) { w.Int(20 + (int)line.Type); w.Int(line.Projected ? 1 : 0); }
+                    break;
                 case FramePointLoad point: w.Int(3); w.Int((int)point.Direction); w.Doubles(point.RelativeDistance, point.Value); break;
                 case CableTargetForce target: w.Int(4); w.Doubles(target.Force, target.RelativeDistance); break;
                 case ShellUniformLoad area: w.Int(5); w.Int((int)area.Direction); w.Doubles(area.Value); break;

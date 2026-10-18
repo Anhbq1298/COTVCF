@@ -240,7 +240,8 @@ public static class DocumentValidator
                 {
                     PointLoad point => (d.Points.ContainsKey(load.TargetId), point.Force.IsFinite && point.Moment.IsFinite, "A point load"),
                     FrameDistributedLoad line => (d.Frames.ContainsKey(load.TargetId),
-                        Finite(line.ValueStart, line.ValueEnd) && Relative(line.RelativeStart) && Relative(line.RelativeEnd) && line.RelativeStart < line.RelativeEnd,
+                        Finite(line.ValueStart, line.ValueEnd) && Relative(line.RelativeStart) && Relative(line.RelativeEnd) && line.RelativeStart < line.RelativeEnd &&
+                        (!line.Projected || FrameDistributedLoadDefinition.CanProject(line.Direction)),
                         "A distributed frame load"),
                     FramePointLoad point => (d.Frames.ContainsKey(load.TargetId), Finite(point.Value) && Relative(point.RelativeDistance), "A frame point load"),
                     CableTargetForce target => (d.Cables.ContainsKey(load.TargetId),
@@ -252,7 +253,7 @@ public static class DocumentValidator
                     Error("load.target", ObjectKind.Load, load.Id, $"{what} is on an object that does not exist or cannot carry it.");
                 else if (!valuesOk)
                     Error("load.value", ObjectKind.Load, load.Id,
-                        $"{what} on '{NameOf(load.TargetId)}' has a value that is not valid: forces must be finite, relative distances within 0 … 1, a target force above zero.");
+                        $"{what} on '{NameOf(load.TargetId)}' has a value that is not valid: forces must be finite, relative distances within 0 … 1, a target force above zero, a projected load along a global direction.");
             }
         }
 

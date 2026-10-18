@@ -15,9 +15,25 @@ public abstract record LoadAssignment(ObjectId Id, ObjectId PatternId, ObjectId 
 public sealed record PointLoad(ObjectId Id, ObjectId PatternId, ObjectId TargetId, Xyz Force, Xyz Moment = default)
     : LoadAssignment(Id, PatternId, TargetId);
 
-/// <summary>A line load [kN/m] on a frame between two relative distances from its start, varying linearly.</summary>
+/// <summary>What a distributed frame load is per unit length: a force [kN/m] or a moment [kN·m/m] (SAP2000 MyType 1, 2).</summary>
+public enum FrameLoadType { Force, Moment }
+
+/// <summary>How the distances of a frame load were entered: relative to the frame length (0 … 1) or absolute [m] from
+/// End-I. The relative distances are what the model holds either way.</summary>
+public enum LoadDistanceType { Relative, Absolute }
+
+/// <summary>A line load on a frame between two relative distances from its start, varying linearly: one segment of
+/// SAP2000's frame distributed load (one row of its "Frame Loads - Distributed" table).
+/// <para><see cref="Type"/>: a force [kN/m] along <see cref="LoadAssignment"/>'s direction, or a moment [kN·m/m] about
+/// it. <see cref="Projected"/>: the value is per unit length of the frame projected on the plane normal to the load
+/// direction (SAP2000 directions 7–9 and 11) — a global direction only. Zero outside its two distances.</para></summary>
 public sealed record FrameDistributedLoad(ObjectId Id, ObjectId PatternId, ObjectId TargetId, LoadDirection Direction,
-    double RelativeStart, double RelativeEnd, double ValueStart, double ValueEnd) : LoadAssignment(Id, PatternId, TargetId);
+    double RelativeStart, double RelativeEnd, double ValueStart, double ValueEnd) : LoadAssignment(Id, PatternId, TargetId)
+{
+    public FrameLoadType Type { get; init; } = FrameLoadType.Force;
+    public bool Projected { get; init; }
+    public LoadDistanceType EnteredAs { get; init; } = LoadDistanceType.Relative;
+}
 
 /// <summary>A force [kN] on a frame at a relative distance from its start.</summary>
 public sealed record FramePointLoad(ObjectId Id, ObjectId PatternId, ObjectId TargetId, LoadDirection Direction,

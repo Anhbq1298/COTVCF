@@ -27,6 +27,8 @@ internal sealed class SpatialFrameElement
     // The loads as they were given, in local axes: the nodal load vector alone does not say where they act.
     private readonly List<(double At, Xyz Force)> pointLoads = [];
     private readonly List<(double Start, double End, Xyz StartIntensity, Xyz EndIntensity)> lineLoads = [];
+    // Distributed moments [kN·m/m] in local axes: m1 twists, m2 and m3 bend (SAP2000 frame distributed load, MyType 2).
+    private readonly List<(double Start, double End, Xyz StartIntensity, Xyz EndIntensity)> lineMoments = [];
 
     public SpatialFrameElement(ModelDocument document, FrameObject frame)
         : this(document, frame, document.Points[frame.StartPointId].Position, document.Points[frame.EndPointId].Position, 0, 1) { }
@@ -178,6 +180,35 @@ internal sealed class SpatialFrameElement
         OriginalLoad[8] += n2 * localForce.Z; OriginalLoad[10] -= h2 * localForce.Z;
     }
 
+    /// <summary>The consistent nodal loads of a concentrated moment (local axes) at a relative distance: its virtual
+    /// work on the rotations of the element's shape functions — θ1 linear; θ3 = u2′ and θ2 = −u3′ of the Hermite cubics
+    /// <see cref="Accumulate"/> uses.</summary>
+    private void AccumulateMoment(double relative, Xyz localMoment)
+    {
+        double t = relative;
+        double dn1 = (-6 * t + 6 * t * t) / Length, dn2 = (6 * t - 6 * t * t) / Length;
+        double dh1 = 1 - 4 * t + 3 * t * t, dh2 = -2 * t + 3 * t * t;
+        OriginalLoad[3] += (1 - t) * localMoment.X; OriginalLoad[9] += t * localMoment.X;
+        OriginalLoad[1] += dn1 * localMoment.Z; OriginalLoad[5] += dh1 * localMoment.Z;
+        OriginalLoad[7] += dn2 * localMoment.Z; OriginalLoad[11] += dh2 * localMoment.Z;
+        OriginalLoad[2] -= dn1 * localMoment.Y; OriginalLoad[4] += dh1 * localMoment.Y;
+        OriginalLoad[8] -= dn2 * localMoment.Y; OriginalLoad[10] += dh2 * localMoment.Y;
+    }
+
+    /// <summary>A moment per unit length [kN·m/m] about <paramref name="direction"/>, varying linearly between two relative
+    /// distances. 3-point Gauss integrates the shape-function slopes (quadratic) × linear intensity exactly.</summary>
+    public void AddDistributedMoment(double start, double end, LoadDirection direction, double startValue, double endValue)
+    {
+        lineMoments.Add((start, end, LoadVector(direction, startValue), LoadVector(direction, endValue)));
+        double g = Math.Sqrt(3.0 / 5), midpoint = (start + end) / 2, half = (end - start) / 2;
+        foreach (var (point, weight) in new[] { (-g, 5.0 / 9), (0.0, 8.0 / 9), (g, 5.0 / 9) })
+        {
+            double relative = midpoint + half * point;
+            double intensity = startValue + (endValue - startValue) * (relative - start) / (end - start);
+            AccumulateMoment(relative, LoadVector(direction, intensity * Length * half * weight));
+        }
+    }
+
     /// <summary>3-point Gauss integrates Hermite cubic × linear intensity exactly on the loaded interval.</summary>
     public void AddDistributedLoad(double start, double end, LoadDirection direction, double startValue, double endValue)
     {
@@ -222,6 +253,13 @@ internal sealed class SpatialFrameElement
             force -= total;
             moment += new Xyz(0, -lever.Z, lever.Y);
         }
+        foreach (var (start, end, startIntensity, endIntensity) in lineMoments)
+        {
+            double a = start * Length, b = end * Length, reach = Math.Min(x, b) - a;
+            if (reach <= 0) continue;
+            var slope = (endIntensity - startIntensity) * (1 / (b - a));
+            moment -= startIntensity * reach + slope * (reach * reach / 2);                                     // ∫ m ds
+        }
         return [force.X, force.Y, force.Z, moment.X, moment.Y, moment.Z];
     }
 
@@ -236,7 +274,7 @@ internal sealed class SpatialFrameElement
         double x = relative * Length;
         var stops = new SortedSet<double> { 0, x };
         foreach (var (at, _) in pointLoads) if (at * Length > 0 && at * Length < x) stops.Add(at * Length);
-        foreach (var (start, end, _, _) in lineLoads)
+        foreach (var (start, end, _, _) in lineLoads.Concat(lineMoments))
         {
             if (start * Length > 0 && start * Length < x) stops.Add(start * Length);
             if (end * Length > 0 && end * Length < x) stops.Add(end * Length);
@@ -281,9 +319,14 @@ internal sealed class SpatialFrameElement
         {
             double from = Math.Max(line.RelativeStart, RelativeStart), to = Math.Min(line.RelativeEnd, RelativeEnd);
             if (to <= from) return;
+            // a projected load is per unit length of the frame projected on the plane normal to its direction: per unit
+            // length of the frame it is that much less (SAP2000 directions 7–9, 11). Every piece has the frame's axis.
+            double scale = factor * (line.Projected ? FrameLoads.ProjectionFactor(Axis1, line.Direction) : 1);
             double Intensity(double relative) => line.ValueStart +
                 (line.ValueEnd - line.ValueStart) * (relative - line.RelativeStart) / (line.RelativeEnd - line.RelativeStart);
-            AddDistributedLoad((from - RelativeStart) / span, (to - RelativeStart) / span, line.Direction, Intensity(from) * factor, Intensity(to) * factor);
+            double a = (from - RelativeStart) / span, b = (to - RelativeStart) / span;
+            if (line.Type == FrameLoadType.Moment) AddDistributedMoment(a, b, line.Direction, Intensity(from) * scale, Intensity(to) * scale);
+            else AddDistributedLoad(a, b, line.Direction, Intensity(from) * scale, Intensity(to) * scale);
         }
     }
 

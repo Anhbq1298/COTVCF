@@ -143,8 +143,22 @@ internal static class NativeDocumentImport
                     else jointLoads.Add(new(pattern, new FemJointLoad(Name(point.TargetId), point.Force.X, point.Force.Z, point.Moment.Y)));
                     break;
                 case Native.FrameDistributedLoad line when document.Frames.TryGetValue(line.TargetId, out var frame):
-                    if (Direction(line.Direction, frame, "line load") is { } lineDirection)
-                        memberLoads.Add(new(pattern, new FemMemberLoad(Name(frame.Id), lineDirection, line.RelativeStart, line.RelativeEnd, line.ValueStart, line.ValueEnd)));
+                    // a distributed moment, or a projected load along Y, has no form in the main window's model yet
+                    if (line.Type == Native.FrameLoadType.Moment)
+                        problems.Add($"Frame {Name(frame.Id)}: a distributed moment about {line.Direction}, which the main window's model does not hold yet");
+                    else if (Direction(line.Direction, frame, "line load") is { } lineDirection)
+                    {
+                        FemLoadDirection? projected = !line.Projected ? lineDirection : lineDirection switch
+                        {
+                            FemLoadDirection.GlobalX => FemLoadDirection.ProjectedX,
+                            FemLoadDirection.GlobalZ => FemLoadDirection.ProjectedZ,
+                            FemLoadDirection.Gravity => FemLoadDirection.ProjectedGravity,
+                            _ => null,
+                        };
+                        if (projected is { } held)
+                            memberLoads.Add(new(pattern, new FemMemberLoad(Name(frame.Id), held, line.RelativeStart, line.RelativeEnd, line.ValueStart, line.ValueEnd)));
+                        else problems.Add($"Frame {Name(frame.Id)}: a projected line load along {line.Direction}, which the main window's model does not hold yet");
+                    }
                     break;
                 case Native.FramePointLoad force when document.Frames.TryGetValue(force.TargetId, out var frame):
                     if (Direction(force.Direction, frame, "point load") is { } pointDirection)

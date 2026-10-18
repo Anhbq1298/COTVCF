@@ -71,6 +71,7 @@ public sealed partial class MainViewModel
         try
         {
             Message = "Checking the export against the model open in SAP2000 (read-only)…";
+            WarnNativeFrameLoadsNotExported("Export to SAP2000");
             var model = BuildSapExportModel();
             var target = await workflow.PeekActiveModelAsync();
             var plan = await workflow.ExportToSapAsync(model, target, unlock: false, preview: true);

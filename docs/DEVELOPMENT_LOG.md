@@ -18,12 +18,20 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
-## 2026-10-18 · Assign → Frame → Frame Load: distributed loads as SAP2000 defines them
+## 2026-10-18 · Frame loads, still to come: drawing, Object Information, SAP2000 / ETABS adapters
 - Status: Planned
 - Who: Unassigned
-- Where: Assign → Frame → Frame Load… (new); Display → Loading; Object Information; File → Import / Export SAP2000 and ETABS
-- What: Distributed forces or moments on the selected frames, as SAP2000's Frame Distributed Loads form: load pattern, Forces / Moments, GLOBAL or Local, directions Local 1/2/3, X/Y/Z, X/Y/Z projected, Gravity and Gravity projected, a 4-point trapezoid (relative or absolute distance from End-I) plus a uniform load, and Add / Replace / Delete existing. The loads are data of the native document, with the frame-load methods in `Mcotis.Core.FrameLoads`. Delivered in slices FL-01 … FL-07; distributed moments are refused at Run until their verification record is complete. Plan: `docs/loads/FRAME_DISTRIBUTED_LOAD_PLAN.md`.
-- Checks: none yet (planned: --frame-loads, --frame-load-ui, --native-parity, --full for FL-02)
+- Where: Display → Loading; Object Information; File → Import From / Export to SAP2000 and ETABS
+- What: The rest of `docs/loads/FRAME_DISTRIBUTED_LOAD_PLAN.md`. FL-05: draw each frame's distributed loads (trapezoid outline, arrows, values; moments as curved arrows) and list them in Object Information from the document. FL-06: import every SAP2000 / ETABS distributed load (dirs 1–11, forces and moments) into the document and export the document's frame loads (`SetLoadDistributed` with Replace on the first row of a frame and pattern). FL-03 step 1: map legacy load directions faithfully instead of collapsing them to X / Z, gated by --native-parity. Until FL-06 an export warns that frame loads assigned in Mcotis are not exported.
+- Checks: none yet
+
+## 2026-10-18 · Assign → Frame → Frame Load: distributed loads as SAP2000 defines them
+- Status: In progress
+- Who: Mark (with Claude Code)
+- Where: Assign → Frame → Frame Load…
+- What: Distributed forces or moments on the frames selected on the model view, in SAP2000's Frame Distributed Loads form: load pattern; Forces / Moments; GLOBAL or Local; directions X, Y, Z, X/Y/Z Projected, Gravity, Gravity Projected or Local 1, 2, 3; four trapezoid points, relative or absolute distance from End-I (linear between points, zero outside them); a uniform load; Add to / Replace / Delete existing loads of the pattern (point loads and other patterns untouched). One step of Undo; results cleared. The loads are data of the native document (`Mcotis.Core.FrameLoads`: `Segments`, `Assign`, `Of`, `IntensityAt`; file schema 8), kept through the main window's rebuilds (`Application/NativeFrameLoads`) and saved in the `.mcotis` file — not in the older `.cotfem` files or the working-session recovery. The solver takes projected loads (per unit projected length) and distributed bending and torsional moments (`SpatialFrameElement`), verified against closed forms (`docs/analysis/frame-distributed-load-verification.md`). Not yet: drawing them, Object Information, the SAP2000 / ETABS export (it warns) and the VCF / TAS optimisation candidates, which are built from the legacy loading.
+  The desktop project was not built where this was written (no WPF there): build it and run the desktop checks on Windows before merging.
+- Checks: Mcotis.Checks quick and --full (group "Frame distributed loads", 129 checks); desktop checks not run yet
 
 ## 2026-10-18 · Default VCF model: CFT chords as a defined filled tube; CFT exports as a steel tube
 - Status: In progress

@@ -73,6 +73,12 @@ public static class DocumentCommands
 
     public static IDocumentCommand PutLoad(LoadAssignment load) => new DocumentCommand("Assign Load", editor => editor.PutLoad(load));
 
+    /// <summary>Assign → Frame → Frame Load: one definition on several frames, added to, replacing or deleting the
+    /// distributed loads of its pattern (<see cref="FrameLoads.Assign"/>). One step of the history.</summary>
+    public static IDocumentCommand AssignFrameDistributedLoad(IReadOnlyCollection<ObjectId> frameIds,
+        FrameDistributedLoadDefinition definition, LoadAssignMode mode) =>
+        new DocumentCommand("Assign Frame Distributed Loads", editor => FrameLoads.Assign(editor, frameIds, definition, mode));
+
     // ---- Definitions: add, or replace the one with the same id ----
     public static IDocumentCommand PutMaterial(MaterialDefinition material) => new DocumentCommand("Define Material", editor => editor.PutMaterial(material));
     public static IDocumentCommand PutFrameSection(FrameSectionDefinition section) => new DocumentCommand("Define Frame Section", editor => editor.PutFrameSection(section));
