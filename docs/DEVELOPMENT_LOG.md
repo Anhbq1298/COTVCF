@@ -18,6 +18,13 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Steel column (beam-column) design to EN 1993-1-1 — plan
+- Status: Planned
+- Who: Unassigned (plan by Claude, for Mark's review)
+- Where: Design → Steel Column Design (EN 1993-1-1)… (planned); plan in docs/design/STEEL_COLUMN_DESIGN_PLAN.md
+- What: Adds a fifth design type for doubly symmetric I/H steel members under axial force and biaxial bending, on the same flow as the other column designs: classification (5.5), cross-section checks per station (6.2), flexural, torsional and lateral-torsional buckling (6.3.1–6.3.2) and Annex B interaction (6.3.3). Class 4, monosymmetric sections and shear buckling are refused with the reason. Decisions D1–D8 are open.
+- Checks: none yet (planned --steel-design)
+
 ## 2026-10-18 · Publish consolidated master and synchronize the working copy
 - Status: Done
 - Who: Codex
