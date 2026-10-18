@@ -11,7 +11,7 @@
                          </Grid>
   <Grid Grid.Row="1" Margin="0,2,0,0">
      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition/></Grid.RowDefinitions>
-     <TextBlock Text="Peak absolute forces over every member and station of each group in the load case / combo shown; the columns may govern at different places. Vertical Chord includes the middle chords; end frames are not listed. Main Cable (External) is Cable1a/1b, Internal Cable every other cable. — = not applicable."
+     <TextBlock Text="Peak absolute forces over every member and station of each group in the load case / combo shown; the columns may govern at different places. Vertical Chord includes the middle chords; end frames are not listed. Main Cable (External) = the cables outside the mega columns on both sides, not connected to the bottom chord; Internal Cable = every other cable. — = not applicable."
                 Style="{StaticResource Caption}" Margin="0,0,0,6" TextWrapping="Wrap"/>
      <DataGrid Grid.Row="1" ItemsSource="{Binding FemMemberSummaryRows}" IsReadOnly="True"
                AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single"

@@ -14,7 +14,7 @@ public enum ResultReportOutput { AxialForce, BendingMoment, Shear, Reactions, De
 public sealed record ResultReportSelection(string Name, IReadOnlyList<string> Cases, IReadOnlyList<ResultReportOutput> Outputs);
 public sealed record ResultReportFigure(string CaseName, string Title, byte[] Png, string? Warning)
 {
-    public string Caption(int number) => $"Figure {number}. {Title} — {CaseName}";
+    public string Caption(int number) => CaseName.Length == 0 ? $"Figure {number}. {Title}" : $"Figure {number}. {Title} — {CaseName}";
 }
 public sealed partial record ResultReport(string ModelName, IReadOnlyList<ResultReportFigure> Figures)
 {
@@ -23,12 +23,12 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
     public const int PageWidth = 11906, PageHeight = 16838;
     public const int Top = 1066, Bottom = 726, Right = 896, Left = 1066;
     public static ResultReport Create(string modelName, FemStudyRun run, IReadOnlyList<string> cases, IReadOnlyList<ResultReportOutput> outputs, Func<FemAnalysisResult, FemResultMode, byte[]> capture,
-        Func<string, IReadOnlyList<ReportTable>>? caseTables = null, IReadOnlyList<ReportTable>? modelTables = null) =>
-        Create(modelName, run, [new ResultReportSelection("", cases, outputs)], capture, caseTables, modelTables);
+        Func<string, IReadOnlyList<ReportTable>>? caseTables = null, IReadOnlyList<ReportTable>? modelTables = null, IReadOnlyList<ResultReportFigure>? modelFigures = null) =>
+        Create(modelName, run, [new ResultReportSelection("", cases, outputs)], capture, caseTables, modelTables, modelFigures);
     /// <summary>A report of several selections (e.g. SLS and ULS), in order. A selection without cases is skipped; a case chosen in more than one selection appears once, with the union of their result types.
     /// <paramref name="caseTables"/> gives the tables of each case (after all figures); <paramref name="modelTables"/> come last. With tables a case may have no figures.</summary>
     public static ResultReport Create(string modelName, FemStudyRun run, IReadOnlyList<ResultReportSelection> selections, Func<FemAnalysisResult, FemResultMode, byte[]> capture,
-        Func<string, IReadOnlyList<ReportTable>>? caseTables = null, IReadOnlyList<ReportTable>? modelTables = null)
+        Func<string, IReadOnlyList<ReportTable>>? caseTables = null, IReadOnlyList<ReportTable>? modelTables = null, IReadOnlyList<ResultReportFigure>? modelFigures = null)
     {
         bool tablesOnly = caseTables is not null;
         foreach (var s in selections)
@@ -45,7 +45,8 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
         if (order.Count == 0 && modelTables is not { Count: > 0 }) throw new InvalidOperationException("Select at least one load case / combination and one result type.");
         foreach (var name in order)
             if (run.Results is null || !run.Results.ContainsKey(name)) throw new InvalidOperationException($"No solved result is available for '{name}'. Run analysis first.");
-        var figures = new List<ResultReportFigure>();
+        // the model views open the report (3D isometric, dimensioned XZ elevation), before the result figures
+        var figures = new List<ResultReportFigure>(modelFigures ?? []);
         foreach (var name in order)
         foreach (var output in perCase[name])
         {
@@ -70,7 +71,7 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
     public string Html()
     {
         string E(string text) => WebUtility.HtmlEncode(text);
-        var html = new StringBuilder("<!doctype html><html><head><meta charset='utf-8'><style>@page{size:A4;margin:1.88cm 1.58cm 1.28cm 1.88cm}body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.15;margin:0}h1{font-size:11pt}figure{margin:12pt 0;break-inside:avoid}img{display:block;width:100%;height:auto;max-height:210mm;object-fit:contain}figcaption{margin-top:6pt}p{margin:6pt 0}</style></head><body>");
+        var html = new StringBuilder("<!doctype html><html><head><meta charset='utf-8'><style>@page{size:A4;margin:1.88cm 1.58cm 1.28cm 1.88cm}body{font-family:Arial,sans-serif;font-size:9pt;line-height:1.15;margin:0}h1{font-size:9pt}figure{margin:12pt 0;break-inside:avoid}img{display:block;width:100%;height:auto;max-height:210mm;object-fit:contain}figcaption{margin-top:6pt}p{margin:6pt 0}</style></head><body>");
         html.Append("<h1>Mcotis — Analysis results</h1><p>Model: ").Append(E(ModelName)).Append("</p>");
         for (int i = 0; i < Figures.Count; i++)
         {
@@ -98,7 +99,7 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
         using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
         var main = doc.AddMainDocumentPart(); var body = new Body(); main.Document = new Document(body);
         main.AddNewPart<StyleDefinitionsPart>().Styles = new Styles(new DocDefaults(
-            new RunPropertiesDefault(new RunPropertiesBaseStyle(new RunFonts { Ascii = "Arial", HighAnsi = "Arial", EastAsia = "Arial", ComplexScript = "Arial" }, new FontSize { Val = "22" }, new FontSizeComplexScript { Val = "22" })),
+            new RunPropertiesDefault(new RunPropertiesBaseStyle(new RunFonts { Ascii = "Arial", HighAnsi = "Arial", EastAsia = "Arial", ComplexScript = "Arial" }, new FontSize { Val = "18" }, new FontSizeComplexScript { Val = "18" })),
             new ParagraphPropertiesDefault(new ParagraphPropertiesBaseStyle(new SpacingBetweenLines { Line = "276", LineRule = LineSpacingRuleValues.Auto, After = "120" }))));
         body.Append(new Paragraph(new Run(new Text("Mcotis — Analysis results"))), new Paragraph(new Run(new Text("Model: " + ModelName))));
         for (int i = 0; i < Figures.Count; i++)

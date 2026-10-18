@@ -83,8 +83,10 @@ internal static class NativeQuantityTakeoffChecks
         var resultWithUnassigned = NativeQuantityTakeoffCalculator.Calculate(withUnassigned.Commit().Document);
         Check(resultWithUnassigned.Rows.Any(row => row.Section == "Unassigned" && row.Kind == QuantityMemberKind.Cable &&
               row.TotalLengthM == 3 && row.ConcreteVolumeM3 is null && row.SteelMassT is null) &&
-              resultWithUnassigned.Total.ConcreteVolumeM3 is null,
-            "native takeoff calls unassigned quantities unavailable and does not silently omit them from totals");
+              Math.Abs(resultWithUnassigned.Total.ConcreteVolumeM3!.Value - takeoff.Total.ConcreteVolumeM3!.Value) < 1e-9 &&
+              Math.Abs(resultWithUnassigned.Total.TotalLengthM!.Value - takeoff.Total.TotalLengthM!.Value - 3) < 1e-9 &&
+              resultWithUnassigned.Notes.Any(note => note == "Total concrete volume excludes Unassigned (unavailable)."),
+            "native takeoff calls unassigned quantities unavailable, sums the totals of the rows that have them and names the rows left out");
 
         Console.WriteLine("Native model quantity checks passed.");
     }

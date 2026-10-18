@@ -7,7 +7,7 @@
    <GroupBox Header="Format" Padding="8" Margin="0,0,0,8">
     <StackPanel>
      <StackPanel Orientation="Horizontal"><RadioButton x:Name="WordFormat" Content="Word (.docx)" IsChecked="True" GroupName="Format" Margin="0,0,20,0"/><RadioButton x:Name="PdfFormat" Content="PDF (.pdf)" GroupName="Format"/></StackPanel>
-     <TextBlock Text="A4 · Arial 11 pt · line spacing 1.15" Margin="0,8,0,0"/>
+     <TextBlock Text="A4 portrait · Arial 9 pt · line spacing 1.15" Margin="0,8,0,0"/>
      <TextBlock Text="Margins [cm]: top 1.88 · bottom 1.28 · left 1.88 · right 1.58" TextWrapping="Wrap" Foreground="{StaticResource Muted}"/>
     </StackPanel>
    </GroupBox>
@@ -41,13 +41,15 @@
      </StackPanel>
     </Grid>
    </GroupBox>
-   <GroupBox Header="Tables (after the figures; forces in MN, 1 decimal)" Padding="8" Margin="0,0,0,8">
+   <GroupBox Header="Also include (tables follow the figures; forces in MN, 1 decimal)" Padding="8" Margin="0,0,0,8">
     <StackPanel>
+     <CheckBox x:Name="IncludeModelViews" IsChecked="True" Margin="0,2,0,2" AutomationProperties.Name="Include model views">
+      <TextBlock TextWrapping="Wrap" Text="Model views — the 3D isometric view and the XZ elevation with dimensions and applied loads, as the first two figures"/></CheckBox>
      <CheckBox x:Name="IncludeForces" IsChecked="True" Margin="0,2,0,2" AutomationProperties.Name="Include member forces">
       <TextBlock TextWrapping="Wrap" Text="Member forces — summary with section drawings, the members of each group and the cables, per selected case"/></CheckBox>
      <CheckBox x:Name="IncludeQuantities" IsChecked="True" Margin="0,2,0,2" AutomationProperties.Name="Include quantities">
       <TextBlock TextWrapping="Wrap" Text="Quantities — section drawing and description, members, length, concrete, steel and estimated cost"/></CheckBox>
-     <CheckBox x:Name="IncludeUtilization" Margin="0,2,0,2" AutomationProperties.Name="Include design utilization">
+     <CheckBox x:Name="IncludeUtilization" IsChecked="True" Margin="0,2,0,2" AutomationProperties.Name="Include design utilization">
       <TextBlock TextWrapping="Wrap" Text="Design utilization — runs every member design on current results and adds a UR column to every table"/></CheckBox>
     </StackPanel>
    </GroupBox>

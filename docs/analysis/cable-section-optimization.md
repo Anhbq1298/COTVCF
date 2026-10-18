@@ -66,3 +66,7 @@ compares those design forces; deflection convergence still compares the pretensi
 
 **Apply & Re-analyse** applies the result as described above and then runs FEM Analysis of the model, so the results and every
 UR read from them are those of the assigned sections; the tab reports each cable's force and UR after that analysis.
+
+The Iterate tab groups cables by their Cable Force Sync links only (`SyncGroupsOnly`): a shared section ID or name does not join
+them, so each Sync group is sized for its own tension. Apply then assigns each changed group an `nT15.7` section of its count
+(groups of the same count share it) instead of renaming the shared section, and keeps the previous sections in the library.

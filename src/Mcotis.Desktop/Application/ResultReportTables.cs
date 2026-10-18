@@ -28,7 +28,15 @@ public static class ResultReportTables
     public const double CableBreakingStressMpa = 2160, CableReductionFactor = 0.5;
 
     public const string SummaryNote = "Peak absolute forces over every member and station of each group; the columns may govern at different places. " +
-        "Vertical Chord includes the middle chords; end frames are not listed. Main Cable (External) is Cable1a/1b, Internal Cable every other cable. — = not applicable.";
+        "Vertical Chord includes the middle chords; end frames are not listed. Main Cable (External) = the cables outside the mega columns on both sides, not connected to the bottom chord; Internal Cable = every other cable. — = not applicable.";
+
+    /// <summary>The limit state a UR belongs to: a member's (frame) UR is a strength check, read only in ULS cases; a cable's is a
+    /// service check, read only in SLS cases. A model whose case names carry no ULS / SLS reads every case.</summary>
+    public static bool IsUlsCase(string name, IEnumerable<string> allCases) =>
+        !allCases.Any(item => item.Contains("ULS", StringComparison.OrdinalIgnoreCase)) || name.Contains("ULS", StringComparison.OrdinalIgnoreCase);
+
+    public static bool IsSlsCase(string name, IEnumerable<string> allCases) =>
+        !allCases.Any(item => item.Contains("SLS", StringComparison.OrdinalIgnoreCase)) || name.Contains("SLS", StringComparison.OrdinalIgnoreCase);
 
     public static string Mn(double? kN) => kN is { } value && double.IsFinite(value) ? (value / 1000).ToString("#,0.0", CultureInfo.InvariantCulture) : "—";
     public static string Ur(double? ur) => ur is { } value && double.IsFinite(value) ? value.ToString("0.00", CultureInfo.InvariantCulture) : "—";
@@ -54,16 +62,18 @@ public static class ResultReportTables
     /// <param name="cableAreaM2">The steel area of a cable's assigned section [m²], or null.</param>
     public static IReadOnlyList<ReportTable> ForCase(string caseName, FemAnalysisResult result, IReadOnlyList<ResultMemberGroup> groups,
         IReadOnlyList<FemMemberSummaryRow> summary, IReadOnlyDictionary<string, double>? memberUr, Func<string, string> sectionOf,
-        Func<string, double> lengthM, Func<string, double?> cableAreaM2, Func<QuantitySectionFigure, byte[]?> image)
+        Func<string, double> lengthM, Func<string, double?> cableAreaM2, Func<QuantitySectionFigure, byte[]?> image,
+        bool memberUrApplies = true, bool cableUrApplies = true)
     {
         bool withUr = memberUr is not null;
         var peaks = FramePeaks(result);
         var cables = result.Cables.GroupBy(cable => cable.MemberName, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         double? CableCapacityKN(string cable) => cableAreaM2(cable) is > 0 and var area ? area * 1e6 * CableBreakingStressMpa * CableReductionFactor / 1000 : null;
-        double? CableUr(string cable) => cables.TryGetValue(cable, out var response) && CableCapacityKN(cable) is { } capacity
+        // a cable's UR is read in SLS cases only, a member's in ULS cases only: elsewhere the column reads —
+        double? CableUr(string cable) => cableUrApplies && cables.TryGetValue(cable, out var response) && CableCapacityKN(cable) is { } capacity
             ? Math.Max(0, response.AxialForceKN) / capacity : null;
         double? UrOf(string member) => cables.ContainsKey(member) ? CableUr(member)
-            : memberUr is not null && memberUr.TryGetValue(member, out var value) ? value : null;
+            : memberUrApplies && memberUr is not null && memberUr.TryGetValue(member, out var value) ? value : null;
         IReadOnlyList<ReportColumn> WithUr(params ReportColumn[] columns) => withUr ? [.. columns, new ReportColumn("UR", 7)] : columns;
 
         var tables = new List<ReportTable>();
@@ -78,7 +88,8 @@ public static class ResultReportTables
             ];
             return withUr ? [.. cells, new ReportCell(Ur(urs.Length == 0 ? null : urs.Max()))] : cells;
         }).ToArray();
-        tables.Add(new($"Summary of member forces — {caseName}", SummaryNote + (withUr ? " UR = the largest UR of the group's members in this case." : ""),
+        const string urNote = " UR: members (strength) in ULS cases only, cables (service) in SLS cases only; — elsewhere.";
+        tables.Add(new($"Summary of member forces — {caseName}", SummaryNote + (withUr ? " UR = the largest UR of the group's members in this case." + urNote : ""),
             WithUr(new("Member", 15, true), new("Bending (MN·m)", 10), new("Shear (MN)", 9), new("Axial (MN)", 9), new("Member size", 30, true), new("Section", 13)),
             summaryRows));
 
@@ -118,7 +129,7 @@ public static class ResultReportTables
             IReadOnlyList<ReportColumn> columns = [new("Cable", 13, true), new("Group", 15, true), new("Section", 14, true), new("L (m)", 8), new("Target pretension (MN)", 13), new("Tension (MN)", 11)];
             if (withUr) columns = [.. columns, new ReportColumn("Capacity (MN)", 11), new ReportColumn("UR", 7)];
             tables.Add(new($"Cable forces — {caseName}",
-                withUr ? $"Capacity = section area × {CableBreakingStressMpa:0} MPa × {CableReductionFactor:0%}; UR = tension ÷ capacity." : null, columns, rows));
+                withUr ? $"Capacity = section area × {CableBreakingStressMpa:0} MPa × {CableReductionFactor:0%}; UR = tension ÷ capacity, in SLS cases only." : null, columns, rows));
         }
         return tables;
     }
@@ -134,11 +145,12 @@ public static class ResultReportTables
         var total = takeoff.Total;
         rows.Add([new("Total"), new(""), new(""), new(""), new(total.MemberCount.ToString("N0", CultureInfo.InvariantCulture)), new(total.LengthText),
             new(total.ConcreteText), new(total.SteelText), new(total.EstimatedCostText)]);
+        var excluded = takeoff.Notes.Where(note => note.StartsWith("Total ", StringComparison.Ordinal)).ToArray();
         return new("Quantities", "Member length from the model geometry; concrete volume and steel mass from the assigned sections and stored material densities; " +
-                                 "estimated cost from the unit costs under Define → Materials.",
+                                 "estimated cost from the unit costs under Define → Materials." + (excluded.Length == 0 ? "" : " " + string.Join(" ", excluded)),
             [new("Section", 15, true), new("Member type", 11, true), new("Section drawing", 9), new("Description", 22, true), new("Members", 7),
              new("Total length", 9), new("Concrete", 9), new("Steel", 8), new("Est. cost (S$)", 10)],
-            rows, Landscape: true, TotalRows: 1);
+            rows, TotalRows: 1);
     }
 
     /// <summary>Show Quantities → Design Utilization: each section's UR envelope over its members and the governing combination.</summary>
@@ -147,5 +159,5 @@ public static class ResultReportTables
             [new("Section", 24, true), new("Procedure", 20, true), new("Members", 8), new("UR", 7), new("Governing combination", 25, true), new("Status", 9, true)],
             rows.Select(row => (IReadOnlyList<ReportCell>)[new(row.Section), new(row.Procedure), new(row.MemberCount.ToString(CultureInfo.InvariantCulture)),
                 new(row.UtilizationText), new(row.GoverningCombinations), new(row.Status)]).ToArray(),
-            Landscape: true);
+            Landscape: false);
 }

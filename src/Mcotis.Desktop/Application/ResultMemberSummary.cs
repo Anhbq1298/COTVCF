@@ -43,10 +43,15 @@ public static class ResultMemberSummary
         catch (InvalidOperationException) { /* Other models retain their actual member names. */ }
         if (vcf is not null)
             foreach (var title in new[] { "Mega Column", "Top Chord", "Bottom Chord", "Vertical Chord", "Main Cable (External)", "Internal Cable" }) groups[title] = [];
+        var bottomChordNodes = vcf is null ? new HashSet<string>() : geometry.Members
+            .Where(member => vcf.Roles.GetValueOrDefault(member.Name) == VcfMemberRole.BottomChord)
+            .SelectMany(member => new[] { member.Start, member.End }).ToHashSet(StringComparer.Ordinal);
         foreach (var member in geometry.Members)
         {
             string? title = member.Name;
-            if (vcf is not null && vcf.Roles.TryGetValue(member.Name, out var role))
+            if (vcf is not null && member.Kind == MemberKind.Cable)
+                title = IsExternalCable(geometry, vcf, bottomChordNodes, member) ? "Main Cable (External)" : "Internal Cable";
+            else if (vcf is not null && vcf.Roles.TryGetValue(member.Name, out var role))
             {
                 title = role switch
                 {
@@ -56,7 +61,7 @@ public static class ResultMemberSummary
                     // Vertical Chord envelopes the vertical and middle chords; the end frames are not summarised.
                     VcfMemberRole.VerticalChord or VcfMemberRole.MiddleChord => "Vertical Chord",
                     VcfMemberRole.EndFrame => null,
-                    _ => IsMainCable(member.Name) ? "Main Cable (External)" : "Internal Cable"
+                    _ => member.Name,
                 };
             }
             if (title is null) continue;
@@ -68,10 +73,16 @@ public static class ResultMemberSummary
             .Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.Ordinal)))).ToArray();
     }
 
-    /// <summary>The main (external) cables are Cable1a and Cable1b, with any element suffix (Cable1a-2); every other
-    /// cable of a VCF system is an internal cable.</summary>
-    public static bool IsMainCable(string name) =>
-        System.Text.RegularExpressions.Regex.IsMatch(name, @"^Cable1[ab](?![0-9A-Za-z])", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    /// <summary>A main (external) cable lies outside the mega columns, on either side — an end beyond the outer mega column
+    /// line, as the back-stay and the outer frame's bracing — and is connected to no node of the bottom chord. Every other cable
+    /// of a VCF system is an internal cable.</summary>
+    public static bool IsExternalCable(GeometryModel geometry, VcfGeometryAnalysis vcf, ISet<string> bottomChordNodes, StructuralMember member)
+    {
+        if (vcf.TrussLines.Count == 0 || bottomChordNodes.Contains(member.Start) || bottomChordNodes.Contains(member.End)) return false;
+        bool Outside(string point) => geometry.Points.TryGetValue(point, out var p) &&
+            (p.Position.X < vcf.TrussLines[0] - 1e-3 || p.Position.X > vcf.TrussLines[^1] + 1e-3);
+        return Outside(member.Start) || Outside(member.End);
+    }
 
     public static ResultMemberTable Create(string caseName, FemAnalysisResult result, IReadOnlyList<ResultMemberGroup> groups,
         IReadOnlyList<ResultReportOutput> outputs)

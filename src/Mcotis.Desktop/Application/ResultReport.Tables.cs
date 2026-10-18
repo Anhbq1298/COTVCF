@@ -19,7 +19,7 @@ public sealed partial record ResultReport
         string E(string text) => WebUtility.HtmlEncode(text);
         html.Append("<style>table{border-collapse:collapse;width:100%;table-layout:fixed;margin:6pt 0 12pt;font-size:9pt}th,td{border:1px solid #222;padding:4pt;overflow-wrap:anywhere;vertical-align:middle}" +
                     "th{background:#8fb3df;font-weight:normal;text-align:center;print-color-adjust:exact}td{text-align:right}td.l{text-align:left}td.c{text-align:center}td img{height:1.2cm;width:auto;display:inline-block}" +
-                    "tr{break-inside:avoid}tr.t td{font-weight:bold}thead{display:table-header-group}h2{font-size:11pt;break-after:avoid;margin:12pt 0 4pt}p.n{font-size:9pt;margin:0 0 4pt}" +
+                    "tr{break-inside:avoid}tr.t td{font-weight:bold}thead{display:table-header-group}h2{font-size:9pt;break-after:avoid;margin:12pt 0 4pt}p.n{font-size:9pt;margin:0 0 4pt}" +
                     "@page land{size:A4 landscape;margin:1.58cm 1.28cm 1.58cm 1.88cm}.land{page:land}</style>");
         bool landscape = false;
         foreach (var table in Tables)
@@ -84,7 +84,9 @@ public sealed partial record ResultReport
             new TableBorders(new TopBorder { Val = BorderValues.Single, Size = 4 }, new LeftBorder { Val = BorderValues.Single, Size = 4 },
                 new BottomBorder { Val = BorderValues.Single, Size = 4 }, new RightBorder { Val = BorderValues.Single, Size = 4 },
                 new InsideHorizontalBorder { Val = BorderValues.Single, Size = 4 }, new InsideVerticalBorder { Val = BorderValues.Single, Size = 4 }),
-            new TableLayout { Type = TableLayoutValues.Fixed }),
+            new TableLayout { Type = TableLayoutValues.Fixed },
+            new TableCellMarginDefault(new TopMargin { Width = "20", Type = TableWidthUnitValues.Dxa }, new TableCellLeftMargin { Width = 90, Type = TableWidthValues.Dxa },
+                new BottomMargin { Width = "20", Type = TableWidthUnitValues.Dxa }, new TableCellRightMargin { Width = 90, Type = TableWidthValues.Dxa })),
             new TableGrid(widths.Select(w => new GridColumn { Width = w.ToString() })));
         void AddRow(IReadOnlyList<ReportCell> values, bool header, bool bold, ref uint id)
         {

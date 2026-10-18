@@ -378,29 +378,30 @@ public sealed partial class MainViewModel
             {
                 var cableBasis = memberParameters?.CableBasis ?? store.CableBasis ?? TensionCableBasis.Default;
                 var caseNames = cableBasis.LoadCases;
-                var cableCases = caseNames.Select(name => (Case: name, Force: run.ResultFor(name).Cables
+                var cableCases = caseNames.Where(name => ResultReportTables.IsSlsCase(name, allCases)).Select(name => (Case: name, Force: run.ResultFor(name).Cables
                     .Where(cable => cable.MemberName == property.MemberName).Select(cable => cable.AxialForceKN)
                     .DefaultIfEmpty(double.NaN).Max())).Where(item => double.IsFinite(item.Force)).ToArray();
                 if (cableCases.Length == 0)
                 {
-                    samples.Add((section, "Tension Cable Design", property.MemberName, [], "NO RESULT", "No cable forces are available in the selected FEM cases."));
+                    samples.Add((section, "Tension Cable Design", property.MemberName, [], "NO RESULT", "No cable forces are available in the selected SLS cases."));
                     store.Members[property.MemberName] = memberParameters! with { FemRunId = run.Id, LastStatus = "NO RESULT" };
                     continue;
                 }
+                // The UR of the section the cable has now — a suggested stay counts only once it is applied:
+                // capacity = area × 2160 MPa × 50 % (the Section Check defaults).
                 var governingForce = cableCases.MaxBy(item => item.Force);
-                var length = CableLength(property.MemberName);
-                var design = TensionCableDesigner.Design(cableBasis,
-                    property.MemberName, section, length, governingForce.Case, governingForce.Force,
-                    property.AreaM2 > 0 ? property.AreaM2 * 1e6 : null);
-                var capacity = design.Selected?.GroupCapacityKN;
+                double? capacity = property.AreaM2 > 0
+                    ? property.AreaM2 * 1e6 * ResultReportTables.CableBreakingStressMpa * ResultReportTables.CableReductionFactor / 1000 : null;
                 var utilizationCases = capacity is > 0
                     ? cableCases.Select(item => (item.Case, Util: Math.Max(0, item.Force) / capacity.Value)).ToArray()
                     : [];
                 var slack = governingForce.Force <= 1e-6;
                 if (slack) utilizationCases = cableCases.Select(item => (item.Case, Util: 0.0)).ToArray();
-                var cableStatus = slack ? "OK" : capacity is null ? design.Status == "ERROR" ? "ERROR" : "NO RESULT" : design.Status;
+                var cableStatus = slack ? "OK" : capacity is null ? "NO RESULT" : "OK";
                 samples.Add((section, "Tension Cable Design", property.MemberName, utilizationCases, cableStatus,
-                    slack ? "Cable is slack in the selected cases; UR = 0.00." : capacity is > 0 ? "UR uses the selected cable assembly capacity." : design.Error ?? design.Detail.Trim()));
+                    slack ? "Cable is slack in the selected cases; UR = 0.00."
+                    : capacity is > 0 ? $"UR = tension ÷ (section area × {ResultReportTables.CableBreakingStressMpa:0} MPa × {ResultReportTables.CableReductionFactor:0%}) of the assigned section."
+                    : "The cable has no section area."));
                 store.Members[property.MemberName] = memberParameters! with { FemRunId = run.Id, LastStatus = cableStatus };
                 continue;
             }
@@ -422,7 +423,7 @@ public sealed partial class MainViewModel
                     ? new ColumnMemberDesign(property.MemberName, section, MemberLength(property.MemberName), [], null, [], "", "No FEM forces are available for this member.")
                     : ColumnDesignEngine.Design(basis, input);
                 samples.Add((section, ColumnDesignCodes.Title(type.Value), property.MemberName,
-                    design.Cases.Select(result => (result.Case, result.MaxUtilization)).ToArray(), design.Status,
+                    design.Cases.Where(result => ResultReportTables.IsUlsCase(result.Case, allCases)).Select(result => (result.Case, result.MaxUtilization)).ToArray(), design.Status,
                     design.Error ?? design.Detailing.FirstOrDefault(check => !check.Pass)?.Text ?? ""));
                 store.Members[property.MemberName] = memberParameters with { FemRunId = run.Id, LastStatus = design.Status };
             }

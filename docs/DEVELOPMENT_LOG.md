@@ -18,6 +18,62 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · UR by limit state, export defaults, loads in the model view
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Show Quantities → Design Utilization; Result → Export…
+- What: A member's (frame) UR is read from ULS cases only and a cable's from SLS cases only — in Design Utilization and in every UR column of the report, which reads — in the other cases. The export dialog defaults to SLS deflection, ULS forces and reactions, and every table and model view ticked. The XZ model view shows the applied loads as red arrows with their values.
+- Checks: `--result-export`
+
+## 2026-10-18 · External cables by position
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Results Table; the exported results report
+- What: Main Cable (External) is every cable outside the mega columns on both sides — the back-stays and the outer frames' bracing — that is not connected to a node of the bottom chord; every other cable is Internal Cable. Replaces the Cable1a/1b name rule.
+- Checks: `--result-export`
+
+## 2026-10-18 · Section Check shown on opening
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Design → Tension Cable Design → Section Check
+- What: With FEM results, the check of the assigned cable sections is on screen as the window opens, and again after Apply & Re-analyse; Check Sections reruns it with other values.
+- Checks: `--cable-design-ui`
+
+## 2026-10-18 · Model views open the results report
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Export… → Model views
+- What: The report's first two figures are the model in a true 3D isometric view (with its sections) and its XZ elevation with dimensions, geometry only; the result figures follow. Ticked by default.
+- Checks: `--result-export`
+
+## 2026-10-18 · Results report in Arial 9, portrait only
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Export… (Word and PDF)
+- What: The whole results report — headings, captions, notes and tables — is Arial 9 pt on A4 portrait pages; the quantities and design utilization tables no longer take a landscape page.
+- Checks: `--result-export`
+
+## 2026-10-18 · Tension Cable Design: Section Check, Cost Rates and Iterate on the VSL catalogue
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Design → Tension Cable Design
+- What: For now the window shows only Section Check, Cost Rates and Iterate, with VSL SSI 2000 Ø15.7 the only stay system; FATZER and Utracon are off and the Design Basis, Cables & Loads, Single Stay and Design tabs and Run Design are hidden. Iterate states the basis and load cases it sizes with; Apply creates the new strand-count section and assigns it.
+- Checks: `--cable-design-ui`
+
+## 2026-10-18 · Iterate follows Cable Force Sync groups
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Design → Tension Cable Design → Iterate
+- What: Cables are grouped by their Cable Force Sync links only, so pairs such as Cable7a-2/7b-2 and Cable3a-2/3b-2 are sized each for their own tension even when they share a section; the target pretensions are kept and fitted again on every pass. Apply & Re-analyse assigns each changed group its own nT15.7 section.
+- Checks: `--cable-section-optimization`, `--cable-design-ui`
+
+## 2026-10-18 · Cable UR of the assigned section, summed quantity totals, even strand drawings
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Show Quantities (Quantities, Design Utilization); the exported results report
+- What: A cable's design utilization is its tension over the capacity of its assigned section (area × 2160 MPa × 50 %), not of a suggested stay, until a suggestion is applied. Quantity totals sum the rows that have a value and name the rows left out instead of reading Unavailable. Strand bundles are drawn as concentric rings with a part-filled outer ring spread at equal angles, each strand's outline drawn round it. Report table cells have side padding.
+- Checks: `--native-quantities`, `--result-export`
+
 ## 2026-10-18 · Export member forces, quantities and design utilization with the results
 - Status: Done
 - Who: aBui (with Claude Code)

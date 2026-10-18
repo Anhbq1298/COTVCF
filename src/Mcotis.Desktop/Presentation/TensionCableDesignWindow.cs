@@ -148,9 +148,10 @@ public sealed class TensionCableDesignWindow : Window
         cases = viewModel.DesignCaseNames().Select(name => new DesignReferenceWindow.CheckItem(name, "", defaultCases.Contains(name))).ToList();
         rates = TensionCableRates.Entries.Select(entry => new RateRow(entry, entry.Get(basis.Rates))).ToList();
 
-        vsl.IsChecked = basis.Systems.Contains(CableSystem.VslSsi2000);
-        fatzer.IsChecked = basis.Systems.Contains(CableSystem.FatzerFlc);
-        utracon.IsChecked = basis.Systems.Contains(CableSystem.UtraconPt);
+        // For now the stays are VSL SSI 2000 only: FATZER and Utracon are switched off with the Design Basis tab hidden.
+        vsl.IsChecked = true;
+        fatzer.IsChecked = false;
+        utracon.IsChecked = false;
         screening.ItemsSource = new[] { "50 % of the breaking load — reference (VSL admissible load)", "60 % of the breaking load — subject to supplier verification" };
         screening.SelectedIndex = basis.ScreeningFactor > 0.55 ? 1 : 0;
         priority.ItemsSource = new[] { "Lowest estimated installed cost", "Fewest parallel units (fewest anchorages)", "Least steel" };
@@ -185,6 +186,7 @@ public sealed class TensionCableDesignWindow : Window
 
         var runButton = new Button { Content = "Run Design", MinWidth = 90, Margin = new Thickness(0, 0, 10, 0), IsDefault = true };
         runButton.Click += (_, _) => Run();
+        runButton.Visibility = Visibility.Collapsed;   // with the Design tab hidden, Iterate and Section Check have their own commands
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Children = { runButton, closeButton } };
         var bottom = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
         status.SetResourceReference(TextBlock.ForegroundProperty, "Error");
@@ -193,19 +195,24 @@ public sealed class TensionCableDesignWindow : Window
         DockPanel.SetDock(bottom, Dock.Bottom);
         root.Children.Add(bottom);
 
+        // Shown for now: Section Check, Cost Rates and Iterate (VSL catalogue). Design Basis, Cables & Loads, Single Stay and Design
+        // are kept but hidden; their settings (the stored basis, every cable, the default load cases) still feed the checks and Iterate.
         tabs.Items.Add(new TabItem { Header = "Section Check", Content = BuildSectionCheckTab() });
-        tabs.Items.Add(new TabItem { Header = "Design Basis", Content = BuildBasisTab() });
-        tabs.Items.Add(new TabItem { Header = "Cables & Loads", Content = BuildCablesTab() });
+        tabs.Items.Add(new TabItem { Header = "Design Basis", Content = BuildBasisTab(), Visibility = Visibility.Collapsed });
+        tabs.Items.Add(new TabItem { Header = "Cables & Loads", Content = BuildCablesTab(), Visibility = Visibility.Collapsed });
         tabs.Items.Add(new TabItem { Header = "Cost Rates", Content = BuildRatesTab() });
-        tabs.Items.Add(new TabItem { Header = "Single Stay", Content = BuildSingleTab() });
+        tabs.Items.Add(new TabItem { Header = "Single Stay", Content = BuildSingleTab(), Visibility = Visibility.Collapsed });
         tabs.Items.Add(new TabItem { Header = "Iterate", Content = BuildIterateTab() });
+        designTab.Visibility = Visibility.Collapsed;
         designTab.Content = BuildResultTab();
         tabs.Items.Add(designTab);
         root.Children.Add(tabs);
         Content = root;
 
         foreach (var row in cables.Where(row => row.Selected)) cableGrid.SelectedItems.Add(row);
-        Message(viewModel.DesignRunId is null ? "There are no FEM results to design the model's cables with. Run the FEM analysis (Run → Run FEM Analysis) first, or size one stay on the Single Stay tab." : "");
+        Message(viewModel.DesignRunId is null ? "There are no FEM results to check or iterate the model's cables with. Run the FEM analysis (Run → Run FEM Analysis) first." : "");
+        // the check of the assigned sections is on screen from the start; Check Sections reruns it with other values
+        if (viewModel.DesignRunId is not null) RunSectionCheck();
     }
 
     private static TextBlock Hint(string text, Thickness margin)
@@ -217,7 +224,7 @@ public sealed class TensionCableDesignWindow : Window
 
     private static UIElement Field(string label, UIElement control, string? unit = null)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 16, 8) };
         row.Children.Add(new TextBlock { Text = label, Width = 190, VerticalAlignment = VerticalAlignment.Center });
         row.Children.Add(control);
         if (unit is not null) row.Children.Add(new TextBlock { Text = unit, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
@@ -473,10 +480,16 @@ public sealed class TensionCableDesignWindow : Window
         var top = new StackPanel();
         iterateSummary.Text = "Iterate to size every cable group of the model as VSL SSI 2000 Ø15.7 mm strand stays.";
         top.Children.Add(iterateSummary);
+        var basis = viewModel.CableDesignBasis;
+        var sizedFor = cases.Where(item => item.IsChecked).Select(item => item.Name).ToArray();
+        top.Children.Add(Hint($"Basis: VSL SSI 2000 catalogue, Ø15.7 mm strand (279 kN breaking load) · screening {basis.ScreeningFactor:0%} of the breaking load × maximum use {basis.MaxUtilisation:0%} · " +
+                              $"at most {basis.MaxUnits} units per stay · lowest estimated installed cost (Cost Rates) · sized for: {(sizedFor.Length == 0 ? "every load case" : string.Join(", ", sizedFor))}.",
+            new Thickness(0, 0, 0, 4)));
         top.Children.Add(Hint("Each group is sized for its largest tension over the load cases ticked on Cables & Loads, with the Design Basis (screening level, maximum use, " +
                               "most units per stay, selection priority) and the Cost Rates, rounded up to a standard VSL unit (6-12 … 6-187, n units in parallel). " +
                               "Each pass analyses a copy of the model with the trial sections — a stiffer cable attracts more force — until the strand counts stop changing and the " +
-                              "forces and pretension-stage deflections settle within the tolerance. Cables sharing a section or a Cable Force Sync link get one size. " +
+                              "forces and pretension-stage deflections settle within the tolerance. Each Cable Force Sync group (a cable and the cables that follow it) gets one size; " +
+                              "cables that only share a section are sized for their own force. Every pass keeps the target pretensions and fits them again. " +
                               "Nothing changes in the model until Apply & Re-analyse, which assigns the sections as one undoable edit and runs FEM Analysis again so the forces and UR are those of the new sections.",
             new Thickness(0, 0, 0, 8)));
         var controls = new StackPanel { Orientation = Orientation.Horizontal };
@@ -538,7 +551,7 @@ public sealed class TensionCableDesignWindow : Window
         { Message("Convergence tolerance: enter a percentage above 0 and at most 100."); return null; }
         // The VSL screen of the Design Basis: a Ø15.7 strand breaks at 279 kN (150 mm² × 1,860 MPa); it may carry f × MBL × η.
         return new CableSectionOptimizationSettings(basis.MaxUtilisation, TensionCableCatalogue.StrandBreakingKN * 1000 / TensionCableCatalogue.StrandAreaMm2,
-            basis.ScreeningFactor, maximum, tolerance, basis with { LoadCases = chosen }, chosen);
+            basis.ScreeningFactor, maximum, tolerance, basis with { LoadCases = chosen }, chosen, SyncGroupsOnly: true);
     }
 
     private async Task IterateAsync()
@@ -616,6 +629,7 @@ public sealed class TensionCableDesignWindow : Window
             RefreshCableRows();
             if (!analysed) { Message("The sections were applied, but FEM Analysis did not produce results. See the run monitor."); return; }
             ShowAfterAnalysis(run.Settings);
+            RunSectionCheck();   // the assigned sections are now the new ones, with the forces of the new analysis
         }
         catch (InvalidOperationException ex) { Message(ex.Message); }
         finally

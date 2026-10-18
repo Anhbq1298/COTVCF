@@ -209,20 +209,13 @@ internal static class CableDesignChecks
         var sectionStress = Visuals<System.Windows.Controls.TextBox>(window).Distinct().Single(box => System.Windows.Automation.AutomationProperties.GetName(box) == "Cable check breaking stress MPa");
         var sectionReduction = Visuals<System.Windows.Controls.TextBox>(window).Distinct().Single(box => System.Windows.Automation.AutomationProperties.GetName(box) == "Cable check reduction factor percent");
         var checkGrid = Visuals<System.Windows.Controls.DataGrid>(window).Distinct().Single(grid => System.Windows.Automation.AutomationProperties.GetName(grid) == "Cable section checks");
-        Check(window.Title == "Tension Cable Design" && buttons.Any(button => Equals(button.Content, "Run Design")) && buttons.Any(button => Equals(button.Content, "Size this stay")) &&
-              buttons.Any(button => Equals(button.Content, "Export to Word…")) && buttons.Any(button => Equals(button.Content, "Check Sections")) &&
-              buttons.Any(button => Equals(button.Content, "Iterate")) && buttons.Any(button => Equals(button.Content, "Apply & Re-analyse")) &&
-              Visuals<System.Windows.Controls.TabItem>(window).Distinct().Any(tab => Equals(tab.Header, "Iterate")) &&
+        var tabHeaders = Visuals<System.Windows.Controls.TabItem>(window).Distinct().Where(tab => tab.Visibility == System.Windows.Visibility.Visible).Select(tab => (string)tab.Header).ToArray();
+        Check(window.Title == "Tension Cable Design" && tabHeaders.SequenceEqual(["Section Check", "Cost Rates", "Iterate"]) &&
+              buttons.Any(button => Equals(button.Content, "Check Sections")) && buttons.Any(button => Equals(button.Content, "Iterate")) &&
+              buttons.Any(button => Equals(button.Content, "Apply & Re-analyse")) && !buttons.Any(button => Equals(button.Content, "Run Design") && button.IsVisible) &&
               Visuals<System.Windows.Controls.DataGrid>(window).Distinct().Any(grid => System.Windows.Automation.AutomationProperties.GetName(grid) == "Iterated cable sections") &&
-              sectionStress.Text == "2160" && sectionReduction.Text == "50" && checkGrid.Columns.Count == 8,
-            "the Tension Cable Design module includes the 2160 MPa / 50% section check and an Iterate tab with Iterate and Apply & Re-analyse beside its stay design commands");
-        buttons.First(button => Equals(button.Content, "Run Design")).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-        var grids = Visuals<System.Windows.Controls.DataGrid>(window).ToArray();
-        var results = grids.First(grid => System.Windows.Automation.AutomationProperties.GetName(grid) == "Cable designs");
-        Check(results.Items.Count == options.Count && vm.CableDesignBasis.Members.Count == options.Count, "Run Design in the window lists every ticked cable and keeps the basis for the optimization");
-        buttons.First(button => Equals(button.Content, "Size this stay")).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-        Check(results.Items.Count == 1 && ((Mcotis.Desktop.Presentation.TensionCableDesignWindow.ResultRow)results.Items[0]!).Assembly.Contains("6-151") && results.SelectedIndex == 0,
-            "Size this stay (60 MN over 50 m) shows one assembly, 3 × 6-151, in the Design tab");
+              sectionStress.Text == "2160" && sectionReduction.Text == "50" && checkGrid.Columns.Count == 8 && checkGrid.Items.Count == options.Count,
+            "the Tension Cable Design window shows Section Check (2160 MPa / 50 %, already checked for every cable on opening), Cost Rates and Iterate; Design Basis, Cables & Loads, Single Stay and Design are hidden");
 
         // Iterate: VSL Ø15.7 stays from the Design Basis for the ticked cases, each pass a full analysis of a candidate model
         var iterateSettings = window.ReadIterationSettings()! with { MaximumIterations = 4 };
@@ -242,7 +235,7 @@ internal static class CableDesignChecks
         {
             var applied = Pump(() => vm.ApplyCableSectionOptimizationAndAnalyzeAsync(iterated, confirmedUnconverged: !iterated.Converged));
             var assigned = vm.CableDesignOptions().ToDictionary(option => option.Member, StringComparer.Ordinal);
-            Check(applied && vm.HasFemResults && vm.IsFemModelLocked && iterated.Rows.All(row =>
+            Check(iterateSettings.SyncGroupsOnly && applied && vm.HasFemResults && vm.IsFemModelLocked && iterated.Rows.All(row =>
                       assigned.TryGetValue(row.TendonName, out var option) && Math.Abs(option.AreaMm2 - row.SuggestedStrands * 150) < 1e-6 &&
                       option.Section == $"{row.SuggestedStrands}T15.7"),
                 "Apply & Re-analyse assigns the suggested Ø15.7 strand sections and re-runs FEM analysis, so the results are those of the new sections");

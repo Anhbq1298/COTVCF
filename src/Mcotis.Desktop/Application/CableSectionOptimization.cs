@@ -14,10 +14,11 @@ namespace Mcotis.Desktop.Application;
 /// <para><see cref="StayBasis"/>, when given, rounds each group up to the VSL SSI 2000 assembly Tension Cable Design would choose
 /// for its tension and length (units × strands per unit, Ø15.7 mm), which also names the product and its cost.
 /// <see cref="DesignCases"/>, when given, sizes each group for its largest tension over those load cases / combinations
-/// instead of its pretension-stage force.</para></summary>
+/// instead of its pretension-stage force. <see cref="SyncGroupsOnly"/> groups cables by their Cable Force Sync links alone, so cables
+/// that only share a section are sized each for their own force (and are given their own section when applied).</para></summary>
 public sealed record CableSectionOptimizationSettings(double TargetUr = 0.90, double BreakingStressMpa = 2160,
     double PreliminaryCoefficient = 0.50, int MaximumIterations = 30, double ConvergenceTolerancePercent = 1.00,
-    TensionCableBasis? StayBasis = null, IReadOnlyList<string>? DesignCases = null)
+    TensionCableBasis? StayBasis = null, IReadOnlyList<string>? DesignCases = null, bool SyncGroupsOnly = false)
 {
     /// <summary>The VSL basis the iteration sizes with: only VSL SSI 2000 offered, the rest as Design Basis sets it.</summary>
     public TensionCableBasis? VslBasis => StayBasis is null ? null : StayBasis with { Systems = [CableSystem.VslSsi2000] };
@@ -158,7 +159,7 @@ public static class CableSectionOptimizer
 {
     private const double StrandAreaM2 = CableSectionOptimizationSettings.StrandAreaMm2 * 1e-6;
 
-    public static CableSectionOptimizationPlan Prepare(ModelDocument document, FemInputSnapshot? snapshot = null)
+    public static CableSectionOptimizationPlan Prepare(ModelDocument document, FemInputSnapshot? snapshot = null, bool syncGroupsOnly = false)
     {
         ArgumentNullException.ThrowIfNull(document);
         if (document.Cables.IsEmpty) throw new InvalidOperationException("The model has no cable objects to optimise.");
@@ -188,13 +189,13 @@ public static class CableSectionOptimizer
         }
 
         foreach (var shared in cables.Select(cable => (Cable: cable, Section: document.AssignmentOfCable(cable.Id).SectionId))
-                     .Where(item => item.Section is not null).GroupBy(item => item.Section))
+                     .Where(item => item.Section is not null && !syncGroupsOnly).GroupBy(item => item.Section))
         {
             var ids = shared.Select(item => item.Cable.Id).ToArray();
             foreach (var id in ids.Skip(1)) Union(ids[0], id);
         }
         foreach (var shared in cables.Select(cable => (Cable: cable, Property: properties.GetValueOrDefault(names[cable.Id])))
-                     .Where(item => !string.IsNullOrWhiteSpace(item.Property?.SectionName))
+                     .Where(item => !syncGroupsOnly && !string.IsNullOrWhiteSpace(item.Property?.SectionName))
                      .GroupBy(item => item.Property!.SectionName!, StringComparer.Ordinal))
         {
             var ids = shared.Select(item => item.Cable.Id).ToArray();
@@ -285,7 +286,7 @@ public static class CableSectionOptimizer
         var revisionHash = snapshot is null ? "" : FemInputDatabase.RevisionHash(snapshot);
         var iterations = new List<CableSectionOptimizationIteration>();
         IReadOnlyList<CableSectionOptimizationRow> lastRows = [];
-        var plan = Prepare(document, snapshot);
+        var plan = Prepare(document, snapshot, settings.SyncGroupsOnly);
         var trialCounts = plan.Groups.ToDictionary(group => group.Key, group => group.CurrentStrands, StringComparer.Ordinal);
         Dictionary<string, double>? previousForces = null;
         Dictionary<string, double>? previousDeflections = null;

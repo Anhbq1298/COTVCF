@@ -27,13 +27,14 @@ public partial class ExportResultsWindow : Window
         bool Named(string name, string tag) => name.Contains(tag, StringComparison.OrdinalIgnoreCase);
         var names = viewModel.FemResultNames;
         bool anyUls = names.Any(n => Named(n, "ULS"));
-        Wire(SlsAllCases, SlsCaseChoices, names.Select(n => (n, (object)n, Named(n, "SLS"))), SlsAllOutputs, SlsOutputChoices, _ => true);
+        // defaults (user, 2026-10-18): SLS the deflection; ULS the forces and reactions; every table and the model views
+        Wire(SlsAllCases, SlsCaseChoices, names.Select(n => (n, (object)n, Named(n, "SLS"))), SlsAllOutputs, SlsOutputChoices, output => output == ResultReportOutput.Deflection);
         Wire(UlsAllCases, UlsCaseChoices, names.Select(n => (n, (object)n, anyUls ? Named(n, "ULS") : n == viewModel.SelectedFemResultName)), UlsAllOutputs, UlsOutputChoices,
             output => output != ResultReportOutput.Deflection);
         Closing += (_, e) => { if (exporting) e.Cancel = true; };
         if (focus == ExportFocus.ResultsTable && viewModel.SelectedFemResultName is { } shown)
             foreach (var box in UlsCaseChoices.Children.OfType<CheckBox>().Where(box => Equals(box.Tag, shown))) box.IsChecked = true;
-        if (focus == ExportFocus.Quantities) IncludeUtilization.IsChecked = true;
+        IncludeUtilization.IsChecked = true;
     }
     private static readonly (ResultReportOutput Output, string Name)[] Outputs = [(ResultReportOutput.AxialForce, "Axial forces / cables"), (ResultReportOutput.BendingMoment, "Bending moments"), (ResultReportOutput.Shear, "Shear forces"), (ResultReportOutput.Reactions, "Support reactions"), (ResultReportOutput.Deflection, "Deflection")];
     private static void Wire(CheckBox allCases, Panel cases, IEnumerable<(string Name, object Tag, bool Ticked)> caseItems, CheckBox allOutputs, Panel outputs, Func<ResultReportOutput, bool> ticked)
@@ -76,7 +77,12 @@ public partial class ExportResultsWindow : Window
             [new ResultReportSelection("SLS", Ticked<string>(SlsCaseChoices), Ticked<ResultReportOutput>(SlsOutputChoices)),
              new ResultReportSelection("ULS", Ticked<string>(UlsCaseChoices), Ticked<ResultReportOutput>(UlsOutputChoices))],
             (result, mode) => ResultFigureCapture.Capture(viewModel, main?.SharedViewer.Canvas, result, mode),
-            IncludeForces.IsChecked == true ? name => viewModel.ReportCaseTables(name, memberCases, Image) : null, modelTables);
+            IncludeForces.IsChecked == true ? name => viewModel.ReportCaseTables(name, memberCases, Image) : null, modelTables,
+            IncludeModelViews.IsChecked == true ?
+            [
+                new ResultReportFigure("", "Model — 3D isometric view", ResultFigureCapture.CaptureIsometric(viewModel), null),
+                new ResultReportFigure("", "Model — XZ elevation with dimensions and applied loads", ResultFigureCapture.Capture(viewModel, main?.SharedViewer.Canvas, null, FemResultMode.AxialForce, "XZ"), null),
+            ] : null);
     }
 
     /// <summary>Design utilization needs the forces of the current model: offers to run the analysis when they are not.</summary>

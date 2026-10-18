@@ -159,18 +159,23 @@ public static class NativeQuantityTakeoffCalculator
         }
 
         rows = rows.OrderBy(row => row.Kind).ThenBy(row => row.Section, StringComparer.Ordinal).ToList();
-        var allLength = rows.All(row => row.TotalLengthM is not null);
-        var allConcrete = rows.All(row => row.ConcreteVolumeM3 is not null);
-        var allSteel = rows.All(row => row.SteelMassT is not null);
-        var allCosts = rows.All(row => row.EstimatedCostSgd is not null);
-        var total = new NativeQuantityTotals(rows.Sum(row => row.MemberCount), allLength ? rows.Sum(row => row.TotalLengthM!.Value) : null,
-            allConcrete ? rows.Sum(row => row.ConcreteVolumeM3!.Value) : null, allSteel ? rows.Sum(row => row.SteelMassT!.Value) : null)
+        // Each total sums the rows that have the value; a row without it is left out and named in the notes, never counted as 0.
+        static double? Sum(IEnumerable<double?> values) { var known = values.OfType<double>().ToArray(); return known.Length == 0 ? null : known.Sum(); }
+        var total = new NativeQuantityTotals(rows.Sum(row => row.MemberCount), Sum(rows.Select(row => row.TotalLengthM)),
+            Sum(rows.Select(row => row.ConcreteVolumeM3)), Sum(rows.Select(row => row.SteelMassT)))
         {
-            EstimatedCostSgd = allCosts ? rows.Sum(row => row.EstimatedCostSgd!.Value) : null,
+            EstimatedCostSgd = Sum(rows.Select(row => row.EstimatedCostSgd)),
         };
         var notesSummary = rows.Where(row => row.Details.Length > 0)
-            .Select(row => $"{row.Kind} · {row.Section}: {row.Details}").ToArray();
-        return new(rows, total, notesSummary);
+            .Select(row => $"{row.Kind} · {row.Section}: {row.Details}").ToList();
+        foreach (var (label, missing) in new[]
+                 {
+                     ("length", rows.Where(row => row.TotalLengthM is null)), ("concrete volume", rows.Where(row => row.ConcreteVolumeM3 is null)),
+                     ("steel mass", rows.Where(row => row.SteelMassT is null)), ("estimated cost", rows.Where(row => row.EstimatedCostSgd is null)),
+                 })
+            if (missing.Select(row => row.Section).ToArray() is { Length: > 0 } names && names.Length < rows.Count)
+                notesSummary.Add($"Total {label} excludes {string.Join(", ", names)} (unavailable).");
+        return new(rows, total, notesSummary.ToArray());
     }
 
     private sealed record Member(string Name, ObjectId Start, ObjectId End, ObjectId? SectionId, QuantityMemberKind Kind,
@@ -317,26 +322,28 @@ public static class NativeQuantityTakeoffCalculator
         }
 
         var strandRadius = bundle.DiameterMm * 0.0005;
+        // Concentric rings around a centre strand, each as full as the strand spacing allows (6, 12, 18 … strands); the outer
+        // ring the count does not fill takes its strands at equal angles, so every count is drawn symmetric.
         var strands = new List<(double X, double Y)> { (0, 0) };
         for (var ring = 1; strands.Count < bundle.Count; ring++)
         {
-            var q = -ring;
-            var r = ring;
-            foreach (var (dq, dr) in new (int Q, int R)[] { (1, 0), (1, -1), (0, -1), (-1, 0), (-1, 1), (0, 1) })
-                for (var step = 0; step < ring && strands.Count < bundle.Count; step++)
-                {
-                    strands.Add(((q + r * 0.5) * strandRadius * 2, r * Math.Sqrt(3) * strandRadius));
-                    q += dq;
-                    r += dr;
-                }
+            var capacity = (int)Math.Floor(Math.PI / Math.Asin(1.0 / (2 * ring)) + 1e-9);
+            var count = Math.Min(capacity, bundle.Count - strands.Count);
+            var radius = ring * strandRadius * 2;
+            for (var k = 0; k < count; k++)
+            {
+                var angle = Math.PI / 2 + 2 * Math.PI * k / count;
+                strands.Add((radius * Math.Cos(angle), radius * Math.Sin(angle)));
+            }
         }
 
         var wireArea = StrandBundle.StandardArea(bundle.DiameterMm);
         var shapes = new List<QuantityFigureShape>(bundle.Count * (wireArea is null ? 1 : 8));
         foreach (var (x, y) in strands)
         {
-            shapes.Add(new(name, material, materialClass, [Circle(strandRadius)], OutlineOnly: true));
-            if (wireArea is null) shapes.Add(new(name, material, materialClass, [Circle(strandRadius)]));
+            var outline = Circle(strandRadius).Select(point => new QuantityFigurePoint(point.X + x, point.Y + y)).ToArray();
+            shapes.Add(new(name, material, materialClass, [outline], OutlineOnly: true));
+            if (wireArea is null) shapes.Add(new(name, material, materialClass, [outline]));
             else
             {
                 var wireRadius = Math.Sqrt(wireArea.Value / 7 * 1e-6 / Math.PI);

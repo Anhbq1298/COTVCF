@@ -39,10 +39,19 @@ internal static class ResultExportChecks
         Check(groups.Take(6).Select(g => g.Title).SequenceEqual(new[] { "Mega Column", "Top Chord", "Bottom Chord", "Vertical Chord", "Main Cable (External)", "Internal Cable" })
             && groups.Single(g => g.Title == "Main Cable (External)").Members.Count > 0 && groups.Single(g => g.Title == "Internal Cable").Members.Count > 0,
             "VCF summary uses the requested member rows and distinguishes external and internal cables");
-        Check(groups.Single(g => g.Title == "Main Cable (External)").Members.OrderBy(n => n, StringComparer.Ordinal).SequenceEqual(new[] { "Cable1a-2", "Cable1b-2" })
-            && groups.Single(g => g.Title == "Internal Cable").Members.All(n => n.StartsWith("Cable", StringComparison.Ordinal) && !ResultMemberSummary.IsMainCable(n))
-            && groups.All(g => g.Title is not ("Other Cables" or "Middle Chord" or "End Frames")) && !ResultMemberSummary.IsMainCable("Cable10a-2") && ResultMemberSummary.IsMainCable("cable1b"),
-            "Main Cable (External) is Cable1a/Cable1b and every other cable is an Internal Cable");
+        {
+            var analysis = VcfGeometry.Analyze(vm.State.Geometry, vm.State.Truss);
+            var geometry = vm.State.Geometry;
+            var bottom = geometry.Members.Where(m => analysis.Roles.GetValueOrDefault(m.Name) == VcfMemberRole.BottomChord).SelectMany(m => new[] { m.Start, m.End }).ToHashSet();
+            bool Outside(string point) => geometry.Points[point].Position.X < analysis.TrussLines[0] - 1e-3 || geometry.Points[point].Position.X > analysis.TrussLines[^1] + 1e-3;
+            var external = groups.Single(g => g.Title == "Main Cable (External)").Members;
+            var cables = geometry.Members.Where(m => m.Kind == Mcotis.Desktop.Domain.MemberKind.Cable).ToArray();
+            Check(external.Contains("Cable1a-2") && external.Contains("Cable1b-2") &&
+                  cables.All(c => external.Contains(c.Name) == ((Outside(c.Start) || Outside(c.End)) && !bottom.Contains(c.Start) && !bottom.Contains(c.End))) &&
+                  groups.Single(g => g.Title == "Internal Cable").Members.Count + external.Count == cables.Length &&
+                  groups.All(g => g.Title is not ("Other Cables" or "Middle Chord" or "End Frames")),
+                $"Main Cable (External) is every cable outside the mega columns on both sides not connected to the bottom chord ({string.Join(", ", external)}); every other cable is Internal");
+        }
         var roles = VcfGeometry.Analyze(vm.State.Geometry, vm.State.Truss).Roles;
         var verticals = groups.Single(g => g.Title == "Vertical Chord").Members.ToHashSet(StringComparer.Ordinal);
         Check(roles.Any(r => r.Value == VcfMemberRole.MiddleChord)
@@ -84,11 +93,17 @@ internal static class ResultExportChecks
         Check(middle.Count > 0 && middle.All(m => report.Tables.Single(t => t.Title == $"Vertical Chord forces — {cases[0]}").Rows.Any(r => r[0].Text == m)),
             "the Vertical Chord table lists the middle chords too");
         var (sections, memberCases) = vm.DesignUtilization();
-        var withUr = vm.ReportCaseTables(cases[0], memberCases, Render);
-        Check(sections.Count > 0 && withUr.All(t => t.Columns[^1].Header == "UR") && withUr.Single(t => t.Title.StartsWith("Cable forces", StringComparison.Ordinal)).Columns.Any(c => c.Header == "Capacity (MN)") &&
-              withUr.Single(t => t.Title.StartsWith("Cable forces", StringComparison.Ordinal)).Rows.All(r => r[^1].Text != "—"),
-            "with design utilization every force table gets a UR column, cables also their capacity (area × 2160 MPa × 50 %)");
-        Check(quantities is { Landscape: true, TotalRows: 1 } && quantities.Columns[2].Header == "Section drawing" && quantities.Columns[3].Header == "Description" &&
+        var sls = vm.FemResultNames.First(n => n.Contains("SLS")); var uls = vm.FemResultNames.First(n => n.Contains("ULS"));
+        var slsTables = vm.ReportCaseTables(sls, memberCases, Render); var ulsTables = vm.ReportCaseTables(uls, memberCases, Render);
+        ReportTable Cable(IReadOnlyList<ReportTable> t) => t.Single(x => x.Title.StartsWith("Cable forces", StringComparison.Ordinal));
+        ReportTable Chord(IReadOnlyList<ReportTable> t) => t.Single(x => x.Title.StartsWith("Top Chord forces", StringComparison.Ordinal));
+        Check(sections.Count > 0 && slsTables.Concat(ulsTables).All(t => t.Columns[^1].Header == "UR") && Cable(slsTables).Columns.Any(c => c.Header == "Capacity (MN)") &&
+              Cable(slsTables).Rows.All(r => r[^1].Text != "—") && Cable(ulsTables).Rows.All(r => r[^1].Text == "—") &&
+              Chord(ulsTables).Rows.All(r => r[^1].Text != "—") && Chord(slsTables).Rows.All(r => r[^1].Text == "—") &&
+              memberCases.Where(m => vm.FemSectionProperties.Any(p => p.MemberName == m.Key && !p.IsCable)).All(m => m.Value.Keys.All(k => k.Contains("ULS"))) &&
+              memberCases.Where(m => vm.FemSectionProperties.Any(p => p.MemberName == m.Key && p.IsCable)).All(m => m.Value.Keys.All(k => k.Contains("SLS"))),
+            "with design utilization every force table gets a UR column: members from ULS cases only, cables (with their capacity, area × 2160 MPa × 50 %) from SLS cases only — elsewhere —");
+        Check(quantities is { Landscape: false, TotalRows: 1 } && quantities.Columns[2].Header == "Section drawing" && quantities.Columns[3].Header == "Description" &&
               quantities.Rows.SkipLast(1).Any(r => r[2].Image is not null) && quantities.Rows[^1][0].Text == "Total",
             "the quantities table draws each section with its description beside it, and closes with the totals");
         Check(html.IndexOf("<table", StringComparison.Ordinal) > html.LastIndexOf("</figure>", StringComparison.Ordinal), "PDF report places every summary table after all figures");
@@ -103,13 +118,12 @@ internal static class ResultExportChecks
         using (var word = WordprocessingDocument.Open(path, false))
         {
             var errors = new OpenXmlValidator().Validate(word).ToArray(); Check(errors.Length == 0, "Word passes Open XML validation: " + string.Join("; ", errors.Select(e => e.Description)));
-            var main = word.MainDocumentPart!; var section = main.Document.Body!.Descendants<ParagraphProperties>().Select(p => p.GetFirstChild<SectionProperties>()).OfType<SectionProperties>().Single();
+            var main = word.MainDocumentPart!; var section = main.Document.Body!.Elements<SectionProperties>().Single();
             var page = section.GetFirstChild<PageSize>()!; var margin = section.GetFirstChild<PageMargin>()!;
             Check(page.Width?.Value == 11906 && page.Height?.Value == 16838 && margin.Top?.Value == 1066 && margin.Bottom?.Value == 726 && margin.Left?.Value == 1066 && margin.Right?.Value == 896, "A4 and requested margins preserved");
-            var last = main.Document.Body!.Elements<SectionProperties>().Single().GetFirstChild<PageSize>()!;
-            Check(last.Width?.Value == 16838 && last.Orient?.Value == PageOrientationValues.Landscape, "the quantities table is on a landscape A4 page at the end");
+            Check(!main.Document.Body!.Descendants<ParagraphProperties>().Any(p => p.GetFirstChild<SectionProperties>() is not null), "the whole report, quantities included, is one portrait A4 section");
             var defaults = main.StyleDefinitionsPart!.Styles!.GetFirstChild<DocDefaults>()!;
-            Check(defaults.RunPropertiesDefault!.RunPropertiesBaseStyle!.GetFirstChild<RunFonts>()!.Ascii == "Arial" && defaults.RunPropertiesDefault.RunPropertiesBaseStyle.GetFirstChild<FontSize>()!.Val == "22" && defaults.ParagraphPropertiesDefault!.ParagraphPropertiesBaseStyle!.GetFirstChild<SpacingBetweenLines>()!.Line == "276", "Arial 11 and 1.15 spacing preserved");
+            Check(defaults.RunPropertiesDefault!.RunPropertiesBaseStyle!.GetFirstChild<RunFonts>()!.Ascii == "Arial" && defaults.RunPropertiesDefault.RunPropertiesBaseStyle.GetFirstChild<FontSize>()!.Val == "18" && defaults.ParagraphPropertiesDefault!.ParagraphPropertiesBaseStyle!.GetFirstChild<SpacingBetweenLines>()!.Line == "276", "Arial 9 and 1.15 spacing preserved");
             Check(main.ImageParts.Count() > 10 && main.Document.Descendants<Table>().Count() == report.Tables.Count && main.Document.InnerText.Contains("Figure 10.") &&
                   main.Document.Descendants<Table>().First().Descendants<Drawing>().Any(), "Word embeds every screenshot and caption, and every table with its section drawings");
             var blocks = main.Document.Body!.ChildElements.ToArray();
@@ -124,12 +138,20 @@ internal static class ResultExportChecks
         var picker = new ShowResultsWindow(vm, _ => {}); picker.Show();
         var export = new ExportResultsWindow(vm) { Owner = picker }; export.Show();
         static CheckBox[] Boxes(Panel panel) => panel.Children.OfType<CheckBox>().ToArray();
-        Check(Boxes(export.SlsOutputChoices).All(b => b.IsChecked == true) && Boxes(export.UlsOutputChoices).All(b => b.IsChecked == Equals(b.Tag, ResultReportOutput.Deflection) is false)
+        Check(Boxes(export.SlsOutputChoices).All(b => b.IsChecked == Equals(b.Tag, ResultReportOutput.Deflection)) && Boxes(export.UlsOutputChoices).All(b => b.IsChecked == Equals(b.Tag, ResultReportOutput.Deflection) is false)
+            && new[] { export.IncludeModelViews, export.IncludeForces, export.IncludeQuantities, export.IncludeUtilization }.All(box => box.IsChecked == true)
             && Boxes(export.SlsCaseChoices).Where(b => b.IsChecked == true).All(b => ((string)b.Content).Contains("SLS")) && Boxes(export.UlsCaseChoices).Where(b => b.IsChecked == true).All(b => ((string)b.Content).Contains("ULS")),
-            "Dialog splits SLS (every result, deflection included) from ULS (deflection left unticked but available)");
+            "Dialog defaults: SLS the deflection, ULS the forces and reactions (deflection unticked), and every table and the model views ticked");
+        export.IncludeUtilization.IsChecked = false;
         foreach (var box in Boxes(export.SlsCaseChoices)) box.IsChecked = false;
         foreach (var box in Boxes(export.UlsCaseChoices)) box.IsChecked = (string)box.Tag == before;
         foreach (var box in Boxes(export.UlsOutputChoices)) box.IsChecked = Equals(box.Tag, ResultReportOutput.BendingMoment);
+        var withViews = export.BuildReport();
+        File.WriteAllBytes(Path.Combine(folder, "Model 3D.png"), withViews.Figures[0].Png); File.WriteAllBytes(Path.Combine(folder, "Model XZ.png"), withViews.Figures[1].Png);
+        Check(withViews.Figures.Count == 3 && withViews.Figures[0].Caption(1) == "Figure 1. Model — 3D isometric view" && withViews.Figures[1].Caption(2) == "Figure 2. Model — XZ elevation with dimensions and applied loads" &&
+              withViews.Figures[0].Png.Length > 10_000 && !withViews.Figures[0].Png.SequenceEqual(withViews.Figures[1].Png),
+            "the report opens with the model's 3D isometric view and its dimensioned XZ elevation, then the result figures");
+        export.IncludeModelViews.IsChecked = false;
         Check(export.BuildReport() is { Figures.Count: 1 }, "An empty SLS part is skipped");
         foreach (var box in Boxes(export.SlsCaseChoices)) box.IsChecked = true;
         foreach (var box in Boxes(export.SlsOutputChoices)) box.IsChecked = false;
@@ -145,9 +167,9 @@ internal static class ResultExportChecks
         Check(export.BuildReport() is { Figures.Count: 0, Tables.Count: > 1 }, "with Member forces ticked a case may be exported as tables only");
         var fromQuantities = new ExportResultsWindow(vm, ExportFocus.Quantities) { Owner = picker };
         var fromTable = new ExportResultsWindow(vm, ExportFocus.ResultsTable) { Owner = picker };
-        Check(fromQuantities.IncludeUtilization.IsChecked == true && fromQuantities.IncludeQuantities.IsChecked == true && fromTable.IncludeUtilization.IsChecked != true &&
+        Check(fromQuantities.IncludeUtilization.IsChecked == true && fromQuantities.IncludeQuantities.IsChecked == true &&
               Boxes(fromTable.UlsCaseChoices).Any(b => b.IsChecked == true && Equals(b.Tag, vm.SelectedFemResultName)),
-            "Export from Show Quantities ticks the quantities and design utilization; Export from the Results Table ticks the case it shows");
+            "Export from Show Quantities keeps the quantities and design utilization ticked; Export from the Results Table ticks the case it shows");
         fromQuantities.Close(); fromTable.Close();
         export.ChooseFile = _ => false; export.OkButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Check(export.IsVisible && export.OkButton.IsEnabled, "Cancelling Save leaves the export dialog available"); export.Close();
         export = new ExportResultsWindow(vm) { Owner = picker }; string? opened = null; var saved = Path.Combine(folder, "UI Results.docx");

@@ -1217,6 +1217,11 @@ public sealed partial class MainViewModel : Observable
         selectedTab == TabFem && ShowFemLoads && SelectedFemRun?.Loads is { } loads
             ? loads.GroupBy(load => load.PointName, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(load => load.FzKN), StringComparer.Ordinal)
             : null;
+    /// <summary>The applied point loads of the FEM run for a report figure, whichever page or switch is on screen.</summary>
+    internal IReadOnlyDictionary<string, double>? ReportLoadValues() => SelectedFemRun?.Loads is { } loads
+        ? loads.GroupBy(load => load.PointName, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Sum(load => load.FzKN), StringComparer.Ordinal)
+        : null;
+
     public int SelectedFemPage
     {
         get => selectedFemPage;
@@ -1299,11 +1304,12 @@ public sealed partial class MainViewModel : Observable
         var properties = FemSectionProperties.GroupBy(p => p.MemberName, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         Dictionary<string, double>? ur = memberCases is null ? null
             : memberCases.Where(pair => pair.Value.ContainsKey(caseName)).ToDictionary(pair => pair.Key, pair => pair.Value[caseName], StringComparer.Ordinal);
+        var allCases = FemResultNames.ToArray();
         return ResultReportTables.ForCase(caseName, result, groups, rows, ur,
             member => properties.GetValueOrDefault(member)?.SectionName ?? "—",
             member => properties.GetValueOrDefault(member)?.IsCable == true ? CableLength(member) : MemberLength(member),
             member => properties.GetValueOrDefault(member) is { IsCable: true, AreaM2: > 0 } cable ? cable.AreaM2 : null,
-            image);
+            image, ResultReportTables.IsUlsCase(caseName, allCases), ResultReportTables.IsSlsCase(caseName, allCases));
     }
     public FemAnalysisResult? SharedViewerFemResult =>
         !ShowUndeformed && selectedTab == TabFem && SelectedFemPage == FemResultsPage

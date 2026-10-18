@@ -132,8 +132,9 @@ public sealed partial class MainViewModel
         var document = NativeDocumentSession.Document;
         var snapshot = NativeToLegacyProjection.Read(document) ?? femInputSnapshot ??
             throw new InvalidOperationException("The model configuration is unavailable.");
-        var plan = CableSectionOptimizer.Prepare(document, snapshot);
+        var plan = CableSectionOptimizer.Prepare(document, snapshot, run.Settings.SyncGroupsOnly);
         var resultByGroup = run.Rows.GroupBy(row => row.GroupKey, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+        if (run.Settings.SyncGroupsOnly) return ApplyBySyncGroups(plan, resultByGroup);
         EnsureMaterials();
         EnsureSections();
         var library = CableSections.ToList();
@@ -186,6 +187,65 @@ public sealed partial class MainViewModel
         PersistFemWorkingSnapshot(advanceRevision: true);
         Message = $"Applied suggested 15.7 mm strand sections to {changedGroups} linked group{(changedGroups == 1 ? "" : "s")}. " +
             "Target cable forces and their load cases were preserved; Edit → Undo restores the previous sections.";
+        return true;
+    }
+
+    /// <summary>Applies a result grouped by Sync links: each changed group is assigned an "nT15.7" section of its own count — groups
+    /// with the same count share it — so cables that shared a section may now differ. The previous sections stay in the library.</summary>
+    private bool ApplyBySyncGroups(CableSectionOptimizationPlan plan, IReadOnlyDictionary<string, CableSectionOptimizationRow[]> resultByGroup)
+    {
+        EnsureMaterials();
+        EnsureSections();
+        var library = CableSections.ToList();
+        var reservedNames = library.Select(section => section.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var byCount = new Dictionary<int, string>();
+        var assignments = new List<(IReadOnlyList<string> Cables, string Section)>();
+        foreach (var group in plan.Groups)
+        {
+            if (!resultByGroup.TryGetValue(group.Key, out var rows) || rows.Length != group.CableNames.Count ||
+                rows.Select(row => row.SuggestedStrands).Distinct().Count() != 1)
+                throw new InvalidOperationException($"The saved result no longer describes the cable group '{string.Join(", ", group.CableNames)}'.");
+            var count = rows[0].SuggestedStrands;
+            if (rows.All(row => row.CurrentStrands == count)) continue;
+            if (!byCount.TryGetValue(count, out var sectionName))
+            {
+                var area = StrandBundle.Area(count, CableSectionOptimizationSettings.StrandAreaMm2);
+                var stem = StrandBundle.Name(count, CableSectionOptimizationSettings.StrandDiameterMm);
+                if (library.FirstOrDefault(section => section.Name == stem) is { } existing && Math.Abs(existing.Area - area) <= area * 1e-6)
+                    sectionName = stem;
+                else
+                {
+                    var current = FemSectionProperties.FirstOrDefault(property => property.MemberName == group.CableNames[0])?.SectionName;
+                    var source = library.FirstOrDefault(section => section.Name == current) ?? library.FirstOrDefault()
+                        ?? throw new InvalidOperationException("The section library has no cable section to base the new strand section on.");
+                    sectionName = UniqueCableSectionName(stem, reservedNames);
+                    reservedNames.Add(sectionName);
+                    library.Add(source with
+                    {
+                        Name = sectionName,
+                        Area = area,
+                        Notes = "15.7 mm strands · applied from Tension Cable Design → Iterate",
+                        Source = "App",
+                    });
+                }
+                byCount[count] = sectionName;
+            }
+            assignments.Add((group.CableNames, sectionName));
+        }
+
+        if (assignments.Count == 0) return false;
+        if (IsFemModelLocked)
+        {
+            UnlockFemModelForEditing();
+            if (IsFemModelLocked) return false;
+        }
+        CommitStrandSections(library, new Dictionary<string, string>(StringComparer.Ordinal), tendons: false);
+        foreach (var (cables, section) in assignments) AssignSection(cables.ToArray(), section, cable: true);
+        nextStepName = "Apply suggested tendon sections";
+        femWorkingDirty = true;
+        PersistFemWorkingSnapshot(advanceRevision: true);
+        Message = $"Applied suggested 15.7 mm strand sections to {assignments.Count} Sync group{(assignments.Count == 1 ? "" : "s")}. " +
+            "Target cable forces and their load cases were preserved.";
         return true;
     }
 

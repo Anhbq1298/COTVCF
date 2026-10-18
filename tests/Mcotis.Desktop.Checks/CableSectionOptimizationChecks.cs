@@ -53,6 +53,13 @@ internal static class CableSectionOptimizationChecks
         Check(independent.Groups.Count == 2 && synced.Groups.Count == 1 && synced.Groups[0].CableNames.SequenceEqual(["T1", "T2"]) &&
               synced.Groups[0].CurrentStrands == 12 && synced.Groups[0].SectionName == "10T15.7 / 12T15.7",
             "a Cable Force Sync follower and its reference with different sections form one group that starts from the larger strand count");
+        var sharedOnly = CableSectionOptimizer.Prepare(document, null, syncGroupsOnly: true);
+        var sharedSynced = CableSectionOptimizer.Prepare(document, new FemInputSnapshot
+        {
+            CableSetup = new() { Cables = [new() { CableName = "T2", SyncMode = CableSyncMode.SameStep, ReferenceCableName = "T1" }] },
+        }, syncGroupsOnly: true);
+        Check(sharedOnly.Groups.Count == 2 && sharedSynced.Groups.Count == 1,
+            "grouped by Sync only, two cables sharing a section are sized apart unless one follows the other");
     }
 
     private static void CheckRunAndApply()
