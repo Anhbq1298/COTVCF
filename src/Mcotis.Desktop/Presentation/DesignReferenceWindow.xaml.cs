@@ -76,6 +76,8 @@ public partial class DesignReferenceWindow : Window
     private readonly IReadOnlyList<string> defaultCases;
     /// <summary>The section last shown: what the fields do not edit (e.g. the profile name) is kept from it.</summary>
     private ColumnSectionInput shownSection = new();
+    /// <summary>The member whose section the Section tab shows: the first ticked one.</summary>
+    private string? sectionMember;
 
     public ColumnDesignBasis? Result { get; private set; }
 
@@ -119,7 +121,10 @@ public partial class DesignReferenceWindow : Window
             : "Forces from the FEM analysis of the model (Run → Run FEM Analysis)" + (resultState is null ? "." : $" · {resultState}.") +
               (resultsStale ? " Run the analysis again before relying on this design." : "");
         if (resultsStale) RunText.SetResourceReference(System.Windows.Controls.TextBlock.ForegroundProperty, "Warning");
-        Show(basis);
+        // the Section tab always shows the first ticked member's section, never a section kept from an earlier design
+        sectionMember = members.FirstOrDefault(member => member.IsChecked)?.Name;
+        Show(sectionMember is null ? basis : basis with { Section = sectionFromMember(sectionMember) });
+        foreach (var member in members) member.PropertyChanged += (_, _) => FollowMemberSection();
         InitOptimization(basis, memberForces, materials);
     }
 
@@ -188,10 +193,20 @@ public partial class DesignReferenceWindow : Window
 
     private void Reset_Click(object sender, RoutedEventArgs e)
     {
-        var first = members.FirstOrDefault(member => member.Suggested) ?? members.FirstOrDefault();
-        Show(ColumnDesignCodes.Default(type) with { Section = first is null ? new ColumnSectionInput() : sectionFromMember(first.Name) });
         foreach (var member in members) member.IsChecked = selection.Count > 0 ? selection.Contains(member.Name) : member.Suggested;
         foreach (var item in cases) item.IsChecked = defaultCases.Contains(item.Name);
+        sectionMember = members.FirstOrDefault(member => member.IsChecked)?.Name;
+        var basis = ColumnDesignCodes.Default(type);
+        Show(sectionMember is null ? basis : basis with { Section = sectionFromMember(sectionMember) });
+    }
+
+    /// <summary>Shows the section of the first ticked member when that member changes.</summary>
+    private void FollowMemberSection()
+    {
+        var first = members.FirstOrDefault(member => member.IsChecked)?.Name;
+        if (first is null || first == sectionMember) return;
+        sectionMember = first;
+        ShowSection(sectionFromMember(first));
     }
 
     private void FromMember_Click(object sender, RoutedEventArgs e)

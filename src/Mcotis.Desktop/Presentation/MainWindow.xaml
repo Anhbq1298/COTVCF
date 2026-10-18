@@ -168,14 +168,6 @@
     <MenuItem x:Name="ModalResultsMenu" Header="_Modal Results…" Click="ModalResults_Click" IsEnabled="{Binding HasFemModalResults}" ToolTipService.ShowOnDisabled="True"
               ToolTip="The modes of the modal cases of the run: frequencies, participation, mode shapes and the mass — and a mode drawn on the model"/>
    </MenuItem>
-   <MenuItem Header="_Post-Processing" IsEnabled="{Binding HasUsableModelGeometry}">
-    <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click"
-              ToolTip="Choose result cases, monitored objects and limits for FEM output"/>
-    <MenuItem Header="FEM Live Results (_HTML)…" Click="OpenFemHtml_Click" IsEnabled="{Binding HasFemResults}"
-              ToolTip="Open the interactive FEM report: switch load cases and result families, inspect values, zoom and pan without regenerating HTML">
-     <MenuItem.Icon><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D9;" FontSize="14"/></MenuItem.Icon>
-    </MenuItem>
-   </MenuItem>
    <MenuItem Header="Di_splay" IsEnabled="{Binding HasUsableModelGeometry}">
     <MenuItem Header="Show _Undeformed Shape" InputGestureText="F4" Click="ShowUndeformed_Click" AutomationProperties.Name="Show Undeformed Shape menu"
               ToolTip="Clear the result display (forces, deformed shape, reactions) and show the model; Show Results draws a result again"/>
@@ -229,7 +221,18 @@
               IsEnabled="{Binding CanOptimizeTas}" ToolTipService.ShowOnDisabled="True" ToolTip="{Binding OptimizationTasToolTip}"/>
     <MenuItem Header="Optimization _Results…" Click="OptimizationResults_Click" AutomationProperties.Name="Optimization Results"
               ToolTip="Every case of the last Optimization VCF or Optimization TAS run with its max deflection (sortable)"/>
+    <MenuItem Header="Compare with _SAP2000…" Click="CompareWithSap_Click" AutomationProperties.Name="Compare with SAP2000"
+              IsEnabled="{Binding HasFemResults}" ToolTipService.ShowOnDisabled="True"
+              ToolTip="The member force table of Export Results with a SAP2000 column beside every Mcotis column: the forces of the model exported to SAP2000 and analysed there, member by member (SAP2000 is only read)"/>
     <MenuItem Header="_Cancel Optimization" Click="CancelOptimization_Click" IsEnabled="{Binding IsVcfOptimizationRunning}"/>
+   </MenuItem>
+   <MenuItem Header="_Post-Processing" IsEnabled="{Binding HasUsableModelGeometry}">
+    <MenuItem Header="_Output Settings" Tag="8" Click="FemPaneMenu_Click"
+              ToolTip="Choose result cases, monitored objects and limits for FEM output"/>
+    <MenuItem Header="FEM Live Results (_HTML)…" Click="OpenFemHtml_Click" IsEnabled="{Binding HasFemResults}"
+              ToolTip="Open the interactive FEM report: switch load cases and result families, inspect values, zoom and pan without regenerating HTML">
+     <MenuItem.Icon><TextBlock FontFamily="Segoe MDL2 Assets" Text="&#xE9D9;" FontSize="14"/></MenuItem.Icon>
+    </MenuItem>
    </MenuItem>
   </Menu>
 

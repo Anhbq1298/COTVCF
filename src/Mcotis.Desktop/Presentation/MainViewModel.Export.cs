@@ -14,6 +14,19 @@ public sealed partial class MainViewModel
 {
     public bool CanExportToSap => !IsBusy && HasModelGeometry && FemSectionProperties.Count > 0;
 
+    /// <summary>A section as SAP2000 / ETABS receive it: a mega composite column becomes a rectangular RC column of the same outline and
+    /// concrete, a concrete filled tube a steel tube of the same outline and wall, each with modifiers that carry the composite's
+    /// stiffness, weight and mass.</summary>
+    private FrameSectionProperty SapFrameSection(FrameSectionProperty section) => section.Shape switch
+    {
+        FrameShape.MegaComposite when AnalyseComposite(section) is { } composite =>
+            CompositeSapSection.Rectangle(section, composite.Values, composite.WeightPerMetre, composite.EquivalentUnitMass * composite.Values.Area, composite.Concrete),
+        FrameShape.FilledTube when AnalyseComposite(section) is { } composite =>
+            CompositeSapSection.Tube(section, composite.Parts, composite.Values, composite.Ecm, composite.WeightPerMetre,
+                composite.EquivalentUnitMass * composite.Values.Area, composite.Steel),
+        _ => section,
+    };
+
     /// <summary>The Mcotis model as SAP2000 receives it.</summary>
     internal SapExportModel BuildSapExportModel()
     {
@@ -34,7 +47,7 @@ public sealed partial class MainViewModel
             State.Geometry,
             FemSectionProperties.ToArray(),
             Materials.ToArray(),
-            FrameSections.ToArray(),
+            FrameSections.Select(SapFrameSection).ToArray(),
             CableSections.ToArray(),
             FemPinSupportPoints,
             restraints,
@@ -90,5 +103,16 @@ public sealed partial class MainViewModel
             throw;
         }
         finally { IsBusy = false; Update(); }
+    }
+
+    /// <summary>Optimization → Compare with SAP2000: the member forces of the model open in SAP2000 for a load case. Read only.</summary>
+    internal async Task<IReadOnlyList<SapMemberPeak>> ReadSapMemberPeaksAsync(string loadCase)
+    {
+        try { return await workflow.ReadSapMemberPeaksAsync(State.Geometry, loadCase); }
+        catch (System.Runtime.InteropServices.COMException) when (State.IsSapConnected)
+        {
+            State.Connection = "Connection Lost";
+            throw;
+        }
     }
 }

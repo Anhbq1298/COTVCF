@@ -834,6 +834,21 @@ public partial class MainWindow : Window
         optimizationResultsWindow.Activate();
     }
 
+    // Optimization → Compare with SAP2000: Mcotis and SAP2000 member forces side by side, one instance brought forward on repeat
+    private SapCompareWindow? sapCompareWindow;
+    private void CompareWithSap_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (sapCompareWindow is null)
+        {
+            sapCompareWindow = new SapCompareWindow(vm) { Owner = this };
+            sapCompareWindow.Closed += (_, _) => sapCompareWindow = null;
+            sapCompareWindow.Show();
+        }
+        if (sapCompareWindow.WindowState == WindowState.Minimized) sapCompareWindow.WindowState = WindowState.Normal;
+        sapCompareWindow.Activate();
+    }
+
     // Toolbar → Show Results: load case / combo and the output to draw on the model view
     private ShowResultsWindow? showResultsWindow;
     private void ShowResults_Click(object sender, RoutedEventArgs e) => OpenResultPicker(ShowResultPickerKind.All);

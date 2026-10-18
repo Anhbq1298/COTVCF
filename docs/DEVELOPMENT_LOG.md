@@ -18,6 +18,65 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Default VCF model: CFT chords as a defined filled tube; CFT exports as a steel tube
+- Status: In progress
+- Who: Philip Pham (with Claude Code)
+- Where: File → Load VCF… (Frame Sections); File → Export to SAP2000 / ETABS; Optimization → VCF; Design → CFT Design…
+- What: The top and bottom chords of the default VCF model use CFT_SHS[1200x2000x150_S460]_C70/85 as a defined concrete filled tube (2000 × 1200 × 150 mm, S460, C70/85) instead of a general section with transformed properties only; area and inertias are unchanged. Exported to SAP2000 or ETABS a concrete filled tube is a steel tube (box or pipe) of the same outline and wall in the tube's steel, with modifiers for area, shear areas, torsion, I22, I33, mass and weight that carry E·A, E·I, G·J and the weight of the composite (`CompositeSapSection.Tube`). Because the section is now defined, its self-weight and cost come from its concrete and steel quantities: the Optimization VCF results change (case 1 deflection 254 → 230 mm, cost SGD 10.0 M → 16.5 M) and so do the CFT design forces of the default model. Their frozen baselines (`vcf/*`, `design/model/*`) are NOT re-captured yet; they wait for the user's approval.
+  A new CFT section (Define → Section Properties → Add New Property…) starts in C100/115 and S690 when the library has them.
+- Checks: --fem-model (the section, its members, the exported tube and its modifiers); --study-ui (new CFT defaults), --etabs-export, --sap-import, --dev-log; --optimization-study and --column-design fail on the frozen baselines until approved.
+
+## 2026-10-17 · Default VCF model: mega columns of 3x3+4H700x90S690C90/105; mega columns export as rectangular RC
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: File → Load VCF… (the built-in default model); Define → Section Properties (library); Optimization → VCF; File → Export to SAP2000 / ETABS
+- What: The four mega columns of the default VCF system (members 170, 181, 186, 187, the verticals at the span ends) carry the mega composite section 3x3+4H700x90S690C90/105: 3000 × 3000 concrete C90/105, 4 × I 700×700×70/90 in S690 (fy 650 MPa for the plate thickness), 96 Ø40 bars (A = 11.70 m², I33 = 9.76 m⁴); it is in the default Sections library. The outer mega columns (188, 191) and the chords are unchanged. The Optimization VCF results change with it (user approved 2026-10-17): the baselines `vcf/*` and the Run Design on the default model's forces `design/model/*` are re-captured; TAS and the guide's column designs are untouched.
+  Exported to SAP2000 or ETABS, any mega composite column section becomes a rectangular RC section of the same outline and concrete grade, with property modifiers (area, shear areas, torsion, I22, I33, mass, weight) that give it the stiffness, self-weight and mass of the composite column in Mcotis (`Application/CompositeSapSection`). The torsion constant of the rectangle is the St Venant formula, so J matches to the accuracy of SAP2000's own value, not exactly.
+  The User Guide (Load VCF, Export to SAP2000 / ETABS, Column design, Mega column design) describes both.
+- Checks: --fem-model (the section, its four members and the exported rectangle with its modifiers); --optimization-study and --column-design against the re-captured baselines; --etabs-export, --sap-import.
+
+## 2026-10-17 · Optimization → Compare with SAP2000
+- Status: In progress
+- Who: Philip Pham (with Claude Code)
+- Where: Optimization → Compare with SAP2000…
+- What: Shows the member force table of Export Results (Mega Column, chords, cables, … with Bending, Shear, Axial and Member size) with every force column split into Mcotis and SAP2000. The SAP2000 values are read, read-only, from the analysed model open in SAP2000 for the chosen load case / combination; its members carry the names Export to SAP2000 gave them (the Mcotis member names). Peak absolute values per row; bending is M3 and shear V2 of SAP2000 (in-plane, default local axes). Cables report 0 for bending and shear. Copy puts the table on the clipboard; Export to Word saves it as a landscape .docx with every force column split in two. Not yet verified against a live SAP2000 model.
+- Checks: none yet (build only; needs a live SAP2000 run).
+
+## 2026-10-17 · Post-Processing menu moved after Optimization
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Main window menu bar
+- What: The Post-Processing menu is now the last menu, after Optimization (File … Display, Design, Help, | Optimization, Post-Processing).
+- Checks: quick smoke checks (menu bar order in Mcotis.Desktop.Checks).
+
+## 2026-10-17 · Mega column design: l0 = 10 m and the Section tab from the member section
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Design → Mega Composite Column Design… (Design Basis and Section tabs); the other column designs share the Section rule
+- What: The mega composite column design starts with l0,y = l0,z = 10 m (Reset returns to it). The Section tab always shows the section of the first ticked member (its Member Section), when the dialog opens and whenever the first ticked member changes, instead of a section kept from an earlier design; the fields can still be edited for one run.
+- Checks: quick smoke checks (Design Reference dialog); --dev-log.
+
+## 2026-10-17 · Load combinations: stored SLS / ULS limit state
+- Status: Planned
+- Who: Unassigned
+- Where: Load Cases / Combinations (main window); Export Results
+- What: Export Results splits SLS and ULS by the words "SLS" / "ULS" in the case names, because a combination carries no limit state. Store the limit state (SLS, ULS or none) on each combination in the document, set it in Load Case Data, and let Export Results fill each part from it instead of from the names.
+- Checks: none yet.
+
+## 2026-10-17 · Export results in separate SLS and ULS parts
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Result → Show Results → Export Results
+- What: The dialog has an SLS part and a ULS part, each with its own load cases / combinations and result types, so one report can hold SLS deflection and loading next to ULS forces. SLS starts with every result ticked, deflection included. ULS starts with every result except deflection, which stays available. No case carries a limit state, so both parts list every solved case and the case names only set the initial ticks ("SLS" / "ULS"). A part without cases is skipped. A case ticked in both parts is reported once with both sets of result types. Cases ticked with no result type are refused, and the message names the part.
+- Checks: --result-export --skip-pdf; quick smoke checks; --dev-log.
+
+## 2026-10-17 · Export results with member force summary tables
+- Status: Done
+- Who: Codex
+- Where: Result → Show Results → Export Results; Word and PDF reports
+- What: Each selected case includes a blue-header table of Member, Bending (MNm), Shear (MN), Axial (MN) and Member size. All summary tables appear at the end of the Word/PDF report, after every figure and caption. VCF rows distinguish mega columns, chords and external/internal cables; other models retain member names. Values are independent absolute peaks over member ends and stored frame stations; selected force types control the columns, assigned section names give the sizes, and unavailable values stay marked.
+- Checks: --result-export --skip-pdf (Word, tables and dialog); quick smoke checks; --dev-log; PDF HTML rendered and visually checked with Chrome. The installed Edge print process timed out in --result-export; the existing browser exporter is unchanged.
+
 ## 2026-10-15 · Geometry editing: grids and levels, view planes, Draw, Move, snapping
 - Status: Done
 - Who: markbui, Claude

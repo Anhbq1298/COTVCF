@@ -99,7 +99,7 @@
     <DockPanel Margin="0,6,0,0">
      <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
       <Button DockPanel.Dock="Right" Content="From Member Section" Click="FromMember_Click" ToolTip="Fill the dimensions and grades from the first ticked member's FEM section and material"/>
-      <TextBlock Text="mm and MPa. Depth h is in the model plane: the FEM moment bends the major axis y-y." Style="{StaticResource Hint}" Margin="2,0,8,0" VerticalAlignment="Center"/>
+      <TextBlock Text="From the first ticked member's section. mm and MPa. Depth h is in the model plane: the FEM moment bends the major axis y-y." Style="{StaticResource Hint}" Margin="2,0,8,0" VerticalAlignment="Center"/>
      </DockPanel>
      <ScrollViewer VerticalScrollBarVisibility="Auto">
       <StackPanel x:Name="SectionPanel"/>

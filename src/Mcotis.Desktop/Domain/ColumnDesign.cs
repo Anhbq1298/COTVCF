@@ -156,6 +156,9 @@ public static class ColumnDesignCodes
         Method = Methods(type)[0],
         MaxConcreteGrade = "C90/105",
         MaxSteelGrade = type == ColumnDesignType.ReinforcedConcrete ? "B500B" : "S550",
+        // a mega column starts at 10 m about both axes; the others wait for the length to be keyed in
+        EffectiveLengthY = type == ColumnDesignType.MegaComposite ? 10 : null,
+        EffectiveLengthZ = type == ColumnDesignType.MegaComposite ? 10 : null,
         Section = type == ColumnDesignType.MegaComposite ? ColumnSectionInput.MegaDefault : new(),
     };
 }

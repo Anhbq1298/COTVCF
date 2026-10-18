@@ -44,7 +44,7 @@ internal static class Program
             }
             if (args.Contains("--result-export"))
             {
-                ResultExportChecks.Run();
+                ResultExportChecks.Run(includePdf: !args.Contains("--skip-pdf"));
                 return 0;
             }
             if (args.Contains("--template-building-ui"))
@@ -264,9 +264,9 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 MenuItem TopMenu(string header) => window.MainMenu.Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == header);
                 Assert(window.MainMenu.Items.OfType<MenuItem>().Select(item => (item.Header as string)!.Replace("_", ""))
-                           .SequenceEqual(["File", "Define", "Edit", "Draw", "Assign", "Run", "Result", "Post-Processing", "Display", "Design", "Help", "Optimization"]) &&
-                       window.MainMenu.Items[^2] is Separator && ReferenceEquals(window.MainMenu.Items[^1], TopMenu("Optimization")),
-                    "The active menu bar ends with the standalone Optimization workspace after a separator; the legacy MB menu is absent");
+                           .SequenceEqual(["File", "Define", "Edit", "Draw", "Assign", "Run", "Result", "Display", "Design", "Help", "Optimization", "Post-Processing"]) &&
+                       window.MainMenu.Items[^3] is Separator && ReferenceEquals(window.MainMenu.Items[^2], TopMenu("Optimization")) && ReferenceEquals(window.MainMenu.Items[^1], TopMenu("Post-Processing")),
+                    "The active menu bar ends with the standalone Optimization workspace after a separator, then Post-Processing; the legacy MB menu is absent");
                 Assert(!FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
                        vm.NewConfig.CanExecute(null) && !TopMenu("Optimization").IsEnabled && TopMenu("Define").IsEnabled && TopMenu("File").IsEnabled,
                     "Before a model exists, model workflows stay disabled while New Config and Define remain available");
@@ -645,6 +645,8 @@ internal static class Program
                 frameList.Find("FSEC");
                 Assert(frameList.SelectedSection is FrameSectionProperty { Shape: FrameShape.Box } && frameList.Working.Count == framesBefore + 1,
                     "Add New Property adds a section of the chosen shape; Find this property selects it");
+                Assert(frameList.NewFrameSection(FrameShape.FilledTube) is { Material: "C100/115", SteelMaterial: "S690", Composite: { Fck: 100, Fy: 690 } },
+                    "A new concrete filled tube starts in C100/115 and S690");
                 frameList.Commit();
                 Assert(vm.FrameSections.Any(section => section.Shape == FrameShape.Box && section.Name.StartsWith("FSEC", StringComparison.Ordinal)), "OK keeps the new frame section");
                 var boxForm = new FrameSectionWindow(vm, FrameSectionProperty.Default(FrameShape.Box, "SHS test", "") with { Depth = 1.2, Width = 1.2, FlangeThickness = 0.12, WebThickness = 0.12 },
@@ -732,6 +734,14 @@ internal static class Program
                        new[] { "Number of profiles (4 or 6)", "dsy  offset in-plane", "dsx  offset across", "Bar layers per b face" }
                            .All(label => FindVisuals<TextBox>(megaDesign).Any(box => System.Windows.Automation.AutomationProperties.GetName(box) == label)),
                     "the Mega Composite Column Design dialog asks for the profile count, offsets and bar layers");
+                var megaItems = ((IEnumerable<DesignReferenceWindow.CheckItem>)megaDesign.MemberList.ItemsSource).ToArray();
+                foreach (var item in megaItems) item.IsChecked = false;
+                var megaMember = megaItems.Last();
+                megaMember.IsChecked = true;
+                var megaWidth = FindVisuals<TextBox>(megaDesign).First(box => System.Windows.Automation.AutomationProperties.GetName(box) == "b  width (minor)");
+                Assert(megaDesign.LengthYBox.Text == "10" && megaDesign.LengthZBox.Text == "10" &&
+                       megaWidth.Text == defaultVm.DesignSectionDefaults(ColumnDesignType.MegaComposite, megaMember.Name).Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    "the mega column design starts at l0 = 10 m and its Section tab follows the first ticked member's section");
                 megaDesign.Close();
                 var cableForm = new StrandSectionWindow(vm, new StrandSectionProperty { Name = "Strand", Area = 0.01 }, new HashSet<string>()) { Owner = window };
                 cableForm.Show();

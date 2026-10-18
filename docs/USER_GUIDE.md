@@ -148,7 +148,7 @@ Mcotis carries two complete models that open and run without SAP2000 or ETABS.
 The CoT 120 m composite arch deck, read from its ETABS file exactly as [[Import From ETABS]] would: C90/105, S690 and B500 materials; CFT, steel encased and Section Designer sections; end releases, pinned bases, 6 load patterns, 9 load cases and 8 combinations. Straight members that ETABS splits at every storey are joined back (30 joints, 59 frames, the same results). Mcotis opens with this model; its title is "TAS - Tied Arch System".
 
 ## Load VCF
-The default VCF model, COT Framing_V1.2_100m, on 07 FEM, ready to run.
+The default VCF model, COT Framing_V1.2_100m, on 07 FEM, ready to run. Its four mega columns at the span ends are the mega composite section **3x3+4H700x90S690C90/105** (3000 × 3000 concrete C90/105, 4 × I 700×700×70/90 in S690, 96 Ø40 bars), which is in its Frame Sections library. The chords are the concrete filled tube **CFT_SHS[1200x2000x150_S460]_C70/85** (2000 × 1200 × 150 mm, S460, C70/85).
 
 Either command sets the current model aside after a confirmation.
 
@@ -200,6 +200,11 @@ Writes the Mcotis model into the model open in SAP2000, so it runs there.
 2. **Confirm.** SAP2000 members and joints that are not in Mcotis will be removed. A locked SAP2000 model must be unlocked, which deletes its analysis results.
 3. **Export.** Materials, sections (SAP's own Section Designer sections are kept), geometry, each member's section / local axis / releases / modifiers, pins on unrestrained supports, load patterns, the Tab 01 joint loads, cable target forces, load cases (new nonlinear ones with P-Δ and large displacements), combinations and run flags.
 
+## Composite columns
+A **concrete filled tube** goes as a steel tube (box or pipe) of the same outline and wall, in the tube's steel; its property modifiers (area, shear areas, torsion constant, I22, I33, mass and weight) give it the stiffness and weight of the composite tube in Mcotis.
+
+SAP2000 has no mega composite section, so a mega column goes as a **rectangular RC column** of the same outline and concrete grade. Its property modifiers (area, shear areas, torsion constant, I22, I33, mass and weight) give it the stiffness, self-weight and mass of the composite column in Mcotis, so the SAP2000 model behaves as the Mcotis one. The torsion constant of the rectangle is a closed-form value, so it can differ slightly from SAP2000's own. Check the modifiers in SAP2000 before you design the column there.
+
 ## Not saved
 The SAP2000 model is not saved: review it, then save — or close it without saving to discard the export.
 
@@ -219,7 +224,7 @@ Category: Files and models
 Where: File → Export to ETABS…
 See also: Import From ETABS; Export to SAP2000
 
-Writes the Mcotis model into the model open in ETABS after a read-only preview and your OK: frames matched to ETABS frames by their end coordinates, sections, materials, releases, supports, every joint and frame load, load cases and combinations, plane-frame analysis. CFT, encased and Section Designer sections go as general sections with their true self-weight. The ETABS model is not saved.
+Writes the Mcotis model into the model open in ETABS after a read-only preview and your OK: frames matched to ETABS frames by their end coordinates, sections, materials, releases, supports, every joint and frame load, load cases and combinations, plane-frame analysis. CFT, encased and Section Designer sections go as general sections with their true self-weight. A mega composite column goes as a rectangular RC section with property modifiers that carry its stiffness and weight, as for [[Export to SAP2000]]. A concrete filled tube goes as a steel tube, likewise. The ETABS model is not saved.
 
 Cables go as tension-only frames **without their pretension** — ETABS has no cable target-force load (see [[Limitations and known issues]]).
 
@@ -252,7 +257,7 @@ See also: Materials; Assign frame sections; Member sections table
 
 The frame section library: rectangle, box/tube, I, pipe, circle, channel, tee, angle, general (Section Designer and other shapes with SAP2000's properties) and the composite sections:
 
-- **Concrete filled tube (CFT)** — a steel tube filled with concrete, optionally with bars inside.
+- **Concrete filled tube (CFT)** — a steel tube filled with concrete, optionally with bars inside. A new CFT starts in **C100/115** and **S690** (fck 100 MPa, fy 690 MPa) when the library has them.
 - **Steel encased** — an I section encased in reinforced concrete.
 - **Mega composite** — several encased I profiles in one large column.
 
@@ -709,7 +714,7 @@ Designs columns with the forces of the FEM run: pick a design from the Design me
 
 ## The Design Reference dialog
 - **Design Basis** — the design code and its references, the method, the Singapore National Annex, the effective lengths l0,y (major, in-plane) and l0,z (minor) in m, the partial factors (γC, γS, γM0) and the grade limits.
-- **Section** — the section and materials (mm, MPa), filled from the member's FEM section; From Member Section fills them again.
+- **Section** — the section and materials (mm, MPa), always taken from the first ticked member's section (its Member Section), when the dialog opens and whenever the first ticked member changes; you may edit the fields for one run, and From Member Section fills them again.
 - **Members & Loads** — the members to design (frames selected on the model view are ticked; Suggested / All / None) and the load cases.
 - **Optimization** — the cheapest section ([[Column design optimization]]).
 
@@ -755,7 +760,7 @@ Category: Design
 Where: Design → Mega Composite Column Design…
 See also: Column design; Column design optimization
 
-Columns with several concrete-encased steel profiles (4, or 6 with two on the bending axis), by the CTBUH / ArcelorMittal (2016) simplified method on SS EN 1994-1-1 6.7.3, with high-strength materials per BCA BC4:2025. The report shows the method and a fibre cross-check; detailing covers web bars and profile cover. The default section is 2200 × 2200, C100, 4 × I 500 × 430 × 60 / 37 S460 with Ø40 bars.
+Columns with several concrete-encased steel profiles (4, or 6 with two on the bending axis), by the CTBUH / ArcelorMittal (2016) simplified method on SS EN 1994-1-1 6.7.3, with high-strength materials per BCA BC4:2025. The report shows the method and a fibre cross-check; detailing covers web bars and profile cover. The effective lengths start at **10 m** about both axes. The Section tab shows the section of the first ticked member; a new Mega Composite Column section starts at 2200 × 2200, C100, 4 × I 500 × 430 × 60 / 37 S460 with Ø40 bars. The default VCF model's mega columns are 3000 × 3000, C90/105, 4 × I 700×700×70/90 S690, 96 Ø40.
 
 # Design results
 Category: Design

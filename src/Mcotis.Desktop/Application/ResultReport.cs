@@ -11,22 +11,40 @@ using DW = DocumentFormat.OpenXml.Drawing.Wordprocessing;
 using PIC = DocumentFormat.OpenXml.Drawing.Pictures;
 namespace Mcotis.Desktop.Application;
 public enum ResultReportOutput { AxialForce, BendingMoment, Shear, Reactions, Deflection }
+public sealed record ResultReportSelection(string Name, IReadOnlyList<string> Cases, IReadOnlyList<ResultReportOutput> Outputs);
 public sealed record ResultReportFigure(string CaseName, string Title, byte[] Png, string? Warning)
 {
     public string Caption(int number) => $"Figure {number}. {Title} — {CaseName}";
 }
-public sealed record ResultReport(string ModelName, IReadOnlyList<ResultReportFigure> Figures)
+public sealed partial record ResultReport(string ModelName, IReadOnlyList<ResultReportFigure> Figures)
 {
+    public IReadOnlyList<ResultMemberTable> MemberTables { get; init; } = [];
     public const int PageWidth = 11906, PageHeight = 16838;
     public const int Top = 1066, Bottom = 726, Right = 896, Left = 1066;
-    public static ResultReport Create(string modelName, FemStudyRun run, IReadOnlyList<string> cases, IReadOnlyList<ResultReportOutput> outputs, Func<FemAnalysisResult, FemResultMode, byte[]> capture)
+    public static ResultReport Create(string modelName, FemStudyRun run, IReadOnlyList<string> cases, IReadOnlyList<ResultReportOutput> outputs, Func<FemAnalysisResult, FemResultMode, byte[]> capture,
+        IReadOnlyList<ResultMemberGroup>? memberGroups = null) =>
+        Create(modelName, run, [new ResultReportSelection("", cases, outputs)], capture, memberGroups);
+    /// <summary>A report of several selections (e.g. SLS and ULS), in order. A selection without cases is skipped; a case chosen in more than one selection appears once, with the union of their result types.</summary>
+    public static ResultReport Create(string modelName, FemStudyRun run, IReadOnlyList<ResultReportSelection> selections, Func<FemAnalysisResult, FemResultMode, byte[]> capture,
+        IReadOnlyList<ResultMemberGroup>? memberGroups = null)
     {
-        if (cases.Count == 0 || outputs.Count == 0) throw new InvalidOperationException("Select at least one load case / combination and one result type.");
-        foreach (var name in cases)
+        foreach (var s in selections)
+            if (s.Cases.Count > 0 && s.Outputs.Count == 0)
+                throw new InvalidOperationException(s.Name.Length == 0 ? "Select at least one load case / combination and one result type."
+                    : $"Select at least one result type for the {s.Name} load cases / combinations.");
+        var perCase = new Dictionary<string, List<ResultReportOutput>>(); var order = new List<string>();
+        foreach (var s in selections)
+        foreach (var name in s.Cases)
+        {
+            if (!perCase.TryGetValue(name, out var list)) { perCase[name] = list = []; order.Add(name); }
+            foreach (var output in s.Outputs) if (!list.Contains(output)) list.Add(output);
+        }
+        if (order.Count == 0) throw new InvalidOperationException("Select at least one load case / combination and one result type.");
+        foreach (var name in order)
             if (run.Results is null || !run.Results.ContainsKey(name)) throw new InvalidOperationException($"No solved result is available for '{name}'. Run analysis first.");
         var figures = new List<ResultReportFigure>();
-        foreach (var name in cases.Distinct())
-        foreach (var output in outputs.Distinct())
+        foreach (var name in order)
+        foreach (var output in perCase[name])
         {
             var (mode, title) = output switch
             {
@@ -41,7 +59,12 @@ public sealed record ResultReport(string ModelName, IReadOnlyList<ResultReportFi
             if (png.Length < 24 || !png.Take(8).SequenceEqual(new byte[] {137,80,78,71,13,10,26,10})) throw new InvalidOperationException("The result view could not be captured.");
             figures.Add(new(name, title, png, result.TargetFitFailure));
         }
-        return new(modelName, figures);
+        return new(modelName, figures)
+        {
+            MemberTables = order.Select(name => ResultMemberSummary.Create(name, run.Results![name],
+                memberGroups ?? run.Results![name].Frames.Select(f => new ResultMemberGroup(f.MemberName, [f.MemberName], "(section unavailable)"))
+                    .Concat(run.Results[name].Cables.Select(c => new ResultMemberGroup(c.MemberName, [c.MemberName], "(section unavailable)"))).ToArray(), perCase[name])).ToArray()
+        };
     }
     public string Html()
     {
@@ -55,6 +78,7 @@ public sealed record ResultReport(string ModelName, IReadOnlyList<ResultReportFi
             if (figure.Warning is { Length: > 0 }) html.Append("<p>Cable target not fitted: ").Append(E(figure.Warning)).Append("</p>");
             html.Append("</figure>");
         }
+        AppendMemberTables(html);
         return html.Append("</body></html>").ToString();
     }
     public void Export(string path, bool pdf)
@@ -99,6 +123,7 @@ public sealed record ResultReport(string ModelName, IReadOnlyList<ResultReportFi
             body.Append(new Paragraph(properties, new Run(new Text(caption))));
             if (figure.Warning is { Length: > 0 }) body.Append(new Paragraph(new Run(new Text("Cable target not fitted: " + figure.Warning))));
         }
+        AppendMemberTables(body);
         body.Append(new SectionProperties(new PageSize { Width = PageWidth, Height = PageHeight }, new PageMargin { Top = Top, Bottom = Bottom, Left = Left, Right = Right, Header = 0, Footer = 0, Gutter = 0 }));
         main.Document.Save();
     }

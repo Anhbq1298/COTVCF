@@ -11,19 +11,37 @@
      <TextBlock Text="Margins [cm]: top 1.88 · bottom 1.28 · left 1.88 · right 1.58" TextWrapping="Wrap" Foreground="{StaticResource Muted}"/>
     </StackPanel>
    </GroupBox>
-   <GroupBox Header="Load cases / combinations" Padding="8" Margin="0,0,0,8">
-    <StackPanel>
-     <CheckBox x:Name="AllCases" Content="All solved load cases / combinations" Click="AllCases_Click" Margin="0,0,0,6"/>
-     <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="CaseChoices"/></ScrollViewer>
-    </StackPanel>
+   <GroupBox Header="SLS — serviceability (deflection, loading)" Padding="8" Margin="0,0,0,8">
+    <Grid>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <StackPanel>
+      <TextBlock Text="Load cases / combinations" FontWeight="SemiBold" Margin="0,0,0,4"/>
+      <CheckBox x:Name="SlsAllCases" Content="All solved" Margin="0,0,0,4"/>
+      <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="SlsCaseChoices"/></ScrollViewer>
+     </StackPanel>
+     <StackPanel Grid.Column="2">
+      <TextBlock Text="Results" FontWeight="SemiBold" Margin="0,0,0,4"/>
+      <CheckBox x:Name="SlsAllOutputs" Content="All results" Margin="0,0,0,4"/>
+      <StackPanel x:Name="SlsOutputChoices"/>
+     </StackPanel>
+    </Grid>
    </GroupBox>
-   <GroupBox Header="Results" Padding="8" Margin="0,0,0,8">
-    <StackPanel>
-     <CheckBox x:Name="AllOutputs" Content="All results" IsChecked="True" Click="AllOutputs_Click" Margin="0,0,0,6"/>
-     <UniformGrid x:Name="OutputChoices" Columns="2"/>
-    </StackPanel>
+   <GroupBox Header="ULS — strength (forces, reactions)" Padding="8" Margin="0,0,0,8">
+    <Grid>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+     <StackPanel>
+      <TextBlock Text="Load cases / combinations" FontWeight="SemiBold" Margin="0,0,0,4"/>
+      <CheckBox x:Name="UlsAllCases" Content="All solved" Margin="0,0,0,4"/>
+      <ScrollViewer MaxHeight="120" VerticalScrollBarVisibility="Auto"><StackPanel x:Name="UlsCaseChoices"/></ScrollViewer>
+     </StackPanel>
+     <StackPanel Grid.Column="2">
+      <TextBlock Text="Results" FontWeight="SemiBold" Margin="0,0,0,4"/>
+      <CheckBox x:Name="UlsAllOutputs" Content="All results" Margin="0,0,0,4"/>
+      <StackPanel x:Name="UlsOutputChoices"/>
+     </StackPanel>
+    </Grid>
    </GroupBox>
-   <TextBlock Text="Each selected result is captured as a model-view figure with its figure number and load case caption. Choose the file name and folder after OK; the saved report opens automatically." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
+   <TextBlock Text="Each selected load case includes a member summary table (bending, shear, axial force and member size) and the model-view figures of the results ticked in its part. A case ticked in both parts is reported once with both sets of results. Leave a part empty to skip it. Choose the file name and folder after OK; the saved report opens automatically." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
   </StackPanel>
   <TextBlock x:Name="Status" TextWrapping="Wrap" Foreground="{StaticResource Warning}" Margin="0,0,0,8"/>
   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

@@ -437,7 +437,7 @@ internal static class ResultToolbarChecks
         Check(bar[at - 1] is Separator && bar[at - 2] is MenuItem { Header: "_Help" } && at == bar.Length - 1 &&
               !window.MainMenu.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "_MB")) &&
               ReferenceEquals(optimization.HeaderTemplate, window.FindResource("HighlightedMenuHeader")) &&
-              optimization.Items.OfType<MenuItem>().Select(item => ((string)item.Header).Replace("_", "")).SequenceEqual(["Optimization VCF…", "Optimization TAS…", "Optimization Results…", "Cancel Optimization"]) &&
+              optimization.Items.OfType<MenuItem>().Select(item => ((string)item.Header).Replace("_", "")).SequenceEqual(["Optimization VCF…", "Optimization TAS…", "Optimization Results…", "Compare with SAP2000…", "Cancel Optimization"]) &&
               !window.MainMenu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "_Run")).Items.OfType<MenuItem>()
                   .Any(item => (item.Header as string)?.Contains("Optimization", StringComparison.Ordinal) == true),
             "Optimization is a tab of its own on the menu bar — after a separator, highlighted, the last one — and Run no longer lists it");

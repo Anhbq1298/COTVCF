@@ -192,7 +192,10 @@ public sealed class SectionListWindow : Window
 
     /// <summary>A new frame section of <paramref name="shape"/>: steel for the steel shapes; a CFT / steel encased section
     /// takes the strongest concrete, the first steel and the first reinforcement of the library.</summary>
-    private FrameSectionProperty NewFrameSection(FrameShape shape)
+    /// <summary>The materials a new concrete filled tube starts with.</summary>
+    internal const string CftConcrete = "C100/115", CftSteel = "S690";
+
+    internal FrameSectionProperty NewFrameSection(FrameShape shape)
     {
         string First(MaterialKind kind) => viewModel.Materials.FirstOrDefault(item => item.Kind == kind)?.Name ?? "";
         if (shape is not (FrameShape.FilledTube or FrameShape.Encased or FrameShape.MegaComposite))
@@ -201,9 +204,18 @@ public sealed class SectionListWindow : Window
         var concrete = viewModel.Materials.Where(item => item.Kind == MaterialKind.Concrete)
             .OrderByDescending(item => viewModel.MaterialUsage(item.Name)).FirstOrDefault()?.Name ?? "";
         var stem = shape switch { FrameShape.FilledTube => "CFT", FrameShape.MegaComposite => "MEGA", _ => "SRC" };
-        return FrameSectionProperty.Default(shape, UniqueName($"{stem}{working.Count + 1}"), concrete) with
+        var section = FrameSectionProperty.Default(shape, UniqueName($"{stem}{working.Count + 1}"), concrete) with
         {
             SteelMaterial = First(MaterialKind.Steel), RebarMaterial = shape == FrameShape.FilledTube ? "" : First(MaterialKind.Rebar),
+        };
+        if (shape != FrameShape.FilledTube) return section;
+        // a new CFT starts in C100/115 and S690 (fck 100 MPa, fy 690 MPa) when the library has them
+        bool Has(string name, MaterialKind kind) => viewModel.Materials.Any(item => item.Name == name && item.Kind == kind);
+        return section with
+        {
+            Material = Has(CftConcrete, MaterialKind.Concrete) ? CftConcrete : section.Material,
+            SteelMaterial = Has(CftSteel, MaterialKind.Steel) ? CftSteel : section.SteelMaterial,
+            Composite = section.Composite! with { Fck = 100, Fy = 690 },
         };
     }
 

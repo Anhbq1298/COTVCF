@@ -350,6 +350,43 @@ internal static class FemModelFileChecks
               !vm.IsFemModelLocked && vm.FemRuns.Count == 0 && vm.OfflineModelName == FemInputDatabase.DefaultModelName,
             $"the default model {FemInputDatabase.DefaultModelName} opens offline on 07 FEM with its database geometry, sections, materials and load cases" +
             (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
+        // the four mega columns (verticals at the span ends) carry the mega composite section of the default sections
+        const string mega = "3x3+4H700x90S690C90/105";
+        var megaSection = vm.FrameSections.Single(section => section.Name == mega);
+        var megaRoles = VcfGeometry.Analyze(state.Geometry, state.Truss).Roles;
+        Check(megaSection is { Shape: FrameShape.MegaComposite, Material: "C90/105", SteelMaterial: "S690", Composite: { Width: 3000, Depth: 3000, ProfileCount: 4,
+                  SteelDepth: 700, SteelWidth: 700, FlangeThickness: 70, WebThickness: 90, Fy: 650, BarDiameter: 40 } c } &&
+              CompositeSection.PerimeterBars(c, c.BarLayers).Count == 96 &&
+              vm.FemSectionProperties.Where(member => megaRoles.GetValueOrDefault(member.MemberName) == VcfMemberRole.MegaColumn)
+                  .Select(member => (member.MemberName, member.SectionName)).Order().SequenceEqual(new[] { "170", "181", "186", "187" }.Select(name => (name, (string?)mega))),
+            "the default VCF model's mega columns are 3000 × 3000 + 4 × I 700×700×70/90 S690 (650), C90/105, 96 Ø40");
+        // exported to SAP2000 / ETABS the mega column is a rectangular RC column of the same outline and concrete with modifiers that keep its stiffness
+        var exported = vm.BuildSapExportModel().FrameSections.Single(section => section.Name == mega);
+        var composite = vm.AnalyseComposite(megaSection)!;
+        var (eb, eh) = (exported.Width, exported.Depth);
+        var concrete = vm.Materials.Single(material => material.Name == "C90/105");
+        Check(exported is { Shape: FrameShape.Rectangle, Material: "C90/105", Composite: null } && Math.Abs(eb - 3) < 1e-9 && Math.Abs(eh - 3) < 1e-9 &&
+              Math.Abs(exported.Modifiers[0] * eb * eh - composite.Values.Area) < 1e-9 &&
+              Math.Abs(exported.Modifiers[5] * eb * eh * eh * eh / 12 - composite.Values.I33) < 1e-9 &&
+              Math.Abs(exported.Modifiers[4] * eh * eb * eb * eb / 12 - composite.Values.I22) < 1e-9 &&
+              Math.Abs(exported.Modifiers[7] * concrete.WeightPerVolume * eb * eh - composite.WeightPerMetre) < 1e-6 &&
+              exported.Modifiers[0] > 1 && exported.Modifiers[5] > 1,
+            "exported to SAP2000 / ETABS the mega column is a 3000 × 3000 rectangular RC column in C90/105 whose modifiers carry the composite's area, inertias and weight");
+        // the CFT chords are a defined filled tube; exported they are a steel tube whose modifiers keep the composite's stiffness and weight
+        const string cftName = "CFT_SHS[1200x2000x150_S460]_C70/85";
+        var cftSection = vm.FrameSections.Single(section => section.Name == cftName);
+        var cftExported = vm.BuildSapExportModel().FrameSections.Single(section => section.Name == cftName);
+        var cftAnalysis = vm.AnalyseComposite(cftSection)!;
+        var s460 = vm.Materials.Single(material => material.Name == "S460");
+        var tubeA = cftAnalysis.Parts.SteelArea;
+        Check(cftSection is { Shape: FrameShape.FilledTube, Material: "C70/85", SteelMaterial: "S460", Composite: { Tube: TubeShape.Rectangular, TubeDepth: 2000, TubeWidth: 1200, TubeThickness: 150 } } &&
+              vm.FemSectionProperties.Where(member => member.SectionName == cftName).Select(member => member.MemberName).Order().SequenceEqual(["BottomChord", "TopChord"]) &&
+              cftExported is { Shape: FrameShape.Box, Material: "S460", Composite: null, Depth: 2.0, Width: 1.2, FlangeThickness: 0.15, WebThickness: 0.15 } &&
+              Math.Abs(cftExported.Modifiers[0] * s460.ElasticModulus * tubeA - cftAnalysis.Ecm * cftAnalysis.Values.Area) < 1e-6 * cftAnalysis.Ecm * cftAnalysis.Values.Area &&
+              Math.Abs(cftExported.Modifiers[5] * s460.ElasticModulus * cftAnalysis.Parts.SteelI33 - cftAnalysis.Ecm * cftAnalysis.Values.I33) < 1e-6 * cftAnalysis.Ecm * cftAnalysis.Values.I33 &&
+              Math.Abs(cftExported.Modifiers[4] * s460.ElasticModulus * cftAnalysis.Parts.SteelI22 - cftAnalysis.Ecm * cftAnalysis.Values.I22) < 1e-6 * cftAnalysis.Ecm * cftAnalysis.Values.I22 &&
+              Math.Abs(cftExported.Modifiers[7] * s460.WeightPerVolume * tubeA - cftAnalysis.WeightPerMetre) < 1e-6,
+            "the default VCF model's chords are the defined concrete filled tube 2000 × 1200 × 150 S460 / C70/85; exported to SAP2000 / ETABS it is a steel tube whose modifiers carry E·A, E·I and the weight of the composite");
         // Tabs 01–03 of the default model span 3 loadings × 6 heights × 1 pretension. That is the parametric study's space;
         // Run Analysis is one run of the model itself: its own truss height, LL_ABOVE at the first value of its 5 … 10 kPa range.
         Check(vm.RunFemAnalysis.CanExecute(null) && vm.FemStatus == "OFFLINE · READY" && state.Truss.CandidateCount == 6 &&
@@ -587,11 +624,11 @@ internal static class FemModelFileChecks
         vm.EnsureSections();
         var shs = vm.FrameSections.Single(section => section.Name == "SHS_1200x1200x120_S460");
         var cfts = vm.FrameSections.Single(section => section.Name.StartsWith("CFT", StringComparison.Ordinal));
-        Check(vm.FrameSections.Count == 4 && vm.CableSections.Single().Name == "192T15.7" &&
+        Check(vm.FrameSections.Count == 5 && vm.CableSections.Single().Name == "192T15.7" &&
               shs is { Shape: FrameShape.Box, Depth: 1.2, Width: 1.2, FlangeThickness: 0.12, WebThickness: 0.12, Material: "S460" } && Math.Abs(shs.Values().Area - 0.5184) < 1e-12 &&
-              Math.Abs(shs.Values().I33 - 0.10202112) < 1e-9 && cfts.Shape == FrameShape.General && Math.Abs(cfts.Values().Area - 5.98609756097561) < 1e-9 &&
+              Math.Abs(shs.Values().I33 - 0.10202112) < 1e-9 && cfts.Shape == FrameShape.FilledTube && Math.Abs(cfts.Values().Area - 5.98609756097561) < 1e-9 &&
               vm.SectionUsage("SHS_1200x1200x120_S460") == 30,
-            "without SAP2000 the section library starts from the member properties (SHS as a 1200×1200×120 box: A 0.5184, I33 0.10202; the CFT as a general section)");
+            "without SAP2000 the section library starts from the member properties (SHS as a 1200×1200×120 box: A 0.5184, I33 0.10202; the CFT chords as a defined filled tube)");
 
         var thicker = shs with { WebThickness = 0.15 };
         vm.CommitFrameSections(vm.FrameSections.Select(section => section.Name == shs.Name ? thicker : section).ToArray(), new Dictionary<string, string>(StringComparer.Ordinal));
@@ -920,16 +957,19 @@ internal static class FemModelFileChecks
         foreach (var member in caseGeometry.Members.Where(member => byMember.ContainsKey(member.Name)))
         {
             var property = byMember[member.Name];
-            var rate = vm.Materials.Single(material => material.Name == property.MaterialName).UnitCostPerCubicMetre!.Value;
+            // a composite section (the mega columns) is costed from its concrete, steel and bars per metre
+            var perMetre = vm.FrameSections.FirstOrDefault(section => section.Name == property.SectionName) is { IsComposite: true } composite
+                ? vm.AnalyseComposite(composite)!.Cost.CostPerM!.Value
+                : (property.GrossAreaM2 > 0 ? property.GrossAreaM2 : property.AreaM2) * vm.Materials.Single(material => material.Name == property.MaterialName).UnitCostPerCubicMetre!.Value;
             var (a, b) = (caseGeometry.Points[member.Start].Position, caseGeometry.Points[member.End].Position);
-            expectedCost += (property.GrossAreaM2 > 0 ? property.GrossAreaM2 : property.AreaM2) * rate *
+            expectedCost += perMetre *
                 Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y) + (b.Z - a.Z) * (b.Z - a.Z));
         }
         Check(slsRow.CostSgd is { } slsCost && Math.Abs(slsCost - expectedCost) < 1e-6 * expectedCost && !slsRow.Status.Contains("No unit cost", StringComparison.Ordinal) &&
               rows.Single(row => row.Case == 3).CostSgd > rows.Single(row => row.Case == 1).CostSgd &&
               rows.Single(row => row.Case == 1).CostSgd == rows.Single(row => row.Case == 2).CostSgd &&
               vm.VcfOptimizationBest.Contains("cheapest passing", StringComparison.Ordinal) == (slsRow.Check == "OK"),
-            $"The run reports the total cost of the system: Σ gross area × material SGD/m³ × member length = SGD {slsRow.Cost}; " +
+            $"The run reports the total cost of the system: Σ gross area × material SGD/m³ (a composite section: its concrete, steel and bars) × member length = SGD {slsRow.Cost}; " +
             $"12 m bays cost more than 10 m (SGD {rows.Single(row => row.Case == 3).Cost} vs {rows.Single(row => row.Case == 1).Cost}); the load does not change it");
 
         // another number of bays runs on the regenerated model
@@ -1077,16 +1117,15 @@ internal static class FemModelFileChecks
         // the default model holds its composite sections as Section Designer properties only: the names give the outlines back
         var drawings = vm.SharedViewerSectionDrawings!;
         var chord = drawings["TopChord"];
-        var narrow = drawings.Values.First(drawing => drawing.Description.StartsWith("Concrete 3000 × 1500", StringComparison.Ordinal));
         var wide = drawings.Values.First(drawing => drawing.Description.StartsWith("Concrete 2500 × 3000", StringComparison.Ordinal));
-        Check(SectionOf("TopChord") == "CFT_SHS[1200x2000x150_S460]_C70/85" && chord is { Recovered: true, Composite: true, Description: "Concrete filled tube 2000 × 1200 × 150 mm" } &&
+        Check(SectionOf("TopChord") == "CFT_SHS[1200x2000x150_S460]_C70/85" && chord is { Recovered: false, Composite: true, Description: "Concrete filled tube 2000 × 1200 × 150 mm" } &&
               chord.Regions.Select(region => (region.Material, region.Shell)).SequenceEqual([(SectionMaterial.Concrete, false), (SectionMaterial.Steel, true)]) &&
               Is(Size(chord.Regions[0]), 1.7, 0.9) && Is(Size(chord.Regions[1]), 2.0, 1.2) && chord.Regions[1].Polygons.Count == 4 &&
-              SectionOf("170") == "MegaCol_1.5x3_C70/85-1" && ReferenceEquals(drawings["170"], narrow) && narrow is { Recovered: true, Composite: false } && Is(Size(narrow.Regions[0]), 3.0, 1.5) &&
+              SectionOf("170") == "3x3+4H700x90S690C90/105" && drawings["170"] is { Composite: true } &&
               wide is { Recovered: true, Composite: false } && Is(Size(wide.Regions[0]), 2.5, 3.0) &&
               SectionOf("VRM001") == "SHS_1200x1200x120_S460" && !drawings.ContainsKey("VRM001") && !drawings.ContainsKey("Cable1a-2"),
             "Section Designer sections get their real outline back from their name once it reproduces their A, I33 and I22: the chords a 2000 × 1200 × 150 tube with its " +
-            "concrete core (not the 2274 × 1450 equivalent solid), the mega columns 3000 × 1500 and 2500 × 3000 concrete, each with the depth where the inertias put it; " +
+            "concrete core (not the 2274 × 1450 equivalent solid), the mega columns 2500 × 3000 concrete (the end columns; the four inner ones are the defined 3 × 3 m mega composite section), each with the depth where the inertias put it; " +
             "a plain box (SHS 1200 × 1200 × 120) needs no drawing");
 
         var stored = vm.FrameSections.Single(section => section.Name == "CFT_SHS[1200x2000x150_S460]_C70/85");
@@ -1131,8 +1170,8 @@ internal static class FemModelFileChecks
               chordPieces[1].BackMaterial is null && chordPieces[1].Model.BackMaterial is null &&
               Alpha(chordPieces[1].BaseMaterial) == (byte)Math.Round(255 * StructureModel3D.CompositeShellOpacity) &&
               firstShell > 0 && pieces.Skip(firstShell).All(piece => piece.BackMaterial is null) &&
-              real.MemberVisuals.Count(visual => visual.Name == "170") == 1 && real.MemberVisuals.Single(visual => visual.Name == "170").BackMaterial is not null &&
-              Math.Abs(real.Bounds.Z + real.Bounds.SizeZ - 21.0) < 1e-9 && equivalent.Bounds.Z + equivalent.Bounds.SizeZ > 21.1 &&
+              real.MemberVisuals.Count(visual => visual.Name == "188") == 1 && real.MemberVisuals.Single(visual => visual.Name == "188").BackMaterial is not null &&
+              Math.Abs(real.Bounds.Z + real.Bounds.SizeZ - 21.0) < 1e-9 && equivalent.Bounds.Z + equivalent.Bounds.SizeZ >= 21.0 - 1e-9 &&
               real.FramesApproximated == 0 && equivalent.FramesApproximated > 0 && silent.Reads == 0 && warnings.Count == 0,
             "The 3D model extrudes the real sections: a CFT chord as a solid concrete core inside a see-through steel tube (front faces only, drawn after everything " +
             $"solid, opacity {StructureModel3D.CompositeShellOpacity:0.##}); the truss tops out at Z +21.0 with the 2.0 m deep tube, not +{equivalent.Bounds.Z + equivalent.Bounds.SizeZ:0.00} " +

@@ -19,39 +19,44 @@ public partial class ExportResultsWindow : Window
         InitializeComponent();
         this.viewModel = viewModel;
         ChooseFile = dialog => dialog.ShowDialog(this);
-        foreach (var name in viewModel.FemResultNames)
-        {
-            var box = new CheckBox { Content = name, Tag = name, IsChecked = name == viewModel.SelectedFemResultName, Margin = new Thickness(0, 2, 0, 2) };
-            box.Click += (_, _) => AllCases.IsChecked = CaseChoices.Children.OfType<CheckBox>().All(c => c.IsChecked == true);
-            CaseChoices.Children.Add(box);
-        }
-        AllCases.IsChecked = CaseChoices.Children.Count > 0 && CaseChoices.Children.OfType<CheckBox>().All(c => c.IsChecked == true);
-        (ResultReportOutput Output, string Name)[] outputs = [(ResultReportOutput.AxialForce, "Axial forces / cables"), (ResultReportOutput.BendingMoment, "Bending moments"), (ResultReportOutput.Shear, "Shear forces"), (ResultReportOutput.Reactions, "Support reactions"), (ResultReportOutput.Deflection, "Deflection")];
-        foreach (var (output, name) in outputs)
-        {
-            var box = new CheckBox { Content = name, Tag = output, IsChecked = true, Margin = new Thickness(0, 3, 0, 3) };
-            box.Click += (_, _) => AllOutputs.IsChecked = OutputChoices.Children.OfType<CheckBox>().All(c => c.IsChecked == true);
-            OutputChoices.Children.Add(box);
-        }
+        // No case carries a limit state, so both parts list every solved case; the names only choose the initial ticks.
+        bool Named(string name, string tag) => name.Contains(tag, StringComparison.OrdinalIgnoreCase);
+        var names = viewModel.FemResultNames;
+        bool anyUls = names.Any(n => Named(n, "ULS"));
+        Wire(SlsAllCases, SlsCaseChoices, names.Select(n => (n, (object)n, Named(n, "SLS"))), SlsAllOutputs, SlsOutputChoices, _ => true);
+        Wire(UlsAllCases, UlsCaseChoices, names.Select(n => (n, (object)n, anyUls ? Named(n, "ULS") : n == viewModel.SelectedFemResultName)), UlsAllOutputs, UlsOutputChoices,
+            output => output != ResultReportOutput.Deflection);
         Closing += (_, e) => { if (exporting) e.Cancel = true; };
     }
-    private void AllCases_Click(object sender, RoutedEventArgs e)
+    private static readonly (ResultReportOutput Output, string Name)[] Outputs = [(ResultReportOutput.AxialForce, "Axial forces / cables"), (ResultReportOutput.BendingMoment, "Bending moments"), (ResultReportOutput.Shear, "Shear forces"), (ResultReportOutput.Reactions, "Support reactions"), (ResultReportOutput.Deflection, "Deflection")];
+    private static void Wire(CheckBox allCases, Panel cases, IEnumerable<(string Name, object Tag, bool Ticked)> caseItems, CheckBox allOutputs, Panel outputs, Func<ResultReportOutput, bool> ticked)
     {
-        foreach (var box in CaseChoices.Children.OfType<CheckBox>()) box.IsChecked = AllCases.IsChecked == true;
+        Fill(allCases, cases, caseItems, new Thickness(0, 2, 0, 2));
+        Fill(allOutputs, outputs, Outputs.Select(o => (o.Name, (object)o.Output, ticked(o.Output))), new Thickness(0, 3, 0, 3));
     }
-    private void AllOutputs_Click(object sender, RoutedEventArgs e)
+    private static void Fill(CheckBox all, Panel panel, IEnumerable<(string Name, object Tag, bool Ticked)> items, Thickness margin)
     {
-        foreach (var box in OutputChoices.Children.OfType<CheckBox>()) box.IsChecked = AllOutputs.IsChecked == true;
+        void Sync() => all.IsChecked = panel.Children.Count > 0 && panel.Children.OfType<CheckBox>().All(c => c.IsChecked == true);
+        foreach (var (name, tag, ticked) in items)
+        {
+            var box = new CheckBox { Content = name, Tag = tag, IsChecked = ticked, Margin = margin };
+            box.Click += (_, _) => Sync();
+            panel.Children.Add(box);
+        }
+        all.Click += (_, _) => { foreach (var box in panel.Children.OfType<CheckBox>()) box.IsChecked = all.IsChecked == true; };
+        Sync();
     }
+    private static T[] Ticked<T>(Panel panel) => panel.Children.OfType<CheckBox>().Where(c => c.IsChecked == true).Select(c => (T)c.Tag).ToArray();
     internal ResultReport BuildReport()
     {
         if (!viewModel.IsIdle || !viewModel.HasFemResults || viewModel.SelectedFemRun is not { } run)
             throw new InvalidOperationException("Run analysis and wait for it to finish before exporting results.");
         var main = Owner as MainWindow ?? Owner?.Owner as MainWindow;
         return ResultReport.Create(viewModel.CurrentFileName, run,
-            CaseChoices.Children.OfType<CheckBox>().Where(c => c.IsChecked == true).Select(c => (string)c.Tag).ToArray(),
-            OutputChoices.Children.OfType<CheckBox>().Where(c => c.IsChecked == true).Select(c => (ResultReportOutput)c.Tag).ToArray(),
-            (result, mode) => ResultFigureCapture.Capture(viewModel, main?.SharedViewer.Canvas, result, mode));
+            [new ResultReportSelection("SLS", Ticked<string>(SlsCaseChoices), Ticked<ResultReportOutput>(SlsOutputChoices)),
+             new ResultReportSelection("ULS", Ticked<string>(UlsCaseChoices), Ticked<ResultReportOutput>(UlsOutputChoices))],
+            (result, mode) => ResultFigureCapture.Capture(viewModel, main?.SharedViewer.Canvas, result, mode),
+            ResultMemberSummary.Groups(viewModel.State.Geometry, viewModel.State.Truss, viewModel.FemSectionProperties.ToArray()));
     }
     private async void Ok_Click(object sender, RoutedEventArgs e)
     {
