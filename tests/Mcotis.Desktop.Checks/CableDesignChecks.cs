@@ -111,6 +111,9 @@ internal static class CableDesignChecks
                   TensionCableDesigner.Candidates(All, 30_000, 50)[0].CostPerMSgd * 1.09, 1e-9),
             "every rate is editable, a negative rate is refused and GST of 9 % adds 9 % to the rate");
 
+        Check(TensionCableDesigner.StayLadder.Select(item => item.Selection.TotalStrands).SequenceEqual([73, 151, 218, 302, 374, 453, 507, 604, 676, 748, 845, 906]) &&
+              TensionCableDesigner.StayLadder.Select(item => item.Selection.Assembly).Take(3).SequenceEqual(["1 × VSL SSI 2000 6-73", "1 × VSL SSI 2000 6-151", "2 × VSL SSI 2000 6-109"]),
+            "the stay ladder is the study's selection schedule of section 04: strands 73 … 906 for 10 … 120 MN");
         Optimization();
         WordExport();
     }
@@ -202,6 +205,20 @@ internal static class CableDesignChecks
         var columnReport = panel.WordReport();
         Check(columnReport.Rows.Count > 0 && columnReport.Rows.Count == columnReport.Calculations.Count && columnReport.Rows.All(row => row.Count == columnReport.Header.Count),
             $"the shared Design results panel (RC, CFT, steel encased, mega, steel, override) builds a Word report: {columnReport.Rows.Count} members, one calculation each");
+        // the VCF system starts with the study's 10 … 120 MN VSL ladder as cable sections (73T15.7 … 906T15.7), once, with the model's cable material
+        int[] strands = [73, 151, 218, 302, 374, 453, 507, 604, 676, 748, 845, 906];
+        vm.EnsureSections();
+        vm.EnsureSections();
+        var ladder = vm.CableSections.Where(section => section.Source == TensionCableDesigner.StayLadderSource).ToArray();
+        var cableMaterial = vm.FemSectionProperties.First(property => property.IsCable).MaterialName;
+        Check(vm.CanOptimizeVcf && ladder.Select(section => section.Name).SequenceEqual(strands.Select(count => $"{count}T15.7")) &&
+              ladder.All(section => Math.Abs(section.Area - int.Parse(section.Name.Split('T')[0]) * 150e-6) < 1e-12 && section.Material == cableMaterial) &&
+              vm.CableSections.GroupBy(section => section.Name).All(group => group.Count() == 1) && vm.VcfSectionNames(cable: true).Contains("906T15.7"),
+            "the VCF system's cable sections include the study's 12-step VSL schedule 73T15.7 … 906T15.7 (N × 150 mm², the model's cable material), once, offered to the optimization");
+        vm.CableSections.Remove(vm.CableSections.First(section => section.Name == "151T15.7"));
+        vm.EnsureSections();
+        Check(vm.CableSections.All(section => section.Name != "151T15.7"), "a predefined section the user deletes is not added back");
+
         var window = new Mcotis.Desktop.Presentation.TensionCableDesignWindow(vm, []);
         window.Show();
         window.UpdateLayout();

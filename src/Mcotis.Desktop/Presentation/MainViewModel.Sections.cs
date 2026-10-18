@@ -1,3 +1,4 @@
+using Mcotis.Desktop.Application.Design;
 using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Geometry;
 using System.Collections.ObjectModel;
@@ -41,6 +42,28 @@ public sealed partial class MainViewModel
                     Notes = "From the model's member properties — Get From SAP2000 for the section as defined.",
                 });
             }
+    }
+
+    /// <summary>The VCF system's predefined cable sections: the VSL SSI 2000 selection schedule for 10 … 120 MN (<see cref="TensionCableDesigner.StayLadder"/>), each as
+    /// one equivalent section of N strands of 15.7 mm in the material of the model's cables, named like the model's own (<c>906T15.7</c>). Added once, when the VCF
+    /// system is loaded (File → Load VCF…, Edit → VCF System replacing the model by the template) — never while a file is opened or saved, so a saved model is
+    /// not changed by being opened — and kept in the library, which is saved with the model.</summary>
+    internal void AddPredefinedStaySections()
+    {
+        EnsureSections();
+        if (!CanOptimizeVcf || CableSections.Any(section => section.Source == TensionCableDesigner.StayLadderSource)) return;
+        var material = FemSectionProperties.FirstOrDefault(property => property.IsCable && !string.IsNullOrWhiteSpace(property.MaterialName))?.MaterialName ?? "";
+        var strandArea = StrandBundle.StandardArea(15.7) ?? 150;
+        foreach (var (demand, selection) in TensionCableDesigner.StayLadder)
+        {
+            var name = StrandBundle.Name(selection.TotalStrands, 15.7);
+            if (CableSections.Any(section => section.Name == name)) continue;
+            CableSections.Add(new StrandSectionProperty
+            {
+                Name = name, Material = material, Area = StrandBundle.Area(selection.TotalStrands, strandArea), Source = TensionCableDesigner.StayLadderSource,
+                Notes = $"{demand} MN stay (50 m, 50 % of the breaking load): {selection.Assembly}, {selection.TotalStrands} strands of 15.7 mm — Technical Options Study, Oct 2026.",
+            });
+        }
     }
 
     private static FrameSectionProperty FromMember(FemSectionProperties member)
