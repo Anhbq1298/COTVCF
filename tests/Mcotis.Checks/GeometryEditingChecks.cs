@@ -59,7 +59,7 @@ internal static class GeometryEditingChecks
         Assert(read.ReferenceGeometry.Equals(reference) && SameContent(read, s.Document),
             "Grid systems and levels are saved and opened with the document (schema 7)");
         var file = (JsonObject)JsonNode.Parse(NativeDocumentFormat.Serialize(s.Document))!;
-        Assert((int)file["schemaVersion"]! == 7 && file["referenceGeometry"]!["gridSystems"]!.AsArray().Count == 1 &&
+        Assert((int)file["schemaVersion"]! >= 7 && file["referenceGeometry"]!["gridSystems"]!.AsArray().Count == 1 &&
                file["referenceGeometry"]!["levels"]!.AsArray().Count == 4, "The file states them under referenceGeometry");
 
         var old = (JsonObject)JsonNode.Parse(NativeDocumentFormat.Serialize(new Sample().Document))!;

@@ -1,6 +1,18 @@
 # Frame distributed loads — implementation package
 
-Status: Planned · Base: `origin/master` at `f827d1a` (2026-10-18) · Requested by Mark, 2026-10-18.
+Status: In progress · Base: `origin/master` at `f827d1a` (2026-10-18) · Requested by Mark, 2026-10-18.
+
+**State (2026-10-18, branch `feature/frame-distributed-loads`)**
+
+| Slice | State |
+| --- | --- |
+| FL-01 Core + methods | Done — `Mcotis.Core.FrameLoads`, record fields, validation, hash, file schema 8 |
+| FL-02 Analysis | Done — projected loads and distributed moments, verified against closed forms (`docs/analysis/frame-distributed-load-verification.md`); moments are therefore solved, not refused |
+| FL-03 Document owns loads | Partly — natively assigned loads survive rebuilds (`Application/NativeFrameLoads`); Replace / Delete clear the legacy mirror. Not done: faithful mapping of imported legacy directions (step 1) |
+| FL-04 Dialog | Written — menu, `AssignFrameLoadWindow`, `MainViewModel.AssignFrameDistributedLoad`. **Not compiled or run yet**: build the desktop project on Windows and run its checks |
+| FL-05 Display | Not started |
+| FL-06 Adapters | Not started — SAP2000 / ETABS export warns that natively assigned frame loads are left out |
+| FL-07 Records | Done for the slices above |
 
 Goal (user, 2026-10-18): add **Assign → Frame → Frame Load** to the main window, defining line loads on the selected
 frames **exactly as SAP2000 does** — forces or moments, global or local directions, projected or not, a 4-point

@@ -276,6 +276,12 @@ internal sealed class LoadDto
     public double? ValueEnd { get; init; }
     public double? RelativeDistance { get; init; }
     public double? Value { get; init; }
+    /// <summary>Schema 8: a distributed frame load that is a moment (absent: a force).</summary>
+    public FrameLoadType? LoadType { get; init; }
+    /// <summary>Schema 8: per unit projected length (absent: per unit frame length).</summary>
+    public bool? Projected { get; init; }
+    /// <summary>Schema 8: the distances were entered as absolute lengths (absent: relative).</summary>
+    public LoadDistanceType? EnteredAs { get; init; }
 }
 
 internal sealed class ComponentDto

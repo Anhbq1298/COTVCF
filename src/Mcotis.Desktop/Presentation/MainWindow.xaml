@@ -132,6 +132,8 @@
                ToolTip="Assign a frame section to the frames selected on the model view (select them first, as in SAP2000)"/>
      <MenuItem Header="_Local Axes…" Click="AssignFrameAxes_Click" AutomationProperties.Name="Assign Frame Local Axes"
                ToolTip="Rotate the local 2/3 axes of the selected frames and update their in-plane FEM stiffness"/>
+     <MenuItem Header="Frame _Load…" Click="AssignFrameLoad_Click" AutomationProperties.Name="Assign Frame Distributed Loads"
+               ToolTip="Distributed forces or moments on the frames selected on the model view, as SAP2000's Frame Distributed Loads: trapezoid and uniform, global, projected or local, added to, replacing or deleting that pattern's loads"/>
     </MenuItem>
     <MenuItem Header="_Cable">
      <MenuItem Header="Cable _Sections…" Tag="Cable" Click="AssignSections_Click" AutomationProperties.Name="Assign Cable Sections"

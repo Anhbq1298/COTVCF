@@ -24,6 +24,7 @@ internal static class Program
             ("Spatial linear static engineering benchmarks", full ? SpatialStaticChecks.Run : SpatialStaticChecks.RunSmoke),
             ("General static solver: split frames, cables, target forces, stages and sag", full ? GeneralStaticChecks.Run : GeneralStaticChecks.RunSmoke),
             ("Modal eigen: lumped mass, condensation, eigenpairs and participation", full ? ModalChecks.Run : ModalChecks.RunSmoke),
+            ("Frame distributed loads: SAP2000's rules, the file and closed forms", FrameLoadChecks.Run),
             ("Section stiffness the active degrees of freedom call on", SectionDemandChecks.Run),
             ("Numerical stability diagnostics: digits lost, singular and nearly singular stiffness", StabilityDiagnosticsChecks.Run),
             ("TemplateBuilding generation, loading and analysis", TemplateBuildingChecks.Run),

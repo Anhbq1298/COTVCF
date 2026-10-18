@@ -256,7 +256,7 @@ internal static class CaseStateChecks
 
         var file = (JsonObject)JsonNode.Parse(json)!;
         JsonObject Case(JsonObject root, ObjectId id) => root["loadCases"]!.AsArray().Select(node => node!.AsObject()).Single(item => (string?)item["id"] == id.ToString());
-        Assert((int)file["schemaVersion"]! == 7 && NativeDocumentFormat.CurrentSchemaVersion == 7 && file["massSources"]!.AsArray().Count == 1 &&
+        Assert((int)file["schemaVersion"]! == 8 && NativeDocumentFormat.CurrentSchemaVersion == 8 && file["massSources"]!.AsArray().Count == 1 &&
                (string?)Case(file, w.PDelta)["kind"] == "InitialPDelta" && (string?)Case(file, w.PDelta)["geometricMode"] == "PDelta" &&
                (string?)Case(file, w.PDelta)["initialState"]!["caseId"] == w.NlPret.ToString() && !Case(file, w.PDelta).ContainsKey("stiffnessSource") &&
                (string?)Case(file, w.NlPret)["initialState"]!["kind"] == "Zero" && !Case(file, w.NlPret)["initialState"]!.AsObject().ContainsKey("caseId") &&
