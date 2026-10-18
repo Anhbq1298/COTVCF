@@ -934,51 +934,83 @@ Use Selected does **not** assign the section to the structural model or rerun FE
 # Summary VCF system
 Category: Optimization
 Where: Optimization → Optimization VCF…; File → Load VCF… (the default VCF model)
-See also: Optimization VCF; VCF System; Run FEM Analysis; Column design; Compare with SAP2000; Export to SAP2000
+See also: Optimization VCF; VCF System; Run FEM Analysis; Column design; Tension cable design; Compare with SAP2000; Export to SAP2000
 
-A summary of the Vierendeel / cable frame (VCF) system as Mcotis models it: what the structure is and what each member does, how it is analysed, how the results are checked against independent solutions and SAP2000, how deflection and member design are checked, and how the parametric optimization compares variants. It is written to be exported with **Export to Word…** as a short technical report. The figures are the default VCF model (File → Load VCF…); the detailed procedures are in [[Optimization VCF]].
+A summary of the Vierendeel / cable frame (VCF) system as Mcotis models it: what the structure is and what each member does, its supports and member connections, how it is expected to behave under load, how it is analysed, how the results are checked against independent solutions and SAP2000, how deflection and member design are checked, and how the parametric optimization compares variants. It is written to be exported with **Export to Word…** as a technical report. The figures and numbers are those of the default VCF model (File → Load VCF…) as it was analysed when this article was written; the detailed procedures are in [[Optimization VCF]].
 
 ## 1 The system
-The VCF is a long-span transfer structure: a deep Vierendeel girder — three horizontal chords joined by vertical members, with no diagonals — hung from fans of pretensioned cables and carried on four mega columns. In the default model it spans **100 m** between the mega columns (10 bays of 10 m) with a 10 m back-span at each end, so the overall length is 120 m. The bottom chord is at +20 m, the middle chord at +30 m and the top chord at +40 m above the ground. The model has 41 joints, 38 frames and 16 cables and stands on four pinned supports.
+The VCF is a long-span transfer structure: a deep Vierendeel girder — three horizontal chords joined by vertical members, with no diagonals — hung from fans of pretensioned cables and carried on four mega columns. In the default model it spans **100 m** between the mega columns (10 bays of 10 m) and has a 10 m back-span at each end, so the overall length is 120 m. The bottom chord is at +20 m, the middle chord at +30 m and the top chord at +40 m above the ground, a truss depth of 20 m. The model has 41 joints, 38 frames and 16 cables.
 
-The loads are the self-weight and two pattern loads on the top chord: DEAD_ABOVE 10 kPa and LL_ABOVE 5 kPa, over a tributary width B = 12 m and 10 storeys. Each of the 11 loaded points takes Fz = −qz × tributary length × B × storeys, which totals −120,000 kN and −60,000 kN. The cable target forces are set in the Pretension pattern.
+The idea is to give a very large clear span with a slender structural depth. The girder alone would deflect too much over 100 m, so the pretensioned cables hang it from the top corners of the mega columns: the cables take a share of the vertical load and, because they are pretensioned, they lift the girder before the load is applied. The cables are tension-only, so the deflection of the system depends on how much force they keep under the service load.
 
 ![Figure 1 — The VCF system in the Edit → VCF System editor: ten bays, three chords, the fans of cables from the top corners, the supports and the loads](images/vcf-system-geometry.png)
 
 ## 2 The members and their function
-- **Top and bottom chords** — concrete filled tubes CFT_SHS[1200x2000x150_S460]_C70/85 (2000 × 1200 × 150 mm steel tube, S460, filled with C70/85). Under gravity the chords form the tension–compression couple that carries the bending of the girder; the filled tube gives a large axial and flexural stiffness for its weight.
-- **Middle chord and vertical chords** — steel box sections SHS_1200x1200x120_S460. The verticals join the chords into a Vierendeel frame: they carry the shear of the girder by frame action, which is why they take bending as well as axial force.
-- **Mega columns** — four columns 3x3+4H700x90S690C90/105: a 3000 × 3000 mm concrete section in C90/105 with four I 700×700×70/90 profiles in S690 and 96 Ø40 bars. They carry the vertical load of the girder and of the cables down to the supports.
-- **End frames** — the short frames at the ends of the girder, with the section MegaCol_2.5x3_C70/85 or the steel box, depending on the member; they tie the back-span to the mega columns.
-- **Fan cables** — tension-only strands 192T15.7 (192 strands of 15.7 mm, area 0.0288 m²) from the top corner joints to the bottom-chord joints. Their pretension lifts the girder against the gravity load, so they reduce the deflection of the bottom chord; the target forces are fitted in the Pretension case.
-- **Back-stay cables** — the same strand type from the top corners to the outer columns; they take the horizontal component of the fan and return it to the supports.
+Each member of the default model, with its section, number and the properties the analysis uses (transformed area A, in-plane inertia I33, weight per metre; all section modifiers are 1.0):
 
-Every cable is tension-only: a cable that goes slack carries nothing, and the model reports it.
+- **Top and bottom chords** (2 members) — concrete filled tubes CFT_SHS[1200x2000x150_S460]_C70/85, a 2000 × 1200 × 150 mm steel tube in S460 filled with C70/85; A = 5.986 m², I33 = 2.579 m⁴, 105.2 kN/m. Each chord is one 100 m member, connected to the verticals and to the cables at every joint on it. Together the two chords form the tension–compression couple that resists the bending of the girder; the filled tube gives a large axial and flexural stiffness for its weight.
+- **Middle chord and vertical chords** (10 and 18 members) — steel box sections SHS_1200x1200x120_S460; A = 0.518 m², I33 = 0.102 m⁴, 39.9 kN/m. The verticals join the chords into a Vierendeel frame: they carry the shear of the girder by frame action, which is why they take bending as well as axial force. The middle chord stiffens the verticals by halving their unbraced length.
+- **Mega columns** (4 members) — 3x3+4H700x90S690C90/105: a 3000 × 3000 mm concrete section in C90/105 with four I 700×700×70/90 profiles in S690 and 96 Ø40 bars; A = 11.70 m², I33 = 9.763 m⁴, 262.6 kN/m. They carry the vertical load of the girder and of the cables down to the supports, and the largest axial force of the model, 290,294 kN under ULS, is in them.
+- **End frames** (4 members) — the short members at the ends of the girder that tie the back-span to the mega columns: two with the section MegaCol_2.5x3_C70/85 (A = 8.366 m², I33 = 6.215 m⁴, 209.1 kN/m) and two steel boxes SHS_1200x1200x120_S460.
+- **Fan cables** (10 cables, 5 on each side: Cable2 to Cable6) — tension-only strands 192T15.7 (192 strands of 15.7 mm, A = 0.0288 m², E = 196.5 GPa, 2.2 kN/m) from the top corner joints to the bottom-chord joints. They hang the girder from the top corners and, through their pretension, lift it against the gravity load.
+- **Back-stay and bracing cables** (6 cables: the Cable1, Cable7 and Cable8 pairs) — the same strand type, from the top corners to the outer columns and across the base frames; they anchor the fans to the supports. Their target forces (100,000, 100,000 and 50,000 kN) are the largest of the model.
 
-## 3 Method of analysis
+The 192T15.7 section is the section the analysis uses to give the cables their stiffness and weight. The actual stay assembly — the number and type of units needed for each cable force — is sized separately by [[Tension cable design]].
+
+## 3 Boundary conditions and member connections
+**Supports.** Four joints are supported: 198 and 199 at the bases of the two mega columns and 200 and 205 at the bases of the outer columns. Each is a **pin**: the three translations are restrained and the rotations are free. The supports are data of the model (Assign → Joint → Restraints…): a joint made free stays free, and nothing is added silently ([[Joint restraints]]).
+
+**Member end releases.** The default model has **no end releases**: every frame end is continuous, so each joint transmits moment between the chord and the vertical it joins. That moment continuity is what makes the frame Vierendeel — with a pin at each end of the verticals the girder would be a mechanism. A release is set per frame end in Assign → Frame or in the frame's Object Information (Assignments tab, Moment release at End I / End J); an imported model keeps the releases of SAP2000 or ETABS. A cable is an axial member by nature and has no bending stiffness, so it needs no release.
+
+**Joints, degrees of freedom and out-of-plane behaviour.** The chords are connected to the verticals and cables at every joint that lies on them. Cable joints have only the translations the Analysis Options give them, and a cable joint left unheld across the line of a cable is reported as unstable. The model is a plane frame: its supports lie on one line, so nothing but the section properties holds it out of its plane. In Full 3D the solver holds that movement, because the loads act in the plane and do no work on it, and says so as a warning ([[Analysis options]]); the XZ plane preset analyses the frame in its plane without the warning, and the figures here use it. A real design needs the out-of-plane bracing of the whole building.
+
+**Loads.** The self-weight of every member (the weights above), and two pattern loads on the top chord, DEAD_ABOVE 10 kPa and LL_ABOVE 5 kPa over a tributary width B = 12 m and 10 storeys. Each of the 11 loaded points takes Fz = −qz × tributary length × B × storeys: −6,000 and −3,000 kN (dead and live) at an end point and −12,000 and −6,000 kN at an interior one, which totals −120,000 kN and −60,000 kN. The cable target forces are set in the Pretension pattern.
+
+![Figure 2 — Cable Force sheet: the target pretension of each cable; the "b" cables follow the "a" cables](images/vcf-system-cable-force.png)
+
+## 4 Expected behaviour
+**Load path.** The loads act on the top chord. The verticals carry them down through the Vierendeel frame to the middle and bottom chords; the fan cables pick the load up at the bottom-chord joints and carry it to the top corners of the mega columns; the mega columns carry it to the inner supports. The inner supports 198 and 199 carry the main vertical load into the ground, while the outer supports 200 and 205, where the back-stays anchor, are held down. This is the intended load path; read the actual forces on the axial force and moment diagrams.
+
+**Three stages.** The load cases continue from one another:
+1. **Pretension** — self-weight and the cable target forces. The cable fit finds the pretension to apply so that each cable carries its target force after the self-weight acts (fan cable Cable2a-2: target 5,000 kN, applied 9,569 kN, 5,011 kN in the case). The pretension lifts the bottom chord by up to **91.1 mm** while the top chord moves 9.9 mm down.
+2. **SLS 1.0DL+1.0LL** — adds the dead and live load above. The girder deflects down, the fan cables take more force (Cable2a-2: 15,253 kN), and none goes slack.
+3. **ULS 1.35DL+1.5LL** — the factored load, from which the members are designed.
+
+**What the result should look like.** The deflection is largest at mid-span and the shape is symmetric; the verticals near the mega columns carry the largest shear and Vierendeel moments; the cable forces rise towards the centre of the fan; no cable should go slack under SLS, because a slack cable is no longer part of the system; the sum of the vertical reactions must equal the applied load. Section 6 gives these checks for the default model.
+
+## 5 Method of analysis
 Every analysis in Mcotis runs the one general static solver ([[Run FEM Analysis]]); SAP2000 is not used for the analysis.
 
 - **Frames** are Euler–Bernoulli elements connected at every joint and at every point that lies on them, with end releases, section modifiers and the properties of the section (area, inertias, torsion constant).
 - **Cables** are tension-only elements with a pretension. A cable carries T = max(0, T0 + k·e), with k = EA/L, and the sag of its own weight is included by the shallow-parabola equation with Ernst's equivalent stiffness.
 - **Equilibrium** is the minimum of the potential energy, found by Newton's method with a line search. The solution is rejected, with the reason, if the residual, the stability or the balance of the internal forces fails the run's gates.
-- **Cable target forces** are fitted in the Pretension case: the solver adjusts the pretension of every targeted cable until its tension meets the target within the fitting tolerance.
-- **Staged load cases.** The default setup is Pretension (cable fit, with self-weight), then SLS = 1.0 DL + 1.0 LL and ULS = 1.35 DL + 1.5 LL, each continuing from the pretensioned state. Small displacements are assumed; P-Delta cases are not analysed.
-- **Degrees of freedom.** A model starts in Full 3D. The figures here use the XZ plane preset, which analyses the frame in its plane; a degree of freedom nothing holds is reported as an unstable model and is never held silently ([[Analysis options]]).
+- **Cable target forces** are fitted in the Pretension case: the solver adjusts the pretension of every targeted cable until its tension meets the target within the fitting tolerance (two fitting iterations in the default model).
+- **Staged load cases.** Pretension (cable fit, with self-weight), then SLS and ULS, each continuing from the pretensioned state. Small displacements are assumed; P-Delta cases are not analysed.
+- **Result recovery.** Joint displacements and reactions, axial force, shear and moment at stations along every frame, and the force in every cable.
 
 The run monitor lists each solve with its convergence and numerical stability; in the default model all four solves (the cable fit, Pretension, SLS and ULS) converge with no instability, with 123 degrees of freedom, of which 8 are restrained.
 
-## 4 Results of the default model
-The largest downward joint deflection is **9.9 mm** after Pretension, **207.3 mm** under SLS and **345.8 mm** under ULS. The largest axial force is 246,636 kN under SLS and 290,294 kN under ULS, the largest support reaction is 180,830 kN and 222,969 kN, and the largest bending moment is 224,469 kNm and 280,344 kNm. Each case converged in three iterations.
+## 6 Results of the default model
+Displacements are downward when negative; the figures below give the downward values.
+- **Deflection** — bottom chord: 204.1 mm at mid-span (joint BTrPt006) under SLS and 341.6 mm under ULS; top chord: 207.3 mm and 345.8 mm. The largest horizontal movement is 23.7 mm under SLS.
+- **Cable forces** — all 16 cables stay in tension in every case. Under SLS the fan cables carry 15,253 to 26,210 kN and the back-stays 46,877 to 102,537 kN; under ULS the cables carry 20,024 to 103,715 kN.
+- **Reactions (SLS)** — each inner support (198, 199): 174,147 kN upward and 48,706 kN horizontal; each outer support (200, 205): 54,501 kN downward and 34,142 kN horizontal. The vertical reactions add up to 239,292 kN, the self-weight 59,292 kN plus 120,000 kN and 60,000 kN of pattern load, as they must. Under ULS the inner supports carry 216,978 kN upward and the outer ones 50,956 kN downward, in total 332,044 kN, equal to 1.35 × (59,292 + 120,000) + 1.5 × 60,000.
+- **Internal forces** — the largest axial force is 246,636 kN under SLS and 290,294 kN under ULS, and the largest bending moment is 224,469 kNm and 280,344 kNm.
 
-![Figure 2 — Deflected shape under SLS 1.0DL+1.0LL, coloured by |U| (maximum 207.3 mm); the span is 100 m](images/vcf-summary-deflection-sls.png)
+![Figure 3 — Deflected shape under SLS 1.0DL+1.0LL, coloured by |U| (maximum 207.3 mm); the span is 100 m](images/vcf-summary-deflection-sls.png)
 
-![Figure 3 — Bending moment under ULS 1.35DL+1.5LL: the chords bend between the verticals, the verticals take the Vierendeel moments, and the columns carry the largest end moments](images/vcf-summary-moment-uls.png)
+![Figure 4 — Bending moment under ULS 1.35DL+1.5LL: the chords bend between the verticals, the verticals take the Vierendeel moments, and the columns carry the largest end moments](images/vcf-summary-moment-uls.png)
 
-![Figure 4 — Axial force under ULS 1.35DL+1.5LL: the chords carry the couple, the fan cables the hanger forces, the mega columns the compression](images/vcf-summary-axial-uls.png)
+![Figure 5 — Axial force under ULS 1.35DL+1.5LL: the chords carry the couple, the fan cables the hanger forces, the mega columns the compression](images/vcf-summary-axial-uls.png)
 
 Results are shown on the model (Result menu, F5–F7), in the Results Table and in the Word / PDF report of Show Results → Export Result… ([[Showing results]]).
 
-## 5 Verification and comparison with SAP2000
+## 7 Deflection check
+The serviceability check is made on the **bottom chord**: the largest downward deflection under the chosen SLS result must not exceed the span divided by a ratio — 100 m / 250 = **400 mm** in the default setup — and the upward movement (uplift) must stay within its allowance, 0 mm in the example. Uplift is checked because a strong fan can lift the middle of the chord while the downward deflection is small, as the Pretension stage does here (91.1 mm). The check reports δ / limit and OK or NG; both limits must pass.
+
+In the default model the bottom chord deflects **204.1 mm** under SLS, δ / limit = 0.51, or span / 490, and no bottom-chord point rises above its undeformed position (the least downward movement is 8.9 mm), so both limits pass. The ULS deflection, 341.6 mm, is for information; the limit applies to the SLS case. The limit is a serviceability choice of the project (span / 250 here), not a code value, and can be changed in the optimization form.
+
+## 8 Verification and comparison with SAP2000
 Nothing the solver computes is shown as a result before it is checked. The records are in docs/analysis:
 
 - **Closed forms and independent solutions** — 1,273 checks of the general solver against hand-worked values (beam deflections, cable sag, target-force fitting, staged cases).
@@ -990,33 +1022,31 @@ The remaining difference is what SAP2000 analyses and Mcotis does not: large dis
 
 **Export to SAP2000** writes the Mcotis model into SAP2000 so that it can be analysed there ([[Export to SAP2000]]), and **Optimization → Compare with SAP2000…** puts the member forces of the Mcotis run beside those of the analysed SAP2000 model ([[Compare with SAP2000]]). These two commands are checked against SAP2000 27's API but have not yet been run against a live SAP2000 model, so the comparison above is that of the stored study.
 
-## 6 Deflection check
-The serviceability check is made on the **bottom chord**: the largest downward deflection under the chosen SLS result must not exceed the span divided by a ratio — 100 m / 250 = **400 mm** in the default setup — and the upward movement (uplift) must stay within its allowance, 0 mm in the example, because a strong fan can lift the middle of the chord while the downward deflection is small. The check reports δ / limit and OK or NG; both limits must pass. In the default model the largest downward joint deflection under SLS is 207.3 mm, 52 % of the 400 mm limit.
-
-## 7 Member design
+## 9 Member design
 With the forces of the analysed model, the Design menu checks the members to the Eurocodes with the Singapore National Annexes and BCA BC4:2025 ([[Column design]]):
 
 - **CFT chords** — SS EN 1994-1-1 6.7.3: plastic N–M interaction, second order with imperfection, biaxial bending, shear of the tube, local buckling.
 - **Mega columns** — the CTBUH / ArcelorMittal (2016) simplified method with a fibre cross-check.
 - **Steel members** — SS EN 1993-1-1: classification, cross-section resistance, flexural and lateral-torsional buckling, Annex B interaction.
+- **Cables** — [[Tension cable design]] chooses the number and type of stay units for each cable from its largest tension, with a first-pass screen at 50 % or 60 % of the breaking load; it is a preliminary option study, not an EN 1993-1-11 resistance.
 
 Each member gets its governing case, the design forces, the utilisations (axial, bending, biaxial, shear) and a status: OK, CHECK (utilisations pass, a detailing rule does not), FAIL or ERROR. With the default basis (effective lengths 10 m) and the ULS case, the top chord reads OK at 0.58 and the bottom chord FAIL at 1.26; the six mega-column and end-frame members read CHECK with utilisations up to 0.91; of the 30 steel box members 24 read CHECK and 6 FAIL. These are the statuses of the default model, not a recommended design: the effective lengths and cases are the engineer's to set, and the reports give the step-by-step calculation with clause references.
 
-![Figure 5 — CFT design of the two chords: the summary with utilisations and status, and the calculation of the bottom chord](images/vcf-design-cft-results.png)
+![Figure 6 — CFT design of the two chords: the summary with utilisations and status, and the calculation of the bottom chord](images/vcf-design-cft-results.png)
 
-## 8 Optimization
+## 10 Optimization
 **Optimization → Optimization VCF…** builds every combination of geometry (bays, bay width, truss depth, heights), cable force, storey force and candidate sections, analyses each with the same solver, checks the bottom-chord deflection and uplift, and prices the members (cost = member length × cost per metre from the material unit costs). It does not change the working model; one run takes up to 10,000 cases.
 
 In the illustrated study the truss depth takes 18, 20 and 22 m and LL_ABOVE 5, 7.5 and 10 kPa, a total of nine cases. All nine pass both displacement checks, and the cheapest is case 1 (depth 18 m, LL 5 kPa) at SGD 7,248,380 with the model and rates when captured. The chart shows that deflection increases with the live load and decreases with the truss depth.
 
-![Figure 6 — Run results of the nine-case study: the deflection, the check and the cost of every case](images/optimization-vcf-results-run.png)
+![Figure 7 — Run results of the nine-case study: the deflection, the check and the cost of every case](images/optimization-vcf-results-run.png)
 
-![Figure 7 — Chart results: the effect of live load and truss depth on the deflection, with the spread over the other inputs](images/optimization-vcf-results-chart.png)
+![Figure 8 — Chart results: the effect of live load and truss depth on the deflection, with the spread over the other inputs](images/optimization-vcf-results-chart.png)
 
 A selected variant is entered through Edit → VCF System, analysed as the working model and designed under the Design menu; the optimization table is a comparison and applies nothing by itself.
 
-## 9 Limits
-Small displacements and no P-Delta; tension-only cables with a parabolic sag; no shells or slabs; about 1,000 joints ([[Limitations and known issues]]). The SAP2000 comparison is of a stored study, not a live model. The optimization is a search of the ranges and rates you enter, not of every possible system.
+## 11 Limits
+Small displacements and no P-Delta; tension-only cables with a parabolic sag; no shells or slabs; about 1,000 joints ([[Limitations and known issues]]). The default model is a plane frame with no out-of-plane bracing, no connection design and no fatigue or construction-stage analysis. The SAP2000 comparison is of a stored study, not a live model. The optimization is a search of the ranges and rates you enter, not of every possible system.
 
 # Optimization VCF
 Category: Optimization
@@ -1508,6 +1538,9 @@ The **Iterate** tab finds how many Ø15.7 mm strands each cable of the model nee
 - A bigger cable is stiffer and attracts more force, so each pass analyses a copy of the model with the trial sections — all its load cases and combinations — and sizes the groups again — the target pretensions are kept and fitted again on every pass — until the strand counts stop changing and the cable forces and pretension-stage deflections change by less than the **convergence tolerance**, or the **maximum iterations** is reached. The model is not changed while it iterates; **Stop** ends it early.
 - The table gives, per cable, the current strands, force and UR, the suggested strands and VSL stay, the governing case, its force and UR, and the cost; the history lists each pass.
 - **Apply & Re-analyse** assigns each group a section of its own count (named *nT15.7*, n × 150 mm²; groups of the same count share it; the previous sections stay in the library) and runs FEM Analysis again, so the forces, the Results Table and every UR are those of the new sections. **Force after** and **UR after** show each cable's new force and UR; when one is above the maximum use, iterate again. An iteration that did not converge asks before it is applied. To go back, unlock the model and use **Edit → Undo**.
+
+## Predefined cable sections of the VCF system
+A VCF system starts with the study's selection schedule (10 to 120 MN, a 50 m stay, VSL SSI 2000 at 50 % of the breaking load) as twelve cable sections in **Define → Section Properties → Cable Sections**, named like the model's own (strands, T, 15.7 mm): **73T15.7** (1 × 6-73, 10 MN), **151T15.7** (1 × 6-151, 20 MN), **218T15.7** (2 × 6-109, 30 MN), **302T15.7** (2 × 6-151, 40 MN), **374T15.7** (2 × 6-187, 50 MN), **453T15.7** (3 × 6-151, 60 MN), **507T15.7** (3 × 6-169, 70 MN), **604T15.7** (4 × 6-151, 80 MN), **676T15.7** (4 × 6-169, 90 MN), **748T15.7** (4 × 6-187, 100 MN), **845T15.7** (5 × 6-169, 110 MN) and **906T15.7** (6 × 6-151, 120 MN). Each is one equivalent section of that many 15.7 mm strands (N × 150 mm²) in the material of the model's cables. They are added once, saved with the model and offered in **Assign → Cable Sections** and in the cable pickers of [[Optimization VCF]]; a section you delete is not added back. Tick the ones to try per cable — they are not ticked for you, since every ticked section multiplies the number of cases.
 
 ## In Optimization VCF and TAS
 The Member Utilization sheet of the optimization results has a **Suggested cable** column: for every cable of a case, the assembly this design chooses for the largest tension of the case's solved results at the cable's length, with the basis last confirmed in this window (VSL and FATZER at 50 % until you change it). The row's utilization, check and note are the cable's own, unchanged; the summary line adds the number of cables and their indicative cost. Use it to see how many strands or ropes each cable needs as the geometry, loading and pretension of a case change. The cost of a case is still the cost of the sections of the model; the suggestion does not change the study.

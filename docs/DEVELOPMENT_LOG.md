@@ -22,8 +22,8 @@ continues on the next lines, indented by two spaces):
 - Status: Done
 - Who: aBui (with Claude Code)
 - Where: Result → Show Quantities → Design Utilization; Result → Export…
-- What: A member's (frame) UR is read from ULS cases only and a cable's from SLS cases only — in Design Utilization and in every UR column of the report, which reads — in the other cases. The export dialog defaults to SLS deflection, ULS forces and reactions, and every table and model view ticked. The XZ model view shows the applied loads as red arrows with their values.
-- Checks: `--result-export`
+- What: A member's (frame) UR is read from ULS cases only and a cable's from SLS cases only — in Design Utilization and in every UR column of the report, which reads — in the other cases. The export dialog defaults to SLS deflection, ULS forces and reactions, and every table and model view ticked. The XZ model view shows the applied loads as red arrows with their values. Iterate's Apply checks the model against the document configuration Iterate read, so a library edit not yet saved to the document no longer blocks it.
+- Checks: `--result-export`, `--cable-design-ui`
 
 ## 2026-10-18 · External cables by position
 - Status: Done
@@ -151,6 +151,13 @@ continues on the next lines, indented by two spaces):
 - What: Composite steel mass now uses the stored structural steel area and material density independently of reinforcement mass availability. Shows the longitudinal reinforcement ratio As/Ac and notes when bar mass is excluded. Cable rows draw the stored strand bundle layout when the section name supplies strand count and diameter, or an equivalent round section from its stored area otherwise.
 - Checks: solution build
 
+## 2026-10-18 · VCF system: predefined VSL cable sections (10–120 MN)
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Define → Section Properties → Cable Sections (VCF system); Assign → Cable Sections; Optimization VCF → Sections → cable pickers
+- What: A VCF system now starts with the Technical Options Study's selection schedule as twelve predefined cable sections, 73T15.7 … 906T15.7 (1 × 6-73 for 10 MN up to 6 × 6-151 for 120 MN, each one equivalent section of N strands × 150 mm² in the model's cable material). Added once to the library (saved with the model), not added back once deleted, and offered as candidates — not ticked, because each ticked section multiplies the cases.
+- Checks: `--cable-design` (the schedule's strand counts, the sections' area and material, once, offered to the optimization, a deleted one stays deleted).
+
 ## 2026-10-18 · Clear User Guide title helper warning
 - Status: Done
 - Who: Codex
@@ -183,7 +190,7 @@ continues on the next lines, indented by two spaces):
 - Status: Done
 - Who: Philip Pham (with Claude Code)
 - Where: Help → User Guide → Optimization → Summary VCF system → Export to Word…
-- What: A 9-section summary of the VCF system written to export as a technical report of about 6 pages (A4, Arial 11, 7 figures): the system and the function of each member, the method of analysis, the results of the default model (deflection, axial force and bending moment figures), verification and the comparison with SAP2000 (the stored 135-candidate study, 4,995 values; Export to SAP2000 and Compare with SAP2000 are not yet run against a live SAP2000), the bottom-chord deflection check, member design (CFT, mega, steel), and the optimization. Its numbers are the default VCF model's as captured, not a recommended design.
+- What: An 11-section summary of the VCF system written to export as a technical report of about 9 pages (A4, Arial 11, 8 figures): the system, the function and properties of each member, the boundary conditions (pin supports, no frame end releases, cable joints, out-of-plane behaviour), the expected behaviour (load path, the three stages), the method of analysis, the results of the default model (deflections, cable forces, reactions with the equilibrium check, deflection, axial force and bending moment figures), verification and the comparison with SAP2000 (the stored 135-candidate study, 4,995 values; Export to SAP2000 and Compare with SAP2000 are not yet run against a live SAP2000), the bottom-chord deflection check, member design (CFT, mega, steel), and the optimization. Its numbers are the default VCF model's as captured, not a recommended design.
 - Checks: `--user-guide`; the figures are regenerated with `--vcf-summary-capture`, and `--guide-export "Summary VCF system" file.docx` writes the article as Export to Word… does.
 
 ## 2026-10-18 · User Guide: Optimization VCF is the complete VCF report

@@ -91,6 +91,30 @@ internal static class VcfGuideCapture
     }
 
 
+
+    /// <summary>--vcf-facts: prints the facts of the default VCF model the summary article quotes (releases, supports, deflections, cable forces).</summary>
+    internal static void Facts()
+    {
+        var (vm, _, _, _) = FemModelFileChecks.DefaultModelApp();
+        var run = FemModelFileChecks.Analyze(vm)[0];
+        foreach (var g in vm.FemSectionProperties.GroupBy(p => p.SectionName ?? "?"))
+        {
+            var f = g.First();
+            Console.WriteLine($"SECTION {g.Key}: {g.Count()} members; A={f.AreaM2:F4} I={f.InPlaneInertiaM4:F4} E={f.ElasticModulusKNPerM2:E3} w={f.WeightPerLengthKNPerM:F1} kN/m; releaseI={g.Count(p => p.ReleaseStartRotation)} releaseJ={g.Count(p => p.ReleaseEndRotation)}; mods={(f.Modifiers is null ? "none" : string.Join(",", f.Modifiers))}; e.g. {string.Join(" ", g.Take(6).Select(p => p.MemberName))}");
+        }
+        foreach (var p in vm.FemSectionProperties.Where(p => p.ReleaseStartRotation || p.ReleaseEndRotation))
+            Console.WriteLine($"RELEASE {p.MemberName} I={p.ReleaseStartRotation} J={p.ReleaseEndRotation}");
+        foreach (var (name, r) in run.Results!)
+        {
+            var bottom = r.Joints.Where(j => j.PointName.StartsWith("BTrPt")).ToArray();
+            var top = r.Joints.Where(j => j.PointName.StartsWith("TTrPt")).ToArray();
+            Console.WriteLine($"CASE {name}: bottom chord max down {bottom.Max(j => -j.UZM * 1000):F1} mm at {bottom.OrderBy(j => j.UZM).First().PointName}; max up {bottom.Max(j => j.UZM * 1000):F1} mm; top chord max down {top.Max(j => -j.UZM * 1000):F1} mm; max |UX| {r.Joints.Max(j => Math.Abs(j.UXM) * 1000):F1} mm; slack cables {r.Cables.Count(c => !c.Active)} of {r.Cables.Count}; cable T min {r.Cables.Min(c => c.AxialForceKN):F0} max {r.Cables.Max(c => c.AxialForceKN):F0} kN; fit iterations {r.TargetFitIterations}");
+            Console.WriteLine("  reactions: " + string.Join("; ", r.SupportReactions.Select(s => $"{s.PointName} Rx={s.ReactionXKN:F0} Rz={s.ReactionZKN:F0}")));
+        }
+        var rr = run.ResultFor(run.Results.Keys.First(k => k.StartsWith("SLS")));
+        foreach (var c in rr.Cables) Console.WriteLine($"CABLE {c.MemberName}: target {c.TargetForceKN:F0} applied {c.AppliedPretensionKN:F0} stage {c.PretensionStageForceKN:F0} SLS {c.AxialForceKN:F0} active {c.Active}");
+    }
+
     /// <summary>--guide-export "Title" file.docx: the article as Export to Word… writes it (to see the report without the window).</summary>
     internal static void ExportArticle(string title, string path) =>
         UserGuideWord.Export(UserGuide.Parse(UserGuide.Embedded()).Find(title) ?? throw new InvalidOperationException("No article " + title), path);

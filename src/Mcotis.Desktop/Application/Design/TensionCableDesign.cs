@@ -350,6 +350,15 @@ public static class TensionCableDesigner
         return text.ToString();
     }
 
+    /// <summary>Source mark of the cable sections the VCF system starts with (<see cref="StayLadder"/>).</summary>
+    public const string StayLadderSource = "VSL SSI 2000 schedule";
+
+    /// <summary>The selection schedule of the Technical Options Study (its section 04): for each demand of 10, 20 … 120 MN on a 50 m stay, the VSL SSI 2000
+    /// assembly the design picks at the lowest cost (50 % of the breaking load). Their total strand counts — 73, 151, 218, 302, 374, 453, 507, 604, 676, 748,
+    /// 845, 906 — are the cable sections the VCF system is offered, each one equivalent section of that many 15.7 mm strands.</summary>
+    public static IReadOnlyList<(int DemandMN, TensionCableSelection Selection)> StayLadder { get; } = Enumerable.Range(1, 12).Select(step => step * 10)
+        .Select(demand => (demand, Candidates(new TensionCableBasis { Systems = [CableSystem.VslSsi2000] }, demand * 1000.0, 50)[0])).ToArray();
+
     /// <summary>The designs as the Word report of Design → Tension Cable Design → Export to Word…: the basis, one table row per cable, each calculation.</summary>
     public static DesignReport WordReport(TensionCableBasis basis, IReadOnlyList<TensionCableMemberDesign> designs)
     {

@@ -628,7 +628,7 @@ internal static class FemModelFileChecks
         vm.EnsureSections();
         var shs = vm.FrameSections.Single(section => section.Name == "SHS_1200x1200x120_S460");
         var cfts = vm.FrameSections.Single(section => section.Name.StartsWith("CFT", StringComparison.Ordinal));
-        Check(vm.FrameSections.Count == 5 && vm.CableSections.Single().Name == "192T15.7" &&
+        Check(vm.FrameSections.Count == 5 && vm.CableSections.Count == 13 && vm.CableSections.Count(section => section.Source == "Model") == 1 && vm.CableSections.Single(section => section.Source == "Model").Name == "192T15.7" &&
               shs is { Shape: FrameShape.Box, Depth: 1.2, Width: 1.2, FlangeThickness: 0.12, WebThickness: 0.12, Material: "S460" } && Math.Abs(shs.Values().Area - 0.5184) < 1e-12 &&
               Math.Abs(shs.Values().I33 - 0.10202112) < 1e-9 && cfts.Shape == FrameShape.FilledTube && Math.Abs(cfts.Values().Area - 5.98609756097561) < 1e-9 &&
               vm.SectionUsage("SHS_1200x1200x120_S460") == 30,
@@ -650,7 +650,7 @@ internal static class FemModelFileChecks
         Check(warnings.Count == 0 && vrm2.SectionName == "SHS_1000x1000x100" && Math.Abs(vrm2.AreaM2 - 0.36) < 1e-12 && vrm2.ElasticModulusKNPerM2 > 2e8,
             "VCF Geometry can assign a library section no member had yet (A 0.36 m², S460 from the materials)" + (warnings.Count > 0 ? " — " + string.Join(" | ", warnings) : ""));
 
-        var strand = vm.CableSections.Single() with { Area = 0.03 };
+        var strand = vm.CableSections.Single(section => section.Source == "Model") with { Area = 0.03 };
         vm.CommitStrandSections([strand], new Dictionary<string, string>(StringComparer.Ordinal), tendons: false);
         Check(vm.FemSectionProperties.Where(property => property.IsCable).All(property => Math.Abs(property.AreaM2 - 0.03) < 1e-12) &&
               state.Cables.All(cable => cable.SectionAreaM2 == 0.03),

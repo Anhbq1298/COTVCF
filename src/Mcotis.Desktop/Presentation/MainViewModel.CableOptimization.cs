@@ -111,7 +111,9 @@ public sealed partial class MainViewModel
         var document = NativeDocumentSession.Document;
         if (document.DocumentId.Value != run.DocumentId || document.AnalysisInputHash != run.AnalysisInputHash || femInputSnapshot is null)
             return false;
-        return FemInputDatabase.RevisionHash(CaptureFemInputSnapshot(advanceRevision: false)) == run.RevisionHash;
+        // the same configuration the run was computed from: the model document's, as Iterate read it
+        var snapshot = NativeToLegacyProjection.Read(document) ?? femInputSnapshot;
+        return FemInputDatabase.RevisionHash(snapshot) == run.RevisionHash;
     }
 
     /// <summary>Apply a reviewed result as one native document history step. A locked FEM model is unlocked first so its

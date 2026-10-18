@@ -397,6 +397,7 @@ public sealed partial class MainViewModel
             return;
         }
         ApplyFemModel(snapshot.ToLegacy(), FemInputDatabase.DefaultModelName, isDefault: true, databaseSnapshot: snapshot);
+        AddPredefinedStaySections();   // the VCF system starts with the VSL schedule of the Technical Options Study as cable sections
     }
 
     /// <summary>Restores a saved FEM model as an offline model — what Load Model does once the file is chosen.</summary>

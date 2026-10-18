@@ -37,6 +37,11 @@ internal static class Program
                 ColumnGuideCapture.Run();
                 return 0;
             }
+            if (args.Contains("--vcf-facts"))
+            {
+                VcfGuideCapture.Facts();
+                return 0;
+            }
             if (args.Contains("--guide-export"))
             {
                 var at = Array.IndexOf(args, "--guide-export");
