@@ -88,6 +88,14 @@ continues on the next lines, indented by two spaces):
 - What: Each frame role (top chord, middle chord, bottom chord, vertical chord, mega column, end frames) has an effective length l0 [m], 10 m by default and editable. The column check of the results window's Member Utilization tab uses it, for both axes, in place of the Design window's effective length. A length that is not a positive number is refused when the study is confirmed. Optimization TAS has no such input yet and uses 10 m.
 - Checks: solution builds; none yet for the l0 flow (the Design engine on a real column case is not covered by --optimization-study).
 
+## 2026-10-18 · Steel column (beam-column) design to EN 1993-1-1 — plan
+- Status: Planned
+- Who: Unassigned (plan by Claude, for Mark's review)
+- Where: Design → Steel Column Design (EN 1993-1-1)… (planned); plan in docs/design/STEEL_COLUMN_DESIGN_PLAN.md
+- What: Adds a fifth design type for doubly symmetric I/H steel members under axial force and biaxial bending, on the same flow as the other column designs: classification (5.5), cross-section checks per station (6.2), flexural, torsional and lateral-torsional buckling (6.3.1–6.3.2) and Annex B interaction (6.3.3). Class 4, monosymmetric sections and shear buckling are refused with the reason. Decisions D1–D8 are open.
+- Checks: none yet (planned --steel-design)
+
+
 ## 2026-10-18 · Publish consolidated master and synchronize the working copy
 - Status: Done
 - Who: Codex
