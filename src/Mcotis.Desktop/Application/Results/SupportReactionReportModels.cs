@@ -68,5 +68,6 @@ public sealed record SupportReactionPairDto(double Inner, double Outer, double N
 public sealed record SupportReactionReportDto(
     SupportReactionStudyDto Study,
     IReadOnlyList<SupportReactionGroupReportDto> Groups,
+    ReportCandidateDefinitionsDto CandidateDefinitions,
     IReadOnlyList<ResultReportWarningDto> Warnings,
     IReadOnlyList<string> SiblingReports);

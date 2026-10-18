@@ -139,7 +139,8 @@ public sealed class CableForceReportGenerator
                 sources[cable] = source == CableCapacityResolver.Invalid ? CableCapacityResolver.Invalid : CableCapacityResolver.None;
         }
 
-        return new CableForceReportDto(study, cables, loads, heights, pretensions, rows, warnings,
+        return new CableForceReportDto(study, cables, loads, heights, pretensions, rows,
+            ReportCandidateDefinitions.Build(results), warnings,
             caps, sources, CableGroupDetector.Suggest(cables),
             BuildOverview(rows, cables, loads, heights, pretensions, scope),
             BuildGoverning(rows, cables, loads, caps),
@@ -293,7 +294,7 @@ public sealed class CableForceReportGenerator
         var library = ReportNav.Library("cable", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Cable Forces — {{Esc(s.BaselineModelName)}}</title>
-<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head>
+<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportCandidateDefinitions.Style}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <pattern id="cf-loss" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="#2A78D6"/></pattern>
@@ -348,6 +349,7 @@ public sealed class CableForceReportGenerator
   <span class="small">Every bar starts at 0 · H = truss height [m] · n/a = result unavailable{{(s.Scope is null ? "" : " · " + ReportScope.MarkerMeaning)}}</span>
 </div>
 <div id="warns" data-pr="note"></div>
+{{ReportCandidateDefinitions.Markup}}
 
 <section class="blk">
   <h2 data-pr="chart" data-pr-keep>01 · Cable Force Overview</h2>
@@ -381,6 +383,7 @@ public sealed class CableForceReportGenerator
 
 <script id="report-data" type="application/json">{{json}}</script>
 {{ReportPrintEngine.Scripts(print)}}
+<script>{{ReportCandidateDefinitions.Script}}</script>
 <script>{{Script}}</script>
 </body></html>
 """;

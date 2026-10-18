@@ -1,6 +1,7 @@
 using System.Windows;
 using Mcotis.Desktop.Application;
 using Mcotis.Desktop.Application.Quantities;
+using Mcotis.Desktop.Application.Results;
 using Mcotis.Desktop.Application.Workers;
 using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Infrastructure;
@@ -35,7 +36,8 @@ public partial class App : System.Windows.Application
         var workflow = new WorkflowService(gateway, state);
         var config = new Configuration.ConfigService(gateway, state, workflow);
         var studyExecution = new StudyExecutionCoordinator(
-            new ConnectedSapInstanceHostFactory(gateway, new SapInstanceHostFactory()));
+            new ConnectedSapInstanceHostFactory(gateway, new SapInstanceHostFactory()),
+            new StudyArtifactPublisher(() => state.OutputSettings.DeflectionLimitBand));
         // Tab 08 reads a candidate's own text export; where that cannot be used, a private copy of the model in a
         // SAP2000 instance of its own — never the connected one.
         var quantityTakeoff = new QuantityTakeoffService(

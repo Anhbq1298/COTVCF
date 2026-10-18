@@ -47,32 +47,49 @@ public sealed class QuantityCandidateCatalog
 
     public IReadOnlyList<QuantityCandidate> Discover(string? baselineModelPath)
     {
-        string root, baseline;
+        string primaryRoot, baseline;
         try
         {
             baseline = Path.GetFullPath(baselineModelPath ?? "");
-            root = Path.GetFullPath(paths.GetStudyRoot(baseline));
+            primaryRoot = Path.GetFullPath(paths.GetStudyRoot(baseline));
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or NotSupportedException or PathTooLongException) { return []; }
         try
         {
-            if (!Directory.Exists(root)) return [];
-            var records = StudyRunJournal.ReadAll(root)
-                .SelectMany(manifest => manifest.Candidates.Select(candidate => (Manifest: manifest, Candidate: candidate)))
-                .Where(record => StudyPathService.IsIterationId(record.Candidate.IterationId))
-                .ToLookup(record => record.Candidate.IterationId, StringComparer.Ordinal);
-            var folders = Directory.EnumerateDirectories(root).Select(Path.GetFileName).OfType<string>().Where(StudyPathService.IsIterationId);
-            return records.Select(group => group.Key).Concat(folders).Distinct(StringComparer.Ordinal)
-                .OrderBy(id => id, NaturalNameComparer.Instance)
-                .Select(id => Resolve(baseline, root, id, records[id].ToArray())).OfType<QuantityCandidate>().ToArray();
+            // Current studies are isolated under Study/<baseline stem>. Older studies used Study directly;
+            // keep that layout readable so quantity take-off still works after upgrading or renaming a baseline.
+            var parent = Path.GetDirectoryName(baseline)!;
+            var legacyRoot = Path.Combine(parent, "Study");
+            return new[] { primaryRoot, Path.GetFullPath(legacyRoot) }
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(Directory.Exists)
+                .SelectMany(root => DiscoverRoot(baseline, primaryRoot, root))
+                .GroupBy(candidate => candidate.Id, StringComparer.Ordinal)
+                .Select(group => group.First())
+                .OrderBy(candidate => candidate.Id, NaturalNameComparer.Instance)
+                .ToArray();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return []; }
     }
 
-    private QuantityCandidate? Resolve(string baseline, string root, string id, (StudyRunManifest Manifest, StudyRunCandidateManifest Candidate)[] records)
+    private IReadOnlyList<QuantityCandidate> DiscoverRoot(string baseline, string primaryRoot, string root)
     {
-        var folder = paths.GetIterationDirectory(baseline, id);
-        var model = paths.GetIterationModelPath(baseline, id);
+        var records = StudyRunJournal.ReadAll(root)
+                .SelectMany(manifest => manifest.Candidates.Select(candidate => (Manifest: manifest, Candidate: candidate)))
+                .Where(record => StudyPathService.IsIterationId(record.Candidate.IterationId))
+                .ToLookup(record => record.Candidate.IterationId, StringComparer.Ordinal);
+        var folders = Directory.EnumerateDirectories(root).Select(Path.GetFileName).OfType<string>().Where(StudyPathService.IsIterationId);
+        return records.Select(group => group.Key).Concat(folders).Distinct(StringComparer.Ordinal)
+            .OrderBy(id => id, NaturalNameComparer.Instance)
+            .Select(id => Resolve(baseline, primaryRoot, root, id, records[id].ToArray())).OfType<QuantityCandidate>().ToArray();
+    }
+
+    private QuantityCandidate? Resolve(string baseline, string primaryRoot, string root, string id, (StudyRunManifest Manifest, StudyRunCandidateManifest Candidate)[] records)
+    {
+        var folder = Path.Combine(root, id);
+        var model = string.Equals(root, primaryRoot, StringComparison.OrdinalIgnoreCase)
+            ? paths.GetIterationModelPath(baseline, id)
+            : Path.Combine(folder, $"{Path.GetFileNameWithoutExtension(baseline)}_{id}.sdb");
         if (!File.Exists(model))
         {
             // A study keeps its children when the baseline is renamed afterwards: take the model the run journal

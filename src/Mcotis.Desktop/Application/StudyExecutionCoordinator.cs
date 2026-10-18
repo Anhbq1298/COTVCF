@@ -18,7 +18,7 @@ public sealed class StudyExecutionCoordinator
         this.artifactPublisher = artifactPublisher ?? new StudyArtifactPublisher();
     }
 
-    /// <summary>Legacy compatibility property. Model execution no longer writes presentation reports.</summary>
+    /// <summary>Absolute path of the last <c>Deflection_Report.html</c> written by a run, or null.</summary>
     public string? LastDeflectionReportPath { get; private set; }
     /// <summary>Absolute path of the last <c>Member_Forces_Report.html</c> written by a run, or null.</summary>
     public string? LastMemberForceReportPath { get; private set; }
@@ -88,7 +88,12 @@ public sealed class StudyExecutionCoordinator
             {
                 try
                 {
-                    LastArtifactOutcome = artifactPublisher.Publish(snapshot, artifactResults);
+                    trackedProgress.Report(new StudyExecutionProgress
+                    {
+                        WorkerId = 0,
+                        Message = "Generating raw data, Excel workbook, and HTML reports."
+                    });
+                    LastArtifactOutcome = await Task.Run(() => artifactPublisher.Publish(snapshot, artifactResults));
                     LastDeflectionReportPath = LastArtifactOutcome.DeflectionReportPath;
                     LastMemberForceReportPath = LastArtifactOutcome.MemberForceReportPath;
                     LastSupportReactionReportPath = LastArtifactOutcome.SupportReactionReportPath;
@@ -97,7 +102,7 @@ public sealed class StudyExecutionCoordinator
                 catch (Exception ex)
                 {
                     LastArtifactOutcome = StudyArtifactOutcome.Failed(ex.Message);
-                    trackedProgress.Report(new StudyExecutionProgress { WorkerId = 0, Message = $"Raw-data publication failed: {ex.Message}" });
+                    trackedProgress.Report(new StudyExecutionProgress { WorkerId = 0, Message = $"Study output publication failed: {ex.Message}" });
                 }
             }
             else if (result.Completed > 0)

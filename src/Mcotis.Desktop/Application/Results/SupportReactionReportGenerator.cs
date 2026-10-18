@@ -78,7 +78,8 @@ public sealed class SupportReactionReportGenerator
             .Select(warning => new ResultReportWarningDto(warning.IterationKey, warning.Category,
                 warning.Severity.ToString(), warning.Message)).ToArray();
         return new(new(baselineName, studyMode.ToString(), results.Count, DateTimeOffset.Now.ToString("o"),
-            IndividualProfileLimit, scope?.ToDto()), groups, warnings, siblingReports ?? []);
+            IndividualProfileLimit, scope?.ToDto()), groups, ReportCandidateDefinitions.Build(results),
+            warnings, siblingReports ?? []);
     }
 
     public string BuildHtml(SupportReactionReportDto dto, ReportPrintDto? print = null)
@@ -88,7 +89,7 @@ public sealed class SupportReactionReportGenerator
         var library = ReportNav.Library("support", new HashSet<string>(dto.SiblingReports, StringComparer.Ordinal));
         return $$"""
 <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Support Reactions — {{Esc(dto.Study.BaselineModelName)}}</title>
-<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportSummaryTheme.Css}}{{SummaryStyle}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body><header><div data-pr="info"><h1>Support Reactions Results Viewer</h1>
+<style>{{ReportPrintEngine.Css}}{{Style}}{{ReportSummaryTheme.Css}}{{SummaryStyle}}{{ReportCandidateDefinitions.Style}}{{ReportScope.Css}}</style>{{ReportPrintEngine.PageStyle}}</head><body><header><div data-pr="info"><h1>Support Reactions Results Viewer</h1>
 <div>{{Esc(dto.Study.BaselineModelName)}} · {{dto.Study.CandidateCount}} candidate(s) · {{Esc(dto.Study.StudyMode)}}</div>
 {{ReportScope.Banner(dto.Study.Scope)}}
 <div class="print-only" data-print-view></div>
@@ -97,10 +98,12 @@ public sealed class SupportReactionReportGenerator
 <label>Component <select id="component"><option>Fx</option><option>Fy</option><option selected>Fz</option><option>Mx</option><option>My</option><option>Mz</option></select></label>
 <label>Result step <select id="step"></select></label><label>View <select id="view"><option value="summary">Summary</option><option value="supports">Individual supports</option><option value="totals">Foundation totals</option><option value="matrix">Candidate matrix</option></select></label>
 <label>Band by <select id="band"><option value="">All candidates</option><option value="loadId">Load candidate</option><option value="heightId">Truss height</option><option value="pretensionId">Pretension</option></select></label>
-<button id="reset">Reset filters</button>{{ReportPrintEngine.ToolbarButton}}<span id="scope"></span></nav><div id="filters" data-print-controls></div><div id="notice" data-pr="note" hidden></div><div id="warnings" data-pr="note"></div>
+<button id="reset">Reset filters</button>{{ReportPrintEngine.ToolbarButton}}<span id="scope"></span>
+ </nav><div id="filters" data-print-controls></div><div id="notice" data-pr="note" hidden></div>{{ReportCandidateDefinitions.Markup}}<div id="warnings" data-pr="note"></div>
 <main id="panels"></main><div id="tip" hidden></div>
-<script type="application/json" id="data">{{data}}</script>
+<script type="application/json" id="report-data">{{data}}</script>
 {{ReportPrintEngine.Scripts(print)}}
+<script>{{ReportCandidateDefinitions.Script}}</script>
 <script>{{Script}}</script></body></html>
 """;
     }
@@ -132,7 +135,7 @@ public sealed class SupportReactionReportGenerator
 """;
 
     private const string Script = """
-(()=>{const D=JSON.parse(document.getElementById('data').textContent),G=document.getElementById('group'),C=document.getElementById('component'),S=document.getElementById('step'),V=document.getElementById('view'),B=document.getElementById('band'),P=document.getElementById('panels'),N=document.getElementById('notice'),Q=document.getElementById('scope'),TIP=document.getElementById('tip');
+(()=>{const D=JSON.parse(document.getElementById('report-data').textContent),G=document.getElementById('group'),C=document.getElementById('component'),S=document.getElementById('step'),V=document.getElementById('view'),B=document.getElementById('band'),P=document.getElementById('panels'),N=document.getElementById('notice'),Q=document.getElementById('scope'),TIP=document.getElementById('tip');
 // "#print&group=Left&component=Fx&view=totals&band=heightId" from the PDF exporter preselects the toolbar
 const OPT=(window.reportPrint&&window.reportPrint.options)||{},pick=(select,value)=>{if(value!=null&&[...select.options].some(o=>o.value===value&&!o.disabled))select.value=value};
 const chosen={loadId:new Set(),heightId:new Set(),pretensionId:new Set()};let hi=null;

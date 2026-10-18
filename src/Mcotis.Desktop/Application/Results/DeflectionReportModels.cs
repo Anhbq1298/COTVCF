@@ -70,6 +70,7 @@ public sealed record DeflectionReportDto(
     StudyMetadataDto Study,
     IReadOnlyList<DeflectionGroupReportDto> Groups,
     IReadOnlyList<ChartViewDto> Views,
+    ReportCandidateDefinitionsDto CandidateDefinitions,
     IReadOnlyList<ResultReportWarningDto> Warnings,
     // module keys whose sibling report exists in the same study folder (drives the Result Library links)
     IReadOnlyList<string> SiblingReports,

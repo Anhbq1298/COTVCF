@@ -53,6 +53,8 @@ internal static class SupportReactionReportChecks
         Check(html.Contains("id=\"band\"") && html.Contains("Band by") && html.Contains("range among candidates") &&
               html.Contains("middle half (P25–P75)") && html.Contains("agg('Range'"),
             "support-reaction HTML draws a min–max / P25–P75 / median range band per column, optionally per L/H/P candidate, and matrix range rows");
+        Check(html.Contains("Candidate definitions") && html.Contains("Truss-height candidates"),
+            "support-reaction HTML includes the shared L/H/P candidate definitions");
 
         var folder = Path.Combine(Path.GetTempPath(), "mcotis_sr_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(folder);

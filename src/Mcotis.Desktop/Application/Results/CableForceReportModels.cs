@@ -12,6 +12,7 @@ public sealed record CableForceReportDto(
     IReadOnlyList<CableForceAxisDto> Heights,     // actual truss heights of this study, ascending
     IReadOnlyList<CableForceAxisDto> Pretensions, // one detailed chart per side for each of these
     IReadOnlyList<CableForceCandidateDto> Rows,
+    ReportCandidateDefinitionsDto CandidateDefinitions,
     IReadOnlyList<CableForceWarningDto> Warnings,
     // cable -> design capacity [kN], by exact cable object name. A cable absent from the map has no limit
     // line and no utilisation (N/A) — never a borrowed or invented value.

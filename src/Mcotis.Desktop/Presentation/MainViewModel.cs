@@ -2309,7 +2309,7 @@ public sealed partial class MainViewModel : Observable
             }
         }
         if (intent == StudyRunIntent.RebuildSelected && MessageBox.Show(
-                $"Rebuild {SelectedRunCount:N0} selected candidate folder{(SelectedRunCount == 1 ? "" : "s")}?\n\nExisting folders will be moved to Study\\RebuildArchive before new child models are created. Nothing is deleted.",
+                $"Rebuild {SelectedRunCount:N0} selected candidate folder{(SelectedRunCount == 1 ? "" : "s")}?\n\nExisting folders will be moved to this model's Study\\RebuildArchive before new child models are created. Nothing is deleted.",
                 "Archive and Rebuild Selected Candidates", System.Windows.MessageBoxButton.YesNo,
                 System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.Yes)
             return;
@@ -2417,9 +2417,9 @@ public sealed partial class MainViewModel : Observable
                         ? StudyBuildState.CompletedWithErrors : StudyBuildState.Completed;
             Message = studyBuildState switch
             {
-                StudyBuildState.Completed => $"Build and analysis complete - {result.Completed:N0} verified child models and raw JSON/CSV are ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused existing)" : "")}. Use Tab 06 to generate reports.",
+                StudyBuildState.Completed => $"Build, analysis, and report export complete - {result.Completed:N0} verified child models plus raw JSON/CSV, Excel, and HTML reports are ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused existing)" : "")}.",
                 StudyBuildState.CompletedWithErrors => result.Artifacts.State == StudyArtifactState.Failed
-                    ? $"Child analysis finished, but raw-data publication failed: {result.Artifacts.ErrorMessage}"
+                    ? $"Child analysis finished. {result.Artifacts.ErrorMessage} Use Tab 06 Generate Outputs to retry without rerunning SAP2000."
                     : $"Build and analysis completed with errors - {result.Completed:N0} ready{(result.Reused > 0 ? $" ({result.Reused:N0} reused)" : "")}, {result.Failed:N0} failed.",
                 StudyBuildState.Cancelled => $"Build and analysis cancelled - {result.Completed:N0} ready, {result.Cancelled:N0} cancelled.",
                 _ => $"Build and analysis failed - all SAP2000 workers faulted; {result.Completed:N0} models are ready and {result.Failed:N0} failed."
