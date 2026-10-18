@@ -18,6 +18,13 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Publish consolidated master and synchronize the working copy
+- Status: Done
+- Who: Codex
+- Where: Help → Development Plans; repository master branch
+- What: Consolidates all available branches and local optimization work into master, the repository's primary branch, and publishes that history for the team. Includes member utilization, linked column-profile dimensions and the planned frame distributed-load workflow. Saved member-utilization fields preserve infinite utilizations explicitly in JSON so an overloaded column cannot prevent saving its study. Earlier default-CFT production-baseline differences remain documented and pending approval; no frozen answers were recaptured.
+- Checks: solution build; quick library and desktop checks (saved optimization rows compare member-utilization contents, not list references); --dev-log. Remote publication and the local pull are verified against origin/master.
+
 ## 2026-10-18 · Optimization results: Member Utilization tab
 - Status: Done
 - Who: Philip Pham (with Claude Code)

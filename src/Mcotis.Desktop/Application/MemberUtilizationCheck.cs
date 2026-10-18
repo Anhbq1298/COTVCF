@@ -1,6 +1,7 @@
 using Mcotis.Desktop.Application.Design;
 using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Geometry;
+using System.Text.Json.Serialization;
 
 namespace Mcotis.Desktop.Application;
 
@@ -10,7 +11,9 @@ namespace Mcotis.Desktop.Application;
 /// <param name="Type">Cable, Column (a section the Design engine takes) or Frame (one it does not).</param>
 /// <param name="Check">OK, FAIL (utilization above 1), CHECK (a detailing rule fails), ERROR, or — when nothing was checked.</param>
 /// <param name="Case">The load case / combination that governs.</param>
-public sealed record MemberUtilization(string Member, string Type, string Section, double? Utilization, string Check, string Case, string Note)
+public sealed record MemberUtilization(string Member, string Type, string Section,
+    [property: JsonNumberHandling(JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? Utilization,
+    string Check, string Case, string Note)
 {
     public string UtilizationText => Utilization is { } value ? (double.IsFinite(value) ? value.ToString("0.00", System.Globalization.CultureInfo.CurrentCulture) : ">9.99") : "—";
 }
