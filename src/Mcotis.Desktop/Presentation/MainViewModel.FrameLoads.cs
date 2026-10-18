@@ -7,6 +7,22 @@ namespace Mcotis.Desktop.Presentation;
 // ---- Assign → Frame → Frame Load (docs/loads/FRAME_DISTRIBUTED_LOAD_PLAN.md, FL-04) ----
 public sealed partial class MainViewModel
 {
+    /// <summary>Frame distributed loads assigned in the native document, with application names for the viewer.</summary>
+    public IReadOnlyList<FrameLoadDisplay> SharedViewerFrameLoads
+    {
+        get
+        {
+            var document = NativeDocumentSession.Document;
+            var names = LegacyNames.Of(document);
+            return document.Loads.Values.OfType<Native.FrameDistributedLoad>()
+                .Where(load => names.TryGetName(load.TargetId, out _))
+                .Select(load => new FrameLoadDisplay(names[load.TargetId],
+                    document.LoadPatterns.TryGetValue(load.PatternId, out var pattern) ? pattern.Name : "Load",
+                    load.Type, load.Direction, load.Projected, load.RelativeStart, load.RelativeEnd, load.ValueStart, load.ValueEnd))
+                .ToArray();
+        }
+    }
+
     /// <summary>The load patterns of the model, by name: what the Frame Load form offers.</summary>
     internal IReadOnlyList<string> FrameLoadPatternNames =>
         NativeDocumentSession.Document.LoadPatterns.Values.Select(pattern => pattern.Name)
@@ -86,7 +102,7 @@ public sealed partial class MainViewModel
         };
         Message = changed == 0
             ? $"The selected frames already have these distributed loads in {pattern.Name}."
-            : $"Distributed {(type == Native.FrameLoadType.Moment ? "moments" : "loads")} in {pattern.Name} {what} {changed} frame{(changed == 1 ? "" : "s")} (FEM results cleared; SAP2000 unchanged).";
+            : $"Distributed {(type == Native.FrameLoadType.Moment ? "moments" : "loads")} in {pattern.Name} {what} {changed} frame{(changed == 1 ? "" : "s")} in the Mcotis model. FEM results cleared.";
         Update();
         return changed;
     }

@@ -90,6 +90,7 @@ public partial class DesignReferenceWindow : Window
         ToolTip = "Picks the buckling curves (Tables 6.2, 6.4, 6.5): Rolled / Welded for an I section, HotFinished / ColdFormed for a hollow one" };
     private readonly List<CheckItem> members;
     private readonly HashSet<string> selection;
+    private readonly bool viewerSelectionActive;
     private readonly List<CheckItem> cases;
     private readonly IReadOnlyList<string> defaultCases;
     /// <summary>The section last shown: what the fields do not edit (e.g. the profile name) is kept from it.</summary>
@@ -135,16 +136,22 @@ public partial class DesignReferenceWindow : Window
             Tabs.Items.Remove(OptimizationTab);
         }
         BuildSectionFields();
-        // frames selected in the viewer are the members to design: ticked alone and listed first
-        selection = (viewerSelection ?? []).Where(name => memberOptions.Any(option => option.Member == name)).ToHashSet(StringComparer.Ordinal);
-        var chosen = selection.Count > 0 ? selection : basis.Members.ToHashSet(StringComparer.Ordinal);
+        // Only viewer-selected frames whose assigned section suits this module are checked. A mixed selection must
+        // not make a CFT run include a Mega column (or the other way around).
+        var selectedNames = (viewerSelection ?? []).ToHashSet(StringComparer.Ordinal);
+        viewerSelectionActive = selectedNames.Count > 0;
+        selection = memberOptions.Where(option => selectedNames.Contains(option.Member) && option.Suggested)
+            .Select(option => option.Member).ToHashSet(StringComparer.Ordinal);
+        var chosen = viewerSelectionActive ? selection : basis.Members.ToHashSet(StringComparer.Ordinal);
         members = memberOptions.OrderBy(option => selection.Contains(option.Member) ? 0 : 1).Select(option => new CheckItem(option.Member,
             MemberText(option),
             chosen.Contains(option.Member), option.Suggested)).ToList();
         MemberList.ItemsSource = members;
-        SelectionButton.Visibility = selection.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        SelectionText.Text = selection.Count > 0 ? $"{selection.Count} member(s) ticked from the viewer selection." : "";
-        SelectionText.Visibility = selection.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SelectionButton.Visibility = viewerSelectionActive ? Visibility.Visible : Visibility.Collapsed;
+        SelectionText.Text = viewerSelectionActive
+            ? $"{selection.Count} selected member(s) match this design; other selected members are skipped."
+            : "";
+        SelectionText.Visibility = viewerSelectionActive ? Visibility.Visible : Visibility.Collapsed;
         var ticked = (basis.LoadCases.Count > 0 ? basis.LoadCases : defaultCases).ToHashSet(StringComparer.Ordinal);
         cases = caseNames.Select(name => new CheckItem(name, "", ticked.Contains(name))).ToList();
         CaseList.ItemsSource = cases;
@@ -275,7 +282,7 @@ public partial class DesignReferenceWindow : Window
     {
         var mode = (string)((FrameworkElement)sender).Tag;
         foreach (var member in members)
-            member.IsChecked = mode == "all" || mode == "suggested" && member.Suggested || mode == "selection" && selection.Contains(member.Name);
+            member.IsChecked = mode == "all" || mode == "suggested" && member.Suggested || mode == "selection" && viewerSelectionActive && selection.Contains(member.Name);
     }
 
     private void CasePick_Click(object sender, RoutedEventArgs e)

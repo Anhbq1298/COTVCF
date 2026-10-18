@@ -117,6 +117,16 @@ internal static class Program
                 McotisFileChecks.Run();
                 return 0;
             }
+            if (args.Contains("--native-quantities"))
+            {
+                NativeQuantityTakeoffChecks.Run();
+                return 0;
+            }
+            if (args.Contains("--native-quantities-ui"))
+            {
+                NativeQuantityTakeoffChecks.RunUi();
+                return 0;
+            }
             if (args.Contains("--tas-3d"))
             {
                 TasSpatialChecks.Run();
@@ -928,7 +938,7 @@ internal static class Program
                 vm.FemRuns.Add(demoFemRun);
                 vm.Notify(nameof(MainViewModel.HasFemResults));
                 Assert(TopMenu("Result").Items.OfType<MenuItem>().Select(item => (item.Header as string)?.Replace("_", ""))
-                           .SequenceEqual(["Show Deformed Shape…", "Show Member Forces…", "Show Joint Reactions…", "Axial forces / cables", "Bending moments", "Shear forces", "Support reactions", "Deflection", "Cable target fit", "Show Results…", "Results Table…"]) &&
+                           .SequenceEqual(["Show Deformed Shape…", "Show Member Forces…", "Show Joint Reactions…", "Axial forces / cables", "Bending moments", "Shear forces", "Support reactions", "Deflection", "Cable target fit", "Show Results…", "Show Quantities…", "Results Table…"]) &&
                        TopMenu("Result").Items.OfType<MenuItem>().All(item => item.IsEnabled),
                     "The Result menu lists the six outputs and the results table, enabled once the run has results");
                 // Run Analysis is one run of the model: nowhere in the FEM results is there a candidate to choose
@@ -1080,6 +1090,11 @@ internal static class Program
                 CableDesignChecks.Run();
                 MegaColumnChecks.Run();
                 ProductionBaselineChecks.RunDesign();
+                return 0;
+            }
+            if (args.Contains("--design-selection"))
+            {
+                DesignSelectionChecks.Run();
                 return 0;
             }
             // Live: starts its own SAP2000 on a copy of the baseline under .work and checks that cable lengths follow the joints.

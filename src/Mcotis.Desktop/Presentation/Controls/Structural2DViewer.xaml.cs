@@ -21,7 +21,7 @@ public partial class Structural2DViewer : UserControl
         Canvas.MemberDoubleClicked += (_, name) => MemberDoubleClicked?.Invoke(this, name);
         Canvas.MemberInformationRequested += (_, name) => MemberInformationRequested?.Invoke(this, name);
         Canvas.JointInformationRequested += (_, name) => JointInformationRequested?.Invoke(this, name);
-        View3DHost.SizeChanged += (_, _) => Update3DJoints();
+        View3DHost.SizeChanged += (_, _) => { Update3DJoints(); Update3DFrameLoads(); };
     }
     public static readonly DependencyProperty ModelProperty = DependencyProperty.Register(nameof(Model), typeof(GeometryModel), typeof(Structural2DViewer), new PropertyMetadata(GeometryModel.Empty));
     public static readonly DependencyProperty ToolbarContentProperty = DependencyProperty.Register(nameof(ToolbarContent), typeof(object), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -79,8 +79,9 @@ public partial class Structural2DViewer : UserControl
     public bool DeflectionIsModeShape { get => (bool)GetValue(DeflectionIsModeShapeProperty); set => SetValue(DeflectionIsModeShapeProperty, value); }
     public static readonly DependencyProperty FrameMeshSegmentsProperty = DependencyProperty.Register(nameof(FrameMeshSegments), typeof(int), typeof(Structural2DViewer), new PropertyMetadata(0));
     public static readonly DependencyProperty MemberSizesProperty = DependencyProperty.Register(nameof(MemberSizes), typeof(IReadOnlyDictionary<string, string>), typeof(Structural2DViewer), new PropertyMetadata(null));
-    public static readonly DependencyProperty ShowLoadsProperty = DependencyProperty.Register(nameof(ShowLoads), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true));
+    public static readonly DependencyProperty ShowLoadsProperty = DependencyProperty.Register(nameof(ShowLoads), typeof(bool), typeof(Structural2DViewer), new PropertyMetadata(true, (d, _) => ((Structural2DViewer)d).Update3DFrameLoads()));
     public static readonly DependencyProperty LoadValuesProperty = DependencyProperty.Register(nameof(LoadValues), typeof(IReadOnlyDictionary<string, double>), typeof(Structural2DViewer), new PropertyMetadata(null));
+    public static readonly DependencyProperty FrameLoadsProperty = DependencyProperty.Register(nameof(FrameLoads), typeof(IEnumerable<FrameLoadDisplay>), typeof(Structural2DViewer), new PropertyMetadata(null, (d, _) => ((Structural2DViewer)d).Update3DFrameLoads()));
     /// <summary>When above 0, frames are drawn broken into this many mesh segments (cables are never meshed).</summary>
     public int FrameMeshSegments { get => (int)GetValue(FrameMeshSegmentsProperty); set => SetValue(FrameMeshSegmentsProperty, value); }
     /// <summary>Member name → section name; when set, each frame and cable is labelled with its size.</summary>
@@ -88,6 +89,7 @@ public partial class Structural2DViewer : UserControl
     public bool ShowLoads { get => (bool)GetValue(ShowLoadsProperty); set => SetValue(ShowLoadsProperty, value); }
     /// <summary>Point name → vertical load Fz [kN] labelled at the load arrows.</summary>
     public IReadOnlyDictionary<string, double>? LoadValues { get => (IReadOnlyDictionary<string, double>?)GetValue(LoadValuesProperty); set => SetValue(LoadValuesProperty, value); }
+    public IEnumerable<FrameLoadDisplay>? FrameLoads { get => (IEnumerable<FrameLoadDisplay>?)GetValue(FrameLoadsProperty); set => SetValue(FrameLoadsProperty, value); }
     public static readonly DependencyProperty MemberNotesProperty = DependencyProperty.Register(nameof(MemberNotes), typeof(IReadOnlyDictionary<string, string>), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty HighlightedMembersProperty = DependencyProperty.Register(nameof(HighlightedMembers), typeof(IEnumerable<string>), typeof(Structural2DViewer), new PropertyMetadata(null));
     public static readonly DependencyProperty JointNotesProperty = DependencyProperty.Register(nameof(JointNotes), typeof(IReadOnlyDictionary<string, string>), typeof(Structural2DViewer), new PropertyMetadata(null));
@@ -265,6 +267,7 @@ public partial class Structural2DViewer : UserControl
         }
         if (!keepCamera || scene.Bounds.IsEmpty) Fit3D();
         else UpdateCamera();
+        Update3DFrameLoads();
     }
 
     private void Fit3D()
@@ -291,6 +294,98 @@ public partial class Structural2DViewer : UserControl
         Camera3D.LookDirection = -from;
         Camera3D.Width = viewWidth;
         Update3DJoints();
+        Update3DFrameLoads();
+    }
+
+    private void Update3DFrameLoads()
+    {
+        if (FrameLoads3D is null) return;
+        FrameLoads3D.Children.Clear();
+        if (!Is3D || !ShowLoads || FrameLoads is not { } loads) return;
+        foreach (var load in loads)
+        {
+            var member = Model.Members.FirstOrDefault(item => item.Name == load.MemberName && item.Kind == MemberKind.Frame);
+            if (member is null || !Model.Points.TryGetValue(member.Start, out var start) || !Model.Points.TryGetValue(member.End, out var end)) continue;
+            var p0 = Project3D(JointPosition3D(member.Start, start.Position));
+            var p1 = Project3D(JointPosition3D(member.End, end.Position));
+            if (p0 is null || p1 is null) continue;
+            var axis = p1.Value - p0.Value;
+            if (axis.Length < 10) continue;
+            var a = p0.Value + axis * load.RelativeStart;
+            var b = p0.Value + axis * load.RelativeEnd;
+            var normal = new Vector(-axis.Y, axis.X); normal.Normalize();
+            var worldAxis = new Vector3D(end.Position.X - start.Position.X, end.Position.Y - start.Position.Y, end.Position.Z - start.Position.Z);
+            if (worldAxis.Length > 1e-12) worldAxis.Normalize();
+            var worldLoad = load.Direction switch
+            {
+                Mcotis.Core.LoadDirection.GlobalX => new Vector3D(1, 0, 0),
+                Mcotis.Core.LoadDirection.GlobalY => new Vector3D(0, 1, 0),
+                Mcotis.Core.LoadDirection.GlobalZ => new Vector3D(0, 0, 1),
+                Mcotis.Core.LoadDirection.Gravity => new Vector3D(0, 0, -1),
+                Mcotis.Core.LoadDirection.Local1 => worldAxis,
+                _ => new Vector3D(),
+            };
+            if (worldLoad.Length > 1e-12)
+            {
+                worldLoad.Normalize();
+                var worldAt = new Position(start.Position.X + (end.Position.X - start.Position.X) * load.RelativeStart,
+                    start.Position.Y + (end.Position.Y - start.Position.Y) * load.RelativeStart,
+                    start.Position.Z + (end.Position.Z - start.Position.Z) * load.RelativeStart);
+                var baseScreen = Project3D(worldAt);
+                var directionScreen = Project3D(new Position(worldAt.X + worldLoad.X, worldAt.Y + worldLoad.Y, worldAt.Z + worldLoad.Z));
+                if (baseScreen is { } screenBase && directionScreen is { } screenDirection)
+                {
+                    var projectedDirection = screenDirection - screenBase;
+                    if (projectedDirection.Length > 1e-6) { projectedDirection.Normalize(); normal = projectedDirection; }
+                }
+            }
+            var mean = (load.ValueStart + load.ValueEnd) * .5;
+            var side = mean < 0 ? -1 : 1;
+            var offset = Math.Clamp(24 + Math.Log10(1 + Math.Max(Math.Abs(load.ValueStart), Math.Abs(load.ValueEnd))) * 5, 24, 48) * side;
+            var oa = a + normal * offset; var ob = b + normal * offset;
+            if (load.Type == Mcotis.Core.FrameLoadType.Force)
+            {
+                Add3DLine(oa, ob); Add3DLine(a, oa); Add3DLine(b, ob);
+                for (var i = 0; i <= 4; i++)
+                {
+                    var t = i / 4d;
+                    var basePoint = a + (b - a) * t;
+                    var value = load.ValueStart + (load.ValueEnd - load.ValueStart) * t;
+                    var from = basePoint + normal * (offset * (value < 0 ? -1 : 1));
+                    Add3DArrow(from, basePoint);
+                }
+            }
+            else for (var i = 0; i <= 4; i++) Add3DMoment(a + (b - a) * (i / 4d), load.ValueStart + (load.ValueEnd - load.ValueStart) * (i / 4d));
+            var units = load.Type == Mcotis.Core.FrameLoadType.Moment ? " kN·m/m" : " kN/m";
+            var label = new TextBlock { Text = $"{load.ValueStart:0.###} … {load.ValueEnd:0.###}{units} · {load.PatternName}",
+                FontSize = 11, Foreground = (Brush)FindResource("Accent"), Background = new SolidColorBrush(Color.FromArgb(210, 255, 255, 255)),
+                Padding = new Thickness(2, 1, 2, 1) };
+            System.Windows.Controls.Canvas.SetLeft(label, oa.X + normal.X * 4); System.Windows.Controls.Canvas.SetTop(label, oa.Y + normal.Y * 4); FrameLoads3D.Children.Add(label);
+        }
+    }
+
+    private void Add3DLine(Point a, Point b)
+    {
+        var line = new System.Windows.Shapes.Line { X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Stroke = (Brush)FindResource("AccentBright"), StrokeThickness = 1.5 };
+        FrameLoads3D.Children.Add(line);
+    }
+
+    private void Add3DArrow(Point from, Point to)
+    {
+        var v = to - from; if (v.Length < 1) return; v.Normalize();
+        Add3DLine(from, to);
+        var back = to - v * 6; var side = new Vector(-v.Y, v.X) * 3;
+        Add3DLine(to, back + side); Add3DLine(to, back - side);
+    }
+
+    private void Add3DMoment(Point center, double value)
+    {
+        if (Math.Abs(value) < 1e-12) return;
+        var sign = Math.Sign(value); const double radius = 7; const int steps = 12;
+        Point At(double angle) => center + new Vector(Math.Cos(angle), Math.Sin(angle)) * radius;
+        var start = sign > 0 ? -2.5 : 2.5; var sweep = sign * 4.7; var previous = At(start);
+        for (var i = 1; i <= steps; i++) { var next = At(start + sweep * i / steps); Add3DLine(previous, next); previous = next; }
+        var tip = At(start + sweep); var near = At(start + sweep - sign * .35); Add3DArrow(near, tip);
     }
 
     /// <summary>Where a model position is on the 3D view's screen: the orthographic camera looks at <see cref="target"/>
@@ -608,10 +703,12 @@ public sealed partial class ModelCanvas : FrameworkElement
     public static readonly DependencyProperty MemberSizesProperty = DependencyProperty.Register(nameof(MemberSizes), typeof(IReadOnlyDictionary<string, string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty ShowLoadsProperty = DependencyProperty.Register(nameof(ShowLoads), typeof(bool), typeof(ModelCanvas), new FrameworkPropertyMetadata(true, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty LoadValuesProperty = DependencyProperty.Register(nameof(LoadValues), typeof(IReadOnlyDictionary<string, double>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty FrameLoadsProperty = DependencyProperty.Register(nameof(FrameLoads), typeof(IEnumerable<FrameLoadDisplay>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public int FrameMeshSegments { get => (int)GetValue(FrameMeshSegmentsProperty); set => SetValue(FrameMeshSegmentsProperty, value); }
     public IReadOnlyDictionary<string, string>? MemberSizes { get => (IReadOnlyDictionary<string, string>?)GetValue(MemberSizesProperty); set => SetValue(MemberSizesProperty, value); }
     public bool ShowLoads { get => (bool)GetValue(ShowLoadsProperty); set => SetValue(ShowLoadsProperty, value); }
     public IReadOnlyDictionary<string, double>? LoadValues { get => (IReadOnlyDictionary<string, double>?)GetValue(LoadValuesProperty); set => SetValue(LoadValuesProperty, value); }
+    public IEnumerable<FrameLoadDisplay>? FrameLoads { get => (IEnumerable<FrameLoadDisplay>?)GetValue(FrameLoadsProperty); set => SetValue(FrameLoadsProperty, value); }
     public static readonly DependencyProperty MemberNotesProperty = DependencyProperty.Register(nameof(MemberNotes), typeof(IReadOnlyDictionary<string, string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty HighlightedMembersProperty = DependencyProperty.Register(nameof(HighlightedMembers), typeof(IEnumerable<string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty JointNotesProperty = DependencyProperty.Register(nameof(JointNotes), typeof(IReadOnlyDictionary<string, string>), typeof(ModelCanvas), new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
@@ -1013,6 +1110,14 @@ public sealed partial class ModelCanvas : FrameworkElement
                     CableLabel(dc, ResultDisplayText.Force(fz), point + new Vector(6, -62), false);
             }
 
+            if (ShowLoads && FrameLoads is { } frameLoads)
+                foreach (var load in frameLoads)
+                {
+                    var member = Model.Members.FirstOrDefault(item => item.Name == load.MemberName && item.Kind == MemberKind.Frame);
+                    if (member is null || !screenPoints.TryGetValue(member.Start, out var a) || !screenPoints.TryGetValue(member.End, out var b)) continue;
+                    DrawFrameLoad(dc, load, a, b);
+                }
+
             foreach (var name in PinSupportPoints ?? [])
                 if (screenPoints.TryGetValue(name, out var support)) DrawPinSupport(dc, support);
 
@@ -1060,6 +1165,76 @@ public sealed partial class ModelCanvas : FrameworkElement
         var halo = new SolidColorBrush(selected ? Color.FromArgb(72, 198, 40, 40) : Color.FromArgb(55, 46, 144, 250));
         dc.DrawEllipse(halo, null, point, selected ? 13 : 10, selected ? 13 : 10);
         dc.DrawEllipse(selected ? selectedBrush : accent, new Pen(Brush("ViewportBg"), 2), point, selected ? 6.5 : 5.5, selected ? 6.5 : 5.5);
+    }
+
+    private void DrawFrameLoad(DrawingContext dc, FrameLoadDisplay load, Point start, Point end)
+    {
+        var axis = end - start;
+        if (axis.Length < 12) return;
+        axis.Normalize();
+        var a = start + (end - start) * load.RelativeStart;
+        var b = start + (end - start) * load.RelativeEnd;
+        var normal = new Vector(-axis.Y, axis.X);
+        Vector direction = load.Direction switch
+        {
+            Mcotis.Core.LoadDirection.GlobalX when Plane != "YZ" => new Vector(1, 0),
+            Mcotis.Core.LoadDirection.GlobalY when Plane != "XZ" => Plane == "XY" ? new Vector(0, -1) : new Vector(1, 0),
+            Mcotis.Core.LoadDirection.GlobalZ when Plane != "XY" => new Vector(0, -1),
+            Mcotis.Core.LoadDirection.Gravity when Plane != "XY" => new Vector(0, 1),
+            Mcotis.Core.LoadDirection.Local1 => axis,
+            _ => normal,
+        };
+        if (direction.Length < 1e-9 || (load.Direction is Mcotis.Core.LoadDirection.GlobalX or Mcotis.Core.LoadDirection.GlobalY or Mcotis.Core.LoadDirection.GlobalZ) &&
+            (Plane == "XY" && load.Direction == Mcotis.Core.LoadDirection.GlobalZ || Plane == "YZ" && load.Direction == Mcotis.Core.LoadDirection.GlobalX || Plane == "XZ" && load.Direction == Mcotis.Core.LoadDirection.GlobalY)) direction = normal;
+        direction.Normalize();
+        var scale = Math.Clamp(22 + Math.Log10(1 + Math.Max(Math.Abs(load.ValueStart), Math.Abs(load.ValueEnd))) * 6, 22, 48);
+        var mean = (load.ValueStart + load.ValueEnd) * .5;
+        var side = mean < 0 ? -1 : 1;
+        var offsetA = a + direction * (scale * side);
+        var offsetB = b + direction * (scale * side);
+        var color = Brush("AccentBright");
+        var pen = new Pen(color, 1.6);
+        if (load.Type == Mcotis.Core.FrameLoadType.Force)
+        {
+            dc.DrawLine(pen, offsetA, offsetB);
+            dc.DrawLine(pen, a, offsetA);
+            dc.DrawLine(pen, b, offsetB);
+            for (var i = 0; i <= 4; i++)
+            {
+                var t = i / 4d;
+                var basePoint = a + (b - a) * t;
+                var value = load.ValueStart + (load.ValueEnd - load.ValueStart) * t;
+                var from = basePoint + direction * (scale * (value < 0 ? -1 : 1));
+                DrawSmallArrow(dc, from, basePoint, pen);
+            }
+        }
+        else for (var i = 0; i <= 4; i++) DrawMomentGlyph(dc, a + (b - a) * (i / 4d), load.ValueStart + (load.ValueEnd - load.ValueStart) * (i / 4d), pen);
+        var suffix = load.Type == Mcotis.Core.FrameLoadType.Moment ? " kN·m/m" : " kN/m";
+        var pattern = load.PatternName;
+        Text(dc, $"{load.ValueStart:0.###} … {load.ValueEnd:0.###}{suffix} · {pattern}", offsetA + direction * 4, "Accent");
+    }
+
+    private static void DrawSmallArrow(DrawingContext dc, Point from, Point to, Pen pen)
+    {
+        var v = to - from;
+        if (v.Length < 1) return;
+        v.Normalize();
+        var back = to - v * 6;
+        var side = new Vector(-v.Y, v.X) * 3;
+        dc.DrawLine(pen, from, to);
+        dc.DrawLine(pen, to, back + side);
+        dc.DrawLine(pen, to, back - side);
+    }
+
+    private static void DrawMomentGlyph(DrawingContext dc, Point center, double value, Pen pen)
+    {
+        if (Math.Abs(value) < 1e-12) return;
+        var sign = Math.Sign(value); const double radius = 7; const int steps = 12;
+        var start = sign > 0 ? -2.5 : 2.5; var sweep = sign * 4.7;
+        Point At(double angle) => center + new Vector(Math.Cos(angle), Math.Sin(angle)) * radius;
+        var previous = At(start);
+        for (var i = 1; i <= steps; i++) { var next = At(start + sweep * i / steps); dc.DrawLine(pen, previous, next); previous = next; }
+        DrawSmallArrow(dc, At(start + sweep - sign * .35), At(start + sweep), pen);
     }
 
     private void DrawPinSupport(DrawingContext dc, Point joint)

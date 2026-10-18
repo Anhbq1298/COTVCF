@@ -11,9 +11,9 @@ public sealed record QuantityComponent(string Material, string MaterialType, Qua
 
 public readonly record struct QuantityFigurePoint(double X, double Y);
 
-/// <summary>One drawn region of a section figure: its material and its outline. A second outline is an opening in
-/// the first (a tube), so the region is filled even-odd.</summary>
-public sealed record QuantityFigureShape(string Name, string Material, QuantityMaterialClass? Class, IReadOnlyList<IReadOnlyList<QuantityFigurePoint>> Outlines);
+/// <summary>One drawn region of a section figure: its material, outline and whether it encloses other materials.</summary>
+public sealed record QuantityFigureShape(string Name, string Material, QuantityMaterialClass? Class,
+    IReadOnlyList<IReadOnlyList<QuantityFigurePoint>> Outlines, bool Shell = false);
 
 /// <summary>The cross-section of an assigned section as the model's own data draws it — the stored Section Designer
 /// shapes, or the stored dimensions of a standard section. Metres, X to the right and Y up, shapes back to front.

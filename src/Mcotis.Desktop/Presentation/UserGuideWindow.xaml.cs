@@ -162,7 +162,7 @@ public partial class UserGuideWindow : Window
         Background = (Brush)FindResource("Raised"), Foreground = (Brush)FindResource("Text"),
     };
 
-    private static Paragraph Title(string text) => new(new Run(text)) { FontSize = 26, FontFamily = new FontFamily("Georgia"), Margin = new Thickness(0, 0, 0, 2) };
+    private static Paragraph DocumentTitle(string text) => new(new Run(text)) { FontSize = 26, FontFamily = new FontFamily("Georgia"), Margin = new Thickness(0, 0, 0, 2) };
 
     private Paragraph Rule() => new() { BorderBrush = (Brush)FindResource("Border"), BorderThickness = new Thickness(0, 0, 0, 1), Margin = new Thickness(0, 0, 0, 10), FontSize = 2 };
 
@@ -175,7 +175,7 @@ public partial class UserGuideWindow : Window
     private FlowDocument MainPage()
     {
         var document = NewDocument();
-        document.Blocks.Add(Title("Mcotis User Guide"));
+        document.Blocks.Add(DocumentTitle("Mcotis User Guide"));
         document.Blocks.Add(Rule());
         foreach (var block in Blocks(guide.MainPage)) document.Blocks.Add(block);
         foreach (var category in guide.Categories)
@@ -198,7 +198,7 @@ public partial class UserGuideWindow : Window
     {
         var document = NewDocument();
         var found = guide.Search(query);
-        document.Blocks.Add(Title("Search results"));
+        document.Blocks.Add(DocumentTitle("Search results"));
         document.Blocks.Add(new Paragraph(new Run($"{found.Count} article(s) contain “{query}”.")) { Foreground = (Brush)FindResource("Muted") });
         document.Blocks.Add(Rule());
         foreach (var article in found)
@@ -217,7 +217,7 @@ public partial class UserGuideWindow : Window
     private FlowDocument ArticlePage(UserGuideArticle article)
     {
         var document = NewDocument();
-        document.Blocks.Add(Title(article.Title));
+        document.Blocks.Add(DocumentTitle(article.Title));
         document.Blocks.Add(new Paragraph(new Run("From the Mcotis User Guide  ·  " + article.Category)) { Foreground = (Brush)FindResource("Muted"), FontSize = 11.5, Margin = new Thickness(0, 0, 0, 4) });
         document.Blocks.Add(Rule());
 

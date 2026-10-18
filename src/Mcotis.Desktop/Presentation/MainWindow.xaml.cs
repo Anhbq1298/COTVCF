@@ -874,6 +874,19 @@ public partial class MainWindow : Window
     // Toolbar → Show Results: load case / combo and the output to draw on the model view
     private ShowResultsWindow? showResultsWindow;
     private void ShowResults_Click(object sender, RoutedEventArgs e) => OpenResultPicker(ShowResultPickerKind.All);
+    private QuantityTakeoffWindow? quantityTakeoffWindow;
+    private void ShowQuantities_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        if (quantityTakeoffWindow is null)
+        {
+            quantityTakeoffWindow = new QuantityTakeoffWindow(vm) { Owner = this };
+            quantityTakeoffWindow.Closed += (_, _) => quantityTakeoffWindow = null;
+            quantityTakeoffWindow.Show();
+        }
+        if (quantityTakeoffWindow.WindowState == WindowState.Minimized) quantityTakeoffWindow.WindowState = WindowState.Normal;
+        quantityTakeoffWindow.Activate();
+    }
     private void ShowDeformedShape_Click(object sender, RoutedEventArgs e) => OpenResultPicker(ShowResultPickerKind.Deflection);
     private void ShowMemberForces_Click(object sender, RoutedEventArgs e) => OpenResultPicker(ShowResultPickerKind.MemberForces);
     private void ShowJointReactions_Click(object sender, RoutedEventArgs e) => OpenResultPicker(ShowResultPickerKind.Reactions);

@@ -361,6 +361,7 @@ public sealed partial class MainViewModel : Observable
         Notify(nameof(SharedViewerFemResult)); Notify(nameof(SharedViewerFemResultMode)); Notify(nameof(SharedViewerIsModeShape));
         Notify(nameof(SharedViewerFrameMeshSegments)); Notify(nameof(SharedViewerMemberSizes));
         Notify(nameof(SharedViewerShowLoads)); Notify(nameof(SharedViewerLoadValues));
+        Notify(nameof(SharedViewerFrameLoads));
         Notify(nameof(SharedViewerCaption)); Notify(nameof(SharedViewerHint));
         NotifyViewPlane();
     }
