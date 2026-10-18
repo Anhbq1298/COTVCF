@@ -133,7 +133,7 @@
      <MenuItem Header="_Local Axes…" Click="AssignFrameAxes_Click" AutomationProperties.Name="Assign Frame Local Axes"
                ToolTip="Rotate the local 2/3 axes of the selected frames and update their in-plane FEM stiffness"/>
      <MenuItem Header="Frame _Load…" Click="AssignFrameLoad_Click" AutomationProperties.Name="Assign Frame Distributed Loads"
-               ToolTip="Distributed forces or moments on the frames selected on the model view, as SAP2000's Frame Distributed Loads: trapezoid and uniform, global, projected or local, added to, replacing or deleting that pattern's loads"/>
+               ToolTip="Assign distributed forces or moments to selected frames in a load pattern: trapezoid or uniform, global or local, projected or not; add, replace or delete"/>
     </MenuItem>
     <MenuItem Header="_Cable">
      <MenuItem Header="Cable _Sections…" Tag="Cable" Click="AssignSections_Click" AutomationProperties.Name="Assign Cable Sections"
@@ -165,6 +165,7 @@
               Visibility="{Binding HasCableMembers, Converter={StaticResource BoolVisibility}}"/>
     <Separator/>
     <MenuItem Header="Show _Results…" Click="ShowResults_Click" ToolTip="Choose the load case / combo and the output to draw on the model"/>
+    <MenuItem Header="Show _Quantities…" Click="ShowQuantities_Click" ToolTip="Show assigned sections, section outlines and member quantities from the Mcotis model"/>
     <MenuItem Header="Results _Table…" Click="OpenFemResultsClick" IsEnabled="{Binding HasFemResults}"
               ToolTip="Open the results table for the selected load case and output"/>
     <MenuItem x:Name="ModalResultsMenu" Header="_Modal Results…" Click="ModalResults_Click" IsEnabled="{Binding HasFemModalResults}" ToolTipService.ShowOnDisabled="True"
@@ -828,13 +829,7 @@
               ToolTip="The plane shown: a level (XY), a grid line (XZ, YZ), a coordinate the model's points sit at, or All — the whole model projected. Type a coordinate in metres for any other plane. A member is shown only when it lies in the plane. In 3D the last plane is the work plane a drawing tool uses."/>
     <Button Style="{StaticResource ToolbarButton}" Content="&#xE76C;" FontSize="12" Click="NextPlane_Click" IsEnabled="{Binding ViewPlaneIsPlane}"
             ToolTip="Next level or grid line (Ctrl+Page Up)" AutomationProperties.Name="Next plane"/>
-    <Border Style="{StaticResource ToolbarSeparator}"/>
-    <TextBlock Text="DRAW WITH" Style="{StaticResource Subheading}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-    <ComboBox Width="150" ItemsSource="{Binding FrameSections}" DisplayMemberPath="Name" SelectedValuePath="Name" SelectedValue="{Binding DrawFrameSection, Mode=TwoWay}"
-              AutomationProperties.Name="Drawing frame section" ToolTip="The section a drawn frame takes (Assign → Frame → Frame Sections changes it afterwards)"/>
-    <ComboBox Width="110" Margin="4,0,0,0" ItemsSource="{Binding CableSections}" DisplayMemberPath="Name" SelectedValuePath="Name" SelectedValue="{Binding DrawCableSection, Mode=TwoWay}"
-              AutomationProperties.Name="Drawing cable section" ToolTip="The section a drawn cable takes"/>
-   </WrapPanel>
+</WrapPanel>
    <TextBlock DockPanel.Dock="Top" Text="{Binding SharedViewerCaption}" FontFamily="{StaticResource MonoFont}" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
    <TextBlock DockPanel.Dock="Bottom" Text="{Binding SharedViewerHint}" Style="{StaticResource Hint}" Margin="2,6,0,0"/>
    <Grid>
@@ -858,6 +853,7 @@
                           MemberSizes="{Binding SharedViewerMemberSizes}"
                           ShowLoads="{Binding SharedViewerShowLoads, Mode=TwoWay}"
                           LoadValues="{Binding SharedViewerLoadValues}"
+                          FrameLoads="{Binding SharedViewerFrameLoads}"
                           ShowAxialValues="{Binding ShowFemAxialValues}"
                           MemberSections="{Binding SharedViewerSections}"
                           SectionDrawings="{Binding SharedViewerSectionDrawings}"

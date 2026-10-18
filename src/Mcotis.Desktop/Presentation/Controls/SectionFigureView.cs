@@ -32,16 +32,24 @@ public sealed class SectionFigureView : FrameworkElement
         Point Place(QuantityFigurePoint point) =>
             new(ActualWidth / 2 + (point.X - centreX) * scale, ActualHeight / 2 - (point.Y - centreY) * scale);     // Y up
 
+        bool composite = figure.Shapes.Select(shape => shape.Class).Where(sectionClass => sectionClass is not null).Distinct().Count() > 1;
         foreach (var shape in figure.Shapes)
         {
-            var fill = shape.Class switch
+            var materialFill = shape.Class switch
             {
                 QuantityMaterialClass.Concrete => Brush("SectionConcrete", Brushes.LightGray),
                 QuantityMaterialClass.Steel => Brush("SectionSteel", Brushes.SteelBlue),
                 _ => Brush("Muted", Brushes.Gray),
             };
+            var fill = materialFill;
+            if (composite && shape.Shell)
+            {
+                fill = materialFill.CloneCurrentValue();
+                fill.Opacity *= StructureModel3D.CompositeShellOpacity;
+                fill.Freeze();
+            }
             // Steel is edged in its own colour, so a thin plate still reads as steel at thumbnail size.
-            var outline = new Pen(shape.Class == QuantityMaterialClass.Steel ? fill : Brush("ViewportEdge", Brushes.Gray), 0.8) { LineJoin = PenLineJoin.Miter };
+            var outline = new Pen(shape.Class == QuantityMaterialClass.Steel ? materialFill : Brush("ViewportEdge", Brushes.Gray), 0.8) { LineJoin = PenLineJoin.Miter };
             outline.Freeze();
             var geometry = new StreamGeometry { FillRule = FillRule.EvenOdd };
             using (var context = geometry.Open())

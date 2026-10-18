@@ -122,9 +122,17 @@ public sealed partial class MainViewModel
                 .Select(pattern => Row(pattern.Name, $"× {Number(pattern.SelfWeightMultiplier)} = {Number(weighed.WeightPerLengthKNPerM * pattern.SelfWeightMultiplier)} kN/m, gravity")).ToArray();
             if (selfWeight.Length > 0) loads.Add(new("Self-weight", selfWeight));
         }
-        var distributed = femSapLoading.MemberLoads.Where(load => load.Load.MemberName == member.Name).Select(load => Row(load.Pattern,
-            $"{Direction(load.Load.Direction)}: {Number(load.Load.ValueStart)}" + (Math.Abs(load.Load.ValueEnd - load.Load.ValueStart) > 1e-12 ? $" … {Number(load.Load.ValueEnd)}" : "") +
-            $" kN/m over {Number(load.Load.RelStart)} … {Number(load.Load.RelEnd)} of the length")).ToArray();
+        var document = NativeDocumentSession.Document;
+        var nativeNames = LegacyNames.Of(document);
+        var frameId = nativeNames.Frame(member.Name);
+        var distributed = frameId is { } nativeFrame
+            ? document.Loads.Values.OfType<Mcotis.Core.FrameDistributedLoad>().Where(load => load.TargetId == nativeFrame)
+                .Select(load => Row(document.LoadPatterns.TryGetValue(load.PatternId, out var pattern) ? pattern.Name : "Load",
+                    $"{NativeDirection(load.Direction)}{(load.Projected ? " projected" : "")}, {load.Type}: {Number(load.ValueStart)} … {Number(load.ValueEnd)} " +
+                    (load.Type == Mcotis.Core.FrameLoadType.Moment ? "kN·m/m" : "kN/m") +
+                    $" over {Number(load.RelativeStart)} … {Number(load.RelativeEnd)} of the length"))
+                .ToArray()
+            : [];
         if (distributed.Length > 0) loads.Add(new("Distributed loads", distributed));
         var concentrated = femSapLoading.MemberPointLoads.Where(load => load.Load.MemberName == member.Name).Select(load => Row(load.Pattern,
             $"{Direction(load.Load.Direction)}: {Number(load.Load.ValueKN)} kN at {Number(load.Load.Rel)} of the length")).ToArray();
@@ -213,6 +221,17 @@ public sealed partial class MainViewModel
         FemLoadDirection.ProjectedX => "Global X, projected",
         FemLoadDirection.ProjectedZ => "Global Z, projected",
         FemLoadDirection.ProjectedGravity => "Gravity, projected",
+        _ => "Gravity",
+    };
+
+    private static string NativeDirection(Mcotis.Core.LoadDirection direction) => direction switch
+    {
+        Mcotis.Core.LoadDirection.GlobalX => "Global X",
+        Mcotis.Core.LoadDirection.GlobalY => "Global Y",
+        Mcotis.Core.LoadDirection.GlobalZ => "Global Z",
+        Mcotis.Core.LoadDirection.Local1 => "Local 1",
+        Mcotis.Core.LoadDirection.Local2 => "Local 2",
+        Mcotis.Core.LoadDirection.Local3 => "Local 3",
         _ => "Gravity",
     };
 

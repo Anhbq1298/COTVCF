@@ -3,3 +3,6 @@ obj/
 .work/
 .vs/
 *.user
+
+build/
+**/build/

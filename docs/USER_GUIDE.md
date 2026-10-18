@@ -538,7 +538,7 @@ Puts distributed forces or moments on the frames selected on the model view, as 
 - **Uniform Load**: a load over the whole frame, added to the trapezoid.
 - **Options**: Add to Existing Loads keeps the loads the frames have in the pattern; Replace Existing Loads (default) removes them first; Delete Existing Loads removes them and assigns nothing. Point loads and other patterns are never touched.
 
-OK assigns and closes, Apply assigns and keeps the form open. One assignment is one step of Edit → Undo, and the results of the model are cleared. The loads are saved in the `.mcotis` file. Not yet: drawing them on the model view, listing them in Object Information, and exporting them to SAP2000 or ETABS (the export warns).
+OK assigns and closes, Apply assigns and keeps the form open. One assignment is one step of Edit → Undo, and the results of the model are cleared. The loads are saved in the `.mcotis` file. Display → Loading draws frame loads in the 2D and 3D views, and Frame Information lists the native assignments. All assigned patterns are drawn because this workflow has no pattern selector. Export to SAP2000 or ETABS does not yet include these assignments (the export warns).
 
 # Object information
 Category: Assign
@@ -661,6 +661,7 @@ Draws the results of the selected load case on the model view.
 - **Member forces** (F6) — choose the load case and N, V or M.
 - **Joint reactions** (F7).
 - **Show Results…** — choose the case / combination and the output.
+- **Show Quantities…** — list assigned frame and cable sections from the active Mcotis document, with stored section outlines where available, member counts and total lengths. Concrete volume and steel mass use the native section area and material data. If a section is unassigned, its material basis is unknown, or its composite component geometry is not stored, the affected quantity is shown as unavailable with a reason. This view does not connect to or write to SAP2000.
 - **Export Result…** in Show Results opens the Word / PDF export dialog. Select solved load cases or combinations and all results or individual result types, then click OK and choose the file name and folder. The report opens after saving. Both formats use portrait A4, Arial 11, 1.15 line spacing and margins of 1.88 cm top/left, 1.28 cm bottom and 1.58 cm right. Reports contain high-resolution captures of the model result diagrams, with Figure numbers and load case/output captions, for axial/cable forces, bending, shear, reactions and deflection. The full model is fitted into each figure using the screen renderer, with result labels. Cable fit warnings are retained. Cable target fit remains in Results Table and is not a graphical export option. PDF uses the installed Edge or Chrome browser.
 - Quick items: axial forces / cables, bending moments, shear forces, support reactions, deflection, cable target fit.
 - **F4** shows the undeformed model again.
@@ -730,7 +731,7 @@ Designs columns with the forces of the FEM run: pick a design from the Design me
 ## The Design Reference dialog
 - **Design Basis** — the design code and its references, the method, the Singapore National Annex, the effective lengths l0,y (major, in-plane) and l0,z (minor) in m, the partial factors (γC, γS, γM0) and the grade limits.
 - **Section** — the section and materials (mm, MPa), always taken from the first ticked member's section (its Member Section), when the dialog opens and whenever the first ticked member changes; you may edit the fields for one run, and From Member Section fills them again.
-- **Members & Loads** — the members to design (frames selected on the model view are ticked; Suggested / All / None; each line shows the member's section, material and the effective length l0 keyed in on Design Basis) and the load cases.
+- **Members & Loads** — frames selected on the model view are ticked only when their section suits the open design module; other selected frames are skipped. Suggested / All / None can change the list; each line shows the member's section, material and the effective length l0 keyed in on Design Basis, plus the load cases.
 - **Design** — the results of Run Design ([[Design results]]), shown here so the basis, section, members and results are always in one window.
 - **Optimization** — the cheapest section ([[Column design optimization]]).
 

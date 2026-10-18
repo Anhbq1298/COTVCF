@@ -341,8 +341,9 @@ earlier tall-header / large-button / blue-block look.
     SAP2000 does"): `AssignFrameLoadWindow`, SAP2000's Frame Distributed Loads form; a native document command
     (`MainViewModel.AssignFrameDistributedLoad` → `Mcotis.Core.FrameLoads.Assign`), one Undo step. Those loads are the
     document's own: `Application/NativeFrameLoads` lists their ids in the document's application data and carries them
-    through `SyncNativeDocument` rebuilds. Display, Object Information and the SAP / ETABS adapters do not read them
-    yet (exports warn). Plan and state: `docs/loads/FRAME_DISTRIBUTED_LOAD_PLAN.md`.
+    through `SyncNativeDocument` rebuilds. Display → Loading draws their force outlines/arrows and moment curves in 2D
+    and 3D; Frame Information lists them from the document. All patterns are visible because the workflow has no pattern
+    selector. Export adapters do not include them yet (exports warn). Plan and state: `docs/loads/FRAME_DISTRIBUTED_LOAD_PLAN.md`.
   - **Run**: Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Analysis Options. The legacy Run Study /
     Cancel Study commands are no longer exposed.
   - **Optimization** (its own tab since 2026-10-12; wherever this document says "Run → Optimization VCF", read

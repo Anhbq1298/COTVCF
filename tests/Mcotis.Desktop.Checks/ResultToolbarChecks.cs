@@ -121,6 +121,22 @@ internal static class ResultToolbarChecks
             Idle();
             Check(vm.ShowFemLoads && window.SharedViewer.Canvas.ShowLoads, "the canvas L toggle restores applied loads");
 
+            var loadPattern = vm.FrameLoadPatternNames.First();
+            Check(vm.AssignFrameDistributedLoad(["170"], loadPattern, Mcotis.Core.FrameLoadType.Force, Mcotis.Core.LoadDirection.GlobalZ,
+                    projected: false, Mcotis.Core.LoadDistanceType.Relative, [], uniform: 12, Mcotis.Core.LoadAssignMode.Replace) == 1,
+                "Assign Frame Load writes one distributed load to the native model");
+            Idle();
+            var displayedFrameLoad = vm.SharedViewerFrameLoads.Single(load => load.MemberName == "170" && load.PatternName == loadPattern);
+            var loadInformation = new ObjectInformationWindow(vm, window.SharedViewer.Model.Members.Single(member => member.Name == "170"), window.SharedViewer.Model);
+            var loadRows = loadInformation.Shown.Single(tab => tab.Title == "Loads").Sections.SelectMany(section => section.Rows).ToArray();
+            window.SharedViewer.ShowPlane("3D"); Idle();
+            Check(displayedFrameLoad is { ValueStart: 12, ValueEnd: 12, RelativeStart: 0, RelativeEnd: 1 } && displayedFrameLoad.PatternName == loadPattern &&
+                  window.SharedViewer.Canvas.FrameLoads?.Any(load => load.MemberName == "170") == true &&
+                  loadRows.Any(row => row.Name == loadPattern && row.Value.Contains("12 … 12 kN/m", StringComparison.Ordinal)) &&
+                  ((Canvas)window.SharedViewer.FindName("FrameLoads3D")!).Children.Count > 0,
+                "Display → Loading shows native frame loads in 2D and 3D; Frame Information lists the same pattern, direction, range and values");
+            window.SharedViewer.ShowPlane("XZ"); Idle();
+
             var axesToggle = Descendants<ToggleButton>(window.SharedViewer)
                 .Single(button => AutomationProperties.GetName(button) == "Show frame local axes");
             axesToggle.IsChecked = true;

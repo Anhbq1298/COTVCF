@@ -10,7 +10,7 @@ Status: In progress · Base: `origin/master` at `f827d1a` (2026-10-18) · Reques
 | FL-02 Analysis | Done — projected loads and distributed moments, verified against closed forms (`docs/analysis/frame-distributed-load-verification.md`); moments are therefore solved, not refused |
 | FL-03 Document owns loads | Partly — natively assigned loads survive rebuilds (`Application/NativeFrameLoads`); Replace / Delete clear the legacy mirror. Not done: faithful mapping of imported legacy directions (step 1) |
 | FL-04 Dialog | Written — menu, `AssignFrameLoadWindow`, `MainViewModel.AssignFrameDistributedLoad`. **Not compiled or run yet**: build the desktop project on Windows and run its checks |
-| FL-05 Display | Not started |
+| FL-05 Display | Done — native frame loads shown in 2D / 3D and Frame Information; `--result-tools-ui` |
 | FL-06 Adapters | Not started — SAP2000 / ETABS export warns that natively assigned frame loads are left out |
 | FL-07 Records | Done for the slices above |
 
@@ -230,13 +230,13 @@ document rows; Apply keeps the window open; Undo removes the whole assignment.
 
 ### FL-05 · Display and Object Information
 
-- Viewer (2D `Structural2DViewer` and 3D): when Display → Loading is on, draw each frame's distributed load of the
-  shown pattern as the trapezoid outline with arrows and end values (as ETABS's elevation in the screenshot); moments as
-  curved arrows. Today only joint arrows are drawn.
-- Object Information: list the frame's distributed loads from the document (pattern, type, direction, projected,
+- Viewer (2D `Structural2DViewer` and 3D): when Display → Loading is on, draw native-document frame loads as a
+  trapezoid outline with arrows and values; moments use curved arrows. Every assigned pattern is shown because this
+  workflow has no pattern selector.
+- Object Information: list the frame's distributed loads from the native document (pattern, type, direction, projected,
   distances, values), replacing the `femSapLoading` read.
 
-Checks: `--fem-view` (or the existing viewer checks): a known load draws the expected outline points.
+Checks: `--result-tools-ui`: a known native load appears in the 2D and 3D viewers and in Frame Information.
 
 ### FL-06 · SAP2000 / ETABS adapters
 

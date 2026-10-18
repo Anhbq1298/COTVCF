@@ -18,6 +18,27 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Clear User Guide title helper warning
+- Status: Done
+- Who: Codex
+- Where: Help → User Guide
+- What: Renames the document-title paragraph helper so it no longer hides WPF Window.Title.
+- Checks: solution build
+
+## 2026-10-18 · Remove duplicate drawing section selectors
+- Status: Done
+- Who: Codex
+- Where: Main model viewer toolbar and Plane navigator
+- What: Removes the always-visible Draw With frame and cable section selectors from the Plane row. The active drawing tool's existing contextual section selector remains in the toolbar, so users see one selector for the member type they are drawing.
+- Checks: solution build
+
+## 2026-10-18 · Improve Show Quantities table and section previews
+- Status: Done
+- Who: Codex
+- Where: Result → Show Quantities…
+- What: Gives the take-off table enough width and row height to show the complete section preview. Separates the section drawing from its dimension description, wraps long details, and draws composite shells translucent so the steel profiles inside remain visible like the model section preview.
+- Checks: solution build
+
 ## 2026-10-18 · Design → Tension Cable Design, and suggested cables in Optimization
 - Status: Done
 - Who: Philip Pham (with Claude Code)
@@ -95,6 +116,26 @@ continues on the next lines, indented by two spaces):
 - What: Adds a fifth design type for doubly symmetric I/H steel members under axial force and biaxial bending, on the same flow as the other column designs: classification (5.5), cross-section checks per station (6.2), flexural, torsional and lateral-torsional buckling (6.3.1–6.3.2) and Annex B interaction (6.3.3). Class 4, monosymmetric sections and shear buckling are refused with the reason. Decisions D1–D8 are open.
 - Checks: none yet (planned --steel-design)
 
+## 2026-10-18 · Show quantities from the native model
+- Status: Done
+- Who: Codex
+- Where: Result → Show Quantities…
+- What: Groups assigned frames and cables by section and shows stored section outlines, member counts, total lengths, and concrete volume / steel mass where native area and material data give a supported basis. Missing assignments, unknown material bases and unavailable composite breakdowns are called out; the take-off reads the active Mcotis document and does not connect to SAP2000.
+- Checks: --native-quantities; --result-tools-ui; solution build
+
+## 2026-10-18 · Display native frame distributed loads
+- Status: Done
+- Who: Codex
+- Where: Display → Loading; right-click a frame → Frame Information → Loads
+- What: The existing Loading toggle draws distributed frame forces and moments from Mcotis's native model in both 2D and 3D. Frame Information lists the same native assignments with pattern, direction, type, projected status, distances and values. All patterns are shown because there is no pattern selector in this workflow; no external model connection is needed.
+- Checks: --result-tools-ui; solution build to `.work/build-check` while the running Mcotis app held the normal executable
+
+## 2026-10-18 · Filter design runs to selected members compatible with the design module
+- Status: Done
+- Who: Codex
+- Where: Design → RC Column / CFT / Steel Encased / Mega Composite Column Design → Members & Loads
+- What: A viewer selection is intersected with the design module's compatible section flags. A mixed selection now checks only matching members; the dialog says other selected members are skipped, so a CFT run does not include a Mega column and vice versa.
+- Checks: --design-selection
 
 ## 2026-10-18 · Publish consolidated master and synchronize the working copy
 - Status: Done
