@@ -24,7 +24,9 @@
    <TextBlock x:Name="CountText" VerticalAlignment="Center" Foreground="{StaticResource Muted}"/>
    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
     <Button Content="Copy Report" MinWidth="96" Margin="0,0,10,0" Click="Copy_Click" ToolTip="Copy the summary and every member's calculation to the clipboard"/>
-    <Button Content="Save Report…" MinWidth="96" Click="Save_Click" ToolTip="Save the summary and every member's calculation as a text file"/>
+    <Button Content="Save Report…" MinWidth="96" Margin="0,0,10,0" Click="Save_Click" ToolTip="Save the summary and every member's calculation as a text file"/>
+    <Button Content="Export to Word…" MinWidth="120" Click="ExportWord_Click" AutomationProperties.Name="Export to Word"
+            ToolTip="Save the summary table and every member's step-by-step calculation as a Word document"/>
    </StackPanel>
   </DockPanel>
   <Grid>
@@ -34,6 +36,7 @@
               CanUserAddRows="False" SelectionChanged="SummaryGrid_SelectionChanged" AutomationProperties.Name="Design summary">
      <DataGrid.Columns>
       <DataGridTextColumn Header="Member" Binding="{Binding Member}" Width="80"/>
+      <DataGridTextColumn x:Name="ProcedureColumn" Header="Procedure" Binding="{Binding Procedure}" Width="*" MinWidth="110" Visibility="Collapsed"/>
       <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="*" MinWidth="90"/>
       <DataGridTextColumn Header="Section" Binding="{Binding Section}" Width="*" MinWidth="110"/>
       <DataGridTextColumn Header="Governing case" Binding="{Binding Governing.Case}" Width="*" MinWidth="110"/>

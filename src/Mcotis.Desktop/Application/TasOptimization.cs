@@ -243,6 +243,10 @@ public sealed class TasOptimizationStudy : IParametricStudy
                 new FemSectionProperties(TiedArchSystem.CableName, 0, 0, null, SectionName: TiedArchSystem.CableSection),
                 chosen.TryGetValue(TiedArchRole.Cable, out var cable) ? cable : TiedArchSystem.CableSection) with { MemberName = TiedArchSystem.CableName };
 
+        // the role of a member is that of the section the system was built with, whatever section the case tries
+        var roles = imported.Members.Where(member => TiedArchSystem.RoleOf(member.SectionName) is not null)
+            .ToDictionary(member => member.MemberName, member => TiedArchSystem.Title(TiedArchSystem.RoleOf(member.SectionName)!.Value), StringComparer.Ordinal);
+        if (p.ElevatedCable) roles[TiedArchSystem.CableName] = TiedArchSystem.Title(TiedArchRole.Cable);
         // the case is analysed as Run FEM Analysis analyses the model: as a native document, by the same solver path
         var setup = new FemCandidateSetup(imported.Loading, inputs.Patterns, inputs.Cases, inputs.Combinations, [], inputs.PretensionPatterns, [],
             inputs.TargetFitPercent, inputs.TargetFitIterations, inputs.FrameMeshSegments, inputs.CableSag, inputs.ActiveDofs, inputs.CableDofs)
@@ -251,7 +255,7 @@ public sealed class TasOptimizationStudy : IParametricStudy
             : new Dictionary<string, double>(StringComparer.Ordinal);
         // both limits are read on the top chord (deck) joints, where the storeys above are carried
         return new($"TAS{item.Index + 1:00000}", geometry, properties, setup, [], targets, null,
-            TopChord(geometry, p).ToHashSet(StringComparer.Ordinal), "top chord joint", p.Span);
+            TopChord(geometry, p).ToHashSet(StringComparer.Ordinal), "top chord joint", p.Span, null, roles);
     }
     /// <summary>The top chord (deck) joints of a built system: those at its deck elevation (H2, or H0 + H2 with an elevated cable).</summary>
     public static IEnumerable<string> TopChord(GeometryModel geometry, TiedArchParameters p) =>

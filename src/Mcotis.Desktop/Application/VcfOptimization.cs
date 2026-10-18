@@ -138,6 +138,10 @@ public sealed record VcfOptimizationSettings(
     /// downward limit cannot see. Both limits are read on the bottom chord points only.</summary>
     public double UpliftLimitMm { get; init; } = VcfOptimization.DefaultUpliftLimitMm;
 
+    /// <summary>Effective (buckling) length l0 [m] of the members of each frame role, for the Design check of the Member Utilization
+    /// sheet; a role not listed has <see cref="VcfOptimization.DefaultEffectiveLengthM"/>.</summary>
+    public IReadOnlyDictionary<VcfMemberRole, double> EffectiveLengths { get; init; } = new Dictionary<VcfMemberRole, double>();
+
     /// <summary>Force variants: the cable steps (all cables step together) × the storey force range counts.</summary>
     public long ForceCount => StoreyLoads.Values.Aggregate((long)CableForces.StepCount, (product, range) => Saturating(product, range.Count));
 
@@ -183,6 +187,8 @@ public static class VcfOptimization
 
     public const double DefaultSpanRatio = 250;
     public const double DefaultUpliftLimitMm = 0;
+    /// <summary>Effective length l0 of every frame member until the user changes it [m].</summary>
+    public const double DefaultEffectiveLengthM = 10;
     /// <summary>An uplift within this of the limit passes: it reads the same at the 0.1 mm the results show.</summary>
     public const double UpliftToleranceMm = 0.05;
 
@@ -365,6 +371,8 @@ public static class VcfOptimization
         problems.AddRange(ValidateForces(settings));
         if (!double.IsFinite(settings.SpanRatio) || settings.SpanRatio <= 0) problems.Add("Deflection limit: span / ratio needs a ratio greater than zero.");
         if (!double.IsFinite(settings.UpliftLimitMm) || settings.UpliftLimitMm < 0) problems.Add("Uplift limit: enter a number of at least 0 mm.");
+        foreach (var (role, length) in settings.EffectiveLengths)
+            if (!double.IsFinite(length) || length <= 0) problems.Add($"Effective length of {VcfGeometry.Title(role)}: enter a length greater than zero.");
         if (problems.Count > 0) return problems;
         var bays = settings.Geometry[Bays.Key];
         if (bays.Min < 2 || bays.Max > 200) problems.Add("Number of bays: the range must lie within 2 … 200.");

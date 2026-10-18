@@ -66,10 +66,11 @@ internal static class UserGuideChecks
         window.Open(vcf.Title);
         var vcfText = new TextRange(window.Viewer.Document.ContentStart, window.Viewer.Document.ContentEnd).Text;
         Check(Enumerable.Range(1, 8).All(step => vcfText.Contains($"Step {step}")) && vcfText.Contains("Troubleshooting") &&
-              vcfText.Contains("× length") && vcfText.Contains("bottom-chord") && vcfText.Contains("27 cases"),
+              vcfText.Contains("× length") && vcfText.Contains("bottom-chord") && vcfText.Contains("27 cases") &&
+              new[] { "Setup A", "Setup B", "Setup C", "Setup D", "Design A", "Design D" }.All(vcfText.Contains),
             "Optimization VCF explains all eight steps, fan rules, case counts, displacement checks and troubleshooting");
         var pictures = window.Viewer.Document.Blocks.OfType<BlockUIContainer>().Count();
-        Check(vcf.Images.Count == 6 && vcf.Images.All(image => UserGuide.Image(image.File) is { Length: > 10_000 }) && pictures == 6,
+        Check(vcf.Images.Count == 24 && vcf.Images.All(image => UserGuide.Image(image.File) is { Length: > 10_000 }) && pictures == vcf.Images.Count,
             $"Optimization VCF shows its {vcf.Images.Count} screenshots (built into the app) in the window ({pictures} pictures)");
         var tas = guide.Find("Optimization TAS")!;
         window.Open(tas.Title);
@@ -101,11 +102,11 @@ internal static class UserGuideChecks
                 (schemaErrors.Length > 0 ? " — " + string.Join(" | ", schemaErrors) : ""));
             Check(page.Width?.Value == 11906 && page.Height?.Value == 16838 && font.Ascii?.Value == "Arial" && styleFonts.SequenceEqual(["Arial"]) &&
                   size.Val?.Value == "22" && spacing.Line?.Value == "276" && spacing.LineRule?.Value == DocumentFormat.OpenXml.Wordprocessing.LineSpacingRuleValues.Auto &&
-                  part.ImageParts.Count() == 6 && body.Descendants<DocumentFormat.OpenXml.Wordprocessing.Drawing>().Count() == 6 &&
+                  part.ImageParts.Count() == vcf.Images.Count && body.Descendants<DocumentFormat.OpenXml.Wordprocessing.Drawing>().Count() == vcf.Images.Count &&
                   docText.Contains("Optimization VCF", StringComparison.Ordinal) && docText.Contains("Cable Force", StringComparison.Ordinal) &&
                   docText.Contains("Where: Optimization → Optimization VCF…", StringComparison.Ordinal) && !docText.Contains("[[", StringComparison.Ordinal) &&
                   body.Descendants<DocumentFormat.OpenXml.Wordprocessing.NumberingProperties>().Any(),
-                $"Export to Word writes the article on A4 in Arial 11 with 1.15 line spacing, its 6 screenshots, headings, lists and plain-text links ({new FileInfo(path).Length / 1024} KB)");
+                $"Export to Word writes the article on A4 in Arial 11 with 1.15 line spacing, its {vcf.Images.Count} screenshots, headings, lists and plain-text links ({new FileInfo(path).Length / 1024} KB)");
         }
         finally { if (File.Exists(path)) File.Delete(path); }
         var tasPath = Path.Combine(Path.GetTempPath(), $"mcotis-tas-guide-{Guid.NewGuid():N}.docx");

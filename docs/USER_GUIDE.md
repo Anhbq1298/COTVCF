@@ -774,7 +774,7 @@ A summary per member — its role in the VCF system (as Frame Information shows 
 - **CHECK** — utilisations pass but a detailing rule does not.
 - **FAIL** — a utilisation above 1.00. **ERROR** — no forces for the member.
 
-Copy Report / Save Report… write the summary and every calculation as text.
+Copy Report / Save Report… write the summary and every calculation as text, and **Export to Word…** saves them as a Word document: the summary table (landscape A4), then the calculation of each member on its own page. [[Tension cable design]] has the same three buttons.
 
 # Column design optimization
 Category: Design
@@ -907,14 +907,178 @@ Use Selected does **not** assign the section to the structural model or rerun FE
 - **Comparing runs:** keep member/case scope, effective lengths and cost basis consistent; change one group of choices at a time.
 - Export this article with **Export to Word…** in the User Guide to share the procedure and screenshots.
 
+# Summary VCF system
+Category: Optimization
+Where: Optimization → Optimization VCF…; File → Load VCF… (the default VCF model)
+See also: Optimization VCF; VCF System; Run FEM Analysis; Column design; Compare with SAP2000; Export to SAP2000
+
+A summary of the Vierendeel / cable frame (VCF) system as Mcotis models it: what the structure is and what each member does, how it is analysed, how the results are checked against independent solutions and SAP2000, how deflection and member design are checked, and how the parametric optimization compares variants. It is written to be exported with **Export to Word…** as a short technical report. The figures are the default VCF model (File → Load VCF…); the detailed procedures are in [[Optimization VCF]].
+
+## 1 The system
+The VCF is a long-span transfer structure: a deep Vierendeel girder — three horizontal chords joined by vertical members, with no diagonals — hung from fans of pretensioned cables and carried on four mega columns. In the default model it spans **100 m** between the mega columns (10 bays of 10 m) with a 10 m back-span at each end, so the overall length is 120 m. The bottom chord is at +20 m, the middle chord at +30 m and the top chord at +40 m above the ground. The model has 41 joints, 38 frames and 16 cables and stands on four pinned supports.
+
+The loads are the self-weight and two pattern loads on the top chord: DEAD_ABOVE 10 kPa and LL_ABOVE 5 kPa, over a tributary width B = 12 m and 10 storeys. Each of the 11 loaded points takes Fz = −qz × tributary length × B × storeys, which totals −120,000 kN and −60,000 kN. The cable target forces are set in the Pretension pattern.
+
+![Figure 1 — The VCF system in the Edit → VCF System editor: ten bays, three chords, the fans of cables from the top corners, the supports and the loads](images/vcf-system-geometry.png)
+
+## 2 The members and their function
+- **Top and bottom chords** — concrete filled tubes CFT_SHS[1200x2000x150_S460]_C70/85 (2000 × 1200 × 150 mm steel tube, S460, filled with C70/85). Under gravity the chords form the tension–compression couple that carries the bending of the girder; the filled tube gives a large axial and flexural stiffness for its weight.
+- **Middle chord and vertical chords** — steel box sections SHS_1200x1200x120_S460. The verticals join the chords into a Vierendeel frame: they carry the shear of the girder by frame action, which is why they take bending as well as axial force.
+- **Mega columns** — four columns 3x3+4H700x90S690C90/105: a 3000 × 3000 mm concrete section in C90/105 with four I 700×700×70/90 profiles in S690 and 96 Ø40 bars. They carry the vertical load of the girder and of the cables down to the supports.
+- **End frames** — the short frames at the ends of the girder, with the section MegaCol_2.5x3_C70/85 or the steel box, depending on the member; they tie the back-span to the mega columns.
+- **Fan cables** — tension-only strands 192T15.7 (192 strands of 15.7 mm, area 0.0288 m²) from the top corner joints to the bottom-chord joints. Their pretension lifts the girder against the gravity load, so they reduce the deflection of the bottom chord; the target forces are fitted in the Pretension case.
+- **Back-stay cables** — the same strand type from the top corners to the outer columns; they take the horizontal component of the fan and return it to the supports.
+
+Every cable is tension-only: a cable that goes slack carries nothing, and the model reports it.
+
+## 3 Method of analysis
+Every analysis in Mcotis runs the one general static solver ([[Run FEM Analysis]]); SAP2000 is not used for the analysis.
+
+- **Frames** are Euler–Bernoulli elements connected at every joint and at every point that lies on them, with end releases, section modifiers and the properties of the section (area, inertias, torsion constant).
+- **Cables** are tension-only elements with a pretension. A cable carries T = max(0, T0 + k·e), with k = EA/L, and the sag of its own weight is included by the shallow-parabola equation with Ernst's equivalent stiffness.
+- **Equilibrium** is the minimum of the potential energy, found by Newton's method with a line search. The solution is rejected, with the reason, if the residual, the stability or the balance of the internal forces fails the run's gates.
+- **Cable target forces** are fitted in the Pretension case: the solver adjusts the pretension of every targeted cable until its tension meets the target within the fitting tolerance.
+- **Staged load cases.** The default setup is Pretension (cable fit, with self-weight), then SLS = 1.0 DL + 1.0 LL and ULS = 1.35 DL + 1.5 LL, each continuing from the pretensioned state. Small displacements are assumed; P-Delta cases are not analysed.
+- **Degrees of freedom.** A model starts in Full 3D. The figures here use the XZ plane preset, which analyses the frame in its plane; a degree of freedom nothing holds is reported as an unstable model and is never held silently ([[Analysis options]]).
+
+The run monitor lists each solve with its convergence and numerical stability; in the default model all four solves (the cable fit, Pretension, SLS and ULS) converge with no instability, with 123 degrees of freedom, of which 8 are restrained.
+
+## 4 Results of the default model
+The largest downward joint deflection is **9.9 mm** after Pretension, **207.3 mm** under SLS and **345.8 mm** under ULS. The largest axial force is 246,636 kN under SLS and 290,294 kN under ULS, the largest support reaction is 180,830 kN and 222,969 kN, and the largest bending moment is 224,469 kNm and 280,344 kNm. Each case converged in three iterations.
+
+![Figure 2 — Deflected shape under SLS 1.0DL+1.0LL, coloured by |U| (maximum 207.3 mm); the span is 100 m](images/vcf-summary-deflection-sls.png)
+
+![Figure 3 — Bending moment under ULS 1.35DL+1.5LL: the chords bend between the verticals, the verticals take the Vierendeel moments, and the columns carry the largest end moments](images/vcf-summary-moment-uls.png)
+
+![Figure 4 — Axial force under ULS 1.35DL+1.5LL: the chords carry the couple, the fan cables the hanger forces, the mega columns the compression](images/vcf-summary-axial-uls.png)
+
+Results are shown on the model (Result menu, F5–F7), in the Results Table and in the Word / PDF report of Show Results → Export Result… ([[Showing results]]).
+
+## 5 Verification and comparison with SAP2000
+Nothing the solver computes is shown as a result before it is checked. The records are in docs/analysis:
+
+- **Closed forms and independent solutions** — 1,273 checks of the general solver against hand-worked values (beam deflections, cable sag, target-force fitting, staged cases).
+- **The archived planar solver** — given the same input, the application's analysis agrees with it to 1e-9 m and 1.5e-4 kN over 11,361 values of the default model.
+- **OpenSees** — four cable models, 11 solutions and 626 values agree within 2e-12 m and 6e-8 kN.
+- **SAP2000** — the stored SAP2000 study of 5 October 2026 (the COT Framing_V1.2 model, 135 candidates with different truss heights, loads and cable forces) is compared with the Mcotis analysis of the same model, case for case, on 4,995 values. With each cable at the undeformed length SAP2000 analysed, the total vertical reaction agrees within 0.002 %, the support reactions Fz and Fx within 0.32 % and 1.2 %, the cable forces within 3.82 % and the deflections within 3.22 % of the largest SAP2000 value.
+
+The remaining difference is what SAP2000 analyses and Mcotis does not: large displacements and P-Delta geometry, catenary cables and shear-deformable frames; Mcotis uses small displacements, the parabolic cable and Euler–Bernoulli frames. Cable sag itself changes a cable force by at most 0.21 % in that study. SAP2000 also keeps a cable at its original undeformed length when the truss height is changed; if every cable is taken as long as its chord, the difference grows to 9.3 % in cable force and 8.7 % in deflection for the tallest trusses — a difference in the model, not in the solver.
+
+**Export to SAP2000** writes the Mcotis model into SAP2000 so that it can be analysed there ([[Export to SAP2000]]), and **Optimization → Compare with SAP2000…** puts the member forces of the Mcotis run beside those of the analysed SAP2000 model ([[Compare with SAP2000]]). These two commands are checked against SAP2000 27's API but have not yet been run against a live SAP2000 model, so the comparison above is that of the stored study.
+
+## 6 Deflection check
+The serviceability check is made on the **bottom chord**: the largest downward deflection under the chosen SLS result must not exceed the span divided by a ratio — 100 m / 250 = **400 mm** in the default setup — and the upward movement (uplift) must stay within its allowance, 0 mm in the example, because a strong fan can lift the middle of the chord while the downward deflection is small. The check reports δ / limit and OK or NG; both limits must pass. In the default model the largest downward joint deflection under SLS is 207.3 mm, 52 % of the 400 mm limit.
+
+## 7 Member design
+With the forces of the analysed model, the Design menu checks the members to the Eurocodes with the Singapore National Annexes and BCA BC4:2025 ([[Column design]]):
+
+- **CFT chords** — SS EN 1994-1-1 6.7.3: plastic N–M interaction, second order with imperfection, biaxial bending, shear of the tube, local buckling.
+- **Mega columns** — the CTBUH / ArcelorMittal (2016) simplified method with a fibre cross-check.
+- **Steel members** — SS EN 1993-1-1: classification, cross-section resistance, flexural and lateral-torsional buckling, Annex B interaction.
+
+Each member gets its governing case, the design forces, the utilisations (axial, bending, biaxial, shear) and a status: OK, CHECK (utilisations pass, a detailing rule does not), FAIL or ERROR. With the default basis (effective lengths 10 m) and the ULS case, the top chord reads OK at 0.58 and the bottom chord FAIL at 1.26; the six mega-column and end-frame members read CHECK with utilisations up to 0.91; of the 30 steel box members 24 read CHECK and 6 FAIL. These are the statuses of the default model, not a recommended design: the effective lengths and cases are the engineer's to set, and the reports give the step-by-step calculation with clause references.
+
+![Figure 5 — CFT design of the two chords: the summary with utilisations and status, and the calculation of the bottom chord](images/vcf-design-cft-results.png)
+
+## 8 Optimization
+**Optimization → Optimization VCF…** builds every combination of geometry (bays, bay width, truss depth, heights), cable force, storey force and candidate sections, analyses each with the same solver, checks the bottom-chord deflection and uplift, and prices the members (cost = member length × cost per metre from the material unit costs). It does not change the working model; one run takes up to 10,000 cases.
+
+In the illustrated study the truss depth takes 18, 20 and 22 m and LL_ABOVE 5, 7.5 and 10 kPa, a total of nine cases. All nine pass both displacement checks, and the cheapest is case 1 (depth 18 m, LL 5 kPa) at SGD 7,248,380 with the model and rates when captured. The chart shows that deflection increases with the live load and decreases with the truss depth.
+
+![Figure 6 — Run results of the nine-case study: the deflection, the check and the cost of every case](images/optimization-vcf-results-run.png)
+
+![Figure 7 — Chart results: the effect of live load and truss depth on the deflection, with the spread over the other inputs](images/optimization-vcf-results-chart.png)
+
+A selected variant is entered through Edit → VCF System, analysed as the working model and designed under the Design menu; the optimization table is a comparison and applies nothing by itself.
+
+## 9 Limits
+Small displacements and no P-Delta; tension-only cables with a parabolic sag; no shells or slabs; about 1,000 joints ([[Limitations and known issues]]). The SAP2000 comparison is of a stored study, not a live model. The optimization is a search of the ranges and rates you enter, not of every possible system.
+
 # Optimization VCF
 Category: Optimization
 Where: Optimization → Optimization VCF…
-See also: Optimization results and charts; VCF System; Materials; Load cases and combinations; Analysis options; 03 Pretension
+See also: Optimization results and charts; VCF System; Materials; Frame sections; Cable and tendon sections; Load cases and combinations; Analysis options; Analysis monitor; Column design; 03 Pretension
 
 The parametric study of the VCF system: Mcotis builds every combination of the geometry, cable force, storey force and candidate section inputs, analyses it with the internal solver, checks bottom-chord deflection and uplift, and prices its members. The working model is not changed. A single Run FEM Analysis analyses the model as defined; Optimization VCF compares many variants without applying them to that model.
 
 The command is available while the open model is a VCF system its generator made — File → Load VCF… or Edit → [[VCF System]] — and the edits since keep it one ([[Generator flag]]). With another model open it is greyed, and its tooltip says why; the tied arch system has [[Optimization TAS]].
+
+## How this article is organised
+This article is the complete report of the VCF workflow, so that **Export to Word…** gives one document with every screen. It follows the order of the work:
+
+1. **Setup A–D** — build and analyse the model the optimization starts from: Edit → VCF System, Define → Materials, Define → Section Properties (frame sections of each element type and cable sections), and Run → Analysis Options with Run FEM Analysis.
+2. **Steps 1–8** — the optimization itself: the form, its four sheets, the run, the results and the chart.
+3. **Design A–D** — the member design under the Design menu, with the forces of the analysed model.
+
+Every screenshot is a real window of the default VCF model (File → Load VCF…). The Setup and Design screenshots were captured on 2026-10-18 by the checks' `--vcf-guide-capture`; the optimization ones come from the illustrated nine-case study. The numbers on the screens are those of that model and its rates when captured; your model gives its own.
+
+## Setup A — Edit the VCF system
+Edit → **VCF System…** is the parametric editor of the system. It shows four sheets on the left and a live preview on the right; the preview updates as you type, and the working model changes only on **Apply** or **OK** (Close and Cancel leave it as it was). **Reset Form to Current Model** reloads the form from the model.
+
+### Geometry
+Seven inputs describe the system, all in metres: the **number of bays**, the **bay width**, the **truss depth** (bottom to top chord), the **middle chord** height above the bottom chord, the **clear height** (ground to bottom chord), the **back-span** (mega column to outer column) and the **back-stay node height**. A line under the table works out the span between the mega columns (bays × bay width), the overall length and the height of the top chord above ground. In the default model: 10 bays of 10 m, so a span of 100 m, a truss 20 m deep with its middle chord at 10 m, a clear height of 20 m, a back-span of 10 m and back-stay nodes at 10 m — the top chord is at 40 m.
+
+![Setup A — Edit → VCF System, Geometry sheet: the seven inputs, the span line and the preview of the system with its supports, fan cables, loads and dimensions](images/vcf-system-geometry.png)
+
+### Cable Force
+One row for each cable: its **Pattern** (Pretension), **Sync** and the target **Pretension [kN]**. A cable is **Independent** (its own force) or follows another cable in Sync (its force is shown in grey and cannot be edited). Changing the number of bays adds or removes symmetric cable pairs. In the default model each "b" cable follows its "a" partner, so eight cables carry the independent forces — the fan forces rise from 5,000 kN for Cable2a-2 to 15,000 kN for Cable6a-2, and Cable1a-2, Cable7a-2 and Cable8a-2 carry 100,000, 100,000 and 50,000 kN.
+
+![Setup A — Cable Force sheet: 16 cables, the independent ones with their target forces and the synchronised ones in grey](images/vcf-system-cable-force.png)
+
+### Storey Force
+The loads on the top chord. **Trib. width B** (m) and **NStories** apply to all of them; each load pattern has a **qz [kPa]**. The force at each loaded point is **Fz = −qz × tributary length × B × NStories**. The table lists the loaded points with their X, tributary area and the force of each pattern, and the line under it totals each pattern. In the default model B = 12 m, 10 storeys, DEAD_ABOVE 10 kPa and LL_ABOVE 5 kPa on 11 points (−120,000 kN and −60,000 kN in total). **+ Add Load** adds a pattern; **+ Add**, **+ Add Selected** and **− Remove** change the loaded points.
+
+![Setup A — Storey Force sheet: B and the number of storeys, qz of each load pattern, and the force on each loaded point](images/vcf-system-storey-force.png)
+
+### Sections
+The section of each frame role — **top chord, middle chord, bottom chord, vertical chord, mega column and end frames** — and of each cable, with the number of members that carry it. The lists hold the model's frame and cable sections ([[Frame sections]], [[Cable and tendon sections]]); **(keep as assigned)** leaves the model's assignment alone. In the default model the top and bottom chords are the concrete filled tube CFT_SHS[1200x2000x150_S460]_C70/85, the middle and vertical chords the steel box SHS_1200x1200x120_S460, the mega columns 3x3+4H700x90S690C90/105, and every cable 192T15.7.
+
+![Setup A — Sections sheet: a section for each frame role and for each cable, with the number of members that use it](images/vcf-system-sections.png)
+
+## Setup B — Define the materials
+Define → **Materials…** lists the materials of the model: the concrete grades C70/85 to C185/200, the steels S355, S460 and S690 and the cable strand. **Add New Material…**, **Add Copy of Material…**, **Modify/Show Material…** and **Delete Material** (a material in use cannot be deleted) manage them; **Get From SAP2000** reads a SAP2000 model's materials. The line under the list shows the type, the source, how many members use the selected material, and its cost, for instance C70/85: 85 SGD/t (216 SGD/m³), used by 4 members. **Show Advanced Properties** adds the advanced fields to the form.
+
+![Setup B — Define → Materials: the material library with its actions and the use and cost of the selected material](images/vcf-materials.png)
+
+**Modify/Show Material…** opens the form of one material. For a steel it holds the weight per unit volume, the modulus E, Poisson's ratio, the thermal coefficient, the yield and tensile stresses (Fy, Fu and the expected values) and the **Unit Cost** in SGD/t — **Suggest Rate** fills the project rate for the grade (7,500 SGD/t for S690). A concrete has its strength and its cost in SGD/m³ as well as SGD/t. E, unit weight and unit mass go to the FEM members that use the material, and the unit cost to the cost of the optimization ([[Materials]]).
+
+![Setup B — the form of S690: weight and mass, modulus, yield and tensile stress, and the unit cost](images/vcf-material-form.png)
+
+## Setup C — Define the sections
+Define → Section Properties has **Frame Sections…**, **Cable Sections…** and **Tendon Sections…**. Each opens a list — **Find this property**, the sections and the actions: **Add New Property…**, **Add Copy of Property…**, **Modify/Show Property…** and **Delete Property** (a section that members use cannot be deleted). The line under the actions names the type, the materials, the source and the members that use the selected section. A change to a section applies to the members that use it.
+
+![Setup C — Define → Section Properties → Frame Sections: the five sections of the default VCF model](images/vcf-frame-sections.png)
+
+### Steel shapes (rectangle, box, I, pipe, circle, channel, tee, angle)
+Add New Property… asks for the shape. The form holds the section name, the dimensions of the shape ( t3 is the depth along the local 2 axis, t2 the width; tf and tw the flange and web thicknesses), the material, the **property modifiers** and **Section Properties…** (area, inertias, torsion constant and shear areas, worked out from the dimensions). The preview draws the section with its local axes. The chords SHS_1200x1200x120_S460 (box, 1.2 × 1.2 m, 120 mm walls, S460) are of this kind.
+
+![Setup C — a steel box section: dimensions in metres, material, modifiers and the section with its local axes](images/vcf-section-steel.png)
+
+### Concrete filled tube (CFT)
+A steel tube filled with concrete, rectangular or circular, with optional bars inside it. The form takes the tube's depth H (or diameter D), width B and wall t in mm, the concrete and the steel, the creep coefficient and the permanent share of the load, and shows at once the **section limits** of EN 1994-1-1 6.7.1 (the steel contribution δ, h/t and the grade scope of BC4:2025), the composite properties (transformed area and inertias, self-weight, Npl,Rk, Npl,Rd, δ, (EI)eff) and the **material quantity and cost per metre**. CFT_SHS[1200x2000x150_S460]_C70/85 — a 2000 × 1200 × 150 mm tube in S460 filled with C70/85 — costs about 33,518 SGD/m at the rates of the model.
+
+![Setup C — a concrete filled tube section: tube, materials, design data, section limits, composite properties and cost per metre](images/vcf-section-cft.png)
+
+### Mega composite
+Several steel I profiles encased in one large reinforced concrete column. The form takes the concrete outline (h, b, cover to the links), the number of profiles (4 or 6), the profile (depth, flange width and thickness, web thickness, and the offsets from the centroid), the bars (diameter, bars on each face, layers), the concrete, steel and reinforcement materials, and checks the limits of EN 1994-1-1 6.7.1 and 6.7.5 and of BC4:2025 (a red line is a limit not met, with its reason). The mega columns 3x3+4H700x90S690C90/105 are 3000 × 3000 mm in C90/105 with four I 700×700×70/90 profiles in S690 and 96 Ø40 bars. In the pictured form the last line is red: fck 90 MPa is above the C50/60 that BC4:2025 allows without a check, and fy 690 MPa is above its 550 MPa — the form reports it, it does not block the section. **Steel encased** sections (one I profile) use the same window.
+
+![Setup C — a mega composite section: concrete outline, encased profiles, reinforcement, materials, section limits, composite properties and cost](images/vcf-section-mega.png)
+
+### Cable and strand sections
+**Cable Sections…** lists the cable sections; the form of a section holds its name, the material and the area (or the equivalent diameter of a solid round of the same area). **Calculate the section from its strands** works the area out as the number of strands × the steel area of one strand and names the section by the convention: 192T15.7 is 192 strands of 15.7 mm of 150 mm² each, an area of 0.0288 m². A cable carries tension only.
+
+![Setup C — Define → Section Properties → Cable Sections: the cable sections of the model](images/vcf-cable-sections.png)
+
+![Setup C — the form of cable section 192T15.7: material, area, strand bundle and modifiers](images/vcf-section-cable.png)
+
+## Setup D — Analyse the model
+Run → **Analysis Options…** sets the degrees of freedom of the analysis — the presets Full 3D, XZ plane, YZ plane, XY plane and Custom, and those of the cable joints — and, on the second sheet, the cable target-force fit (tolerance, iterations, mesh and sag). The pictured form uses the **XZ plane** preset (UX, UZ and RY). A model starts in Full 3D; the plane preset analyses it in its plane without the warning that Full 3D gives for a movement out of the plane. See [[Analysis options]].
+
+![Setup D — Run → Analysis Options: the XZ plane preset and the degrees of freedom of the cable joints](images/vcf-analysis-options.png)
+
+Then **Run → Run FEM Analysis** solves the load cases chosen under Define → Load Cases ([[Load cases and combinations]]): the Pretension case fits the cable target forces, and SLS and ULS continue from it. The [[Analysis monitor]] follows the run: the status, the degrees of freedom, the model information and one entry for each solve, with its convergence and its numerical stability. In the picture the default model has 41 joints, 38 frames and 16 cables, 123 degrees of freedom of which 8 are restrained, and four solves — the fit of the cable forces, Pretension, SLS 1.0DL+1.0LL and ULS 1.35DL+1.5LL — all Converged with no instability. A run locks the model; Run → Unlock FEM Model allows editing again ([[Unlock FEM Model]]). The design under the Design menu uses these results.
+
+![Setup D — the Analysis Monitor after a run of the default VCF model: four solves, all converged](images/vcf-run-monitor.png)
 
 ## Step 1 — Prepare the working model
 1. Open the VCF model through **File → Load VCF…**, a saved model, or an existing imported model.
@@ -1027,6 +1191,36 @@ Use **Copy Summary** to copy the report text. A fixed or small study may produce
 
 ![Step 8 — Chart: in the illustrated study, deflection increases with LL and decreases with truss depth; bands show spread over the other inputs](images/optimization-vcf-results-chart.png)
 
+## Design A — Design the members under the Design menu
+The optimization compares system variants by deflection and cost. The members of the system you choose are then designed with the forces of its analysis: run the model ([[Run FEM Analysis]]), open a command of the **Design** menu, and **Run Design**. The window has the same tabs for every type — **Design Basis** (the code, method, partial factors and the effective lengths l0,y and l0,z, 10 m to start with), **Section** (the section of the first ticked member, in mm and MPa; **From Member Section** fills it again), **Members & Loads** (the members and the load cases) and **Design** (the results) — and the column types have an **Optimization** tab ([[Column design optimization]]). The design never changes the model: it reads each member's section and its forces from the run. See [[Column design]] for the basis and the sign rules.
+
+The pictures below design the default VCF model with the basis the window opens with, on its ULS 1.35DL+1.5LL case. They show what the windows report; they are not a recommended design — the effective lengths and the case are yours to set.
+
+In the summary, each member has its role in the VCF system, its governing case, the design forces NEd (compression positive), MEd,y, MEd,z and VEd, the utilisations for axial force N, major-axis bending M-y, minor-axis and biaxial bending M-z/biax, shear V, the maximum, and its **status**: **OK**, **CHECK** (utilisations pass, but a detailing rule does not), **FAIL** (a utilisation above 1.00) or **ERROR** (no forces). Below it the step-by-step calculation of the selected member gives the clause of every check. **Copy Report**, **Save Report…** and **Export to Word…** write the summary and every calculation as text or as a Word document ([[Design results]]).
+
+## Design B — Concrete filled tube members (chords)
+Design → **CFT (Concrete Filled Tube) Design…** checks the concrete filled tube chords to SS EN 1994-1-1 6.7.3 with the Singapore National Annex, extended by BCA BC4:2025 ([[CFT column design]]). Its checks are the plastic N–M interaction, the second-order effect with the member imperfection, biaxial bending, shear of the tube, local buckling and the steel contribution ratio. In the pictured run the two chords are designed with their 2000 × 1200 × 150 mm tubes in S460 and C70/85: the top chord passes (maximum utilisation 0.58) and the **bottom chord fails at 1.26** — it is in tension with a very large bending moment, and the report calculates the section's tension resistance and the N–M resistance at that force. That is the answer for this model, basis and case: the section or the loading has to change, and Setup A (sections, cable forces) and Setup C (section definitions) show where.
+
+![Design B — CFT Design, Design tab: the summary of the two chords and the calculation of the bottom chord, which fails](images/vcf-design-cft-results.png)
+
+## Design C — Mega composite columns
+Design → **Mega Composite Column Design…** designs the mega columns and the other members with a mega composite section by the CTBUH / ArcelorMittal (2016) simplified method on EN 1994-1-1 6.7.3 with the high-strength rules of BC4:2025, and cross-checks it with a fibre analysis ([[Mega column design]]). The pictured run designs six members: four mega columns of 3x3+4H700x90S690C90/105 with utilisations up to 0.91, and the two end frames of MegaCol_2.5x3_C70/85. All six read **CHECK**: their utilisations pass, but a detailing rule is not met — read the detailing lines of the calculation of the selected member. The calculation also reports the ratio of the simplified method to the fibre cross-check (0.879 for member 170: the method is on the safe side).
+
+![Design C — Mega Composite Column Design, Design tab: the six members and the calculation of member 170](images/vcf-design-mega-results.png)
+
+## Design D — Steel beam and column members
+Design → **Steel Beam / Column Design…** designs the bare steel members — I, rectangular (RHS) and circular (CHS) hollow sections — to SS EN 1993-1-1 (EC3) with the Singapore National Annex: the classification of the section (5.5), its cross-section resistance (6.2), flexural and lateral-torsional buckling (6.3.2.3 for rolled or equivalent welded sections) and the interaction of Annex B (6.3.3). The design basis holds γM0 and γM1 (1.0) and γM2 (1.25). The **Section** tab takes the shape, the manufacture (rolled, hot finished or cold formed), the dimensions of an I section (h, b, tf, tw and the root radius) or of a hollow section (H or D, B and t), the length between lateral restraints LLT (0 = the member's length) and fy and E; the dialog has no Optimization tab. [[Design codes and references]] lists the references.
+
+![Design D — Steel Beam / Column Design, Section tab: the SHS_1200x1200x120_S460 box taken from the first ticked member, with the lateral-torsional length and the steel](images/vcf-design-steel-section.png)
+
+The pictured run designs the 30 steel members of the default model — the vertical chords, the middle chords and the end frames — with their SHS_1200x1200x120_S460 section. The status line under the table reads **0 OK · 24 detailing to check · 6 failing**: under the ULS 1.35DL+1.5LL case of this model and basis, 24 members pass their utilisations and show CHECK, and 6 fail. Scroll the table to the failing members and read the calculation of each before relying on a status.
+
+![Design D — Steel Beam / Column Design, Design tab: the members with their utilisations and the calculation of member 189](images/vcf-design-steel-results.png)
+
+**Tension Cable Design…** (Design menu) chooses the number and type of stay units for each tension cable ([[Tension cable design]]); the Optimization results suggest the same for every cable of a case.
+
+**Override Design Procedure…** (Design menu) selects members and gives each the design procedure of any of the Design engines — the member's size comes from its section and its forces from the FEM analysis.
+
 ## Troubleshooting and good practice
 - **Run disabled:** inspect invalid ranges, missing geometry or force inputs, the case-count limit and whether another run is active. Use positive steps and whole-number values where required.
 - **Unexpected number of cases:** multiply the counts of every geometry range, storey-load range, effective shared cable step and section choice. Off-step maxima are omitted.
@@ -1034,7 +1228,7 @@ Use **Copy Summary** to copy the report text. A fixed or small study may produce
 - **Large uplift with small downward deflection:** review fan pretension and the separate uplift allowance. Do not decide from δ / limit alone.
 - **Unavailable cost:** inspect the section/material assignments and material rates. Compare total costs only on a consistent cost basis.
 - **Using a selected variant:** enter its geometry, forces and sections through [[VCF System]], apply them, and run the working model to review its results. The optimization table is a comparison, not an automatic model edit.
-- Export this article with **Export to Word…** in the User Guide to share its steps and six screenshots.
+- Export this article with **Export to Word…** in the User Guide to share the whole workflow — the system, materials, sections, analysis, optimization and member design — with its screenshots.
 
 # Optimization TAS
 Category: Optimization
@@ -1163,6 +1357,19 @@ One row per case: the values of the inputs that vary, the max deflection, span, 
 ## Chart
 The parametric study written like the results section of a paper: up to 20 numbered figures — for every response (deflection, utilisation, base forces, cost, cost per metre, mass, cable tension, frame forces, uplift) its main effect against each varying parameter, a sensitivity ranking, cost against utilisation for every case, and an interaction plot — then a summary and numbered conclusions. Copy Summary puts the text on the clipboard.
 
+# Compare with SAP2000
+Category: Optimization
+Where: Optimization → Compare with SAP2000…
+See also: Export to SAP2000; Run FEM Analysis; Showing results
+
+Puts the member forces of the Mcotis run beside the forces of the same model analysed in SAP2000, member by member. It is enabled when the model has FEM results.
+
+- Choose the **load case / combination** and click **Compare**. The table is the member force table of Export Results (mega column, chords, cables and the other member groups, with bending, shear, axial force and member size); every force column is split into **Mcotis** and **SAP2000**, as peak absolute values for each row.
+- The SAP2000 values are only read, from the analysed model open in SAP2000. Export the model first with [[Export to SAP2000]] and run it there; its members carry the names the export gave them (the Mcotis member names). Bending is M3 and shear V2 of SAP2000 in the default local axes, and cables report 0 for bending and shear.
+- **Copy** puts the table on the clipboard; **Export to Word** saves it as a landscape .docx with every force column split in two.
+
+This command has not yet been checked against a live SAP2000 model (see [[Limitations and known issues]]).
+
 # MB study workflow
 Category: MB study (SAP2000)
 Where: Archived on 2026-10-13 — no longer in the application
@@ -1245,6 +1452,34 @@ See also: Glossary; Showing results
 - Display on the model view: MN and MN·m, fixed decimals; stored results stay kN and kN·m.
 - Axial force: tension positive in the analysis results (as SAP2000); in column design NEd is shown compression positive.
 - Costs: SGD — per tonne for steel, rebar and strand, per m³ for concrete, per metre of column in the design optimization.
+
+# Tension cable design
+Category: Design
+Where: Design → Tension Cable Design…; Optimization → results → Member Utilization → Suggested cable; Export to Word… in the Design tab
+See also: Design results; Optimization VCF; Optimization TAS; Design codes and references
+
+Chooses the **number and type of stay units** for each tension cable of the model. A stay is *n* identical units in parallel — VSL SSI 2000 strand groups (6-12 … 6-187), FATZER galvanized full-locked-coil ropes (Ø80 … Ø150) or, only if you tick it, the Utracon 37-strand PT tendon — and the design picks, for each cable's largest tension and length, the assembly that passes the screen at the lowest cost (or with the fewest units, or the least steel). It is a preliminary option study (Technical Options Study, 18 Oct 2026), **not for construction**.
+
+## The screen
+A unit carries f × its breaking load, with f = **0.50** (the reference admissible load) or **0.60** (subject to the supplier's confirmation), and the stay needs n = ceil( T / (f × MBL × η) ) units, η being the highest use you allow (100 % = no reserve). This is a first-pass proxy, **not an EN 1993-1-11 ultimate resistance**: fatigue, sag, anchorage slip, relaxation, the supporting anchorage steelwork and the node design are outside it, and the calculation says so. Tell the design whether the tension is a service, a factored (ULS) or an unknown force; a factored force prints the caution that 50–60 % of the breaking load is not F_Rd.
+
+## Step 1 — Run the model
+Run the FEM analysis so the cables have forces. The window can also size one stay from a force you type (Single Stay tab), without a run.
+
+## Step 2 — Open Design → Tension Cable Design…
+- **Design Basis**: the systems offered, the screening level (50 % or 60 %), the highest use of it, the priority (lowest cost, fewest units, least steel), what the tension is, and the most units one stay may have (24 to start with). VSL is the study's base option and FATZER its certified alternative; the Utracon tendon is not shown to be an approved exposed stay and is offered only when ticked — its results read **CHECK**.
+- **Cables & Loads**: tick the cables (all to start with, or those selected in the viewer) and the load cases. The tension of a cable is its largest axial force over the ticked cases — the service (SLS) cases to start with. The cable's own length is used.
+- **Cost Rates**: the study's indicative Singapore allowances, all editable (strand, pipe, anchorages, installation, contingency, GST). They are the study author's budgeting assumptions, **not supplier prices**; the cost excludes GST (unless you enter it) and the supporting anchorage-box steelwork.
+- **Single Stay**: a tension in MN and a length in m, sized with the same basis.
+
+## Step 3 — Run Design and read the Design tab
+One row per cable: the governing case, its tension, the suggested assembly (for example *4 × VSL SSI 2000 6-187*), the strands, the group capacity, the use T / capacity, the elastic extension ΔL = T L / ΣEA, the cost per metre and for the cable, and the status — **OK**, **CHECK** (an unqualified system was chosen), **ERROR** (no length, or no assembly within the most units) or — (the cable carries no tension: no stay is sized). The **Status** column reads as above. Below the table the calculation of the selected cable lists the steel area, mass, ΣEA, extension, the thermal change for 40 °C, the best assembly of each other system and the cautions. **Copy Report** and **Save Report…** write all of it as text, and **Export to Word…** saves it as a Word document: the basis, the summary table with one row per cable, the cautions, and the calculation of each designed cable on its own page (A4, landscape for the wide table). Every Design window has the same **Export to Word…** button in its Design tab ([[Design results]]).
+
+## In Optimization VCF and TAS
+The Member Utilization sheet of the optimization results has a **Suggested cable** column: for every cable of a case, the assembly this design chooses for the largest tension of the case's solved results at the cable's length, with the basis last confirmed in this window (VSL and FATZER at 50 % until you change it). The row's utilization, check and note are the cable's own, unchanged; the summary line adds the number of cables and their indicative cost. Use it to see how many strands or ropes each cable needs as the geometry, loading and pretension of a case change. The cost of a case is still the cost of the sections of the model; the suggestion does not change the study.
+
+## Verified against the study
+Its selections and installed rates for 10 … 120 MN at 50 m, for all three systems, agree with the study's tables to within S$0.5/m, and its 120 MN worked example (group forces, ΣEA, extensions) is reproduced: `--cable-design`, `docs/analysis/tension-cable-design-verification.md`.
 
 # Design codes and references
 Category: Reference

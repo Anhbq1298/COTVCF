@@ -891,6 +891,18 @@ public partial class MainWindow : Window
             vm.FemResultStateText, vm.FemResultState == Mcotis.Application.ResultState.Stale, RunDesign) { Owner = this }.ShowDialog();
     }
 
+    private void TensionCableDesign_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        new TensionCableDesignWindow(vm, SharedViewer.SelectedMembers) { Owner = this }.ShowDialog();
+    }
+
+    private void OverrideDesignProcedure_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        new DesignProcedureWindow(vm, SharedViewer.SelectedMembers) { Owner = this }.ShowDialog();
+    }
+
     private void ShowWorkflowHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.Workflow);
 
     private void ShowFemHelp(object sender, RoutedEventArgs e) => ShowHelpTopic(HelpWindow.Topic.FemProcedure);

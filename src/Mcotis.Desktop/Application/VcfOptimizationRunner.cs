@@ -202,8 +202,15 @@ public sealed class VcfOptimizationStudy : IParametricStudy
         // pulls the outer column tops up.
         return new($"OPT{item.Index + 1:00000}", geometry, properties, setup, PointLoads(item, geometry, applied),
             Targets(item, model, topology, geometry, properties), TargetPatterns(topology),
-            model.BottomPoints.ToHashSet(StringComparer.Ordinal), "bottom chord point", bays * form.BayWidth);
+            model.BottomPoints.ToHashSet(StringComparer.Ordinal), "bottom chord point", bays * form.BayWidth, EffectiveLengths(model, geometry),
+            model.Roles.ToDictionary(pair => pair.Key, pair => VcfGeometry.Title(pair.Value), StringComparer.Ordinal));
     }
+    /// <summary>l0 of every member of the case: its role's length of the settings, else the default.</summary>
+    private Dictionary<string, double> EffectiveLengths(VcfGeometryAnalysis model, GeometryModel geometry) =>
+        geometry.Members.ToDictionary(member => member.Name, member =>
+            model.Roles.TryGetValue(member.Name, out var role) && settings.EffectiveLengths.TryGetValue(role, out var length) ? length : VcfOptimization.DefaultEffectiveLengthM,
+            StringComparer.Ordinal);
+
     /// <summary>The load pattern of each cable's target force: its own Tab 03 pattern, or — a cable the bays add — that of
     /// the cable it copies.</summary>
     private Dictionary<string, string> TargetPatterns(VcfTopology? topology)

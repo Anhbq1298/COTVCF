@@ -18,7 +18,9 @@ public sealed record ParametricCandidate(
     IReadOnlyDictionary<string, string>? TargetPatterns,
     IReadOnlyCollection<string> CheckedJoints,
     string CheckedWhat,
-    double SpanM);
+    double SpanM,
+    IReadOnlyDictionary<string, double>? EffectiveLengthsM = null,
+    IReadOnlyDictionary<string, string>? MemberRoles = null);
 
 /// <summary>A case that is no system — its geometry is impossible — with the reason, which its row shows.</summary>
 public sealed class ParametricCandidateException(string reason) : Exception(reason);

@@ -37,6 +37,22 @@ internal static class Program
                 ColumnGuideCapture.Run();
                 return 0;
             }
+            if (args.Contains("--guide-export"))
+            {
+                var at = Array.IndexOf(args, "--guide-export");
+                VcfGuideCapture.ExportArticle(args[at + 1], args[at + 2]);
+                return 0;
+            }
+            if (args.Contains("--vcf-summary-capture"))
+            {
+                VcfGuideCapture.RunSummary();
+                return 0;
+            }
+            if (args.Contains("--vcf-guide-capture"))
+            {
+                VcfGuideCapture.Run();
+                return 0;
+            }
             if (args.Contains("--tas-guide-capture"))
             {
                 TasGuideCapture.Run();
@@ -743,6 +759,20 @@ internal static class Program
                        megaWidth.Text == defaultVm.DesignSectionDefaults(ColumnDesignType.MegaComposite, megaMember.Name).Width.ToString(System.Globalization.CultureInfo.InvariantCulture),
                     "the mega column design starts at l0 = 10 m and its Section tab follows the first ticked member's section");
                 megaDesign.Close();
+                Assert(TopMenu("Design").Items.OfType<MenuItem>().Select(item => System.Windows.Automation.AutomationProperties.GetName(item)).Contains("Steel Beam Column Design"),
+                    "Design offers Steel Beam / Column Design…");
+                var steelDesign = new DesignReferenceWindow(defaultVm.DesignBasis(ColumnDesignType.Steel), defaultVm.DesignMemberOptions(ColumnDesignType.Steel),
+                    defaultVm.DesignCaseNames(), defaultVm.DesignDefaultCases(), defaultVm.DesignRunId, member => defaultVm.DesignSectionDefaults(ColumnDesignType.Steel, member)) { Owner = window };
+                steelDesign.Show();
+                steelDesign.Tabs.SelectedIndex = 1;
+                steelDesign.UpdateLayout();
+                Assert(steelDesign.Title == "Design Reference — Steel Beam / Column Design" && steelDesign.GammaCLabel.Text == "γM1  stability" && steelDesign.GammaSLabel.Text == "γM2  net section" &&
+                       steelDesign.GammaCBox.Text == "1" && steelDesign.GammaSBox.Text == "1.25" && steelDesign.GammaABox.Text == "1" &&
+                       !steelDesign.Tabs.Items.OfType<TabItem>().Any(tab => tab.Header as string == "Optimization") &&
+                       new[] { "h  I section depth", "H  depth / D  diameter", "t  wall thickness", "LLT  between lateral restraints (0 = member length)", "fy  structural steel (nominal)" }
+                           .All(label => FindVisuals<TextBox>(steelDesign).Any(box => System.Windows.Automation.AutomationProperties.GetName(box) == label)),
+                    "the Steel Beam / Column Design dialog asks for the section, the lateral-torsional length and fy, with γM1 / γM2 in place of the concrete factors and no Optimization tab");
+                steelDesign.Close();
                 var designRuns = 0;
                 var runDialog = new DesignReferenceWindow(defaultVm.DesignBasis(ColumnDesignType.MegaComposite), defaultVm.DesignMemberOptions(ColumnDesignType.MegaComposite),
                     defaultVm.DesignCaseNames(), defaultVm.DesignDefaultCases(), "run", member => defaultVm.DesignSectionDefaults(ColumnDesignType.MegaComposite, member),
@@ -1018,9 +1048,31 @@ internal static class Program
                 PlanarFrameChecks.Run();
                 return 0;
             }
+            if (args.Contains("--steel-design"))
+            {
+                SteelDesignChecks.Run();
+                return 0;
+            }
+            if (args.Contains("--steel-design-ui"))
+            {
+                SteelDesignChecks.RunDialog();
+                return 0;
+            }
+            if (args.Contains("--cable-design"))
+            {
+                CableDesignChecks.Run();
+                return 0;
+            }
+            if (args.Contains("--cable-design-ui"))
+            {
+                CableDesignChecks.RunDialog();
+                return 0;
+            }
             if (args.Contains("--column-design"))
             {
                 ColumnDesignChecks.Run();
+                SteelDesignChecks.Run();
+                CableDesignChecks.Run();
                 MegaColumnChecks.Run();
                 ProductionBaselineChecks.RunDesign();
                 return 0;
@@ -1233,6 +1285,8 @@ internal static class Program
             {
                 UserGuideChecks.Run();
                 ColumnDesignChecks.Run();
+                SteelDesignChecks.Run();
+                CableDesignChecks.Run();
                 ProductionBaselineChecks.RunDesign();
                 ProductionBaselineChecks.RunOptimization();
             }

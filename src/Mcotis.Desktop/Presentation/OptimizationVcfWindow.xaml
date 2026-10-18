@@ -122,16 +122,16 @@
     <TabItem Header="Sections">
      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
       <StackPanel>
-       <TextBlock Text="FRAME SECTIONS · CANDIDATES" Style="{StaticResource Subheading}"/>
+       <TextBlock Text="FRAME SECTIONS · CANDIDATES · EFFECTIVE LENGTH l0 [m]" Style="{StaticResource Subheading}"/>
        <Grid x:Name="FrameGrid">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="200"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
        </Grid>
        <TextBlock Text="CABLE SECTIONS · CANDIDATES" Style="{StaticResource Subheading}" Margin="0,10,0,6"/>
        <Grid x:Name="CableGrid">
         <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="200"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
        </Grid>
        <TextBlock x:Name="SectionHint" Style="{StaticResource Hint}" Margin="0,8,0,0"
-                  Text="Tick the sections to try per role or cable; none ticked keeps the section assigned in the model."/>
+                  Text="Tick the sections to try per role or cable; none ticked keeps the section assigned in the model. l0 = effective length of the role's members [m], default 10; the column check of Member Utilization uses it."/>
       </StackPanel>
      </ScrollViewer>
     </TabItem>

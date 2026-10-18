@@ -296,7 +296,8 @@ internal static class ProductionBaselineChecks
         // Run Design on the FEM forces of the default model: every type with members its sections suit
         var (vm, _, _, _) = FemModelFileChecks.DefaultModelApp();
         FemModelFileChecks.Analyze(vm);
-        foreach (var type in Enum.GetValues<ColumnDesignType>())
+        // (the frozen answers are those of the four column designs; the steel beam / column design is checked by --steel-design)
+        foreach (var type in Enum.GetValues<ColumnDesignType>().Where(type => type != ColumnDesignType.Steel))
         {
             var basis = vm.DesignBasis(type) with { EffectiveLengthY = 10, EffectiveLengthZ = 10, LoadCases = vm.DesignDefaultCases() };
             entries.Add(new($"design/model/{type}/members", Text: string.Join(" | ", basis.Members)));

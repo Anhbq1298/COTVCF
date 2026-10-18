@@ -29,9 +29,19 @@ public partial class DesignReferenceWindow : Window
     private sealed record SectionField(string Group, string Label, string Unit, ColumnDesignType[] Types,
         Func<ColumnSectionInput, double> Get, Func<ColumnSectionInput, double, ColumnSectionInput> Set, bool Integer = false, bool Positive = true);
 
-    private const ColumnDesignType Rc = ColumnDesignType.ReinforcedConcrete, Cft = ColumnDesignType.ConcreteFilledTube, Src = ColumnDesignType.SteelEncased, Mega = ColumnDesignType.MegaComposite;
+    private const ColumnDesignType Rc = ColumnDesignType.ReinforcedConcrete, Cft = ColumnDesignType.ConcreteFilledTube, Src = ColumnDesignType.SteelEncased, Mega = ColumnDesignType.MegaComposite, St = ColumnDesignType.Steel;
+    private const string SteelGroup = "Steel section", HollowGroup = "Hollow section (RHS / CHS)";
     private static readonly SectionField[] Fields =
     [
+        new(SteelGroup, "h  I section depth", "mm", [St], s => s.SteelDepth, (s, v) => s with { SteelDepth = v }),
+        new(SteelGroup, "b  I section flange width", "mm", [St], s => s.SteelWidth, (s, v) => s with { SteelWidth = v }),
+        new(SteelGroup, "tf  flange", "mm", [St], s => s.FlangeThickness, (s, v) => s with { FlangeThickness = v }),
+        new(SteelGroup, "tw  web", "mm", [St], s => s.WebThickness, (s, v) => s with { WebThickness = v }),
+        new(SteelGroup, "r  root radius (0 = not counted)", "mm", [St], s => s.RootRadius, (s, v) => s with { RootRadius = v }, Positive: false),
+        new(HollowGroup, "H  depth / D  diameter", "mm", [St], s => s.TubeDepth, (s, v) => s with { TubeDepth = v }),
+        new(HollowGroup, "B  width (RHS)", "mm", [St], s => s.TubeWidth, (s, v) => s with { TubeWidth = v }),
+        new(HollowGroup, "t  wall thickness", "mm", [St], s => s.TubeThickness, (s, v) => s with { TubeThickness = v }),
+        new("Lateral-torsional buckling", "LLT  between lateral restraints (0 = member length)", "mm", [St], s => s.LateralLength, (s, v) => s with { LateralLength = v }, Positive: false),
         new("Concrete outline", "b  width (minor)", "mm", [Rc, Src, Mega], s => s.Width, (s, v) => s with { Width = v }),
         new("Concrete outline", "h  depth (in-plane)", "mm", [Rc, Src, Mega], s => s.Depth, (s, v) => s with { Depth = v }),
         new("Concrete outline", "Cover to links", "mm", [Rc, Src, Mega], s => s.Cover, (s, v) => s with { Cover = v }),
@@ -57,9 +67,9 @@ public partial class DesignReferenceWindow : Window
         new("Reinforcement", "Link Ø", "mm", [Rc, Src, Mega], s => s.LinkDiameter, (s, v) => s with { LinkDiameter = v }),
         new("Reinforcement", "Link spacing", "mm", [Rc, Src, Mega], s => s.LinkSpacing, (s, v) => s with { LinkSpacing = v }),
         new("Materials", "fck  concrete (cylinder)", "MPa", [Rc, Cft, Src, Mega], s => s.Fck, (s, v) => s with { Fck = v }),
-        new("Materials", "fy  structural steel", "MPa", [Cft, Src, Mega], s => s.Fy, (s, v) => s with { Fy = v }),
+        new("Materials", "fy  structural steel (nominal)", "MPa", [Cft, Src, Mega, St], s => s.Fy, (s, v) => s with { Fy = v }),
         new("Materials", "fyk  reinforcement", "MPa", [Rc, Src, Mega], s => s.Fyk, (s, v) => s with { Fyk = v }),
-        new("Materials", "Ea  structural steel", "MPa", [Cft, Src, Mega], s => s.Ea, (s, v) => s with { Ea = v }),
+        new("Materials", "Ea  structural steel", "MPa", [Cft, Src, Mega, St], s => s.Ea, (s, v) => s with { Ea = v }),
         new("Materials", "Es  reinforcement", "MPa", [Rc, Src, Mega], s => s.Es, (s, v) => s with { Es = v }),
         new("Materials", "αcc  (EC2 3.1.6, NA)", "", [Rc], s => s.AlphaCc, (s, v) => s with { AlphaCc = v }),
         new("Long term", "φef  effective creep (5.8.4)", "", [Rc], s => s.CreepRatio, (s, v) => s with { CreepRatio = v }, Positive: false),
@@ -74,6 +84,10 @@ public partial class DesignReferenceWindow : Window
     private readonly IReadOnlyList<DesignMemberOption> memberOptions;
     private readonly Dictionary<SectionField, TextBox> fieldBoxes = [];
     private readonly ComboBox tubeBox = new() { ItemsSource = Enum.GetValues<TubeShape>(), Width = 140, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 6) };
+    private readonly ComboBox steelKindBox = new() { ItemsSource = Enum.GetValues<SteelShape>(), Width = 140, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 6),
+        ToolTip = "I: h, b, tf, tw, r · RHS: H, B, t · CHS: D, t (the hollow section's own group)" };
+    private readonly ComboBox fabricationBox = new() { ItemsSource = Enum.GetValues<SteelFabrication>(), Width = 140, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 0, 0, 6),
+        ToolTip = "Picks the buckling curves (Tables 6.2, 6.4, 6.5): Rolled / Welded for an I section, HotFinished / ColdFormed for a hollow one" };
     private readonly List<CheckItem> members;
     private readonly HashSet<string> selection;
     private readonly List<CheckItem> cases;
@@ -110,6 +124,16 @@ public partial class DesignReferenceWindow : Window
             GammaALabel.Visibility = GammaABox.Visibility = Visibility.Collapsed;
             SteelGradeLabel.Text = "Reinforcement";
         }
+        if (type == St)
+        {
+            // γC and γS carry γM1 and γM2 of EN 1993-1-1; there is no concrete
+            GammaCLabel.Text = "γM1  stability";
+            GammaSLabel.Text = "γM2  net section";
+            GammaALabel.Text = "γM0  cross-section";
+            ConcreteGradeLabel.Visibility = ConcreteGradeBox.Visibility = Visibility.Collapsed;
+            SteelGradeLabel.Text = "Max. steel grade";
+            Tabs.Items.Remove(OptimizationTab);
+        }
         BuildSectionFields();
         // frames selected in the viewer are the members to design: ticked alone and listed first
         selection = (viewerSelection ?? []).Where(name => memberOptions.Any(option => option.Member == name)).ToHashSet(StringComparer.Ordinal);
@@ -137,7 +161,7 @@ public partial class DesignReferenceWindow : Window
         LengthYBox.TextChanged += (_, _) => RefreshMemberTexts();
         LengthZBox.TextChanged += (_, _) => RefreshMemberTexts();
         RefreshMemberTexts();
-        InitOptimization(basis, memberForces, materials);
+        if (type != St) InitOptimization(basis, memberForces, materials);
     }
 
     private void BuildSectionFields()
@@ -149,6 +173,7 @@ public partial class DesignReferenceWindow : Window
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(40) });
             if (group.Key == "Steel tube") AddRow(grid, "Shape", tubeBox, "");
+            if (group.Key == SteelGroup) { AddRow(grid, "Section shape", steelKindBox, ""); AddRow(grid, "Manufacture", fabricationBox, ""); }
             foreach (var field in group)
             {
                 var box = new TextBox { Margin = new Thickness(0, 0, 0, 6) };
@@ -199,6 +224,8 @@ public partial class DesignReferenceWindow : Window
         shownSection = section;
         foreach (var (field, box) in fieldBoxes) box.Text = Text(field.Get(section));
         tubeBox.SelectedItem = section.Tube;
+        steelKindBox.SelectedItem = section.SteelKind;
+        fabricationBox.SelectedItem = section.Fabrication;
     }
 
     private static string Text(double value) => value.ToString(CultureInfo.InvariantCulture);
@@ -279,7 +306,12 @@ public partial class DesignReferenceWindow : Window
         { return Fail("Partial factors must be numbers of 1.0 or more.", 0);  }
         if (!TryLength(LengthYBox.Text, out var lengthY) || !TryLength(LengthZBox.Text, out var lengthZ))
         { return Fail("Key in both effective lengths in m (greater than 0).", 0);  }
-        var section = shownSection with { Tube = tubeBox.SelectedItem is TubeShape tube ? tube : TubeShape.Rectangular };
+        var section = shownSection with
+        {
+            Tube = tubeBox.SelectedItem is TubeShape tube ? tube : TubeShape.Rectangular,
+            SteelKind = steelKindBox.SelectedItem is SteelShape kind ? kind : SteelShape.I,
+            Fabrication = fabricationBox.SelectedItem is SteelFabrication made ? made : SteelFabrication.Rolled,
+        };
         foreach (var (field, box) in fieldBoxes)
         {
             if (!double.TryParse(box.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || value < 0 || field.Positive && value <= 0 ||
@@ -314,6 +346,22 @@ public partial class DesignReferenceWindow : Window
     /// <summary>Geometry that cannot be built: walls thicker than half the tube, steel larger than the concrete, bars that do not fit.</summary>
     private string? SectionProblem(ColumnSectionInput s)
     {
+        if (type == St)
+        {
+            var hollowFabrication = s.Fabrication is SteelFabrication.HotFinished or SteelFabrication.ColdFormed;
+            return s.SteelKind switch
+            {
+                SteelShape.I when hollowFabrication => "An I section is Rolled or Welded; HotFinished and ColdFormed are for hollow sections.",
+                SteelShape.I when 2 * s.FlangeThickness >= s.SteelDepth || s.WebThickness >= s.SteelWidth => "The I section needs a web between its flanges and flanges wider than the web.",
+                SteelShape.I when s.Fabrication == SteelFabrication.Rolled && s.RootRadius > 0 && (2 * s.RootRadius + s.WebThickness >= s.SteelWidth || 2 * (s.FlangeThickness + s.RootRadius) >= s.SteelDepth) =>
+                    "The root radius does not fit between the web and the flange tips.",
+                SteelShape.I => null,
+                _ when !hollowFabrication => "A hollow section is HotFinished or ColdFormed.",
+                SteelShape.Rhs when 2 * s.TubeThickness >= Math.Min(s.TubeDepth, s.TubeWidth) => "The tube wall is too thick for its size.",
+                SteelShape.Chs when 2 * s.TubeThickness >= s.TubeDepth => "The tube wall is too thick for its diameter.",
+                _ => null,
+            };
+        }
         if (type == Cft)
             return 2 * s.TubeThickness >= Math.Min(s.TubeDepth, s.Tube == TubeShape.Circular ? s.TubeDepth : s.TubeWidth) ? "The tube wall is too thick for its size." : null;
         var inset = s.Cover + s.LinkDiameter + s.BarDiameter / 2;

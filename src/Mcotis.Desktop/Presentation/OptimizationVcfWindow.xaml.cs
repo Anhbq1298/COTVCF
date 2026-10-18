@@ -35,6 +35,7 @@ public partial class OptimizationVcfWindow : Window
     private readonly Dictionary<string, SpanRow> cableSpans = new(StringComparer.Ordinal);     // Cable Force: every cable with a force of its own
     private readonly Dictionary<string, RangeRow> storeyLoads = new(StringComparer.Ordinal);   // Storey Force: qz by load name, Stories, B
     private readonly Dictionary<VcfMemberRole, CandidatePicker> roleSections = [];
+    private readonly Dictionary<VcfMemberRole, TextBox> roleLengths = [];
     private readonly Dictionary<string, CandidatePicker> cableSections = new(StringComparer.Ordinal);
     private (TextBox Min, TextBox Max)? middle;     // read-only: the middle chord follows the truss depth
     private SpanRow? fanSpan;                       // Cable Force: the shortest fan cable, while the fan is graded by its length
@@ -71,7 +72,7 @@ public partial class OptimizationVcfWindow : Window
         try
         {
             foreach (var grid in new[] { GeometryGrid, FanForceGrid, CableForceGrid, StoreyForceGrid, FrameGrid, CableGrid }) { grid.Children.Clear(); grid.RowDefinitions.Clear(); }
-            ranges.Clear(); cableSpans.Clear(); storeyLoads.Clear(); roleSections.Clear(); cableSections.Clear(); middle = null;
+            ranges.Clear(); cableSpans.Clear(); storeyLoads.Clear(); roleSections.Clear(); roleLengths.Clear(); cableSections.Clear(); middle = null;
             fanSpan = null; cableRows.Clear(); cableRowsKey = "";
             try { analysis = VcfGeometry.Analyze(viewModel.State.Geometry, viewModel.State.Truss); }
             catch (Exception ex)
@@ -147,7 +148,14 @@ public partial class OptimizationVcfWindow : Window
                 var picker = new CandidatePicker(frames, kept?.RoleSections.TryGetValue(role, out var picked) == true ? picked : [], Refresh)
                     { ToolTip = string.Join(", ", members) };
                 roleSections[role] = picker;
-                AddRow(FrameGrid, VcfGeometry.Title(role), picker, $"{members.Count} mbr · {(assigned.Length == 1 ? assigned[0] : assigned.Length == 0 ? "—" : "mixed")}");
+                var title = VcfGeometry.Title(role);
+                var length = new TextBox { Text = (kept?.EffectiveLengths.TryGetValue(role, out var l0) == true ? l0 : VcfOptimization.DefaultEffectiveLengthM).ToString("0.###", CultureInfo.CurrentCulture),
+                    Width = 60, TextAlignment = TextAlignment.Right, Margin = new Thickness(0, 2, 8, 2), FontFamily = (System.Windows.Media.FontFamily)FindResource("MonoFont"),
+                    ToolTip = "Effective length l0 [m] of the " + title + " members, for the column check of Member Utilization" };
+                System.Windows.Automation.AutomationProperties.SetName(length, title + " effective length [m]");
+                length.TextChanged += (_, _) => Refresh();
+                roleLengths[role] = length;
+                AddRow(FrameGrid, title, picker, $"{members.Count} mbr · {(assigned.Length == 1 ? assigned[0] : assigned.Length == 0 ? "—" : "mixed")}", length);
             }
             var cables = viewModel.VcfSectionNames(cable: true);
             foreach (var name in Members(VcfMemberRole.Cable))
@@ -246,15 +254,16 @@ public partial class OptimizationVcfWindow : Window
         middle = (min, max);
     }
 
-    private static void AddRow(Grid grid, string label, CandidatePicker picker, string note)
+    private static void AddRow(Grid grid, string label, CandidatePicker picker, string note, TextBox? length = null)
     {
         var row = grid.RowDefinitions.Count;
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Place(grid, new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center }, row, 0);
         System.Windows.Automation.AutomationProperties.SetName(picker.Button, label + " candidate sections");
         Place(grid, picker, row, 1);
+        if (length is not null) Place(grid, length, row, 2);
         Place(grid, new TextBlock { Text = note, ToolTip = "Now assigned: " + note, FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center,
-            Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("Muted") }, row, 2);
+            Foreground = (System.Windows.Media.Brush)System.Windows.Application.Current.FindResource("Muted") }, row, length is null ? 2 : 3);
     }
 
     private static void Place(Grid grid, UIElement element, int row, int column)
@@ -298,6 +307,7 @@ public partial class OptimizationVcfWindow : Window
         DeflectionResult = DeflectionResultCombo.SelectedItem as string,
         SpanRatio = Number(SpanRatioBox),
         UpliftLimitMm = Number(UpliftLimitBox),
+        EffectiveLengths = roleLengths.ToDictionary(pair => pair.Key, pair => Number(pair.Value)),
     };
 
     private void Refresh()

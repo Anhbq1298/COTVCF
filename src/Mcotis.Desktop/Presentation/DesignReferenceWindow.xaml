@@ -64,13 +64,13 @@
        <Grid>
         <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="80"/><ColumnDefinition Width="24"/><ColumnDefinition Width="130"/><ColumnDefinition Width="90"/></Grid.ColumnDefinitions>
         <Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-        <TextBlock Text="γC  concrete" Style="{StaticResource Label}"/>
+        <TextBlock x:Name="GammaCLabel" Text="γC  concrete" Style="{StaticResource Label}"/>
         <TextBox x:Name="GammaCBox" Grid.Column="1" Style="{StaticResource Field}" AutomationProperties.Name="Gamma C"/>
-        <TextBlock Grid.Row="1" Text="γS  reinforcement" Style="{StaticResource Label}"/>
+        <TextBlock x:Name="GammaSLabel" Grid.Row="1" Text="γS  reinforcement" Style="{StaticResource Label}"/>
         <TextBox x:Name="GammaSBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource Field}" AutomationProperties.Name="Gamma S"/>
         <TextBlock x:Name="GammaALabel" Grid.Row="2" Text="γM0  steel section" Style="{StaticResource Label}"/>
         <TextBox x:Name="GammaABox" Grid.Row="2" Grid.Column="1" Style="{StaticResource Field}" AutomationProperties.Name="Gamma M0"/>
-        <TextBlock Grid.Column="3" Text="Max. concrete grade" Style="{StaticResource Label}"/>
+        <TextBlock x:Name="ConcreteGradeLabel" Grid.Column="3" Text="Max. concrete grade" Style="{StaticResource Label}"/>
         <TextBox x:Name="ConcreteGradeBox" Grid.Column="4" Style="{StaticResource Field}" AutomationProperties.Name="Maximum concrete grade"/>
         <TextBlock x:Name="SteelGradeLabel" Grid.Row="1" Grid.Column="3" Text="Max. steel grade" Style="{StaticResource Label}"/>
         <TextBox x:Name="SteelGradeBox" Grid.Row="1" Grid.Column="4" Style="{StaticResource Field}" AutomationProperties.Name="Maximum steel grade"/>

@@ -1,7 +1,14 @@
 namespace Mcotis.Desktop.Domain;
 
 /// <summary>The column designs offered under the Design menu.</summary>
-public enum ColumnDesignType { ReinforcedConcrete, ConcreteFilledTube, SteelEncased, MegaComposite }
+public enum ColumnDesignType { ReinforcedConcrete, ConcreteFilledTube, SteelEncased, MegaComposite, Steel }
+
+/// <summary>The cross-section of a bare steel member (Design → Steel Beam / Column).</summary>
+public enum SteelShape { I, Rhs, Chs }
+
+/// <summary>How a steel member was made: it picks the buckling curves of EN 1993-1-1 Tables 6.2 and 6.4. Rolled and Welded are for an
+/// I section, HotFinished and ColdFormed for a hollow one.</summary>
+public enum SteelFabrication { Rolled, Welded, HotFinished, ColdFormed }
 
 /// <summary>A standard or guide the design is based on.</summary>
 public sealed record DesignReference(string Code, string Title);
@@ -19,6 +26,10 @@ public sealed record ColumnDesignBasis
     public double GammaC { get; init; } = 1.5;          // concrete, γC
     public double GammaS { get; init; } = 1.15;         // reinforcement, γS
     public double GammaA { get; init; } = 1.0;          // structural steel, γM0 (γa)
+    /// <summary>For the steel beam / column design the fields of concrete and reinforcement carry the other partial factors of
+    /// EN 1993-1-1: <see cref="GammaC"/> is γM1 (member stability) and <see cref="GammaS"/> is γM2 (net section, connections).</summary>
+    public double GammaM1 => GammaC;
+    public double GammaM2 => GammaS;
     public string MaxConcreteGrade { get; init; } = "C90/105";
     public string MaxSteelGrade { get; init; } = "S550";
     /// <summary>Effective (buckling) length about the major axis, l0,y [m]; null until keyed in.</summary>
@@ -72,6 +83,13 @@ public sealed record ColumnSectionInput
     public double ProfileOffsetZ { get; init; } = 700;    // dsx, the same across the section (minor axis)
     public string ProfileName { get; init; } = "";       // designation for the report, e.g. "HD 400x551"
     public int BarLayers { get; init; } = 1;              // bar layers on each b face (flange layers, CTBUH §4.2.1)
+    // bare steel member (Steel Beam / Column): I uses SteelDepth, SteelWidth, FlangeThickness, WebThickness and RootRadius;
+    // RHS uses TubeDepth (H), TubeWidth (B) and TubeThickness; CHS TubeDepth (D) and TubeThickness
+    public SteelShape SteelKind { get; init; } = SteelShape.I;
+    public SteelFabrication Fabrication { get; init; } = SteelFabrication.Rolled;
+    public double RootRadius { get; init; }               // r of a rolled I section (0 = not counted)
+    /// <summary>Length between the points that hold the compression flange against lateral-torsional buckling, mm; 0 = the member length.</summary>
+    public double LateralLength { get; init; }
     // materials
     public double Fck { get; init; } = 50;               // concrete cylinder strength
     public double Fy { get; init; } = 355;               // structural steel yield
@@ -96,22 +114,32 @@ public static class ColumnDesignCodes
 {
     public const string Ec2 = "SS EN 1992-1-1 (EC2) + Singapore NA";
     public const string Ec4Bc4 = "SS EN 1994-1-1 (EC4) + Singapore NA, extended by BCA BC4:2025";
+    public const string Ec3 = "SS EN 1993-1-1 (EC3) + Singapore NA";
+    /// <summary>The steel design's method names: the lateral-torsional buckling curve it uses (EN 1993-1-1 6.3.2.3 or 6.3.2.2).</summary>
+    public const string SteelRolledMethod = "Member checks — LTB 6.3.2.3 (rolled / equivalent welded), interaction Annex B (EN 1993-1-1 §6.3)";
+    public const string SteelGeneralMethod = "Member checks — LTB 6.3.2.2 (general case), interaction Annex B (EN 1993-1-1 §6.3)";
 
     public static string Title(ColumnDesignType type) => type switch
     {
         ColumnDesignType.ReinforcedConcrete => "RC Column Design",
         ColumnDesignType.ConcreteFilledTube => "CFT (Concrete Filled Tube) Design",
         ColumnDesignType.MegaComposite => "Mega Composite Column Design",
+        ColumnDesignType.Steel => "Steel Beam / Column Design",
         _ => "Steel Encased Composite Column Design"
     };
 
-    public static IReadOnlyList<string> DesignCodes(ColumnDesignType type) =>
-        type == ColumnDesignType.ReinforcedConcrete ? [Ec2] : [Ec4Bc4];
+    public static IReadOnlyList<string> DesignCodes(ColumnDesignType type) => type switch
+    {
+        ColumnDesignType.ReinforcedConcrete => [Ec2],
+        ColumnDesignType.Steel => [Ec3],
+        _ => [Ec4Bc4],
+    };
 
     public static IReadOnlyList<string> Methods(ColumnDesignType type) => type switch
     {
         ColumnDesignType.ReinforcedConcrete => ["Nominal curvature (EN 1992-1-1 §5.8.8)", "Nominal stiffness (EN 1992-1-1 §5.8.7)"],
         ColumnDesignType.MegaComposite => ["Simplified method — adapted plastic distribution (CTBUH 2016 §4, EN 1994-1-1 §6.7.3)"],
+        ColumnDesignType.Steel => [SteelRolledMethod, SteelGeneralMethod],
         _ => ["Simplified method (EN 1994-1-1 §6.7.3, BC4)", "General method (EN 1994-1-1 §6.7.2)"],
     };
 
@@ -127,8 +155,11 @@ public static class ColumnDesignCodes
         DesignReference bc4 = new("BCA BC4:2025", "Design Guide for Steel-Concrete Composite Columns with High Strength Materials");
         DesignReference bc1 = new("BCA BC1", "Design Guide on Use of Alternative Structural Steel (material qualification)");
         DesignReference ctbuh = new("CTBUH / ArcelorMittal 2016", "Composite Megacolumns: Testing Multiple, Concrete-Encased, Hot-Rolled Steel Sections — §4 Simplified Design Methods (Trabucco, Gérardy, Xiao, Davies)");
+        DesignReference ec31 = new("SS EN 1993-1-5 + NA", "Eurocode 3 — Plated structural elements: effective widths (class 4), shear buckling of webs");
+        DesignReference en10025 = new("SS EN 10025 / EN 10210 / EN 10219", "Hot rolled structural steels; hot finished and cold formed hollow sections (yield strength by thickness)");
         return type switch
         {
+            ColumnDesignType.Steel => [ec3, ec31, ec0, ec1, en10025, bc1],
             ColumnDesignType.ReinforcedConcrete => [ec2, ec0, ec1, concrete, rebar],
             ColumnDesignType.ConcreteFilledTube => [ec4, bc4, ec3, ec2, ec0, bc1, concrete],
             ColumnDesignType.MegaComposite => [ctbuh, ec4, bc4, ec3, ec2, ec0, bc1, rebar, concrete],
@@ -141,6 +172,8 @@ public static class ColumnDesignCodes
     {
         ColumnDesignType.ReinforcedConcrete =>
             "EC2 covers concrete up to C90/105; high-strength grades above C50/60 use the modified εcu2, n and η of Table 3.1.",
+        ColumnDesignType.Steel =>
+            "EC3 covers S235–S460 (Table 3.1: elements up to 80 mm thick; the yield strength falls with thickness above 40 mm). Singapore NA values of γM0, γM1, γM2 are keyed above — confirm them against the current NA before use.",
         ColumnDesignType.ConcreteFilledTube =>
             "EC4 covers C20/25–C50/60 and S235–S460; BC4 extends the method to high-strength concrete and steel (check the limits against the guide).",
         ColumnDesignType.MegaComposite =>
@@ -155,10 +188,13 @@ public static class ColumnDesignCodes
         DesignCode = DesignCodes(type)[0],
         Method = Methods(type)[0],
         MaxConcreteGrade = "C90/105",
-        MaxSteelGrade = type == ColumnDesignType.ReinforcedConcrete ? "B500B" : "S550",
-        // a mega column starts at 10 m about both axes; the others wait for the length to be keyed in
-        EffectiveLengthY = type == ColumnDesignType.MegaComposite ? 10 : null,
-        EffectiveLengthZ = type == ColumnDesignType.MegaComposite ? 10 : null,
+        MaxSteelGrade = type switch { ColumnDesignType.ReinforcedConcrete => "B500B", ColumnDesignType.Steel => "S460", _ => "S550" },
+        // EN 1993-1-1 6.1(1) recommended values: γM0 = γM1 = 1.0 and γM2 = 1.25 (GammaC and GammaS carry γM1 and γM2 for this design)
+        GammaC = type == ColumnDesignType.Steel ? 1.0 : 1.5,
+        GammaS = type == ColumnDesignType.Steel ? 1.25 : 1.15,
+        // every design starts at 10 m about both axes
+        EffectiveLengthY = 10,
+        EffectiveLengthZ = 10,
         Section = type == ColumnDesignType.MegaComposite ? ColumnSectionInput.MegaDefault : new(),
     };
 }

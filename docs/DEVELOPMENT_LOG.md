@@ -18,6 +18,76 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Design → Tension Cable Design, and suggested cables in Optimization
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Design → Tension Cable Design…; Optimization VCF / TAS → results → Member Utilization → Suggested cable column
+- What: (Export to Word… saves the summary table and every cable calculation as a .docx; the same button is in the Design tab of every other Design window.) Chooses the number and type of stay units for each tension cable — VSL SSI 2000 6-N strand groups, FATZER full-locked-coil ropes, optionally the (unqualified) Utracon PT tendon — from the cable's largest tension over the ticked load cases and its own length, at 50 % or 60 % of the breaking load, with the group capacity, ΣEA, elastic extension, steel mass and an indicative cost from the Technical Options Study of 18 Oct 2026 (rates editable; not supplier prices; a first-pass screen, not an EN 1993-1-11 resistance). The window also sizes a single stay from a typed force. The basis it keeps is used by the Member Utilization check of Optimization VCF / TAS, whose cable rows gain a Suggested cable column and a cost in the summary line; the cable's utilization, check, note and the study's costs are unchanged.
+- Checks: `--cable-design` (the study's 36 selections and rates, the 120 MN worked example, refusals, the optimization suggestion and its saved form), `--cable-design-ui`; `docs/analysis/tension-cable-design-verification.md`. Known: `--optimization-study` and `--column-design` baselines already differ on a clean HEAD (164 differences in the optimization study) — not caused by this entry.
+
+## 2026-10-18 · User Guide: Summary VCF system (research report)
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Help → User Guide → Optimization → Summary VCF system → Export to Word…
+- What: A 9-section summary of the VCF system written to export as a technical report of about 6 pages (A4, Arial 11, 7 figures): the system and the function of each member, the method of analysis, the results of the default model (deflection, axial force and bending moment figures), verification and the comparison with SAP2000 (the stored 135-candidate study, 4,995 values; Export to SAP2000 and Compare with SAP2000 are not yet run against a live SAP2000), the bottom-chord deflection check, member design (CFT, mega, steel), and the optimization. Its numbers are the default VCF model's as captured, not a recommended design.
+- Checks: `--user-guide`; the figures are regenerated with `--vcf-summary-capture`, and `--guide-export "Summary VCF system" file.docx` writes the article as Export to Word… does.
+
+## 2026-10-18 · User Guide: Optimization VCF is the complete VCF report
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Help → User Guide → Optimization VCF → Export to Word…
+- What: The Optimization VCF article now covers the whole VCF workflow, so one Word export is the report: Setup A–D (Edit → VCF System sheets, Define → Materials, Define → Section Properties for steel shapes, CFT, mega composite and cable sections, Run → Analysis Options and the run monitor), the eight optimization steps, and Design A–D (CFT, mega composite and steel beam / column design with their results). 18 new screenshots of the real windows of the default VCF model; the statuses shown (for example the bottom chord FAIL 1.26) are that model's results with the default basis, not a recommended design. Also adds the missing guide article for Optimization → Compare with SAP2000… (the guide's menu-coverage check was failing without it).
+- Checks: `--user-guide` (24 screenshots in the article and its Word export, the Setup / Design sections); the screenshots are regenerated with `--vcf-guide-capture`.
+
+## 2026-10-18 · Member Utilization: pass / fail filter
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Optimization → results window → Member Utilization, a Status box beside the Role box
+- What: Status shows all members, only those that pass, only those that fail (utilization above 1, a failed detailing rule or an error) or only those not checked; it combines with the Role filter, and the summary line speaks of the members shown.
+- Checks: solution builds; none yet (a window filter).
+
+## 2026-10-18 · Fix: Optimization results window failed to open
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Optimization → Optimization VCF / TAS → results window (Member Utilization filters)
+- What: Opening the results window threw "Object reference not set to an instance of an object" (logged in %LocalAppData%\Mcotis\error.log): the role / status filter boxes fire their selection handler while the window's XAML is still loading, before the window had its view model. The handlers now do nothing until the window is built, so the results window opens and a VCF / TAS study can be run and viewed.
+- Checks: `--steel-design-ui` (opens the results window on the default model).
+
+## 2026-10-18 · Optimization: Member Utilization designs bare steel sections
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Optimization → Optimization VCF / TAS → results window → Member Utilization
+- What: Frames with a bare steel I, box (SHS / RHS) or pipe section (steel material) were listed "Not designed". They now go to the Steel Beam / Column design (EC3) on the ULS forces, with the study's effective length l0 and the Design window's steel basis (γM0, γM1, fy, E from the model's material; hollow sections as cold-formed, I sections without root fillets). The default VCF model's chords and end frames are SHS 1200×1200×120 S460: their walls are beyond the 80 mm of EC3 Table 3.1, so they show CHECK with that note even where the utilization is below 1 (a Fail where it is above 1).
+- Checks: `--steel-design` (the section → steel basis step). `--optimization-study`'s frozen baseline already differs by 164 entries on a clean HEAD (deflection and cost of the default VCF model), so it cannot confirm this change leaves the VCF results unchanged; the member rows themselves are not in that baseline's differences I could see.
+
+## 2026-10-18 · Design: Steel Beam / Column (EC3 + Singapore NA)
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Design → Steel Beam / Column Design…; also a choice in Design → Override Design Procedure…
+- What: Bare steel member design for an I section (rolled or welded), a rectangular hollow section and a circular hollow section, in the same dialog as the RC / CFT / composite designs (Design Basis, Section, Members & Loads, Design tabs; "From Member Section" fills h, b, tf, tw or H, B, t or D, t from the FEM section). Per member and load case, on the six FEM force components: classification to EN 1993-1-1 Table 5.2 (class 4 on effective widths of EN 1993-1-5), cross-section resistance 6.2 (N, My, Mz, shear with the 6.2.8 reduction, web shear buckling), flexural buckling 6.3.1 (Table 6.2 curves by manufacture and thickness), lateral-torsional buckling 6.3.2 (6.3.2.3 rolled / equivalent welded, or 6.3.2.2 general case; Mcr with C1 from the quarter-point moments) and the Annex B interaction (6.61 / 6.62, Cm from the end-moment ratio). The step-by-step report, governing case and detailing / scope list are as for the other designs. Yield strength falls with thickness above 40 mm (Table 3.1). The partial factors default to the EC3 recommended γM0 = γM1 = 1.0, γM2 = 1.25; the Singapore NA values and its choice of interaction method were not confirmed against the NA text, so confirm them before relying on a result. Not designed: torsion (refused, as for the other columns), a class 4 CHS (EN 1993-1-6), net section at bolt holes, mono-symmetric I sections, sway Cm = 0.9, load applied away from the shear centre. A rolled I section from the FEM section is taken without root fillets and a hollow section as cold-formed (the lower curve) until set in the dialog. The optimization tab is not offered for this design.
+- Checks: `--steel-design` (UB 457×191×82 properties against the Blue Book, EN 1993-1-1 flexural / LTB / Annex B values worked outside the engine, class 4 effective section worked separately, the default model's 30 steel members designed on their FEM forces, Override Design Procedure); `--steel-design-ui` (the dialog in a real window: fields, γM labels, no Optimization tab, Run Design); `--steel-design` is also run by `--column-design` and `--full`. `--study-ui` has an added assertion for the Design menu and dialog, but that check already stops at an earlier assertion ("FEM inputs panes show the supports") on a clean HEAD, so it does not reach it. `--column-design`'s frozen production baseline still differs by the same 66 entries, with the same values, as a clean checkout of HEAD (the first eight listed are CFT results of the default model's FEM run), so it cannot confirm the other designs are unchanged until that baseline is looked at; this change leaves the steel design out of that baseline.
+
+## 2026-10-18 · Member Utilization: role column and role filter
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Optimization → Optimization VCF / Optimization TAS → results window → Member Utilization (Role box on the right of the Case row)
+- What: Each member row now carries its role in the system (VCF: top / middle / bottom / vertical chord, mega column, cable …; TAS: arch rib, top chord (deck), mega column, struts, tie cable), shown in a new Role column. The Role box beside the Case box lists the roles of the chosen case and shows only that role's members (All roles shows every one); the summary line then counts the members shown. A study saved before this has no roles and lists only All roles.
+- Checks: solution builds; none yet for the filter.
+
+## 2026-10-18 · Design: Override Design Procedure
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Design → Override Design Procedure…
+- What: Select members (frames selected in the viewer come pre-selected), assign each the design procedure of any Design engine (RC column, CFT, steel encased, mega composite) whatever its section suggests, then Run Design. Each assigned member is designed with that engine's code, method and factors from its own Design window, the size of its own section and the FEM forces of the chosen load cases; the effective length l0 is keyed in once for all members and starts at 10 m about both axes. The RC, CFT and Steel Encased Design windows now also start at l0 = 10 m in each direction, as the Mega Composite one already did (they started empty before). A procedure is refused for a member whose section cannot give that engine its size (no default size is ever filled in). The Design tab shows a Procedure column and the report can be copied or saved. Assignments are kept for the session only, and the Optimization Member Utilization check still picks its engine by section.
+- Checks: solution builds; none yet for the assignment flow.
+
+## 2026-10-18 · Optimization VCF: effective length per member role
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Optimization → Optimization VCF → Sections tab (a column beside each frame role's candidate sections)
+- What: Each frame role (top chord, middle chord, bottom chord, vertical chord, mega column, end frames) has an effective length l0 [m], 10 m by default and editable. The column check of the results window's Member Utilization tab uses it, for both axes, in place of the Design window's effective length. A length that is not a positive number is refused when the study is confirmed. Optimization TAS has no such input yet and uses 10 m.
+- Checks: solution builds; none yet for the l0 flow (the Design engine on a real column case is not covered by --optimization-study).
+
 ## 2026-10-18 · Publish consolidated master and synchronize the working copy
 - Status: Done
 - Who: Codex

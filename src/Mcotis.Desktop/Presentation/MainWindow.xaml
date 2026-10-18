@@ -197,6 +197,13 @@
               ToolTip="Concrete-encased steel section column design to SS EN 1994-1-1 + Singapore NA and BCA BC4:2025 (high-strength materials)"/>
     <MenuItem Header="_Mega Composite Column Design…" Tag="MegaComposite" Click="DesignMenu_Click" AutomationProperties.Name="Mega Composite Column Design"
               ToolTip="Several concrete-encased steel profiles: CTBUH / ArcelorMittal (2016) simplified method on SS EN 1994-1-1 6.7.3, high-strength materials per BCA BC4:2025"/>
+    <MenuItem Header="Steel _Beam / Column Design…" Tag="Steel" Click="DesignMenu_Click" AutomationProperties.Name="Steel Beam Column Design"
+              ToolTip="Bare steel beam and column design (I, RHS, CHS) to SS EN 1993-1-1 (EC3) + Singapore NA: classification, cross-section, flexural and lateral-torsional buckling, Annex B interaction"/>
+    <MenuItem Header="Tension C_able Design…" Click="TensionCableDesign_Click" AutomationProperties.Name="Tension Cable Design"
+              ToolTip="Choose the number and type of stay units for each tension cable — VSL SSI 2000 strand groups, FATZER full-locked-coil ropes — at 50 % or 60 % of the breaking load, with stiffness, elongation, mass and an indicative cost (Technical Options Study, Oct 2026). Optimization VCF / TAS suggest the same for every cable of a case."/>
+    <Separator/>
+    <MenuItem Header="_Override Design Procedure…" Click="OverrideDesignProcedure_Click" AutomationProperties.Name="Override Design Procedure"
+              ToolTip="Select members and assign each the design procedure of any Design engine; the member's size comes from its section and its forces from the FEM analysis"/>
    </MenuItem>
    <MenuItem Header="_Help">
     <MenuItem Header="_User Guide" Click="ShowUserGuide" InputGestureText="F1" AutomationProperties.Name="User Guide"

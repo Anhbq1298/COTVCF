@@ -28,7 +28,39 @@ public sealed record DesignCaseResult(string Case, double NEdKN, double M0EdKNm,
 /// <summary>The design actions of one case, the largest over the member's stations, in N and N·mm: axial force
 /// (compression positive), the moments about the major (y-y, local 3) and minor (z-z, local 2) axes and the shears that go
 /// with them.</summary>
-internal readonly record struct DesignActions(double NEd, double M0Y, double M0Z, double VY, double VZ);
+internal readonly record struct DesignActions(double NEd, double M0Y, double M0Z, double VY, double VZ)
+{
+    /// <summary>The shape of the moment diagram about y-y and z-z along the member (used by the steel design's Cm and C1).</summary>
+    public MomentShape ShapeY { get; init; } = MomentShape.Uniform;
+    public MomentShape ShapeZ { get; init; } = MomentShape.Uniform;
+}
+
+/// <summary>A moment diagram along a member read from the FEM stations (spaced evenly from end to end): the end-moment ratio
+/// <paramref name="Psi"/> = smaller end moment / larger end moment (signed; 1 = uniform, −1 = double curvature), <paramref name="Cb"/> the
+/// equivalent-moment factor 12.5 Mmax / (2.5 Mmax + 3 MA + 4 MB + 3 MC) from the quarter points (≥ 1, the factor C1 of the elastic
+/// critical moment is taken from it), and whether the diagram peaks between the ends (loads along the member).</summary>
+internal readonly record struct MomentShape(double Psi, double Cb, bool BetweenEnds)
+{
+    public static MomentShape Uniform { get; } = new(1, 1, false);
+
+    public static MomentShape Of(IReadOnlyList<double> moments)
+    {
+        if (moments.Count < 2) return Uniform;
+        var maximum = moments.Max(Math.Abs);
+        if (maximum < 1e-9) return Uniform;
+        double first = moments[0], last = moments[^1];
+        var (large, small) = Math.Abs(first) >= Math.Abs(last) ? (first, last) : (last, first);
+        double At(double fraction)
+        {
+            var position = fraction * (moments.Count - 1);
+            var index = Math.Min((int)Math.Floor(position), moments.Count - 2);
+            var t = position - index;
+            return Math.Abs(moments[index] * (1 - t) + moments[index + 1] * t);
+        }
+        var cb = 12.5 * maximum / (2.5 * maximum + 3 * At(0.25) + 4 * At(0.5) + 3 * At(0.75));
+        return new(Math.Abs(large) < 1e-9 ? 1 : small / large, Math.Max(1, cb), maximum > Math.Abs(large) * 1.001 + 1e-9);
+    }
+}
 
 /// <summary>One curve of an N–M interaction diagram: N in kN (compression +), M in kNm (≥ 0).</summary>
 public sealed record InteractionSeries(string Name, IReadOnlyList<(double NKN, double MKNm)> Points, bool Dashed = false, bool Minor = false);
@@ -52,6 +84,8 @@ public sealed record ColumnMemberDesign(string Member, string Section, double Le
 {
     /// <summary>The member's role in the model (the VCF system's, as Frame Information gives it); empty when the model has none.</summary>
     public string Role { get; init; } = "";
+    /// <summary>The design procedure the member was designed with when it was assigned one by Design → Override Design Procedure; empty otherwise.</summary>
+    public string Procedure { get; init; } = "";
     public double MaxUtilization => Governing?.MaxUtilization ?? double.PositiveInfinity;
     public bool DetailingOk => Detailing.All(check => check.Pass);
     public string Status => Error is not null ? "ERROR" : MaxUtilization > 1.0 ? "FAIL" : DetailingOk ? "OK" : "CHECK";
@@ -87,7 +121,11 @@ public static class ColumnDesignEngine
         forces.Stations.Max(station => Math.Abs(station.MomentKNm)) * 1e6,
         forces.Stations.Max(station => Math.Abs(station.MomentMinorKNm)) * 1e6,
         forces.Stations.Max(station => Math.Abs(station.ShearKN)) * 1000,
-        forces.Stations.Max(station => Math.Abs(station.ShearMinorKN)) * 1000);
+        forces.Stations.Max(station => Math.Abs(station.ShearMinorKN)) * 1000)
+    {
+        ShapeY = MomentShape.Of(forces.Stations.Select(station => station.MomentKNm).ToArray()),
+        ShapeZ = MomentShape.Of(forces.Stations.Select(station => station.MomentMinorKNm).ToArray()),
+    };
 
     public static ColumnMemberDesign Design(ColumnDesignBasis basis, DesignMemberInput member)
     {
@@ -194,6 +232,7 @@ public static class ColumnDesignEngine
     {
         ColumnDesignType.ReinforcedConcrete => new RcDesigner(basis),
         ColumnDesignType.MegaComposite => new MegaDesigner(basis),
+        ColumnDesignType.Steel => new SteelDesigner(basis),
         _ => new CompositeDesigner(basis),
     };
 

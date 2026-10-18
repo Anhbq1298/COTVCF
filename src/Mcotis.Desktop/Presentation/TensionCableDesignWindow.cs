@@ -1,0 +1,375 @@
+using System.Globalization;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Design;
+using Mcotis.Desktop.Domain;
+using Microsoft.Win32;
+
+namespace Mcotis.Desktop.Presentation;
+
+/// <summary>
+/// Design → Tension Cable Design: for each tension cable of the model, the number and type of stay units that carry its largest tension —
+/// VSL SSI 2000 6-N strand groups, FATZER full-locked-coil ropes or (unqualified) Utracon PT tendons — screened at 50 % or 60 % of the
+/// breaking load, with the stay's stiffness, elongation, steel mass and an indicative cost (<see cref="TensionCableDesigner"/>). The basis
+/// is kept by the view model, and Optimization VCF / TAS suggest each cable's assembly in the Member Utilization sheet with it.
+/// </summary>
+public sealed class TensionCableDesignWindow : Window
+{
+    public sealed class CableRow(MainViewModel.CableDesignOption option, bool isChecked) : Observable
+    {
+        private bool selected = isChecked;
+        public bool Selected { get => selected; set => Set(ref selected, value); }
+        public string Member { get; } = option.Member;
+        public string Section { get; } = option.Section;
+        public string Length { get; } = option.LengthM > 0 ? option.LengthM.ToString("0.###", CultureInfo.InvariantCulture) : "";
+        public string Area { get; } = option.AreaMm2 > 0 ? option.AreaMm2.ToString("#,0", CultureInfo.InvariantCulture) : "";
+        public string Capacity { get; } = option.CapacityKN is { } kn ? kn.ToString("#,0", CultureInfo.InvariantCulture) : "";
+    }
+
+    public sealed class RateRow(TensionCableRates.Entry entry, double value) : Observable
+    {
+        private string text = value.ToString("0.###", CultureInfo.InvariantCulture);
+        public TensionCableRates.Entry Entry { get; } = entry;
+        public string Label { get; } = entry.Label;
+        public string Unit { get; } = entry.Unit;
+        public string Value { get => text; set => Set(ref text, value); }
+    }
+
+    public sealed class ResultRow(TensionCableMemberDesign design)
+    {
+        public TensionCableMemberDesign Design { get; } = design;
+        public string Member => Design.Member;
+        public string Case => Design.Case;
+        public string Tension => Design.TensionKN.ToString("#,0", CultureInfo.InvariantCulture);
+        public string Length => Design.LengthM > 0 ? Design.LengthM.ToString("0.##", CultureInfo.InvariantCulture) : "";
+        public string Assembly => Design.Selected?.Assembly ?? "—";
+        public string Strands => Design.Selected is { StrandsPerUnit: > 0 } s ? s.TotalStrands.ToString(CultureInfo.InvariantCulture) : Design.Selected is null ? "" : "rope";
+        public string Capacity => Design.Selected is { } s ? s.GroupCapacityKN.ToString("#,0", CultureInfo.InvariantCulture) : "";
+        public string Use => Design.Selected is { } s ? s.Utilisation.ToString("0.00", CultureInfo.InvariantCulture) : "";
+        public string Elongation => Design.Selected is { } s ? s.ElongationMm.ToString("0.0", CultureInfo.InvariantCulture) : "";
+        public string CostPerM => Design.Selected is { } s ? s.CostPerMSgd.ToString("#,0", CultureInfo.InvariantCulture) : "";
+        public string Cost => Design.Selected is { } s ? s.CostSgd.ToString("#,0", CultureInfo.InvariantCulture) : "";
+        public string Status => Design.Status;
+    }
+
+    private readonly MainViewModel viewModel;
+    private readonly List<CableRow> cables;
+    private readonly List<RateRow> rates;
+    private readonly List<DesignReferenceWindow.CheckItem> cases;
+    private readonly CheckBox vsl = new() { Content = "VSL SSI 2000 — parallel strand stay, 12 to 187 strands per unit", Margin = new Thickness(0, 0, 0, 4) };
+    private readonly CheckBox fatzer = new() { Content = "FATZER full-locked-coil rope — Ø80 to Ø150 mm", Margin = new Thickness(0, 0, 0, 4) };
+    private readonly CheckBox utracon = new() { Content = "Utracon / DSI-UPS 37-strand PT tendon — NOT shown to be a qualified exposed stay; a provisional alternative only", Margin = new Thickness(0, 0, 0, 4) };
+    private readonly ComboBox screening = new() { MinWidth = 330 };
+    private readonly ComboBox priority = new() { MinWidth = 330 };
+    private readonly ComboBox forceBasis = new() { MinWidth = 330 };
+    private readonly TextBox maxUse = new() { Width = 70 };
+    private readonly TextBox maxUnits = new() { Width = 70 };
+    private readonly TextBox manualForce = new() { Text = "60", Width = 80 };
+    private readonly TextBox manualLength = new() { Text = "50", Width = 80 };
+    private readonly DataGrid cableGrid = new() { AutoGenerateColumns = false, SelectionMode = DataGridSelectionMode.Extended, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
+    private readonly DataGrid rateGrid = new() { AutoGenerateColumns = false, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
+    private readonly DataGrid resultGrid = new() { AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Single, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
+    private readonly TextBox detail = new() { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, FontFamily = new System.Windows.Media.FontFamily("Consolas"), FontSize = 12 };
+    private readonly TextBlock countText = new() { FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6), TextWrapping = TextWrapping.Wrap };
+    private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 560, VerticalAlignment = VerticalAlignment.Center, FontSize = 11 };
+    private readonly TabControl tabs = new();
+    private readonly TabItem designTab = new() { Header = "Design" };
+    private readonly Button closeButton = new() { Content = "Cancel", MinWidth = 80, IsCancel = true };
+    private readonly HashSet<string> viewerSelected;
+    private TensionCableBasis? lastBasis;
+    private IReadOnlyList<TensionCableMemberDesign> lastResults = [];
+
+    private static readonly double[] Screens = [0.5, 0.6];
+
+    public TensionCableDesignWindow(MainViewModel viewModel, IReadOnlyList<string> viewerSelection)
+    {
+        this.viewModel = viewModel;
+        viewerSelected = viewerSelection.ToHashSet(StringComparer.Ordinal);
+        Title = "Tension Cable Design";
+        Icon = AppIcon.Window;
+        Width = 1080; Height = 760; MinWidth = 760; MinHeight = 540;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner; ShowInTaskbar = false;
+        SetResourceReference(BackgroundProperty, "Surface");
+
+        var basis = viewModel.CableDesignBasis;
+        var selected = viewerSelection.ToHashSet(StringComparer.Ordinal);
+        var options = viewModel.CableDesignOptions();
+        var picked = basis.Members.Count > 0 ? basis.Members.ToHashSet(StringComparer.Ordinal) : selected.Count > 0 && options.Any(option => selected.Contains(option.Member)) ? selected : options.Select(option => option.Member).ToHashSet(StringComparer.Ordinal);
+        cables = options.Select(option => new CableRow(option, picked.Contains(option.Member))).ToList();
+        var defaultCases = basis.LoadCases.Count > 0 ? basis.LoadCases : viewModel.CableDesignDefaultCases();
+        cases = viewModel.DesignCaseNames().Select(name => new DesignReferenceWindow.CheckItem(name, "", defaultCases.Contains(name))).ToList();
+        rates = TensionCableRates.Entries.Select(entry => new RateRow(entry, entry.Get(basis.Rates))).ToList();
+
+        vsl.IsChecked = basis.Systems.Contains(CableSystem.VslSsi2000);
+        fatzer.IsChecked = basis.Systems.Contains(CableSystem.FatzerFlc);
+        utracon.IsChecked = basis.Systems.Contains(CableSystem.UtraconPt);
+        screening.ItemsSource = new[] { "50 % of the breaking load — reference (VSL admissible load)", "60 % of the breaking load — subject to supplier verification" };
+        screening.SelectedIndex = basis.ScreeningFactor > 0.55 ? 1 : 0;
+        priority.ItemsSource = new[] { "Lowest estimated installed cost", "Fewest parallel units (fewest anchorages)", "Least steel" };
+        priority.SelectedIndex = (int)basis.Priority;
+        forceBasis.ItemsSource = new[] { "Service (SLS) forces", "Factored (ULS) forces — a caution is printed", "Unknown / other" };
+        forceBasis.SelectedIndex = (int)basis.ForceBasis;
+        maxUse.Text = (basis.MaxUtilisation * 100).ToString("0.###", CultureInfo.InvariantCulture);
+        maxUnits.Text = basis.MaxUnits.ToString(CultureInfo.InvariantCulture);
+        System.Windows.Automation.AutomationProperties.SetName(screening, "Screening level");
+        System.Windows.Automation.AutomationProperties.SetName(priority, "Selection priority");
+        System.Windows.Automation.AutomationProperties.SetName(forceBasis, "Force basis");
+        System.Windows.Automation.AutomationProperties.SetName(maxUse, "Maximum use");
+        System.Windows.Automation.AutomationProperties.SetName(maxUnits, "Most units per stay");
+        System.Windows.Automation.AutomationProperties.SetName(cableGrid, "Cables");
+        System.Windows.Automation.AutomationProperties.SetName(rateGrid, "Cost rates");
+        System.Windows.Automation.AutomationProperties.SetName(resultGrid, "Cable designs");
+
+        var root = new DockPanel { Margin = new Thickness(10) };
+        var banner = new TextBlock { Text = "Tension Cable Design" };
+        banner.SetResourceReference(StyleProperty, "BannerTitle");
+        banner.Margin = new Thickness(2, 0, 0, 8);
+        DockPanel.SetDock(banner, Dock.Top);
+        root.Children.Add(banner);
+
+        var runButton = new Button { Content = "Run Design", MinWidth = 90, Margin = new Thickness(0, 0, 10, 0), IsDefault = true };
+        runButton.Click += (_, _) => Run();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Children = { runButton, closeButton } };
+        var bottom = new DockPanel { Margin = new Thickness(0, 8, 0, 0) };
+        status.SetResourceReference(TextBlock.ForegroundProperty, "Error");
+        bottom.Children.Add(status);
+        bottom.Children.Add(buttons);
+        DockPanel.SetDock(bottom, Dock.Bottom);
+        root.Children.Add(bottom);
+
+        tabs.Items.Add(new TabItem { Header = "Design Basis", Content = BuildBasisTab() });
+        tabs.Items.Add(new TabItem { Header = "Cables & Loads", Content = BuildCablesTab() });
+        tabs.Items.Add(new TabItem { Header = "Cost Rates", Content = BuildRatesTab() });
+        tabs.Items.Add(new TabItem { Header = "Single Stay", Content = BuildSingleTab() });
+        designTab.Content = BuildResultTab();
+        tabs.Items.Add(designTab);
+        root.Children.Add(tabs);
+        Content = root;
+
+        foreach (var row in cables.Where(row => row.Selected)) cableGrid.SelectedItems.Add(row);
+        Message(viewModel.DesignRunId is null ? "There are no FEM results to design the model's cables with. Run the FEM analysis (Run → Run FEM Analysis) first, or size one stay on the Single Stay tab." : "");
+    }
+
+    private static TextBlock Hint(string text, Thickness margin)
+    {
+        var hint = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, Margin = margin };
+        hint.SetResourceReference(StyleProperty, "Hint");
+        return hint;
+    }
+
+    private static UIElement Field(string label, UIElement control, string? unit = null)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        row.Children.Add(new TextBlock { Text = label, Width = 190, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(control);
+        if (unit is not null) row.Children.Add(new TextBlock { Text = unit, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+        return row;
+    }
+
+    private UIElement BuildBasisTab()
+    {
+        var panel = new StackPanel { Margin = new Thickness(8, 10, 8, 0) };
+        panel.Children.Add(new TextBlock { Text = "Stay systems offered", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+        panel.Children.Add(vsl);
+        panel.Children.Add(fatzer);
+        panel.Children.Add(utracon);
+        panel.Children.Add(Hint("The study recommends VSL as the base option, FATZER as the certified rope alternative, and Utracon only as a local specialist bid that must name an approved exposed stay system.", new Thickness(0, 2, 0, 14)));
+        panel.Children.Add(Field("Screening level", screening));
+        panel.Children.Add(Field("Maximum use of it", maxUse, "%"));
+        panel.Children.Add(Field("Selection priority", priority));
+        panel.Children.Add(Field("Tension is", forceBasis));
+        panel.Children.Add(Field("Most units per stay", maxUnits));
+        panel.Children.Add(Hint("A stay of T passes when n × f × MBL ≥ T with f = 0.50 (or 0.60): a first-pass proxy for an admissible load, NOT an EN 1993-1-11 ultimate resistance, fatigue check or anchorage design. " +
+                                "Every system is sized from its standard units; the stay is n identical units in parallel, each with its own anchorage at both ends. " + TensionCableBasis.Code + ".", new Thickness(0, 8, 0, 0)));
+        return panel;
+    }
+
+    private UIElement BuildCablesTab()
+    {
+        var layout = new Grid { Margin = new Thickness(0, 6, 0, 0) };
+        layout.ColumnDefinitions.Add(new ColumnDefinition());
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) });
+        layout.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
+
+        cableGrid.ItemsSource = cables;
+        cableGrid.Columns.Add(new DataGridCheckBoxColumn { Header = "Design", Binding = new System.Windows.Data.Binding(nameof(CableRow.Selected)) { Mode = System.Windows.Data.BindingMode.TwoWay } });
+        foreach (var (header, path, width) in new[] { ("Cable", nameof(CableRow.Member), 90.0), ("Section", nameof(CableRow.Section), 170.0), ("L [m]", nameof(CableRow.Length), 70.0),
+                     ("Steel area [mm²]", nameof(CableRow.Area), 110.0), ("Model capacity [kN]", nameof(CableRow.Capacity), 130.0) })
+            cableGrid.Columns.Add(new DataGridTextColumn { Header = header, IsReadOnly = true, Binding = new System.Windows.Data.Binding(path), Width = new DataGridLength(width, DataGridLengthUnitType.Pixel) });
+
+        var all = new Button { Content = "All", Margin = new Thickness(0, 0, 6, 0), Padding = new Thickness(10, 2, 10, 2) };
+        all.Click += (_, _) => { foreach (var row in cables) row.Selected = true; };
+        var none = new Button { Content = "None", Margin = new Thickness(0, 0, 6, 0), Padding = new Thickness(10, 2, 10, 2) };
+        none.Click += (_, _) => { foreach (var row in cables) row.Selected = false; };
+        var inViewer = new Button { Content = "Selected in viewer", Padding = new Thickness(10, 2, 10, 2), ToolTip = "Design only the cables selected in the model viewer" };
+        inViewer.Click += (_, _) => { var chosen = viewerSelected; foreach (var row in cables) row.Selected = chosen.Contains(row.Member); };
+        var bar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8), Children = { all, none, inViewer } };
+
+        var left = new DockPanel();
+        DockPanel.SetDock(bar, Dock.Top);
+        left.Children.Add(bar);
+        var hint = Hint("Tick the tension cables to design. The tension of each is its largest axial force over the ticked load cases of the FEM run; the stay is sized for that force at the cable's own length. The model section is not changed.", new Thickness(0, 6, 0, 0));
+        DockPanel.SetDock(hint, Dock.Bottom);
+        left.Children.Add(hint);
+        left.Children.Add(cableGrid);
+        layout.Children.Add(left);
+
+        var caseList = new ListBox { ItemsSource = cases };
+        var template = new FrameworkElementFactory(typeof(CheckBox));
+        template.SetBinding(CheckBox.IsCheckedProperty, new System.Windows.Data.Binding(nameof(DesignReferenceWindow.CheckItem.IsChecked)));
+        template.SetBinding(ContentControl.ContentProperty, new System.Windows.Data.Binding(nameof(DesignReferenceWindow.CheckItem.Name)));
+        caseList.ItemTemplate = new DataTemplate { VisualTree = template };
+        System.Windows.Automation.AutomationProperties.SetName(caseList, "Load cases");
+        var side = new GroupBox { Header = "Load cases / combinations", Content = caseList };
+        Grid.SetColumn(side, 2);
+        layout.Children.Add(side);
+        return layout;
+    }
+
+    private UIElement BuildRatesTab()
+    {
+        rateGrid.ItemsSource = rates;
+        rateGrid.Columns.Add(new DataGridTextColumn { Header = "Rate", IsReadOnly = true, Binding = new System.Windows.Data.Binding(nameof(RateRow.Label)), Width = new DataGridLength(360, DataGridLengthUnitType.Pixel) });
+        rateGrid.Columns.Add(new DataGridTextColumn { Header = "Value", Binding = new System.Windows.Data.Binding(nameof(RateRow.Value)) { Mode = System.Windows.Data.BindingMode.TwoWay, UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.PropertyChanged }, Width = new DataGridLength(110, DataGridLengthUnitType.Pixel) });
+        rateGrid.Columns.Add(new DataGridTextColumn { Header = "Unit", IsReadOnly = true, Binding = new System.Windows.Data.Binding(nameof(RateRow.Unit)), Width = new DataGridLength(1, DataGridLengthUnitType.Star) });
+        var dock = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+        var hint = Hint("Indicative Singapore allowances of the Technical Options Study (SGD, excluding GST and the supporting anchorage-box steelwork). They are the study author's budgeting assumptions, " +
+                        "not VSL, FATZER or Utracon prices: obtain three comparable supplier bids before any procurement decision. A stay's rate per metre is its units × (material + pipe + 2 × anchorage ÷ length + installation).", new Thickness(0, 6, 0, 0));
+        DockPanel.SetDock(hint, Dock.Bottom);
+        dock.Children.Add(hint);
+        dock.Children.Add(rateGrid);
+        return dock;
+    }
+
+    private UIElement BuildSingleTab()
+    {
+        var panel = new StackPanel { Margin = new Thickness(8, 10, 8, 0) };
+        panel.Children.Add(Field("Tension in the stay", manualForce, "MN"));
+        panel.Children.Add(Field("Length of the stay", manualLength, "m"));
+        var size = new Button { Content = "Size this stay", MinWidth = 110, HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(10, 3, 10, 3) };
+        size.Click += (_, _) => RunSingle();
+        panel.Children.Add(size);
+        panel.Children.Add(Hint("Sizes one stay from a force you enter — for example a demand of 10–120 MN from another model — with the Design Basis and Cost Rates of the other tabs, without a FEM run. The result appears in the Design tab as \"Manual\".", new Thickness(0, 12, 0, 0)));
+        return panel;
+    }
+
+    private UIElement BuildResultTab()
+    {
+        resultGrid.SelectionChanged += (_, _) => { if (resultGrid.SelectedItem is ResultRow row) { detail.Text = row.Design.Error ?? row.Design.Detail; detail.ScrollToHome(); } };
+        foreach (var (header, path, width) in new[] { ("Cable", nameof(ResultRow.Member), 80.0), ("Governing case", nameof(ResultRow.Case), 130.0), ("T [kN]", nameof(ResultRow.Tension), 80.0), ("L [m]", nameof(ResultRow.Length), 60.0),
+                     ("Suggested stay", nameof(ResultRow.Assembly), 190.0), ("Strands", nameof(ResultRow.Strands), 62.0), ("Capacity [kN]", nameof(ResultRow.Capacity), 90.0), ("Use", nameof(ResultRow.Use), 50.0),
+                     ("ΔL [mm]", nameof(ResultRow.Elongation), 62.0), ("S$/m", nameof(ResultRow.CostPerM), 70.0), ("Cost [S$]", nameof(ResultRow.Cost), 90.0), ("Status", nameof(ResultRow.Status), 60.0) })
+            resultGrid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new System.Windows.Data.Binding(path), Width = new DataGridLength(width, DataGridLengthUnitType.Pixel) });
+
+        var copy = new Button { Content = "Copy Report", MinWidth = 100, Margin = new Thickness(0, 0, 8, 0) };
+        copy.Click += (_, _) => { if (lastBasis is null) return; try { Clipboard.SetText(TensionCableDesigner.Report(lastBasis, lastResults)); } catch (System.Runtime.InteropServices.COMException) { } };
+        var save = new Button { Content = "Save Report…", MinWidth = 100 };
+        save.Click += (_, _) =>
+        {
+            if (lastBasis is null) return;
+            var dialog = new SaveFileDialog { Filter = "Text (*.txt)|*.txt", FileName = "tension-cable-design.txt" };
+            if (dialog.ShowDialog(this) == true) File.WriteAllText(dialog.FileName, TensionCableDesigner.Report(lastBasis, lastResults));
+        };
+        var word = new Button { Content = "Export to Word…", MinWidth = 120, Margin = new Thickness(8, 0, 0, 0), ToolTip = "Save the summary table and every cable calculation as a Word document" };
+        word.Click += (_, _) => ExportWord();
+        var bar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0), Children = { copy, save, word } };
+
+        var layout = new Grid { Margin = new Thickness(0, 6, 0, 0) };
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 120 });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(6) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1.2, GridUnitType.Star), MinHeight = 120 });
+        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        layout.Children.Add(countText);
+        Grid.SetRow(resultGrid, 1);
+        layout.Children.Add(resultGrid);
+        var box = new GroupBox { Header = "Calculation of the selected cable", Content = detail };
+        Grid.SetRow(box, 3);
+        layout.Children.Add(box);
+        Grid.SetRow(bar, 4);
+        layout.Children.Add(bar);
+        countText.Text = "Run Design to see the results here.";
+        return layout;
+    }
+
+    private void Message(string text) => status.Text = text;
+
+    private void ExportWord()
+    {
+        if (lastBasis is null || lastResults.Count == 0) { Message("Run Design first; there is nothing to export yet."); return; }
+        var dialog = new SaveFileDialog { Title = "Export to Word", Filter = "Word document (*.docx)|*.docx", FileName = "tension-cable-design.docx", AddExtension = true };
+        if (dialog.ShowDialog(this) != true) return;
+        try
+        {
+            DesignReportWord.Export(TensionCableDesigner.WordReport(lastBasis, lastResults), dialog.FileName);
+            Message("");
+            if (MessageBox.Show(this, $"Saved to\n{dialog.FileName}\n\nOpen it now?", "Export to Word", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dialog.FileName) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Message("The document could not be saved: " + ex.Message + " Is it open in Word? Close it, or choose another name."); }
+    }
+
+    /// <summary>The basis the tabs describe, or why it cannot be read.</summary>
+    private TensionCableBasis? ReadBasis()
+    {
+        var systems = new List<CableSystem>();
+        if (vsl.IsChecked == true) systems.Add(CableSystem.VslSsi2000);
+        if (fatzer.IsChecked == true) systems.Add(CableSystem.FatzerFlc);
+        if (utracon.IsChecked == true) systems.Add(CableSystem.UtraconPt);
+        if (!double.TryParse(maxUse.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var use)) { Message("Maximum use: enter a percentage."); return null; }
+        if (!int.TryParse(maxUnits.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var units)) { Message("Most units per stay: enter a whole number."); return null; }
+        var rateSet = new TensionCableRates();
+        foreach (var row in rates)
+        {
+            if (!double.TryParse(row.Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)) { Message($"Rate {row.Label}: enter a number."); return null; }
+            rateSet = row.Entry.Set(rateSet, value);
+        }
+        var basis = new TensionCableBasis
+        {
+            Systems = systems, ScreeningFactor = Screens[Math.Max(0, screening.SelectedIndex)], MaxUtilisation = use / 100, MaxUnits = units,
+            Priority = (CablePriority)Math.Max(0, priority.SelectedIndex), ForceBasis = (CableForceBasis)Math.Max(0, forceBasis.SelectedIndex), Rates = rateSet,
+        };
+        if (basis.Problems() is { Count: > 0 } problems) { Message(problems[0]); return null; }
+        return basis;
+    }
+
+    private void Show(TensionCableBasis basis, IReadOnlyList<TensionCableMemberDesign> designs, string basisText)
+    {
+        lastBasis = basis;
+        lastResults = designs;
+        resultGrid.ItemsSource = designs.Select(design => new ResultRow(design)).ToList();
+        var failed = designs.Count(design => design.Status == "ERROR");
+        var check = designs.Count(design => design.Status == "CHECK");
+        var none = designs.Count(design => design.Status == "—");
+        countText.Text = $"{designs.Count} cable(s): {designs.Count - failed - check - none} OK · {check} to check · {none} without tension · {failed} not designed · indicative cost S${designs.Sum(design => design.Selected?.CostSgd ?? 0):#,0} — {basisText}";
+        if (designs.Count > 0) resultGrid.SelectedIndex = 0;
+        Message("");
+        closeButton.Content = "Close";
+        tabs.SelectedItem = designTab;
+    }
+
+    private void Run()
+    {
+        if (ReadBasis() is not { } basis) return;
+        if (viewModel.DesignRunId is null) { Message("There are no FEM results to design the model's cables with. Run the FEM analysis (Run → Run FEM Analysis) first, or size one stay on the Single Stay tab."); return; }
+        var members = cables.Where(row => row.Selected).Select(row => row.Member).ToArray();
+        if (members.Length == 0) { Message(cables.Count == 0 ? "The model has no tension cables." : "Tick at least one cable."); return; }
+        var chosen = cases.Where(item => item.IsChecked).Select(item => item.Name).ToArray();
+        if (cases.Count > 0 && chosen.Length == 0) { Message("Tick at least one load case or combination."); return; }
+        basis = basis with { Members = members, LoadCases = chosen };
+        viewModel.CableDesignBasis = basis;
+        try { Show(basis, viewModel.RunTensionCableDesign(basis), $"FEM analysis of the model · {chosen.Length} load case(s)"); }
+        catch (Exception ex) { Message(ex is InvalidOperationException ? ex.Message : "The design could not be completed: " + ex.Message); }
+    }
+
+    private void RunSingle()
+    {
+        if (ReadBasis() is not { } basis) return;
+        if (!double.TryParse(manualForce.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var force) || !double.IsFinite(force) || force <= 0) { Message("The tension must be a number greater than 0 MN."); return; }
+        if (!double.TryParse(manualLength.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var length) || !double.IsFinite(length) || length <= 0) { Message("The length must be a number greater than 0 m."); return; }
+        Show(basis, [TensionCableDesigner.Design(basis, "Manual", "", length, "", force * 1000)], $"entered force, no FEM run");
+        viewModel.CableDesignBasis = basis with { Members = viewModel.CableDesignBasis.Members, LoadCases = viewModel.CableDesignBasis.LoadCases };
+    }
+}

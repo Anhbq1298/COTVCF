@@ -46,17 +46,34 @@ public partial class OptimizationResultsWindow : Window
         else if (MemberCaseBox.SelectedItem is null) MemberCaseBox.SelectedIndex = 0;
     }
 
-    private void MemberCase_Changed(object sender, SelectionChangedEventArgs e) => ShowMembers(MemberCaseBox.SelectedItem as VcfOptimizationRow);
+    // the XAML selects its first filter item while it loads, before the constructor has set the view model (the case box is still null then)
+    private void MemberCase_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (viewModel is null || MemberCaseBox is null) return;
+        ShowMembers(MemberCaseBox.SelectedItem as VcfOptimizationRow);
+    }
+
+    private void MemberRole_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (viewModel is null || MemberCaseBox is null) return;
+        if (!refreshingRoles) ShowMembers(MemberCaseBox.SelectedItem as VcfOptimizationRow);
+    }
+
+    private const string AllRoles = "All roles";
+    private bool refreshingRoles;
 
     private void BuildMemberColumns()
     {
         var numeric = (Style)FindResource("NumericCell");
         MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Member", Binding = new Binding(nameof(MemberUtilization.Member)), MinWidth = 90 });
+        MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Role", Binding = new Binding(nameof(MemberUtilization.Role)), MinWidth = 110 });
         MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Type", Binding = new Binding(nameof(MemberUtilization.Type)), MinWidth = 70 });
         MemberGrid.Columns.Add(new DataGridTextColumn { Header = new TextBlock { Text = "Section" }, Binding = new Binding(nameof(MemberUtilization.Section)), MinWidth = 140 });
         MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Utilization", MinWidth = 90, ElementStyle = numeric,
             Binding = new Binding(nameof(MemberUtilization.UtilizationText)), SortMemberPath = nameof(MemberUtilization.Utilization) });
         MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Check", Binding = new Binding(nameof(MemberUtilization.Check)), MinWidth = 54, ElementStyle = CheckStyle(nameof(MemberUtilization.Check)) });
+        MemberGrid.Columns.Add(new DataGridTextColumn { Header = new TextBlock { Text = "Suggested cable" }, Binding = new Binding(nameof(MemberUtilization.SuggestedCable)), MinWidth = 210,
+            SortMemberPath = nameof(MemberUtilization.SuggestedCable) });
         MemberGrid.Columns.Add(new DataGridTextColumn { Header = new TextBlock { Text = "Governing result" }, Binding = new Binding(nameof(MemberUtilization.Case)), MinWidth = 130 });
         MemberGrid.Columns.Add(new DataGridTextColumn { Header = "Note", Binding = new Binding(nameof(MemberUtilization.Note)), Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = 160 });
     }
@@ -64,18 +81,42 @@ public partial class OptimizationResultsWindow : Window
     /// <summary>The members of <paramref name="row"/>'s case, the most utilized first.</summary>
     private void ShowMembers(VcfOptimizationRow? row)
     {
-        if (row is null) { MemberGrid.ItemsSource = null; MemberSummary.Text = ""; return; }
+        if (row is null) { MemberGrid.ItemsSource = null; MemberSummary.Text = ""; ShowRoles([]); return; }
         if (row.Members is not { Count: > 0 } members)
         {
             MemberGrid.ItemsSource = null;
+            ShowRoles([]);
             MemberSummary.Text = row.MaxDeflectionMm is null ? "This case could not be analysed — no members." : "No member utilization saved for this case (a study run before this sheet existed): run it again.";
             return;
         }
+        ShowRoles(members);
+        // the filter: one role, or all; the summary line then speaks of the members shown
+        if (MemberRoleBox.SelectedItem is string role && role != AllRoles) members = members.Where(item => item.Role == role).ToArray();
+        members = (MemberStatusBox.SelectedIndex switch
+        {
+            1 => members.Where(item => item.Check == "OK"),
+            2 => members.Where(item => item.Check is "FAIL" or "CHECK" or "ERROR"),
+            3 => members.Where(item => item.Utilization is null && item.Check is not ("FAIL" or "CHECK" or "ERROR")),
+            _ => members,
+        }).ToArray();
         MemberGrid.ItemsSource = members.OrderByDescending(item => item.Utilization ?? -1).ThenBy(item => item.Member, StringComparer.Ordinal).ToArray();
         var checkedMembers = members.Where(item => item.Utilization is not null).ToArray();
         var worst = checkedMembers.MaxBy(item => item.Utilization);
         MemberSummary.Text = $"{members.Count} members · {checkedMembers.Length} checked · {checkedMembers.Count(item => item.Check == "OK")} OK" +
-            (worst is null ? "" : $" · governing {worst.Member} {worst.UtilizationText} ({worst.Check})");
+            (worst is null ? "" : $" · governing {worst.Member} {worst.UtilizationText} ({worst.Check})") +
+            (members.Where(item => item.CableDesign is not null).ToArray() is { Length: > 0 } stays
+                ? $" · {stays.Length} cables suggested, S${stays.Sum(item => item.CableDesign!.CostSgd):#,0}" : "");
+    }
+
+    /// <summary>The roles of the case's members in the filter box, the chosen one kept while the case changes.</summary>
+    private void ShowRoles(IReadOnlyList<MemberUtilization> members)
+    {
+        var kept = MemberRoleBox.SelectedItem as string;
+        var roles = members.Select(item => item.Role).Where(text => text.Length > 0).Distinct().Order(StringComparer.Ordinal).Prepend(AllRoles).ToList();
+        refreshingRoles = true;
+        MemberRoleBox.ItemsSource = roles;
+        MemberRoleBox.SelectedItem = kept is not null && roles.Contains(kept) ? kept : AllRoles;
+        refreshingRoles = false;
     }
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs e)

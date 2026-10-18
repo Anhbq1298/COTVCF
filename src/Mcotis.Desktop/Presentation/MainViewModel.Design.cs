@@ -60,9 +60,19 @@ public sealed partial class MainViewModel
             ColumnDesignType.SteelEncased => section.Shape == FrameShape.Encased || name.Contains("SRC", StringComparison.OrdinalIgnoreCase) ||
                                              name.Contains("encase", StringComparison.OrdinalIgnoreCase),
             ColumnDesignType.MegaComposite => section.Shape == FrameShape.MegaComposite || name.Contains("mega", StringComparison.OrdinalIgnoreCase),
+            ColumnDesignType.Steel => material?.Kind == MaterialKind.Steel && SteelSectionGives(section),
             _ => material?.Kind == MaterialKind.Concrete && section.Shape is FrameShape.Rectangle or FrameShape.Circle,
         };
     }
+
+    /// <summary>A bare steel section the steel beam / column design can size: a doubly symmetric I, a box (RHS) or a pipe (CHS).</summary>
+    private static bool SteelSectionGives(FrameSectionProperty section) => section.Composite is null && section.Shape switch
+    {
+        FrameShape.I => (section.BottomWidth <= 0 || Math.Abs(section.BottomWidth - section.Width) < 1e-9) &&
+                        (section.BottomFlangeThickness <= 0 || Math.Abs(section.BottomFlangeThickness - section.FlangeThickness) < 1e-9),
+        FrameShape.Box or FrameShape.Pipe => true,
+        _ => false,
+    };
 
     /// <summary>The member check of the optimization cases (Member Utilization tab): the Design engine on the columns, tension over
     /// capacity on the cables. A snapshot of the design bases of every section × material of the libraries, so it runs off the UI thread.</summary>
@@ -78,11 +88,132 @@ public sealed partial class MainViewModel
             {
                 var found = material == "" ? null : Materials.First(item => item.Name == material);
                 // the type is the first the section suits, in the order of the Design menu's own: composite ones before plain RC
-                var type = new[] { ColumnDesignType.MegaComposite, ColumnDesignType.SteelEncased, ColumnDesignType.ConcreteFilledTube, ColumnDesignType.ReinforcedConcrete }
+                var type = new[] { ColumnDesignType.MegaComposite, ColumnDesignType.SteelEncased, ColumnDesignType.ConcreteFilledTube, ColumnDesignType.ReinforcedConcrete, ColumnDesignType.Steel }
                     .Where(candidate => Suits(candidate, section, found)).Select(candidate => (ColumnDesignType?)candidate).FirstOrDefault();
                 byKey[(section.Name, material)] = type is { } suited ? bases[suited] with { Section = DesignSectionDefaults(suited, section.Name, material == "" ? null : material), Members = [], LoadCases = [] } : null;
             }
-        return new(property => byKey.GetValueOrDefault((property.SectionName ?? "", property.MaterialName ?? "")), State.CableStrengthMpa, State.CableStrengthReductionFactor);
+        return new(property => byKey.GetValueOrDefault((property.SectionName ?? "", property.MaterialName ?? "")), State.CableStrengthMpa, State.CableStrengthReductionFactor,
+            CableDesignBasis with { Members = [], LoadCases = [] });
+    }
+
+    // ---- Design → Tension Cable Design ----
+    // The basis confirmed in the window is kept for the session; the optimization cases suggest each cable's assembly with it
+    // (MemberUtilizationCheck), so a stay system, screening level or rate set in the Design window carries into Optimization VCF / TAS.
+    internal TensionCableBasis CableDesignBasis { get; set; } = TensionCableBasis.Default;
+
+    /// <summary>A cable of the model offered in Design → Tension Cable Design.</summary>
+    public sealed record CableDesignOption(string Member, string Section, double LengthM, double AreaMm2, double? CapacityKN);
+
+    internal IReadOnlyList<CableDesignOption> CableDesignOptions() => FemSectionProperties.Where(property => property.IsCable)
+        .OrderBy(property => property.MemberName, StringComparer.Ordinal)
+        .Select(property => new CableDesignOption(property.MemberName, property.SectionName ?? "", CableLength(property.MemberName), property.AreaM2 * 1e6,
+            property.AreaM2 > 0 && State.CableStrengthMpa > 0 ? property.AreaM2 * State.CableStrengthMpa * 1000.0 * State.CableStrengthReductionFactor : null)).ToArray();
+
+    private double CableLength(string member) => MemberLength(member) is > 0 and var length ? length : VcfOptimization.CableLength(State.Geometry, member);
+
+    /// <summary>The cases ticked by default for the cables: the service (SLS) ones, else every case, as the cable screen is a service-load proxy.</summary>
+    internal IReadOnlyList<string> CableDesignDefaultCases()
+    {
+        var names = DesignCaseNames();
+        var service = names.Where(name => name.Contains("SLS", StringComparison.OrdinalIgnoreCase)).ToArray();
+        return service.Length > 0 ? service : names;
+    }
+
+    /// <summary>Designs each cable of <paramref name="basis"/> for its largest tension over the load cases of the FEM run.</summary>
+    internal IReadOnlyList<TensionCableMemberDesign> RunTensionCableDesign(TensionCableBasis basis)
+    {
+        var run = SelectedFemRun ?? FemRuns.FirstOrDefault() ?? throw new InvalidOperationException("There are no FEM results to design with. Run the FEM analysis (Run → Run FEM Analysis) first; the design basis is kept.");
+        var cases = basis.LoadCases.Count > 0 ? basis.LoadCases : DesignCaseNames();
+        var options = CableDesignOptions().ToDictionary(option => option.Member, StringComparer.Ordinal);
+        var byCase = cases.Select(name => (Name: name, Result: run.ResultFor(name == "Result" ? null : name))).ToArray();
+        return basis.Members.Select(member =>
+        {
+            var option = options.GetValueOrDefault(member);
+            var governing = byCase.Select(entry => (entry.Name, Force: entry.Result.Cables.Where(cable => cable.MemberName == member).Select(cable => cable.AxialForceKN).DefaultIfEmpty(double.NaN).Max()))
+                .Where(entry => !double.IsNaN(entry.Force)).DefaultIfEmpty((Name: "", Force: double.NaN)).MaxBy(entry => entry.Force);
+            return TensionCableDesigner.Design(basis, member, option?.Section ?? "", option?.LengthM ?? 0, governing.Name, governing.Force, option?.AreaMm2, option?.CapacityKN);
+        }).ToArray();
+    }
+
+    // ---- Design → Override Design Procedure ----
+    // A member is designed with the procedure of the Design menu it is assigned, whatever its section suggests. The assignment is
+    // the user's, kept for the session; the member's size comes from its own section, its forces from the FEM run.
+    private readonly Dictionary<string, ColumnDesignType> designProcedures = new(StringComparer.Ordinal);
+
+    internal ColumnDesignType? DesignProcedureOf(string member) => designProcedures.TryGetValue(member, out var type) ? type : null;
+
+    /// <summary>The procedure the Design menu would offer a member by its section and material alone (none for a section no design takes).</summary>
+    internal ColumnDesignType? SuggestedDesignProcedure(string member)
+    {
+        var property = FemSectionProperties.FirstOrDefault(item => item.MemberName == member);
+        var section = FrameSections.FirstOrDefault(item => item.Name == property?.SectionName);
+        var material = Materials.FirstOrDefault(item => item.Name == property?.MaterialName);
+        return new[] { ColumnDesignType.MegaComposite, ColumnDesignType.SteelEncased, ColumnDesignType.ConcreteFilledTube, ColumnDesignType.ReinforcedConcrete, ColumnDesignType.Steel }
+            .Where(candidate => Suits(candidate, section, material)).Select(candidate => (ColumnDesignType?)candidate).FirstOrDefault();
+    }
+
+    /// <summary>Why <paramref name="member"/>'s section cannot give <paramref name="type"/> its size; null when it can. A size is never
+    /// filled in from a default: an RC column takes its outline from a concrete rectangle or circle, a CFT its tube from a box, a pipe or
+    /// a filled-tube section, and a steel encased or mega composite column everything from its Section Designer section.</summary>
+    internal string? DesignProcedureProblem(ColumnDesignType type, string member)
+    {
+        var property = FemSectionProperties.FirstOrDefault(item => item.MemberName == member);
+        var section = FrameSections.FirstOrDefault(item => item.Name == property?.SectionName);
+        if (section is null) return $"{member} has no section assigned.";
+        var composite = section.Composite is not null;
+        var gives = type switch
+        {
+            ColumnDesignType.ReinforcedConcrete => section.Shape is FrameShape.Rectangle or FrameShape.Circle,
+            ColumnDesignType.ConcreteFilledTube => composite && section.Shape == FrameShape.FilledTube || section.Shape is FrameShape.Box or FrameShape.Pipe || TubeFromName(section) is not null,
+            ColumnDesignType.SteelEncased => composite && section.Shape == FrameShape.Encased,
+            ColumnDesignType.Steel => SteelSectionGives(section),
+            _ => composite && section.Shape == FrameShape.MegaComposite,
+        };
+        return gives ? null : $"{member}: section {section.Name} ({FrameSectionProperty.Title(section.Shape)}) gives no size for the {ColumnDesignCodes.Title(type)}.";
+    }
+
+    /// <summary>Assigns <paramref name="type"/> (null clears the assignment) to the members; returns the reason for each member refused.</summary>
+    internal IReadOnlyList<string> AssignDesignProcedure(IEnumerable<string> members, ColumnDesignType? type)
+    {
+        var refused = new List<string>();
+        foreach (var member in members)
+        {
+            if (type is not { } procedure) { designProcedures.Remove(member); continue; }
+            if (DesignProcedureProblem(procedure, member) is { } problem) refused.Add(problem);
+            else designProcedures[member] = procedure;
+        }
+        return refused;
+    }
+
+    /// <summary>Designs each member with the procedure assigned to it: the design basis (code, method, factors, materials) of that
+    /// procedure's Design menu, the member's own section, and the FEM forces of the member. The effective length is
+    /// <paramref name="effectiveLengthM"/> [m] about both axes (10 m by default in the window).</summary>
+    internal IReadOnlyList<ColumnMemberDesign> RunOverriddenDesign(IReadOnlyList<string> members, IReadOnlyList<string> loadCases, double effectiveLengthM)
+    {
+        IReadOnlyDictionary<string, VcfMemberRole> roles;
+        try { roles = VcfGeometry.Analyze(State.Geometry, State.Truss).Roles; }
+        catch (InvalidOperationException) { roles = new Dictionary<string, VcfMemberRole>(); }
+        var results = new List<ColumnMemberDesign>();
+        foreach (var member in members)
+        {
+            if (DesignProcedureOf(member) is not { } type) continue;
+            var input = DesignMemberInputs(type, [member], loadCases).FirstOrDefault();
+            var title = ColumnDesignCodes.Title(type);
+            ColumnMemberDesign result;
+            if (input is null) result = new(member, "", 0, [], null, [], "", "There are no FEM results to design with.");
+            else if (input.LengthM <= 0) result = new(member, input.Section, 0, [], null, [], "", "The member has no length in the model.");
+            else
+            {
+                var basis = DesignBasis(type) with
+                {
+                    Section = DesignSectionDefaults(type, member), Members = [member], LoadCases = loadCases,
+                    EffectiveLengthY = effectiveLengthM, EffectiveLengthZ = effectiveLengthM,
+                };
+                result = ColumnDesignEngine.Design(basis, input);
+            }
+            results.Add(result with { Procedure = title, Role = roles.TryGetValue(member, out var role) ? VcfGeometry.Title(role) : "" });
+        }
+        return results;
     }
 
     /// <summary>The length of a frame of the model's document, by its identity (M7); 0 for a member the document lacks.</summary>
@@ -136,6 +267,22 @@ public sealed partial class MainViewModel
             (ColumnDesignType.SteelEncased, FrameShape.I) => input with
             {
                 SteelDepth = mm(section.Depth), SteelWidth = mm(section.Width), FlangeThickness = mm(section.FlangeThickness), WebThickness = mm(section.WebThickness),
+            },
+            // a bare steel section; the FEM section gives no root radius, so a rolled I is designed without its fillets (on the safe side), and a
+            // hollow section is taken as cold-formed (the lower buckling curve) until the user says otherwise; a box has one wall thickness, the thinner
+            (ColumnDesignType.Steel, FrameShape.I) => input with
+            {
+                SteelKind = SteelShape.I, Fabrication = SteelFabrication.Rolled, RootRadius = 0,
+                SteelDepth = mm(section.Depth), SteelWidth = mm(section.Width), FlangeThickness = mm(section.FlangeThickness), WebThickness = mm(section.WebThickness),
+            },
+            (ColumnDesignType.Steel, FrameShape.Box) => input with
+            {
+                SteelKind = SteelShape.Rhs, Fabrication = SteelFabrication.ColdFormed,
+                TubeDepth = mm(section.Depth), TubeWidth = mm(section.Width), TubeThickness = mm(Math.Min(section.FlangeThickness, section.WebThickness)),
+            },
+            (ColumnDesignType.Steel, FrameShape.Pipe) => input with
+            {
+                SteelKind = SteelShape.Chs, Fabrication = SteelFabrication.ColdFormed, TubeDepth = mm(section.Depth), TubeThickness = mm(section.WebThickness),
             },
             _ => input,
         };
