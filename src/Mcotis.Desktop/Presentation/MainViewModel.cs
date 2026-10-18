@@ -369,7 +369,7 @@ public sealed partial class MainViewModel : Observable
     {
         Notify(nameof(FemResultRows)); Notify(nameof(FemResultSummary));
         Notify(nameof(HasNativeStaticResults)); Notify(nameof(NativeJointResultRows)); Notify(nameof(NativeFrameStationResultRows));
-        Notify(nameof(FemRunCableFitRows));
+        Notify(nameof(FemRunCableFitRows)); Notify(nameof(FemMemberSummaryRows));
         Notify(nameof(FemResultStartHeader)); Notify(nameof(FemResultEndHeader));
         Notify(nameof(FemResultNames)); Notify(nameof(FemResultDiagramTitle));
         Notify(nameof(FemResultIssue));
@@ -1252,6 +1252,29 @@ public sealed partial class MainViewModel : Observable
     public IEnumerable<FemCableFitRow> FemRunCableFitRows => SelectedFemRun is { } run
         ? FemCableFitRow.FromRun(run, SelectedFemResultName) : [];
     public IReadOnlyList<FemResultRow> FemResultRows => FemResultTable.Build(SelectedFemResult, FemResultMode);
+    /// <summary>Results table → Member force summary: peak bending, shear and axial force of each member group (Mega
+    /// Column, chords, main and internal cables on a VCF system; each member otherwise) under the load case shown.
+    /// Member size describes each assigned section and draws it, as Show Quantities does.</summary>
+    public IReadOnlyList<FemMemberSummaryRow> FemMemberSummaryRows
+    {
+        get
+        {
+            if (SelectedFemResult is not { } result) return [];
+            var properties = FemSectionProperties.ToArray();
+            var groups = ResultMemberSummary.Groups(State.Geometry, State.Truss, properties);
+            var forces = ResultMemberSummary.Create(SelectedFemResultName ?? "", result, groups, Enum.GetValues<ResultReportOutput>()).Rows;
+            IReadOnlyList<NativeQuantityRow> quantities = [];
+            try { quantities = NativeQuantityTakeoffCalculator.Calculate(NativeDocumentSession.Document).Rows; }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or System.Text.Json.JsonException) { /* sizes fall back to section names */ }
+            var sectionOf = properties.GroupBy(p => p.MemberName, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().SectionName, StringComparer.Ordinal);
+            return forces.Select((row, index) => new FemMemberSummaryRow(row, groups[index].Members
+                .Select(member => sectionOf.GetValueOrDefault(member)).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.Ordinal)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .Select(name => quantities.FirstOrDefault(q => q.Section == name) is { } q
+                    ? new FemMemberSummarySection(name!, q.SectionType == "—" ? q.FigureDescription : $"{q.SectionType}: {q.FigureDescription}", q.Figure)
+                    : new FemMemberSummarySection(name!, name!, null)).ToArray())).ToArray();
+        }
+    }
     public FemAnalysisResult? SharedViewerFemResult =>
         !ShowUndeformed && selectedTab == TabFem && SelectedFemPage == FemResultsPage
             ? showModeShape ? ModalResults.Display : ViewedFemResult : null;

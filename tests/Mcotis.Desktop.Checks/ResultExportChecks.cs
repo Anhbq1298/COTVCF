@@ -36,6 +36,23 @@ internal static class ResultExportChecks
         Check(groups.Take(6).Select(g => g.Title).SequenceEqual(new[] { "Mega Column", "Top Chord", "Bottom Chord", "Vertical Chord", "Main Cable (External)", "Internal Cable" })
             && groups.Single(g => g.Title == "Main Cable (External)").Members.Count > 0 && groups.Single(g => g.Title == "Internal Cable").Members.Count > 0,
             "VCF summary uses the requested member rows and distinguishes external and internal cables");
+        Check(groups.Single(g => g.Title == "Main Cable (External)").Members.OrderBy(n => n, StringComparer.Ordinal).SequenceEqual(new[] { "Cable1a-2", "Cable1b-2" })
+            && groups.Single(g => g.Title == "Internal Cable").Members.All(n => n.StartsWith("Cable", StringComparison.Ordinal) && !ResultMemberSummary.IsMainCable(n))
+            && groups.All(g => g.Title is not ("Other Cables" or "Middle Chord" or "End Frames")) && !ResultMemberSummary.IsMainCable("Cable10a-2") && ResultMemberSummary.IsMainCable("cable1b"),
+            "Main Cable (External) is Cable1a/Cable1b and every other cable is an Internal Cable");
+        var roles = VcfGeometry.Analyze(vm.State.Geometry, vm.State.Truss).Roles;
+        var verticals = groups.Single(g => g.Title == "Vertical Chord").Members.ToHashSet(StringComparer.Ordinal);
+        Check(roles.Any(r => r.Value == VcfMemberRole.MiddleChord)
+            && roles.Where(r => r.Value is VcfMemberRole.VerticalChord or VcfMemberRole.MiddleChord).All(r => verticals.Contains(r.Key))
+            && roles.Where(r => r.Value == VcfMemberRole.EndFrame).All(r => groups.All(g => !g.Members.Contains(r.Key))),
+            "Vertical Chord envelopes the vertical and middle chords, and the end frames are left out of the summary");
+        var tableRows = vm.FemMemberSummaryRows;
+        Check(tableRows.Take(6).Select(r => r.Member).SequenceEqual(new[] { "Mega Column", "Top Chord", "Bottom Chord", "Vertical Chord", "Main Cable (External)", "Internal Cable" })
+            && tableRows[4] is { BendingKNmText: "—", ShearKNText: "—" } && tableRows[5].AxialKNText != "—" && tableRows[0].BendingKNmText != "—"
+            && tableRows.Count == 6 && tableRows.All(r => r.Sections.Count > 0 && r.Sections.All(s => s.Description.Length > 0 && s.Description != s.Name))
+            && tableRows.Any(r => r.Sections.Any(s => s.Figure is not null))
+            && tableRows.Single(r => r.Member == "Vertical Chord").Sections.Count == groups.Single(g => g.Title == "Vertical Chord").Sections.Split("; ").Length,
+            "Results table Member force summary lists only the six VCF member rows in kN for the shown load case, with no bending or shear for cables, and describes and draws each row's sections");
         var sample = new FemAnalysisResult([], [], [new FemFrameResponse("F", -1000, 2000, 3000, -4000, 5000, -6000,
             [new FemFrameStation(0.5, -7000, 8000, -9000, 0, 0)])], [new FemCableResponse("C", 12000, true)], 0);
         ResultMemberGroup[] sampleGroups = [new("Frame", ["F"], "Section A; Section B"), new("Cable", ["C"], "192T15.7"), new("Missing", ["F", "absent"], "Unknown")];

@@ -974,20 +974,36 @@ public partial class MainWindow : Window
     }
 
     private FemResultsWindow? femResultsWindow;
+    private CableTargetFitWindow? cableTargetFitWindow;
+    /// <summary>Results Table (the member force summary), or the cable target fit table when that is the result on show.</summary>
     private void OpenFemResultsClick(object sender, RoutedEventArgs e)
     {
         if (DataContext is not MainViewModel vm) return;
         if (vm.SelectedFemRun is null && vm.FemRuns.Count > 0) vm.SelectedFemRun = vm.FemRuns[0];
         if (vm.SelectedFemRun is null) return;
-        if (femResultsWindow is null)
+        Window window;
+        if (vm.FemCableFitView)
         {
-            femResultsWindow = new FemResultsWindow(vm) { Owner = this };
-            femResultsWindow.Closed += (_, _) => femResultsWindow = null;
-            femResultsWindow.Show();
+            if (cableTargetFitWindow is null)
+            {
+                cableTargetFitWindow = new CableTargetFitWindow(vm) { Owner = this };
+                cableTargetFitWindow.Closed += (_, _) => cableTargetFitWindow = null;
+                cableTargetFitWindow.Show();
+            }
+            window = cableTargetFitWindow;
         }
-        femResultsWindow.SelectCableFit(vm.FemCableFitView);
-        if (femResultsWindow.WindowState == WindowState.Minimized) femResultsWindow.WindowState = WindowState.Normal;
-        femResultsWindow.Activate();
+        else
+        {
+            if (femResultsWindow is null)
+            {
+                femResultsWindow = new FemResultsWindow(vm) { Owner = this };
+                femResultsWindow.Closed += (_, _) => femResultsWindow = null;
+                femResultsWindow.Show();
+            }
+            window = femResultsWindow;
+        }
+        if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+        window.Activate();
     }
 
     private ModalResultsWindow? modalResultsWindow;

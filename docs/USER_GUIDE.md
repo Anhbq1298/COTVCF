@@ -598,7 +598,7 @@ The monitor counts the degrees of freedom of each run (active | solved | restrai
 ## Cable Force Fitting
 The tolerance of the cable target-force fit (%), its maximum number of fitting iterations, the frame mesh — the number of stations each frame is read at, which changes no joint result — and cable sag.
 
-This tab is shown for a model that has cables. For a model without cables — the tied arch system without its elevated cable, for instance — the tab is **Frame Mesh** and holds the mesh alone; the cable settings keep their values for when the model has cables again. The same goes for the results of the fit: Result → Cable target fit, its choice in Show Results, its tab of the Results Table and the Cable Target-Force Convergence tab of the [[Analysis monitor]] are shown only for a model with cables.
+This tab is shown for a model that has cables. For a model without cables — the tied arch system without its elevated cable, for instance — the tab is **Frame Mesh** and holds the mesh alone; the cable settings keep their values for when the model has cables again. The same goes for the results of the fit: Result → Cable target fit, its choice in Show Results, its table and the Cable Target-Force Convergence tab of the [[Analysis monitor]] are shown only for a model with cables.
 
 # Analysis monitor
 Category: Run
@@ -662,7 +662,7 @@ Draws the results of the selected load case on the model view.
 - **Joint reactions** (F7).
 - **Show Results…** — choose the case / combination and the output.
 - **Show Quantities…** — list assigned frame and cable sections from the active Mcotis document, with stored section outlines where available, member counts and total lengths. Concrete volume and steel mass use the native section area and material data. If a section is unassigned, its material basis is unknown, or its composite component geometry is not stored, the affected quantity is shown as unavailable with a reason. This view does not connect to or write to SAP2000.
-- **Export Result…** in Show Results opens the Word / PDF export dialog. Select solved load cases or combinations and all results or individual result types, then click OK and choose the file name and folder. The report opens after saving. Both formats use portrait A4, Arial 11, 1.15 line spacing and margins of 1.88 cm top/left, 1.28 cm bottom and 1.58 cm right. Reports contain high-resolution captures of the model result diagrams, with Figure numbers and load case/output captions, for axial/cable forces, bending, shear, reactions and deflection. The full model is fitted into each figure using the screen renderer, with result labels. Cable fit warnings are retained. Cable target fit remains in Results Table and is not a graphical export option. PDF uses the installed Edge or Chrome browser.
+- **Export Result…** in Show Results opens the Word / PDF export dialog. Select solved load cases or combinations and all results or individual result types, then click OK and choose the file name and folder. The report opens after saving. Both formats use portrait A4, Arial 11, 1.15 line spacing and margins of 1.88 cm top/left, 1.28 cm bottom and 1.58 cm right. Reports contain high-resolution captures of the model result diagrams, with Figure numbers and load case/output captions, for axial/cable forces, bending, shear, reactions and deflection. The full model is fitted into each figure using the screen renderer, with result labels. Cable fit warnings are retained. Cable target fit is a table (Result → Cable target fit) and is not a graphical export option. PDF uses the installed Edge or Chrome browser.
 - Quick items: axial forces / cables, bending moments, shear forces, support reactions, deflection, cable target fit.
 - **F4** shows the undeformed model again.
 
@@ -673,10 +673,12 @@ Category: Results
 Where: Result → Results Table…
 See also: Showing results
 
-The results of the selected load case and output as a table, browsed by load case. **Member / joint results** retains
-the compact XZ diagrams and tables used by the 2D viewer and reports. **Joint 6-DOF** lists global UX/UY/UZ,
-RX/RY/RZ and the matching support forces/moments. **Frame 6-component** lists local U1/U2/U3, R1/R2/R3 and
-F1/F2/F3, M1/M2/M3 at every result station. The 3D values are separate; they are never written into a planar column.
+The member force summary of the load case or combination chosen at the top. Each row is a member group — Mega Column,
+Top Chord, Bottom Chord, Vertical Chord (the vertical and middle chords together), Main Cable (External: Cable1a and
+Cable1b) and Internal Cable (every other cable) — with its peak absolute bending (kN·m), shear and axial force (kN)
+over all its members and stations; the three columns may govern at different places. Member size describes each
+section the group uses and draws it. End frames are not listed. A model that is not a VCF system lists each member.
+Result → Cable target fit opens the cable fitting table in a window of its own.
 
 # Modal results
 Category: Results

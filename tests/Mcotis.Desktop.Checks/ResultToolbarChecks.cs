@@ -326,23 +326,32 @@ internal static class ResultToolbarChecks
             Idle();
             bool onTas = vm.CanOptimizeTas && !vm.CanOptimizeVcf && optimizeTas.IsEnabled && !optimizeVcf.IsEnabled;
             var fitPicker = new ShowResultsWindow(vm, _ => { }) { Owner = window };
-            var fitTable = new FemResultsWindow(vm) { Owner = window };
+            var fitTable = new CableTargetFitWindow(vm) { Owner = window };
             var fitMonitor = new FemRunMonitorWindow(vm) { Owner = window };
             fitTable.Show(); fitMonitor.Show(); Idle();
-            fitTable.SelectCableFit(true);
             ListBoxItem PickerFit() => fitPicker.Outputs.Items.OfType<ListBoxItem>().Single(item => Equals(item.Tag, "CableFit"));
             bool hidden = !vm.HasCableMembers && !vm.FemCableFitView && fitItem.Visibility == Visibility.Collapsed && PickerFit().Visibility == Visibility.Collapsed &&
-                          fitTable.CableFitTab.Visibility == Visibility.Collapsed && fitTable.ResultTopics.SelectedIndex == 0 && fitMonitor.ConvergenceTab.Visibility == Visibility.Collapsed;
+                          fitMonitor.ConvergenceTab.Visibility == Visibility.Collapsed;
             vm.ReplaceCurrentWithVcfModel();
             Idle();
             fitPicker.Configure(ShowResultPickerKind.All);
             bool shown = vm.HasCableMembers && fitItem.Visibility == Visibility.Visible && PickerFit().Visibility == Visibility.Visible &&
-                         fitTable.CableFitTab.Visibility == Visibility.Visible && fitMonitor.ConvergenceTab.Visibility == Visibility.Visible;
+                         fitMonitor.ConvergenceTab.Visibility == Visibility.Visible;
             fitPicker.Close(); fitTable.Close(); fitMonitor.Close();
+            var resultsTable = new FemResultsWindow(vm) { Owner = window };
+            resultsTable.Show(); Idle();
+            static IEnumerable<DependencyObject> Tree(DependencyObject root) =>
+                Enumerable.Range(0, System.Windows.Media.VisualTreeHelper.GetChildrenCount(root))
+                    .Select(i => System.Windows.Media.VisualTreeHelper.GetChild(root, i)).SelectMany(child => Tree(child).Prepend(child));
+            var tableParts = Tree(resultsTable).ToArray();
+            bool summaryOnly = resultsTable.Title == "Results Table" && !tableParts.OfType<System.Windows.Controls.TabControl>().Any() &&
+                               tableParts.OfType<System.Windows.Controls.DataGrid>().Select(System.Windows.Automation.AutomationProperties.GetName).SequenceEqual(["Summary of member forces"]);
+            resultsTable.Close();
+            Check(summaryOnly, "Results Table shows only the member force summary; Result → Cable target fit has a window of its own");
             Check(onTas && vm.CanOptimizeVcf && !vm.CanOptimizeTas && optimizeVcf.IsEnabled && !optimizeTas.IsEnabled,
                 "with the tied arch system open Optimization TAS is offered and Optimization VCF is greyed; back on the VCF system it is the other way round");
             Check(hidden && shown,
-                "the tied arch system has no cables: Result → Cable target fit, its choice in Show Results, its tab of the results table and the cable convergence chart of the run monitor are not shown; " +
+                "the tied arch system has no cables: Result → Cable target fit, its choice in Show Results, and the cable convergence chart of the run monitor are not shown; " +
                 "on the VCF system, which has cables, they all are");
         }
         finally { window.Close(); }

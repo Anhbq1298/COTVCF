@@ -8,7 +8,23 @@ public sealed record ResultMemberGroup(string Title, IReadOnlyList<string> Membe
 public sealed record ResultMemberRow(string Member, double? BendingMNm, double? ShearMN, double? AxialMN, string MemberSize)
 {
     public string[] Cells => [Member, Number(BendingMNm), Number(ShearMN), Number(AxialMN), MemberSize];
+    public string BendingKNmText => KiloNumber(BendingMNm);
+    public string ShearKNText => KiloNumber(ShearMN);
+    public string AxialKNText => KiloNumber(AxialMN);
     private static string Number(double? value) => value?.ToString("0.###", CultureInfo.InvariantCulture) ?? "—";
+    private static string KiloNumber(double? value) => value is { } mega ? (mega * 1000).ToString("N1", CultureInfo.CurrentCulture) : "—";
+}
+/// <summary>One section of a summary row: its name, Show Quantities' description and drawing (null when not stored).</summary>
+public sealed record FemMemberSummarySection(string Name, string Description, Mcotis.Desktop.Application.Quantities.QuantitySectionFigure? Figure);
+/// <summary>A results-table summary row: the peak forces and the sections its members use.</summary>
+public sealed record FemMemberSummaryRow(ResultMemberRow Forces, IReadOnlyList<FemMemberSummarySection> Sections)
+{
+    public string Member => Forces.Member;
+    public string BendingKNmText => Forces.BendingKNmText;
+    public string ShearKNText => Forces.ShearKNText;
+    public string AxialKNText => Forces.AxialKNText;
+    public string MemberSize => Sections.Count == 0 ? Forces.MemberSize : string.Join(Environment.NewLine, Sections.Select(s => s.Description));
+    public string SectionNames => Sections.Count == 0 ? Forces.MemberSize : string.Join("; ", Sections.Select(s => s.Name));
 }
 public sealed record ResultMemberTable(string CaseName, IReadOnlyList<ResultMemberRow> Rows, string? Warning);
 
@@ -27,10 +43,9 @@ public static class ResultMemberSummary
         catch (InvalidOperationException) { /* Other models retain their actual member names. */ }
         if (vcf is not null)
             foreach (var title in new[] { "Mega Column", "Top Chord", "Bottom Chord", "Vertical Chord", "Main Cable (External)", "Internal Cable" }) groups[title] = [];
-        var fans = vcf is null ? new HashSet<string>() : VcfGeometry.FanCables(vcf).Select(c => c.Name).ToHashSet(StringComparer.Ordinal);
         foreach (var member in geometry.Members)
         {
-            var title = member.Name;
+            string? title = member.Name;
             if (vcf is not null && vcf.Roles.TryGetValue(member.Name, out var role))
             {
                 title = role switch
@@ -38,22 +53,25 @@ public static class ResultMemberSummary
                     VcfMemberRole.MegaColumn => "Mega Column",
                     VcfMemberRole.TopChord => "Top Chord",
                     VcfMemberRole.BottomChord => "Bottom Chord",
-                    VcfMemberRole.VerticalChord => "Vertical Chord",
-                    VcfMemberRole.MiddleChord => "Middle Chord",
-                    VcfMemberRole.EndFrame => "End Frames",
-                    _ => fans.Contains(member.Name) ? "Internal Cable" : External(member) ? "Main Cable (External)" : "Other Cables"
+                    // Vertical Chord envelopes the vertical and middle chords; the end frames are not summarised.
+                    VcfMemberRole.VerticalChord or VcfMemberRole.MiddleChord => "Vertical Chord",
+                    VcfMemberRole.EndFrame => null,
+                    _ => IsMainCable(member.Name) ? "Main Cable (External)" : "Internal Cable"
                 };
             }
+            if (title is null) continue;
             if (!groups.TryGetValue(title, out var names)) groups[title] = names = [];
             names.Add(member.Name);
         }
         return groups.Select(g => new ResultMemberGroup(g.Key, g.Value.ToArray(), string.Join("; ", g.Value.Select(name =>
             properties.FirstOrDefault(p => p.MemberName == name)?.SectionName is { Length: > 0 } section ? section : "(section unavailable)")
             .Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.Ordinal)))).ToArray();
-
-        bool External(StructuralMember member) => new[] { member.Start, member.End }.Any(name =>
-            geometry.Points[name].Position.X < vcf!.TrussLines[0] - 1e-3 || geometry.Points[name].Position.X > vcf.TrussLines[^1] + 1e-3);
     }
+
+    /// <summary>The main (external) cables are Cable1a and Cable1b, with any element suffix (Cable1a-2); every other
+    /// cable of a VCF system is an internal cable.</summary>
+    public static bool IsMainCable(string name) =>
+        System.Text.RegularExpressions.Regex.IsMatch(name, @"^Cable1[ab](?![0-9A-Za-z])", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     public static ResultMemberTable Create(string caseName, FemAnalysisResult result, IReadOnlyList<ResultMemberGroup> groups,
         IReadOnlyList<ResultReportOutput> outputs)

@@ -18,6 +18,13 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Summarize member forces in the results table
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Results Table; Result → Cable target fit
+- What: Adds a tab listing peak bending, shear and axial force (kN, kN·m) with member sizes for Mega Column, Top Chord, Bottom Chord, Vertical Chord, Main Cable (External) and Internal Cable under the load case / combo shown, in Arial Narrow; Member size gives each section's description and a Section column draws it, as Show Quantities does. Results Table now shows only this summary: the Member / joint results, Joint 6-DOF and Frame 6-component tabs are removed, and Result → Cable target fit opens its table in a window of its own. In this table and the exported results report, Vertical Chord envelopes the vertical and middle chords, end frames are not listed, and Main Cable (External) is Cable1a/Cable1b with every other cable an Internal Cable.
+- Checks: `--result-export`, `--result-tools-ui`, `--ui-read`
+
 ## 2026-10-18 · Add cable section check and bring strand optimisation into Design
 - Status: Done
 - Who: Codex

@@ -297,9 +297,9 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 MenuItem TopMenu(string header) => window.MainMenu.Items.OfType<MenuItem>().Single(item => (item.Header as string)?.Replace("_", "") == header);
                 Assert(window.MainMenu.Items.OfType<MenuItem>().Select(item => (item.Header as string)!.Replace("_", ""))
-                           .SequenceEqual(["File", "Define", "Edit", "Draw", "Assign", "Run", "Result", "Display", "Design", "Help", "Optimization", "Post-Processing"]) &&
-                       window.MainMenu.Items[^3] is Separator && ReferenceEquals(window.MainMenu.Items[^2], TopMenu("Optimization")) && ReferenceEquals(window.MainMenu.Items[^1], TopMenu("Post-Processing")),
-                    "The active menu bar ends with the standalone Optimization workspace after a separator, then Post-Processing; the legacy MB menu is absent");
+                           .SequenceEqual(["File", "Define", "Edit", "Draw", "Assign", "Run", "Result", "Display", "Design", "Post-Processing", "Help", "Optimization"]) &&
+                       window.MainMenu.Items[^2] is Separator && ReferenceEquals(window.MainMenu.Items[^1], TopMenu("Optimization")),
+                    "The active menu bar puts Post-Processing before Help and ends with the standalone Optimization workspace after a separator; the legacy MB menu is absent");
                 Assert(!FindVisuals<TabControl>(window).First(tabs => tabs.Name == "WorkflowTabs").IsEnabled &&
                        vm.NewConfig.CanExecute(null) && !TopMenu("Optimization").IsEnabled && TopMenu("Define").IsEnabled && TopMenu("File").IsEnabled,
                     "Before a model exists, model workflows stay disabled while New Config and Define remain available");
@@ -1013,9 +1013,10 @@ internal static class Program
                 window.Dispatcher.Invoke(() => { }, DispatcherPriority.ApplicationIdle);
                 var tableWindow = window.OwnedWindows.OfType<FemResultsWindow>().Single();
                 tableWindow.UpdateLayout();
-                Assert(FindVisuals<DataGrid>(tableWindow).Any(grid => grid.Name == "FemResultRowsGrid" && grid.Items.Count > 0) && !HasCandidatePicker(tableWindow) &&
+                Assert(FindVisuals<DataGrid>(tableWindow).Any(grid => System.Windows.Automation.AutomationProperties.GetName(grid) == "Summary of member forces" && grid.Items.Count > 0) &&
+                       !FindVisuals<TabControl>(tableWindow).Any() && !HasCandidatePicker(tableWindow) &&
                        FindVisuals<ComboBox>(tableWindow).Any(combo => System.Windows.Automation.AutomationProperties.GetName(combo) == "FEM load case or combination"),
-                    "View Results opens a separate populated table with the load-case dropdown above it");
+                    "View Results opens the member force summary alone, with the load-case dropdown above it");
                 tableWindow.Close();
                 Assert(!FindVisuals<RadioButton>(window).Any(button => button.GroupName == "ViewerResultMode"),
                     "The model view has no floating result buttons — the result type is chosen in Show Results / the Result menu");
