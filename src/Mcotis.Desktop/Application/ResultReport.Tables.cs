@@ -25,29 +25,36 @@ public sealed partial record ResultReport
         foreach (var table in Tables)
         {
             if (table.Landscape && !landscape) { html.Append("<div class='land'>"); landscape = true; }
-            html.Append("<h2>").Append(E(table.Title)).Append("</h2>");
-            if (table.Note is { Length: > 0 } note) html.Append("<p class='n'>").Append(E(note)).Append("</p>");
-            var sum = table.Columns.Sum(column => column.Width);
-            html.Append("<table><colgroup>");
-            foreach (var column in table.Columns) html.Append("<col style='width:").Append((column.Width / sum * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)).Append("%'>");
-            html.Append("</colgroup><thead><tr>");
-            foreach (var column in table.Columns) html.Append("<th>").Append(E(column.Header)).Append("</th>");
-            html.Append("</tr></thead><tbody>");
-            for (int r = 0; r < table.Rows.Count; r++)
-            {
-                html.Append(r >= table.Rows.Count - table.TotalRows ? "<tr class='t'>" : "<tr>");
-                for (int c = 0; c < table.Columns.Count; c++)
-                {
-                    var cell = c < table.Rows[r].Count ? table.Rows[r][c] : new ReportCell("");
-                    if (cell.Image is { } png)
-                        html.Append("<td class='c'><img alt='").Append(E(cell.Text)).Append("' src='data:image/png;base64,").Append(Convert.ToBase64String(png)).Append("'></td>");
-                    else html.Append(table.Columns[c].Left ? "<td class='l'>" : "<td>").Append(E(cell.Text)).Append("</td>");
-                }
-                html.Append("</tr>");
-            }
-            html.Append("</tbody></table>");
+            AppendTable(html, table, heading: true);
         }
         if (landscape) html.Append("</div>");
+    }
+
+    /// <summary>One table in HTML: its title as a heading (unless it sits under a figure), its note, then the table.</summary>
+    private static void AppendTable(StringBuilder html, ReportTable table, bool heading)
+    {
+        string E(string text) => WebUtility.HtmlEncode(text);
+        if (heading) html.Append("<h2>").Append(E(table.Title)).Append("</h2>");
+        if (table.Note is { Length: > 0 } note) html.Append("<p class='n'>").Append(E(note)).Append("</p>");
+        var sum = table.Columns.Sum(column => column.Width);
+        html.Append("<table><colgroup>");
+        foreach (var column in table.Columns) html.Append("<col style='width:").Append((column.Width / sum * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)).Append("%'>");
+        html.Append("</colgroup><thead><tr>");
+        foreach (var column in table.Columns) html.Append("<th>").Append(E(column.Header)).Append("</th>");
+        html.Append("</tr></thead><tbody>");
+        for (int r = 0; r < table.Rows.Count; r++)
+        {
+            html.Append(r >= table.Rows.Count - table.TotalRows ? "<tr class='t'>" : "<tr>");
+            for (int c = 0; c < table.Columns.Count; c++)
+            {
+                var cell = c < table.Rows[r].Count ? table.Rows[r][c] : new ReportCell("");
+                if (cell.Image is { } png)
+                    html.Append("<td class='c'><img alt='").Append(E(cell.Text)).Append("' src='data:image/png;base64,").Append(Convert.ToBase64String(png)).Append("'></td>");
+                else html.Append(table.Columns[c].Left ? "<td class='l'>" : "<td>").Append(E(cell.Text)).Append("</td>");
+            }
+            html.Append("</tr>");
+        }
+        html.Append("</tbody></table>");
     }
 
     /// <summary>The tables in Word. The portrait section ends before the first landscape table; <paramref name="lastSection"/> is then landscape.</summary>

@@ -18,6 +18,34 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-19 · Reaction values under the reactions figure
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Export… → Support reactions
+- What: Each Support reactions figure of the report has a small table directly below it: Rx, Rz (MN) and My (MN·m) at each support, to one decimal, with their sums.
+- Checks: `--result-export`
+
+## 2026-10-18 · Export: one Cable forces tick
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Export… → SLS / ULS → Results
+- What: Each part's Results list has one Cable forces tick (SLS and ULS, ticked by default) that adds the cable force table of that part's cases, without a figure; "Axial forces / cables" is now Axial forces. Member forces under Also include gives the summary and the members of each group for the ULS cases.
+- Checks: `--result-export`
+
+## 2026-10-18 · Report: force tables for ULS cases, UR in its own summary
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Export…
+- What: The member force tables are made for the selected ULS cases only; an SLS case gives its deflection figure. The URs leave the force tables for a summary of utilization: one row per member group with its governing UR, member and case — members on the ULS cases, cables on the SLS cases — before the section UR table.
+- Checks: `--result-export`
+
+## 2026-10-18 · Section Check on the VSL catalogue strand
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Design → Tension Cable Design → Section Check; Design Utilization and report cable UR
+- What: Section Check now uses the strand Iterate sizes with — a VSL Ø15.7 strand of 150 mm² breaking at 279 kN (1,860 MPa), screened at 50 % — instead of 2160 MPa, and shows the VSL unit each section's strands fit (e.g. 1 × 6-55). The cable UR of Design Utilization and of the report uses the same capacity, so all three agree.
+- Checks: `--cable-design-ui`, `--result-export`
+
 ## 2026-10-18 · UR by limit state, export defaults, loads in the model view
 - Status: Done
 - Who: aBui (with Claude Code)

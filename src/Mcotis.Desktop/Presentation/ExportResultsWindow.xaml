@@ -46,14 +46,14 @@
      <CheckBox x:Name="IncludeModelViews" IsChecked="True" Margin="0,2,0,2" AutomationProperties.Name="Include model views">
       <TextBlock TextWrapping="Wrap" Text="Model views — the 3D isometric view and the XZ elevation with dimensions and applied loads, as the first two figures"/></CheckBox>
      <CheckBox x:Name="IncludeForces" IsChecked="True" Margin="0,2,0,2" AutomationProperties.Name="Include member forces">
-      <TextBlock TextWrapping="Wrap" Text="Member forces — summary with section drawings, the members of each group and the cables, per selected case"/></CheckBox>
+      <TextBlock TextWrapping="Wrap" Text="Member forces — the summary with section drawings and the members of each group, for each selected ULS case"/></CheckBox>
      <CheckBox x:Name="IncludeQuantities" IsChecked="True" Margin="0,2,0,2" AutomationProperties.Name="Include quantities">
       <TextBlock TextWrapping="Wrap" Text="Quantities — section drawing and description, members, length, concrete, steel and estimated cost"/></CheckBox>
      <CheckBox x:Name="IncludeUtilization" IsChecked="True" Margin="0,2,0,2" AutomationProperties.Name="Include design utilization">
-      <TextBlock TextWrapping="Wrap" Text="Design utilization — runs every member design on current results and adds a UR column to every table"/></CheckBox>
+      <TextBlock TextWrapping="Wrap" Text="Design utilization — runs every member design on current results: a summary of each group&#x27;s UR (members ULS, cables SLS) and the section UR table"/></CheckBox>
     </StackPanel>
    </GroupBox>
-   <TextBlock Text="Each selected load case gives the model-view figures of the results ticked in its part and, with Member forces, its force tables. A case ticked in both parts is reported once. With Member forces a part may have no figures. Design utilization first makes sure the FEM results are those of the current model. Choose the file name and folder after OK; the saved report opens automatically." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
+   <TextBlock Text="Each selected load case gives the figures of the results ticked in its part; Cable forces gives its cable force table. A case ticked in both parts is reported once. Design utilization first makes sure the FEM results are those of the current model. Choose the file name and folder after OK; the saved report opens automatically." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
   </StackPanel>
   <TextBlock x:Name="Status" TextWrapping="Wrap" Foreground="{StaticResource Warning}" Margin="0,0,0,8"/>
   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

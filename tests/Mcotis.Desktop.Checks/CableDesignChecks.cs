@@ -231,8 +231,9 @@ internal static class CableDesignChecks
               buttons.Any(button => Equals(button.Content, "Check Sections")) && buttons.Any(button => Equals(button.Content, "Iterate")) &&
               buttons.Any(button => Equals(button.Content, "Apply & Re-analyse")) && !buttons.Any(button => Equals(button.Content, "Run Design") && button.IsVisible) &&
               Visuals<System.Windows.Controls.DataGrid>(window).Distinct().Any(grid => System.Windows.Automation.AutomationProperties.GetName(grid) == "Iterated cable sections") &&
-              sectionStress.Text == "2160" && sectionReduction.Text == "50" && checkGrid.Columns.Count == 8 && checkGrid.Items.Count == options.Count,
-            "the Tension Cable Design window shows Section Check (2160 MPa / 50 %, already checked for every cable on opening), Cost Rates and Iterate; Design Basis, Cables & Loads, Single Stay and Design are hidden");
+              sectionStress.Text == "1860" && sectionReduction.Text == "50" && checkGrid.Columns.Count == 9 && checkGrid.Items.Count == options.Count &&
+              ResultReportTables.VslUnit(55) == "1 × 6-55" && ResultReportTables.VslUnit(50) == "1 × 6-55 (50 strands)" && ResultReportTables.VslUnit(200) == "2 × 6-109 (200 strands)",
+            "the Tension Cable Design window shows Section Check on the VSL catalogue strand as Iterate (1860 MPa = 279 kN per Ø15.7 strand, 50 %, with each section's VSL unit, already checked on opening), Cost Rates and Iterate; the other tabs are hidden");
 
         // Iterate: VSL Ø15.7 stays from the Design Basis for the ticked cases, each pass a full analysis of a candidate model
         var iterateSettings = window.ReadIterationSettings()! with { MaximumIterations = 4 };

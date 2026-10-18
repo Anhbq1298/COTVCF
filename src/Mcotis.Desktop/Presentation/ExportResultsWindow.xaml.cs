@@ -28,7 +28,8 @@ public partial class ExportResultsWindow : Window
         var names = viewModel.FemResultNames;
         bool anyUls = names.Any(n => Named(n, "ULS"));
         // defaults (user, 2026-10-18): SLS the deflection; ULS the forces and reactions; every table and the model views
-        Wire(SlsAllCases, SlsCaseChoices, names.Select(n => (n, (object)n, Named(n, "SLS"))), SlsAllOutputs, SlsOutputChoices, output => output == ResultReportOutput.Deflection);
+        Wire(SlsAllCases, SlsCaseChoices, names.Select(n => (n, (object)n, Named(n, "SLS"))), SlsAllOutputs, SlsOutputChoices,
+            output => output is ResultReportOutput.Deflection or ResultReportOutput.CableForces);
         Wire(UlsAllCases, UlsCaseChoices, names.Select(n => (n, (object)n, anyUls ? Named(n, "ULS") : n == viewModel.SelectedFemResultName)), UlsAllOutputs, UlsOutputChoices,
             output => output != ResultReportOutput.Deflection);
         Closing += (_, e) => { if (exporting) e.Cancel = true; };
@@ -36,7 +37,7 @@ public partial class ExportResultsWindow : Window
             foreach (var box in UlsCaseChoices.Children.OfType<CheckBox>().Where(box => Equals(box.Tag, shown))) box.IsChecked = true;
         IncludeUtilization.IsChecked = true;
     }
-    private static readonly (ResultReportOutput Output, string Name)[] Outputs = [(ResultReportOutput.AxialForce, "Axial forces / cables"), (ResultReportOutput.BendingMoment, "Bending moments"), (ResultReportOutput.Shear, "Shear forces"), (ResultReportOutput.Reactions, "Support reactions"), (ResultReportOutput.Deflection, "Deflection")];
+    private static readonly (ResultReportOutput Output, string Name)[] Outputs = [(ResultReportOutput.AxialForce, "Axial forces"), (ResultReportOutput.BendingMoment, "Bending moments"), (ResultReportOutput.Shear, "Shear forces"), (ResultReportOutput.Reactions, "Support reactions"), (ResultReportOutput.Deflection, "Deflection"), (ResultReportOutput.CableForces, "Cable forces (table)")];
     private static void Wire(CheckBox allCases, Panel cases, IEnumerable<(string Name, object Tag, bool Ticked)> caseItems, CheckBox allOutputs, Panel outputs, Func<ResultReportOutput, bool> ticked)
     {
         Fill(allCases, cases, caseItems, new Thickness(0, 2, 0, 2));
@@ -62,27 +63,43 @@ public partial class ExportResultsWindow : Window
         var main = Owner as MainWindow ?? Owner?.Owner as MainWindow;
         var images = new Dictionary<QuantitySectionFigure, byte[]?>(ReferenceEqualityComparer.Instance);
         byte[]? Image(QuantitySectionFigure figure) => images.TryGetValue(figure, out var png) ? png : images[figure] = SectionFigureImage.Render(figure);
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>>? memberCases = null;
         var modelTables = new List<ReportTable>();
-        if (IncludeQuantities.IsChecked == true) modelTables.Add(ResultReportTables.Quantities(viewModel.QuantityTakeoff(), Image));
         if (IncludeUtilization.IsChecked == true)
         {
             if (viewModel.FemResultState != Mcotis.Application.ResultState.Current)
                 throw new InvalidOperationException("The FEM results are not those of the current model. Run analysis before exporting the design utilization.");
             var (sections, members) = viewModel.DesignUtilization();
-            memberCases = members;
+            modelTables.Add(ResultReportTables.UtilizationSummary(viewModel.ReportGroupUtilization(members)));
             modelTables.Add(ResultReportTables.Utilization(sections));
         }
+        if (IncludeQuantities.IsChecked == true) modelTables.Add(ResultReportTables.Quantities(viewModel.QuantityTakeoff(), Image));
+        // forces are a strength result: their tables are made for the ULS cases only (an SLS case gives its deflection figure);
+        // the URs are in the utilization summary, not in the force tables
+        var allCases = viewModel.FemResultNames.ToArray();
         return ResultReport.Create(viewModel.CurrentFileName, run,
             [new ResultReportSelection("SLS", Ticked<string>(SlsCaseChoices), Ticked<ResultReportOutput>(SlsOutputChoices)),
              new ResultReportSelection("ULS", Ticked<string>(UlsCaseChoices), Ticked<ResultReportOutput>(UlsOutputChoices))],
             (result, mode) => ResultFigureCapture.Capture(viewModel, main?.SharedViewer.Canvas, result, mode),
-            IncludeForces.IsChecked == true ? name => viewModel.ReportCaseTables(name, memberCases, Image) : null, modelTables,
+            IncludesForceTables ? name => viewModel.ReportCaseTables(name, null, Image)
+                .Where(table => IncludesTable(table, name, ResultReportTables.IsUlsCase(name, allCases))).ToArray() : null, modelTables,
             IncludeModelViews.IsChecked == true ?
             [
                 new ResultReportFigure("", "Model — 3D isometric view", ResultFigureCapture.CaptureIsometric(viewModel), null),
                 new ResultReportFigure("", "Model — XZ elevation with dimensions and applied loads", ResultFigureCapture.Capture(viewModel, main?.SharedViewer.Canvas, null, FemResultMode.AxialForce, "XZ"), null),
             ] : null);
+    }
+
+    /// <summary>Any force table asked for: Member forces, or Cable forces in either part.</summary>
+    internal bool IncludesForceTables => IncludeForces.IsChecked == true ||
+        Ticked<ResultReportOutput>(SlsOutputChoices).Contains(ResultReportOutput.CableForces) || Ticked<ResultReportOutput>(UlsOutputChoices).Contains(ResultReportOutput.CableForces);
+
+    /// <summary>The cable forces of a case ticked with Cable forces in its part; the member force summary and the members of each group
+    /// for the ULS cases, with Member forces.</summary>
+    private bool IncludesTable(ReportTable table, string caseName, bool uls)
+    {
+        if (!table.Title.StartsWith("Cable forces", StringComparison.Ordinal)) return uls && IncludeForces.IsChecked == true;
+        bool In(Panel cases, Panel outputs) => Ticked<string>(cases).Contains(caseName) && Ticked<ResultReportOutput>(outputs).Contains(ResultReportOutput.CableForces);
+        return In(SlsCaseChoices, SlsOutputChoices) || In(UlsCaseChoices, UlsOutputChoices);
     }
 
     /// <summary>Design utilization needs the forces of the current model: offers to run the analysis when they are not.</summary>

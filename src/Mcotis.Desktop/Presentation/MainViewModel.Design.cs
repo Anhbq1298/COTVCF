@@ -388,7 +388,7 @@ public sealed partial class MainViewModel
                     continue;
                 }
                 // The UR of the section the cable has now — a suggested stay counts only once it is applied:
-                // capacity = area × 2160 MPa × 50 % (the Section Check defaults).
+                // capacity = area × 1,860 MPa × 50 %: the VSL Ø15.7 strand (279 kN) screened at 50 %, as Section Check and Iterate.
                 var governingForce = cableCases.MaxBy(item => item.Force);
                 double? capacity = property.AreaM2 > 0
                     ? property.AreaM2 * 1e6 * ResultReportTables.CableBreakingStressMpa * ResultReportTables.CableReductionFactor / 1000 : null;

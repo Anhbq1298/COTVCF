@@ -1284,6 +1284,31 @@ public sealed partial class MainViewModel : Observable
                 : new FemMemberSummarySection(name!, name!, null)).ToArray())).ToArray());
     }
 
+    /// <summary>The governing UR of each member group (the Results Table groups): members from <paramref name="memberCases"/> over the
+    /// ULS cases, cables as tension ÷ (area × 1,860 MPa × 50 %) over the SLS cases of the FEM run.</summary>
+    internal IReadOnlyList<ResultReportTables.GroupUtilization> ReportGroupUtilization(IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> memberCases)
+    {
+        var run = SelectedFemRun ?? throw new InvalidOperationException("Run analysis first.");
+        var allCases = FemResultNames.ToArray();
+        var (groups, rows) = MemberSummary(run.ResultFor(SelectedFemResultName), SelectedFemResultName ?? "");
+        var properties = FemSectionProperties.GroupBy(p => p.MemberName, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var slsCases = allCases.Where(name => ResultReportTables.IsSlsCase(name, allCases)).ToArray();
+        IEnumerable<(string Member, string Case, double Ur)> Cable(string member) =>
+            properties.GetValueOrDefault(member) is { IsCable: true, AreaM2: > 0 } cable
+                ? slsCases.SelectMany(name => run.ResultFor(name).Cables.Where(item => item.MemberName == member && double.IsFinite(item.AxialForceKN))
+                    .Select(item => (member, name, Math.Max(0, item.AxialForceKN) / (cable.AreaM2 * 1e6 * ResultReportTables.CableBreakingStressMpa * ResultReportTables.CableReductionFactor / 1000))))
+                : [];
+        IEnumerable<(string Member, string Case, double Ur)> Frame(string member) =>
+            memberCases.TryGetValue(member, out var cases) ? cases.Where(pair => ResultReportTables.IsUlsCase(pair.Key, allCases)).Select(pair => (member, pair.Key, pair.Value)) : [];
+        return groups.Select((group, index) =>
+        {
+            var cables = group.Members.All(member => properties.GetValueOrDefault(member)?.IsCable == true);
+            var governing = group.Members.SelectMany(member => cables ? Cable(member) : Frame(member)).DefaultIfEmpty((Member: "—", Case: "—", Ur: double.NaN)).MaxBy(item => item.Ur);
+            return new ResultReportTables.GroupUtilization(group.Title, index < rows.Count ? rows[index].MemberSize : group.Sections,
+                cables ? "Service (SLS)" : "Strength (ULS)", double.IsNaN(governing.Ur) ? null : governing.Ur, governing.Member, governing.Case);
+        }).ToArray();
+    }
+
     /// <summary>Show Quantities of the model's document, with the material unit costs of Define → Materials.</summary>
     internal NativeQuantityTakeoff QuantityTakeoff()
     {

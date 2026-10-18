@@ -24,8 +24,22 @@ public sealed record ResultMemberPeak(string Member, double? MomentKNm, double? 
 /// </summary>
 public static class ResultReportTables
 {
-    /// <summary>Cable UR of an assigned section: tension ÷ (area × breaking stress × reduction factor), the Section Check defaults.</summary>
-    public const double CableBreakingStressMpa = 2160, CableReductionFactor = 0.5;
+    /// <summary>Cable UR of an assigned section: tension ÷ (area × breaking stress × reduction factor) — the VSL catalogue strand,
+    /// as Iterate sizes with: a Ø15.7 strand of 150 mm² breaks at 279 kN (1,860 MPa), screened at 50 % of it.</summary>
+    public const double CableBreakingStressMpa = Design.TensionCableCatalogue.StrandBreakingKN * 1000 / Design.TensionCableCatalogue.StrandAreaMm2,
+        CableReductionFactor = 0.5;
+
+    /// <summary>The VSL SSI 2000 assembly a section of <paramref name="strands"/> Ø15.7 strands fits: the fewest units, then the
+    /// smallest unit that holds them ("1 × 6-55", or "1 × 6-61 (55 strands)" for a part-filled anchorage); null beyond the catalogue.</summary>
+    public static string? VslUnit(int strands, int maxUnits = 24)
+    {
+        if (strands < 1) return null;
+        var sizes = Design.TensionCableCatalogue.Units(Design.CableSystem.VslSsi2000).Select(unit => unit.Strands).OrderBy(size => size).ToArray();
+        for (var units = 1; units <= maxUnits; units++)
+            if (sizes.FirstOrDefault(size => units * size >= strands) is var size and > 0)
+                return units * size == strands ? $"{units} × 6-{size}" : $"{units} × 6-{size} ({strands} strands)";
+        return null;
+    }
 
     public const string SummaryNote = "Peak absolute forces over every member and station of each group; the columns may govern at different places. " +
         "Vertical Chord includes the middle chords; end frames are not listed. Main Cable (External) = the cables outside the mega columns on both sides, not connected to the bottom chord; Internal Cable = every other cable. — = not applicable.";
@@ -38,7 +52,8 @@ public static class ResultReportTables
     public static bool IsSlsCase(string name, IEnumerable<string> allCases) =>
         !allCases.Any(item => item.Contains("SLS", StringComparison.OrdinalIgnoreCase)) || name.Contains("SLS", StringComparison.OrdinalIgnoreCase);
 
-    public static string Mn(double? kN) => kN is { } value && double.IsFinite(value) ? (value / 1000).ToString("#,0.0", CultureInfo.InvariantCulture) : "—";
+    public static string Mn(double? kN) => kN is { } value && double.IsFinite(value)
+        ? (Math.Round(value / 1000, 1) is var mn && mn == 0 ? 0 : mn).ToString("#,0.0", CultureInfo.InvariantCulture) : "—";   // never "-0.0"
     public static string Ur(double? ur) => ur is { } value && double.IsFinite(value) ? value.ToString("0.00", CultureInfo.InvariantCulture) : "—";
     private static string Length(double lengthM) => lengthM > 0 && double.IsFinite(lengthM) ? lengthM.ToString("0.0", CultureInfo.InvariantCulture) : "—";
 
@@ -132,6 +147,29 @@ public static class ResultReportTables
                 withUr ? $"Capacity = section area × {CableBreakingStressMpa:0} MPa × {CableReductionFactor:0%}; UR = tension ÷ capacity, in SLS cases only." : null, columns, rows));
         }
         return tables;
+    }
+
+    /// <summary>One group's governing utilization: its largest UR over its members and the load cases of its check.</summary>
+    public sealed record GroupUtilization(string Group, string MemberSize, string Check, double? Ur, string Member, string Case);
+
+    /// <summary>The utilization summary of the member groups: a member group's strength UR from the ULS cases, a cable group's
+    /// service UR from the SLS cases, with the member and the case that govern. The force tables carry no UR.</summary>
+    public static ReportTable UtilizationSummary(IReadOnlyList<GroupUtilization> rows) =>
+        new("Summary of utilization", "UR = the largest UR of the group's members: members (strength) over the ULS cases from their member design, " +
+                                      $"cables (service) over the SLS cases as tension ÷ (section area × {CableBreakingStressMpa:0} MPa × {CableReductionFactor:0%}), the VSL Ø15.7 strand. — = no designed member or no case.",
+            [new("Member", 15, true), new("Member size", 30, true), new("Check", 12, true), new("UR", 7), new("Governing member", 13, true), new("Governing case", 15, true), new("Status", 8, true)],
+            rows.Select(row => (IReadOnlyList<ReportCell>)[new(row.Group), new(row.MemberSize), new(row.Check), new(Ur(row.Ur)), new(row.Member), new(row.Case),
+                new(row.Ur is not { } ur ? "—" : ur > 1 + 1e-9 ? "FAIL" : "OK")]).ToArray());
+
+    /// <summary>The support reactions of a result, set under its diagram: Rx, Rz [MN] and My [MN·m] at each support, with their sums.</summary>
+    public static ReportTable Reactions(FemAnalysisResult result)
+    {
+        var reactions = result.SupportReactions.OrderBy(reaction => reaction.PointName, StringComparer.Ordinal).ToArray();
+        var rows = reactions.Select(reaction => (IReadOnlyList<ReportCell>)
+            [new(reaction.PointName), new(Mn(reaction.ReactionXKN)), new(Mn(reaction.ReactionZKN)), new(Mn(reaction.MomentYKNm))]).ToList();
+        rows.Add([new("Sum"), new(Mn(reactions.Sum(reaction => reaction.ReactionXKN))), new(Mn(reactions.Sum(reaction => reaction.ReactionZKN))), new("")]);
+        return new("Support reactions", "Global axes: Rx along X, Rz up, My about Y (a fixed support only).",
+            [new("Support", 25, true), new("Rx (MN)", 25), new("Rz (MN)", 25), new("My (MN·m)", 25)], rows, TotalRows: 1);
     }
 
     /// <summary>Show Quantities: per section its drawing and description, the members, length, concrete, steel and estimated cost, with totals.</summary>

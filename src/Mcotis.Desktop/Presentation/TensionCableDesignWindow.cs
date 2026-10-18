@@ -30,6 +30,8 @@ public sealed class TensionCableDesignWindow : Window
     public sealed record SectionCheckRow(string Member, string Section, double AreaMm2, double? TensionKN,
         string GoverningCombo, double? CapacityKN, double? Utilization, string Status)
     {
+        /// <summary>The VSL SSI 2000 assembly the section's Ø15.7 strands fit.</summary>
+        public string VslUnit => AreaMm2 > 0 && ResultReportTables.VslUnit((int)Math.Round(AreaMm2 / TensionCableCatalogue.StrandAreaMm2)) is { } unit ? unit : "—";
         public string AreaText => AreaMm2 > 0 ? AreaMm2.ToString("#,0.##", CultureInfo.CurrentCulture) : "—";
         public string TensionText => TensionKN is { } tension ? tension.ToString("#,0.##", CultureInfo.CurrentCulture) : "—";
         public string CapacityText => CapacityKN is { } capacity ? capacity.ToString("#,0.##", CultureInfo.CurrentCulture) : "—";
@@ -98,7 +100,8 @@ public sealed class TensionCableDesignWindow : Window
     private readonly TextBox maxUnits = new() { Width = 70 };
     private readonly TextBox manualForce = new() { Text = "60", Width = 80 };
     private readonly TextBox manualLength = new() { Text = "50", Width = 80 };
-    private readonly TextBox sectionStress = new() { Text = "2160", Width = 90 };
+    // the VSL catalogue strand Iterate sizes with: 279 kN on 150 mm² = 1,860 MPa, at the 50 % screening level
+    private readonly TextBox sectionStress = new() { Text = ResultReportTables.CableBreakingStressMpa.ToString("0", CultureInfo.InvariantCulture), Width = 90 };
     private readonly TextBox sectionReduction = new() { Text = "50", Width = 90 };
     private readonly DataGrid cableGrid = new() { AutoGenerateColumns = false, SelectionMode = DataGridSelectionMode.Extended, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
     private readonly DataGrid sectionCheckGrid = new() { AutoGenerateColumns = false, IsReadOnly = true, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
@@ -237,7 +240,9 @@ public sealed class TensionCableDesignWindow : Window
         var top = new StackPanel();
         sectionCheckSummary.Text = "Check the assigned cable sections against the selected FEM load cases.";
         top.Children.Add(sectionCheckSummary);
-        top.Children.Add(Hint("Capacity [kN] = section area [mm²] × breaking stress [MPa] × reduction factor ÷ 1,000. UR = maximum tensile force ÷ section capacity. Area comes from each assigned cable section; force comes from the selected FEM results.", new Thickness(0, 0, 0, 8)));
+        top.Children.Add(Hint("VSL SSI 2000 catalogue, as Iterate: a Ø15.7 mm strand (150 mm²) breaks at 279 kN = 1,860 MPa, and the screening level is 50 % of it. " +
+                              "Capacity [kN] = section area [mm²] × breaking stress [MPa] × reduction factor ÷ 1,000; UR = maximum tensile force ÷ capacity. Area comes from each assigned cable section; " +
+                              "force comes from the selected FEM results; VSL unit is the assembly the section's strands fit.", new Thickness(0, 0, 0, 8)));
 
         var controls = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         controls.Children.Add(Field("Breaking stress", sectionStress, "MPa"));
@@ -251,7 +256,7 @@ public sealed class TensionCableDesignWindow : Window
 
         foreach (var (header, path, width) in new[]
         {
-            ("Cable", nameof(SectionCheckRow.Member), 100.0), ("Section", nameof(SectionCheckRow.Section), 150.0),
+            ("Cable", nameof(SectionCheckRow.Member), 100.0), ("Section", nameof(SectionCheckRow.Section), 120.0), ("VSL unit", nameof(SectionCheckRow.VslUnit), 150.0),
             ("Area [mm²]", nameof(SectionCheckRow.AreaText), 100.0), ("Governing combo", nameof(SectionCheckRow.GoverningCombo), 1.0),
             ("Tension [kN]", nameof(SectionCheckRow.TensionText), 110.0), ("Capacity [kN]", nameof(SectionCheckRow.CapacityText), 110.0),
             ("UR", nameof(SectionCheckRow.UtilizationText), 70.0), ("Status", nameof(SectionCheckRow.Status), 100.0),
@@ -333,7 +338,7 @@ public sealed class TensionCableDesignWindow : Window
         var failCount = rows.Count(row => row.Status == "FAIL");
         var slackCount = rows.Count(row => row.Status == "SLACK");
         var missingCount = rows.Count(row => row.Status is "NO SECTION" or "NO RESULT");
-        sectionCheckSummary.Text = $"Section property check · fpu {breakingStress:0.##} MPa · φ {reductionFactor:P0} · {rows.Count - failCount - slackCount - missingCount} OK · {failCount} FAIL · {slackCount} slack · {missingCount} unavailable";
+        sectionCheckSummary.Text = $"Section check · VSL Ø15.7 · fpu {breakingStress:0.##} MPa · φ {reductionFactor:P0} · {rows.Count - failCount - slackCount - missingCount} OK · {failCount} FAIL · {slackCount} slack · {missingCount} unavailable";
         Message(run is null ? "Run FEM Analysis for the current model before checking cable utilization." : "");
     }
 

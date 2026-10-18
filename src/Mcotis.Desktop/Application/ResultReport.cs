@@ -10,10 +10,13 @@ using A = DocumentFormat.OpenXml.Drawing;
 using DW = DocumentFormat.OpenXml.Drawing.Wordprocessing;
 using PIC = DocumentFormat.OpenXml.Drawing.Pictures;
 namespace Mcotis.Desktop.Application;
-public enum ResultReportOutput { AxialForce, BendingMoment, Shear, Reactions, Deflection }
+/// <summary>What a case reports. <see cref="CableForces"/> is a table (the cable forces), not a figure.</summary>
+public enum ResultReportOutput { AxialForce, BendingMoment, Shear, Reactions, Deflection, CableForces }
 public sealed record ResultReportSelection(string Name, IReadOnlyList<string> Cases, IReadOnlyList<ResultReportOutput> Outputs);
 public sealed record ResultReportFigure(string CaseName, string Title, byte[] Png, string? Warning)
 {
+    /// <summary>A small table set directly below the figure (the support reactions under their diagram).</summary>
+    public ReportTable? Table { get; init; }
     public string Caption(int number) => CaseName.Length == 0 ? $"Figure {number}. {Title}" : $"Figure {number}. {Title} — {CaseName}";
 }
 public sealed partial record ResultReport(string ModelName, IReadOnlyList<ResultReportFigure> Figures)
@@ -48,11 +51,11 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
         // the model views open the report (3D isometric, dimensioned XZ elevation), before the result figures
         var figures = new List<ResultReportFigure>(modelFigures ?? []);
         foreach (var name in order)
-        foreach (var output in perCase[name])
+        foreach (var output in perCase[name].Where(output => output != ResultReportOutput.CableForces))
         {
             var (mode, title) = output switch
             {
-                ResultReportOutput.AxialForce => (FemResultMode.AxialForce, "Axial forces / cables"),
+                ResultReportOutput.AxialForce => (FemResultMode.AxialForce, "Axial forces"),
                 ResultReportOutput.BendingMoment => (FemResultMode.BendingMoment, "Bending moments"),
                 ResultReportOutput.Shear => (FemResultMode.Shear, "Shear forces"),
                 ResultReportOutput.Reactions => (FemResultMode.Reactions, "Support reactions"),
@@ -61,7 +64,10 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
             };
             var result = run.Results![name]; var png = capture(result, mode);
             if (png.Length < 24 || !png.Take(8).SequenceEqual(new byte[] {137,80,78,71,13,10,26,10})) throw new InvalidOperationException("The result view could not be captured.");
-            figures.Add(new(name, title, png, result.TargetFitFailure));
+            figures.Add(new(name, title, png, result.TargetFitFailure)
+            {
+                Table = output == ResultReportOutput.Reactions ? ResultReportTables.Reactions(result) : null,
+            });
         }
         return new(modelName, figures)
         {
@@ -78,6 +84,7 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
             var figure = Figures[i];
             html.Append("<figure><img alt='").Append(E(figure.Caption(i + 1))).Append("' src='data:image/png;base64,").Append(Convert.ToBase64String(figure.Png)).Append("'><figcaption>").Append(E(figure.Caption(i + 1))).Append("</figcaption>");
             if (figure.Warning is { Length: > 0 }) html.Append("<p>Cable target not fitted: ").Append(E(figure.Warning)).Append("</p>");
+            if (figure.Table is { } table) AppendTable(html, table, heading: false);
             html.Append("</figure>");
         }
         AppendTables(html);
@@ -124,6 +131,11 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
             var properties = new ParagraphProperties(); if (figure.Warning is { Length: > 0 }) properties.Append(new KeepNext());
             body.Append(new Paragraph(properties, new Run(new Text(caption))));
             if (figure.Warning is { Length: > 0 }) body.Append(new Paragraph(new Run(new Text("Cable target not fitted: " + figure.Warning))));
+            if (figure.Table is { } table)
+            {
+                uint tableIds = 10_000 + id * 100;
+                body.Append(WordTable(table, main, ref tableIds), new Paragraph());
+            }
         }
         uint drawingId = (uint)Figures.Count;
         AppendTables(body, main, ref drawingId, out var landscape);

@@ -75,6 +75,12 @@ internal static class ResultExportChecks
         var filtered = ResultMemberSummary.Create("ULS", sample, sampleGroups, [ResultReportOutput.BendingMoment]);
         Check(filtered.Rows[0] is { BendingMNm: 9, ShearMN: null, AxialMN: null }, "Summary force columns follow selected result types");
         Check(report.Figures.Count == 10 && report.Figures.Take(5).All(f => f.CaseName == cases[0]) && report.Figures.Skip(5).All(f => f.CaseName == cases[1]), "One figure per selected case and graphical output, in selection order");
+        var reactionFigure = report.Figures.First(f => f.Title == "Support reactions");
+        var reactionResult = run.ResultFor(reactionFigure.CaseName);
+        Check(reactionFigure.Table is { } reactionTable && reactionTable.Rows.Count == reactionResult.SupportReactions.Count + 1 && reactionTable.Rows[^1][0].Text == "Sum" &&
+              reactionTable.Rows[^1][2].Text == ResultReportTables.Mn(reactionResult.SupportReactions.Sum(r => r.ReactionZKN)) &&
+              report.Figures.Where(f => f.Title != "Support reactions").All(f => f.Table is null) && report.Html().Contains("</figcaption><p class='n'>Global axes"),
+            "every Support reactions figure has a small table of Rx, Rz and My (MN) at each support, with their sums, set directly below it");
         Check(!report.Figures[0].Png.SequenceEqual(report.Figures[1].Png) && !report.Figures[1].Png.SequenceEqual(report.Figures[6].Png), "Changing result type or case changes the captured model diagram");
         Check(vm.SelectedFemResultName == before, "Capturing figures leaves the displayed case unchanged");
         var html = report.Html(); Check(report.Tables.Where(t => t.Title.StartsWith("Summary of member forces — ", StringComparison.Ordinal)).Select(t => t.Title[27..]).SequenceEqual(cases) && html.Contains("<table") && html.Contains(System.Net.WebUtility.HtmlEncode("Bending (MN·m)")) && html.Contains("Member size") && html.Contains("Figure 10.") && html.Contains("data:image/png;base64,"), "Report contains the force tables of each selected case alongside numbered graphical figures");
@@ -94,19 +100,20 @@ internal static class ResultExportChecks
             "the Vertical Chord table lists the middle chords too");
         var (sections, memberCases) = vm.DesignUtilization();
         var sls = vm.FemResultNames.First(n => n.Contains("SLS")); var uls = vm.FemResultNames.First(n => n.Contains("ULS"));
-        var slsTables = vm.ReportCaseTables(sls, memberCases, Render); var ulsTables = vm.ReportCaseTables(uls, memberCases, Render);
-        ReportTable Cable(IReadOnlyList<ReportTable> t) => t.Single(x => x.Title.StartsWith("Cable forces", StringComparison.Ordinal));
-        ReportTable Chord(IReadOnlyList<ReportTable> t) => t.Single(x => x.Title.StartsWith("Top Chord forces", StringComparison.Ordinal));
-        Check(sections.Count > 0 && slsTables.Concat(ulsTables).All(t => t.Columns[^1].Header == "UR") && Cable(slsTables).Columns.Any(c => c.Header == "Capacity (MN)") &&
-              Cable(slsTables).Rows.All(r => r[^1].Text != "—") && Cable(ulsTables).Rows.All(r => r[^1].Text == "—") &&
-              Chord(ulsTables).Rows.All(r => r[^1].Text != "—") && Chord(slsTables).Rows.All(r => r[^1].Text == "—") &&
-              memberCases.Where(m => vm.FemSectionProperties.Any(p => p.MemberName == m.Key && !p.IsCable)).All(m => m.Value.Keys.All(k => k.Contains("ULS"))) &&
-              memberCases.Where(m => vm.FemSectionProperties.Any(p => p.MemberName == m.Key && p.IsCable)).All(m => m.Value.Keys.All(k => k.Contains("SLS"))),
-            "with design utilization every force table gets a UR column: members from ULS cases only, cables (with their capacity, area × 2160 MPa × 50 %) from SLS cases only — elsewhere —");
+        var ulsTables = vm.ReportCaseTables(uls, null, Render);
+        var groupUr = vm.ReportGroupUtilization(memberCases);
+        var urTable = ResultReportTables.UtilizationSummary(groupUr);
+        Check(sections.Count > 0 && ulsTables.All(t => t.Columns.All(c => c.Header is not ("UR" or "Capacity (MN)"))) &&
+              groupUr.Select(g => g.Group).SequenceEqual(["Mega Column", "Top Chord", "Bottom Chord", "Vertical Chord", "Main Cable (External)", "Internal Cable"]) &&
+              groupUr.Take(4).All(g => g.Check == "Strength (ULS)" && g.Ur is > 0 && g.Case.Contains("ULS")) &&
+              groupUr.Skip(4).All(g => g.Check == "Service (SLS)" && g.Ur is > 0 && g.Case.Contains("SLS")) &&
+              urTable.Columns.Any(c => c.Header == "UR") && urTable.Rows.Count == 6 &&
+              memberCases.Where(m => vm.FemSectionProperties.Any(p => p.MemberName == m.Key && !p.IsCable)).All(m => m.Value.Keys.All(k => k.Contains("ULS"))),
+            "the force tables carry no UR; the utilization summary gives each group's governing UR, member and case — members on ULS, cables on SLS (area × 1860 MPa × 50 %, the VSL strand)");
         Check(quantities is { Landscape: false, TotalRows: 1 } && quantities.Columns[2].Header == "Section drawing" && quantities.Columns[3].Header == "Description" &&
               quantities.Rows.SkipLast(1).Any(r => r[2].Image is not null) && quantities.Rows[^1][0].Text == "Total",
             "the quantities table draws each section with its description beside it, and closes with the totals");
-        Check(html.IndexOf("<table", StringComparison.Ordinal) > html.LastIndexOf("</figure>", StringComparison.Ordinal), "PDF report places every summary table after all figures");
+        Check(html.IndexOf("<h2>", StringComparison.Ordinal) > html.LastIndexOf("</figure>", StringComparison.Ordinal), "PDF report places every titled table after all figures (a reactions table sits under its figure)");
         bool refused = false; try { ResultReport.Create("test", run, ["missing"], [ResultReportOutput.Reactions], (_, _) => []); } catch (InvalidOperationException) { refused = true; }
         Check(refused, "Unsolved case cannot silently substitute another result");
         var merged = ResultReport.Create("test", run, [new ResultReportSelection("SLS", cases, [ResultReportOutput.Deflection]), new ResultReportSelection("ULS", [cases[0]], [ResultReportOutput.Reactions, ResultReportOutput.Deflection])], (result, mode) => ResultFigureCapture.Capture(vm, null, result, mode),
@@ -124,10 +131,10 @@ internal static class ResultExportChecks
             Check(!main.Document.Body!.Descendants<ParagraphProperties>().Any(p => p.GetFirstChild<SectionProperties>() is not null), "the whole report, quantities included, is one portrait A4 section");
             var defaults = main.StyleDefinitionsPart!.Styles!.GetFirstChild<DocDefaults>()!;
             Check(defaults.RunPropertiesDefault!.RunPropertiesBaseStyle!.GetFirstChild<RunFonts>()!.Ascii == "Arial" && defaults.RunPropertiesDefault.RunPropertiesBaseStyle.GetFirstChild<FontSize>()!.Val == "18" && defaults.ParagraphPropertiesDefault!.ParagraphPropertiesBaseStyle!.GetFirstChild<SpacingBetweenLines>()!.Line == "276", "Arial 9 and 1.15 spacing preserved");
-            Check(main.ImageParts.Count() > 10 && main.Document.Descendants<Table>().Count() == report.Tables.Count && main.Document.InnerText.Contains("Figure 10.") &&
-                  main.Document.Descendants<Table>().First().Descendants<Drawing>().Any(), "Word embeds every screenshot and caption, and every table with its section drawings");
+            Check(main.ImageParts.Count() > 10 && main.Document.Descendants<Table>().Count() == report.Tables.Count + report.Figures.Count(f => f.Table is not null) && main.Document.InnerText.Contains("Figure 10.") &&
+                  main.Document.Descendants<Table>().Any(t => t.Descendants<Drawing>().Any()), "Word embeds every screenshot and caption, and every table with its section drawings");
             var blocks = main.Document.Body!.ChildElements.ToArray();
-            Check(Array.FindIndex(blocks, b => b is Table) > Array.FindLastIndex(blocks, b => b is Paragraph && (b.Descendants<Drawing>().Any() || b.InnerText.StartsWith("Figure ", StringComparison.Ordinal))), "Word places every table after all figures and captions");
+            Check(Array.FindIndex(blocks, b => b is Paragraph && b.InnerText.StartsWith("Summary of member forces", StringComparison.Ordinal)) > Array.FindLastIndex(blocks, b => b is Paragraph && (b.Descendants<Drawing>().Any() || b.InnerText.StartsWith("Figure ", StringComparison.Ordinal))), "Word places every titled table after all figures and captions (a reactions table sits under its figure)");
         }
         if (includePdf)
         {
@@ -138,13 +145,13 @@ internal static class ResultExportChecks
         var picker = new ShowResultsWindow(vm, _ => {}); picker.Show();
         var export = new ExportResultsWindow(vm) { Owner = picker }; export.Show();
         static CheckBox[] Boxes(Panel panel) => panel.Children.OfType<CheckBox>().ToArray();
-        Check(Boxes(export.SlsOutputChoices).All(b => b.IsChecked == Equals(b.Tag, ResultReportOutput.Deflection)) && Boxes(export.UlsOutputChoices).All(b => b.IsChecked == Equals(b.Tag, ResultReportOutput.Deflection) is false)
+        Check(Boxes(export.SlsOutputChoices).All(b => b.IsChecked == b.Tag is ResultReportOutput.Deflection or ResultReportOutput.CableForces) && Boxes(export.UlsOutputChoices).All(b => b.IsChecked == Equals(b.Tag, ResultReportOutput.Deflection) is false)
             && new[] { export.IncludeModelViews, export.IncludeForces, export.IncludeQuantities, export.IncludeUtilization }.All(box => box.IsChecked == true)
             && Boxes(export.SlsCaseChoices).Where(b => b.IsChecked == true).All(b => ((string)b.Content).Contains("SLS")) && Boxes(export.UlsCaseChoices).Where(b => b.IsChecked == true).All(b => ((string)b.Content).Contains("ULS")),
-            "Dialog defaults: SLS the deflection, ULS the forces and reactions (deflection unticked), and every table and the model views ticked");
+            "Dialog defaults: SLS the deflection and Cable forces, ULS the forces, reactions and Cable forces (deflection unticked), and the model views, member forces, quantities and design utilization ticked");
         export.IncludeUtilization.IsChecked = false;
         foreach (var box in Boxes(export.SlsCaseChoices)) box.IsChecked = false;
-        foreach (var box in Boxes(export.UlsCaseChoices)) box.IsChecked = (string)box.Tag == before;
+        foreach (var box in Boxes(export.UlsCaseChoices)) box.IsChecked = (string)box.Tag == uls;
         foreach (var box in Boxes(export.UlsOutputChoices)) box.IsChecked = Equals(box.Tag, ResultReportOutput.BendingMoment);
         var withViews = export.BuildReport();
         File.WriteAllBytes(Path.Combine(folder, "Model 3D.png"), withViews.Figures[0].Png); File.WriteAllBytes(Path.Combine(folder, "Model XZ.png"), withViews.Figures[1].Png);
@@ -155,12 +162,31 @@ internal static class ResultExportChecks
         Check(export.BuildReport() is { Figures.Count: 1 }, "An empty SLS part is skipped");
         foreach (var box in Boxes(export.SlsCaseChoices)) box.IsChecked = true;
         foreach (var box in Boxes(export.SlsOutputChoices)) box.IsChecked = false;
-        export.IncludeForces.IsChecked = false;
+        export.IncludeForces.IsChecked = false; foreach (var box in Boxes(export.SlsOutputChoices).Concat(Boxes(export.UlsOutputChoices)).Where(b => Equals(b.Tag, ResultReportOutput.CableForces))) box.IsChecked = false;
         refused = false; try { export.BuildReport(); } catch (InvalidOperationException ex) { refused = ex.Message.Contains("SLS"); }
         Check(refused, "without Member forces, SLS cases without a result type are refused with the part named");
         export.IncludeForces.IsChecked = true;
+        CheckBox CableTick(Panel outputs) => Boxes(outputs).Single(b => Equals(b.Tag, ResultReportOutput.CableForces));
+        foreach (var box in Boxes(export.UlsCaseChoices)) box.IsChecked = (string)box.Tag == uls;
+        foreach (var box in Boxes(export.SlsCaseChoices)) box.IsChecked = (string)box.Tag == sls;
+        foreach (var box in Boxes(export.SlsOutputChoices)) box.IsChecked = Equals(box.Tag, ResultReportOutput.Deflection);
+        CableTick(export.SlsOutputChoices).IsChecked = true; CableTick(export.UlsOutputChoices).IsChecked = true;
+        Check(export.BuildReport() is { } partial && partial.Tables.Any(t => t.Title == $"Summary of member forces — {uls}") && partial.Tables.Any(t => t.Title == $"Top Chord forces — {uls}") &&
+              partial.Tables.Any(t => t.Title == $"Cable forces — {sls}") && partial.Tables.Any(t => t.Title == $"Cable forces — {uls}") &&
+              !partial.Tables.Any(t => t.Title == $"Summary of member forces — {sls}") && partial.Figures.All(f => !f.Title.Contains("Cable", StringComparison.Ordinal)),
+            "one Cable forces tick in each part gives the cable force table of its cases (no figure); member forces come for the ULS case");
+        CableTick(export.UlsOutputChoices).IsChecked = false;
+        Check(export.BuildReport() is { } slsOnly && slsOnly.Tables.Any(t => t.Title == $"Cable forces — {sls}") && !slsOnly.Tables.Any(t => t.Title == $"Cable forces — {uls}"),
+            "unticking Cable forces in the ULS part keeps the SLS cable forces");
+        CableTick(export.UlsOutputChoices).IsChecked = true;
         foreach (var box in Boxes(export.SlsCaseChoices)) box.IsChecked = false;
-        Check(export.BuildReport() is { Figures.Count: 1 } selected && selected.Tables.Count(t => t.Title == $"Summary of member forces — {before}") == 1 &&
+        foreach (var box in Boxes(export.SlsCaseChoices)) box.IsChecked = (string)box.Tag == sls;
+        foreach (var box in Boxes(export.SlsOutputChoices)) box.IsChecked = box.Tag is ResultReportOutput.Deflection or ResultReportOutput.CableForces;
+        Check(export.BuildReport() is { } both && both.Tables.Any(t => t.Title == $"Summary of member forces — {uls}") &&
+              both.Tables.Where(t => t.Title.EndsWith($"— {sls}", StringComparison.Ordinal)).Select(t => t.Title).SequenceEqual([$"Cable forces — {sls}"]),
+            "the member force tables are made for the ULS case; the SLS case gives its deflection figure and its cable forces");
+        foreach (var box in Boxes(export.SlsCaseChoices)) box.IsChecked = false;
+        Check(export.BuildReport() is { Figures.Count: 1 } selected && selected.Tables.Count(t => t.Title == $"Summary of member forces — {uls}") == 1 &&
               selected.Tables.Any(t => t.Title == "Quantities") && !selected.Tables.Any(t => t.Title == "Design utilization") && vm.SelectedFemResultName == before,
             "Dialog exports the selected figure, that case's force tables and the quantities without changing the live selection");
         foreach (var box in Boxes(export.UlsOutputChoices)) box.IsChecked = false;
