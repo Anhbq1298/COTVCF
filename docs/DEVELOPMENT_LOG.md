@@ -46,6 +46,12 @@ continues on the next lines, indented by two spaces):
 - What: Run Design no longer closes the dialog and opens a separate results window: the results (summary per member and the step-by-step calculation, Copy / Save Report) appear in a new **Design** tab placed before Optimization, so the basis, section, members and results are always in one window; Cancel becomes Close and Run Design can be repeated. The Members & Loads list shows each member's section, material and the effective length l0 of the Design Basis (following what is keyed in there) instead of the member's geometric length, which read 20 m against an l0 of 10 m.
   The summary table has a **Role** column after Member (Mega column, Top chord, End frames…, as Frame Information gives it for the VCF system; empty for a model that has no such roles).
 - Checks: --study-ui (Design tab and member lines; that suite stops earlier on an unrelated viewer-supports assertion and at Assign → Joint → Restraints from uncommitted menu work, so the new check was run past them); --dev-log.
+## 2026-10-18 · Assign → Frame → Frame Load: distributed loads as SAP2000 defines them
+- Status: Planned
+- Who: Unassigned
+- Where: Assign → Frame → Frame Load… (new); Display → Loading; Object Information; File → Import / Export SAP2000 and ETABS
+- What: Distributed forces or moments on the selected frames, as SAP2000's Frame Distributed Loads form: load pattern, Forces / Moments, GLOBAL or Local, directions Local 1/2/3, X/Y/Z, X/Y/Z projected, Gravity and Gravity projected, a 4-point trapezoid (relative or absolute distance from End-I) plus a uniform load, and Add / Replace / Delete existing. The loads are data of the native document, with the frame-load methods in `Mcotis.Core.FrameLoads`. Delivered in slices FL-01 … FL-07; distributed moments are refused at Run until their verification record is complete. Plan: `docs/loads/FRAME_DISTRIBUTED_LOAD_PLAN.md`.
+- Checks: none yet (planned: --frame-loads, --frame-load-ui, --native-parity, --full for FL-02)
 
 ## 2026-10-18 · Default VCF model: CFT chords as a defined filled tube; CFT exports as a steel tube
 - Status: In progress
