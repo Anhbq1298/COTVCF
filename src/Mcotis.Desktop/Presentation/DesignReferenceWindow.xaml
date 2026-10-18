@@ -200,6 +200,7 @@
          <TextBox x:Name="OptProfileDepthMin" Grid.Row="1" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptProfileDepthMax" Grid.Row="1" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptProfileDepthStep" Grid.Row="1" Grid.Column="3" Margin="0,0,4,6"/>
          <TextBlock Grid.Row="2" Text="b  flange width" Style="{StaticResource Label}"/>
          <TextBox x:Name="OptProfileWidthMin" Grid.Row="2" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptProfileWidthMax" Grid.Row="2" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptProfileWidthStep" Grid.Row="2" Grid.Column="3" Margin="0,0,4,6"/>
+         <CheckBox x:Name="OptWidthEqualsDepth" Grid.Row="2" Grid.Column="4" Content="b = h" VerticalAlignment="Center" Margin="4,0,0,6" Click="OptShape_Changed" ToolTip="Profile as wide as it is deep: b is not stepped, so fewer cases"/>
          <TextBlock Grid.Row="3" Text="tf  flange" Style="{StaticResource Label}"/>
          <TextBox x:Name="OptFlangeMin" Grid.Row="3" Grid.Column="1" Margin="0,0,4,6"/><TextBox x:Name="OptFlangeMax" Grid.Row="3" Grid.Column="2" Margin="0,0,4,6"/><TextBox x:Name="OptFlangeStep" Grid.Row="3" Grid.Column="3" Margin="0,0,4,6"/>
          <TextBlock Grid.Row="4" Text="tw  web" Style="{StaticResource Label}"/>

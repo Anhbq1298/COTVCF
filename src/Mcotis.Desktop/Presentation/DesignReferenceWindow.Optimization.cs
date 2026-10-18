@@ -144,6 +144,7 @@ public partial class DesignReferenceWindow
         OptDepthLabel.Text = circular ? "D  diameter" : "H  depth (in-plane)";
         foreach (var control in new FrameworkElement[] { OptWidthLabel, OptWidthMin, OptWidthMax, OptWidthStep }) control.IsEnabled = width;
         foreach (var control in new FrameworkElement[] { OptWebMin, OptWebMax, OptWebStep }) control.IsEnabled = OptWebEqualsFlange.IsChecked != true;
+        foreach (var control in new FrameworkElement[] { OptProfileWidthMin, OptProfileWidthMax, OptProfileWidthStep }) control.IsEnabled = OptWidthEqualsDepth.IsChecked != true;
         UpdateCaseCount();
         var outlineWidth = OptOutlineSquareBox.IsChecked != true;
         foreach (var control in new FrameworkElement[] { OptOutlineWidthLabel, OptOutlineWidthMin, OptOutlineWidthMax, OptOutlineWidthStep }) control.IsEnabled = outlineWidth;
@@ -152,7 +153,7 @@ public partial class DesignReferenceWindow
     /// <summary>The number of cases a run would design, shown above the Run button and kept up to date as the ranges change.</summary>
     private void UpdateCaseCount()
     {
-        if (OptCountText is null || OptWebEqualsFlange is null || OptSteelFrom?.SelectedItem is null || OptSteelTo?.SelectedItem is null ||
+        if (OptCountText is null || OptWebEqualsFlange is null || OptWidthEqualsDepth is null || OptSteelFrom?.SelectedItem is null || OptSteelTo?.SelectedItem is null ||
             OptConcreteFrom?.SelectedItem is null || OptConcreteTo?.SelectedItem is null) return;
         try
         {
@@ -226,6 +227,7 @@ public partial class DesignReferenceWindow
             FlangeThickness = Range(OptFlangeMin, OptFlangeMax, OptFlangeStep),
             WebThickness = Range(OptWebMin, OptWebMax, OptWebStep),
             WebEqualsFlange = OptWebEqualsFlange.IsChecked == true,
+            WidthEqualsDepth = OptWidthEqualsDepth.IsChecked == true,
             ProfileCounts = counts,
             ProfileEdge = Number(OptProfileEdge),
             SteelFrom = OptSteelFrom.SelectedItem as string ?? "S355",
@@ -258,7 +260,8 @@ public partial class DesignReferenceWindow
             if (!input.SquareOutline) ranges.Add(("b (outline)", input.OutlineWidth));
         }
         if (input.UsesProfile)
-            ranges.AddRange([("profile h", input.ProfileDepth), ("flange b", input.ProfileWidth), ("tf", input.FlangeThickness)]);
+            ranges.AddRange([("profile h", input.ProfileDepth), ("tf", input.FlangeThickness)]);
+        if (input.UsesProfile && !input.WidthEqualsDepth) ranges.Add(("flange b", input.ProfileWidth));
         if (input.UsesProfile && !input.WebEqualsFlange) ranges.Add(("tw", input.WebThickness));
         foreach (var (name, range) in ranges)
             if (!(range.Min > 0) || !(range.Max >= range.Min) || !(range.Step > 0))

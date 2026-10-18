@@ -95,6 +95,24 @@ internal static class OptimizationStudyChecks
         var response = OptimizationResponses.Of(geometry, new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal), reactions);
         Check(response.BaseHorizontalKN == 500 && response.BaseVerticalKN == 2500,
             "The base horizontal force is the sum over the two column bases of one end (300 + 200 = 500 kN; all four sum to 0), V likewise (2,500 kN)");
+
+        // Member Utilization: a cable of 1,000 mm² at 1,860 MPa × φ 0.5 has 930 kN; it carries 300 kN (SLS) and 600 kN (ULS) → 600 / 930
+        // under the governing result; a frame no design type takes is listed, not designed
+        var memberPoints = new Dictionary<string, StructuralPoint>(StringComparer.Ordinal) { ["A"] = new("A", new(0, 0, 0)), ["B"] = new("B", new(10, 0, 0)), ["C"] = new("C", new(10, 0, 5)) };
+        var memberGeometry = new GeometryModel(memberPoints, [new StructuralMember("C1", "A", "B", MemberKind.Cable), new StructuralMember("F1", "B", "C", MemberKind.Frame)]);
+        var memberProperties = new Dictionary<string, FemSectionProperties>(StringComparer.Ordinal)
+        {
+            ["C1"] = new("C1", 1e-3, 195e6, null, SectionName: "STRAND"), ["F1"] = new("F1", 0.05, 200e6, 1e-3, SectionName: "UB"),
+        };
+        var candidate = new ParametricCandidate("OPT00001", memberGeometry, memberProperties, null!, [], new Dictionary<string, double>(), null, [], "bottom chord point", 10);
+        FemAnalysisResult Solved(double tension) => new([], [], [], [new FemCableResponse("C1", tension, true)], 0);
+        var members = new MemberUtilizationCheck(_ => null, 1860, 0.5).Evaluate(candidate,
+            new Dictionary<string, FemAnalysisResult> { ["SLS"] = Solved(300), ["ULS"] = Solved(600) });
+        var cable = members.Single(item => item.Member == "C1");
+        var frame = members.Single(item => item.Member == "F1");
+        Check(members.Count == 2 && cable.Type == "Cable" && Math.Abs(cable.Utilization!.Value - 600 / 930.0) < 1e-12 && cable.Check == "OK" && cable.Case == "ULS" &&
+              frame.Type == "Frame" && frame.Utilization is null && frame.Note.StartsWith("Not designed", StringComparison.Ordinal),
+            "Member Utilization: a cable's utilization is its largest tension over area × strength × φ (600 / 930 under ULS); a frame no design type takes is listed as not designed");
     }
 
     private static VcfOptimizationResult VcfOptimizationRunnerFailed(long index) =>

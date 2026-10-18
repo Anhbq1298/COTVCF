@@ -840,7 +840,7 @@ Choose steel and concrete grades plus longitudinal bars and cover to links. Cand
 ### Mega composite — multiple profiles and placement
 Set the concrete outline and dimensions of one steel I profile, then tick **4 and/or 6 profiles**. Ticking both tries both arrangements. Enter the **edge distance from the concrete face to the profile [mm]**; it controls placement, rather than being a centre-to-centre spacing.
 
-Tick **tw = tf** (steel encased and mega) to make the web as thick as the flange: the web is not stepped, so the run has far fewer cases. Above the Run button the tab shows the **number of cases** the run would design (every combination of size, steel grade, concrete grade and bar arrangement) and updates it as you change a range, a grade, the bars or the profile options; over the limit of 250,000 it says so and the run is refused until you narrow a range or use larger steps.
+Tick **tw = tf** (steel encased and mega) to make the web as thick as the flange, and **b = h** to make the profile as wide as it is deep: that dimension is not stepped, so the run has far fewer cases. Above the Run button the tab shows the **number of cases** the run would design (every combination of size, steel grade, concrete grade and bar arrangement) and updates it as you change a range, a grade, the bars or the profile options; over the limit of 250,000 it says so and the run is refused until you narrow a range or use larger steps.
 
 Choose grades, bars and cover as for the mega section. More profiles do not automatically produce the cheapest result: their added capacity and material cost are both considered. The screenshot illustrates the mega-specific controls, not a completed mega optimization run.
 

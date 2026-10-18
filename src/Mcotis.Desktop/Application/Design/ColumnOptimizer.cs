@@ -102,6 +102,8 @@ public sealed record ColumnOptimizationInput
     public SizeRange WebThickness { get; init; } = new(20, 40, 10);
     /// <summary>True: the web is as thick as the flange (tw = tf), so tw is not stepped and the cases are fewer.</summary>
     public bool WebEqualsFlange { get; init; }
+    /// <summary>True: the profile is as wide as it is deep (b = h), so the flange width is not stepped.</summary>
+    public bool WidthEqualsDepth { get; init; }
     public IReadOnlyList<int> ProfileCounts { get; init; } = [4];         // mega: 4 and / or 6
     public double ProfileEdge { get; init; } = 160;                       // mega: concrete face to the outer profile's face
     // grades
@@ -254,7 +256,7 @@ public static class ColumnOptimizer
             var outline = template with { Depth = depth, Width = width };
             if (!input.UsesProfile) { yield return outline; continue; }
             foreach (var hs in input.ProfileDepth.Values())
-                foreach (var bf in input.ProfileWidth.Values())
+                foreach (var bf in input.WidthEqualsDepth ? [hs] : input.ProfileWidth.Values())
                     foreach (var tf in input.FlangeThickness.Values())
                         foreach (var tw in input.WebEqualsFlange ? [tf] : input.WebThickness.Values())
                         {

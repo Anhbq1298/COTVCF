@@ -14,7 +14,8 @@ namespace Mcotis.Desktop.Presentation;
 /// that rises most) and the check of both.</summary>
 public sealed record VcfOptimizationRow(long Case, IReadOnlyList<string> Values, double? MaxDeflectionMm, string Deflection,
     string Governing, string Point, string Status, string Span = "", string Limit = "", double? Utilisation = null, string Ratio = "",
-    string Check = "", double? CostSgd = null, string Cost = "", double? MaxUpliftMm = null, string Uplift = "", string UpliftPoint = "");
+    string Check = "", double? CostSgd = null, string Cost = "", double? MaxUpliftMm = null, string Uplift = "", string UpliftPoint = "",
+    IReadOnlyList<MemberUtilization>? Members = null);
 
 /// <summary>An optimization study as it is saved beside its model (M7: <c>&lt;name&gt;.results/optimization-study.json</c>):
 /// what the results window shows — the rows, the varying inputs' column labels, the Chart page — and the model it was run
@@ -122,7 +123,8 @@ public sealed partial class MainViewModel
                     { ActiveDofs = FemActiveDofs, CableDofs = FemCableDofs, MassSources = femMassSources.ToArray() };
                 // Optimization VCF is a configuration of the one parametric study engine
                 return new ParametricOptimization(new VcfOptimizationStudy(inputs, settings),
-                    new OptimizationCriteria(settings.DeflectionResult, settings.SpanRatio, settings.UpliftLimitMm), inputs.CostPerMetre);
+                    new OptimizationCriteria(settings.DeflectionResult, settings.SpanRatio, settings.UpliftLimitMm), inputs.CostPerMetre,
+                    memberCheck: BuildMemberUtilizationCheck());
             });
     }
 
@@ -253,7 +255,8 @@ public sealed partial class MainViewModel
                     utilisation, utilisation is { } u ? u.ToString("0.00", CultureInfo.CurrentCulture) : "",
                     result.Passes switch { true => "OK", false => "NG", null => "—" },
                     result.CostSgd, result.CostSgd is { } sgd ? sgd.ToString("N0", CultureInfo.CurrentCulture) : "—",
-                    result.MaxUpliftMm, result.MaxUpliftMm is { } up ? up.ToString("0.0", CultureInfo.CurrentCulture) : "—", result.UpliftPoint ?? "");
+                    result.MaxUpliftMm, result.MaxUpliftMm is { } up ? up.ToString("0.0", CultureInfo.CurrentCulture) : "—", result.UpliftPoint ?? "",
+                    result.Members);
                 if (result.UpliftPasses == false)
                     row = row with { Status = row.Status + $" · uplift {row.Uplift} mm at {row.UpliftPoint} is above the {upliftLimitMm:0.###} mm limit" };
                 if (result.CostNote is { } costNote) row = row with { Status = row.Status + " · " + costNote };
@@ -349,7 +352,8 @@ public sealed partial class MainViewModel
                 // Optimization TAS is a configuration of the one parametric study engine
                 var inputs = TasOptimizationInputs();
                 return new ParametricOptimization(new TasOptimizationStudy(inputs, settings),
-                    new OptimizationCriteria(settings.DeflectionResult, settings.SpanRatio, settings.UpliftLimitMm), inputs.CostPerMetre);
+                    new OptimizationCriteria(settings.DeflectionResult, settings.SpanRatio, settings.UpliftLimitMm), inputs.CostPerMetre,
+                    memberCheck: BuildMemberUtilizationCheck());
             });
     }
 

@@ -64,6 +64,27 @@ public sealed partial class MainViewModel
         };
     }
 
+    /// <summary>The member check of the optimization cases (Member Utilization tab): the Design engine on the columns, tension over
+    /// capacity on the cables. A snapshot of the design bases of every section × material of the libraries, so it runs off the UI thread.</summary>
+    internal MemberUtilizationCheck BuildMemberUtilizationCheck()
+    {
+        EnsureSections();
+        EnsureMaterials();
+        var types = Enum.GetValues<ColumnDesignType>();
+        var bases = types.ToDictionary(type => type, type => DesignBasis(type));
+        var byKey = new Dictionary<(string Section, string Material), ColumnDesignBasis?>();
+        foreach (var section in FrameSections)
+            foreach (var material in Materials.Select(item => item.Name).Append(""))
+            {
+                var found = material == "" ? null : Materials.First(item => item.Name == material);
+                // the type is the first the section suits, in the order of the Design menu's own: composite ones before plain RC
+                var type = new[] { ColumnDesignType.MegaComposite, ColumnDesignType.SteelEncased, ColumnDesignType.ConcreteFilledTube, ColumnDesignType.ReinforcedConcrete }
+                    .Where(candidate => Suits(candidate, section, found)).Select(candidate => (ColumnDesignType?)candidate).FirstOrDefault();
+                byKey[(section.Name, material)] = type is { } suited ? bases[suited] with { Section = DesignSectionDefaults(suited, section.Name, material == "" ? null : material), Members = [], LoadCases = [] } : null;
+            }
+        return new(property => byKey.GetValueOrDefault((property.SectionName ?? "", property.MaterialName ?? "")), State.CableStrengthMpa, State.CableStrengthReductionFactor);
+    }
+
     /// <summary>The length of a frame of the model's document, by its identity (M7); 0 for a member the document lacks.</summary>
     private double MemberLength(string member)
     {
@@ -79,8 +100,14 @@ public sealed partial class MainViewModel
     internal ColumnSectionInput DesignSectionDefaults(ColumnDesignType type, string member)
     {
         var property = FemSectionProperties.FirstOrDefault(item => item.MemberName == member);
-        var section = FrameSections.FirstOrDefault(item => item.Name == property?.SectionName);
-        var material = Materials.FirstOrDefault(item => item.Name == property?.MaterialName);
+        return DesignSectionDefaults(type, property?.SectionName, property?.MaterialName);
+    }
+
+    /// <summary>As above for a section and material by name (a case of an optimization has its own sections).</summary>
+    private ColumnSectionInput DesignSectionDefaults(ColumnDesignType type, string? sectionName, string? materialName)
+    {
+        var section = FrameSections.FirstOrDefault(item => item.Name == sectionName);
+        var material = Materials.FirstOrDefault(item => item.Name == materialName);
         var concrete = material?.Kind == MaterialKind.Concrete ? material : Materials.FirstOrDefault(item => item.Kind == MaterialKind.Concrete);
         var steel = material?.Kind == MaterialKind.Steel ? material : Materials.FirstOrDefault(item => item.Kind == MaterialKind.Steel);
         var rebar = Materials.FirstOrDefault(item => item.Kind == MaterialKind.Rebar);

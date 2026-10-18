@@ -24,6 +24,19 @@
                HeadersVisibility="Column" SelectionMode="Single" AutomationProperties.Name="Optimization results"/>
     </DockPanel>
    </TabItem>
+   <TabItem Header="Member Utilization">
+    <DockPanel Margin="0,6,0,0">
+     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+      <TextBlock Text="Case" VerticalAlignment="Center" Margin="0,0,6,0"/>
+      <ComboBox x:Name="MemberCaseBox" Width="90" DisplayMemberPath="Case" SelectionChanged="MemberCase_Changed" AutomationProperties.Name="Case of the member utilization"/>
+      <TextBlock x:Name="MemberSummary" Margin="12,0,0,0" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+     </DockPanel>
+     <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Hint}" Margin="0,6,0,0" TextWrapping="Wrap"
+                Text="Cables: largest tension of the solved results / design capacity (area × cable strength × φ, Run → Cable settings). Columns (RC, CFT, steel encased, mega composite): the Design engine with the Design window's code, method and factors on the ULS results (all solved results when none is named ULS); an effective length not keyed there is the member's length. Other frames have no design engine and are listed as not designed."/>
+     <DataGrid x:Name="MemberGrid" IsReadOnly="True" AutoGenerateColumns="False" CanUserAddRows="False" HeadersVisibility="Column" SelectionMode="Single"
+               AutomationProperties.Name="Member utilization"/>
+    </DockPanel>
+   </TabItem>
    <TabItem Header="Chart">
     <ScrollViewer x:Name="ChartScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Background="{StaticResource Raised}">
      <StackPanel x:Name="ChartPage" Margin="18,14,18,18" AutomationProperties.Name="Optimization charts"/>

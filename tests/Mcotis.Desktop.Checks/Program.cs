@@ -770,7 +770,12 @@ internal static class Program
                 var webSteps = 1 + (int)Math.Round((double.Parse(runDialog.OptWebMax.Text) - double.Parse(runDialog.OptWebMin.Text)) / double.Parse(runDialog.OptWebStep.Text));
                 runDialog.OptFlangeMax.Text = "60";
                 var casesNarrow = Cases();
-                Assert(casesEqual < casesBoth && !runDialog.OptWebMin.IsEnabled && casesBoth % casesEqual == 0 && casesNarrow < casesEqual && webSteps > 1,
+                runDialog.OptWidthEqualsDepth.IsChecked = true;
+                runDialog.OptWidthEqualsDepth.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                var casesSquare = Cases();
+                runDialog.OptWidthEqualsDepth.IsChecked = false;
+                runDialog.OptWidthEqualsDepth.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Assert(casesSquare < casesEqual && !runDialog.OptProfileWidthMin.IsEnabled == false && casesEqual < casesBoth && !runDialog.OptWebMin.IsEnabled && casesBoth % casesEqual == 0 && casesNarrow < casesEqual && webSteps > 1,
                     $"the Optimization tab shows the number of cases ({casesBoth:N0}; {casesEqual:N0} with tw = tf) and recounts when a range changes ({casesNarrow:N0})");
                 runDialog.Close();
                 var cableForm = new StrandSectionWindow(vm, new StrandSectionProperty { Name = "Strand", Area = 0.01 }, new HashSet<string>()) { Owner = window };

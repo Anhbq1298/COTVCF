@@ -18,6 +18,13 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Optimization results: Member Utilization tab
+- Status: Done
+- Who: Philip Pham (with Claude Code)
+- Where: Optimization → Optimization VCF / Optimization TAS → results window → Member Utilization (between Run and Chart)
+- What: Every analysed case now keeps the utilization of all the members of its model, and the new tab lists them for the case chosen in its Case box (or selected on the Run sheet), most utilized first, with the governing result and a summary line. Cables: largest tension of the solved results over the design capacity (section area × cable strength × φ). Columns whose section a Design type takes (RC, CFT, steel encased, mega composite): the Design engine, with the Design window's code, method and factors, on the ULS results (all solved results when none is named ULS); an effective length not keyed there is the member's length. Other frames (chords, braces) have no design engine and are listed as not designed. Saved with the study; a study saved before this shows a note asking for a new run. Design runs per case, so a study with many column members takes longer.
+- Checks: --optimization-study (cable ratio and not-designed frame on a synthetic case). The engine on a real column case is not covered yet, and --optimization-study's frozen-baseline comparison reports the default VCF model's cost and deflection moving; this change adds a field after those values are computed and does not alter them.
+
 ## 2026-10-18 · Consolidate pending branches and column-design work
 - Status: Done
 - Who: Codex
@@ -25,11 +32,11 @@ continues on the next lines, indented by two spaces):
 - What: Merged all pending remote branches into master and committed the local column-design changes. Kept the current main-window geometry implementation and retired workspace archive intact; removed the obsolete unused native-workspace controller brought by the older geometry branch. Current load-case and modal verification records remain authoritative; earlier conflicting specifications are retained under docs/analysis/archived-plans.
 - Checks: solution build and quick library/desktop smoke checks pass. --column-design passes its engineering checks but reports 66 frozen design/model baseline differences, the pre-existing default-CFT change recorded below; baselines were not recaptured. Historical report suites were not run for this consolidation.
 
-## 2026-10-18 · Column optimization: tw = tf option and the number of cases shown
+## 2026-10-18 · Column optimization: tw = tf and b = h options and the number of cases shown
 - Status: Done
 - Who: Philip Pham (with Claude Code)
 - Where: Design → Steel Encased / Mega Composite Column Design… → Optimization tab
-- What: A **tw = tf** tick next to the web range makes the web as thick as the flange, so the web is not stepped and a run has far fewer cases. The tab shows the number of cases a run would design (size × steel grade × concrete grade × bar arrangement) above the Run button and recounts it whenever a range, grade, bar or profile input changes; over the 250,000 limit it says so.
+- What: A **tw = tf** tick next to the web range makes the web as thick as the flange, and a **b = h** tick next to the flange width makes the profile as wide as it is deep; that dimension is not stepped, so a run has far fewer cases. The tab shows the number of cases a run would design (size × steel grade × concrete grade × bar arrangement) above the Run button and recounts it whenever a range, grade, bar or profile input changes; over the 250,000 limit it says so.
 - Checks: --study-ui (the count, with and without tw = tf, and after a range change; run past the unrelated assertions noted in the Design tab entry); --dev-log.
 
 ## 2026-10-18 · Column design: results in a Design tab; members show the effective length
