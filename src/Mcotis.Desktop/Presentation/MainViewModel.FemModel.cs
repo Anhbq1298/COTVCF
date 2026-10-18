@@ -733,6 +733,9 @@ public sealed partial class MainViewModel
         var reference = carriedReferenceGeometry ?? (current.DocumentId == document.DocumentId ? current.ReferenceGeometry : null);
         carriedReferenceGeometry = null;
         if (reference is { IsEmpty: false } && NativeDocumentProblem is null) document = WithReferenceGeometry(document, reference);
+        // frame loads assigned with Assign → Frame → Frame Load are the document's own: the configuration cannot hold
+        // them, so a rebuild of the same model carries them over (NativeFrameLoads, FL-03)
+        if (NativeDocumentProblem is null && current.DocumentId == document.DocumentId) document = NativeFrameLoads.Carry(current, document);
         if (edit && NativeDocumentProblem is null && current.DocumentId == document.DocumentId && !current.Points.IsEmpty)
         {
             if (!restoringFromDocument)

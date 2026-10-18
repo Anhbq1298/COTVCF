@@ -21,7 +21,7 @@ public interface IDocumentMigration
 public static class NativeDocumentFormat
 {
     public const string FormatName = "Mcotis.Document";
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
     public const string Extension = ".mcotis";
 
     /// <summary>Schema 1 had no DOF setting; preserve its planar XZ analysis assumption. Schema 2 had no setting for the
@@ -30,7 +30,16 @@ public static class NativeDocumentFormat
     /// geometric nonlinearity and the mass sources (docs/analysis/LOAD_CASE_STATE_REFACTOR_PLAN.md §5.1).</summary>
     public static IReadOnlyList<IDocumentMigration> Migrations { get; } =
         [new AddActiveDofs(), new AddCableDofs(), new AddLoadCaseStateConfig(), new AddModalMassAssignments(), new AddApplicationDataAndGenerator(),
-         new AddReferenceGeometry()];
+         new AddReferenceGeometry(), new AddFrameLoadOptions()];
+
+    /// <summary>7 → 8. Distributed frame loads gained a type (force or moment), projection and how their distances were
+    /// entered. A schema-7 load was a force per unit frame length entered relatively — what an absent member reads as,
+    /// so the file itself is unchanged. The version moves so that a schema-7 reader refuses a file using them.</summary>
+    private sealed class AddFrameLoadOptions : IDocumentMigration
+    {
+        public int FromVersion => 7;
+        public void Upgrade(JsonObject file) { }
+    }
 
     /// <summary>6 → 7. A schema-6 document had no grid systems and no levels: both lists are empty. No grid is made up
     /// from the points of the model — the view offers their coordinates as planes without saving them as grids.</summary>
@@ -354,6 +363,8 @@ public static class NativeDocumentFormat
             {
                 Id = id, PatternId = pattern, TargetId = target, Type = LoadDto.FrameDistributed, Direction = line.Direction,
                 RelativeStart = line.RelativeStart, RelativeEnd = line.RelativeEnd, ValueStart = line.ValueStart, ValueEnd = line.ValueEnd,
+                LoadType = line.Type == FrameLoadType.Force ? null : line.Type, Projected = line.Projected ? true : null,
+                EnteredAs = line.EnteredAs == LoadDistanceType.Relative ? null : line.EnteredAs,
             },
             FramePointLoad point => new()
             {
@@ -492,7 +503,10 @@ public static class NativeDocumentFormat
             LoadDto.Point => new PointLoad(id, pattern, target, FromVector(load.Force ?? throw Missing("force")), FromVector(load.Moment ?? throw Missing("moment"))),
             LoadDto.FrameDistributed => new FrameDistributedLoad(id, pattern, target, load.Direction ?? throw Missing("direction"),
                 load.RelativeStart ?? throw Missing("relativeStart"), load.RelativeEnd ?? throw Missing("relativeEnd"),
-                load.ValueStart ?? throw Missing("valueStart"), load.ValueEnd ?? throw Missing("valueEnd")),
+                load.ValueStart ?? throw Missing("valueStart"), load.ValueEnd ?? throw Missing("valueEnd"))
+            {
+                Type = load.LoadType ?? FrameLoadType.Force, Projected = load.Projected ?? false, EnteredAs = load.EnteredAs ?? LoadDistanceType.Relative,
+            },
             LoadDto.FramePoint => new FramePointLoad(id, pattern, target, load.Direction ?? throw Missing("direction"),
                 load.RelativeDistance ?? throw Missing("relativeDistance"), load.Value ?? throw Missing("value")),
             LoadDto.CableTargetForce => new CableTargetForce(id, pattern, target, load.Value ?? throw Missing("value"),

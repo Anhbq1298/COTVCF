@@ -194,20 +194,23 @@ public static class ModelCompiler
                             $"Load {load.Id} on '{document.Points[load.TargetId].Name}' has a nonzero {component} component on an inactive DOF; choose compatible DOFs or edit the load.");
                 continue;
             }
-            var (direction, nonzero) = load switch
+            var (direction, nonzero, moment) = load switch
             {
-                FrameDistributedLoad line => (line.Direction, line.ValueStart != 0 || line.ValueEnd != 0),
-                FramePointLoad point => (point.Direction, point.Value != 0),
-                _ => (LoadDirection.GlobalX, false), // Cable target force is axial, not a global nodal component.
+                FrameDistributedLoad line => (line.Direction, line.ValueStart != 0 || line.ValueEnd != 0, line.Type == FrameLoadType.Moment),
+                FramePointLoad point => (point.Direction, point.Value != 0, false),
+                _ => (LoadDirection.GlobalX, false, false), // Cable target force is axial, not a global nodal component.
             };
             if (!nonzero) continue;
-            DofComponent? loadDof = direction switch
+            DofComponent? loadDof = (direction, moment) switch
             {
-                LoadDirection.GlobalX => DofComponent.UX, LoadDirection.GlobalY => DofComponent.UY,
-                LoadDirection.GlobalZ or LoadDirection.Gravity => DofComponent.UZ, _ => null,
+                (LoadDirection.GlobalX, false) => DofComponent.UX, (LoadDirection.GlobalY, false) => DofComponent.UY,
+                (LoadDirection.GlobalZ or LoadDirection.Gravity, false) => DofComponent.UZ,
+                (LoadDirection.GlobalX, true) => DofComponent.RX, (LoadDirection.GlobalY, true) => DofComponent.RY,
+                (LoadDirection.GlobalZ or LoadDirection.Gravity, true) => DofComponent.RZ,
+                _ => null,
             };
             if (loadDof is { } global && !mask.Contains(global))
-                Error("dof.load.inactive", ObjectKind.Load, load.Id, $"Member load {load.Id} acts in inactive {global}; it cannot be silently discarded.");
+                Error("dof.load.inactive", ObjectKind.Load, load.Id, $"Member load {load.Id} acts {(moment ? "about" : "in")} inactive {global}; it cannot be silently discarded.");
             if (loadDof is null && mask != DofMask.Full3D)
                 Error("dof.load.local.unverified", ObjectKind.Load, load.Id,
                     $"Local member load {load.Id} requires a verified local-axis transformation before compatibility with reduced DOFs can be established.");

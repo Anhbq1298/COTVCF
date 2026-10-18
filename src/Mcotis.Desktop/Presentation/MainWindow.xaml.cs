@@ -437,6 +437,28 @@ public partial class MainWindow : Window
         new AssignFrameAxisWindow(vm, chosen) { Owner = this }.ShowDialog();
     }
 
+    /// <summary>Assign → Frame → Frame Load…: SAP2000's Frame Distributed Loads form on the frames selected on the model view
+    /// (docs/loads/FRAME_DISTRIBUTED_LOAD_PLAN.md). Cables in the selection are left out: their loads are not frame loads.</summary>
+    private void AssignFrameLoad_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        var frames = vm.FemSectionProperties.Where(property => !property.IsCable)
+            .Select(property => property.MemberName).ToHashSet(StringComparer.Ordinal);
+        var selected = SharedViewer.SelectedMembers.ToArray();
+        var chosen = selected.Where(frames.Contains).ToArray();
+        if (chosen.Length == 0)
+        {
+            MessageBox.Show(this, "Select one or more frames on the model view first, then choose Assign → Frame → Frame Load.",
+                "Assign Frame Distributed Loads", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var cables = vm.FemSectionProperties.Count(property => property.IsCable && selected.Contains(property.MemberName, StringComparer.Ordinal));
+        if (cables > 0)
+            MessageBox.Show(this, $"{cables} cable{(cables == 1 ? " is" : "s are")} left out: a frame load goes on frames only.",
+                "Assign Frame Distributed Loads", MessageBoxButton.OK, MessageBoxImage.Information);
+        new AssignFrameLoadWindow(vm, chosen) { Owner = this }.ShowDialog();
+    }
+
     // File → Import From SAP2000: the active SAP2000 model, complete, as the working model (read-only)
     private async void ImportFromSap_Click(object sender, RoutedEventArgs e)
     {

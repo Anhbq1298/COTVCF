@@ -337,7 +337,12 @@ earlier tall-header / large-button / blue-block look.
     Tab 03 cables (followers of a removed cable become Independent) and Tab 04 output entries; FEM results are cleared and the
     model becomes an offline "· edited" model — SAP2000 is never written.
   - **Assign**: Joint Restraints — read-only: the restraints the model holds with their components, or the pins
-    detected at its column bases (`FemPinSupportSummary`).
+    detected at its column bases (`FemPinSupportSummary`). **Frame → Frame Load…** (2026-10-18, user: "do exactly what
+    SAP2000 does"): `AssignFrameLoadWindow`, SAP2000's Frame Distributed Loads form; a native document command
+    (`MainViewModel.AssignFrameDistributedLoad` → `Mcotis.Core.FrameLoads.Assign`), one Undo step. Those loads are the
+    document's own: `Application/NativeFrameLoads` lists their ids in the document's application data and carries them
+    through `SyncNativeDocument` rebuilds. Display, Object Information and the SAP / ETABS adapters do not read them
+    yet (exports warn). Plan and state: `docs/loads/FRAME_DISTRIBUTED_LOAD_PLAN.md`.
   - **Run**: Run FEM Analysis, Cancel FEM Analysis, Analysis Monitor · Analysis Options. The legacy Run Study /
     Cancel Study commands are no longer exposed.
   - **Optimization** (its own tab since 2026-10-12; wherever this document says "Run → Optimization VCF", read

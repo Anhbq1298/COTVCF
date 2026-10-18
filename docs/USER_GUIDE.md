@@ -84,7 +84,7 @@ The 3-d, xy, xz and yz buttons (or the drop-down in the view's corner) choose th
 - The status bar counts the selected frames, cables and points.
 
 ## Using the selection
-- Assign → Frame / Cable sections and Local Axes act on the selected members ([[Assign frame sections]], [[Frame local axes]]).
+- Assign → Frame / Cable sections, Local Axes and Frame Load act on the selected members ([[Assign frame sections]], [[Frame local axes]], [[Frame distributed loads]]).
 - **Del** or Edit → Delete removes the selection ([[Delete objects]]).
 - A column design ticks the selected frames as its members ([[Column design]]).
 
@@ -524,6 +524,21 @@ Where: Assign → Frame → Local Axes…; Display → Frame local axes
 See also: Assign frame sections; Display options
 
 Rotates the local 2 / 3 axes of the selected frames by an angle; the in-plane stiffness of the 2D analysis rotates with it (I33 cos² + I22 sin²). Display → Frame local axes draws the axes; select frames to show only theirs.
+
+# Frame distributed loads
+Category: Assign
+Where: Assign → Frame → Frame Load…
+See also: Load patterns; Frame local axes; Model view and selection
+
+Puts distributed forces or moments on the frames selected on the model view, as SAP2000's Frame Distributed Loads form. Select the frames first; cables in the selection are left out.
+
+- **Load Pattern Name**: the pattern the loads belong to.
+- **Load Type and Direction**: Forces [kN/m] or Moments [kN·m/m]; Coordinate System GLOBAL or Local; Direction X, Y, Z, X / Y / Z Projected, Gravity or Gravity Projected (GLOBAL), or 1, 2, 3 (Local). Gravity acts along −Z, positive down. A projected load is per unit length of the frame projected on the plane normal to the load — on an inclined beam, projected gravity is per metre of plan length.
+- **Trapezoidal Loads**: four points, distance and load, measured from End-I as Relative (0 … 1) or Absolute [m] distances. The load is linear between points and zero before the first and after the last; two points at the same distance give a step.
+- **Uniform Load**: a load over the whole frame, added to the trapezoid.
+- **Options**: Add to Existing Loads keeps the loads the frames have in the pattern; Replace Existing Loads (default) removes them first; Delete Existing Loads removes them and assigns nothing. Point loads and other patterns are never touched.
+
+OK assigns and closes, Apply assigns and keeps the form open. One assignment is one step of Edit → Undo, and the results of the model are cleared. The loads are saved in the `.mcotis` file. Not yet: drawing them on the model view, listing them in Object Information, and exporting them to SAP2000 or ETABS (the export warns).
 
 # Object information
 Category: Assign

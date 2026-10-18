@@ -49,6 +49,7 @@ public sealed partial class MainViewModel
         try
         {
             Message = "Checking the export against the model open in ETABS (read-only)…";
+            WarnNativeFrameLoadsNotExported("Export to ETABS");
             var model = BuildEtabsExportModel();
             var plan = await gateway.PreviewExportAsync(model);
             Message = "Export to ETABS: review the changes and confirm.";
