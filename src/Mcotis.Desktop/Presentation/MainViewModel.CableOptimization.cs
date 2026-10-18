@@ -27,10 +27,6 @@ public sealed partial class MainViewModel
     /// <summary>Applying a reviewed section result may unlock the FEM model as part of the edit.</summary>
     internal bool CanApplyCableSectionOptimization => !IsBusy && !IsCableSectionOptimizationRunning && HasUsableModelGeometry && NativeDocumentProblem is null;
 
-    public string CableSectionOptimizationToolTip =>
-        "Size 15.7 mm strand bundles in the open native model. Cable Force Sync pairs share one suggested count. " +
-        "Apply preserves target-force loads, unlocks a locked model when needed, and makes one undoable section edit.";
-
     private string? CableSectionOptimizationStoragePath
     {
         get
@@ -62,10 +58,11 @@ public sealed partial class MainViewModel
         var snapshot = NativeToLegacyProjection.Read(document) ?? femInputSnapshot ??
             throw new InvalidOperationException("The main window has no saved configuration for this native model.");
         settings.Validate();
+        var analyse = settings.DesignCases is { Count: > 0 } ? CandidateAnalysis() : null;
         IsCableSectionOptimizationRunning = true;
         try
         {
-            var run = await Task.Run(() => CableSectionOptimizer.Run(document, snapshot, settings, progress, cancellationToken),
+            var run = await Task.Run(() => CableSectionOptimizer.Run(document, snapshot, settings, progress, cancellationToken, analyse),
                 CancellationToken.None).ConfigureAwait(true);
             lastCableSectionOptimization = run;
             SaveCableSectionOptimization(run);
@@ -75,6 +72,27 @@ public sealed partial class MainViewModel
         {
             IsCableSectionOptimizationRunning = false;
         }
+    }
+
+    /// <summary>How an iteration analyses a candidate document: with the load plan Run FEM Analysis uses, so its load cases and
+    /// combinations are the ones the cables are designed for. Read on the UI thread; the analyses run on the worker.</summary>
+    private Func<Mcotis.Core.ModelDocument, CancellationToken, FemStudyRun> CandidateAnalysis()
+    {
+        var candidateLoads = State.LoadDefinitions.Count == 0 ? [] : femStudy.ComposeModel(State, IsOfflineModel).Loads;
+        var properties = HeldFemProperties();
+        var baseline = State.Baseline;
+        var loadPlan = FemLoadPlan.Build(FemPatternRows.ToArray(), FemCaseRows.ToArray(), FemCombinationRows.ToArray(), femSapLoading,
+            properties, baseline, Tab01Patterns, PretensionPatterns, State.AppliedPoints.Select(point => point.PointName).ToArray(), FemMassSourceReferences);
+        return (candidate, token) => femStudy.AnalyzeDocument(candidate, loadPlan, "cable-iteration", baseline, candidateLoads, null, token, modal: false);
+    }
+
+    /// <summary>Apply, then run FEM Analysis of the model with the new sections so its results — and every UR read from them — are
+    /// those of the sections now assigned. True when the sections were applied and the analysis produced results.</summary>
+    internal async Task<bool> ApplyCableSectionOptimizationAndAnalyzeAsync(CableSectionOptimizationRun run, bool confirmedUnconverged)
+    {
+        if (!ApplyCableSectionOptimization(run, confirmedUnconverged)) return false;
+        await AnalyzeFemAsync();
+        return HasFemResults;
     }
 
     private void SaveCableSectionOptimization(CableSectionOptimizationRun run)

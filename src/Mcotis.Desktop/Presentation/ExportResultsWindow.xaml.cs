@@ -5,8 +5,12 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
 using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Quantities;
 
 namespace Mcotis.Desktop.Presentation;
+
+/// <summary>Where Export was chosen: it ticks that window's own content first.</summary>
+public enum ExportFocus { Results, ResultsTable, Quantities }
 
 public partial class ExportResultsWindow : Window
 {
@@ -14,7 +18,7 @@ public partial class ExportResultsWindow : Window
     private bool exporting;
     internal Func<SaveFileDialog, bool?> ChooseFile { get; set; }
     internal Action<string> OpenFile { get; set; } = path => Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
-    public ExportResultsWindow(MainViewModel viewModel)
+    public ExportResultsWindow(MainViewModel viewModel, ExportFocus focus = ExportFocus.Results)
     {
         InitializeComponent();
         this.viewModel = viewModel;
@@ -27,6 +31,9 @@ public partial class ExportResultsWindow : Window
         Wire(UlsAllCases, UlsCaseChoices, names.Select(n => (n, (object)n, anyUls ? Named(n, "ULS") : n == viewModel.SelectedFemResultName)), UlsAllOutputs, UlsOutputChoices,
             output => output != ResultReportOutput.Deflection);
         Closing += (_, e) => { if (exporting) e.Cancel = true; };
+        if (focus == ExportFocus.ResultsTable && viewModel.SelectedFemResultName is { } shown)
+            foreach (var box in UlsCaseChoices.Children.OfType<CheckBox>().Where(box => Equals(box.Tag, shown))) box.IsChecked = true;
+        if (focus == ExportFocus.Quantities) IncludeUtilization.IsChecked = true;
     }
     private static readonly (ResultReportOutput Output, string Name)[] Outputs = [(ResultReportOutput.AxialForce, "Axial forces / cables"), (ResultReportOutput.BendingMoment, "Bending moments"), (ResultReportOutput.Shear, "Shear forces"), (ResultReportOutput.Reactions, "Support reactions"), (ResultReportOutput.Deflection, "Deflection")];
     private static void Wire(CheckBox allCases, Panel cases, IEnumerable<(string Name, object Tag, bool Ticked)> caseItems, CheckBox allOutputs, Panel outputs, Func<ResultReportOutput, bool> ticked)
@@ -52,17 +59,46 @@ public partial class ExportResultsWindow : Window
         if (!viewModel.IsIdle || !viewModel.HasFemResults || viewModel.SelectedFemRun is not { } run)
             throw new InvalidOperationException("Run analysis and wait for it to finish before exporting results.");
         var main = Owner as MainWindow ?? Owner?.Owner as MainWindow;
+        var images = new Dictionary<QuantitySectionFigure, byte[]?>(ReferenceEqualityComparer.Instance);
+        byte[]? Image(QuantitySectionFigure figure) => images.TryGetValue(figure, out var png) ? png : images[figure] = SectionFigureImage.Render(figure);
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>>? memberCases = null;
+        var modelTables = new List<ReportTable>();
+        if (IncludeQuantities.IsChecked == true) modelTables.Add(ResultReportTables.Quantities(viewModel.QuantityTakeoff(), Image));
+        if (IncludeUtilization.IsChecked == true)
+        {
+            if (viewModel.FemResultState != Mcotis.Application.ResultState.Current)
+                throw new InvalidOperationException("The FEM results are not those of the current model. Run analysis before exporting the design utilization.");
+            var (sections, members) = viewModel.DesignUtilization();
+            memberCases = members;
+            modelTables.Add(ResultReportTables.Utilization(sections));
+        }
         return ResultReport.Create(viewModel.CurrentFileName, run,
             [new ResultReportSelection("SLS", Ticked<string>(SlsCaseChoices), Ticked<ResultReportOutput>(SlsOutputChoices)),
              new ResultReportSelection("ULS", Ticked<string>(UlsCaseChoices), Ticked<ResultReportOutput>(UlsOutputChoices))],
             (result, mode) => ResultFigureCapture.Capture(viewModel, main?.SharedViewer.Canvas, result, mode),
-            ResultMemberSummary.Groups(viewModel.State.Geometry, viewModel.State.Truss, viewModel.FemSectionProperties.ToArray()));
+            IncludeForces.IsChecked == true ? name => viewModel.ReportCaseTables(name, memberCases, Image) : null, modelTables);
+    }
+
+    /// <summary>Design utilization needs the forces of the current model: offers to run the analysis when they are not.</summary>
+    private async Task<bool> EnsureCurrentResultsAsync()
+    {
+        if (IncludeUtilization.IsChecked != true || viewModel.HasFemResults && viewModel.FemResultState == Mcotis.Application.ResultState.Current) return true;
+        if (MessageBox.Show(this, "The FEM results are not those of the current model, so the design utilization would use out-of-date forces.\n\nRun FEM Analysis now and then export?",
+                "Export Results", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return false;
+        Status.Text = "Running FEM Analysis…";
+        Options.IsEnabled = OkButton.IsEnabled = false;
+        try { await viewModel.AnalyzeFemAsync(); }
+        finally { Options.IsEnabled = OkButton.IsEnabled = true; }
+        if (viewModel.HasFemResults && viewModel.FemResultState == Mcotis.Application.ResultState.Current) { Status.Text = ""; return true; }
+        Status.Text = "FEM Analysis did not produce current results; the report was not exported.";
+        return false;
     }
     private async void Ok_Click(object sender, RoutedEventArgs e)
     {
         if (exporting) return;
         try
         {
+            if (!await EnsureCurrentResultsAsync()) return;
             var report = BuildReport(); // Freeze the selections and existing solved values before awaiting.
             bool pdf = PdfFormat.IsChecked == true;
             var name = Path.GetFileNameWithoutExtension(viewModel.CurrentFileName);

@@ -4,7 +4,7 @@
 
 The tool sizes native cable objects whose assigned sections represent an integer number of 15.7 mm strands. It changes
 strand count only. The nominal area is 150 mm² per strand. A section name that states a strand count must agree with the
-native section area; an unsupported diameter, non-integral area, missing section, or inconsistent name/area stops the run
+native section area to within 1 %; an unsupported diameter, non-integral area, missing section, or inconsistent name/area stops the run
 with an explanation. It does not infer design identity from geometry.
 
 One optimization group is formed from cables that share an assigned native section ID, share a section name in the
@@ -51,3 +51,18 @@ suggested groups as one undoable model edit. If the FEM model is locked, Apply u
 revision's outputs are no longer valid, the user is told that current FEM results and registered output databases will
 be cleared. If the convergence requirements were not met before the iteration limit, Apply also asks for confirmation.
 The edit changes sections and their derived cable capacities only; target-force data, patterns, and cases remain unchanged.
+
+## Design → Tension Cable Design → Iterate
+
+The Iterate tab runs the same loop with two settings the stand-alone window did not use. **Stay basis**: the Design Basis
+(screening factor f, maximum use η, most units, priority, cost rates) with VSL SSI 2000 as the only system. One Ø15.7 strand
+breaks at 279 kN (150 mm² × 1,860 MPa), so the capacity per strand is `279 kN × f` and the target UR is η. A group's count is the
+total strands of the VSL assembly `TensionCableDesigner` chooses for the group's largest force over its longest cable, so the
+suggestion is always a standard unit (n × 6-s) and carries its product name and indicative cost. Because a VSL step is many
+strands, every pending group moves to its assembly on the same pass, instead of one strand of one group per pass. **Design
+cases**: each pass analyses the candidate document with the model's full load plan (the one Run FEM Analysis uses, combinations
+included) and sizes each group for its largest tension over the load cases ticked on Cables & Loads. Force convergence then
+compares those design forces; deflection convergence still compares the pretension-stage joints.
+
+**Apply & Re-analyse** applies the result as described above and then runs FEM Analysis of the model, so the results and every
+UR read from them are those of the assigned sections; the tab reports each cable's force and UR after that analysis.

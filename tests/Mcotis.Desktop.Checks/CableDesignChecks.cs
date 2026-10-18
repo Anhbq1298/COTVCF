@@ -211,8 +211,11 @@ internal static class CableDesignChecks
         var checkGrid = Visuals<System.Windows.Controls.DataGrid>(window).Distinct().Single(grid => System.Windows.Automation.AutomationProperties.GetName(grid) == "Cable section checks");
         Check(window.Title == "Tension Cable Design" && buttons.Any(button => Equals(button.Content, "Run Design")) && buttons.Any(button => Equals(button.Content, "Size this stay")) &&
               buttons.Any(button => Equals(button.Content, "Export to Word…")) && buttons.Any(button => Equals(button.Content, "Check Sections")) &&
-              buttons.Any(button => Equals(button.Content, "Optimize Tendon Sections…")) && sectionStress.Text == "2160" && sectionReduction.Text == "50" && checkGrid.Columns.Count == 8,
-            "the Tension Cable Design module includes the 2160 MPa / 50% section check and opens strand optimization beside its existing stay design commands");
+              buttons.Any(button => Equals(button.Content, "Iterate")) && buttons.Any(button => Equals(button.Content, "Apply & Re-analyse")) &&
+              Visuals<System.Windows.Controls.TabItem>(window).Distinct().Any(tab => Equals(tab.Header, "Iterate")) &&
+              Visuals<System.Windows.Controls.DataGrid>(window).Distinct().Any(grid => System.Windows.Automation.AutomationProperties.GetName(grid) == "Iterated cable sections") &&
+              sectionStress.Text == "2160" && sectionReduction.Text == "50" && checkGrid.Columns.Count == 8,
+            "the Tension Cable Design module includes the 2160 MPa / 50% section check and an Iterate tab with Iterate and Apply & Re-analyse beside its stay design commands");
         buttons.First(button => Equals(button.Content, "Run Design")).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
         var grids = Visuals<System.Windows.Controls.DataGrid>(window).ToArray();
         var results = grids.First(grid => System.Windows.Automation.AutomationProperties.GetName(grid) == "Cable designs");
@@ -220,6 +223,30 @@ internal static class CableDesignChecks
         buttons.First(button => Equals(button.Content, "Size this stay")).RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
         Check(results.Items.Count == 1 && ((Mcotis.Desktop.Presentation.TensionCableDesignWindow.ResultRow)results.Items[0]!).Assembly.Contains("6-151") && results.SelectedIndex == 0,
             "Size this stay (60 MN over 50 m) shows one assembly, 3 × 6-151, in the Design tab");
+
+        // Iterate: VSL Ø15.7 stays from the Design Basis for the ticked cases, each pass a full analysis of a candidate model
+        var iterateSettings = window.ReadIterationSettings()! with { MaximumIterations = 4 };
+        var iterated = Pump(() => vm.RunCableSectionOptimizationAsync(iterateSettings, null, CancellationToken.None));
+        static int StrandsOf(string product)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(product, @"^(\d+) × VSL SSI 2000 6-(\d+)$");
+            return match.Success ? int.Parse(match.Groups[1].Value) * int.Parse(match.Groups[2].Value) : -1;
+        }
+        Check(iterated.Failure is null && iterated.IterationCount >= 1 && iterated.Rows.Count == options.Count &&
+              iterated.Rows.All(row => row.Product is { } product && StrandsOf(product) == row.SuggestedStrands && row.CostSgd > 0) &&
+              iterated.Rows.All(row => row.SuggestedUr <= iterateSettings.TargetUr + 1e-9 && iterateSettings.DesignCases!.Contains(row.GoverningCase)) &&
+              iterated.Rows.GroupBy(row => row.GroupKey).All(group => group.Select(row => row.SuggestedStrands).Distinct().Count() == 1),
+            $"Iterate sizes every cable as a standard VSL assembly for its governing design case, within the maximum use, one size per group " +
+            $"({iterated.IterationCount} pass(es), {(iterated.Converged ? "converged" : "not converged")}; e.g. {iterated.Rows[0].TendonName}: {iterated.Rows[0].Product})");
+        if (iterated.Rows.Any(row => row.CurrentStrands != row.SuggestedStrands))
+        {
+            var applied = Pump(() => vm.ApplyCableSectionOptimizationAndAnalyzeAsync(iterated, confirmedUnconverged: !iterated.Converged));
+            var assigned = vm.CableDesignOptions().ToDictionary(option => option.Member, StringComparer.Ordinal);
+            Check(applied && vm.HasFemResults && vm.IsFemModelLocked && iterated.Rows.All(row =>
+                      assigned.TryGetValue(row.TendonName, out var option) && Math.Abs(option.AreaMm2 - row.SuggestedStrands * 150) < 1e-6 &&
+                      option.Section == $"{row.SuggestedStrands}T15.7"),
+                "Apply & Re-analyse assigns the suggested Ø15.7 strand sections and re-runs FEM analysis, so the results are those of the new sections");
+        }
         window.Close();
 
         var optimization = new Mcotis.Desktop.Presentation.OptimizationResultsWindow(vm);
@@ -227,6 +254,22 @@ internal static class CableDesignChecks
         Check(optimization.MemberGrid.Columns.Any(column => column.Header is System.Windows.Controls.TextBlock { Text: "Suggested cable" }),
             "the Optimization results window's Member Utilization sheet has a Suggested cable column");
         optimization.Close();
+    }
+
+    /// <summary>Waits for a UI-thread task while the dispatcher keeps running its continuations.</summary>
+    private static T Pump<T>(Func<Task<T>> start)
+    {
+        var previous = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(System.Windows.Threading.Dispatcher.CurrentDispatcher));
+        try
+        {
+            var task = start();
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            task.ContinueWith(_ => frame.Continue = false, TaskScheduler.Default);
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+            return task.GetAwaiter().GetResult();
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
     }
 
     private static IEnumerable<T> Visuals<T>(System.Windows.DependencyObject root) where T : System.Windows.DependencyObject

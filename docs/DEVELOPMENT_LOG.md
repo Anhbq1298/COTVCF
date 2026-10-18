@@ -18,6 +18,27 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Export member forces, quantities and design utilization with the results
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Show Results / Results Table / Show Quantities → Export…
+- What: The results report adds, after the figures, per case the member force summary with section drawings, a table of each group's members and the cable forces, then the Quantities table (drawing and description, landscape) and, when ticked, Design utilization, which adds a UR column to every table and first makes sure the FEM results are current. Every report force is in MN (MN·m) with one decimal; the old MN member table is replaced. Export… buttons in the Results Table and Show Quantities open the dialog with their own content ticked.
+- Checks: `--result-export`
+
+## 2026-10-18 · Iterate VSL strand sections in Tension Cable Design
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Design → Tension Cable Design → Iterate
+- What: A tab that sizes every cable group as a VSL SSI 2000 Ø15.7 mm stay (standard units, product and indicative cost from the Design Basis and Cost Rates) for its largest tension over the ticked load cases, analysing a copy of the model with the trial sections each pass until the strand counts and forces settle. Apply & Re-analyse assigns the sections and re-runs FEM Analysis, then shows each cable's force and UR with the new section. Replaces the separate Optimize Tendon Sections window. A named strand count now accepts an area within 1 % of n × 150 mm².
+- Checks: `--cable-design-ui`, `--cable-section-optimization`
+
+## 2026-10-18 · Plain diagrams in the exported results report
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Result → Show Results → Export Result…
+- What: Report figures show the result diagram on the geometry with its dimensions only: loads, value labels, point and member names, the grid and the view title are left out so a figure reads on an A4 page. The live view is unchanged.
+- Checks: `--result-export`
+
 ## 2026-10-18 · Summarize member forces in the results table
 - Status: Done
 - Who: aBui (with Claude Code)

@@ -30,11 +30,16 @@ internal static class ResultFigureCapture
             canvas.SpanPoints = vm.SharedViewerSpanPoints;
         }
         canvas.SelectedCable = null; canvas.SelectedAppliedPoint = null;
-        canvas.FemResult = result; canvas.FemResultMode = mode; canvas.ShowAxialValues = true;
+        canvas.FemResult = result; canvas.FemResultMode = mode;
+        // A report figure shows the diagram's pattern on the geometry and its dimensions: no loads, no value or name labels, no grid
+        // and no view chrome, which crowd an A4 page until nothing reads.
+        canvas.ShowAxialValues = false; canvas.ShowLoads = false; canvas.ShowPointLabels = false;
+        canvas.ShowFrameLabels = false; canvas.ShowCableLabels = false; canvas.ShowReferenceLabels = false;
+        canvas.ShowFrameLocalAxes = false; canvas.ShowGridLines = false; canvas.ShowTitle = false;
         try
         {
             var size = new Size(1800, 700); canvas.Measure(size); canvas.Arrange(new Rect(size));
-            canvas.Fit(); canvas.ZoomBy(.8); // leave room for load arrows and diagrams beyond the model bounds
+            canvas.Fit(); canvas.ZoomBy(.85); // leave room for the diagrams beyond the model bounds
             canvas.UpdateLayout();
             var bitmap = new RenderTargetBitmap(3600, 1400, 192, 192, PixelFormats.Pbgra32); bitmap.Render(canvas);
             var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));

@@ -10,4 +10,7 @@ public partial class FemResultsWindow : Window
         InitializeComponent();
         DataContext = viewModel;
     }
+
+    private void Export_Click(object sender, RoutedEventArgs e) =>
+        new ExportResultsWindow((MainViewModel)DataContext, ExportFocus.ResultsTable) { Owner = this }.ShowDialog();
 }

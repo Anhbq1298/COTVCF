@@ -1,70 +1,137 @@
+using System.IO;
 using System.Net;
 using System.Text;
+using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
+using A = DocumentFormat.OpenXml.Drawing;
+using DW = DocumentFormat.OpenXml.Drawing.Wordprocessing;
+using PIC = DocumentFormat.OpenXml.Drawing.Pictures;
 
 namespace Mcotis.Desktop.Application;
 
 public sealed partial record ResultReport
 {
-    private void AppendMemberTables(StringBuilder html)
+    /// <summary>Height of a section drawing in a table cell [EMU]: 1.2 cm.</summary>
+    private const long CellImageHeight = 432000;
+
+    private void AppendTables(StringBuilder html)
     {
         string E(string text) => WebUtility.HtmlEncode(text);
-        html.Append("<style>table{border-collapse:collapse;width:100%;table-layout:fixed;margin:6pt 0 12pt}th,td{border:1px solid #222;padding:5pt;overflow-wrap:anywhere;vertical-align:top}th{background:#8fb3df;font-weight:normal;text-align:center;print-color-adjust:exact}td{text-align:right}td:first-child,td:last-child{text-align:left}tr{break-inside:avoid}thead{display:table-header-group}h2{font-size:11pt;break-after:avoid}</style>");
-        foreach (var table in MemberTables)
+        html.Append("<style>table{border-collapse:collapse;width:100%;table-layout:fixed;margin:6pt 0 12pt;font-size:9pt}th,td{border:1px solid #222;padding:4pt;overflow-wrap:anywhere;vertical-align:middle}" +
+                    "th{background:#8fb3df;font-weight:normal;text-align:center;print-color-adjust:exact}td{text-align:right}td.l{text-align:left}td.c{text-align:center}td img{height:1.2cm;width:auto;display:inline-block}" +
+                    "tr{break-inside:avoid}tr.t td{font-weight:bold}thead{display:table-header-group}h2{font-size:11pt;break-after:avoid;margin:12pt 0 4pt}p.n{font-size:9pt;margin:0 0 4pt}" +
+                    "@page land{size:A4 landscape;margin:1.58cm 1.28cm 1.58cm 1.88cm}.land{page:land}</style>");
+        bool landscape = false;
+        foreach (var table in Tables)
         {
-            html.Append("<h2>Member force summary — ").Append(E(table.CaseName)).Append("</h2><p>").Append(E(ResultMemberSummary.Note)).Append("</p>");
-            if (table.Warning is { Length: > 0 }) html.Append("<p>Cable target not fitted: ").Append(E(table.Warning)).Append("</p>");
-            html.Append("<table><colgroup><col style='width:22%'><col style='width:16%'><col style='width:16%'><col style='width:16%'><col style='width:30%'></colgroup><thead><tr>");
-            foreach (var header in ResultMemberSummary.Headers) html.Append("<th>").Append(E(header)).Append("</th>");
+            if (table.Landscape && !landscape) { html.Append("<div class='land'>"); landscape = true; }
+            html.Append("<h2>").Append(E(table.Title)).Append("</h2>");
+            if (table.Note is { Length: > 0 } note) html.Append("<p class='n'>").Append(E(note)).Append("</p>");
+            var sum = table.Columns.Sum(column => column.Width);
+            html.Append("<table><colgroup>");
+            foreach (var column in table.Columns) html.Append("<col style='width:").Append((column.Width / sum * 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)).Append("%'>");
+            html.Append("</colgroup><thead><tr>");
+            foreach (var column in table.Columns) html.Append("<th>").Append(E(column.Header)).Append("</th>");
             html.Append("</tr></thead><tbody>");
-            foreach (var row in table.Rows)
+            for (int r = 0; r < table.Rows.Count; r++)
             {
-                html.Append("<tr>");
-                foreach (var cell in row.Cells) html.Append("<td>").Append(E(cell)).Append("</td>");
+                html.Append(r >= table.Rows.Count - table.TotalRows ? "<tr class='t'>" : "<tr>");
+                for (int c = 0; c < table.Columns.Count; c++)
+                {
+                    var cell = c < table.Rows[r].Count ? table.Rows[r][c] : new ReportCell("");
+                    if (cell.Image is { } png)
+                        html.Append("<td class='c'><img alt='").Append(E(cell.Text)).Append("' src='data:image/png;base64,").Append(Convert.ToBase64String(png)).Append("'></td>");
+                    else html.Append(table.Columns[c].Left ? "<td class='l'>" : "<td>").Append(E(cell.Text)).Append("</td>");
+                }
                 html.Append("</tr>");
             }
             html.Append("</tbody></table>");
         }
+        if (landscape) html.Append("</div>");
     }
 
-    private void AppendMemberTables(Body body)
+    /// <summary>The tables in Word. The portrait section ends before the first landscape table; <paramref name="lastSection"/> is then landscape.</summary>
+    private void AppendTables(Body body, MainDocumentPart main, ref uint drawingId, out bool lastSectionLandscape)
     {
-        foreach (var summary in MemberTables)
+        lastSectionLandscape = false;
+        foreach (var table in Tables)
         {
-            body.Append(new Paragraph(new ParagraphProperties(new KeepNext()), new Run(new Text("Member force summary — " + summary.CaseName))),
-                new Paragraph(new ParagraphProperties(new KeepNext()), new Run(new Text(ResultMemberSummary.Note))));
-            if (summary.Warning is { Length: > 0 }) body.Append(new Paragraph(new ParagraphProperties(new KeepNext()), new Run(new Text("Cable target not fitted: " + summary.Warning))));
-            body.Append(WordTable(summary), new Paragraph());
+            if (table.Landscape && !lastSectionLandscape)
+            {
+                body.Append(new Paragraph(new ParagraphProperties(PortraitSection())));
+                lastSectionLandscape = true;
+            }
+            body.Append(new Paragraph(new ParagraphProperties(new KeepNext()), new Run(new RunProperties(new Bold()), new Text(table.Title))));
+            if (table.Note is { Length: > 0 } note)
+                body.Append(new Paragraph(new ParagraphProperties(new KeepNext()), new Run(new RunProperties(new FontSize { Val = "18" }), new Text(note) { Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve })));
+            body.Append(WordTable(table, main, ref drawingId), new Paragraph());
         }
     }
 
-    private static Table WordTable(ResultMemberTable summary)
+    internal static SectionProperties PortraitSection() =>
+        new(new PageSize { Width = PageWidth, Height = PageHeight }, new PageMargin { Top = Top, Bottom = Bottom, Left = Left, Right = Right, Header = 0, Footer = 0, Gutter = 0 });
+
+    internal static SectionProperties LandscapeSection() =>
+        new(new PageSize { Width = PageHeight, Height = PageWidth, Orient = PageOrientationValues.Landscape },
+            new PageMargin { Top = Right, Bottom = Right, Left = Left, Right = Bottom, Header = 0, Footer = 0, Gutter = 0 });
+
+    private static Table WordTable(ReportTable source, MainDocumentPart main, ref uint drawingId)
     {
-        int total = PageWidth - Left - Right;
-        int[] widths = [total * 22 / 100, total * 16 / 100, total * 16 / 100, total * 16 / 100, total - total * 22 / 100 - 3 * (total * 16 / 100)];
+        int total = source.Landscape ? PageHeight - Left - Bottom : PageWidth - Left - Right;
+        var sum = source.Columns.Sum(column => column.Width);
+        var widths = source.Columns.Select(column => (int)(total * column.Width / sum)).ToArray();
         var table = new Table(new TableProperties(new TableWidth { Width = total.ToString(), Type = TableWidthUnitValues.Dxa },
             new TableBorders(new TopBorder { Val = BorderValues.Single, Size = 4 }, new LeftBorder { Val = BorderValues.Single, Size = 4 },
                 new BottomBorder { Val = BorderValues.Single, Size = 4 }, new RightBorder { Val = BorderValues.Single, Size = 4 },
                 new InsideHorizontalBorder { Val = BorderValues.Single, Size = 4 }, new InsideVerticalBorder { Val = BorderValues.Single, Size = 4 }),
             new TableLayout { Type = TableLayoutValues.Fixed }),
             new TableGrid(widths.Select(w => new GridColumn { Width = w.ToString() })));
-        void AddRow(string[] values, bool header)
+        void AddRow(IReadOnlyList<ReportCell> values, bool header, bool bold, ref uint id)
         {
             var row = new TableRow(new TableRowProperties(new CantSplit()));
             if (header) row.GetFirstChild<TableRowProperties>()!.Append(new TableHeader());
-            for (int i = 0; i < values.Length; i++)
+            for (int i = 0; i < widths.Length; i++)
             {
+                var cell = i < values.Count ? values[i] : new ReportCell("");
                 var properties = new TableCellProperties(new TableCellWidth { Width = widths[i].ToString(), Type = TableWidthUnitValues.Dxa });
                 if (header) properties.Append(new Shading { Val = ShadingPatternValues.Clear, Fill = "8FB3DF" });
-                row.Append(new TableCell(properties, new Paragraph(new ParagraphProperties(
-                    new SpacingBetweenLines { After = "60", Before = "60" },
-                    new Justification { Val = header ? JustificationValues.Center : i is 0 or 4 ? JustificationValues.Left : JustificationValues.Right }),
-                    new Run(new Text(values[i])))));
+                properties.Append(new TableCellVerticalAlignment { Val = TableVerticalAlignmentValues.Center });
+                var justification = header || cell.Image is not null ? JustificationValues.Center : source.Columns[i].Left ? JustificationValues.Left : JustificationValues.Right;
+                var paragraph = new Paragraph(new ParagraphProperties(new SpacingBetweenLines { After = "40", Before = "40" }, new Justification { Val = justification }));
+                if (cell.Image is { } png) paragraph.Append(new Run(CellImage(main, png, widths[i], ++id, cell.Text)));
+                else
+                {
+                    var runProperties = bold ? new RunProperties(new Bold(), new FontSize { Val = "18" }) : new RunProperties(new FontSize { Val = "18" });
+                    paragraph.Append(new Run(runProperties, new Text(cell.Text) { Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve }));
+                }
+                row.Append(new TableCell(properties, paragraph));
             }
             table.Append(row);
         }
-        AddRow(ResultMemberSummary.Headers, true);
-        foreach (var row in summary.Rows) AddRow(row.Cells, false);
+        uint next = drawingId;
+        AddRow(source.Columns.Select(column => new ReportCell(column.Header)).ToArray(), true, false, ref next);
+        for (int r = 0; r < source.Rows.Count; r++) AddRow(source.Rows[r], false, r >= source.Rows.Count - source.TotalRows, ref next);
+        drawingId = next;
         return table;
+    }
+
+    /// <summary>A section drawing in a table cell: 1.2 cm high, narrower than its column.</summary>
+    private static Drawing CellImage(MainDocumentPart main, byte[] png, int columnDxa, uint id, string name)
+    {
+        var part = main.AddImagePart(ImagePartType.Png);
+        using (var stream = new MemoryStream(png)) part.FeedData(stream);
+        long width = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(16, 4));
+        long height = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(png.AsSpan(20, 4));
+        long cy = CellImageHeight, cx = height > 0 ? cy * width / height : cy;
+        long maxWidth = (columnDxa - 200) * 635L;
+        if (cx > maxWidth && maxWidth > 0) { cy = cy * maxWidth / cx; cx = maxWidth; }
+        var graphic = new A.Graphic(new A.GraphicData(new PIC.Picture(
+            new PIC.NonVisualPictureProperties(new PIC.NonVisualDrawingProperties { Id = id, Name = name }, new PIC.NonVisualPictureDrawingProperties()),
+            new PIC.BlipFill(new A.Blip { Embed = main.GetIdOfPart(part) }, new A.Stretch(new A.FillRectangle())),
+            new PIC.ShapeProperties(new A.Transform2D(new A.Offset { X = 0, Y = 0 }, new A.Extents { Cx = cx, Cy = cy }), new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle })))
+            { Uri = "http://schemas.openxmlformats.org/drawingml/2006/picture" });
+        return new Drawing(new DW.Inline(new DW.Extent { Cx = cx, Cy = cy }, new DW.EffectExtent { LeftEdge = 0, TopEdge = 0, RightEdge = 0, BottomEdge = 0 },
+            new DW.DocProperties { Id = id, Name = name, Description = name }, new DW.NonVisualGraphicFrameDrawingProperties(new A.GraphicFrameLocks { NoChangeAspect = true }), graphic)
+            { DistanceFromTop = 0, DistanceFromBottom = 0, DistanceFromLeft = 0, DistanceFromRight = 0 });
     }
 }

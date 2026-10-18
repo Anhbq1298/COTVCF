@@ -1,5 +1,6 @@
 using Mcotis.Core;
 using Mcotis.Desktop.Application;
+using Mcotis.Desktop.Application.Design;
 using Mcotis.Desktop.Configuration;
 using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Presentation;
@@ -60,15 +61,6 @@ internal static class CableSectionOptimizationChecks
         var viewModel = EtabsImportChecks.NewViewModel(out _);
         viewModel.OpenNativeDocument(document, "Cable optimizer check", null,
             LegacyNativeDocumentMigration.Source.Imported("native optimizer check"));
-        var window = new CableSectionOptimizationWindow(viewModel);
-        window.Show();
-        window.UpdateLayout();
-        Check(window.TargetUrBox.Text == "0.90" && window.BreakingStressBox.Text == "2160" &&
-              window.PreliminaryCoefficientBox.Text == "0.50" && window.MaximumIterationsBox.Text == "30" &&
-              window.ConvergenceToleranceBox.Text == "1.00" && window.ApplyButton.Content?.ToString() == "Apply Suggested Tendon" &&
-              !window.ApplyButton.IsEnabled && window.ResultsGrid.Columns.Count == 6 && window.HistoryGrid.Columns.Count == 6,
-            "the compact optimization window shows the approved defaults, the six result columns, and an explicit Apply Suggested Tendon action");
-        window.Close();
         var currentDocument = viewModel.NativeDocumentSession.Document;
         var snapshot = NativeToLegacyProjection.Read(currentDocument)
             ?? throw new Exception("FAIL: the imported native model has no configuration snapshot");
@@ -101,6 +93,16 @@ internal static class CableSectionOptimizationChecks
               !CableSectionOptimizer.MeetsDualConvergence(true, .5, .5, 1) &&
               CableSectionOptimizer.MeetsDualConvergence(false, 1, 1, 1),
             "neither force nor pretension deflection can pass alone, pending strand-count changes block convergence, and both values at tolerance pass");
+
+        var vslSettings = settings with { TargetUr = 1, BreakingStressMpa = 1860, PreliminaryCoefficient = .5, StayBasis = TensionCableBasis.Default };
+        var vsl = CableSectionOptimizer.Run(currentDocument, snapshot, vslSettings);
+        Check(vsl.Failure is null && vsl.Rows.Single() is { SuggestedStrands: 12, Product: "1 × VSL SSI 2000 6-12", CostSgd: > 0 } &&
+              Math.Abs(vslSettings.StrandCapacityKN - TensionCableCatalogue.StrandBreakingKN * .5) < 1e-9,
+            "with a VSL stay basis a 50 kN tendon rounds up to the smallest standard unit, 1 × VSL SSI 2000 6-12 (12 × Ø15.7, 279 kN × 0.5 per strand), with its indicative cost");
+        var needsAnalysis = false;
+        try { CableSectionOptimizer.Run(currentDocument, snapshot, vslSettings with { DesignCases = ["Pretension"] }); }
+        catch (ArgumentException) { needsAnalysis = true; }
+        Check(needsAnalysis, "sizing for design load cases is refused without the model's analysis of each candidate");
 
         var onePass = CableSectionOptimizer.Run(currentDocument, snapshot, settings with { MaximumIterations = 1 });
         Check(onePass.IterationCount == 1 && !onePass.Converged && onePass.Rows.Single().Status == "Maximum iterations" &&

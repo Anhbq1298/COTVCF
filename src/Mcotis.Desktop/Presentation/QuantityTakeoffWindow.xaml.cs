@@ -17,13 +17,15 @@ public partial class QuantityTakeoffWindow : Window
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => Refresh();
 
+    private void Export_Click(object sender, RoutedEventArgs e)
+    {
+        if (!viewModel.HasFemResults) { MessageBox.Show(this, "Run FEM Analysis first: the report starts from the solved results.", "Export Results", MessageBoxButton.OK, MessageBoxImage.Information); return; }
+        new ExportResultsWindow(viewModel, ExportFocus.Quantities) { Owner = this }.ShowDialog();
+    }
+
     private void Refresh()
     {
-        viewModel.EnsureMaterials();
-        var materialRates = viewModel.Materials
-            .GroupBy(material => material.Name, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
-        var takeoff = NativeQuantityTakeoffCalculator.Calculate(viewModel.NativeDocumentSession.Document, materialRates);
+        var takeoff = viewModel.QuantityTakeoff();
         RowsGrid.ItemsSource = takeoff.Rows;
         UtilizationGrid.ItemsSource = viewModel.QuantityUtilizationSummary();
         NotesList.ItemsSource = takeoff.Notes;

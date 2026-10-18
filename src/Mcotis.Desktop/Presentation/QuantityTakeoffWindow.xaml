@@ -4,6 +4,8 @@
  <DockPanel Margin="12">
   <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
    <DockPanel>
+    <Button DockPanel.Dock="Right" Content="Export…" Click="Export_Click" MinWidth="88" Margin="8,0,0,0" AutomationProperties.Name="Export results"
+            ToolTip="Export the quantities, design utilization and result tables to Word or PDF"/>
     <Button DockPanel.Dock="Right" Content="Refresh" Click="Refresh_Click" MinWidth="88" AutomationProperties.Name="Refresh quantities"/>
     <TextBlock x:Name="ModelLabel" Style="{StaticResource Subheading}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
    </DockPanel>

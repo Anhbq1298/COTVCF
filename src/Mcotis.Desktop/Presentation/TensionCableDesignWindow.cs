@@ -36,6 +36,28 @@ public sealed class TensionCableDesignWindow : Window
         public string UtilizationText => Utilization is { } utilization ? utilization.ToString("0.00", CultureInfo.CurrentCulture) : "—";
     }
 
+    /// <summary>A row of the Iterate tab: the suggestion of the last iteration and, once applied and re-analysed, the force and UR of the new section.</summary>
+    public sealed class IterateRow(CableSectionOptimizationRow row) : Observable
+    {
+        private double? afterForce, afterUr;
+        public CableSectionOptimizationRow Row { get; } = row;
+        public string Member => Row.TendonName;
+        public string Current => $"{Row.CurrentStrands} × Ø15.7";
+        public string CurrentForce => Row.CurrentForceKN.ToString("#,0", CultureInfo.CurrentCulture);
+        public string CurrentUr => Row.CurrentUr.ToString("0.00", CultureInfo.CurrentCulture);
+        public string Suggested => $"{Row.SuggestedStrands} × Ø15.7";
+        public string Product => Row.Product ?? "—";
+        public string Case => Row.GoverningCase;
+        public string Force => Row.CalculatedForceKN.ToString("#,0", CultureInfo.CurrentCulture);
+        public string SuggestedUr => Row.SuggestedUr.ToString("0.00", CultureInfo.CurrentCulture);
+        public string Cost => Row.CostSgd is { } cost ? cost.ToString("#,0", CultureInfo.CurrentCulture) : "—";
+        public string Status => Row.Status;
+        public string AfterForce => afterForce is { } value ? value.ToString("#,0", CultureInfo.CurrentCulture) : "";
+        public string AfterUr => afterUr is { } value ? value.ToString("0.00", CultureInfo.CurrentCulture) : "";
+        public double? AfterUrValue => afterUr;
+        public void SetAfter(double? force, double? ur) { afterForce = force; afterUr = ur; Notify(nameof(AfterForce)); Notify(nameof(AfterUr)); }
+    }
+
     public sealed class RateRow(TensionCableRates.Entry entry, double value) : Observable
     {
         private string text = value.ToString("0.###", CultureInfo.InvariantCulture);
@@ -86,6 +108,18 @@ public sealed class TensionCableDesignWindow : Window
     private readonly TextBlock countText = new() { FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6), TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock sectionCheckSummary = new() { FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 560, VerticalAlignment = VerticalAlignment.Center, FontSize = 11 };
+    private readonly TextBox iterateMaximum = new() { Text = "20", Width = 70 };
+    private readonly TextBox iterateTolerance = new() { Text = "1.0", Width = 70 };
+    private readonly DataGrid iterateGrid = new() { AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Single, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
+    private readonly DataGrid historyGrid = new() { AutoGenerateColumns = false, IsReadOnly = true, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
+    private readonly TextBlock iterateSummary = new() { FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
+    private readonly Button iterateButton = new() { Content = "Iterate", MinWidth = 90, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 3, 10, 3) };
+    private readonly Button stopButton = new() { Content = "Stop", MinWidth = 70, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 3, 10, 3), IsEnabled = false };
+    private readonly Button applyButton = new() { Content = "Apply & Re-analyse", MinWidth = 140, Margin = new Thickness(0, 0, 0, 8), Padding = new Thickness(10, 3, 10, 3), IsEnabled = false };
+    private readonly List<IterateRow> iterateRows = [];
+    private readonly System.Collections.ObjectModel.ObservableCollection<CableSectionOptimizationIteration> iterations = [];
+    private CableSectionOptimizationRun? iteration;
+    private CancellationTokenSource? iterationCancellation;
     private readonly TabControl tabs = new();
     private readonly TabItem designTab = new() { Header = "Design" };
     private readonly Button closeButton = new() { Content = "Cancel", MinWidth = 80, IsCancel = true };
@@ -136,6 +170,11 @@ public sealed class TensionCableDesignWindow : Window
         System.Windows.Automation.AutomationProperties.SetName(sectionCheckGrid, "Cable section checks");
         System.Windows.Automation.AutomationProperties.SetName(rateGrid, "Cost rates");
         System.Windows.Automation.AutomationProperties.SetName(resultGrid, "Cable designs");
+        System.Windows.Automation.AutomationProperties.SetName(iterateGrid, "Iterated cable sections");
+        System.Windows.Automation.AutomationProperties.SetName(historyGrid, "Iteration history");
+        System.Windows.Automation.AutomationProperties.SetName(iterateMaximum, "Maximum iterations");
+        System.Windows.Automation.AutomationProperties.SetName(iterateTolerance, "Convergence tolerance percent");
+        Closing += (_, e) => { if (iterationCancellation is not null) { iterationCancellation.Cancel(); e.Cancel = true; Message("Stopping the iteration…"); } };
 
         var root = new DockPanel { Margin = new Thickness(10) };
         var banner = new TextBlock { Text = "Tension Cable Design" };
@@ -159,6 +198,7 @@ public sealed class TensionCableDesignWindow : Window
         tabs.Items.Add(new TabItem { Header = "Cables & Loads", Content = BuildCablesTab() });
         tabs.Items.Add(new TabItem { Header = "Cost Rates", Content = BuildRatesTab() });
         tabs.Items.Add(new TabItem { Header = "Single Stay", Content = BuildSingleTab() });
+        tabs.Items.Add(new TabItem { Header = "Iterate", Content = BuildIterateTab() });
         designTab.Content = BuildResultTab();
         tabs.Items.Add(designTab);
         root.Children.Add(tabs);
@@ -198,15 +238,6 @@ public sealed class TensionCableDesignWindow : Window
         var check = new Button { Content = "Check Sections", MinWidth = 110, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 3, 10, 3), IsDefault = true };
         check.Click += (_, _) => RunSectionCheck();
         controls.Children.Add(check);
-        var optimize = new Button
-        {
-            Content = "Optimize Tendon Sections…", MinWidth = 170, Margin = new Thickness(0, 0, 0, 8), Padding = new Thickness(10, 3, 10, 3),
-            IsEnabled = viewModel.CanOptimizeCableSections,
-            ToolTip = viewModel.CableSectionOptimizationToolTip
-        };
-        System.Windows.Controls.ToolTipService.SetShowOnDisabled(optimize, true);
-        optimize.Click += (_, _) => OptimizeSections();
-        controls.Children.Add(optimize);
         top.Children.Add(controls);
         DockPanel.SetDock(top, Dock.Top);
         root.Children.Add(top);
@@ -297,30 +328,6 @@ public sealed class TensionCableDesignWindow : Window
         var missingCount = rows.Count(row => row.Status is "NO SECTION" or "NO RESULT");
         sectionCheckSummary.Text = $"Section property check · fpu {breakingStress:0.##} MPa · φ {reductionFactor:P0} · {rows.Count - failCount - slackCount - missingCount} OK · {failCount} FAIL · {slackCount} slack · {missingCount} unavailable";
         Message(run is null ? "Run FEM Analysis for the current model before checking cable utilization." : "");
-    }
-
-    private void OptimizeSections()
-    {
-        if (!TryReadSectionCheckInputs(out var breakingStress, out var reductionFactor)) return;
-        var before = viewModel.CableDesignOptions().ToDictionary(option => option.Member, option => option.Section, StringComparer.Ordinal);
-        var prior = viewModel.LoadCableSectionOptimization();
-        var settings = (prior?.DocumentId == viewModel.NativeDocumentSession.Document.DocumentId.Value
-                ? prior.Settings : CableSectionOptimizationSettings.Default) with
-        {
-            BreakingStressMpa = breakingStress,
-            PreliminaryCoefficient = reductionFactor,
-        };
-        new CableSectionOptimizationWindow(viewModel, settings) { Owner = this }.ShowDialog();
-
-        var options = viewModel.CableDesignOptions();
-        var changed = options.Any(option => before.TryGetValue(option.Member, out var oldSection) && oldSection != option.Section);
-        RefreshCableRows();
-        if (changed)
-        {
-            sectionCheckGrid.ItemsSource = Array.Empty<SectionCheckRow>();
-            sectionCheckSummary.Text = "Tendon sections changed. Run FEM Analysis again, then recheck utilization on this tab.";
-            Message("Suggested tendon sections were applied. Run FEM Analysis again before checking the updated sections.");
-        }
     }
 
     private void RefreshCableRows()
@@ -458,6 +465,184 @@ public sealed class TensionCableDesignWindow : Window
         layout.Children.Add(bar);
         countText.Text = "Run Design to see the results here.";
         return layout;
+    }
+
+    private UIElement BuildIterateTab()
+    {
+        var root = new DockPanel { Margin = new Thickness(8, 6, 8, 0) };
+        var top = new StackPanel();
+        iterateSummary.Text = "Iterate to size every cable group of the model as VSL SSI 2000 Ø15.7 mm strand stays.";
+        top.Children.Add(iterateSummary);
+        top.Children.Add(Hint("Each group is sized for its largest tension over the load cases ticked on Cables & Loads, with the Design Basis (screening level, maximum use, " +
+                              "most units per stay, selection priority) and the Cost Rates, rounded up to a standard VSL unit (6-12 … 6-187, n units in parallel). " +
+                              "Each pass analyses a copy of the model with the trial sections — a stiffer cable attracts more force — until the strand counts stop changing and the " +
+                              "forces and pretension-stage deflections settle within the tolerance. Cables sharing a section or a Cable Force Sync link get one size. " +
+                              "Nothing changes in the model until Apply & Re-analyse, which assigns the sections as one undoable edit and runs FEM Analysis again so the forces and UR are those of the new sections.",
+            new Thickness(0, 0, 0, 8)));
+        var controls = new StackPanel { Orientation = Orientation.Horizontal };
+        controls.Children.Add(Field("Maximum iterations", iterateMaximum));
+        controls.Children.Add(Field("Convergence tolerance", iterateTolerance, "%"));
+        iterateButton.Click += async (_, _) => await IterateAsync();
+        stopButton.Click += (_, _) => iterationCancellation?.Cancel();
+        applyButton.Click += async (_, _) => await ApplyIterationAsync();
+        controls.Children.Add(new Border { Width = 16 });
+        controls.Children.Add(iterateButton);
+        controls.Children.Add(stopButton);
+        controls.Children.Add(applyButton);
+        top.Children.Add(controls);
+        DockPanel.SetDock(top, Dock.Top);
+        root.Children.Add(top);
+
+        foreach (var (header, path, width) in new[]
+        {
+            ("Cable", nameof(IterateRow.Member), 90.0), ("Current", nameof(IterateRow.Current), 90.0), ("Force now [kN]", nameof(IterateRow.CurrentForce), 100.0),
+            ("UR now", nameof(IterateRow.CurrentUr), 60.0), ("Suggested", nameof(IterateRow.Suggested), 90.0), ("VSL stay", nameof(IterateRow.Product), 180.0),
+            ("Governing case", nameof(IterateRow.Case), 120.0), ("Force [kN]", nameof(IterateRow.Force), 90.0), ("UR", nameof(IterateRow.SuggestedUr), 55.0),
+            ("Cost [S$]", nameof(IterateRow.Cost), 90.0), ("Status", nameof(IterateRow.Status), 110.0),
+            ("Force after [kN]", nameof(IterateRow.AfterForce), 110.0), ("UR after", nameof(IterateRow.AfterUr), 70.0),
+        })
+            iterateGrid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new System.Windows.Data.Binding(path), Width = new DataGridLength(width, DataGridLengthUnitType.Pixel) });
+        iterateGrid.ItemsSource = iterateRows;
+
+        foreach (var (header, path, width) in new[]
+        {
+            ("Pass", nameof(CableSectionOptimizationIteration.Number), 50.0), ("Changed groups", nameof(CableSectionOptimizationIteration.AdjustedGroup), 1.0),
+            ("Max force change %", nameof(CableSectionOptimizationIteration.MaximumForceChangePercent), 130.0),
+            ("Max deflection change %", nameof(CableSectionOptimizationIteration.MaximumDeflectionChangePercent), 150.0),
+        })
+            historyGrid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new System.Windows.Data.Binding(path) { StringFormat = path.StartsWith("Maximum", StringComparison.Ordinal) ? "0.###" : null },
+                Width = new DataGridLength(width, width == 1 ? DataGridLengthUnitType.Star : DataGridLengthUnitType.Pixel) });
+        historyGrid.ItemsSource = iterations;
+
+        var layout = new Grid();
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(2, GridUnitType.Star), MinHeight = 120 });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(6) });
+        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 90 });
+        layout.Children.Add(iterateGrid);
+        var history = new GroupBox { Header = "Iteration history", Content = historyGrid };
+        Grid.SetRow(history, 2);
+        layout.Children.Add(history);
+        root.Children.Add(layout);
+        return root;
+    }
+
+    /// <summary>The settings of an iteration from the Design Basis, the ticked load cases and this tab; null with the reason shown.</summary>
+    internal CableSectionOptimizationSettings? ReadIterationSettings()
+    {
+        if (ReadBasis() is not { } basis) return null;
+        var chosen = cases.Where(item => item.IsChecked).Select(item => item.Name).ToArray();
+        if (chosen.Length == 0) { Message("Tick at least one load case or combination on the Cables & Loads tab to size the cables for."); return null; }
+        if (!int.TryParse(iterateMaximum.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var maximum) || maximum is < 1 or > 50)
+        { Message("Maximum iterations: enter a whole number from 1 to 50."); return null; }
+        if (!TryReadNumber(iterateTolerance.Text, out var tolerance) || tolerance <= 0 || tolerance > 100)
+        { Message("Convergence tolerance: enter a percentage above 0 and at most 100."); return null; }
+        // The VSL screen of the Design Basis: a Ø15.7 strand breaks at 279 kN (150 mm² × 1,860 MPa); it may carry f × MBL × η.
+        return new CableSectionOptimizationSettings(basis.MaxUtilisation, TensionCableCatalogue.StrandBreakingKN * 1000 / TensionCableCatalogue.StrandAreaMm2,
+            basis.ScreeningFactor, maximum, tolerance, basis with { LoadCases = chosen }, chosen);
+    }
+
+    private async Task IterateAsync()
+    {
+        if (iterationCancellation is not null || ReadIterationSettings() is not { } settings) return;
+        Message("");
+        iterationCancellation = new CancellationTokenSource();
+        iterateButton.IsEnabled = applyButton.IsEnabled = false;
+        stopButton.IsEnabled = true;
+        iterations.Clear();
+        iterateSummary.Text = "Iterating — each pass analyses the model with the trial sections…";
+        try
+        {
+            var progress = new Progress<CableSectionOptimizationProgress>(report =>
+            {
+                iterations.Add(report.Iteration);
+                ShowIterationRows(report.Rows);
+                iterateSummary.Text = $"Pass {report.Iteration.Number} · {report.Status}";
+            });
+            iteration = await viewModel.RunCableSectionOptimizationAsync(settings, progress, iterationCancellation.Token);
+            iterations.Clear();
+            foreach (var pass in iteration.Iterations) iterations.Add(pass);
+            ShowIterationRows(iteration.Rows);
+            iterateSummary.Text = IterationSummary(iteration);
+            if (iteration.Failure is { Length: > 0 } failure) Message(failure);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            Message(ex.Message);
+            iterateSummary.Text = "The iteration could not be completed.";
+        }
+        finally
+        {
+            iterationCancellation.Dispose();
+            iterationCancellation = null;
+            iterateButton.IsEnabled = true;
+            stopButton.IsEnabled = false;
+            applyButton.IsEnabled = CanApplyIteration();
+        }
+    }
+
+    private static string IterationSummary(CableSectionOptimizationRun run)
+    {
+        var changed = run.Rows.GroupBy(row => row.GroupKey).Count(group => group.Any(row => row.CurrentStrands != row.SuggestedStrands));
+        var outcome = run.Failure is not null ? "Failed" : run.Cancelled ? "Stopped" : run.Converged ? "Converged" : "Not converged within the maximum iterations";
+        var cost = run.Rows.Sum(row => row.CostSgd ?? 0);
+        return $"{outcome} after {run.IterationCount} pass(es) · {changed} group(s) to change · largest UR {run.Rows.Select(row => row.SuggestedUr).DefaultIfEmpty().Max():0.00} · indicative cost S${cost:#,0}";
+    }
+
+    private void ShowIterationRows(IReadOnlyList<CableSectionOptimizationRow> rows)
+    {
+        iterateRows.Clear();
+        iterateRows.AddRange(rows.Select(row => new IterateRow(row)));
+        iterateGrid.ItemsSource = null;
+        iterateGrid.ItemsSource = iterateRows;
+    }
+
+    private bool CanApplyIteration() => iteration is { Failure: null, Cancelled: false } run && run.Rows.Any(row => row.CurrentStrands != row.SuggestedStrands) &&
+                                        viewModel.CanApplyCableSectionOptimization && viewModel.CableSectionOptimizationIsCurrent(run);
+
+    private async Task ApplyIterationAsync()
+    {
+        if (iteration is not { } run) return;
+        if (!viewModel.CableSectionOptimizationIsCurrent(run)) { Message("The model changed after this iteration. Iterate again before applying."); applyButton.IsEnabled = false; return; }
+        var groups = run.Rows.GroupBy(row => row.GroupKey).Count(group => group.Any(row => row.CurrentStrands != row.SuggestedStrands));
+        var text = $"Assign the suggested Ø15.7 mm strand sections to {groups} cable group(s) and run FEM Analysis again?\n\n" +
+                   "The current FEM results are replaced by those of the new sections. To go back, unlock the model and use Edit → Undo." +
+                   (run.Converged ? "" : "\n\nThe iteration did NOT converge: the forces may still move with these sections.");
+        if (MessageBox.Show(this, text, "Apply & Re-analyse", MessageBoxButton.YesNo, run.Converged ? MessageBoxImage.Question : MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        applyButton.IsEnabled = iterateButton.IsEnabled = false;
+        try
+        {
+            iterateSummary.Text = "Applying the sections and re-running FEM Analysis…";
+            var analysed = await viewModel.ApplyCableSectionOptimizationAndAnalyzeAsync(run, confirmedUnconverged: !run.Converged);
+            RefreshCableRows();
+            if (!analysed) { Message("The sections were applied, but FEM Analysis did not produce results. See the run monitor."); return; }
+            ShowAfterAnalysis(run.Settings);
+        }
+        catch (InvalidOperationException ex) { Message(ex.Message); }
+        finally
+        {
+            iteration = null;
+            iterateButton.IsEnabled = true;
+            applyButton.IsEnabled = false;
+        }
+    }
+
+    /// <summary>The force of each cable in the re-analysed model and the UR of its new section.</summary>
+    private void ShowAfterAnalysis(CableSectionOptimizationSettings settings)
+    {
+        if (viewModel.SelectedFemRun is not { } fem) return;
+        var caseNames = settings.DesignCases ?? [];
+        foreach (var row in iterateRows)
+        {
+            var force = caseNames.SelectMany(name => fem.Results is not null && fem.Results.TryGetValue(name, out var result) ? result.Cables : [])
+                .Where(cable => cable.MemberName == row.Member && double.IsFinite(cable.AxialForceKN)).Select(cable => cable.AxialForceKN)
+                .DefaultIfEmpty(double.NaN).Max();
+            row.SetAfter(double.IsNaN(force) ? null : force, double.IsNaN(force) ? null : settings.Utilisation(force, row.Row.SuggestedStrands));
+        }
+        var urs = iterateRows.Select(row => row.AfterUrValue).OfType<double>().ToArray();
+        var over = urs.Count(ur => ur > settings.TargetUr + 1e-9);
+        iterateSummary.Text = $"Applied and re-analysed · largest UR {urs.DefaultIfEmpty().Max():0.00}" +
+            (over == 0 ? " · every cable within the maximum use" : $" · {over} cable(s) above the maximum use — Iterate again");
+        Message("");
     }
 
     private void Message(string text) => status.Text = text;

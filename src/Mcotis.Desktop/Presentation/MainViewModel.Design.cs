@@ -314,11 +314,16 @@ public sealed partial class MainViewModel
     }
 
     /// <summary>Section-level utilisation summaries from the selected FEM run and the same design engines as Design.</summary>
-    internal IReadOnlyList<NativeQuantityUtilizationRow> QuantityUtilizationSummary()
+    internal IReadOnlyList<NativeQuantityUtilizationRow> QuantityUtilizationSummary() => DesignUtilization().Sections;
+
+    /// <summary>Runs the design of every member on the current FEM run: the section summaries of Show Quantities and each designed
+    /// member's UR per load case (empty when the results are not those of the current model).</summary>
+    internal (IReadOnlyList<NativeQuantityUtilizationRow> Sections, IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>> MemberCases) DesignUtilization()
     {
         var run = SelectedFemRun ?? FemRuns.FirstOrDefault();
         if (run is null || FemResultState != Mcotis.Application.ResultState.Current)
-            return [new("—", "—", 0, null, "—", "", "RUN FEM", "Run FEM Analysis for the current model before calculating utilization.")];
+            return ([new("—", "—", 0, null, "—", "", "RUN FEM", "Run FEM Analysis for the current model before calculating utilization.")],
+                new Dictionary<string, IReadOnlyDictionary<string, double>>(StringComparer.Ordinal));
         var allCases = DesignCaseNames();
         var caseOrder = allCases.Select((name, index) => (name, index)).ToDictionary(item => item.name, item => item.index, StringComparer.Ordinal);
         var store = ReadDesignParameterStore();
@@ -429,7 +434,12 @@ public sealed partial class MainViewModel
         }
         SaveDesignParameterStore(store);
 
-        return samples.GroupBy(sample => (sample.Section, sample.Procedure))
+        var memberCases = samples.Where(sample => sample.Cases.Count > 0 && sample.Status is not ("ERROR" or "NO RESULT"))
+            .GroupBy(sample => sample.Member, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => (IReadOnlyDictionary<string, double>)group.SelectMany(sample => sample.Cases)
+                .GroupBy(item => item.Case, StringComparer.Ordinal).ToDictionary(item => item.Key, item => item.Max(value => value.Util), StringComparer.Ordinal),
+                StringComparer.Ordinal);
+        return (samples.GroupBy(sample => (sample.Section, sample.Procedure))
             .Select(group =>
             {
                 var perCase = group.SelectMany(sample => sample.Cases).GroupBy(item => item.Case, StringComparer.Ordinal)
@@ -448,7 +458,7 @@ public sealed partial class MainViewModel
                 var casesText = string.Join(" · ", perCase.Select(item => $"{item.Case}: {item.Util:0.00}"));
                 return new NativeQuantityUtilizationRow(group.Key.Section, group.Key.Procedure, group.Count(), envelope, governing, casesText, status, details);
             })
-            .OrderBy(row => row.Section, StringComparer.Ordinal).ThenBy(row => row.Procedure, StringComparer.Ordinal).ToArray();
+            .OrderBy(row => row.Section, StringComparer.Ordinal).ThenBy(row => row.Procedure, StringComparer.Ordinal).ToArray(), memberCases);
     }
 
     /// <summary>Section and material values taken from <paramref name="member"/>'s FEM section, in mm and MPa; what the

@@ -41,7 +41,17 @@
      </StackPanel>
     </Grid>
    </GroupBox>
-   <TextBlock Text="Each selected load case includes a member summary table (bending, shear, axial force and member size) and the model-view figures of the results ticked in its part. A case ticked in both parts is reported once with both sets of results. Leave a part empty to skip it. Choose the file name and folder after OK; the saved report opens automatically." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
+   <GroupBox Header="Tables (after the figures; forces in MN, 1 decimal)" Padding="8" Margin="0,0,0,8">
+    <StackPanel>
+     <CheckBox x:Name="IncludeForces" IsChecked="True" Margin="0,2,0,2" AutomationProperties.Name="Include member forces">
+      <TextBlock TextWrapping="Wrap" Text="Member forces — summary with section drawings, the members of each group and the cables, per selected case"/></CheckBox>
+     <CheckBox x:Name="IncludeQuantities" IsChecked="True" Margin="0,2,0,2" AutomationProperties.Name="Include quantities">
+      <TextBlock TextWrapping="Wrap" Text="Quantities — section drawing and description, members, length, concrete, steel and estimated cost"/></CheckBox>
+     <CheckBox x:Name="IncludeUtilization" Margin="0,2,0,2" AutomationProperties.Name="Include design utilization">
+      <TextBlock TextWrapping="Wrap" Text="Design utilization — runs every member design on current results and adds a UR column to every table"/></CheckBox>
+    </StackPanel>
+   </GroupBox>
+   <TextBlock Text="Each selected load case gives the model-view figures of the results ticked in its part and, with Member forces, its force tables. A case ticked in both parts is reported once. With Member forces a part may have no figures. Design utilization first makes sure the FEM results are those of the current model. Choose the file name and folder after OK; the saved report opens automatically." TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,0,0,8"/>
   </StackPanel>
   <TextBlock x:Name="Status" TextWrapping="Wrap" Foreground="{StaticResource Warning}" Margin="0,0,0,8"/>
   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

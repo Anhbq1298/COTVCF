@@ -1255,25 +1255,55 @@ public sealed partial class MainViewModel : Observable
     /// <summary>Results table → Member force summary: peak bending, shear and axial force of each member group (Mega
     /// Column, chords, main and internal cables on a VCF system; each member otherwise) under the load case shown.
     /// Member size describes each assigned section and draws it, as Show Quantities does.</summary>
-    public IReadOnlyList<FemMemberSummaryRow> FemMemberSummaryRows
+    public IReadOnlyList<FemMemberSummaryRow> FemMemberSummaryRows =>
+        SelectedFemResult is { } result ? MemberSummaryRows(result, SelectedFemResultName ?? "") : [];
+
+    /// <summary>The member force summary of <paramref name="result"/> with the groups it is built from, in the same order.</summary>
+    internal IReadOnlyList<FemMemberSummaryRow> MemberSummaryRows(FemAnalysisResult result, string caseName) =>
+        MemberSummary(result, caseName).Rows;
+
+    internal (IReadOnlyList<ResultMemberGroup> Groups, IReadOnlyList<FemMemberSummaryRow> Rows) MemberSummary(FemAnalysisResult result, string caseName)
     {
-        get
-        {
-            if (SelectedFemResult is not { } result) return [];
-            var properties = FemSectionProperties.ToArray();
-            var groups = ResultMemberSummary.Groups(State.Geometry, State.Truss, properties);
-            var forces = ResultMemberSummary.Create(SelectedFemResultName ?? "", result, groups, Enum.GetValues<ResultReportOutput>()).Rows;
-            IReadOnlyList<NativeQuantityRow> quantities = [];
-            try { quantities = NativeQuantityTakeoffCalculator.Calculate(NativeDocumentSession.Document).Rows; }
-            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or System.Text.Json.JsonException) { /* sizes fall back to section names */ }
-            var sectionOf = properties.GroupBy(p => p.MemberName, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().SectionName, StringComparer.Ordinal);
-            return forces.Select((row, index) => new FemMemberSummaryRow(row, groups[index].Members
-                .Select(member => sectionOf.GetValueOrDefault(member)).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.Ordinal)
-                .OrderBy(name => name, StringComparer.Ordinal)
-                .Select(name => quantities.FirstOrDefault(q => q.Section == name) is { } q
-                    ? new FemMemberSummarySection(name!, q.SectionType == "—" ? q.FigureDescription : $"{q.SectionType}: {q.FigureDescription}", q.Figure)
-                    : new FemMemberSummarySection(name!, name!, null)).ToArray())).ToArray();
-        }
+        var properties = FemSectionProperties.ToArray();
+        var groups = ResultMemberSummary.Groups(State.Geometry, State.Truss, properties);
+        var forces = ResultMemberSummary.Create(caseName, result, groups, Enum.GetValues<ResultReportOutput>()).Rows;
+        IReadOnlyList<NativeQuantityRow> quantities = [];
+        try { quantities = NativeQuantityTakeoffCalculator.Calculate(NativeDocumentSession.Document).Rows; }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or System.Text.Json.JsonException) { /* sizes fall back to section names */ }
+        var sectionOf = properties.GroupBy(p => p.MemberName, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().SectionName, StringComparer.Ordinal);
+        return (groups, forces.Select((row, index) => new FemMemberSummaryRow(row, groups[index].Members
+            .Select(member => sectionOf.GetValueOrDefault(member)).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.Ordinal)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .Select(name => quantities.FirstOrDefault(q => q.Section == name) is { } q
+                ? new FemMemberSummarySection(name!, q.SectionType == "—" ? q.FigureDescription : $"{q.SectionType}: {q.FigureDescription}", q.Figure)
+                : new FemMemberSummarySection(name!, name!, null)).ToArray())).ToArray());
+    }
+
+    /// <summary>Show Quantities of the model's document, with the material unit costs of Define → Materials.</summary>
+    internal NativeQuantityTakeoff QuantityTakeoff()
+    {
+        EnsureMaterials();
+        var rates = Materials.GroupBy(material => material.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
+        return NativeQuantityTakeoffCalculator.Calculate(NativeDocumentSession.Document, rates);
+    }
+
+    /// <summary>The report tables of one load case: summary, member forces per group and cable forces. <paramref name="memberCases"/>
+    /// (each member's UR per case, from <see cref="DesignUtilization"/>) adds the UR columns; null leaves them out.</summary>
+    internal IReadOnlyList<ReportTable> ReportCaseTables(string caseName, IReadOnlyDictionary<string, IReadOnlyDictionary<string, double>>? memberCases,
+        Func<QuantitySectionFigure, byte[]?> image)
+    {
+        var run = SelectedFemRun ?? throw new InvalidOperationException("Run analysis first.");
+        var result = run.ResultFor(caseName);
+        var (groups, rows) = MemberSummary(result, caseName);
+        var properties = FemSectionProperties.GroupBy(p => p.MemberName, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        Dictionary<string, double>? ur = memberCases is null ? null
+            : memberCases.Where(pair => pair.Value.ContainsKey(caseName)).ToDictionary(pair => pair.Key, pair => pair.Value[caseName], StringComparer.Ordinal);
+        return ResultReportTables.ForCase(caseName, result, groups, rows, ur,
+            member => properties.GetValueOrDefault(member)?.SectionName ?? "—",
+            member => properties.GetValueOrDefault(member)?.IsCable == true ? CableLength(member) : MemberLength(member),
+            member => properties.GetValueOrDefault(member) is { IsCable: true, AreaM2: > 0 } cable ? cable.AreaM2 : null,
+            image);
     }
     public FemAnalysisResult? SharedViewerFemResult =>
         !ShowUndeformed && selectedTab == TabFem && SelectedFemPage == FemResultsPage

@@ -18,18 +18,21 @@ public sealed record ResultReportFigure(string CaseName, string Title, byte[] Pn
 }
 public sealed partial record ResultReport(string ModelName, IReadOnlyList<ResultReportFigure> Figures)
 {
-    public IReadOnlyList<ResultMemberTable> MemberTables { get; init; } = [];
+    /// <summary>The tables after the figures: per case its member force tables, then the model's tables (quantities, design utilization).</summary>
+    public IReadOnlyList<ReportTable> Tables { get; init; } = [];
     public const int PageWidth = 11906, PageHeight = 16838;
     public const int Top = 1066, Bottom = 726, Right = 896, Left = 1066;
     public static ResultReport Create(string modelName, FemStudyRun run, IReadOnlyList<string> cases, IReadOnlyList<ResultReportOutput> outputs, Func<FemAnalysisResult, FemResultMode, byte[]> capture,
-        IReadOnlyList<ResultMemberGroup>? memberGroups = null) =>
-        Create(modelName, run, [new ResultReportSelection("", cases, outputs)], capture, memberGroups);
-    /// <summary>A report of several selections (e.g. SLS and ULS), in order. A selection without cases is skipped; a case chosen in more than one selection appears once, with the union of their result types.</summary>
+        Func<string, IReadOnlyList<ReportTable>>? caseTables = null, IReadOnlyList<ReportTable>? modelTables = null) =>
+        Create(modelName, run, [new ResultReportSelection("", cases, outputs)], capture, caseTables, modelTables);
+    /// <summary>A report of several selections (e.g. SLS and ULS), in order. A selection without cases is skipped; a case chosen in more than one selection appears once, with the union of their result types.
+    /// <paramref name="caseTables"/> gives the tables of each case (after all figures); <paramref name="modelTables"/> come last. With tables a case may have no figures.</summary>
     public static ResultReport Create(string modelName, FemStudyRun run, IReadOnlyList<ResultReportSelection> selections, Func<FemAnalysisResult, FemResultMode, byte[]> capture,
-        IReadOnlyList<ResultMemberGroup>? memberGroups = null)
+        Func<string, IReadOnlyList<ReportTable>>? caseTables = null, IReadOnlyList<ReportTable>? modelTables = null)
     {
+        bool tablesOnly = caseTables is not null;
         foreach (var s in selections)
-            if (s.Cases.Count > 0 && s.Outputs.Count == 0)
+            if (s.Cases.Count > 0 && s.Outputs.Count == 0 && !tablesOnly)
                 throw new InvalidOperationException(s.Name.Length == 0 ? "Select at least one load case / combination and one result type."
                     : $"Select at least one result type for the {s.Name} load cases / combinations.");
         var perCase = new Dictionary<string, List<ResultReportOutput>>(); var order = new List<string>();
@@ -39,7 +42,7 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
             if (!perCase.TryGetValue(name, out var list)) { perCase[name] = list = []; order.Add(name); }
             foreach (var output in s.Outputs) if (!list.Contains(output)) list.Add(output);
         }
-        if (order.Count == 0) throw new InvalidOperationException("Select at least one load case / combination and one result type.");
+        if (order.Count == 0 && modelTables is not { Count: > 0 }) throw new InvalidOperationException("Select at least one load case / combination and one result type.");
         foreach (var name in order)
             if (run.Results is null || !run.Results.ContainsKey(name)) throw new InvalidOperationException($"No solved result is available for '{name}'. Run analysis first.");
         var figures = new List<ResultReportFigure>();
@@ -61,9 +64,7 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
         }
         return new(modelName, figures)
         {
-            MemberTables = order.Select(name => ResultMemberSummary.Create(name, run.Results![name],
-                memberGroups ?? run.Results![name].Frames.Select(f => new ResultMemberGroup(f.MemberName, [f.MemberName], "(section unavailable)"))
-                    .Concat(run.Results[name].Cables.Select(c => new ResultMemberGroup(c.MemberName, [c.MemberName], "(section unavailable)"))).ToArray(), perCase[name])).ToArray()
+            Tables = (caseTables is null ? [] : order.SelectMany(caseTables)).Concat(modelTables ?? []).OrderBy(table => table.Landscape).ToArray(),
         };
     }
     public string Html()
@@ -78,7 +79,7 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
             if (figure.Warning is { Length: > 0 }) html.Append("<p>Cable target not fitted: ").Append(E(figure.Warning)).Append("</p>");
             html.Append("</figure>");
         }
-        AppendMemberTables(html);
+        AppendTables(html);
         return html.Append("</body></html>").ToString();
     }
     public void Export(string path, bool pdf)
@@ -123,8 +124,9 @@ public sealed partial record ResultReport(string ModelName, IReadOnlyList<Result
             body.Append(new Paragraph(properties, new Run(new Text(caption))));
             if (figure.Warning is { Length: > 0 }) body.Append(new Paragraph(new Run(new Text("Cable target not fitted: " + figure.Warning))));
         }
-        AppendMemberTables(body);
-        body.Append(new SectionProperties(new PageSize { Width = PageWidth, Height = PageHeight }, new PageMargin { Top = Top, Bottom = Bottom, Left = Left, Right = Right, Header = 0, Footer = 0, Gutter = 0 }));
+        uint drawingId = (uint)Figures.Count;
+        AppendTables(body, main, ref drawingId, out var landscape);
+        body.Append(landscape ? LandscapeSection() : PortraitSection());
         main.Document.Save();
     }
 }
