@@ -18,6 +18,13 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-18 · Assign → Frame → Frame Load: distributed loads as SAP2000 defines them
+- Status: Planned
+- Who: Unassigned
+- Where: Assign → Frame → Frame Load… (new); Display → Loading; Object Information; File → Import / Export SAP2000 and ETABS
+- What: Distributed forces or moments on the selected frames, as SAP2000's Frame Distributed Loads form: load pattern, Forces / Moments, GLOBAL or Local, directions Local 1/2/3, X/Y/Z, X/Y/Z projected, Gravity and Gravity projected, a 4-point trapezoid (relative or absolute distance from End-I) plus a uniform load, and Add / Replace / Delete existing. The loads are data of the native document, with the frame-load methods in `Mcotis.Core.FrameLoads`. Delivered in slices FL-01 … FL-07; distributed moments are refused at Run until their verification record is complete. Plan: `docs/loads/FRAME_DISTRIBUTED_LOAD_PLAN.md`.
+- Checks: none yet (planned: --frame-loads, --frame-load-ui, --native-parity, --full for FL-02)
+
 ## 2026-10-18 · Default VCF model: CFT chords as a defined filled tube; CFT exports as a steel tube
 - Status: In progress
 - Who: Philip Pham (with Claude Code)
