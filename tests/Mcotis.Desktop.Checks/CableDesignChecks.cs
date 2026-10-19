@@ -249,14 +249,14 @@ internal static class CableDesignChecks
               iterated.Rows.GroupBy(row => row.GroupKey).All(group => group.Select(row => row.SuggestedStrands).Distinct().Count() == 1),
             $"Iterate sizes every cable as a standard VSL assembly for its governing design case, within the maximum use, one size per group " +
             $"({iterated.IterationCount} pass(es), {(iterated.Converged ? "converged" : "not converged")}; e.g. {iterated.Rows[0].TendonName}: {iterated.Rows[0].Product})");
-        if (iterated.Rows.Any(row => row.CurrentStrands != row.SuggestedStrands))
+        if (iterated.Rows.Any(row => row.Changes))
         {
             var applied = Pump(() => vm.ApplyCableSectionOptimizationAndAnalyzeAsync(iterated, confirmedUnconverged: !iterated.Converged));
             var assigned = vm.CableDesignOptions().ToDictionary(option => option.Member, StringComparer.Ordinal);
-            Check(iterateSettings.SyncGroupsOnly && applied && vm.HasFemResults && vm.IsFemModelLocked && iterated.Rows.All(row =>
+            Check(iterateSettings.SyncGroupsOnly && iterateSettings.StaySystem == CableSystem.VslSsi2000 && applied && vm.HasFemResults && vm.IsFemModelLocked && iterated.Rows.All(row =>
                       assigned.TryGetValue(row.TendonName, out var option) && Math.Abs(option.AreaMm2 - row.SuggestedStrands * 150) < 1e-6 &&
-                      option.Section == $"{row.SuggestedStrands}T15.7"),
-                "Apply & Re-analyse assigns the suggested Ø15.7 strand sections and re-runs FEM analysis, so the results are those of the new sections");
+                      option.Section == row.Suggested.SectionName && option.Section.StartsWith("VSL_SSI2000_", StringComparison.Ordinal) && vm.CableStayStiffnessMatches(row.TendonName)),
+                "Apply & Re-analyse assigns the suggested VSL stays as VSL_SSI2000_[units]x6-[strands] sections in the VSL strand material (catalogue EA) and re-runs FEM analysis, so the results are those of the new sections");
         }
         window.Close();
 

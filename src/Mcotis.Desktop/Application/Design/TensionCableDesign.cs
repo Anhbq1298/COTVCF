@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Serialization;
+using Mcotis.Desktop.Domain;
 
 namespace Mcotis.Desktop.Application.Design;
 
@@ -24,7 +25,15 @@ public enum CablePriority { LowestCost, FewestUnits, LeastSteel }
 /// <param name="Strands">Number of 7-wire strands of the unit; 0 for a rope.</param>
 /// <param name="LimitTensionKN">The supplier's published EN 1993-1-11 limit tension F_Rd of one unit [kN] (FATZER ropes); 0 where none is published (VSL publishes 50 % / 60 % admissible values, Utracon strand data).</param>
 public sealed record CableUnit(CableSystem System, string Code, string Name, double BreakingLoadKN, double SteelAreaMm2, double MassKgPerM,
-    double AxialStiffnessKN, double ConduitMm, int Strands, double LimitTensionKN = 0);
+    double AxialStiffnessKN, double ConduitMm, int Strands, double LimitTensionKN = 0)
+{
+    /// <summary>E of the unit's steel [MPa]: EA ÷ A — 195 GPa for strand, 160 GPa for a full-locked-coil rope.</summary>
+    public double ModulusMpa => AxialStiffnessKN * 1000 / SteelAreaMm2;
+    /// <summary>Density that gives the catalogue mass per metre on the steel area [kg/m³] (a rope's zinc and fill included).</summary>
+    public double DensityKgPerM3 => MassKgPerM / (SteelAreaMm2 * 1e-6);
+    /// <summary>The material the unit is analysed with: one per strand system, one per rope size (each rope has its own density).</summary>
+    public string MaterialName => System == CableSystem.FatzerFlc ? $"FATZER_FLC_D{ConduitMm:0}" : $"{TensionCableCatalogue.Prefix(System)}_Strand";
+}
 
 /// <summary>The catalogue of the Technical Options Study of 18 Oct 2026 (VSL SSI 2000, FATZER FLC, Utracon UPS).</summary>
 public static class TensionCableCatalogue
@@ -42,6 +51,9 @@ public static class TensionCableCatalogue
         (12, 125), (19, 140), (22, 160), (27, 160), (31, 160), (37, 180), (43, 200), (55, 200), (61, 225), (73, 250), (85, 250),
         (91, 280), (109, 315), (127, 315), (139, 315), (151, 355), (169, 355), (187, 400),
     ];
+
+    /// <summary>E of a galvanized full-locked-coil rope [MPa] (FATZER planning aid): the metallic area of a rope is its EA ÷ E.</summary>
+    public const double FatzerModulusMpa = 160_000;
 
     // FATZER Structural Ropes planning aid (05/2023) p. 20, galvanized full locked coil rope, E = 160 GPa: the five sizes of the study —
     // diameter [mm], minimum breaking force Fmin [kN], limit tension FRd = Fuk / 1.5 [kN] (EN 1993-1-11), EA [MN], weight [kg/m]
@@ -71,6 +83,52 @@ public static class TensionCableCatalogue
     /// <summary>True for a system the study says is qualified as a permanent exposed stay; the Utracon PT tendon is not.</summary>
     public static bool IsQualifiedStay(CableSystem system) => system != CableSystem.UtraconPt;
 
+    /// <summary>The unit <paramref name="code"/> of <paramref name="system"/>, or null.</summary>
+    public static CableUnit? Find(CableSystem system, string? code) => All.FirstOrDefault(unit => unit.System == system && unit.Code == code);
+
+    /// <summary>[brand]_[model] of a system's section and material names.</summary>
+    internal static string Prefix(CableSystem system) => system switch
+    {
+        CableSystem.VslSsi2000 => "VSL_SSI2000",
+        CableSystem.FatzerFlc => "FATZER_FLC",
+        _ => "UTRACON_UPS",
+    };
+
+    // the technical data of one unit in a section name: VSL 6-187, FATZER D100, Utracon 37T15.7 (ASCII only)
+    private static string NameCode(CableUnit unit) => unit.System switch
+    {
+        CableSystem.VslSsi2000 => unit.Code,
+        CableSystem.FatzerFlc => $"D{unit.ConduitMm:0}",
+        _ => $"{unit.Strands}T15.7",
+    };
+
+    /// <summary>The section name of <paramref name="units"/> × <paramref name="unit"/>, [brand]_[model]_[units]x[unit]: <c>VSL_SSI2000_4x6-187</c>,
+    /// <c>FATZER_FLC_2xD100</c>, <c>UTRACON_UPS_3x37T15.7</c> — ASCII without spaces, so SAP2000 and ETABS take it.</summary>
+    public static string SectionName(CableUnit unit, int units) => $"{Prefix(unit.System)}_{units}x{NameCode(unit)}";
+
+    /// <summary>The assembly a stay section name states (a " (2)" suffix of a second section of the same name allowed), or null for
+    /// any other name.</summary>
+    public static (CableUnit Unit, int Units)? ParseSection(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(name.Trim(), @"^([A-Z]+_[A-Z0-9]+)_(\d+)x(\S+?)(?: \(\d+\))?$");
+        if (!match.Success || !int.TryParse(match.Groups[2].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var units) || units < 1) return null;
+        var unit = All.FirstOrDefault(item => Prefix(item.System) == match.Groups[1].Value && NameCode(item) == match.Groups[3].Value);
+        return unit is null ? null : (unit, units);
+    }
+
+    /// <summary>The material <paramref name="unit"/> is analysed with: E so that A × E is the catalogue EA, and a unit weight so that A × γ is
+    /// the catalogue mass per metre.</summary>
+    public static MaterialProperty Material(CableUnit unit) => new()
+    {
+        Name = unit.MaterialName, Kind = MaterialKind.Tendon, Color = 0x00FFFF, Source = "Tension Cable Design",
+        ElasticModulus = unit.ModulusMpa * 1000, WeightPerVolume = unit.DensityKgPerM3 * MaterialProperty.Gravity / 1000, ThermalCoefficient = 1.2e-5,
+        Fu = unit.BreakingLoadKN / unit.SteelAreaMm2 * 1e6,
+        Notes = unit.System == CableSystem.FatzerFlc
+            ? $"FATZER full-locked-coil rope Ø{unit.ConduitMm:0}: E = {unit.ModulusMpa / 1000:0} GPa, {unit.MassKgPerM:0.#} kg/m on {unit.SteelAreaMm2:#,0} mm² metallic area (EA ÷ E) — planning aid 05/2023."
+            : $"{ShortTitle(unit.System)} Ø15.7 mm strand: E = {unit.ModulusMpa / 1000:0} GPa, {StrandMassKgPerM} kg/m on {StrandAreaMm2:0} mm², 1,860 MPa.",
+    };
+
     private static List<CableUnit> Build()
     {
         var list = new List<CableUnit>();
@@ -78,7 +136,7 @@ public static class TensionCableCatalogue
             list.Add(new(CableSystem.VslSsi2000, $"6-{strands}", $"VSL SSI 2000 6-{strands}", strands * StrandBreakingKN, strands * StrandAreaMm2,
                 strands * StrandMassKgPerM, strands * StrandAreaMm2 * StrandModulusMpa / 1000, pipe, strands));
         foreach (var rope in Fatzer)
-            list.Add(new(CableSystem.FatzerFlc, $"Ø{rope.D:0}", $"FATZER FLC Ø{rope.D:0}", rope.Fmin, double.NaN, rope.Mass, rope.Ea * 1000, rope.D, 0, rope.FRd));
+            list.Add(new(CableSystem.FatzerFlc, $"Ø{rope.D:0}", $"FATZER FLC Ø{rope.D:0}", rope.Fmin, rope.Ea * 1e6 / FatzerModulusMpa, rope.Mass, rope.Ea * 1000, rope.D, 0, rope.FRd));
         list.Add(new(CableSystem.UtraconPt, "37-strand", "Utracon PT 37 × Ø15.7", 37 * StrandBreakingKN, 37 * StrandAreaMm2, 37 * StrandMassKgPerM,
             37 * StrandAreaMm2 * StrandModulusMpa / 1000, 135, 37));
         return list;
@@ -207,6 +265,10 @@ public sealed record TensionCableSelection(
     /// <summary>"4 × VSL SSI 2000 6-187" — the assembly in one line.</summary>
     public string Assembly => $"{Units} × {Name}";
 
+    /// <summary>The section the assembly is applied as, "VSL_SSI2000_4x6-187".</summary>
+    [JsonIgnore]
+    public string SectionName => TensionCableCatalogue.Find(System, Code) is { } unit ? TensionCableCatalogue.SectionName(unit, Units) : Assembly;
+
     /// <summary>The assembly with what a reader checks first: strands, utilisation and cost.</summary>
     [JsonIgnore]
     public string Summary
@@ -331,6 +393,7 @@ public static class TensionCableDesigner
         text.AppendLine();
         text.AppendLine("Selected: " + s.Summary);
         if (s.StrandsPerUnit > 0) text.AppendLine($"  {s.TotalStrands} strands Ø15.7 mm = {s.SteelAreaMm2.ToString("#,0", ci)} mm² of steel, {s.TotalStrands * 7} wires");
+        else text.AppendLine($"  metallic area {s.SteelAreaMm2.ToString("#,0", ci)} mm² = ΣEA ÷ E (E = {TensionCableCatalogue.FatzerModulusMpa / 1000:0} GPa)");
         text.AppendLine($"  steel mass {s.SteelMassT.ToString("0.00", ci)} t over {s.LengthM.ToString("0.###", ci)} m");
         text.AppendLine($"  ΣEA = {(s.AxialStiffnessKN / 1000).ToString("#,0", ci)} MN · elastic extension ΔL = T L / ΣEA = {s.ElongationMm.ToString("0.0", ci)} mm · " +
                         $"thermal ΔL (ΔT = 40 °C, α = 12×10⁻⁶) = {(ThermalMmPerM * s.LengthM / 1000).ToString("0.0", ci)} mm");

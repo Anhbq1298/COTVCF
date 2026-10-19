@@ -14,6 +14,66 @@ internal static class CableSectionOptimizationChecks
         CheckSettingsAndNearZeroHandling();
         CheckSharedSectionGrouping();
         CheckRunAndApply();
+        CheckStaySystems();
+    }
+
+    /// <summary>Each stay system is analysed and applied with its own material: A × E = the catalogue EA and A × γ = the catalogue mass of
+    /// every unit, the section named [brand]_[model]_[units]x[unit] and read back, Iterate's trial = the applied model.</summary>
+    private static void CheckStaySystems()
+    {
+        Check(TensionCableCatalogue.All.All(unit => Math.Abs(unit.SteelAreaMm2 * unit.ModulusMpa / 1000 - unit.AxialStiffnessKN) <= unit.AxialStiffnessKN * 1e-12 &&
+                                                    TensionCableCatalogue.Material(unit) is var material &&
+                                                    Math.Abs(unit.SteelAreaMm2 * 1e-6 * material.ElasticModulus - unit.AxialStiffnessKN) <= unit.AxialStiffnessKN * 1e-12 &&
+                                                    Math.Abs(unit.SteelAreaMm2 * 1e-6 * material.MassPerVolume * 1000 - unit.MassKgPerM) <= unit.MassKgPerM * 1e-12) &&
+              TensionCableCatalogue.Find(CableSystem.FatzerFlc, "Ø100") is { SteelAreaMm2: 6806.25, ModulusMpa: 160_000 } &&
+              TensionCableCatalogue.Find(CableSystem.VslSsi2000, "6-187") is { ModulusMpa: 195_000 } vsl && Math.Abs(vsl.DensityKgPerM3 - 1.172 / 150e-6) < 1e-6,
+            "every catalogue unit's material gives A × E = its catalogue EA and A × γ = its catalogue mass: strand 195 GPa, FATZER rope 160 GPa on EA ÷ E (Ø100: 6,806 mm²)");
+
+        var names = TensionCableCatalogue.All.Select(unit => TensionCableCatalogue.SectionName(unit, 3)).ToArray();
+        Check(names.Contains("VSL_SSI2000_3x6-187") && names.Contains("FATZER_FLC_3xD100") && names.Contains("UTRACON_UPS_3x37T15.7") &&
+              TensionCableCatalogue.All.All(unit => TensionCableCatalogue.ParseSection(TensionCableCatalogue.SectionName(unit, 3)) == (unit, 3)) &&
+              TensionCableCatalogue.ParseSection("FATZER_FLC_2xD100 (2)") is { Units: 2, Unit.Code: "Ø100" } &&
+              TensionCableCatalogue.ParseSection("748T15.7") is null && TensionCableCatalogue.ParseSection("VSL_SSI2000_2x6-188") is null &&
+              ResultReportTables.CableCapacityKN("FATZER_FLC_2xD100", 2 * 6806.25e-6) == 2 * 10_100 * .5 &&
+              ResultReportTables.CableCapacityKN("VSL_SSI2000_4x6-187", 748 * 150e-6) is { } strands && Math.Abs(strands - 748 * 279 * .5) < 1e-6,
+            "stay sections are named [brand]_[model]_[units]x[unit] and read back; a FATZER rope's capacity is its units × Fmin × f, a strand stay's its area × 1,860 MPa × f");
+
+        foreach (var system in new[] { CableSystem.FatzerFlc, CableSystem.UtraconPt })
+        {
+            var viewModel = EtabsImportChecks.NewViewModel(out _);
+            viewModel.OpenNativeDocument(CreateDocument(twoCables: false), "Stay system check", null, LegacyNativeDocumentMigration.Source.Imported("stay system check"));
+            var document = viewModel.NativeDocumentSession.Document;
+            var snapshot = NativeToLegacyProjection.Read(document) ?? throw new Exception("FAIL: the stay check model has no configuration snapshot");
+            var settings = CableSectionOptimizationSettings.Default with { TargetUr = 1, BreakingStressMpa = 1860, PreliminaryCoefficient = .5, StayBasis = TensionCableBasis.Default, StaySystem = system };
+            var run = CableSectionOptimizer.Run(document, snapshot, settings);
+            var row = run.Rows.Single();
+            var unit = TensionCableCatalogue.Units(system)[0];
+            Check(run.Failure is null && run.Converged && row.Suggested == CableSize.Of(unit, 1) && row.AxialStiffnessKN == unit.AxialStiffnessKN &&
+                  Math.Abs(row.CapacityKN - unit.BreakingLoadKN * .5) < 1e-9 && run.Iterations[^1].TrialSizes![row.GroupKey] == row.Suggested &&
+                  new TensionCableDesignWindow.IterateRow(row).Status == (system == CableSystem.UtraconPt ? "CHECK" : "OK"),
+                $"Iterate with {TensionCableCatalogue.ShortTitle(system)} sizes the 50 kN cable as 1 × {unit.Name} (EA {unit.AxialStiffnessKN / 1000:#,0} MN, capacity {unit.BreakingLoadKN * .5:#,0} kN) and converges on it" +
+                (system == CableSystem.UtraconPt ? "; the unqualified Utracon tendon reads CHECK" : ""));
+
+            Check(viewModel.ApplyCableSectionOptimization(run, confirmedUnconverged: false), $"{TensionCableCatalogue.ShortTitle(system)}: Apply assigns the suggested stay");
+            var applied = viewModel.NativeDocumentSession.Document;
+            var cable = applied.Cables.Values.Single();
+            var section = applied.CableSections[applied.AssignmentOfCable(cable.Id).SectionId!.Value];
+            var material = applied.Materials[section.MaterialId];
+            var property = viewModel.FemSectionProperties.Single(item => item.IsCable);
+            Check(property.SectionName == TensionCableCatalogue.SectionName(unit, 1) && property.MaterialName == unit.MaterialName &&
+                  Math.Abs(section.Area * material.ElasticModulus - unit.AxialStiffnessKN) <= unit.AxialStiffnessKN * 1e-9 &&
+                  Math.Abs(section.Area * material.WeightDensity - unit.MassKgPerM * MaterialProperty.Gravity / 1000) <= unit.MassKgPerM * 1e-9 &&
+                  viewModel.CableStayStiffnessMatches(property.MemberName),
+                $"Apply names the section {property.SectionName} in material {property.MaterialName}; the analysed model has A × E = {unit.AxialStiffnessKN / 1000:#,0} MN and the catalogue {unit.MassKgPerM} kg/m");
+
+            // the trial Iterate converged on is the applied model: iterating it again analyses it unchanged, with the same deflections
+            var again = CableSectionOptimizer.Run(applied, NativeToLegacyProjection.Read(applied)!, settings with { MaximumIterations = 1 });
+            var trial = run.Iterations[^1].PretensionDeflections;
+            var reanalysed = again.Iterations[0].PretensionDeflections;
+            Check(again.Rows.Single() is { Changes: false } && trial.Count == reanalysed.Count && trial.Zip(reanalysed).All(pair =>
+                      Math.Abs(pair.First.UXM - pair.Second.UXM) + Math.Abs(pair.First.UYM - pair.Second.UYM) + Math.Abs(pair.First.UZM - pair.Second.UZM) <= 1e-12),
+                $"{TensionCableCatalogue.ShortTitle(system)}: the applied section is read back as the same assembly, and the applied model deflects as Iterate's trial did (same EA and mass)");
+        }
     }
 
     private static void CheckSettingsAndNearZeroHandling()

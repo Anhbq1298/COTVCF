@@ -18,6 +18,15 @@ continues on the next lines, indented by two spaces):
 - What: what it does, in a sentence or two, with anything a user must know
 - Checks: the check(s) that prove it (a `--flag` of the checks project), or "none yet"
 
+## 2026-10-19 · Iterate: choose VSL, FATZER or Utracon stays, each with its own material
+- Status: Done
+- Who: aBui (with Claude Code)
+- Where: Design → Tension Cable Design → Iterate (Stay system); Section Check; result report UR
+- What: Iterate sizes every cable group as VSL SSI 2000 (VSL manual), FATZER FLC full-locked-coil rope or Utracon UPS 37 × Ø15.7 tendon stays. Each trial is analysed, and Apply & Re-analyse assigns it, with the assembly's own area and its system's material, so A × E is the catalogue EA and A × γ the catalogue mass: strand 195 GPa; FATZER 160 GPa on the metallic area EA ÷ E, with one material per rope size for its catalogue mass. Applied sections are named [brand]_[model]_[units]x[unit] (VSL_SSI2000_4x6-187, FATZER_FLC_2xD100, UTRACON_UPS_3x37T15.7) in materials VSL_SSI2000_Strand, FATZER_FLC_D100, UTRACON_UPS_Strand. Iterate can read these names again.
+  The Iterate table follows the study's format: Cable, Governing case, T, L, Suggested stay, Strands, EA, Capacity, Use, ΔL, S$/m, Cost, Status. Hover a row to see the current section. Utracon rows read CHECK (not a qualified exposed stay).
+  A FATZER section's capacity is units × Fmin × f everywhere a UR is read; area × 1,860 MPa would overstate a rope by about 25 %. Section Check marks a stay section whose area × E is not its catalogue EA as CHECK EA.
+- Checks: `--cable-section-optimization`, `--cable-design`, `--cable-design-ui`
+
 ## 2026-10-19 · Reaction values under the reactions figure
 - Status: Done
 - Who: aBui (with Claude Code)

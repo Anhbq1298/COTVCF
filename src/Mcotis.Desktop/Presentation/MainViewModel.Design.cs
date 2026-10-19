@@ -150,6 +150,16 @@ public sealed partial class MainViewModel
     /// <summary>A cable of the model offered in Design → Tension Cable Design.</summary>
     public sealed record CableDesignOption(string Member, string Section, double LengthM, double AreaMm2, double? CapacityKN);
 
+    /// <summary>False when the cable's section is named for a stay assembly (<c>FATZER_FLC_2xD100</c>) but its area × E differs from the
+    /// assembly's catalogue EA by more than 0.1 % (a section or material edited by hand); true otherwise.</summary>
+    internal bool CableStayStiffnessMatches(string member)
+    {
+        if (FemSectionProperties.FirstOrDefault(property => property.MemberName == member && property.IsCable) is not { } property ||
+            Mcotis.Desktop.Application.Design.TensionCableCatalogue.ParseSection(property.SectionName) is not { } stay) return true;
+        var catalogue = stay.Units * stay.Unit.AxialStiffnessKN;
+        return Math.Abs(property.AreaM2 * property.ElasticModulusKNPerM2 - catalogue) <= catalogue * 1e-3;
+    }
+
     internal IReadOnlyList<CableDesignOption> CableDesignOptions() => FemSectionProperties.Where(property => property.IsCable)
         .OrderBy(property => property.MemberName, StringComparer.Ordinal)
         .Select(property => new CableDesignOption(property.MemberName, property.SectionName ?? "", CableLength(property.MemberName), property.AreaM2 * 1e6,
@@ -390,8 +400,7 @@ public sealed partial class MainViewModel
                 // The UR of the section the cable has now — a suggested stay counts only once it is applied:
                 // capacity = area × 1,860 MPa × 50 %: the VSL Ø15.7 strand (279 kN) screened at 50 %, as Section Check and Iterate.
                 var governingForce = cableCases.MaxBy(item => item.Force);
-                double? capacity = property.AreaM2 > 0
-                    ? property.AreaM2 * 1e6 * ResultReportTables.CableBreakingStressMpa * ResultReportTables.CableReductionFactor / 1000 : null;
+                double? capacity = ResultReportTables.CableCapacityKN(property.SectionName, property.AreaM2);
                 var utilizationCases = capacity is > 0
                     ? cableCases.Select(item => (item.Case, Util: Math.Max(0, item.Force) / capacity.Value)).ToArray()
                     : [];

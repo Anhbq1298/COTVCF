@@ -6,30 +6,44 @@ using Mcotis.Desktop.Domain;
 using Mcotis.Desktop.Geometry;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json.Serialization;
 
 namespace Mcotis.Desktop.Application;
 
 /// <summary>The inputs of Cable / Tendon Section Optimisation. Strand diameter and steel area are fixed at 15.7 mm and
 /// 150 mm²; the optimizer changes strand count only.
-/// <para><see cref="StayBasis"/>, when given, rounds each group up to the VSL SSI 2000 assembly Tension Cable Design would choose
-/// for its tension and length (units × strands per unit, Ø15.7 mm), which also names the product and its cost.
+/// <para><see cref="StayBasis"/>, when given, rounds each group up to the assembly of <see cref="StaySystem"/> (VSL SSI 2000, FATZER FLC
+/// or Utracon UPS) Tension Cable Design would choose for its tension and length, which also names the product and its cost; the
+/// group is then analysed and applied with that assembly's area and its system's material (<see cref="CableSize"/>).
 /// <see cref="DesignCases"/>, when given, sizes each group for its largest tension over those load cases / combinations
 /// instead of its pretension-stage force. <see cref="SyncGroupsOnly"/> groups cables by their Cable Force Sync links alone, so cables
 /// that only share a section are sized each for their own force (and are given their own section when applied).</para></summary>
 public sealed record CableSectionOptimizationSettings(double TargetUr = 0.90, double BreakingStressMpa = 2160,
     double PreliminaryCoefficient = 0.50, int MaximumIterations = 30, double ConvergenceTolerancePercent = 1.00,
-    TensionCableBasis? StayBasis = null, IReadOnlyList<string>? DesignCases = null, bool SyncGroupsOnly = false)
+    TensionCableBasis? StayBasis = null, IReadOnlyList<string>? DesignCases = null, bool SyncGroupsOnly = false,
+    CableSystem StaySystem = CableSystem.VslSsi2000)
 {
-    /// <summary>The VSL basis the iteration sizes with: only VSL SSI 2000 offered, the rest as Design Basis sets it.</summary>
-    public TensionCableBasis? VslBasis => StayBasis is null ? null : StayBasis with { Systems = [CableSystem.VslSsi2000] };
+    /// <summary>The basis the iteration sizes with: only <see cref="StaySystem"/> offered, the rest as Design Basis sets it.</summary>
+    public TensionCableBasis? SizingBasis => StayBasis is null ? null : StayBasis with { Systems = [StaySystem] };
 
-    /// <summary>The VSL assembly for a group carrying <paramref name="forceKN"/> over <paramref name="lengthM"/>; null without a stay basis.</summary>
+    /// <summary>The assembly for a group carrying <paramref name="forceKN"/> over <paramref name="lengthM"/>; null without a stay basis.</summary>
     public TensionCableSelection? StayFor(double forceKN, double lengthM)
     {
-        if (VslBasis is not { } basis) return null;
+        if (SizingBasis is not { } basis) return null;
         var force = Math.Max(Math.Abs(forceKN), 1e-6);
         return TensionCableDesigner.Candidates(basis, force, Math.Max(lengthM, 1e-3)).FirstOrDefault()
-            ?? throw new InvalidOperationException($"No VSL SSI 2000 assembly of at most {basis.MaxUnits} units carries {force:#,0} kN. Raise Most units per stay on the Design Basis tab.");
+            ?? throw new InvalidOperationException($"No {TensionCableCatalogue.ShortTitle(StaySystem)} assembly of at most {basis.MaxUnits} units carries {force:#,0} kN. Raise Most units per stay on the Design Basis tab.");
+    }
+
+    /// <summary>The capacity of <paramref name="size"/> [kN]: units × the catalogue breaking load × the preliminary coefficient for an
+    /// assembly, strands × <see cref="StrandCapacityKN"/> otherwise.</summary>
+    public double CapacityKN(CableSize size) => size.Unit is { } unit ? size.Units * unit.BreakingLoadKN * PreliminaryCoefficient : size.Strands * StrandCapacityKN;
+
+    public double Utilisation(double calculatedForceKN, CableSize size)
+    {
+        if (size.Unit is null) return Utilisation(calculatedForceKN, size.Strands);
+        Validate();
+        return Math.Abs(calculatedForceKN) / CapacityKN(size);
     }
 
     public static CableSectionOptimizationSettings Default { get; } = new();
@@ -73,10 +87,40 @@ public sealed record CableSectionOptimizationSettings(double TargetUr = 0.90, do
     }
 }
 
+/// <summary>
+/// The size of a cable group: <see cref="Strands"/> Ø15.7 mm strands in the cable's own material, or — with <see cref="System"/> —
+/// <see cref="Units"/> × the catalogue unit <see cref="UnitCode"/>, analysed with the unit's metallic area and its system's material, so
+/// A × E is the catalogue EA and A × γ the catalogue mass. <see cref="Strands"/> is 0 for a rope.
+/// </summary>
+public sealed record CableSize(int Strands, CableSystem? System = null, string? UnitCode = null, int Units = 0)
+{
+    public static CableSize OfStrands(int strands) => new(strands);
+    public static CableSize Of(CableUnit unit, int units) => new(units * unit.Strands, unit.System, unit.Code, units);
+    public static CableSize Of(TensionCableSelection stay) => new(stay.TotalStrands, stay.System, stay.Code, stay.Units);
+
+    [JsonIgnore] public CableUnit? Unit => System is { } system ? TensionCableCatalogue.Find(system, UnitCode) : null;
+    [JsonIgnore] public double AreaMm2 => Unit is { } unit ? Units * unit.SteelAreaMm2 : Strands * CableSectionOptimizationSettings.StrandAreaMm2;
+    /// <summary>The catalogue EA [kN]; null for bare strands, whose E is the cable's material's.</summary>
+    [JsonIgnore] public double? AxialStiffnessKN => Unit is { } unit ? Units * unit.AxialStiffnessKN : null;
+    /// <summary>The minimum breaking load [kN]: the units' catalogue value, or strands × 279 kN.</summary>
+    [JsonIgnore] public double BreakingLoadKN => Unit is { } unit ? Units * unit.BreakingLoadKN : Strands * TensionCableCatalogue.StrandBreakingKN;
+    /// <summary>The section name: "VSL_SSI2000_4x6-187", "FATZER_FLC_2xD100", or "748T15.7" for bare strands.</summary>
+    [JsonIgnore] public string SectionName => Unit is { } unit ? TensionCableCatalogue.SectionName(unit, Units) : StrandBundle.Name(Strands, CableSectionOptimizationSettings.StrandDiameterMm);
+    /// <summary>"4 × VSL SSI 2000 6-187", or "748 × Ø15.7".</summary>
+    [JsonIgnore] public string Label => Unit is { } unit ? $"{Units} × {unit.Name}" : $"{Strands} × Ø15.7";
+}
+
 /// <summary>One explicit strand-count relationship discovered from a shared assigned section or a shared section name
 /// in the main-window model projection. Geometry and cable-force sync settings are not grouping keys.</summary>
 public sealed record CableSectionOptimizationGroup(string Key, string SectionName, int CurrentStrands,
-    IReadOnlyDictionary<string, int> CurrentStrandsByCable, IReadOnlyList<ObjectId> CableIds, IReadOnlyList<string> CableNames);
+    IReadOnlyDictionary<string, int> CurrentStrandsByCable, IReadOnlyList<ObjectId> CableIds, IReadOnlyList<string> CableNames)
+{
+    /// <summary>The size of each cable now: its strands, or the stay assembly its section is named for.</summary>
+    public IReadOnlyDictionary<string, CableSize> CurrentSizes { get; init; } =
+        CurrentStrandsByCable.ToDictionary(pair => pair.Key, pair => CableSize.OfStrands(pair.Value), StringComparer.Ordinal);
+    /// <summary>The size a group's iteration starts from: the strongest of its cables'.</summary>
+    public CableSize CurrentSize { get; init; } = CableSize.OfStrands(CurrentStrands);
+}
 
 /// <summary>Prepared immutable inputs for one optimization run.</summary>
 public sealed class CableSectionOptimizationPlan
@@ -117,7 +161,10 @@ public sealed record CableSectionOptimizationIteration(int Number, IReadOnlyDict
     double? MaximumDeflectionChangePercent, string? GoverningDeflection,
     string? AdjustedGroup, int? AdjustedToStrands)
 {
-    public string? Adjustment => AdjustedGroup is null ? null : $"{AdjustedGroup} → {AdjustedToStrands} × 15.7 mm";
+    /// <summary>The size of each group in this pass (<see cref="TrialStrandCounts"/> holds its strands, 0 for a rope); null in a run saved before sizes.</summary>
+    public IReadOnlyDictionary<string, CableSize>? TrialSizes { get; init; }
+    public CableSize? AdjustedToSize { get; init; }
+    public string? Adjustment => AdjustedGroup is null ? null : AdjustedToSize is { } size ? $"{AdjustedGroup} → {size.Label}" : $"{AdjustedGroup} → {AdjustedToStrands} × 15.7 mm";
 }
 
 /// <summary>One tendon row in the compact results table. Target and calculated forces remain available in the
@@ -133,6 +180,22 @@ public sealed record CableSectionOptimizationRow(string TendonName, string Group
     public double CurrentForceKN { get; init; }
     /// <summary>The load case / combination of <see cref="CalculatedForceKN"/>; empty for a pretension-stage force.</summary>
     public string GoverningCase { get; init; } = "";
+    /// <summary>The cable's size now and the suggested one; null in a run saved before sizes (<see cref="Current"/> / <see cref="Suggested"/> read the strands then).</summary>
+    public CableSize? CurrentSize { get; init; }
+    public CableSize? SuggestedSize { get; init; }
+    /// <summary>Chord length of the cable [m].</summary>
+    public double LengthM { get; init; }
+    /// <summary>The suggested size's capacity [kN] (units × f × MBL, or strands × strand capacity).</summary>
+    public double CapacityKN { get; init; }
+    /// <summary>The suggested assembly's catalogue EA [kN]; null for bare strands.</summary>
+    public double? AxialStiffnessKN { get; init; }
+    /// <summary>The indicative installed cost of the suggested stay per metre [S$/m]; null without a stay basis.</summary>
+    public double? CostPerMSgd { get; init; }
+
+    [JsonIgnore] public CableSize Current => CurrentSize ?? CableSize.OfStrands(CurrentStrands);
+    [JsonIgnore] public CableSize Suggested => SuggestedSize ?? CableSize.OfStrands(SuggestedStrands);
+    /// <summary>True when applying the result changes this cable's section.</summary>
+    [JsonIgnore] public bool Changes => Current != Suggested;
 }
 
 /// <summary>The persisted optimization history stored beside the model in its results folder.</summary>
@@ -227,14 +290,16 @@ public static class CableSectionOptimizer
                 return (Cable: cable, Name: names[cable.Id], Assignment: assignment, Section: section, Property: property,
                     GroupName: string.IsNullOrWhiteSpace(property?.SectionName) ? section.Name : property.SectionName!);
             }).ToArray();
-            var currentStrands = sections.ToDictionary(item => item.Name,
-                item => CurrentStrands(item.Section, item.GroupName, item.Name), StringComparer.Ordinal);
+            var currentSizes = sections.ToDictionary(item => item.Name,
+                item => CurrentSize(item.Section, item.GroupName, item.Name), StringComparer.Ordinal);
+            var currentStrands = currentSizes.ToDictionary(pair => pair.Key, pair => pair.Value.Strands, StringComparer.Ordinal);
             var namesInGroup = sections.Select(item => item.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray();
             var sourceNames = sections.Select(item => item.GroupName).Distinct(StringComparer.Ordinal).ToArray();
             var sectionName = sourceNames.Length == 1 ? sourceNames[0] : string.Join(" / ", sourceNames.OrderBy(name => name, StringComparer.Ordinal));
             var key = string.Join("\u001f", namesInGroup);
-            groups.Add(new(key, sectionName, currentStrands.Values.Max(), currentStrands,
-                sections.Select(item => item.Cable.Id).ToArray(), namesInGroup));
+            var start = currentSizes.Values.MaxBy(size => size.BreakingLoadKN)!;
+            groups.Add(new(key, sectionName, start.Strands, currentStrands,
+                sections.Select(item => item.Cable.Id).ToArray(), namesInGroup) { CurrentSizes = currentSizes, CurrentSize = start });
         }
 
         var targets = document.Loads.Values.OfType<Mcotis.Core.CableTargetForce>().ToArray();
@@ -287,12 +352,12 @@ public static class CableSectionOptimizer
         var iterations = new List<CableSectionOptimizationIteration>();
         IReadOnlyList<CableSectionOptimizationRow> lastRows = [];
         var plan = Prepare(document, snapshot, settings.SyncGroupsOnly);
-        var trialCounts = plan.Groups.ToDictionary(group => group.Key, group => group.CurrentStrands, StringComparer.Ordinal);
+        var trialSizes = plan.Groups.ToDictionary(group => group.Key, group => group.CurrentSize, StringComparer.Ordinal);
         Dictionary<string, double>? previousForces = null;
         Dictionary<string, double>? previousDeflections = null;
         Dictionary<string, double>? baselineForces = null;
         IReadOnlyDictionary<string, double> forceTargets = new Dictionary<string, double>(StringComparer.Ordinal);
-        IReadOnlyDictionary<string, int> desiredCounts = trialCounts;
+        IReadOnlyDictionary<string, CableSize> desiredSizes = trialSizes;
         Dictionary<string, string> governingCases = new(StringComparer.Ordinal);
         // One analysis of a document: the pretension-stage samples (target vs fitted force) and the forces the groups are sized
         // for — the pretension-stage force, or with design cases the largest tension over them, keyed "case␟cable".
@@ -325,7 +390,7 @@ public static class CableSectionOptimizer
 
         // A Sync group may contain different initial section sizes. Analyse the unchanged model once so Current UR
         // still reports each cable's actual starting condition before trial candidates harmonise the group's size.
-        if (plan.Groups.Any(group => group.CurrentStrandsByCable.Values.Distinct().Count() > 1))
+        if (plan.Groups.Any(group => group.CurrentSizes.Values.Distinct().Count() > 1))
         {
             try
             {
@@ -345,7 +410,7 @@ public static class CableSectionOptimizer
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var candidate = Candidate(document, plan, trialCounts);
+                var candidate = Candidate(document, plan, trialSizes);
                 var (forceSamples, analysed, forces) = Evaluate(candidate);
                 var deflectionSamples = DeflectionSamples(candidate, plan.FitCaseNames, analysed);
                 var deflections = DeflectionValues(deflectionSamples);
@@ -354,10 +419,10 @@ public static class CableSectionOptimizer
                     forceTargets = forceSamples.GroupBy(sample => sample.CableName, StringComparer.Ordinal)
                         .ToDictionary(group => group.Key, group => group.Select(sample => sample.TargetForceKN ?? 0).Max(), StringComparer.Ordinal);
 
-                desiredCounts = SuggestedCounts(plan, forces, settings);
+                desiredSizes = SuggestedSizes(plan, forces, settings);
                 governingCases = GoverningCases(forces);
-                var pending = plan.Groups.Where(group => desiredCounts[group.Key] != trialCounts[group.Key])
-                    .OrderBy(group => trialCounts[group.Key]).ThenBy(group => group.CableNames[0], StringComparer.Ordinal).ToArray();
+                var pending = plan.Groups.Where(group => desiredSizes[group.Key] != trialSizes[group.Key])
+                    .OrderBy(group => trialSizes[group.Key].BreakingLoadKN).ThenBy(group => group.CableNames[0], StringComparer.Ordinal).ToArray();
                 var forceChange = previousForces is null ? (Value: (double?)null, Governing: (string?)null)
                     : MaximumRelativeChange(previousForces, forces, designCases is null ? forceTargets : null, forceFloorKN: true);
                 var deflectionChange = previousDeflections is null ? (Value: (double?)null, Governing: (string?)null)
@@ -370,15 +435,19 @@ public static class CableSectionOptimizer
                 var stepAll = settings.StayBasis is not null;
                 var changes = converged || number >= settings.MaximumIterations ? []
                     : stepAll ? pending : pending.Take(1).ToArray();
-                int Next(CableSectionOptimizationGroup group) => stepAll ? desiredCounts[group.Key]
-                    : trialCounts[group.Key] + Math.Sign(desiredCounts[group.Key] - trialCounts[group.Key]);
-                var trialSnapshot = new Dictionary<string, int>(trialCounts, StringComparer.Ordinal);
+                CableSize Next(CableSectionOptimizationGroup group) => stepAll ? desiredSizes[group.Key]
+                    : CableSize.OfStrands(trialSizes[group.Key].Strands + Math.Sign(desiredSizes[group.Key].Strands - trialSizes[group.Key].Strands));
+                var trialSnapshot = trialSizes.ToDictionary(pair => pair.Key, pair => pair.Value.Strands, StringComparer.Ordinal);
                 var iteration = new CableSectionOptimizationIteration(number, trialSnapshot, forceSamples, deflectionSamples,
                     forceChange.Value, forceChange.Governing, deflectionChange.Value, deflectionChange.Governing,
                     changes.Length == 0 ? null : string.Join("; ", changes.Select(group => string.Join(", ", group.CableNames))),
-                    changes.Length == 1 ? Next(changes[0]) : null);
+                    changes.Length == 1 ? Next(changes[0]).Strands : null)
+                {
+                    TrialSizes = new Dictionary<string, CableSize>(trialSizes, StringComparer.Ordinal),
+                    AdjustedToSize = changes.Length == 1 && stepAll ? Next(changes[0]) : null,
+                };
                 iterations.Add(iteration);
-                lastRows = Rows(plan, baselineForces, forces, forceTargets, desiredCounts, governingCases, settings,
+                lastRows = Rows(plan, baselineForces, forces, forceTargets, desiredSizes, governingCases, settings,
                     converged ? "Converged" : number == settings.MaximumIterations ? "Maximum iterations" : "Iterating");
                 progress?.Report(new(iteration, lastRows, converged,
                     converged ? "Converged" : number == settings.MaximumIterations ? "Maximum iterations reached" : "Iterating"));
@@ -386,7 +455,7 @@ public static class CableSectionOptimizer
                 if (converged || number == settings.MaximumIterations) break;
                 previousForces = forces;
                 previousDeflections = deflections;
-                foreach (var group in changes) trialCounts[group.Key] = Next(group);
+                foreach (var group in changes) trialSizes[group.Key] = Next(group);
             }
             catch (OperationCanceledException)
             {
@@ -406,6 +475,18 @@ public static class CableSectionOptimizer
         }).ToArray();
         return new(document.DocumentId.Value, document.AnalysisInputHash, revisionHash, settings, caseSummary, started,
             DateTime.UtcNow, iterations, completeRows, converged, cancelled, failure);
+    }
+
+    /// <summary>A stay section (<c>FATZER_FLC_2xD100</c>) is the assembly it is named for, when its area is that assembly's; any other
+    /// section is a number of Ø15.7 strands.</summary>
+    private static CableSize CurrentSize(CableSectionDefinition section, string sectionName, string cableName)
+    {
+        if (TensionCableCatalogue.ParseSection(sectionName) is not { } stay) return CableSize.OfStrands(CurrentStrands(section, sectionName, cableName));
+        var size = CableSize.Of(stay.Unit, stay.Units);
+        var namedArea = size.AreaMm2 * 1e-6;
+        if (Math.Abs(section.Area - namedArea) > Math.Max(1e-12, namedArea * 1e-2))
+            throw new InvalidOperationException($"Cable '{cableName}' section '{sectionName}' names {size.Label} ({size.AreaMm2:#,0} mm²), but its native area is {section.Area * 1e6:#,0} mm². Resolve the section data before optimising.");
+        return size;
     }
 
     private static int CurrentStrands(CableSectionDefinition section, string sectionName, string cableName)
@@ -429,14 +510,31 @@ public static class CableSectionOptimizer
     }
 
     private static ModelDocument Candidate(ModelDocument source, CableSectionOptimizationPlan plan,
-        IReadOnlyDictionary<string, int> trialCounts)
+        IReadOnlyDictionary<string, CableSize> trialSizes)
     {
         var editor = source.Edit();
         var usedNames = source.CableSections.Values.Select(section => section.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var usedMaterials = source.Materials.Values.Select(material => material.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var group in plan.Groups.OrderBy(group => group.Key, StringComparer.Ordinal))
         {
-            var count = trialCounts[group.Key];
-            if (count == group.CurrentStrands && group.CurrentStrandsByCable.Values.All(current => current == count)) continue;
+            var size = trialSizes[group.Key];
+            if (group.CurrentSizes.Values.All(current => current == size)) continue;
+            if (size.Unit is { } unit)
+            {
+                // an assembly is analysed in its system's material, as Apply assigns it: A × E = the catalogue EA, A × γ = its mass
+                var material = TensionCableCatalogue.Material(unit);
+                var materialId = CandidateSectionId(source, group.Key + "\u001fmaterial", default, size.Units);
+                var materialName = UniqueName(material.Name, usedMaterials);
+                usedMaterials.Add(materialName);
+                editor.PutMaterial(new(materialId, materialName, MaterialType.Tendon, material.ElasticModulus, .3, material.WeightPerVolume, material.MassPerVolume));
+                var stayId = CandidateSectionId(source, group.Key + "\u001f" + size.SectionName, materialId, size.Units);
+                var stayName = UniqueName(size.SectionName, usedNames);
+                usedNames.Add(stayName);
+                editor.PutCableSection(new(stayId, stayName, materialId, size.AreaMm2 * 1e-6));
+                editor.SetCableSection(group.CableIds, stayId);
+                continue;
+            }
+            var count = size.Strands;
             var perMaterial = group.CableIds.GroupBy(id => source.CableSections[source.AssignmentOfCable(id).SectionId!.Value].MaterialId);
             foreach (var sameMaterial in perMaterial)
             {
@@ -546,19 +644,19 @@ public static class CableSectionOptimizer
         return Math.Sqrt(Math.Pow(xs.Max() - xs.Min(), 2) + Math.Pow(ys.Max() - ys.Min(), 2) + Math.Pow(zs.Max() - zs.Min(), 2));
     }
 
-    private static IReadOnlyDictionary<string, int> SuggestedCounts(CableSectionOptimizationPlan plan,
+    private static IReadOnlyDictionary<string, CableSize> SuggestedSizes(CableSectionOptimizationPlan plan,
         IReadOnlyDictionary<string, double> forces, CableSectionOptimizationSettings settings)
     {
-        var byName = forces.GroupBy(pair => pair.Key[(pair.Key.IndexOf('\u001f') + 1)..], StringComparer.Ordinal)
+        var byName = forces.GroupBy(pair => pair.Key[(pair.Key.IndexOf('') + 1)..], StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Max(pair => Math.Abs(pair.Value)), StringComparer.Ordinal);
         if (settings.StayBasis is not null)
-            return plan.Groups.ToDictionary(group => group.Key, group => GroupStay(plan, group, byName, settings)!.TotalStrands, StringComparer.Ordinal);
+            return plan.Groups.ToDictionary(group => group.Key, group => CableSize.Of(GroupStay(plan, group, byName, settings)!), StringComparer.Ordinal);
         return plan.Groups.ToDictionary(group => group.Key,
-            group => group.CableNames.Select(name => byName.TryGetValue(name, out var force) ? settings.SuggestedStrands(force) : group.CurrentStrands).Max(),
+            group => CableSize.OfStrands(group.CableNames.Select(name => byName.TryGetValue(name, out var force) ? settings.SuggestedStrands(force) : group.CurrentStrands).Max()),
             StringComparer.Ordinal);
     }
 
-    /// <summary>The VSL assembly of a group: its largest force over its longest cable.</summary>
+    /// <summary>The stay assembly of a group: its largest force over its longest cable.</summary>
     private static TensionCableSelection? GroupStay(CableSectionOptimizationPlan plan, CableSectionOptimizationGroup group,
         IReadOnlyDictionary<string, double> forceByName, CableSectionOptimizationSettings settings) =>
         settings.StayFor(group.CableNames.Select(name => forceByName.GetValueOrDefault(name)).DefaultIfEmpty().Max(),
@@ -575,7 +673,7 @@ public static class CableSectionOptimizer
 
     private static IReadOnlyList<CableSectionOptimizationRow> Rows(CableSectionOptimizationPlan plan,
         IReadOnlyDictionary<string, double> baselineForces, IReadOnlyDictionary<string, double> finalForces,
-        IReadOnlyDictionary<string, double> targets, IReadOnlyDictionary<string, int> desiredCounts,
+        IReadOnlyDictionary<string, double> targets, IReadOnlyDictionary<string, CableSize> desiredSizes,
         IReadOnlyDictionary<string, string> governingCases, CableSectionOptimizationSettings settings, string status)
     {
         var forceByName = finalForces.GroupBy(pair => pair.Key[(pair.Key.IndexOf('\u001f') + 1)..], StringComparer.Ordinal)
@@ -592,15 +690,23 @@ public static class CableSectionOptimizer
             var calculated = forceByName.GetValueOrDefault(name);
             var current = baselineByName.GetValueOrDefault(name);
             var target = targetByName.GetValueOrDefault(name);
-            var suggested = desiredCounts[group.Key];
-            return new CableSectionOptimizationRow(name, group.Key, group.CurrentStrandsByCable[name], suggested, target, calculated,
-                settings.Utilisation(current, group.CurrentStrandsByCable[name]), settings.Utilisation(calculated, suggested), status)
+            var suggested = desiredSizes[group.Key];
+            var currentSize = group.CurrentSizes[name];
+            var length = plan.CableLengths.GetValueOrDefault(name);
+            var isStay = stay is not null && CableSize.Of(stay) == suggested;
+            return new CableSectionOptimizationRow(name, group.Key, currentSize.Strands, suggested.Strands, target, calculated,
+                settings.Utilisation(current, currentSize), settings.Utilisation(calculated, suggested), status)
             {
-                Product = stay is null ? null : stay.TotalStrands == suggested ? stay.Assembly : $"{suggested} × Ø15.7 strands",
-                CostSgd = stay is null || stay.TotalStrands != suggested ? null
-                    : stay.CostPerMSgd * plan.CableLengths.GetValueOrDefault(name),
+                Product = stay is null ? null : isStay ? stay.Assembly : suggested.Label,
+                CostSgd = isStay ? stay!.CostPerMSgd * length : null,
+                CostPerMSgd = isStay ? stay!.CostPerMSgd : null,
                 CurrentForceKN = current,
                 GoverningCase = governingCases.GetValueOrDefault(name) ?? "",
+                CurrentSize = currentSize,
+                SuggestedSize = suggested,
+                LengthM = length,
+                CapacityKN = settings.CapacityKN(suggested),
+                AxialStiffnessKN = suggested.AxialStiffnessKN,
             };
         });
         }).OrderBy(row => row.TendonName, StringComparer.Ordinal).ToArray();

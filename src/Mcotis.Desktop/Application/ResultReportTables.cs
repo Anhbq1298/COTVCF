@@ -29,6 +29,15 @@ public static class ResultReportTables
     public const double CableBreakingStressMpa = Design.TensionCableCatalogue.StrandBreakingKN * 1000 / Design.TensionCableCatalogue.StrandAreaMm2,
         CableReductionFactor = 0.5;
 
+    /// <summary>The capacity of a cable section [kN]: area × breaking stress × factor — but a FATZER rope section (<c>FATZER_FLC_2xD100</c>)
+    /// carries its units × the rope's minimum breaking force × factor, as a rope's strength is not its area × the strand's stress. Null without area.</summary>
+    public static double? CableCapacityKN(string? section, double areaM2, double stressMpa = CableBreakingStressMpa, double factor = CableReductionFactor)
+    {
+        if (Design.TensionCableCatalogue.ParseSection(section) is { Unit.System: Design.CableSystem.FatzerFlc } rope)
+            return rope.Units * rope.Unit.BreakingLoadKN * factor;
+        return areaM2 > 0 && double.IsFinite(areaM2) ? areaM2 * 1e6 * stressMpa * factor / 1000 : null;
+    }
+
     /// <summary>The VSL SSI 2000 assembly a section of <paramref name="strands"/> Ø15.7 strands fits: the fewest units, then the
     /// smallest unit that holds them ("1 × 6-55", or "1 × 6-61 (55 strands)" for a part-filled anchorage); null beyond the catalogue.</summary>
     public static string? VslUnit(int strands, int maxUnits = 24)
@@ -83,7 +92,7 @@ public static class ResultReportTables
         bool withUr = memberUr is not null;
         var peaks = FramePeaks(result);
         var cables = result.Cables.GroupBy(cable => cable.MemberName, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-        double? CableCapacityKN(string cable) => cableAreaM2(cable) is > 0 and var area ? area * 1e6 * CableBreakingStressMpa * CableReductionFactor / 1000 : null;
+        double? CableCapacityKN(string cable) => cableAreaM2(cable) is > 0 and var area ? ResultReportTables.CableCapacityKN(sectionOf(cable), area) : null;
         // a cable's UR is read in SLS cases only, a member's in ULS cases only: elsewhere the column reads —
         double? CableUr(string cable) => cableUrApplies && cables.TryGetValue(cable, out var response) && CableCapacityKN(cable) is { } capacity
             ? Math.Max(0, response.AxialForceKN) / capacity : null;

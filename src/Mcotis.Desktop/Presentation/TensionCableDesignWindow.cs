@@ -30,32 +30,41 @@ public sealed class TensionCableDesignWindow : Window
     public sealed record SectionCheckRow(string Member, string Section, double AreaMm2, double? TensionKN,
         string GoverningCombo, double? CapacityKN, double? Utilization, string Status)
     {
-        /// <summary>The VSL SSI 2000 assembly the section's Ø15.7 strands fit.</summary>
-        public string VslUnit => AreaMm2 > 0 && ResultReportTables.VslUnit((int)Math.Round(AreaMm2 / TensionCableCatalogue.StrandAreaMm2)) is { } unit ? unit : "—";
+        /// <summary>The assembly a stay section is named for, or the VSL SSI 2000 assembly the section's Ø15.7 strands fit.</summary>
+        public string VslUnit => TensionCableCatalogue.ParseSection(Section) is { } stay ? $"{stay.Units} × {stay.Unit.Name}"
+            : AreaMm2 > 0 && ResultReportTables.VslUnit((int)Math.Round(AreaMm2 / TensionCableCatalogue.StrandAreaMm2)) is { } unit ? unit : "—";
         public string AreaText => AreaMm2 > 0 ? AreaMm2.ToString("#,0.##", CultureInfo.CurrentCulture) : "—";
         public string TensionText => TensionKN is { } tension ? tension.ToString("#,0.##", CultureInfo.CurrentCulture) : "—";
         public string CapacityText => CapacityKN is { } capacity ? capacity.ToString("#,0.##", CultureInfo.CurrentCulture) : "—";
         public string UtilizationText => Utilization is { } utilization ? utilization.ToString("0.00", CultureInfo.CurrentCulture) : "—";
     }
 
-    /// <summary>A row of the Iterate tab: the suggestion of the last iteration and, once applied and re-analysed, the force and UR of the new section.</summary>
+    /// <summary>A row of the Iterate tab, in the study's table format: the suggestion of the last iteration for the cable's governing tension and
+    /// length, and, once applied and re-analysed, the force and UR of the new section. The current section is in the row's tooltip.</summary>
     public sealed class IterateRow(CableSectionOptimizationRow row) : Observable
     {
         private double? afterForce, afterUr;
+        private static string N(double value, string format) => value.ToString(format, CultureInfo.CurrentCulture);
         public CableSectionOptimizationRow Row { get; } = row;
         public string Member => Row.TendonName;
-        public string Current => $"{Row.CurrentStrands} × Ø15.7";
-        public string CurrentForce => Row.CurrentForceKN.ToString("#,0", CultureInfo.CurrentCulture);
-        public string CurrentUr => Row.CurrentUr.ToString("0.00", CultureInfo.CurrentCulture);
-        public string Suggested => $"{Row.SuggestedStrands} × Ø15.7";
-        public string Product => Row.Product ?? "—";
         public string Case => Row.GoverningCase;
-        public string Force => Row.CalculatedForceKN.ToString("#,0", CultureInfo.CurrentCulture);
-        public string SuggestedUr => Row.SuggestedUr.ToString("0.00", CultureInfo.CurrentCulture);
-        public string Cost => Row.CostSgd is { } cost ? cost.ToString("#,0", CultureInfo.CurrentCulture) : "—";
-        public string Status => Row.Status;
-        public string AfterForce => afterForce is { } value ? value.ToString("#,0", CultureInfo.CurrentCulture) : "";
-        public string AfterUr => afterUr is { } value ? value.ToString("0.00", CultureInfo.CurrentCulture) : "";
+        public string Force => N(Row.CalculatedForceKN, "#,0");
+        public string Length => Row.LengthM > 0 ? N(Row.LengthM, "0.00") : "";
+        public string Product => Row.Product ?? Row.Suggested.Label;
+        public string Strands => Row.Suggested.Unit is { Strands: 0 } ? "rope" : N(Row.Suggested.Strands, "#,0");
+        public string Stiffness => Row.AxialStiffnessKN is { } ea ? N(ea / 1000, "#,0") : "—";
+        public string Capacity => Row.CapacityKN > 0 ? N(Row.CapacityKN, "#,0") : "—";
+        public string SuggestedUr => N(Row.SuggestedUr, "0.00");
+        /// <summary>Elastic extension T L / EA [mm] with the assembly's catalogue EA.</summary>
+        public string Elongation => Row.AxialStiffnessKN is > 0 and var ea && Row.LengthM > 0 ? N(Math.Abs(Row.CalculatedForceKN) * Row.LengthM / ea * 1000, "0.0") : "—";
+        public string CostPerM => Row.CostPerMSgd is { } rate ? N(rate, "#,0") : "—";
+        public string Cost => Row.CostSgd is { } cost ? N(cost, "#,0") : "—";
+        /// <summary>The run's state while it iterates; once converged OK, or CHECK for a Utracon tendon (not a qualified exposed stay).</summary>
+        public string Status => Row.Status != "Converged" ? Row.Status : Row.Suggested.System == CableSystem.UtraconPt ? "CHECK" : "OK";
+        public string Now => $"Now: {Row.Current.Label} ({Row.Current.SectionName}) · force {N(Row.CurrentForceKN, "#,0")} kN · UR {N(Row.CurrentUr, "0.00")}" +
+                             (Row.Changes ? $" → {Row.Suggested.SectionName}" : " · unchanged");
+        public string AfterForce => afterForce is { } value ? N(value, "#,0") : "";
+        public string AfterUr => afterUr is { } value ? N(value, "0.00") : "";
         public double? AfterUrValue => afterUr;
         public void SetAfter(double? force, double? ur) { afterForce = force; afterUr = ur; Notify(nameof(AfterForce)); Notify(nameof(AfterUr)); }
     }
@@ -113,6 +122,9 @@ public sealed class TensionCableDesignWindow : Window
     private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, MaxWidth = 560, VerticalAlignment = VerticalAlignment.Center, FontSize = 11 };
     private readonly TextBox iterateMaximum = new() { Text = "20", Width = 70 };
     private readonly TextBox iterateTolerance = new() { Text = "1.0", Width = 70 };
+    private static readonly CableSystem[] IterateSystems = [CableSystem.VslSsi2000, CableSystem.FatzerFlc, CableSystem.UtraconPt];
+    private readonly ComboBox iterateSystem = new() { MinWidth = 300, ItemsSource = new[] { "VSL SSI 2000 — VSL manual, parallel strand stay", "FATZER FLC — full-locked-coil rope", "Utracon UPS — 37 × Ø15.7 strand tendon" }, SelectedIndex = 0 };
+    private readonly TextBlock iterateBasis = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) };
     private readonly DataGrid iterateGrid = new() { AutoGenerateColumns = false, IsReadOnly = true, SelectionMode = DataGridSelectionMode.Single, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
     private readonly DataGrid historyGrid = new() { AutoGenerateColumns = false, IsReadOnly = true, HeadersVisibility = DataGridHeadersVisibility.Column, CanUserAddRows = false };
     private readonly TextBlock iterateSummary = new() { FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) };
@@ -178,6 +190,7 @@ public sealed class TensionCableDesignWindow : Window
         System.Windows.Automation.AutomationProperties.SetName(historyGrid, "Iteration history");
         System.Windows.Automation.AutomationProperties.SetName(iterateMaximum, "Maximum iterations");
         System.Windows.Automation.AutomationProperties.SetName(iterateTolerance, "Convergence tolerance percent");
+        System.Windows.Automation.AutomationProperties.SetName(iterateSystem, "Stay system");
         Closing += (_, e) => { if (iterationCancellation is not null) { iterationCancellation.Cancel(); e.Cancel = true; Message("Stopping the iteration…"); } };
 
         var root = new DockPanel { Margin = new Thickness(10) };
@@ -306,7 +319,7 @@ public sealed class TensionCableDesignWindow : Window
         foreach (var option in options)
         {
             var area = option.AreaMm2;
-            var capacity = area > 0 && double.IsFinite(area) ? area * breakingStress * reductionFactor / 1000 : (double?)null;
+            var capacity = ResultReportTables.CableCapacityKN(option.Section, area * 1e-6, breakingStress, reductionFactor);
             if (capacity is not > 0)
             {
                 rows.Add(new(option.Member, option.Section, area, null, "—", null, null, "NO SECTION"));
@@ -331,6 +344,7 @@ public sealed class TensionCableDesignWindow : Window
             var tension = Math.Max(0, governing.Force);
             var utilization = tension / capacity.Value;
             var statusText = tension <= 1e-6 ? "SLACK" : utilization <= 1 ? "OK" : "FAIL";
+            if (statusText == "OK" && !viewModel.CableStayStiffnessMatches(option.Member)) statusText = "CHECK EA";
             rows.Add(new(option.Member, option.Section, area, tension, governing.Case, capacity, utilization, statusText));
         }
 
@@ -338,7 +352,9 @@ public sealed class TensionCableDesignWindow : Window
         var failCount = rows.Count(row => row.Status == "FAIL");
         var slackCount = rows.Count(row => row.Status == "SLACK");
         var missingCount = rows.Count(row => row.Status is "NO SECTION" or "NO RESULT");
-        sectionCheckSummary.Text = $"Section check · VSL Ø15.7 · fpu {breakingStress:0.##} MPa · φ {reductionFactor:P0} · {rows.Count - failCount - slackCount - missingCount} OK · {failCount} FAIL · {slackCount} slack · {missingCount} unavailable";
+        var eaCount = rows.Count(row => row.Status == "CHECK EA");
+        sectionCheckSummary.Text = $"Section check · VSL Ø15.7 · fpu {breakingStress:0.##} MPa · φ {reductionFactor:P0} · {rows.Count - failCount - slackCount - missingCount - eaCount} OK · {failCount} FAIL · {slackCount} slack · {missingCount} unavailable" +
+                                   (eaCount > 0 ? $" · {eaCount} stay section(s) whose area × E is not the catalogue EA — CHECK EA" : "");
         Message(run is null ? "Run FEM Analysis for the current model before checking cable utilization." : "");
     }
 
@@ -483,20 +499,22 @@ public sealed class TensionCableDesignWindow : Window
     {
         var root = new DockPanel { Margin = new Thickness(8, 6, 8, 0) };
         var top = new StackPanel();
-        iterateSummary.Text = "Iterate to size every cable group of the model as VSL SSI 2000 Ø15.7 mm strand stays.";
         top.Children.Add(iterateSummary);
-        var basis = viewModel.CableDesignBasis;
-        var sizedFor = cases.Where(item => item.IsChecked).Select(item => item.Name).ToArray();
-        top.Children.Add(Hint($"Basis: VSL SSI 2000 catalogue, Ø15.7 mm strand (279 kN breaking load) · screening {basis.ScreeningFactor:0%} of the breaking load × maximum use {basis.MaxUtilisation:0%} · " +
-                              $"at most {basis.MaxUnits} units per stay · lowest estimated installed cost (Cost Rates) · sized for: {(sizedFor.Length == 0 ? "every load case" : string.Join(", ", sizedFor))}.",
-            new Thickness(0, 0, 0, 4)));
+        iterateBasis.SetResourceReference(StyleProperty, "Hint");
+        top.Children.Add(iterateBasis);
         top.Children.Add(Hint("Each group is sized for its largest tension over the load cases ticked on Cables & Loads, with the Design Basis (screening level, maximum use, " +
-                              "most units per stay, selection priority) and the Cost Rates, rounded up to a standard VSL unit (6-12 … 6-187, n units in parallel). " +
-                              "Each pass analyses a copy of the model with the trial sections — a stiffer cable attracts more force — until the strand counts stop changing and the " +
-                              "forces and pretension-stage deflections settle within the tolerance. Each Cable Force Sync group (a cable and the cables that follow it) gets one size; " +
-                              "cables that only share a section are sized for their own force. Every pass keeps the target pretensions and fits them again. " +
-                              "Nothing changes in the model until Apply & Re-analyse, which assigns the sections as one undoable edit and runs FEM Analysis again so the forces and UR are those of the new sections.",
+                              "most units per stay, selection priority) and the Cost Rates, rounded up to a standard unit of the stay system, n units in parallel. " +
+                              "Each pass analyses a copy of the model with the trial sections — each in its system's own material, so the analysis has the catalogue EA and mass of the " +
+                              "assembly; a stiffer cable attracts more force — until the assemblies stop changing and the forces and pretension-stage deflections settle within the " +
+                              "tolerance. Each Cable Force Sync group (a cable and the cables that follow it) gets one size; cables that only share a section are sized for their own force. " +
+                              "Every pass keeps the target pretensions and fits them again. Nothing changes in the model until Apply & Re-analyse, which assigns the sections — named " +
+                              "[brand]_[model]_[units]x[unit], e.g. VSL_SSI2000_4x6-187, FATZER_FLC_2xD100, UTRACON_UPS_3x37T15.7 — with their materials as one undoable edit and runs " +
+                              "FEM Analysis again so the forces and UR are those of the new sections. Hover a row for the cable's current section.",
             new Thickness(0, 0, 0, 8)));
+        iterateSystem.SelectionChanged += (_, _) => ShowIterateBasis();
+        ShowIterateBasis();
+        // the stay system on a row of its own, so the commands stay in view at the window's smallest width
+        top.Children.Add(Field("Stay system", iterateSystem));
         var controls = new StackPanel { Orientation = Orientation.Horizontal };
         controls.Children.Add(Field("Maximum iterations", iterateMaximum));
         controls.Children.Add(Field("Convergence tolerance", iterateTolerance, "%"));
@@ -513,13 +531,14 @@ public sealed class TensionCableDesignWindow : Window
 
         foreach (var (header, path, width) in new[]
         {
-            ("Cable", nameof(IterateRow.Member), 90.0), ("Current", nameof(IterateRow.Current), 90.0), ("Force now [kN]", nameof(IterateRow.CurrentForce), 100.0),
-            ("UR now", nameof(IterateRow.CurrentUr), 60.0), ("Suggested", nameof(IterateRow.Suggested), 90.0), ("VSL stay", nameof(IterateRow.Product), 180.0),
-            ("Governing case", nameof(IterateRow.Case), 120.0), ("Force [kN]", nameof(IterateRow.Force), 90.0), ("UR", nameof(IterateRow.SuggestedUr), 55.0),
-            ("Cost [S$]", nameof(IterateRow.Cost), 90.0), ("Status", nameof(IterateRow.Status), 110.0),
-            ("Force after [kN]", nameof(IterateRow.AfterForce), 110.0), ("UR after", nameof(IterateRow.AfterUr), 70.0),
+            ("Cable", nameof(IterateRow.Member), 80.0), ("Governing case", nameof(IterateRow.Case), 120.0), ("T [kN]", nameof(IterateRow.Force), 75.0),
+            ("L [m]", nameof(IterateRow.Length), 60.0), ("Suggested stay", nameof(IterateRow.Product), 170.0), ("Strands", nameof(IterateRow.Strands), 60.0),
+            ("EA [MN]", nameof(IterateRow.Stiffness), 70.0), ("Capacity [kN]", nameof(IterateRow.Capacity), 90.0), ("Use", nameof(IterateRow.SuggestedUr), 50.0),
+            ("ΔL [mm]", nameof(IterateRow.Elongation), 65.0), ("S$/m", nameof(IterateRow.CostPerM), 65.0), ("Cost [S$]", nameof(IterateRow.Cost), 85.0),
+            ("Status", nameof(IterateRow.Status), 90.0), ("Force after [kN]", nameof(IterateRow.AfterForce), 105.0), ("UR after", nameof(IterateRow.AfterUr), 65.0),
         })
             iterateGrid.Columns.Add(new DataGridTextColumn { Header = header, Binding = new System.Windows.Data.Binding(path), Width = new DataGridLength(width, DataGridLengthUnitType.Pixel) });
+        iterateGrid.RowStyle = new Style(typeof(DataGridRow)) { Setters = { new Setter(ToolTipProperty, new System.Windows.Data.Binding(nameof(IterateRow.Now))) } };
         iterateGrid.ItemsSource = iterateRows;
 
         foreach (var (header, path, width) in new[]
@@ -544,6 +563,26 @@ public sealed class TensionCableDesignWindow : Window
         return root;
     }
 
+    private CableSystem IterateStaySystem => IterateSystems[Math.Max(0, iterateSystem.SelectedIndex)];
+
+    /// <summary>What the chosen stay system is sized and analysed with.</summary>
+    private void ShowIterateBasis()
+    {
+        var system = IterateStaySystem;
+        var basis = viewModel.CableDesignBasis;
+        var units = TensionCableCatalogue.Units(system);
+        var sizedFor = cases.Where(item => item.IsChecked).Select(item => item.Name).ToArray();
+        iterateSummary.Text = $"Iterate to size every cable group of the model as {TensionCableCatalogue.Title(system)} stays.";
+        var catalogue = system switch
+        {
+            CableSystem.VslSsi2000 => $"VSL SSI 2000 catalogue (VSL manual), units 6-{units[0].Strands} … 6-{units[^1].Strands} of Ø15.7 mm strand (279 kN, 150 mm²), E = {units[0].ModulusMpa / 1000:0} GPa, {TensionCableCatalogue.StrandMassKgPerM} kg/m per strand",
+            CableSystem.FatzerFlc => $"FATZER FLC planning aid, galvanized full-locked-coil rope Ø{units[0].ConduitMm:0} … Ø{units[^1].ConduitMm:0}, E = {TensionCableCatalogue.FatzerModulusMpa / 1000:0} GPa, metallic area = EA ÷ E, each size its own density for its catalogue mass",
+            _ => $"Utracon UPS 37 × Ø15.7 mm strand tendon (279 kN, 150 mm² per strand), E = {units[0].ModulusMpa / 1000:0} GPa — not shown to be a qualified exposed stay: rows read CHECK",
+        };
+        iterateBasis.Text = $"Basis: {catalogue} · screening {basis.ScreeningFactor:0%} of the breaking load × maximum use {basis.MaxUtilisation:0%} · " +
+                            $"at most {basis.MaxUnits} units per stay · lowest estimated installed cost (Cost Rates) · sized for: {(sizedFor.Length == 0 ? "every load case" : string.Join(", ", sizedFor))}.";
+    }
+
     /// <summary>The settings of an iteration from the Design Basis, the ticked load cases and this tab; null with the reason shown.</summary>
     internal CableSectionOptimizationSettings? ReadIterationSettings()
     {
@@ -554,9 +593,9 @@ public sealed class TensionCableDesignWindow : Window
         { Message("Maximum iterations: enter a whole number from 1 to 50."); return null; }
         if (!TryReadNumber(iterateTolerance.Text, out var tolerance) || tolerance <= 0 || tolerance > 100)
         { Message("Convergence tolerance: enter a percentage above 0 and at most 100."); return null; }
-        // The VSL screen of the Design Basis: a Ø15.7 strand breaks at 279 kN (150 mm² × 1,860 MPa); it may carry f × MBL × η.
+        // The screen of the Design Basis: a unit may carry f × MBL × η — a Ø15.7 strand breaks at 279 kN (150 mm² × 1,860 MPa), a rope at its Fmin.
         return new CableSectionOptimizationSettings(basis.MaxUtilisation, TensionCableCatalogue.StrandBreakingKN * 1000 / TensionCableCatalogue.StrandAreaMm2,
-            basis.ScreeningFactor, maximum, tolerance, basis with { LoadCases = chosen }, chosen, SyncGroupsOnly: true);
+            basis.ScreeningFactor, maximum, tolerance, basis with { LoadCases = chosen }, chosen, SyncGroupsOnly: true, StaySystem: IterateStaySystem);
     }
 
     private async Task IterateAsync()
@@ -600,7 +639,7 @@ public sealed class TensionCableDesignWindow : Window
 
     private static string IterationSummary(CableSectionOptimizationRun run)
     {
-        var changed = run.Rows.GroupBy(row => row.GroupKey).Count(group => group.Any(row => row.CurrentStrands != row.SuggestedStrands));
+        var changed = run.Rows.GroupBy(row => row.GroupKey).Count(group => group.Any(row => row.Changes));
         var outcome = run.Failure is not null ? "Failed" : run.Cancelled ? "Stopped" : run.Converged ? "Converged" : "Not converged within the maximum iterations";
         var cost = run.Rows.Sum(row => row.CostSgd ?? 0);
         return $"{outcome} after {run.IterationCount} pass(es) · {changed} group(s) to change · largest UR {run.Rows.Select(row => row.SuggestedUr).DefaultIfEmpty().Max():0.00} · indicative cost S${cost:#,0}";
@@ -614,15 +653,18 @@ public sealed class TensionCableDesignWindow : Window
         iterateGrid.ItemsSource = iterateRows;
     }
 
-    private bool CanApplyIteration() => iteration is { Failure: null, Cancelled: false } run && run.Rows.Any(row => row.CurrentStrands != row.SuggestedStrands) &&
+    private bool CanApplyIteration() => iteration is { Failure: null, Cancelled: false } run && run.Rows.Any(row => row.Changes) &&
                                         viewModel.CanApplyCableSectionOptimization && viewModel.CableSectionOptimizationIsCurrent(run);
 
     private async Task ApplyIterationAsync()
     {
         if (iteration is not { } run) return;
         if (!viewModel.CableSectionOptimizationIsCurrent(run)) { Message("The model changed after this iteration. Iterate again before applying."); applyButton.IsEnabled = false; return; }
-        var groups = run.Rows.GroupBy(row => row.GroupKey).Count(group => group.Any(row => row.CurrentStrands != row.SuggestedStrands));
-        var text = $"Assign the suggested Ø15.7 mm strand sections to {groups} cable group(s) and run FEM Analysis again?\n\n" +
+        var groups = run.Rows.GroupBy(row => row.GroupKey).Count(group => group.Any(row => row.Changes));
+        var names = run.Rows.Where(row => row.Changes).Select(row => row.Suggested.SectionName).Distinct(StringComparer.Ordinal).ToArray();
+        var text = $"Assign the suggested sections to {groups} cable group(s) and run FEM Analysis again?\n\n" +
+                   $"{string.Join(", ", names.Take(6))}{(names.Length > 6 ? $" and {names.Length - 6} more" : "")}" +
+                   (run.Settings.StayBasis is not null ? $", each in the {TensionCableCatalogue.ShortTitle(run.Settings.StaySystem)} material (catalogue E and mass)" : "") + ".\n\n" +
                    "The current FEM results are replaced by those of the new sections. To go back, unlock the model and use Edit → Undo." +
                    (run.Converged ? "" : "\n\nThe iteration did NOT converge: the forces may still move with these sections.");
         if (MessageBox.Show(this, text, "Apply & Re-analyse", MessageBoxButton.YesNo, run.Converged ? MessageBoxImage.Question : MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
@@ -655,7 +697,7 @@ public sealed class TensionCableDesignWindow : Window
             var force = caseNames.SelectMany(name => fem.Results is not null && fem.Results.TryGetValue(name, out var result) ? result.Cables : [])
                 .Where(cable => cable.MemberName == row.Member && double.IsFinite(cable.AxialForceKN)).Select(cable => cable.AxialForceKN)
                 .DefaultIfEmpty(double.NaN).Max();
-            row.SetAfter(double.IsNaN(force) ? null : force, double.IsNaN(force) ? null : settings.Utilisation(force, row.Row.SuggestedStrands));
+            row.SetAfter(double.IsNaN(force) ? null : force, double.IsNaN(force) ? null : settings.Utilisation(force, row.Row.Suggested));
         }
         var urs = iterateRows.Select(row => row.AfterUrValue).OfType<double>().ToArray();
         var over = urs.Count(ur => ur > settings.TargetUr + 1e-9);

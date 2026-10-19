@@ -1296,7 +1296,7 @@ public sealed partial class MainViewModel : Observable
         IEnumerable<(string Member, string Case, double Ur)> Cable(string member) =>
             properties.GetValueOrDefault(member) is { IsCable: true, AreaM2: > 0 } cable
                 ? slsCases.SelectMany(name => run.ResultFor(name).Cables.Where(item => item.MemberName == member && double.IsFinite(item.AxialForceKN))
-                    .Select(item => (member, name, Math.Max(0, item.AxialForceKN) / (cable.AreaM2 * 1e6 * ResultReportTables.CableBreakingStressMpa * ResultReportTables.CableReductionFactor / 1000))))
+                    .Select(item => (member, name, Math.Max(0, item.AxialForceKN) / ResultReportTables.CableCapacityKN(cable.SectionName, cable.AreaM2)!.Value)))
                 : [];
         IEnumerable<(string Member, string Case, double Ur)> Frame(string member) =>
             memberCases.TryGetValue(member, out var cases) ? cases.Where(pair => ResultReportTables.IsUlsCase(pair.Key, allCases)).Select(pair => (member, pair.Key, pair.Value)) : [];
